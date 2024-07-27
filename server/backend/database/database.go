@@ -179,6 +179,13 @@ type Database interface {
 		docKey key.Key,
 	) (*DocInfo, error)
 
+	// FindDocInfosByKeys finds the documents of the given keys.
+	FindDocInfosByKeys(
+		ctx context.Context,
+		projectID types.ID,
+		docKeys []key.Key,
+	) ([]*DocInfo, error)
+
 	// FindDocInfoByKeyAndOwner finds the document of the given key. If the
 	// createDocIfNotExist condition is true, create the document if it does not
 	// exist.

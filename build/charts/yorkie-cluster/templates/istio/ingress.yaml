@@ -2,17 +2,30 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Values.yorkie.name }}
-  namespace: istio-system
-  {{ if .Values.ingress.alb.enabled }}
+  namespace: {{ .Values.yorkie.namespace }}
+  {{ if .Values.ingress.awsAlb.enabled }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
-    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
-    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.alb.certArn }}
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued by AWS ACM
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.awsAlb.certArn }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
     alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
     alb.ingress.kubernetes.io/group.order: '10'
+  {{ end }}
+  {{ if .Values.ingress.ncpAlb.enabled }}
+  annotations:
+    # Set alb.ingress.kubernetes.io/ssl-certificate-no annotation to TLS certificate's number issued by NCP
+    alb.ingress.kubernetes.io/ssl-certificate-no: "{{ .Values.ingress.ncpAlb.certNo }}"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/enable-http2: "true"
+    # Set alb.ingress.kubernetes.io/healthcheck-path annotation to health check path in yorkie
+    # NCP ALB will use this path to check the health of the service
+    # If the health check fails, NCP ALB will not route the traffic to the service
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
   {{ end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
@@ -29,6 +42,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: istio-ingressgateway
+                name: yorkie-gateway
                 port:
                   number: 80

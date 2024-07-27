@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"testing"
 	gotime "time"
@@ -33,6 +34,7 @@ import (
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -62,6 +64,7 @@ var (
 
 	AdminUser                                                = server.DefaultAdminUser
 	AdminPassword                                            = server.DefaultAdminPassword
+	UseDefaultProject                                        = true
 	HousekeepingIntervalDeactivateCandidates                 = 10 * gotime.Second
 	HousekeepingIntervalDeleteDocuments                      = 10 * gotime.Second
 	HousekeepingDocumentHardDeletionGracefulPeriod           = 0 * gotime.Second
@@ -200,6 +203,28 @@ func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	return doc.Root().GetTree("test").Root()
 }
 
+type treeNodePair struct {
+	node     *crdt.TreeNode
+	parentID *crdt.TreeNodeID
+}
+
+func createTreeNodePairs(node *crdt.TreeNode, parentID *crdt.TreeNodeID) []treeNodePair {
+	var pairs []treeNodePair
+
+	pairs = append(pairs, treeNodePair{node, parentID})
+	for _, child := range node.Index.Children(true) {
+		pairs = append(pairs, createTreeNodePairs(child.Value, node.ID())...)
+	}
+	return pairs
+}
+
+// AssertEqualTreeNode asserts that the given TreeNodes are equal.
+func AssertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
+	pairsA := createTreeNodePairs(nodeA, nil)
+	pairsB := createTreeNodePairs(nodeB, nil)
+	assert.Equal(t, pairsA, pairsB)
+}
+
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.
@@ -256,8 +281,13 @@ func TestServer() *server.Yorkie {
 }
 
 // TestDocKey returns a new instance of document key for testing.
-func TestDocKey(t testing.TB) key.Key {
+func TestDocKey(t testing.TB, prefix ...int) key.Key {
 	name := t.Name()
+
+	if len(prefix) > 0 {
+		name = fmt.Sprintf("%d-%s", prefix[0], name)
+	}
+
 	if err := key.Key(name).Validate(); err == nil {
 		return key.Key(name)
 	}
@@ -459,4 +489,55 @@ func CreateDummyClientWithID(
 	}
 
 	return nil
+}
+
+// WaitForServerToStart waits for the server to start.
+func WaitForServerToStart(addr string) error {
+	maxRetries := 10
+	initialDelay := 100 * gotime.Millisecond
+	maxDelay := 5 * gotime.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Exponential backoff calculation
+		delay := initialDelay * gotime.Duration(1<<uint(attempt))
+		fmt.Println("delay: ", delay)
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		conn, err := net.DialTimeout("tcp", addr, 1*gotime.Second)
+		if err != nil {
+			gotime.Sleep(delay)
+			continue
+		}
+
+		err = conn.Close()
+		if err != nil {
+			return fmt.Errorf("close connection: %w", err)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("timeout for server to start: %s", addr)
+}
+
+// CreateProjectAndDocuments creates a new project and documents for the given count.
+func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (*types.Project, []*document.Document) {
+	ctx := context.Background()
+	project, err := server.CreateProject(ctx, t.Name())
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(server.RPCAddr(), client.WithAPIKey(project.PublicKey))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	var docs []*document.Document
+	for i := 0; i < count; i++ {
+		doc := document.New(TestDocKey(t, i))
+		assert.NoError(t, cli.Attach(ctx, doc))
+		docs = append(docs, doc)
+	}
+
+	return project, docs
 }

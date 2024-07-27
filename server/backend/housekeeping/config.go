@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package housekeeping is the package for housekeeping service. It cleans up
+// the resources and data that is no longer needed.
 package housekeeping
 
 import (
@@ -90,4 +92,14 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ParseInterval parses the interval.
+func (c *Config) ParseInterval() (time.Duration, error) {
+	interval, err := time.ParseDuration(c.Interval)
+	if err != nil {
+		return 0, fmt.Errorf("parse interval %s: %w", c.Interval, err)
+	}
+
+	return interval, nil
 }

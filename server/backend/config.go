@@ -55,6 +55,9 @@ type Config struct {
 	// SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
 	SnapshotWithPurgingChanges bool `yaml:"SnapshotWithPurgingChages"`
 
+	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
+	SnapshotDisableGC bool
+
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
 

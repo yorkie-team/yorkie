@@ -80,9 +80,9 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
 
-// RegisterElementHasRemovedNodes register the given text element with garbage to hash table.
-func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
-	c.root.RegisterElementHasRemovedNodes(element)
+// RegisterGCPair registers the given GC pair to the root.
+func (c *Context) RegisterGCPair(pair crdt.GCPair) {
+	c.root.RegisterGCPair(pair)
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.

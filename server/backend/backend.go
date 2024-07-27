@@ -43,16 +43,15 @@ import (
 // Backend manages Yorkie's backend such as Database and Coordinator. And it
 // has the server status such as the information of this Server.
 type Backend struct {
-	Config     *Config
-	serverInfo *sync.ServerInfo
+	Config           *Config
+	serverInfo       *sync.ServerInfo
+	AuthWebhookCache *cache.LRUExpireCache[string, *types.AuthWebhookResponse]
 
+	Metrics      *prometheus.Metrics
 	DB           database.Database
 	Coordinator  sync.Coordinator
-	Metrics      *prometheus.Metrics
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
-
-	AuthWebhookCache *cache.LRUExpireCache[string, *types.AuthWebhookResponse]
 }
 
 // New creates a new instance of Backend.
@@ -62,6 +61,8 @@ func New(
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
 ) (*Backend, error) {
+	// 01. Build the server info with the given hostname or the hostname of the
+	// current machine.
 	hostname := conf.Hostname
 	if hostname == "" {
 		hostname, err := os.Hostname()
@@ -77,10 +78,21 @@ func New(
 		UpdatedAt: time.Now(),
 	}
 
+	// 02. Create the auth webhook cache. The auth webhook cache is used to
+	// cache the response of the auth webhook.
+	// TODO(hackerwins): Consider to extend the cache for general purpose.
+	webhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
+	if err != nil {
+		return nil, err
+	}
+
+	// 03. Create the background instance. The background instance is used to
+	// manage background tasks.
 	bg := background.New()
 
+	// 04. Create the database instance. If the MongoDB configuration is given,
+	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var db database.Database
-	var err error
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
 		if err != nil {
@@ -93,23 +105,32 @@ func New(
 		}
 	}
 
+	// 05. Create the coordinator instance. The coordinator is used to manage
+	// the synchronization between the Yorkie servers.
 	// TODO(hackerwins): Implement the coordinator for a shard. For now, we
 	//  distribute workloads to all shards per document. In the future, we
 	//  will need to distribute workloads of a document.
 	coordinator := memsync.NewCoordinator(serverInfo)
 
-	authWebhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
+	// 06. Create the housekeeping instance. The housekeeping is used
+	// to manage keeping tasks such as deactivating inactive clients.
+	keeping, err := housekeeping.New(housekeepingConf)
 	if err != nil {
 		return nil, err
 	}
 
-	keeping, err := housekeeping.Start(
-		housekeepingConf,
-		db,
-		coordinator,
-	)
-	if err != nil {
-		return nil, err
+	// 07. Ensure the default user and project. If the default user and project
+	// do not exist, create them.
+	if conf.UseDefaultProject {
+		_, _, err = db.EnsureDefaultUserAndProject(
+			context.Background(),
+			conf.AdminUser,
+			conf.AdminPassword,
+			conf.ClientDeactivateThreshold,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dbInfo := "memory"
@@ -118,42 +139,41 @@ func New(
 	}
 
 	logging.DefaultLogger().Infof(
-		"backend created: id: %s, rpc: %s",
+		"backend created: id: %s, db: %s",
 		serverInfo.ID,
 		dbInfo,
 	)
 
-	_, _, err = db.EnsureDefaultUserAndProject(
-		context.Background(),
-		conf.AdminUser,
-		conf.AdminPassword,
-		conf.ClientDeactivateThreshold,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Backend{
-		Config:     conf,
-		serverInfo: serverInfo,
+		Config:           conf,
+		serverInfo:       serverInfo,
+		AuthWebhookCache: webhookCache,
 
-		Background:   bg,
 		Metrics:      metrics,
 		DB:           db,
 		Coordinator:  coordinator,
+		Background:   bg,
 		Housekeeping: keeping,
-
-		AuthWebhookCache: authWebhookCache,
 	}, nil
+}
+
+// Start starts the backend.
+func (b *Backend) Start() error {
+	if err := b.Housekeeping.Start(); err != nil {
+		return err
+	}
+
+	logging.DefaultLogger().Infof("backend started: id: %s", b.serverInfo.ID)
+	return nil
 }
 
 // Shutdown closes all resources of this instance.
 func (b *Backend) Shutdown() error {
-	b.Background.Close()
-
 	if err := b.Housekeeping.Stop(); err != nil {
 		return err
 	}
+
+	b.Background.Close()
 
 	if err := b.Coordinator.Close(); err != nil {
 		logging.DefaultLogger().Error(err)

@@ -221,14 +221,20 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.Style(fromPos, toPos, attributes, ticket); err != nil {
+	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	if err != nil {
 		panic(err)
+	}
+
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
 	}
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
 		fromPos,
 		toPos,
+		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))
@@ -256,14 +262,20 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket); err != nil {
+	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	if err != nil {
 		panic(err)
+	}
+
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
 	}
 
 	t.context.Push(operations.NewTreeStyleRemove(
 		t.CreatedAt(),
 		fromPos,
 		toPos,
+		maxCreationMapByActor,
 		attributesToRemove,
 		ticket,
 	))
@@ -334,7 +346,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Edit(
+	maxCreationMapByActor, pairs, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
@@ -347,6 +359,10 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		panic(err)
 	}
 
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
+	}
+
 	t.context.Push(operations.NewTreeEdit(
 		t.CreatedAt(),
 		fromPos,
@@ -356,10 +372,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		maxCreationMapByActor,
 		ticket,
 	))
-
-	if !fromPos.Equals(toPos) {
-		t.context.RegisterElementHasRemovedNodes(t.Tree)
-	}
 
 	return true
 }

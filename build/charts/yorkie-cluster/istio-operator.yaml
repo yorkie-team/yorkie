@@ -1,7 +1,7 @@
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 metadata:
-  name: istio-operator
+  name: yorkie-gateway-operator
   namespace: istio-system
 spec:
   profile: default
@@ -11,7 +11,12 @@ spec:
   components:
     ingressGateways:
       - name: istio-ingressgateway
+        enabled: false
+      - name: yorkie-gateway
+        namespace: yorkie
         enabled: true
+        label:
+          istio: yorkie-gateway
         k8s:
           service:
             type: NodePort

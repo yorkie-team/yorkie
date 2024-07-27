@@ -549,15 +549,39 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given refKey.
+// DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
-		"$set": bson.M{
-			"status":     database.ClientDeactivated,
-			"updated_at": gotime.Now(),
+	}, bson.A{
+		bson.M{
+			"$set": bson.M{
+				"status":     database.ClientDeactivated,
+				"updated_at": gotime.Now(),
+				"documents": bson.M{
+					"$arrayToObject": bson.M{
+						"$map": bson.M{
+							"input": bson.M{"$objectToArray": "$documents"},
+							"as":    "doc",
+							"in": bson.M{
+								"k": "$$doc.k",
+								"v": bson.M{
+									"$cond": bson.M{
+										"if": bson.M{"$eq": bson.A{"$$doc.v.status", database.DocumentAttached}},
+										"then": bson.M{
+											"client_seq": 0,
+											"server_seq": 0,
+											"status":     database.DocumentDetached,
+										},
+										"else": "$$doc.v",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
@@ -827,6 +851,35 @@ func (c *Client) FindDocInfoByKey(
 	return &docInfo, nil
 }
 
+// FindDocInfosByKeys finds the documents of the given keys.
+func (c *Client) FindDocInfosByKeys(
+	ctx context.Context,
+	projectID types.ID,
+	docKeys []key.Key,
+) ([]*database.DocInfo, error) {
+	filter := bson.M{
+		"project_id": projectID,
+		"key": bson.M{
+			"$in": docKeys,
+		},
+		"removed_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("find documents: %w", err)
+	}
+
+	var docInfos []*database.DocInfo
+	if err := cursor.All(ctx, &docInfos); err != nil {
+		return nil, fmt.Errorf("fetch documents: %w", err)
+	}
+
+	return docInfos, nil
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
@@ -926,8 +979,15 @@ func (c *Client) CreateChangeInfos(
 	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
-		"updated_at": now,
 	}
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			updateFields["updated_at"] = now
+			break
+		}
+	}
+
 	if isRemoved {
 		updateFields["removed_at"] = now
 	}
@@ -1265,6 +1325,9 @@ func (c *Client) FindDocInfosByQuery(
 		"key": bson.M{"$regex": primitive.Regex{
 			Pattern: "^" + escapeRegex(query),
 		}},
+		"removed_at": bson.M{
+			"$exists": false,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find document infos: %w", err)

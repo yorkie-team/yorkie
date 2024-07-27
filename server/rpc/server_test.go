@@ -70,6 +70,7 @@ func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
 		AdminUser:                 helper.AdminUser,
 		AdminPassword:             helper.AdminPassword,
+		UseDefaultProject:         helper.UseDefaultProject,
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
@@ -108,8 +109,11 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	if err := testRPCServer.Start(); err != nil {
+	if err = testRPCServer.Start(); err != nil {
 		log.Fatalf("failed rpc listen: %s\n", err)
+	}
+	if err = helper.WaitForServerToStart(testRPCAddr); err != nil {
+		log.Fatal(err)
 	}
 
 	authInterceptor := client.NewAuthInterceptor(project.PublicKey, "")

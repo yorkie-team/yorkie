@@ -262,6 +262,8 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.True(t, d1.Root().GetText("k1").CheckWeight())
 		assert.True(t, d2.Root().GetText("k1").CheckWeight())
+		assert.True(t, d1.Root().GetText("k1").TreeByIndex().CheckWeight())
+		assert.True(t, d2.Root().GetText("k1").TreeByIndex().CheckWeight())
 	})
 
 	// Peritext test

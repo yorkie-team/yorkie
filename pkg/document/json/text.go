@@ -51,7 +51,12 @@ func (p *Text) CreateRange(from, to int) (*crdt.RGATreeSplitNodePos, *crdt.RGATr
 }
 
 // Edit edits the given range with the given content and attributes.
-func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) *Text {
+func (p *Text) Edit(
+	from,
+	to int,
+	content string,
+	attributes ...map[string]string,
+) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
@@ -68,7 +73,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, maxCreationMapByActor, err := p.Text.Edit(
+	_, maxCreationMapByActor, pairs, err := p.Text.Edit(
 		fromPos,
 		toPos,
 		nil,
@@ -80,6 +85,10 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		panic(err)
 	}
 
+	for _, pair := range pairs {
+		p.context.RegisterGCPair(pair)
+	}
+
 	p.context.Push(operations.NewEdit(
 		p.CreatedAt(),
 		fromPos,
@@ -89,9 +98,6 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		attrs,
 		ticket,
 	))
-	if !fromPos.Equal(toPos) {
-		p.context.RegisterElementHasRemovedNodes(p)
-	}
 
 	return p
 }
@@ -107,7 +113,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	maxCreationMapByActor, err := p.Text.Style(
+	maxCreationMapByActor, pairs, err := p.Text.Style(
 		fromPos,
 		toPos,
 		nil,
@@ -116,6 +122,10 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	)
 	if err != nil {
 		panic(err)
+	}
+
+	for _, pair := range pairs {
+		p.context.RegisterGCPair(pair)
 	}
 
 	p.context.Push(operations.NewStyle(

@@ -311,6 +311,7 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 }
 
 // SetChildren sets the children of the given node.
+// This method does not update the size of the ancestors.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
 		return ErrInvalidMethodCallForTextNode
@@ -319,28 +320,13 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	n.children = children
 	for _, child := range children {
 		child.Parent = n
-		child.UpdateAncestorsSize()
 	}
 
 	return nil
 }
 
-// SetChildrenInternal sets the children of the given node.
-// This method does not update the size of the ancestors.
-func (n *Node[V]) SetChildrenInternal(children []*Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-
-	n.children = children
-	for _, child := range children {
-		child.Parent = n
-	}
-
-	return nil
-}
-
-// UpdateAncestorsSize updates the size of ancestors.
+// UpdateAncestorsSize updates the size of ancestors. It is used when
+// the size of the node is changed.
 func (n *Node[V]) UpdateAncestorsSize() {
 	parent := n.Parent
 	sign := 1
@@ -350,9 +336,30 @@ func (n *Node[V]) UpdateAncestorsSize() {
 
 	for parent != nil {
 		parent.Length += n.PaddedLength() * sign
+		if parent.Value.IsRemoved() {
+			break
+		}
 
 		parent = parent.Parent
 	}
+}
+
+// UpdateDescendantsSize updates the size of descendants. It is used when
+// the tree is newly created and the size of the descendants is not calculated.
+func (n *Node[V]) UpdateDescendantsSize() int {
+	size := 0
+	for _, child := range n.Children(true) {
+		childSize := child.UpdateDescendantsSize()
+		if child.Value.IsRemoved() {
+			continue
+		}
+
+		size += childSize
+	}
+
+	n.Length += size
+
+	return n.PaddedLength()
 }
 
 // PaddedLength returns the length of the node with padding.
@@ -511,7 +518,8 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 	return nil
 }
 
-// Prepend prepends the given nodes to the children.
+// Prepend prepends the given nodes to the children. It is only used
+// for creating a new node from shapshot.
 func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	if n.IsText() {
 		return ErrInvalidMethodCallForTextNode
@@ -520,10 +528,6 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	n.children = append(children, n.children...)
 	for _, node := range children {
 		node.Parent = n
-
-		if !node.Value.IsRemoved() {
-			node.UpdateAncestorsSize()
-		}
 	}
 
 	return nil
@@ -593,15 +597,20 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 	return nil
 }
 
-// HasTextChild returns true if the node has a text child.
+// HasTextChild returns true if the node's children consist of only text children.
 func (n *Node[V]) HasTextChild() bool {
-	for _, child := range n.Children() {
-		if child.IsText() {
-			return true
+	children := n.Children()
+	if len(children) == 0 {
+		return false
+	}
+
+	for _, child := range children {
+		if !child.IsText() {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // OffsetOfChild returns offset of children of the given node.
@@ -728,6 +737,15 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 
 		node = node.Parent
 		path = append(path, leftSiblingsSize+treePos.Offset)
+	} else if node.HasTextChild() {
+		// TODO(hackerwins): The function does not consider the situation
+		// where Element and Text nodes are mixed in the Element's Children.
+		leftSiblingsSize, err := t.LeftSiblingsSize(node, treePos.Offset)
+		if err != nil {
+			return nil, err
+		}
+
+		path = append(path, leftSiblingsSize)
 	} else {
 		path = append(path, treePos.Offset)
 	}

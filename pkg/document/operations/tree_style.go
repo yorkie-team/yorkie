@@ -32,6 +32,10 @@ type TreeStyle struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
+	// maxCreatedAtMapByActor is a map that stores the latest creation time
+	// by actor for the nodes included in the styling range.
+	maxCreatedAtMapByActor map[string]*time.Ticket
+
 	// attributes represents the tree style to be added.
 	attributes map[string]string
 
@@ -47,16 +51,18 @@ func NewTreeStyle(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *TreeStyle {
 	return &TreeStyle{
-		parentCreatedAt:    parentCreatedAt,
-		from:               from,
-		to:                 to,
-		attributes:         attributes,
-		attributesToRemove: []string{},
-		executedAt:         executedAt,
+		parentCreatedAt:        parentCreatedAt,
+		from:                   from,
+		to:                     to,
+		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
+		attributes:             attributes,
+		attributesToRemove:     []string{},
+		executedAt:             executedAt,
 	}
 }
 
@@ -65,16 +71,18 @@ func NewTreeStyleRemove(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributesToRemove []string,
 	executedAt *time.Ticket,
 ) *TreeStyle {
 	return &TreeStyle{
-		parentCreatedAt:    parentCreatedAt,
-		from:               from,
-		to:                 to,
-		attributes:         map[string]string{},
-		attributesToRemove: attributesToRemove,
-		executedAt:         executedAt,
+		parentCreatedAt:        parentCreatedAt,
+		from:                   from,
+		to:                     to,
+		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
+		attributes:             map[string]string{},
+		attributesToRemove:     attributesToRemove,
+		executedAt:             executedAt,
 	}
 }
 
@@ -86,11 +94,25 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
+	var pairs []crdt.GCPair
+	var err error
 	if len(e.attributes) > 0 {
-		return obj.Style(e.from, e.to, e.attributes, e.executedAt)
+		_, pairs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, e.maxCreatedAtMapByActor)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, e.maxCreatedAtMapByActor)
+		if err != nil {
+			return err
+		}
 	}
 
-	return obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+
+	return nil
 }
 
 // FromPos returns the start point of the editing range.
@@ -126,4 +148,10 @@ func (e *TreeStyle) Attributes() map[string]string {
 // AttributesToRemove returns the content of Style.
 func (e *TreeStyle) AttributesToRemove() []string {
 	return e.attributesToRemove
+}
+
+// MaxCreatedAtMapByActor returns the map that stores the latest creation time
+// by actor for the nodes included in the styling range.
+func (e *TreeStyle) MaxCreatedAtMapByActor() map[string]*time.Ticket {
+	return e.maxCreatedAtMapByActor
 }

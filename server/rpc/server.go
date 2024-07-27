@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 )
 
@@ -57,9 +56,8 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	opts := []connect.HandlerOption{
 		connect.WithInterceptors(
-			connecthelper.NewLoggingInterceptor(),
-			interceptors.NewAdminAuthInterceptor(be, tokenManager),
-			interceptors.NewContextInterceptor(be),
+			interceptors.NewAdminServiceInterceptor(be, tokenManager),
+			interceptors.NewYorkieServiceInterceptor(be),
 			interceptors.NewDefaultInterceptor(),
 		),
 	}

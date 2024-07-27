@@ -93,11 +93,17 @@ type AttachOption func(*AttachOptions)
 type AttachOptions struct {
 	// Presence is the presence of the client.
 	Presence innerpresence.Presence
+	IsManual bool
 }
 
 // WithPresence configures the presence of the client.
 func WithPresence(presence innerpresence.Presence) AttachOption {
 	return func(o *AttachOptions) { o.Presence = presence }
+}
+
+// WithManualSync configures the manual sync of the client.
+func WithManualSync() AttachOption {
+	return func(o *AttachOptions) { o.IsManual = true }
 }
 
 // DetachOption configures DetachOptions.

@@ -120,6 +120,16 @@ mongodb-sharded:
       size: *configSize
       mountPath: /data/configdb
       storageClass: *storageClass
+    ## @param configsvr.resources Set container requests and limits for different resources like CPU or memory (essential for production workloads)
+    ## Example:
+    ## resources:
+    ##   requests:
+    ##     cpu: 2
+    ##     memory: 512Mi
+    ##   limits:
+    ##     cpu: 3
+    ##     memory: 1024Mi
+    resources: {}
 
   # Configuration for shard server
   shardsvr:
@@ -154,6 +164,12 @@ mongodb-sharded:
       size: *dataSize
       mountPath: /data/db
       storageClass: *storageClass
+    ## @param shardsvr.dataNode.resources Set container requests and limits for different resources like CPU or memory (essential for production workloads)
+    resources:
+      requests:
+        memory: 1Gi
+      limits:
+        memory: 2Gi
 
   # Configuration for mongos
   mongos:
@@ -196,6 +212,16 @@ mongodb-sharded:
       enabled: false
     startupProbe:
       enabled: false
+    ## @param mongos.resources Set container requests and limits for different resources like CPU or memory (essential for production workloads)
+    ## Example:
+    ## resources:
+    ##   requests:
+    ##     cpu: 2
+    ##     memory: 512Mi
+    ##   limits:
+    ##     cpu: 3
+    ##     memory: 1024Mi
+    resources: {}
 
   # Configuration for Prometheus monitoring
   metrics:

@@ -35,26 +35,33 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
-// ContextInterceptor is an interceptor for building additional context.
-type ContextInterceptor struct {
+func isYorkieService(method string) bool {
+	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
+}
+
+// YorkieServiceInterceptor is an interceptor for building additional context
+// and handling authentication for YorkieService.
+type YorkieServiceInterceptor struct {
 	backend          *backend.Backend
+	requestID        *requestID
 	projectInfoCache *cache.LRUExpireCache[string, *types.Project]
 }
 
-// NewContextInterceptor creates a new instance of ContextInterceptor.
-func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
+// NewYorkieServiceInterceptor creates a new instance of YorkieServiceInterceptor.
+func NewYorkieServiceInterceptor(be *backend.Backend) *YorkieServiceInterceptor {
 	projectInfoCache, err := cache.NewLRUExpireCache[string, *types.Project](be.Config.ProjectInfoCacheSize)
 	if err != nil {
 		logging.DefaultLogger().Fatal("Failed to create project info cache: %v", err)
 	}
-	return &ContextInterceptor{
+	return &YorkieServiceInterceptor{
 		backend:          be,
+		requestID:        newRequestID("r"),
 		projectInfoCache: projectInfoCache,
 	}
 }
 
 // WrapUnary creates a unary server interceptor for building additional context.
-func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
 		req connect.AnyRequest,
@@ -93,7 +100,7 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 }
 
 // WrapStreamingClient creates a stream client interceptor for building additional context.
-func (i *ContextInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+func (i *YorkieServiceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
 		spec connect.Spec,
@@ -103,7 +110,9 @@ func (i *ContextInterceptor) WrapStreamingClient(next connect.StreamingClientFun
 }
 
 // WrapStreamingHandler creates a stream server interceptor for building additional context.
-func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (i *YorkieServiceInterceptor) WrapStreamingHandler(
+	next connect.StreamingHandlerFunc,
+) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,
 		conn connect.StreamingHandlerConn,
@@ -141,13 +150,9 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 	}
 }
 
-func isYorkieService(method string) bool {
-	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
-}
-
 // buildContext builds a context data for RPC. It includes the metadata of the
 // request and the project information.
-func (i *ContextInterceptor) buildContext(ctx context.Context, header http.Header) (context.Context, error) {
+func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http.Header) (context.Context, error) {
 	// 01. building metadata
 	md := metadata.Metadata{}
 
@@ -166,16 +171,18 @@ func (i *ContextInterceptor) buildContext(ctx context.Context, header http.Heade
 	cacheKey := md.APIKey
 
 	// 02. building project
-	if cachedProjectInfo, ok := i.projectInfoCache.Get(cacheKey); ok {
-		ctx = projects.With(ctx, cachedProjectInfo)
-	} else {
-		project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
+	if _, ok := i.projectInfoCache.Get(cacheKey); !ok {
+		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
 			return nil, connecthelper.ToStatusError(err)
 		}
-		i.projectInfoCache.Add(cacheKey, project, i.backend.Config.ParseProjectInfoCacheTTL())
-		ctx = projects.With(ctx, project)
+		i.projectInfoCache.Add(cacheKey, prj, i.backend.Config.ParseProjectInfoCacheTTL())
 	}
+	project, _ := i.projectInfoCache.Get(cacheKey)
+	ctx = projects.With(ctx, project)
+
+	// 03. building logger
+	ctx = logging.With(ctx, logging.New(i.requestID.next(), logging.NewField("prj", project.Name)))
 
 	return ctx, nil
 }

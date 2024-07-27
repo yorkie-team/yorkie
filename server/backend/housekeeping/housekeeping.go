@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-// Package housekeeping provides the housekeeping service. The housekeeping
-// service is responsible for deactivating clients that have not been used for
-// a long time.
 package housekeeping
 
 import (
@@ -24,22 +21,22 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/clients"
+	"github.com/go-co-op/gocron/v2"
+
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-const (
+const ( // existing commit
 	deactivateCandidatesKey     = "housekeeping/deactivateCandidates"
 	documentHardDeletionLockKey = "housekeeping/DocumentHardDeletionLock"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
-// tasks. It is responsible for deactivating clients that have not been active
-// for a long time.
+// tasks.
 type Housekeeping struct {
+	Config *Config
+	/* existing commit
+
 	database    database.Database
 	coordinator sync.Coordinator
 
@@ -49,42 +46,30 @@ type Housekeeping struct {
 	clientDeactivationCandidateLimitPerProject   int
 	DocumentHardDeletionCandidateLimitPerProject int
 	projectFetchSize                             int
-
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-}
-
-// Start starts the housekeeping service.
-func Start(
-	conf *Config,
-	database database.Database,
-	coordinator sync.Coordinator,
-) (*Housekeeping, error) {
-	h, err := New(conf, database, coordinator)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.Start(); err != nil {
-		return nil, err
-	}
-
-	return h, nil
+	*/
+	scheduler gocron.Scheduler
 }
 
 // New creates a new housekeeping instance.
-func New(
-	conf *Config,
-	database database.Database,
-	coordinator sync.Coordinator,
-) (*Housekeeping, error) {
-	intervalDeactivateCandidates, err := time.ParseDuration(conf.IntervalDeactivateCandidates)
-	if err != nil {
-		return nil, fmt.Errorf("parse intervalDeactivateCandidates %s: %w",
-			conf.IntervalDeactivateCandidates, err)
-	}
+func New(conf *Config) (*Housekeeping, error) {
+	scheduler, err := gocron.NewScheduler()
+	/* existing commit
+	func New(
+		conf *Config,
+		database database.Database,
+		coordinator sync.Coordinator,
+	) (*Housekeeping, error) {
+		intervalDeactivateCandidates, err := time.ParseDuration(conf.IntervalDeactivateCandidates)
+		if err != nil {
+			return nil, fmt.Errorf("parse intervalDeactivateCandidates %s: %w",
+				conf.IntervalDeactivateCandidates, err)
+		}
 
-	intervalDeleteDocuments, err := time.ParseDuration(conf.IntervalDeleteDocuments)
-	if err != nil {
+		intervalDeleteDocuments, err := time.ParseDuration(conf.IntervalDeleteDocuments)
+		if err != nil {
+	*/
+	return nil, fmt.Errorf("new scheduler: %w", err)
+	/* existing commit
 		return nil, fmt.Errorf("parse intervalDeleteDocuments %s: %w", conf.IntervalDeleteDocuments, err)
 	}
 
@@ -93,10 +78,11 @@ func New(
 		return nil, fmt.Errorf("parse documentHardDeletionGracefulPeriod %s: %w",
 			conf.DocumentHardDeletionGracefulPeriod, err)
 	}
-
-	ctx, cancelFunc := context.WithCancel(context.Background())
-
+	*/
 	return &Housekeeping{
+		Config:    conf,
+		scheduler: scheduler,
+		/* existing commit
 		database:    database,
 		coordinator: coordinator,
 
@@ -109,22 +95,56 @@ func New(
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
+		*/
 	}, nil
+}
+
+// RegisterTask registers task the housekeeping service.
+func (h *Housekeeping) RegisterTask(
+	interval time.Duration,
+	task func(ctx context.Context) error,
+) error {
+	if _, err := h.scheduler.NewJob(
+		gocron.DurationJob(interval),
+		gocron.NewTask(func() {
+			ctx := context.Background()
+			if err := task(ctx); err != nil {
+				logging.From(ctx).Error(err)
+			}
+		}),
+	); err != nil {
+		return fmt.Errorf("scheduler new job: %w", err)
+	}
+
+	return nil
 }
 
 // Start starts the housekeeping service.
 func (h *Housekeeping) Start() error {
-	go h.AttachDeactivateCandidates()
+	h.scheduler.Start()
+	/* existing commit
+	go h.AttachDeactivateCandidates()밋
 	go h.AttachDocumentHardDeletion()
+	*/
 	return nil
 }
 
 // Stop stops the housekeeping service.
 func (h *Housekeeping) Stop() error {
+	if err := h.scheduler.StopJobs(); err != nil {
+		return fmt.Errorf("scheduler stop jobs: %w", err)
+	}
+
+	if err := h.scheduler.Shutdown(); err != nil {
+		return fmt.Errorf("scheduler shutdown: %w", err)
+	}
+	/* existing commit
 	h.cancelFunc()
+	*/
 	return nil
 }
 
+/* existing commit
 // AttachDeactivateCandidates is the housekeeping loop for DeactivateCandidates
 func (h *Housekeeping) AttachDeactivateCandidates() {
 	housekeepingLastProjectID := database.DefaultProjectID
@@ -345,3 +365,4 @@ func (h *Housekeeping) FindDocumentHardDeletionCandidates(
 
 	return topProjectID, candidates, nil
 }
+*/

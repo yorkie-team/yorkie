@@ -12,7 +12,7 @@ monitoring:
 # Configuration for ingress (eg: AWS ALB)
 ingress:
   ingressClassName: nginx
-  ## Set to alb if you are using AWS ALB
+  ## Set to alb if you are using AWS, NCP ALB
   # ingressClassName: alb
 
   # Use same host for yorkie cluster
@@ -21,10 +21,13 @@ ingress:
     apiHost: &apiHost api.yorkie.dev
     grafanaPath: /grafana
 
-  alb:
+  awsAlb:
     enabled: false
-
     certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234
+
+  ncpAlb:
+    enabled: false
+    certNo: 1234
 
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:

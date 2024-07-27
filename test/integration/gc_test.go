@@ -20,14 +20,17 @@ package integration
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -452,4 +455,213 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
 	})
 
+	t.Run("Should work properly when there are multiple nodes to be collected in text type", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "z")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 1, "a")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 1, "b")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "d")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d2.Marshal())
+		assert.Equal(t, 1, d1.GarbageLen()) // z
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "c")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d2.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"d"}]}`, d1.Marshal())
+		assert.Equal(t, 2, d1.GarbageLen()) // b,c
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"d"}]}`, d2.Marshal())
+		assert.Equal(t, 0, d1.GarbageLen())
+	})
+
+	t.Run("Should work properly when there are multiple nodes to be collected in tree type", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("tree", &json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type: "text", Value: "z",
+				}},
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{0}, []int{1}, &json.TreeNode{Type: "text", Value: "a"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{1}, []int{1}, &json.TreeNode{Type: "text", Value: "b"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{2}, []int{2}, &json.TreeNode{Type: "text", Value: "d"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `<r>abd</r>`, d1.Root().GetTree("tree").ToXML())
+		assert.Equal(t, `<r>abd</r>`, d2.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 1, d1.GarbageLen()) // z
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{2}, []int{2}, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r>abcd</r>`, d1.Root().GetTree("tree").ToXML())
+		assert.Equal(t, `<r>abcd</r>`, d2.Root().GetTree("tree").ToXML())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{1}, []int{3}, nil, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r>ad</r>`, d1.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 2, d1.GarbageLen()) // b,c
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r>ad</r>`, d2.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+	})
+
+	t.Run("Should not collect the garbage if the DisableGC is true", func(t *testing.T) {
+		// 01. Create a new server with SnapshotDisableGC set to true
+		conf := helper.TestConfig()
+		conf.Backend.SnapshotDisableGC = true
+		conf.Backend.SnapshotThreshold = 10
+		conf.Backend.SnapshotInterval = 10
+		testServer, err := server.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, testServer.Start())
+		defer func() {
+			assert.NoError(t, testServer.Shutdown(true))
+		}()
+
+		ctx := context.Background()
+		c1, err := client.Dial(testServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Activate(ctx))
+		defer func() {
+			assert.NoError(t, c1.Deactivate(ctx))
+			assert.NoError(t, c1.Close())
+		}()
+
+		// 02. Create a document and update it to check if the garbage is collected
+		d1 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() {
+			assert.NoError(t, c1.Detach(ctx, d1))
+		}()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "-")
+			return nil
+		}))
+		for i := 0; i < int(conf.Backend.SnapshotInterval); i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
+				return nil
+			}))
+		}
+		assert.Equal(t, int(conf.Backend.SnapshotInterval), d1.GarbageLen())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 03. Check if the garbage is collected after the snapshot interval
+		c2, err := client.Dial(testServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Activate(ctx))
+		defer func() {
+			assert.NoError(t, c2.Deactivate(ctx))
+			assert.NoError(t, c2.Close())
+		}()
+
+		d2 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() {
+			assert.NoError(t, c2.Detach(ctx, d2))
+		}()
+		assert.Equal(t, int(conf.Backend.SnapshotInterval), d2.GarbageLen())
+	})
 }

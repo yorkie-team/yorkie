@@ -20,8 +20,10 @@ package integration
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
@@ -171,5 +173,37 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 4, ServerSeq: 4})
 		assert.Equal(t, "2", doc.Root().GetCounter("counter").Marshal())
+	})
+
+	t.Run("deactivated client's stream test", func(t *testing.T) {
+		ctx := context.Background()
+
+		c1, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Activate(ctx))
+
+		d1 := document.New(helper.TestDocKey(t))
+
+		// 01. Attach the document and subscribe.
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		// 02. Deactivate the client and try to watch.
+		assert.NoError(t, defaultServer.DeactivateClient(ctx, c1))
+
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		stream, _ := c1.Watch(ctx, d1)
+
+		go func() {
+			defer wg.Done()
+
+			stream.Receive()
+			if err = stream.Err(); err != nil {
+				assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+				return
+			}
+		}()
+
+		wg.Wait()
 	})
 }

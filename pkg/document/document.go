@@ -65,6 +65,22 @@ type BroadcastRequest struct {
 	Payload []byte
 }
 
+// Option configures Options.
+type Option func(*Options)
+
+// Options configures how we set up the document.
+type Options struct {
+	// DisableGC disables garbage collection.
+	DisableGC bool
+}
+
+// WithDisableGC configures the document to disable garbage collection.
+func WithDisableGC() Option {
+	return func(o *Options) {
+		o.DisableGC = true
+	}
+}
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -75,6 +91,9 @@ type BroadcastRequest struct {
 type Document struct {
 	// doc is the original data of the actual document.
 	doc *InternalDocument
+
+	// options is the options to configure the document.
+	options Options
 
 	// cloneRoot is a copy of `doc.root` to be exposed to the user and is used to
 	// protect `doc.root`.
@@ -100,9 +119,15 @@ type Document struct {
 }
 
 // New creates a new instance of Document.
-func New(key key.Key) *Document {
+func New(key key.Key, opts ...Option) *Document {
+	var options Options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	return &Document{
 		doc:                NewInternalDocument(key),
+		options:            options,
 		events:             make(chan DocEvent, 1),
 		broadcastRequests:  make(chan BroadcastRequest, 1),
 		broadcastResponses: make(chan error, 1),
@@ -164,23 +189,8 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.ensureClone(); err != nil {
+		if err := d.applyChanges(pack.Changes); err != nil {
 			return err
-		}
-
-		for _, c := range pack.Changes {
-			if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
-				return err
-			}
-		}
-
-		events, err := d.doc.ApplyChanges(pack.Changes...)
-		if err != nil {
-			return err
-		}
-
-		for _, e := range events {
-			d.events <- e
 		}
 	}
 
@@ -193,17 +203,47 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.doc.localChanges = d.doc.localChanges[1:]
 	}
 
+	if len(pack.Snapshot) > 0 {
+		if err := d.applyChanges(d.doc.localChanges); err != nil {
+			return err
+		}
+	}
+
 	// 03. Update the checkpoint.
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSyncedTicket)
+	if !d.options.DisableGC {
+		d.GarbageCollect(pack.MinSyncedTicket)
+	}
 
 	// 05. Update the status.
 	if pack.IsRemoved {
 		d.SetStatus(StatusRemoved)
 	}
 
+	return nil
+}
+
+func (d *Document) applyChanges(changes []*change.Change) error {
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
+
+	for _, c := range changes {
+		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+			return err
+		}
+	}
+
+	events, err := d.doc.ApplyChanges(changes...)
+	if err != nil {
+		return err
+	}
+
+	for _, e := range events {
+		d.events <- e
+	}
 	return nil
 }
 

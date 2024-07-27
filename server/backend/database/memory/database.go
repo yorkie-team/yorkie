@@ -523,7 +523,15 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	// the stored objects are returned instead of new objects. This can cause
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
 	clientInfo = clientInfo.DeepCopy()
+	for docID := range clientInfo.Documents {
+		if clientInfo.Documents[docID].Status == database.DocumentAttached {
+			if err := clientInfo.DetachDocument(docID); err != nil {
+				return nil, err
+			}
+		}
+	}
 	clientInfo.Deactivate()
+
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, fmt.Errorf("update client: %w", err)
 	}
@@ -737,48 +745,17 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// TODO(hackerwins): Removed documents should be filtered out by the query, but
-	// somehow it does not work. This is a workaround.
-	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
-	iter, err := txn.Get(
-		tblDocuments,
-		"project_id_key_removed_at",
-		clientRefKey.ProjectID.String(),
-		key.String(),
-		gotime.Time{},
-	)
+	info, err := d.findDocInfoByKey(txn, clientRefKey.ProjectID, key)
 	if err != nil {
-		return nil, fmt.Errorf("find document by key: %w", err)
+		return info, err
 	}
-	var raw interface{}
-	for val := iter.Next(); val != nil; val = iter.Next() {
-		if val != nil && val.(*database.DocInfo).RemovedAt.IsZero() {
-			raw = val
-		}
+	if !createDocIfNotExist && info == nil {
+		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("find document by key: %w", err)
-	}
-	if !createDocIfNotExist && raw == nil {
-		raw, err = txn.First(
-			tblDocuments,
-			"project_id_key",
-			clientRefKey.ProjectID.String(),
-			key.String(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("find document by key: %w", err)
-		}
-		if raw == nil {
-			return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
-		}
-	}
-
-	now := gotime.Now()
-	var docInfo *database.DocInfo
-	if raw == nil {
-		docInfo = &database.DocInfo{
+	if info == nil {
+		now := gotime.Now()
+		info = &database.DocInfo{
 			ID:         newID(),
 			ProjectID:  clientRefKey.ProjectID,
 			Key:        key,
@@ -787,15 +764,38 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			CreatedAt:  now,
 			AccessedAt: now,
 		}
-		if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		if err := txn.Insert(tblDocuments, info); err != nil {
 			return nil, fmt.Errorf("create document: %w", err)
 		}
 		txn.Commit()
-	} else {
-		docInfo = raw.(*database.DocInfo)
 	}
 
-	return docInfo.DeepCopy(), nil
+	return info.DeepCopy(), nil
+}
+
+// findDocInfoByKey finds the document of the given key.
+func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, key key.Key) (*database.DocInfo, error) {
+	// TODO(hackerwins): Removed documents should be filtered out by the query, but
+	// somehow it does not work. This is a workaround.
+	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_key_removed_at",
+		projectID.String(),
+		key.String(),
+		gotime.Time{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find doc info by key: %w", err)
+	}
+	var docInfo *database.DocInfo
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if info := val.(*database.DocInfo); info.RemovedAt.IsZero() {
+			docInfo = info
+		}
+	}
+
+	return docInfo, nil
 }
 
 // FindDocInfoByKey finds the document of the given key.
@@ -807,15 +807,40 @@ func (d *DB) FindDocInfoByKey(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	info, err := d.findDocInfoByKey(txn, projectID, key)
 	if err != nil {
-		return nil, fmt.Errorf("find document by key: %w", err)
+		return nil, fmt.Errorf("find doc info by key: %w", err)
 	}
-	if raw == nil {
+	if info == nil {
 		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
-	return raw.(*database.DocInfo).DeepCopy(), nil
+	return info.DeepCopy(), nil
+}
+
+// FindDocInfosByKeys finds the documents of the given keys.
+func (d *DB) FindDocInfosByKeys(
+	_ context.Context,
+	projectID types.ID,
+	keys []key.Key,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, k := range keys {
+		info, err := d.findDocInfoByKey(txn, projectID, k)
+		if err != nil {
+			return nil, fmt.Errorf("find doc info by key: %w", err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
 }
 
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
@@ -937,7 +962,14 @@ func (d *DB) CreateChangeInfos(
 
 	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
-	loadedDocInfo.UpdatedAt = now
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			loadedDocInfo.UpdatedAt = now
+			break
+		}
+	}
+
 	if isRemoved {
 		loadedDocInfo.RemovedAt = now
 	}
@@ -1367,6 +1399,9 @@ func (d *DB) FindDocInfosByQuery(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		if count < pageSize {
 			info := raw.(*database.DocInfo)
+			if info.IsRemoved() {
+				continue
+			}
 			docInfos = append(docInfos, info)
 		}
 		count++

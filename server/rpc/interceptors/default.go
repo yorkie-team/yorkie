@@ -23,12 +23,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
-
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 )
 
-// DefaultInterceptor is a interceptor for default.
+// DefaultInterceptor is an interceptor for common RPC.
 type DefaultInterceptor struct{}
 
 // NewDefaultInterceptor creates a new instance of DefaultInterceptor.

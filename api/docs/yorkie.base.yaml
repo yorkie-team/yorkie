@@ -1,0 +1,18 @@
+openapi: 3.1.0
+info:
+  title: Yorkie
+  description: "Yorkie is an open source document store for building collaborative editing applications."
+  version: v0.4.27
+servers:
+  - url: https://api.yorkie.dev
+    description: Production server
+  - url: http://localhost:8080
+    description: Local server
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+security:
+  - ApiKeyAuth: [] # use the same name as under securitySchemes

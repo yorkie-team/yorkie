@@ -511,11 +511,19 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, err
 	}
 
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbTreeStyle.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(pbTreeStyle.AttributesToRemove) > 0 {
 		return operations.NewTreeStyleRemove(
 			parentCreatedAt,
 			from,
 			to,
+			createdAtMapByActor,
 			pbTreeStyle.AttributesToRemove,
 			executedAt,
 		), nil
@@ -525,6 +533,7 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		parentCreatedAt,
 		from,
 		to,
+		createdAtMapByActor,
 		pbTreeStyle.Attributes,
 		executedAt,
 	), nil
@@ -588,6 +597,8 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 		}
 	}
 
+	root.Index.UpdateDescendantsSize()
+
 	// build crdt.Tree from root to construct the links between nodes.
 	return crdt.NewTree(root, nil).Root(), nil
 }
@@ -614,19 +625,27 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	return treeNodes, nil
 }
 
+func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
+	rht := crdt.NewRHT()
+	for k, pbAttr := range pbRHT {
+		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		rht.SetInternal(k, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
+	}
+	return rht, nil
+}
+
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 	id, err := fromTreeNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	attrs := crdt.NewRHT()
-	for k, pbAttr := range pbNode.Attributes {
-		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		attrs.Set(k, pbAttr.Value, updatedAt)
+	attrs, err := fromRHT(pbNode.Attributes)
+	if err != nil {
+		return nil, err
 	}
 
 	node := crdt.NewTreeNode(
@@ -650,10 +669,11 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		}
 	}
 
-	node.RemovedAt, err = fromTimeTicket(pbNode.RemovedAt)
+	removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 	if err != nil {
 		return nil, err
 	}
+	node.SetRemovedAt(removedAt)
 
 	return node, nil
 }

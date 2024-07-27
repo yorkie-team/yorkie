@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+// Package connecthelper provides helper functions for connectRPC.
 package connecthelper
 
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -36,8 +36,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-// errorToCode maps an error to connectRPC status code.
-var errorToCode = map[error]connect.Code{
+// errorToConnectCode maps an error to connectRPC status code.
+var errorToConnectCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
 	converter.ErrPackRequired:       connect.CodeInvalidArgument,
 	converter.ErrCheckpointRequired: connect.CodeInvalidArgument,
@@ -65,6 +65,7 @@ var errorToCode = map[error]connect.Code{
 	database.ErrClientNotActivated:      connect.CodeFailedPrecondition,
 	database.ErrDocumentNotAttached:     connect.CodeFailedPrecondition,
 	database.ErrDocumentAlreadyAttached: connect.CodeFailedPrecondition,
+	database.ErrDocumentAlreadyDetached: connect.CodeFailedPrecondition,
 	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
 	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
 	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,
@@ -86,9 +87,110 @@ var errorToCode = map[error]connect.Code{
 	context.Canceled: connect.CodeCanceled,
 }
 
-func detailsFromError(err error) (*errdetails.BadRequest, bool) {
-	invalidFieldsError, ok := err.(*validation.StructError)
+// errorToCode maps an error to a string representation of the error.
+// TODO(hackerwins): We need to add codes by hand for each error. It would be
+// better to generate this map automatically.
+var errorToCode = map[error]string{
+	converter.ErrPackRequired:       "ErrPackRequired",
+	converter.ErrCheckpointRequired: "ErrCheckpointRequired",
+	time.ErrInvalidHexString:        "ErrInvalidHexString",
+	time.ErrInvalidActorID:          "ErrInvalidActorID",
+	types.ErrInvalidID:              "ErrInvalidID",
+	clients.ErrInvalidClientID:      "ErrInvalidClientID",
+	clients.ErrInvalidClientKey:     "ErrInvalidClientKey",
+	key.ErrInvalidKey:               "ErrInvalidKey",
+	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
+
+	database.ErrProjectNotFound:  "ErrProjectNotFound",
+	database.ErrClientNotFound:   "ErrClientNotFound",
+	database.ErrDocumentNotFound: "ErrDocumentNotFound",
+	database.ErrUserNotFound:     "ErrUserNotFound",
+
+	database.ErrProjectAlreadyExists:     "ErrProjectAlreadyExists",
+	database.ErrProjectNameAlreadyExists: "ErrProjectNameAlreadyExists",
+	database.ErrUserAlreadyExists:        "ErrUserAlreadyExists",
+
+	database.ErrClientNotActivated:      "ErrClientNotActivated",
+	database.ErrDocumentNotAttached:     "ErrDocumentNotAttached",
+	database.ErrDocumentAlreadyAttached: "ErrDocumentAlreadyAttached",
+	database.ErrDocumentAlreadyDetached: "ErrDocumentAlreadyDetached",
+	documents.ErrDocumentAttached:       "ErrDocumentAttached",
+	packs.ErrInvalidServerSeq:           "ErrInvalidServerSeq",
+	database.ErrConflictOnUpdate:        "ErrConflictOnUpdate",
+
+	converter.ErrUnsupportedOperation:   "ErrUnsupportedOperation",
+	converter.ErrUnsupportedElement:     "ErrUnsupportedElement",
+	converter.ErrUnsupportedEventType:   "ErrUnsupportedEventType",
+	converter.ErrUnsupportedValueType:   "ErrUnsupportedValueType",
+	converter.ErrUnsupportedCounterType: "ErrUnsupportedCounterType",
+
+	auth.ErrNotAllowed:             "ErrNotAllowed",
+	auth.ErrUnexpectedStatusCode:   "ErrUnexpectedStatusCode",
+	auth.ErrWebhookTimeout:         "ErrWebhookTimeout",
+	database.ErrMismatchedPassword: "ErrMismatchedPassword",
+}
+
+// CodeOf returns the string representation of the given error.
+func CodeOf(err error) string {
+	cause := err
+	for errors.Unwrap(cause) != nil {
+		cause = errors.Unwrap(cause)
+	}
+
+	if code, ok := errorToCode[cause]; ok {
+		return code
+	}
+
+	return ""
+}
+
+// errorToConnectError returns connect.Error from the given error.
+func errorToConnectError(err error) (*connect.Error, bool) {
+	cause := err
+	for errors.Unwrap(cause) != nil {
+		cause = errors.Unwrap(cause)
+	}
+
+	connectCode, ok := errorToConnectCode[cause]
 	if !ok {
+		return nil, false
+	}
+
+	connectErr := connect.NewError(connectCode, err)
+	if code, ok := errorToCode[cause]; ok {
+		errorInfo := &errdetails.ErrorInfo{
+			Metadata: map[string]string{"code": code},
+		}
+		if detail, detailErr := connect.NewErrorDetail(errorInfo); detailErr == nil {
+			connectErr.AddDetail(detail)
+		}
+	}
+
+	return connectErr, true
+}
+
+// structErrorToConnectError returns connect.Error from the given struct error.
+func structErrorToConnectError(err error) (*connect.Error, bool) {
+	var invalidFieldsError *validation.StructError
+	if !errors.As(err, &invalidFieldsError) {
+		return nil, false
+	}
+
+	connectErr := connect.NewError(connect.CodeInvalidArgument, err)
+	badRequest, ok := badRequestFromError(err)
+	if !ok {
+		return connectErr, true
+	}
+	if detail, err := connect.NewErrorDetail(badRequest); err == nil {
+		connectErr.AddDetail(detail)
+	}
+
+	return connectErr, true
+}
+
+func badRequestFromError(err error) (*errdetails.BadRequest, bool) {
+	var invalidFieldsError *validation.StructError
+	if !errors.As(err, &invalidFieldsError) {
 		return nil, false
 	}
 
@@ -105,38 +207,23 @@ func detailsFromError(err error) (*errdetails.BadRequest, bool) {
 	return br, true
 }
 
-// ToStatusError returns a connect.Error from the given logic error. If an error
+// ToStatusError returns connect.Error from the given logic error. If an error
 // occurs while executing logic in API handler, connectRPC connect.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
-	cause := err
-	for errors.Unwrap(cause) != nil {
-		cause = errors.Unwrap(cause)
-	}
-	if code, ok := errorToCode[cause]; ok {
-		return connect.NewError(code, err)
+	if err == nil {
+		return nil
 	}
 
-	// NOTE(hackerwins): InvalidFieldsError has details of invalid fields in
-	// the error message.
-	var invalidFieldsError *validation.StructError
-	if errors.As(err, &invalidFieldsError) {
-		st := connect.NewError(connect.CodeInvalidArgument, err)
-		details, ok := detailsFromError(err)
-		if !ok {
-			return st
-		}
-		if detail, err := connect.NewErrorDetail(details); err == nil {
-			st.AddDetail(detail)
-		}
-		return st
+	if err, ok := errorToConnectError(err); ok {
+		return err
 	}
 
-	if err := connect.NewError(connect.CodeInternal, err); err != nil {
-		return fmt.Errorf("create status error: %w", err)
+	if err, ok := structErrorToConnectError(err); ok {
+		return err
 	}
 
-	return nil
+	return connect.NewError(connect.CodeInternal, err)
 }
 
 // ToRPCCodeString returns a string representation of the given error.
@@ -149,7 +236,7 @@ func ToRPCCodeString(err error) string {
 	for errors.Unwrap(cause) != nil {
 		cause = errors.Unwrap(cause)
 	}
-	if code, ok := errorToCode[cause]; ok {
+	if code, ok := errorToConnectCode[cause]; ok {
 		return code.String()
 	}
 

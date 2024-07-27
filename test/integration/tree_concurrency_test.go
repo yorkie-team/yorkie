@@ -30,6 +30,28 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+/**
+ * parseSimpleXML parses the given XML string into a slice of strings.
+ * For example, "<p>abc</p>" returns ["<p>", "abc", "</p>"].
+ */
+func parseSimpleXML(s string) []string {
+	var res []string
+	for i := 0; i < len(s); i++ {
+		current := ""
+		if s[i] == '<' {
+			for i < len(s) && s[i] != '>' {
+				current += string(s[i])
+				i++
+			}
+			current += string(s[i])
+		} else {
+			current += string(s[i])
+		}
+		res = append(res, current)
+	}
+	return res
+}
+
 type testResult struct {
 	flag       bool
 	resultDesc string
@@ -43,6 +65,8 @@ const (
 	RangeMiddle
 	RangeBack
 	RangeAll
+	RangeOneQuarter
+	RangeThreeQuarter
 )
 
 type rangeType struct {
@@ -59,14 +83,22 @@ type twoRangesType struct {
 }
 
 func getRange(ranges twoRangesType, selector rangeSelector, user int) rangeType {
+	interval := ranges.ranges[user]
+	from, mid, to := interval.from, interval.mid, interval.to
 	if selector == RangeFront {
-		return rangeType{ranges.ranges[user].from, ranges.ranges[user].from}
+		return rangeType{from, from}
 	} else if selector == RangeMiddle {
-		return rangeType{ranges.ranges[user].mid, ranges.ranges[user].mid}
+		return rangeType{mid, mid}
 	} else if selector == RangeBack {
-		return rangeType{ranges.ranges[user].to, ranges.ranges[user].to}
+		return rangeType{to, to}
 	} else if selector == RangeAll {
-		return rangeType{ranges.ranges[user].from, ranges.ranges[user].to}
+		return rangeType{from, to}
+	} else if selector == RangeOneQuarter {
+		pos := (from + mid + 1) / 2
+		return rangeType{pos, pos}
+	} else if selector == RangeThreeQuarter {
+		pos := (mid + to) / 2
+		return rangeType{pos, pos}
 	}
 	return rangeType{-1, -1}
 }
@@ -75,6 +107,20 @@ func makeTwoRanges(from1, mid1, to1 int, from2, mid2, to2 int, desc string) twoR
 	range0 := rangeWithMiddleType{from1, mid1, to1}
 	range1 := rangeWithMiddleType{from2, mid2, to2}
 	return twoRangesType{[2]rangeWithMiddleType{range0, range1}, desc}
+}
+
+func getMergeRange(xml string, interval rangeType) rangeType {
+	content := parseSimpleXML(xml)
+	st, ed := -1, -1
+	for i := interval.from + 1; i <= interval.to; i++ {
+		if st == -1 && len(content[i]) >= 2 && content[i][0] == '<' && content[i][1] == '/' {
+			st = i - 1
+		}
+		if len(content[i]) >= 2 && content[i][0] == '<' && content[i][1] != '/' {
+			ed = i
+		}
+	}
+	return rangeType{st, ed}
 }
 
 type styleOpCode int
@@ -89,6 +135,8 @@ const (
 const (
 	EditUndefined editOpCode = iota
 	EditUpdate
+	MergeUpdate
+	SplitUpdate
 )
 
 type operationInterface interface {
@@ -138,7 +186,19 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 	from, to := interval.from, interval.to
 
 	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
+		if op.op == EditUpdate {
+			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
+		} else if op.op == MergeUpdate {
+			mergeInterval := getMergeRange(root.GetTree("t").ToXML(), interval)
+			from, to = mergeInterval.from, mergeInterval.to
+			if from != -1 && to != -1 && from < to {
+				root.GetTree("t").Edit(mergeInterval.from, mergeInterval.to, op.content, op.splitLevel)
+			}
+		} else if op.op == SplitUpdate {
+			assert.NotEqual(t, 0, op.splitLevel)
+			assert.Equal(t, from, to)
+			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
+		}
 		return nil
 	}))
 }
@@ -151,17 +211,17 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.TreeNode, initialXML string,
 	rangesArr []twoRangesType, opArr1, opArr2 []operationInterface) {
 
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	ctx := context.Background()
+	d1 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
 	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
-		clients := activeClients(t, 2)
-		c1, c2 := clients[0], clients[1]
-		defer deactivateAndCloseClients(t, clients)
-
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &initialState)
 			return nil
@@ -247,6 +307,7 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, elementNode1, 0, `insertElementBack`},
 		editOperationType{RangeAll, EditUpdate, elementNode1, 0, `replaceElement`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	editOperations2 := []operationInterface{
@@ -259,9 +320,117 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, elementNode2, 0, `insertElementBack`},
 		editOperationType{RangeAll, EditUpdate, elementNode2, 0, `replaceElement`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
+}
+
+func TestTreeConcurrencySplitSplit(t *testing.T) {
+	//       0   1   2   3   4 5 6 7 8    9   10 11 12 13 14    15    16   17 18 19 20 21    22    23    24
+	// <root> <p> <p> <p> <p> a b c d </p> <p>  e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </p>  </root>
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+					}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
+				}},
+			}},
+		},
+	}
+	initialXML := `<root><p><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></p></root>`
+
+	ranges := []twoRangesType{
+		// equal-single-element: <p>abcd</p>
+		makeTwoRanges(3, 6, 9, 3, 6, 9, `equal-single`),
+		// equal-multiple-element: <p>abcd</p><p>efgh</p>
+		makeTwoRanges(3, 9, 15, 3, 9, 15, `equal-multiple`),
+		// A contains B same level: <p>abcd</p><p>efgh</p> - <p>efgh</p>
+		makeTwoRanges(3, 9, 15, 9, 12, 15, `A contains B same level`),
+		// A contains B multiple level: <p><p>abcd</p><p>efgh</p></p><p>ijkl</p> - <p>efgh</p>
+		makeTwoRanges(2, 16, 22, 9, 12, 15, `A contains B multiple level`),
+		// side by side
+		makeTwoRanges(3, 6, 9, 9, 12, 15, `B is next to A`),
+	}
+
+	splitOperations := []operationInterface{
+		editOperationType{RangeFront, SplitUpdate, nil, 1, `split-front-1`},
+		editOperationType{RangeOneQuarter, SplitUpdate, nil, 1, `split-one-quarter-1`},
+		editOperationType{RangeThreeQuarter, SplitUpdate, nil, 1, `split-three-quarter-1`},
+		editOperationType{RangeBack, SplitUpdate, nil, 1, `split-back-1`},
+		editOperationType{RangeFront, SplitUpdate, nil, 2, `split-front-2`},
+		editOperationType{RangeOneQuarter, SplitUpdate, nil, 2, `split-one-quarter-2`},
+		editOperationType{RangeThreeQuarter, SplitUpdate, nil, 2, `split-three-quarter-2`},
+		editOperationType{RangeBack, SplitUpdate, nil, 2, `split-back-2`},
+	}
+
+	RunTestTreeConcurrency("concurrently-split-split-test", t, initialState, initialXML, ranges, splitOperations, splitOperations)
+}
+
+func TestTreeConcurrencySplitEdit(t *testing.T) {
+	//       0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
+	// <root> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </root>
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}, Attributes: map[string]string{"italic": "true"}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}, Attributes: map[string]string{"italic": "true"}},
+				}, Attributes: map[string]string{"italic": "true"}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}, Attributes: map[string]string{"italic": "true"}},
+			}},
+		},
+	}
+	initialXML := `<root><p><p italic="true"><p italic="true">abcd</p><p italic="true">efgh</p></p><p italic="true">ijkl</p></p></root>`
+
+	content := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
+
+	ranges := []twoRangesType{
+		// equal: <p>ab'cd</p>
+		makeTwoRanges(2, 5, 8, 2, 5, 8, `equal`),
+		// A contains B: <p>ab'cd</p> - bc
+		makeTwoRanges(2, 5, 8, 4, 5, 6, `A contains B`),
+		// B contains A: <p>ab'cd</p> - <p>abcd</p><p>efgh</p>
+		makeTwoRanges(2, 5, 8, 2, 8, 14, `B contains A`),
+		// left node(text): <p>ab'cd</p> - ab
+		makeTwoRanges(2, 5, 8, 3, 4, 5, `left node(text)`),
+		// right node(text): <p>ab'cd</p> - cd
+		makeTwoRanges(2, 5, 8, 5, 6, 7, `right node(text)`),
+		// left node(element): <p>abcd</p>'<p>efgh</p> - <p>abcd</p>
+		makeTwoRanges(2, 8, 14, 2, 5, 8, `left node(element)`),
+		// right node(element): <p>abcd</p>'<p>efgh</p> - <p>efgh</p>
+		makeTwoRanges(2, 8, 14, 8, 11, 14, `right node(element)`),
+		// A -> B: <p>ab'cd</p> - <p>efgh</p>
+		makeTwoRanges(2, 5, 8, 8, 11, 14, `A -> B`),
+		// B -> A: <p>ef'gh</p> - <p>abcd</p>
+		makeTwoRanges(8, 11, 14, 2, 5, 8, `B -> A`),
+	}
+
+	splitOperations := []operationInterface{
+		editOperationType{RangeMiddle, SplitUpdate, nil, 1, `split-1`},
+		editOperationType{RangeMiddle, SplitUpdate, nil, 2, `split-2`},
+	}
+
+	editOperations := []operationInterface{
+		editOperationType{RangeFront, EditUpdate, content, 0, `insertFront`},
+		editOperationType{RangeMiddle, EditUpdate, content, 0, `insertMiddle`},
+		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
+		editOperationType{RangeAll, EditUpdate, content, 0, "replace"},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
+		styleOperationType{RangeAll, StyleSet, "bold", "aa", `style`},
+		styleOperationType{RangeAll, StyleRemove, "italic", "", `remove-style`},
+	}
+
+	RunTestTreeConcurrency("concurrently-split-edit-test", t, initialState, initialXML, ranges, splitOperations, editOperations)
 }
 
 func TestTreeConcurrencyStyleStyle(t *testing.T) {
@@ -314,18 +483,23 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}, Attributes: map[string]string{"color": "red"}},
 		},
 	}
-	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
+	initialXML := `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
 
-	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
+	content := &json.TreeNode{Type: "p", Attributes: map[string]string{
+		"italic": "true",
+		"color":  "blue",
+	}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
 
 	ranges := []twoRangesType{
 		// equal: <p>b</p> - <p>b</p>
 		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
+		// equal multiple: <p>a</p><p>b</p><p>c</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 9, 0, 3, 9, `equal multiple`),
 		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
 		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
 		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
@@ -344,10 +518,11 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
 		editOperationType{RangeAll, EditUpdate, content, 0, `replace`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	styleOperations := []operationInterface{
-		styleOperationType{RangeAll, StyleRemove, "bold", "", `remove-bold`},
+		styleOperationType{RangeAll, StyleRemove, "color", "", `remove-color`},
 		styleOperationType{RangeAll, StyleSet, "bold", "aa", `set-bold-aa`},
 	}
 

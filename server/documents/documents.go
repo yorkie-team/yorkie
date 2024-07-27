@@ -97,16 +97,7 @@ func GetDocumentSummary(
 	project *types.Project,
 	k key.Key,
 ) (*types.DocumentSummary, error) {
-	// TODO(hackerwins): Split FindDocInfoByKeyAndOwner into upsert and find.
-	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
-		ctx,
-		types.ClientRefKey{
-			ProjectID: project.ID,
-			ClientID:  types.IDFromActorID(time.InitialActorID),
-		},
-		k,
-		false,
-	)
+	docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, k)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +115,47 @@ func GetDocumentSummary(
 		UpdatedAt:  docInfo.UpdatedAt,
 		Snapshot:   doc.Marshal(),
 	}, nil
+}
+
+// GetDocumentSummaries returns a list of document summaries.
+func GetDocumentSummaries(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	keys []key.Key,
+	includeSnapshot bool,
+) ([]*types.DocumentSummary, error) {
+	docInfos, err := be.DB.FindDocInfosByKeys(ctx, project.ID, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	var summaries []*types.DocumentSummary
+	for _, docInfo := range docInfos {
+		snapshot := ""
+		if includeSnapshot {
+			// TODO(hackerwins, kokodak): Resolve the N+1 problem.
+			doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			if err != nil {
+				return nil, err
+			}
+
+			snapshot = doc.Marshal()
+		}
+
+		summary := &types.DocumentSummary{
+			ID:         docInfo.ID,
+			Key:        docInfo.Key,
+			CreatedAt:  docInfo.CreatedAt,
+			AccessedAt: docInfo.AccessedAt,
+			UpdatedAt:  docInfo.UpdatedAt,
+			Snapshot:   snapshot,
+		}
+
+		summaries = append(summaries, summary)
+	}
+
+	return summaries, nil
 }
 
 // GetDocumentByServerSeq returns a document for the given server sequence.

@@ -71,6 +71,91 @@ func RunFindDocInfoTest(
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
 	})
+
+	t.Run("find docInfo by key test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create a document
+		docKey := helper.TestDocKey(t)
+		info, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, err)
+		assert.Equal(t, docKey, info.Key)
+
+		// 02. Remove the document
+		err = db.CreateChangeInfos(ctx, projectID, info, 0, []*change.Change{}, true)
+		assert.NoError(t, err)
+
+		// 03. Find the document
+		info, err = db.FindDocInfoByKey(ctx, projectID, docKey)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
+}
+
+// RunFindDocInfosByKeysTest runs the FindDocInfosByKeys test for the given db.
+func RunFindDocInfosByKeysTest(
+	t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("find docInfos by keys test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create documents
+		docKeys := []key.Key{
+			"test", "test$3", "test123", "test$0",
+			"search$test", "abcde", "test abc",
+		}
+		for _, docKey := range docKeys {
+			_, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+			assert.NoError(t, err)
+		}
+
+		// 02. Find documents
+		infos, err := db.FindDocInfosByKeys(ctx, projectID, docKeys)
+		assert.NoError(t, err)
+
+		actualKeys := make([]key.Key, len(infos))
+		for i, info := range infos {
+			actualKeys[i] = info.Key
+		}
+
+		assert.ElementsMatch(t, docKeys, actualKeys)
+		assert.Len(t, infos, len(docKeys))
+	})
+
+	t.Run("find docInfos by keys where some keys are not found test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create documents
+		docKeys := []key.Key{
+			"exist-key1", "exist-key2", "exist-key3",
+		}
+		for _, docKey := range docKeys {
+			_, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+			assert.NoError(t, err)
+		}
+
+		// 02. append a key that does not exist
+		docKeysWithNonExistKey := append(docKeys, "non-exist-key")
+
+		// 03. Find documents
+		infos, err := db.FindDocInfosByKeys(ctx, projectID, docKeysWithNonExistKey)
+		assert.NoError(t, err)
+
+		actualKeys := make([]key.Key, len(infos))
+		for i, info := range infos {
+			actualKeys[i] = info.Key
+		}
+
+		assert.ElementsMatch(t, docKeys, actualKeys)
+		assert.Len(t, infos, len(docKeys))
+	})
 }
 
 // RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
@@ -199,7 +284,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
@@ -390,6 +475,56 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
+	})
+
+	t.Run("ensure document detached when deactivate client test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a client
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, t.Name(), clientInfo.Key)
+		assert.Equal(t, database.ClientActivated, clientInfo.Status)
+
+		// 02. Create documents and attach them to the client
+		for i := 0; i < 3; i++ {
+			docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+			clientInfo.Documents[docInfo.ID].ServerSeq = 1
+			clientInfo.Documents[docInfo.ID].ClientSeq = 1
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+			result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
+			assert.NoError(t, err)
+		}
+
+		// 03. Remove one document
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 04. Deactivate the client
+		result, err := db.DeactivateClient(ctx, types.ClientRefKey{
+			ProjectID: projectID,
+			ClientID:  clientInfo.ID,
+		})
+		assert.NoError(t, err)
+
+		// 05. Check whether doc.Status is reflected properly.
+		// If it was `DocumentAttached`, it should be changed to `DocumentDetached`.
+		for i := 0; i < 2; i++ {
+			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
+			assert.NoError(t, err)
+			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentDetached)
+		}
+		// If it was `DocumentRemoved`, it should be remained `DocumentRemoved`.
+		docInfo, err = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		assert.NoError(t, err)
+		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentRemoved)
 	})
 }
 
@@ -720,7 +855,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
@@ -739,7 +874,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
 		docRefKey1 := docInfo1.RefKey()
-		assert.NoError(t, clientInfo1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
 		// 02. Remove the document.
@@ -750,7 +885,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		// 03. Create a document with same key and check they have same key but different id.
 		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
 		docRefKey2 := docInfo2.RefKey()
-		assert.NoError(t, clientInfo1.AttachDocument(docRefKey2.DocID))
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey2.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
@@ -763,7 +898,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		doc := document.New(key.Key(t.Name()))
@@ -784,6 +919,46 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, err)
 		assert.NotEqual(t, database.DocumentRemoved, clientInfo.Documents[docInfo.ID].Status)
 	})
+
+	t.Run("set updated_at in docInfo test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+
+		// 01. Create a client and a document then attach the document to the client.
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo1.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
+
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+
+		// 02. update document only presence
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("key", "val")
+			return nil
+		}))
+		pack := doc.CreateChangePack()
+		updatedAt := docInfo1.UpdatedAt
+		assert.NoError(t, db.CreateChangeInfos(ctx, projectID, docInfo1, 0, pack.Changes, false))
+		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.Equal(t, updatedAt, docInfo2.UpdatedAt)
+
+		// 03. update document presence and operation
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("key", "val")
+			root.SetNewArray("array")
+			return nil
+		}))
+		pack = doc.CreateChangePack()
+		updatedAt = docInfo2.UpdatedAt
+		assert.NoError(t, db.CreateChangeInfos(ctx, projectID, docInfo2, 0, pack.Changes, false))
+		docInfo3, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NotEqual(t, updatedAt, docInfo3.UpdatedAt)
+	})
 }
 
 // RunUpdateClientInfoAfterPushPullTest runs the UpdateClientInfoAfterPushPull tests for the given db.
@@ -801,7 +976,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 	})
 
@@ -813,7 +988,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -831,7 +1006,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -873,7 +1048,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -902,7 +1077,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		clientInfo.Documents[docInfo.ID].ServerSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -931,7 +1106,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		clientInfo.ID = "invalid clientInfo id"
@@ -962,7 +1137,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.False(t, attached)
 
 		// 02. Check if document is attached after attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttached(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -976,9 +1151,9 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.False(t, attached)
 
 		// 04. Check if document is attached after two clients attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
-		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttached(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -1012,14 +1187,14 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 
 		// 01. Check if documents are attached after attaching
 		docRefKey1 := d1.RefKey()
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err := db.IsDocumentAttached(ctx, docRefKey1, "")
 		assert.NoError(t, err)
 		assert.True(t, attached)
 
 		docRefKey2 := d2.RefKey()
-		assert.NoError(t, c1.AttachDocument(docRefKey2.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey2.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d2))
 		attached, err = db.IsDocumentAttached(ctx, docRefKey2, "")
 		assert.NoError(t, err)
@@ -1061,7 +1236,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.False(t, attached)
 
 		// 02. Check if document is attached after attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttached(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -1081,9 +1256,9 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.False(t, attached)
 
 		// 04. Check if document is attached after two clients attaching
-		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
-		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID))
+		assert.NoError(t, c2.AttachDocument(docRefKey1.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttached(ctx, docRefKey1, "")
 		assert.NoError(t, err)

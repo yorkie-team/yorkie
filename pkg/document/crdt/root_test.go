@@ -26,9 +26,9 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func registerElementHasRemovedNodes(fromPos, toPos *crdt.RGATreeSplitNodePos, root *crdt.Root, text crdt.GCElement) {
-	if !fromPos.Equal(toPos) {
-		root.RegisterElementHasRemovedNodes(text)
+func registerGCPairs(root *crdt.Root, pairs []crdt.GCPair) {
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
 	}
 }
 
@@ -61,76 +61,66 @@ func TestRoot(t *testing.T) {
 	})
 
 	t.Run("garbage collection for text test", func(t *testing.T) {
-		root := helper.TestRoot()
-		ctx := helper.TextChangeContext(root)
-		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
-
-		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
-		assert.Equal(t, "Hello World", text.String())
-		assert.Equal(t, 0, root.GarbageLen())
-
-		fromPos, toPos, _ = text.CreateRange(5, 10)
-		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
-		assert.Equal(t, "HelloYorkied", text.String())
-		assert.Equal(t, 1, root.GarbageLen())
-
-		fromPos, toPos, _ = text.CreateRange(0, 5)
-		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
-		assert.Equal(t, "Yorkied", text.String())
-		assert.Equal(t, 2, root.GarbageLen())
-
-		fromPos, toPos, _ = text.CreateRange(6, 7)
-		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
-		assert.Equal(t, "Yorkie", text.String())
-		assert.Equal(t, 3, root.GarbageLen())
-
-		// It contains code marked tombstone.
-		// After calling the garbage collector, the node will be removed.
-		nodeLen := len(text.Nodes())
-		assert.Equal(t, 4, nodeLen)
-
-		n, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, n)
-		assert.Equal(t, 0, root.GarbageLen())
-		nodeLen = len(text.Nodes())
-		assert.Equal(t, 1, nodeLen)
-	})
-
-	t.Run("garbage collection for fragments of text", func(t *testing.T) {
-		type test struct {
+		steps := []struct {
 			from    int
 			to      int
 			content string
 			want    string
 			garbage int
+		}{
+			{0, 0, "Hi World", `[0:0:00:0 {} ""][0:2:00:0 {} "Hi World"]`, 0},
+			{2, 7, "Earth", `[0:0:00:0 {} ""][0:2:00:0 {} "Hi"][0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}[0:2:00:7 {} "d"]`, 1},
+			{0, 2, "", `[0:0:00:0 {} ""]{0:2:00:0 {} "Hi"}[0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}[0:2:00:7 {} "d"]`, 2},
+			{5, 6, "", `[0:0:00:0 {} ""]{0:2:00:0 {} "Hi"}[0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}{0:2:00:7 {} "d"}`, 3},
 		}
 
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		tests := []test{
+		for _, step := range steps {
+			fromPos, toPos, _ := text.CreateRange(step.from, step.to)
+			_, _, pairs, err := text.Edit(fromPos, toPos, nil, step.content, nil, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
+			registerGCPairs(root, pairs)
+			assert.Equal(t, step.want, text.ToTestString())
+			assert.Equal(t, step.garbage, root.GarbageLen())
+		}
+
+		// It contains code marked tombstone.
+		// After calling the garbage collector, the node will be removed.
+		assert.Equal(t, 4, len(text.Nodes()))
+
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, n)
+		assert.Equal(t, 0, root.GarbageLen())
+		assert.Equal(t, 1, len(text.Nodes()))
+	})
+
+	t.Run("garbage collection for fragments of text", func(t *testing.T) {
+		steps := []struct {
+			from    int
+			to      int
+			content string
+			want    string
+			garbage int
+		}{
 			{from: 0, to: 0, content: "Yorkie", want: "Yorkie", garbage: 0},
 			{from: 4, to: 5, content: "", want: "Yorke", garbage: 1},
 			{from: 2, to: 3, content: "", want: "Yoke", garbage: 2},
 			{from: 0, to: 1, content: "", want: "oke", garbage: 3},
 		}
 
-		for _, tc := range tests {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		for _, tc := range steps {
 			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
-			_, _, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
+			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			assert.NoError(t, err)
-			registerElementHasRemovedNodes(fromPos, toPos, root, text)
+			registerGCPairs(root, pairs)
 			assert.Equal(t, tc.want, text.String())
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
@@ -147,23 +137,23 @@ func TestRoot(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
-		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 6)
-		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 2, root.GarbageLen())
 

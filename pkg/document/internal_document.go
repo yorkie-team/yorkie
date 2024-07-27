@@ -142,7 +142,7 @@ func (d *InternalDocument) HasLocalChanges() bool {
 }
 
 // ApplyChangePack applies the given change pack into this document.
-func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
+func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
 		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
@@ -166,7 +166,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if pack.MinSyncedTicket != nil {
+	if !disableGC && pack.MinSyncedTicket != nil {
 		if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
 			return err
 		}

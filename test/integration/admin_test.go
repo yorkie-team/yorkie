@@ -83,15 +83,14 @@ func TestAdmin(t *testing.T) {
 
 	t.Run("document event propagation on removal test", func(t *testing.T) {
 		ctx := context.Background()
-		watchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
 
 		// 01. c1 attaches and watches d1.
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		rch, err := c1.Watch(watchCtx, d1)
+		rch, cancel, err := c1.Subscribe(d1)
+		defer cancel()
 		assert.NoError(t, err)
 		go func() {
 			defer wg.Done()
@@ -151,12 +150,12 @@ func TestAdmin(t *testing.T) {
 
 	t.Run("unauthentication test", func(t *testing.T) {
 		// 01. try to call admin API without token.
-		adminCli2, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		cli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
 		assert.NoError(t, err)
 		defer func() {
-			adminCli2.Close()
+			cli.Close()
 		}()
-		_, err = adminCli2.GetProject(ctx, "default")
+		_, err = cli.GetProject(ctx, "default")
 
 		// 02. server should return unauthenticated error.
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))

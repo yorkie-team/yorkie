@@ -136,7 +136,7 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 	return pos.relativeOffset
 }
 
-// Equal returns the whether the given pos equals or not.
+// Equal returns whether the given pos equals or not.
 func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
 	if !pos.id.Equal(other.id) {
 		return false
@@ -171,6 +171,11 @@ func NewRGATreeSplitNode[V RGATreeSplitValue](id *RGATreeSplitNodeID, value V) *
 // ID returns the ID of this RGATreeSplitNode.
 func (s *RGATreeSplitNode[V]) ID() *RGATreeSplitNodeID {
 	return s.id
+}
+
+// IDString returns the string representation of the ID.
+func (s *RGATreeSplitNode[V]) IDString() string {
+	return s.id.key()
 }
 
 // InsPrevID returns previous node ID at the time of this node insertion.
@@ -253,18 +258,21 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	if !s.createdAt().After(latestCreatedAt) &&
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	justRemoved := s.removedAt == nil
+
+	if !s.createdAt().After(maxCreatedAt) &&
 		(s.removedAt == nil || removedAt.After(s.removedAt)) {
 		s.removedAt = removedAt
-		return true
+		return justRemoved
 	}
+
 	return false
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	return !s.createdAt().After(latestCreatedAt) &&
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	return !s.createdAt().After(maxCreatedAt) &&
 		(s.removedAt == nil || editedAt.After(s.removedAt))
 }
 
@@ -281,10 +289,6 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	initialHead *RGATreeSplitNode[V]
 	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
-
-	// removedNodeMap is a map to store removed nodes. It is used to
-	// delete the node physically when the garbage collection is executed.
-	removedNodeMap map[string]*RGATreeSplitNode[V]
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
@@ -294,10 +298,9 @@ func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGA
 	treeByID.Put(initialHead.ID(), initialHead)
 
 	return &RGATreeSplit[V]{
-		initialHead:    initialHead,
-		treeByIndex:    treeByIndex,
-		treeByID:       treeByID,
-		removedNodeMap: make(map[string]*RGATreeSplitNode[V]),
+		initialHead: initialHead,
+		treeByIndex: treeByIndex,
+		treeByID:    treeByID,
 	}
 }
 
@@ -445,23 +448,23 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content V,
 	editedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
 	// 01. Split nodes with from and to
 	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	maxCreatedAtMap, removedNodes := s.deleteNodes(nodesToDelete, maxCreatedAtMapByActor, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -478,11 +481,15 @@ func (s *RGATreeSplit[V]) edit(
 	}
 
 	// 04. add removed node
-	for key, removedNode := range removedNodeMapByNodeKey {
-		s.removedNodeMap[key] = removedNode
+	var pairs []GCPair
+	for _, removedNode := range removedNodes {
+		pairs = append(pairs, GCPair{
+			Parent: s,
+			Child:  removedNode,
+		})
 	}
 
-	return caretPos, latestCreatedAtMap, nil
+	return caretPos, maxCreatedAtMap, pairs, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -497,7 +504,7 @@ func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeS
 
 func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
@@ -517,22 +524,22 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
-			latestCreatedAt = time.MaxTicket
+		var maxCreatedAt *time.Ticket
+		if maxCreatedAtMapByActor == nil {
+			maxCreatedAt = time.MaxTicket
 		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
-				latestCreatedAt = createdAt
+				maxCreatedAt = createdAt
 			} else {
-				latestCreatedAt = time.InitialTicket
+				maxCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.Remove(editedAt, latestCreatedAt) {
-			latestCreatedAt := createdAtMapByActor[actorIDHex]
+		if node.Remove(editedAt, maxCreatedAt) {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
@@ -617,29 +624,13 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 	return builder.String()
 }
 
-// removedNodesLen returns length of removed nodes
-func (s *RGATreeSplit[V]) removedNodesLen() int {
-	return len(s.removedNodeMap)
-}
+// Purge physically purge the given node from RGATreeSplit.
+func (s *RGATreeSplit[V]) Purge(child GCChild) error {
+	node := child.(*RGATreeSplitNode[V])
 
-// purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
-	count := 0
-	for _, node := range s.removedNodeMap {
-		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
-			s.treeByIndex.Delete(node.indexNode)
-			s.purge(node)
-			s.treeByID.Remove(node.id)
-			delete(s.removedNodeMap, node.id.key())
-			count++
-		}
-	}
+	s.treeByIndex.Delete(node.indexNode)
+	s.treeByID.Remove(node.id)
 
-	return count, nil
-}
-
-// purge physically purge the given node from RGATreeSplit.
-func (s *RGATreeSplit[V]) purge(node *RGATreeSplitNode[V]) {
 	node.prev.next = node.next
 	if node.next != nil {
 		node.next.prev = node.prev
@@ -653,4 +644,6 @@ func (s *RGATreeSplit[V]) purge(node *RGATreeSplitNode[V]) {
 		node.insNext.insPrev = node.insPrev
 	}
 	node.insPrev, node.insNext = nil, nil
+
+	return nil
 }

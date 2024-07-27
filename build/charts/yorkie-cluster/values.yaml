@@ -13,8 +13,7 @@ yorkie:
     tag: ""
 
   args:
-    dbUrl: mongodb.mongodb.svc.cluster.local
-    dbPort: 27017
+    dbConnectionUri: mongodb://mongodb.mongodb.svc.cluster.local:27017/yorkie-meta
 
   ports:
     rpcPort: 8080
@@ -46,16 +45,20 @@ ingressGateway:
 # Configuration for ingress (eg: AWS ALB)
 ingress:
   ingressClassName: nginx
-  ## Set to alb if you are using AWS ALB
+  ## Set to alb if you are using AWS, NCP ALB
   # ingressClassName: alb
 
   hosts:
     enabled: false
     apiHost: api.yorkie.dev
 
-  alb:
+  awsAlb:
     enabled: false
     certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234
+
+  ncpAlb:
+    enabled: false
+    certNo: 1234
 
 # Configuration for ratelimit
 ratelimit:

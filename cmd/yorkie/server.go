@@ -313,6 +313,12 @@ func init() {
 		server.DefaultSnapshotWithPurgingChanges,
 		"Whether to delete previous changes when the snapshot is created.",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Backend.SnapshotDisableGC,
+		"backend-snapshot-disable-gc",
+		server.DefaultSnapshotDisableGC,
+		"Whether to disable garbage collection of snapshots.",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
 		"auth-webhook-max-retries",

@@ -7,275 +7,464 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.27] - 2024-07-11
+
+### Changed
+
+- Provide error codes for enhancing error handling from clients by @hackerwins in https://github.com/yorkie-team/yorkie/pull/927
+
+### Fixed
+
+- Prevent exposure of removed documents when searching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/918
+- Ensure proper deletion of documents in MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/920
+- Handle local changes correctly when receiving snapshot by @raararaara in https://github.com/yorkie-team/yorkie/pull/923
+
+## [0.4.26] - 2024-07-04
+
+### Fixed
+
+- Remove node from index during GC by @raararaara in https://github.com/yorkie-team/yorkie/pull/913
+
+## [0.4.25] - 2024-07-03
+
+### Added
+
+- Add GetDocuments API returning document summaries by @hackerwins in https://github.com/yorkie-team/yorkie/pull/909
+
+### Changed
+
+- Update CI workflow to trigger Pull Request CI only on code-level changes by @kokodak in https://github.com/yorkie-team/yorkie/pull/906
+- Return ErrAlreadyDetached when reattaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/908
+- Add Project field to YorkieService logs by @hackerwins in https://github.com/yorkie-team/yorkie/pull/911
+
+### Fixed
+
+- Remove commit revision in version command by @hackerwins in https://github.com/yorkie-team/yorkie/pull/905
+- Fix missing document detachments when client is deactivated by @raararaara in https://github.com/yorkie-team/yorkie/pull/907
+
+## [0.4.24] - 2024-06-14
+
+### Fixed
+
+- Fix duplicate changes when syncing and detaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/896
+
+## [0.4.23] - 2024-06-07
+
+### Fixed
+
+- Fix miscalculation of tree size in concurrent editing by @raararaara in https://github.com/yorkie-team/yorkie/pull/891
+
+## [0.4.22] - 2024-06-04
+
+## Added
+
+- Add RHTNode removal to converter for consistency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/888
+
+## [0.4.21] - 2024-06-03
+
+### Added
+
+- Handle concurrent Tree.RemoveStyle by @hackerwins in https://github.com/yorkie-team/yorkie/pull/883
+
+### Changed
+
+- Return ErrClientNotActivated for deactivated clients on WatchDocument by @hackerwins in https://github.com/yorkie-team/yorkie/pull/877
+
+### Fixed
+
+- Fix incorrect tree snapshot encoding/decoding by @raararaara in https://github.com/yorkie-team/yorkie/pull/881
+
+## [0.4.20] - 2024-05-24
+
+### Added
+
+- Implement RHT.GC by @hackerwins in https://github.com/yorkie-team/yorkie/pull/864
+- Add Resource Configuration in `yorkie-mongodb` Helm chart by @krapie in https://github.com/yorkie-team/yorkie/pull/872
+- Add snapshot-disable-gc flag by @hackerwins in https://github.com/yorkie-team/yorkie/pull/874
+
+### Changed
+
+- Move ToXML from RHT to TreeNode by @raararaara in https://github.com/yorkie-team/yorkie/pull/863
+- Apply GCPair to TreeNode, TextNode by @hackerwins in https://github.com/yorkie-team/yorkie/pull/866
+
+## [0.4.19] - 2024-05-10
+
+### Fixed
+
+- Handle concurrent editing and styling in Tree by @hackerwins in https://github.com/yorkie-team/yorkie/pull/854
+- Fix inconsistent garbage collection for multiple nodes in text and tree type by @chacha912 in https://github.com/yorkie-team/yorkie/pull/855
+
+## [0.4.18] - 2024-04-23
+
+### Added
+
+- Support `yorkie-monitoring` and `yorkie-argocd` Charts on NCP by @krapie in https://github.com/yorkie-team/yorkie/pull/846
+
+## [0.4.17] - 2024-04-19
+
+### Added
+
+- Support NCP ALB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/835
+
+### Changed
+
+- Move Client.Watch inside Client.Attach by @krapie in https://github.com/yorkie-team/yorkie/pull/803
+- Use DBConnectionURI directly by @hackerwins in https://github.com/yorkie-team/yorkie/pull/833
+- Move `istio-ingressgateway` to Yorkie Namespace by @krapie in https://github.com/yorkie-team/yorkie/pull/836
+
+### Fixed
+
+- Provide CODECOV_TOKEN to codecov-action by @hackerwins in https://github.com/yorkie-team/yorkie/pull/843
+
+## [0.4.16] - 2024-03-29
+
+### Fixed
+
+- Fix incorrect calculation in `indexTree.treePosToPath` operation by @raararaara in https://github.com/yorkie-team/yorkie/pull/824
+- Fix logic errors in TreeNode.DeepCopy by @raararaara in https://github.com/yorkie-team/yorkie/pull/821
+- Fix missing escapeString in Tree Marshal by @chacha912 https://github.com/yorkie-team/yorkie/pull/830
+
+## [0.4.15] - 2024-03-11
+
+### Added
+
+- Add Swagger Serving Command by @devleejb in https://github.com/yorkie-team/yorkie/pull/812
+- Add MongoDB sharding document by @sejongk in https://github.com/yorkie-team/yorkie/pull/781
+- Add merge and split concurrency tests by @justiceHui in https://github.com/yorkie-team/yorkie/pull/780
+
+### Fixed
+
+- Prevent RunTestConcurrency from creating garbage clients by @justiceHui in https://github.com/yorkie-team/yorkie/pull/793
+- Add Test Server Wait Helper Function by @krapie in https://github.com/yorkie-team/yorkie/pull/787
+- Update Design Document for Missing Document Link and Instructon by @krapie in https://github.com/yorkie-team/yorkie/pull/782
+
+## [0.4.14] - 2024-01-29
+
+### Added
+
+- Introduce MongoDB sharding rules to Project-wide and Document-wide collections by @sejongk in https://github.com/yorkie-team/yorkie/pull/776
+- Add Helm chart for MongoDB sharded cluster by @sejongk in https://github.com/yorkie-team/yorkie/pull/769
+- Improve object creation with an initial value of specific types by @highcloud100 in https://github.com/yorkie-team/yorkie/pull/766
+
+### Changed
+
+- Refactor concurrency tests for basic Tree.Edit by @justiceHui in https://github.com/yorkie-team/yorkie/pull/772
+- Remove unnecessary `String()` calls with `stringer` interface by @sejongk in https://github.com/yorkie-team/yorkie/pull/777
+
 ## [0.4.13] - 2024-01-19
 
 ### Added
-* Add API for Retrieving All Documents by @raararaara in https://github.com/yorkie-team/yorkie/pull/755
-* Introduce object creation interface with initial values by @highcloud100 in https://github.com/yorkie-team/yorkie/pull/756
-* Implement Tree.RemoveStyle by @justiceHui in https://github.com/yorkie-team/yorkie/pull/748
+
+- Add API for Retrieving All Documents by @raararaara in https://github.com/yorkie-team/yorkie/pull/755
+- Introduce object creation interface with initial values by @highcloud100 in https://github.com/yorkie-team/yorkie/pull/756
+- Implement Tree.RemoveStyle by @justiceHui in https://github.com/yorkie-team/yorkie/pull/748
 
 ### Fixed
-* Fix RHT.Remove and Add test code by @justiceHui in https://github.com/yorkie-team/yorkie/pull/752
-* FIx Finding Housekeeping Candidates and Modify Housekeeping Structure by @devleejb in https://github.com/yorkie-team/yorkie/pull/749
-* Add concurrent editing test cases in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/751
+
+- Fix RHT.Remove and Add test code by @justiceHui in https://github.com/yorkie-team/yorkie/pull/752
+- FIx Finding Housekeeping Candidates and Modify Housekeeping Structure by @devleejb in https://github.com/yorkie-team/yorkie/pull/749
+- Add concurrent editing test cases in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/751
 
 ## [0.4.12] - 2024-01-05
 
 ### Changed
-* Introduce TreeToken and tokensBetween to Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/747
-* Add RPC and profiling ports to Yorkie deployment by @hackerwins in https://github.com/yorkie-team/yorkie/pull/727
+
+- Introduce TreeToken and tokensBetween to Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/747
+- Add RPC and profiling ports to Yorkie deployment by @hackerwins in https://github.com/yorkie-team/yorkie/pull/727
 
 ### Fixed
-* Change CLI TLS configuration to HTTP2 by @krapie in https://github.com/yorkie-team/yorkie/pull/742
-* Replace grpcstatus.Errorf with connect.Error by @chacha912, @highcloud100 in https://github.com/yorkie-team/yorkie/pull/741
-* Fix `getGarbageLen` to retrun correct size by @devleejb in https://github.com/yorkie-team/yorkie/pull/743
-* Fix typo in `MAINTAINING.md` by @devleejb in https://github.com/yorkie-team/yorkie/pull/739
+
+- Change CLI TLS configuration to HTTP2 by @krapie in https://github.com/yorkie-team/yorkie/pull/742
+- Replace grpcstatus.Errorf with connect.Error by @chacha912, @highcloud100 in https://github.com/yorkie-team/yorkie/pull/741
+- Fix `getGarbageLen` to retrun correct size by @devleejb in https://github.com/yorkie-team/yorkie/pull/743
+- Fix typo in `MAINTAINING.md` by @devleejb in https://github.com/yorkie-team/yorkie/pull/739
 
 ## [0.4.11] - 2023-12-18
 
 ### Added
-* Support concurrent insertion and splitting in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/725
+
+- Support concurrent insertion and splitting in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/725
 
 ### Changed
-* Migrate RPC to ConnectRPC by @krapie, @hackerwins https://github.com/yorkie-team/yorkie/pull/703
+
+- Migrate RPC to ConnectRPC by @krapie, @hackerwins https://github.com/yorkie-team/yorkie/pull/703
 
 ### Fixed
-* Address duplicate nodeIDs in Tree.Split @sejongk https://github.com/yorkie-team/yorkie/pull/724
+
+- Address duplicate nodeIDs in Tree.Split @sejongk https://github.com/yorkie-team/yorkie/pull/724
 
 ## [0.4.10] - 2023-12-04
 
 ### Added
-* Add Rate Limit using Istio Envoy by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/674
-* Implement splitLevel of Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/705
+
+- Add Rate Limit using Istio Envoy by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/674
+- Implement splitLevel of Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/705
 
 ### Changed
-* Bump github.com/spf13/viper from 1.15.0 to 1.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/693
-* Bump github.com/jedib0t/go-pretty/v6 from 6.4.0 to 6.4.9 by @dependabot in https://github.com/yorkie-team/yorkie/pull/695
-* Bump actions/setup-go from 3 to 4 by @dependabot in https://github.com/yorkie-team/yorkie/pull/698
-* Bump helm/chart-releaser-action from 1.5.0 to 1.6.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/699
-* Bump docker/login-action from 2 to 3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/700
-* Bump google.golang.org/grpc from 1.58.2 to 1.58.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/701
-* Bump golang.org/x/crypto from 0.14.0 to 0.16.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/702
-* Bump github.com/rs/xid from 1.4.0 to 1.5.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/697
+
+- Bump github.com/spf13/viper from 1.15.0 to 1.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/693
+- Bump github.com/jedib0t/go-pretty/v6 from 6.4.0 to 6.4.9 by @dependabot in https://github.com/yorkie-team/yorkie/pull/695
+- Bump actions/setup-go from 3 to 4 by @dependabot in https://github.com/yorkie-team/yorkie/pull/698
+- Bump helm/chart-releaser-action from 1.5.0 to 1.6.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/699
+- Bump docker/login-action from 2 to 3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/700
+- Bump google.golang.org/grpc from 1.58.2 to 1.58.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/701
+- Bump golang.org/x/crypto from 0.14.0 to 0.16.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/702
+- Bump github.com/rs/xid from 1.4.0 to 1.5.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/697
 
 ## [0.4.9] - 2023-11-25
 
 ### Added
-* Implement merge elements in Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/659
-* Add PushPull benchmark test by @sejongk in https://github.com/yorkie-team/yorkie/pull/658
-* Setup Dependabot by @jongwooo in https://github.com/yorkie-team/yorkie/pull/675
+
+- Implement merge elements in Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/659
+- Add PushPull benchmark test by @sejongk in https://github.com/yorkie-team/yorkie/pull/658
+- Setup Dependabot by @jongwooo in https://github.com/yorkie-team/yorkie/pull/675
 
 ### Changed
-* Bump up golangci-lint and fix lint errors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/660
-* Modify converter to allow setting values for object and array by @chacha912 and @hackerwins in https://github.com/yorkie-team/yorkie/pull/687
+
+- Bump up golangci-lint and fix lint errors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/660
+- Modify converter to allow setting values for object and array by @chacha912 and @hackerwins in https://github.com/yorkie-team/yorkie/pull/687
 
 ## [0.4.8] - 2023-11-01
 
 ### Changed
-* Bump golang.org/x/net from 0.10.0 to 0.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/649
-* Bump google.golang.org/grpc from 1.54.0 to 1.56.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/654
-* Fix ArgoCD version to v2.7.10 by @krapie in https://github.com/yorkie-team/yorkie/pull/653
-* Rename StructureAsString to toTestString by @hackerwins in https://github.com/yorkie-team/yorkie/pull/656
+
+- Bump golang.org/x/net from 0.10.0 to 0.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/649
+- Bump google.golang.org/grpc from 1.54.0 to 1.56.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/654
+- Fix ArgoCD version to v2.7.10 by @krapie in https://github.com/yorkie-team/yorkie/pull/653
+- Rename StructureAsString to toTestString by @hackerwins in https://github.com/yorkie-team/yorkie/pull/656
 
 ### Fixed
-* Revise Prometheus PVC Spec Syntax Error by @krapie in https://github.com/yorkie-team/yorkie/pull/650
-* Remove skip storing MinSyncedTicket when the ticket is initial by @hackerwins in https://github.com/yorkie-team/yorkie/pull/655
+
+- Revise Prometheus PVC Spec Syntax Error by @krapie in https://github.com/yorkie-team/yorkie/pull/650
+- Remove skip storing MinSyncedTicket when the ticket is initial by @hackerwins in https://github.com/yorkie-team/yorkie/pull/655
 
 ## [0.4.7] - 2023-10-06
 
 ### Added
-* Introduce Broadcast API by @sejongk in https://github.com/yorkie-team/yorkie/pull/631
-* Add context to CLI for simplifying CLI commands by @Wu22e and @hackerwins in https://github.com/yorkie-team/yorkie/pull/647
-* Add Tree.Edit benchmark by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/637
+
+- Introduce Broadcast API by @sejongk in https://github.com/yorkie-team/yorkie/pull/631
+- Add context to CLI for simplifying CLI commands by @Wu22e and @hackerwins in https://github.com/yorkie-team/yorkie/pull/647
+- Add Tree.Edit benchmark by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/637
 
 ### Changed
-* Bump checkout from v3 to v4 by @Yaminyam in https://github.com/yorkie-team/yorkie/pull/641
-* Remove panic from crdt.Primitive @fourjae and @hackerwins in https://github.com/yorkie-team/yorkie/pull/636
+
+- Bump checkout from v3 to v4 by @Yaminyam in https://github.com/yorkie-team/yorkie/pull/641
+- Remove panic from crdt.Primitive @fourjae and @hackerwins in https://github.com/yorkie-team/yorkie/pull/636
 
 ### Removed
-* Remove unused trie by @hackerwins in https://github.com/yorkie-team/yorkie/pull/646
+
+- Remove unused trie by @hackerwins in https://github.com/yorkie-team/yorkie/pull/646
 
 ### Fixed
-* Support concurrent formatting of Text by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/639
-* Fix typo in retention design document by @LakHyeonKim in https://github.com/yorkie-team/yorkie/pull/633
-* Update Design Document for Missing Document Links and Ordering by @krapie in https://github.com/yorkie-team/yorkie/pull/630
-* Recover Select to prevent unsupported operation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/629
+
+- Support concurrent formatting of Text by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/639
+- Fix typo in retention design document by @LakHyeonKim in https://github.com/yorkie-team/yorkie/pull/633
+- Update Design Document for Missing Document Links and Ordering by @krapie in https://github.com/yorkie-team/yorkie/pull/630
+- Recover Select to prevent unsupported operation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/629
 
 ## [0.4.6] - 2023-08-25
 
 ### Added
-* Set cobra default output to stdout by @blurfx in https://github.com/yorkie-team/yorkie/pull/599
-* Fetch latest snapshot metadata to determine snapshot creation need by @hyemmie in https://github.com/yorkie-team/yorkie/pull/597
-* Update contributing docs by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/601
-* Add Pagination to Listing Projects for Housekeeping by @tedkimdev in https://github.com/yorkie-team/yorkie/pull/587
-* Update workflow with latest versions of the actions which runs on Node16 by @jongwooo in https://github.com/yorkie-team/yorkie/pull/620
-* Add integration tree test for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/611
-* Add testcases for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/621
-* Add tree document by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/608
-* Cache ProjectInfo by @blurfx in https://github.com/yorkie-team/yorkie/pull/586
-* Handle concurrent editing of Tree.Edit by @hackerwins, @MoonGyu1, @sejongk in https://github.com/yorkie-team/yorkie/pull/607
-* Support multi-level and partial element selection by @sejongk, @hackerwins in https://github.com/yorkie-team/yorkie/pull/624
+
+- Set cobra default output to stdout by @blurfx in https://github.com/yorkie-team/yorkie/pull/599
+- Fetch latest snapshot metadata to determine snapshot creation need by @hyemmie in https://github.com/yorkie-team/yorkie/pull/597
+- Update contributing docs by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/601
+- Add Pagination to Listing Projects for Housekeeping by @tedkimdev in https://github.com/yorkie-team/yorkie/pull/587
+- Update workflow with latest versions of the actions which runs on Node16 by @jongwooo in https://github.com/yorkie-team/yorkie/pull/620
+- Add integration tree test for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/611
+- Add testcases for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/621
+- Add tree document by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/608
+- Cache ProjectInfo by @blurfx in https://github.com/yorkie-team/yorkie/pull/586
+- Handle concurrent editing of Tree.Edit by @hackerwins, @MoonGyu1, @sejongk in https://github.com/yorkie-team/yorkie/pull/607
+- Support multi-level and partial element selection by @sejongk, @hackerwins in https://github.com/yorkie-team/yorkie/pull/624
 
 ### Changed
-* Remove Select operation from Text by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/589
-* Change 'Documents' from plural to singular in DocEvent by @chacha912 in https://github.com/yorkie-team/yorkie/pull/613
-* Cleanup proto by @chacha912 in https://github.com/yorkie-team/yorkie/pull/614
-* Replace matrix strategy with environment variable by @jongwooo in https://github.com/yorkie-team/yorkie/pull/619
-* Change TreeNode to have IDs instead of insPrev, insNext  by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/622
+
+- Remove Select operation from Text by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/589
+- Change 'Documents' from plural to singular in DocEvent by @chacha912 in https://github.com/yorkie-team/yorkie/pull/613
+- Cleanup proto by @chacha912 in https://github.com/yorkie-team/yorkie/pull/614
+- Replace matrix strategy with environment variable by @jongwooo in https://github.com/yorkie-team/yorkie/pull/619
+- Change TreeNode to have IDs instead of insPrev, insNext by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/622
 
 ### Fixed
-* Fix typos and invalid link in the yorkie design document by @g2hhh2ee in https://github.com/yorkie-team/yorkie/pull/591
-* Clean up code by @hackerwins in https://github.com/yorkie-team/yorkie/pull/595
-* Clean up methods related to presence by @chacha912 in https://github.com/yorkie-team/yorkie/pull/594
-* Remove panic from crdt.RGATreeList by @sejongk in https://github.com/yorkie-team/yorkie/pull/596
-* Fix treePos calculating logic for text node by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/615
+
+- Fix typos and invalid link in the yorkie design document by @g2hhh2ee in https://github.com/yorkie-team/yorkie/pull/591
+- Clean up code by @hackerwins in https://github.com/yorkie-team/yorkie/pull/595
+- Clean up methods related to presence by @chacha912 in https://github.com/yorkie-team/yorkie/pull/594
+- Remove panic from crdt.RGATreeList by @sejongk in https://github.com/yorkie-team/yorkie/pull/596
+- Fix treePos calculating logic for text node by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/615
 
 ## [0.4.5] - 2023-07-20
 
 ### Added
-* Move Presence from Client to Document by @chacha912, @hackerwins in https://github.com/yorkie-team/yorkie/pull/582
-* Add include-snapshot flag to ListDocuments API by @YoonKiJin, @hackerwins in https://github.com/yorkie-team/yorkie/pull/575
+
+- Move Presence from Client to Document by @chacha912, @hackerwins in https://github.com/yorkie-team/yorkie/pull/582
+- Add include-snapshot flag to ListDocuments API by @YoonKiJin, @hackerwins in https://github.com/yorkie-team/yorkie/pull/575
 
 ### Changed
-* Revise log messages by @hackerwins in https://github.com/yorkie-team/yorkie/pull/574
-* Bump google.golang.org/grpc from 1.50.0 to 1.53.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/576
-* Allow users to pass multi nodes when calling Tree.edit by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/579
+
+- Revise log messages by @hackerwins in https://github.com/yorkie-team/yorkie/pull/574
+- Bump google.golang.org/grpc from 1.50.0 to 1.53.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/576
+- Allow users to pass multi nodes when calling Tree.edit by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/579
 
 ### Fixed
-* Remove unnecessary codes from gc by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/581
+
+- Remove unnecessary codes from gc by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/581
 
 ## [0.4.4] - 2023-07-04
 
 ### Added
-* Add logout command to CLI by @blurfx in https://github.com/yorkie-team/yorkie/pull/571
-* Add RemoveIfNotAttached flag to Detach by @emplam27 in https://github.com/yorkie-team/yorkie/pull/560
+
+- Add logout command to CLI by @blurfx in https://github.com/yorkie-team/yorkie/pull/571
+- Add RemoveIfNotAttached flag to Detach by @emplam27 in https://github.com/yorkie-team/yorkie/pull/560
 
 ### Fixed
-* Make attributes display properly in dashboard by @YoonKiJin in https://github.com/yorkie-team/yorkie/pull/564
-* Remove panic from crdt.Tree and index.Tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/570
+
+- Make attributes display properly in dashboard by @YoonKiJin in https://github.com/yorkie-team/yorkie/pull/564
+- Remove panic from crdt.Tree and index.Tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/570
 
 ## [0.4.3] - 2023-06-29
 
 ### Added
-* Add force flag to RemoveDocument command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/558
-* Apply garbage collection for tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/566
+
+- Add force flag to RemoveDocument command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/558
+- Apply garbage collection for tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/566
 
 ### Fixed
-* Resolve CI failure with longer MaxConnectionAge by @krapie in https://github.com/yorkie-team/yorkie/pull/556
-* Update ClientInfo with ID and extract `testcases` package by @emplam27 in https://github.com/yorkie-team/yorkie/pull/557
-* Filter out removed documents from ListDocuments API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/563
-* Add a workaround to prevent retrieving removed documents from MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/565
+
+- Resolve CI failure with longer MaxConnectionAge by @krapie in https://github.com/yorkie-team/yorkie/pull/556
+- Update ClientInfo with ID and extract `testcases` package by @emplam27 in https://github.com/yorkie-team/yorkie/pull/557
+- Filter out removed documents from ListDocuments API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/563
+- Add a workaround to prevent retrieving removed documents from MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/565
 
 ## [0.4.2] - 2023-06-19
 
 ### Added
-* Add TLS Option & Insecure Flag in Admin CLI by @krapie in https://github.com/yorkie-team/yorkie/pull/548
-* Implement Tree.Style for setting attributes to nodes by @krapie, @hackerwins in https://github.com/yorkie-team/yorkie/pull/549
+
+- Add TLS Option & Insecure Flag in Admin CLI by @krapie in https://github.com/yorkie-team/yorkie/pull/548
+- Implement Tree.Style for setting attributes to nodes by @krapie, @hackerwins in https://github.com/yorkie-team/yorkie/pull/549
 
 ### Changed
-* Abstract the workflow to base-docker-publish.yml by @jongwooo in https://github.com/yorkie-team/yorkie/pull/552
-* Change k8s version of yorkie-cluster chart to 1.23 by @emplam27 in https://github.com/yorkie-team/yorkie/pull/550
+
+- Abstract the workflow to base-docker-publish.yml by @jongwooo in https://github.com/yorkie-team/yorkie/pull/552
+- Change k8s version of yorkie-cluster chart to 1.23 by @emplam27 in https://github.com/yorkie-team/yorkie/pull/550
 
 ## [0.4.1] - 2023-06-09
 
 ### Fixed
-* Support UTF16 Code Units in yorkie.Tree by @krapie in https://github.com/yorkie-team/yorkie/pull/545
+
+- Support UTF16 Code Units in yorkie.Tree by @krapie in https://github.com/yorkie-team/yorkie/pull/545
 
 ## [0.4.0] - 2023-06-05
 
 ### Added
-* Implement yorkie.Tree for text editors using tree model by @hackerwins in https://github.com/yorkie-team/yorkie/pull/535
-* Add remove document command to CLI by @emplam27 in https://github.com/yorkie-team/yorkie/pull/540
+
+- Implement yorkie.Tree for text editors using tree model by @hackerwins in https://github.com/yorkie-team/yorkie/pull/535
+- Add remove document command to CLI by @emplam27 in https://github.com/yorkie-team/yorkie/pull/540
 
 ### Fixed
-* Remove panic method in crdt array by @emplam27 in https://github.com/yorkie-team/yorkie/pull/524
-* Revise Helm Charts for Production Installations by @krapie in https://github.com/yorkie-team/yorkie/pull/537
-* Resolve concurrent map issue by @chacha912 in https://github.com/yorkie-team/yorkie/pull/538
+
+- Remove panic method in crdt array by @emplam27 in https://github.com/yorkie-team/yorkie/pull/524
+- Revise Helm Charts for Production Installations by @krapie in https://github.com/yorkie-team/yorkie/pull/537
+- Resolve concurrent map issue by @chacha912 in https://github.com/yorkie-team/yorkie/pull/538
 
 ## [0.3.5] - 2023-05-22
 
 ### Added
-* Add Sharded Cluster Mode Design Document by @krapie in https://github.com/yorkie-team/yorkie/pull/523
+
+- Add Sharded Cluster Mode Design Document by @krapie in https://github.com/yorkie-team/yorkie/pull/523
 
 ### Changed
-* Remove panic and wrapping informational error from server by @emplam27 in https://github.com/yorkie-team/yorkie/pull/519
-* Remove panic method in crdt text by @emplam27 in https://github.com/yorkie-team/yorkie/pull/522
-* Integrate SDK RPC Server and Admin RPC Server to Single RPC Server by @krapie in https://github.com/yorkie-team/yorkie/pull/532
+
+- Remove panic and wrapping informational error from server by @emplam27 in https://github.com/yorkie-team/yorkie/pull/519
+- Remove panic method in crdt text by @emplam27 in https://github.com/yorkie-team/yorkie/pull/522
+- Integrate SDK RPC Server and Admin RPC Server to Single RPC Server by @krapie in https://github.com/yorkie-team/yorkie/pull/532
 
 ### Fixed
-* Update Helm Chart Releaser Action by @krapie in https://github.com/yorkie-team/yorkie/pull/516
-* Revise Helm charts & README.md by @krapie in https://github.com/yorkie-team/yorkie/pull/525
-* Resolve Helm Chart Installation Fail on Custom Release Name by @krapie in https://github.com/yorkie-team/yorkie/pull/531
+
+- Update Helm Chart Releaser Action by @krapie in https://github.com/yorkie-team/yorkie/pull/516
+- Revise Helm charts & README.md by @krapie in https://github.com/yorkie-team/yorkie/pull/525
+- Resolve Helm Chart Installation Fail on Custom Release Name by @krapie in https://github.com/yorkie-team/yorkie/pull/531
 
 ## [0.3.4] - 2023-04-18
 
 ### Added
-* Add Yorkie Helm Charts by @krapie in https://github.com/yorkie-team/yorkie/pull/507
-* Add gRPC MaxConnectionAge & MaxConnectionAgeGrace Options by @krapie in https://github.com/yorkie-team/yorkie/pull/512
-* Extend PushPull to support sync mode by adding push-only flag by @humdrum in https://github.com/yorkie-team/yorkie/pull/500
+
+- Add Yorkie Helm Charts by @krapie in https://github.com/yorkie-team/yorkie/pull/507
+- Add gRPC MaxConnectionAge & MaxConnectionAgeGrace Options by @krapie in https://github.com/yorkie-team/yorkie/pull/512
+- Extend PushPull to support sync mode by adding push-only flag by @humdrum in https://github.com/yorkie-team/yorkie/pull/500
 
 ### Removed
-* Remove etcd-based cluster mode and replace it with sharding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/504
+
+- Remove etcd-based cluster mode and replace it with sharding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/504
 
 ### Fixed
-* Lock watchDocuments depending on the client and doc by @chacha912 in https://github.com/yorkie-team/yorkie/pull/506
-* Fixed a guide about path of docker-compose.xml file by @maruldy in https://github.com/yorkie-team/yorkie/pull/511
+
+- Lock watchDocuments depending on the client and doc by @chacha912 in https://github.com/yorkie-team/yorkie/pull/506
+- Fixed a guide about path of docker-compose.xml file by @maruldy in https://github.com/yorkie-team/yorkie/pull/511
 
 ## [0.3.3] - 2023-03-24
 
 ### Added
-* Add ClientDeactivateThreshold field in admin CLI project list by @krapie in https://github.com/yorkie-team/yorkie/pull/477
-* Add RemoveDocument API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/484
-* Add user agent metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/492
-* Add shard key in context by @hackerwins in https://github.com/yorkie-team/yorkie/pull/499
-* Add pagination flags to document ls command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/489
+
+- Add ClientDeactivateThreshold field in admin CLI project list by @krapie in https://github.com/yorkie-team/yorkie/pull/477
+- Add RemoveDocument API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/484
+- Add user agent metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/492
+- Add shard key in context by @hackerwins in https://github.com/yorkie-team/yorkie/pull/499
+- Add pagination flags to document ls command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/489
 
 ### Changed
-* Allow uppercase letters(A-Z) for document keys by @shiningsoo in https://github.com/yorkie-team/yorkie/pull/483
-* Bump golang.org/x/net from 0.0.0-20221004154528-8021a29435af to 0.7.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/486
-* Change the structure of WatchDocument API by @chacha912 in https://github.com/yorkie-team/yorkie/pull/491
+
+- Allow uppercase letters(A-Z) for document keys by @shiningsoo in https://github.com/yorkie-team/yorkie/pull/483
+- Bump golang.org/x/net from 0.0.0-20221004154528-8021a29435af to 0.7.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/486
+- Change the structure of WatchDocument API by @chacha912 in https://github.com/yorkie-team/yorkie/pull/491
 
 ### Fixed
 
 ## [0.3.1] - 2023-02-27
 
 ### Added
-* Add ClientDeactivateThreshold in Project by @krapie in https://github.com/yorkie-team/yorkie/pull/454
-* Add validation module and document key validation by @easylogic in https://github.com/yorkie-team/yorkie/pull/467
+
+- Add ClientDeactivateThreshold in Project by @krapie in https://github.com/yorkie-team/yorkie/pull/454
+- Add validation module and document key validation by @easylogic in https://github.com/yorkie-team/yorkie/pull/467
 
 ### Changed
-* Filter out unsubscribed documents key in DocEvent  by @chacha912 in https://github.com/yorkie-team/yorkie/pull/463
-* Remove priority queue from RHTPQMap and entire project by @blurfx in https://github.com/yorkie-team/yorkie/pull/462
+
+- Filter out unsubscribed documents key in DocEvent by @chacha912 in https://github.com/yorkie-team/yorkie/pull/463
+- Remove priority queue from RHTPQMap and entire project by @blurfx in https://github.com/yorkie-team/yorkie/pull/462
 
 ### Fixed
-* Remove duplicated backslash in string escaping by @cozitive in https://github.com/yorkie-team/yorkie/pull/458
-* Fix invalid index of SplayTree with single node by @hackerwins in https://github.com/yorkie-team/yorkie/pull/470
+
+- Remove duplicated backslash in string escaping by @cozitive in https://github.com/yorkie-team/yorkie/pull/458
+- Fix invalid index of SplayTree with single node by @hackerwins in https://github.com/yorkie-team/yorkie/pull/470
 
 ## [0.3.0] - 2023-01-31
 
 ### Changed
-* Merge Text and RichText by @hackerwins in https://github.com/yorkie-team/yorkie/pull/438
-* Fix the value type of Counter and remove double type from Counter by @cozitive in https://github.com/yorkie-team/yorkie/pull/441
+
+- Merge Text and RichText by @hackerwins in https://github.com/yorkie-team/yorkie/pull/438
+- Fix the value type of Counter and remove double type from Counter by @cozitive in https://github.com/yorkie-team/yorkie/pull/441
 
 ### Fixed
-* Fix wrong string escape in Text's attrs by @cozitive in https://github.com/yorkie-team/yorkie/pull/443
-* Increase CRDT Counter in local change by @cozitive in https://github.com/yorkie-team/yorkie/pull/449
+
+- Fix wrong string escape in Text's attrs by @cozitive in https://github.com/yorkie-team/yorkie/pull/443
+- Increase CRDT Counter in local change by @cozitive in https://github.com/yorkie-team/yorkie/pull/449
 
 ## [0.2.20] - 2022-12-30
 
 ### Changed
 
-* Bump up Go to 1.19.2 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/425
-* Bump up libraries to the latest version by @hackerwins in https://github.com/yorkie-team/yorkie/pull/426
-* Remove use of bou.ke/monkey library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/427
-* Replace deprecated ioutil library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/428
-* Remove duplicate logging when the function returns error by @hackerwins in https://github.com/yorkie-team/yorkie/pull/429
+- Bump up Go to 1.19.2 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/425
+- Bump up libraries to the latest version by @hackerwins in https://github.com/yorkie-team/yorkie/pull/426
+- Remove use of bou.ke/monkey library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/427
+- Replace deprecated ioutil library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/428
+- Remove duplicate logging when the function returns error by @hackerwins in https://github.com/yorkie-team/yorkie/pull/429
 
 ### Fixed
 
-* Fix typo by @ppeeou in https://github.com/yorkie-team/yorkie/pull/421
-* Fix invalid JSON from marshaling dates and use UNIX ms for Date by @hackerwins in https://github.com/yorkie-team/yorkie/pull/432
-* Add additional unwrap code in ToStatusError gRPC error handler by @Krapi0314 in https://github.com/yorkie-team/yorkie/pull/434
+- Fix typo by @ppeeou in https://github.com/yorkie-team/yorkie/pull/421
+- Fix invalid JSON from marshaling dates and use UNIX ms for Date by @hackerwins in https://github.com/yorkie-team/yorkie/pull/432
+- Add additional unwrap code in ToStatusError gRPC error handler by @Krapi0314 in https://github.com/yorkie-team/yorkie/pull/434
 
 ## [0.2.19] - 2022-10-04
 

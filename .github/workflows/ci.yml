@@ -5,6 +5,12 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'api/docs/**'
+      - 'build/charts/**'
+      - '**/*.md'
+      - '**/*.txt'
+      - '**/.gitignore'
 
 env:
   GO_VERSION: '1.21'
@@ -50,6 +56,8 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.txt
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   
   bench:
     name: bench
