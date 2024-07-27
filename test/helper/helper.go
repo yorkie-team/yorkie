@@ -64,7 +64,7 @@ var (
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
-	AdminPasswordForCreateUser            = AdminPassword + "123!"
+	AdminPasswordForSignUp                = AdminPassword + "123!"
 	UseDefaultProject                     = true
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10

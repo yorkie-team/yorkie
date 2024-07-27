@@ -644,7 +644,7 @@ func RunAdminSignUpTest(
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPasswordForCreateUser
+	adminPassword := helper.AdminPasswordForSignUp
 
 	_, err := testAdminClient.SignUp(
 		context.Background(),
@@ -693,26 +693,26 @@ func RunAdminLoginTest(
 	assert.Equal(t, connecthelper.CodeOf(database.ErrMismatchedPassword), converter.ErrorCodeOf(err))
 }
 
-// RunAdminDeleteUserTest runs the admin delete user test.
-func RunAdminDeleteUserTest(
+// RunAdminDeleteAccountTest runs the admin delete user test.
+func RunAdminDeleteAccountTest(
 	t *testing.T,
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPasswordForCreateUser
+	adminPassword := helper.AdminPasswordForSignUp
 
-	_, err := testAdminClient.CreateUser(
+	_, err := testAdminClient.SignUp(
 		context.Background(),
-		connect.NewRequest(&api.CreateUserRequest{
+		connect.NewRequest(&api.SignUpRequest{
 			Username: adminUser,
 			Password: adminPassword,
 		},
 		))
 	assert.NoError(t, err)
 
-	_, err = testAdminClient.DeleteUser(
+	_, err = testAdminClient.DeleteAccount(
 		context.Background(),
-		connect.NewRequest(&api.DeleteUserRequest{
+		connect.NewRequest(&api.DeleteAccountRequest{
 			Username: adminUser,
 			Password: adminPassword,
 		},
@@ -720,9 +720,9 @@ func RunAdminDeleteUserTest(
 	assert.NoError(t, err)
 
 	// try to delete user with not existing username
-	_, err = testAdminClient.DeleteUser(
+	_, err = testAdminClient.DeleteAccount(
 		context.Background(),
-		connect.NewRequest(&api.DeleteUserRequest{
+		connect.NewRequest(&api.DeleteAccountRequest{
 			Username: adminUser,
 			Password: adminPassword,
 		},
@@ -737,11 +737,11 @@ func RunAdminChangePasswordTest(
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPasswordForCreateUser
+	adminPassword := helper.AdminPasswordForSignUp
 
-	_, err := testAdminClient.CreateUser(
+	_, err := testAdminClient.SignUp(
 		context.Background(),
-		connect.NewRequest(&api.CreateUserRequest{
+		connect.NewRequest(&api.SignUpRequest{
 			Username: adminUser,
 			Password: adminPassword,
 		},
@@ -758,9 +758,9 @@ func RunAdminChangePasswordTest(
 	assert.NoError(t, err)
 
 	newAdminPassword := helper.AdminPassword + "12345!"
-	_, err = testAdminClient.ChangeUserPassword(
+	_, err = testAdminClient.ChangePassword(
 		context.Background(),
-		connect.NewRequest(&api.ChangeUserPasswordRequest{
+		connect.NewRequest(&api.ChangePasswordRequest{
 			Username:        adminUser,
 			CurrentPassword: adminPassword,
 			NewPassword:     newAdminPassword,
@@ -789,9 +789,9 @@ func RunAdminChangePasswordTest(
 	assert.NoError(t, err)
 
 	// try to change password with invalid password
-	_, err = testAdminClient.ChangeUserPassword(
+	_, err = testAdminClient.ChangePassword(
 		context.Background(),
-		connect.NewRequest(&api.ChangeUserPasswordRequest{
+		connect.NewRequest(&api.ChangePasswordRequest{
 			Username:        adminUser,
 			CurrentPassword: adminPassword,
 			NewPassword:     invalidSlugName,

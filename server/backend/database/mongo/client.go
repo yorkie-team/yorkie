@@ -442,8 +442,8 @@ func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) erro
 	return nil
 }
 
-// ChangeUserPassword changes to new password for user.
-func (c *Client) ChangeUserPassword(ctx context.Context, username, hashedNewPassword string) error {
+// ChangePassword changes to new password for user.
+func (c *Client) ChangePassword(ctx context.Context, username, hashedNewPassword string) error {
 	updateResult, err := c.collection(ColUsers).UpdateOne(ctx,
 		bson.M{"username": username},
 		bson.M{"$set": bson.M{"hashed_password": hashedNewPassword}},
