@@ -94,3 +94,35 @@ func GetUserByID(
 	}
 	return info.ToUser(), nil
 }
+
+// DeleteAccountByName deletes a user by name.
+func DeleteAccountByName(
+	ctx context.Context,
+	be *backend.Backend,
+	username string,
+) error {
+	if err := be.DB.DeleteUserInfoByName(ctx, username); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ChangePassword changes the password for a user.
+func ChangePassword(
+	ctx context.Context,
+	be *backend.Backend,
+	username,
+	newPassword string,
+) error {
+	hashedNewPassword, err := database.HashedPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("cannot hash newPassword: %w", err)
+	}
+
+	if err := be.DB.ChangeUserPassword(ctx, username, hashedNewPassword); err != nil {
+		return err
+	}
+
+	return nil
+}
