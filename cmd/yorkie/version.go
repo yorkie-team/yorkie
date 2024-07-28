@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -40,8 +41,9 @@ var (
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print the version number of Yorkie",
+		Use:     "version",
+		Short:   "Print the version number of Yorkie",
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := Validate(); err != nil {
 				return err
@@ -93,15 +95,13 @@ func newVersionCmd() *cobra.Command {
 
 			switch output {
 			case "":
-				fmt.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
-				fmt.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
-				fmt.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
+				cmd.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
+				cmd.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
+				cmd.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
 				if versionInfo.ServerVersion != nil {
-					fmt.Printf("Yorkie Server: %s\n", versionInfo.ServerVersion.YorkieVersion)
-					fmt.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
-					fmt.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
-				} else if serverErr != nil {
-					fmt.Printf("Error fetching server version: %v\n", serverErr)
+					cmd.Printf("Yorkie Server: %s\n", versionInfo.ServerVersion.YorkieVersion)
+					cmd.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
+					cmd.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
 				}
 			case "yaml":
 				marshalled, err := yaml.Marshal(&versionInfo)
@@ -115,6 +115,15 @@ func newVersionCmd() *cobra.Command {
 					return errors.New("failed to marshal JSON")
 				}
 				fmt.Println(string(marshalled))
+			}
+
+			if serverErr != nil {
+				cmd.Printf("Error fetching server version: ")
+				if strings.Contains(serverErr.Error(), "unimplemented") {
+					cmd.Printf("The server does not support this operation. You might need to check your server version.\n")
+				} else {
+					cmd.Print(serverErr)
+				}
 			}
 
 			return nil
