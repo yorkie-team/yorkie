@@ -468,6 +468,9 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("presence clear by server test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
+
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))

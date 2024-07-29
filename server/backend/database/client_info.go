@@ -285,10 +285,16 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 }
 
 // ToClient is a temporary function.
-func (i *ClientInfo) ToClient(rpcAddr string, projectKey string) (*client.Client, error) {
+func (i *ClientInfo) ToClient(rpcAddr string, projectKey string, token ...string) (*client.Client, error) {
+	tokenValue := ""
+	if len(token) > 0 {
+		tokenValue = token[0]
+	}
+
 	cli, err := client.Dial(rpcAddr,
 		client.WithKey(i.Key),
 		client.WithAPIKey(projectKey),
+		client.WithToken(tokenValue),
 	)
 	if err != nil {
 		return nil, err

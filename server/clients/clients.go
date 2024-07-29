@@ -20,6 +20,8 @@ package clients
 import (
 	"context"
 	"errors"
+	"github.com/yorkie-team/yorkie/client"
+	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -27,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
 var (
@@ -77,7 +80,14 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
-	cli, err := clientInfo.ToClient(rpcAddr, project.PublicKey)
+	// TODO(raararaara): Need to clean up when creating
+	auth := ""
+	if !isEmptyCtx(ctx) {
+		md := metadata.From(ctx)
+		auth = md.Authorization
+	}
+
+	cli, err := clientInfo.ToClient(rpcAddr, project.PublicKey, auth)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +131,13 @@ func Deactivate(
 		//}); err != nil {
 		//	return nil, err
 		//}
-		//if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
-		//	return nil, err
-		//}
+		if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
+			return nil, err
+		}
 	}
-	if err = cli.Sync(ctx); err != nil {
-		return nil, err
-	}
+	//if err = cli.Sync(ctx); err != nil {
+	//	return nil, err
+	//}
 
 	// 02. Deactivate the client.
 	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
@@ -154,4 +164,9 @@ func FindActiveClientInfo(
 	}
 
 	return info, nil
+}
+
+func isEmptyCtx(ctx context.Context) bool {
+	emptyCtxType := reflect.TypeOf(context.Background())
+	return reflect.TypeOf(ctx) == emptyCtxType
 }
