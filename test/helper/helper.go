@@ -240,7 +240,7 @@ func TestConfig() *server.Config {
 		Housekeeping: &housekeeping.Config{
 			IntervalDeactivateCandidates:                 HousekeepingIntervalDeactivateCandidates.String(),
 			IntervalDeleteDocuments:                      HousekeepingIntervalDeleteDocuments.String(),
-			DocumentHardDeletionGracefulPeriod:           HousekeepingDocumentHardDeletionGracefulPeriod.String(),
+			DocumentHardDeletionGracefulPeriod:           HousekeepingDocumentHardDeletionGracefulPeriod,
 			ClientDeactivationCandidateLimitPerProject:   HousekeepingClientDeactivationCandidateLimitPerProject,
 			DocumentHardDeletionCandidateLimitPerProject: HousekeepingDocumentHardDeletionCandidateLimitPerProject,
 			ProjectFetchSize:                             HousekeepingProjectFetchSize,

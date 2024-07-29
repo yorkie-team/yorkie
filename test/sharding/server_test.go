@@ -80,7 +80,7 @@ func TestMain(m *testing.M) {
 	}, &housekeeping.Config{
 		IntervalDeactivateCandidates:                 helper.HousekeepingIntervalDeactivateCandidates.String(),
 		IntervalDeleteDocuments:                      helper.HousekeepingIntervalDeleteDocuments.String(),
-		DocumentHardDeletionGracefulPeriod:           helper.HousekeepingDocumentHardDeletionGracefulPeriod.String(),
+		DocumentHardDeletionGracefulPeriod:           helper.HousekeepingDocumentHardDeletionGracefulPeriod,
 		ClientDeactivationCandidateLimitPerProject:   helper.HousekeepingClientDeactivationCandidateLimitPerProject,
 		DocumentHardDeletionCandidateLimitPerProject: helper.HousekeepingDocumentHardDeletionCandidateLimitPerProject,
 		ProjectFetchSize:                             helper.HousekeepingProjectFetchSize,

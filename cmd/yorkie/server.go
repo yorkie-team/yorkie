@@ -73,7 +73,7 @@ func newServerCmd() *cobra.Command {
 
 			conf.Housekeeping.IntervalDeactivateCandidates = housekeepingIntervalDeactivateCandidates.String()
 			conf.Housekeeping.IntervalDeleteDocuments = housekeepingIntervalDeleteDocuments.String()
-			conf.Housekeeping.DocumentHardDeletionGracefulPeriod = documentHardDeletionGracefulPeriod.String()
+			conf.Housekeeping.DocumentHardDeletionGracefulPeriod = documentHardDeletionGracefulPeriod
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -197,20 +197,20 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
-	cmd.Flags().DurationVar(
-		&housekeepingIntervalDeactivateCandidates,
+	cmd.Flags().StringVar(
+		&conf.Housekeeping.IntervalDeactivateCandidates,
 		"housekeeping-interval-Deactivate-Candidates",
-		server.DefaultHousekeepingIntervalDeactivateCandidates,
+		server.DefaultHousekeepingIntervalDeactivateCandidates.String(),
 		"housekeeping Interval deactivate candidates between housekeeping runs",
 	)
-	cmd.Flags().DurationVar(
-		&housekeepingIntervalDeleteDocuments,
+	cmd.Flags().StringVar(
+		&conf.Housekeeping.IntervalDeleteDocuments,
 		"housekeeping-interval-Delete-Documents",
-		server.DefaultHousekeepingIntervalDeleteDocuments,
+		server.DefaultHousekeepingIntervalDeleteDocuments.String(),
 		"housekeeping Interval delete documents between housekeeping runs",
 	)
 	cmd.Flags().DurationVar(
-		&documentHardDeletionGracefulPeriod,
+		&conf.Housekeeping.DocumentHardDeletionGracefulPeriod,
 		"housekeeping-DocumentHardDeletion-delete-graceful-period",
 		server.DefaultHousekeepingDocumentHardDeletionGracefulPeriod,
 		"Document deletion over time after a single housekeeping run",

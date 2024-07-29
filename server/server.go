@@ -159,27 +159,51 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 
 // RegisterHousekeepingTasks registers housekeeping tasks.
 func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
-	interval, err := be.Housekeeping.Config.ParseInterval()
+	intervalDeactivateCandidates, err :=
+		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.IntervalDeactivateCandidates)
 	if err != nil {
 		return err
 	}
 
-	housekeepingLastProjectID := database.DefaultProjectID
-	return be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
-		lastProjectID, err := clients.DeactivateInactives(
-			ctx,
-			be,
-			be.Housekeeping.Config.CandidatesLimitPerProject,
-			be.Housekeeping.Config.ProjectFetchSize,
-			housekeepingLastProjectID,
-		)
-		if err != nil {
-			return err
-		}
+	intervalDeleteDocuments, err :=
+		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.IntervalDeleteDocuments)
+	if err != nil {
+		return err
+	}
 
-		housekeepingLastProjectID = lastProjectID
-		return nil
-	})
+	housekeepingLastDeactivateInactivesProjectID := database.DefaultProjectID
+	housekeepingLastDeleteDocumentProjectID := database.DefaultProjectID
+	return be.Housekeeping.RegisterTask(
+		intervalDeactivateCandidates, intervalDeleteDocuments,
+		func(ctx context.Context) error {
+			lastProjectDeactivateInactivesID, err := clients.DeactivateInactives(
+				ctx,
+				be,
+				be.Housekeeping.Config.ClientDeactivationCandidateLimitPerProject,
+				be.Housekeeping.Config.ProjectFetchSize,
+				housekeepingLastDeactivateInactivesProjectID,
+			)
+			if err != nil {
+				return err
+			}
+
+			// Second task: Document hard deletes
+			lastProjectDeleteDocumentID, err := clients.DeleteDocument(
+				ctx,
+				be,
+				be.Housekeeping.Config.DocumentHardDeletionCandidateLimitPerProject,
+				be.Housekeeping.Config.DocumentHardDeletionGracefulPeriod,
+				be.Housekeeping.Config.ProjectFetchSize,
+				housekeepingLastDeleteDocumentProjectID,
+			)
+			if err != nil {
+				return err
+			}
+
+			housekeepingLastDeactivateInactivesProjectID = lastProjectDeactivateInactivesID
+			housekeepingLastDeleteDocumentProjectID = lastProjectDeleteDocumentID
+			return nil
+		})
 }
 
 // DefaultProject returns the default project.

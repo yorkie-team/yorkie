@@ -18,6 +18,7 @@ package housekeeping_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -29,7 +30,7 @@ func TestConfig(t *testing.T) {
 		validConf := housekeeping.Config{
 			IntervalDeactivateCandidates:                 "1m",
 			IntervalDeleteDocuments:                      "1m",
-			DocumentHardDeletionGracefulPeriod:           "1m",
+			DocumentHardDeletionGracefulPeriod:           time.Minute,
 			ClientDeactivationCandidateLimitPerProject:   100,
 			DocumentHardDeletionCandidateLimitPerProject: 100,
 			ProjectFetchSize:                             100,
@@ -45,7 +46,7 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf2.Validate())
 
 		conf3 := validConf
-		conf3.DocumentHardDeletionGracefulPeriod = "second"
+		conf3.DocumentHardDeletionGracefulPeriod = 0
 		assert.Error(t, conf3.Validate())
 
 		conf4 := validConf

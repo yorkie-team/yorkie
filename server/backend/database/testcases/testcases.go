@@ -1403,7 +1403,7 @@ func RunDocumentHardDeletionTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t), true)
 		assert.NoError(t, err)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))

@@ -32,7 +32,7 @@ type Config struct {
 	IntervalDeleteDocuments string `yaml:"IntervalDeleteDocuments"`
 
 	// DocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time.
-	DocumentHardDeletionGracefulPeriod string `yaml:"HousekeepingDocumentHardDeletionGracefulPeriod"`
+	DocumentHardDeletionGracefulPeriod time.Duration `yaml:"HousekeepingDocumentHardDeletionGracefulPeriod"`
 
 	// ClientDeactivationCandidateLimitPerProject is the maximum number of candidates to be returned per project.
 	ClientDeactivationCandidateLimitPerProject int `yaml:"ClientDeactivationCandidateLimitPerProject"`
@@ -62,24 +62,23 @@ func (c *Config) Validate() error {
 		)
 	}
 
-	if _, err := time.ParseDuration(c.DocumentHardDeletionGracefulPeriod); err != nil {
+	if c.DocumentHardDeletionGracefulPeriod <= 0 {
 		return fmt.Errorf(
-			`invalid argument %v for "--housekeeping-project-delete-graceful-period" flag: %w`,
+			`invalid argument %v for "--housekeeping-project-delete-graceful-period"`,
 			c.DocumentHardDeletionGracefulPeriod,
-			err,
 		)
 	}
 
 	if c.ClientDeactivationCandidateLimitPerProject <= 0 {
 		return fmt.Errorf(
-			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
-			c.ProjectFetchSize,
+			`invalid argument %d for "--housekeeping-client-deactivateion-candidate-limit-per-project"`,
+			c.ClientDeactivationCandidateLimitPerProject,
 		)
 	}
 
 	if c.DocumentHardDeletionCandidateLimitPerProject <= 0 {
 		return fmt.Errorf(
-			`invalid argument %d for "--housekeeping-document-hard-deletion-limit-per-project" flag`,
+			`invalid argument %d for "--housekeeping-document-hard-deletion-limit-per-project"`,
 			c.DocumentHardDeletionCandidateLimitPerProject,
 		)
 	}
@@ -95,11 +94,13 @@ func (c *Config) Validate() error {
 }
 
 // ParseInterval parses the interval.
-func (c *Config) ParseInterval() (time.Duration, error) {
-	interval, err := time.ParseDuration(c.Interval)
+func (c *Config) ParseInterval(
+	interval string,
+) (time.Duration, error) {
+	parseInterval, err := time.ParseDuration(interval)
 	if err != nil {
-		return 0, fmt.Errorf("parse interval %s: %w", c.Interval, err)
+		return 0, fmt.Errorf("parse interval %s: %w", interval, err)
 	}
 
-	return interval, nil
+	return parseInterval, nil
 }

@@ -234,7 +234,7 @@ func newConfig(port int, profilingPort int) *Config {
 		Housekeeping: &housekeeping.Config{
 			IntervalDeactivateCandidates:                 DefaultHousekeepingIntervalDeactivateCandidates.String(),
 			IntervalDeleteDocuments:                      DefaultHousekeepingIntervalDeleteDocuments.String(),
-			DocumentHardDeletionGracefulPeriod:           DefaultHousekeepingDocumentHardDeletionGracefulPeriod.String(),
+			DocumentHardDeletionGracefulPeriod:           DefaultHousekeepingDocumentHardDeletionGracefulPeriod,
 			ClientDeactivationCandidateLimitPerProject:   DefaultHousekeepingClientDeactivationCandidateLimitPerProject,
 			DocumentHardDeletionCandidateLimitPerProject: DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject,
 			ProjectFetchSize:                             DefaultHousekeepingProjectFetchSize,
