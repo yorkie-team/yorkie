@@ -68,7 +68,7 @@ var (
 	UseDefaultProject                                        = true
 	HousekeepingIntervalDeactivateCandidates                 = 10 * gotime.Second
 	HousekeepingIntervalDeleteDocuments                      = 10 * gotime.Second
-	HousekeepingDocumentHardDeletionGracefulPeriod           = 0 * gotime.Second
+	HousekeepingDocumentHardDeletionGracefulPeriod           = 10 * gotime.Second
 	HousekeepingClientDeactivationCandidateLimitPerProject   = 10
 	HousekeepingDocumentHardDeletionCandidateLimitPerProject = 10
 	HousekeepingProjectFetchSize                             = 10
