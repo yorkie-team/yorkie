@@ -3,13 +3,25 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.4.27
+  version: v0.4.28
 servers:
 - description: Production server
   url: https://api.yorkie.dev
 - description: Local server
   url: http://localhost:8080
 paths:
+  /yorkie.v1.AdminService/ChangePassword:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/CreateProject:
     post:
       description: ""
@@ -18,6 +30,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/DeleteAccount:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -168,6 +192,15 @@ paths:
       - yorkie.v1.AdminService
 components:
   requestBodies:
+    yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
+      required: true
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectRequest:
       content:
         application/json:
@@ -176,6 +209,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.CreateProjectRequest'
+      required: true
+    yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DeleteAccountRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DeleteAccountRequest'
       required: true
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentRequest:
       content:
@@ -295,6 +337,15 @@ components:
           schema:
             $ref: '#/components/schemas/connect.error'
       description: ""
+    yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+      description: ""
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse:
       content:
         application/json:
@@ -303,6 +354,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.CreateProjectResponse'
+      description: ""
+    yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DeleteAccountResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DeleteAccountResponse'
       description: ""
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentResponse:
       content:
@@ -611,6 +671,32 @@ components:
           title: server_seq
       title: ChangeID
       type: object
+    yorkie.v1.ChangePasswordRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        currentPassword:
+          additionalProperties: false
+          description: ""
+          title: current_password
+          type: string
+        newPassword:
+          additionalProperties: false
+          description: ""
+          title: new_password
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: ChangePasswordRequest
+      type: object
+    yorkie.v1.ChangePasswordResponse:
+      additionalProperties: false
+      description: ""
+      title: ChangePasswordResponse
+      type: object
     yorkie.v1.CreateProjectRequest:
       additionalProperties: false
       description: ""
@@ -633,6 +719,27 @@ components:
           title: project
           type: object
       title: CreateProjectResponse
+      type: object
+    yorkie.v1.DeleteAccountRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        password:
+          additionalProperties: false
+          description: ""
+          title: password
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: DeleteAccountRequest
+      type: object
+    yorkie.v1.DeleteAccountResponse:
+      additionalProperties: false
+      description: ""
+      title: DeleteAccountResponse
       type: object
     yorkie.v1.DocumentSummary:
       additionalProperties: false

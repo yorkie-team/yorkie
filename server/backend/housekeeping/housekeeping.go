@@ -26,20 +26,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-/* existing commit
-
-database    database.Database
-coordinator sync.Coordinator
-
-intervalDeactivateCandidates                 time.Duration
-intervalDeleteDocuments                      time.Duration
-documentHardDeletionGracefulPeriod           time.Duration
-clientDeactivationCandidateLimitPerProject   int
-DocumentHardDeletionCandidateLimitPerProject int
-projectFetchSize                             int
-*/
-
-// Housekeeping is the housekeeping service. It periodically runs housekeeping tasks.
+// Housekeeping is the housekeeping service. It periodically runs housekeeping
+// tasks.
 type Housekeeping struct {
 	Config    *Config
 	scheduler gocron.Scheduler
@@ -48,51 +36,13 @@ type Housekeeping struct {
 // New creates a new housekeeping instance.
 func New(conf *Config) (*Housekeeping, error) {
 	scheduler, err := gocron.NewScheduler()
-	/* existing commit
-	func New(
-		conf *Config,
-		database database.Database,
-		coordinator sync.Coordinator,
-	) (*Housekeeping, error) {
-		intervalDeactivateCandidates, err := time.ParseDuration(conf.IntervalDeactivateCandidates)
-		if err != nil {
-			return nil, fmt.Errorf("parse intervalDeactivateCandidates %s: %w",
-				conf.IntervalDeactivateCandidates, err)
-		}
-
-		intervalDeleteDocuments, err := time.ParseDuration(conf.IntervalDeleteDocuments)
-		if err != nil {
-	*/
 	if err != nil {
 		return nil, fmt.Errorf("new scheduler: %w", err)
 	}
-	/* existing commit
-		return nil, fmt.Errorf("parse intervalDeleteDocuments %s: %w", conf.IntervalDeleteDocuments, err)
-	}
 
-	documentHardDeletionGracefulPeriod, err := time.ParseDuration(conf.DocumentHardDeletionGracefulPeriod)
-	if err != nil {
-		return nil, fmt.Errorf("parse documentHardDeletionGracefulPeriod %s: %w",
-			conf.DocumentHardDeletionGracefulPeriod, err)
-	}
-	*/
 	return &Housekeeping{
 		Config:    conf,
 		scheduler: scheduler,
-		/* existing commit
-		database:    database,
-		coordinator: coordinator,
-
-		intervalDeactivateCandidates:                 intervalDeactivateCandidates,
-		intervalDeleteDocuments:                      intervalDeleteDocuments,
-		documentHardDeletionGracefulPeriod:           documentHardDeletionGracefulPeriod,
-		clientDeactivationCandidateLimitPerProject:   conf.ClientDeactivationCandidateLimitPerProject,
-		DocumentHardDeletionCandidateLimitPerProject: conf.DocumentHardDeletionCandidateLimitPerProject,
-		projectFetchSize:                             conf.ProjectFetchSize,
-
-		ctx:        ctx,
-		cancelFunc: cancelFunc,
-		*/
 	}, nil
 }
 

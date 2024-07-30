@@ -457,6 +457,35 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) error {
+	deleteResult, err := c.collection(ColUsers).DeleteOne(ctx, bson.M{
+		"username": username,
+	})
+	if err != nil {
+		return err
+	}
+	if deleteResult.DeletedCount == 0 {
+		return fmt.Errorf("no user found with username %s", username)
+	}
+	return nil
+}
+
+// ChangeUserPassword changes to new password for user.
+func (c *Client) ChangeUserPassword(ctx context.Context, username, hashedNewPassword string) error {
+	updateResult, err := c.collection(ColUsers).UpdateOne(ctx,
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"hashed_password": hashedNewPassword}},
+	)
+	if err != nil {
+		return err
+	}
+	if updateResult.ModifiedCount == 0 {
+		return fmt.Errorf("no user found with username %s", username)
+	}
+	return nil
+}
+
 // FindUserInfoByID returns a user by ID.
 func (c *Client) FindUserInfoByID(ctx context.Context, clientID types.ID) (*database.UserInfo, error) {
 	result := c.collection(ColUsers).FindOne(ctx, bson.M{
@@ -857,6 +886,9 @@ func (c *Client) FindDocInfosByKeys(
 	projectID types.ID,
 	docKeys []key.Key,
 ) ([]*database.DocInfo, error) {
+	if len(docKeys) == 0 {
+		return nil, nil
+	}
 	filter := bson.M{
 		"project_id": projectID,
 		"key": bson.M{
