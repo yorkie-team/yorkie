@@ -41,11 +41,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -108,11 +110,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -179,9 +183,10 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
@@ -248,11 +253,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -326,11 +333,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -389,10 +398,12 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("GarbageLen should return the actual number of elements garbage-collected", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1 := document.New(docKey)
-		d2 := document.New(docKey)
+		d1, err := document.New(docKey)
+		assert.NoError(t, err)
+		d2, err := document.New(docKey)
+		assert.NoError(t, err)
 
-		err := c1.Attach(ctx, d1)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -436,8 +447,9 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -457,11 +469,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("Should work properly when there are multiple nodes to be collected in text type", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -530,11 +544,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("Should work properly when there are multiple nodes to be collected in tree type", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -629,7 +645,8 @@ func TestGarbageCollection(t *testing.T) {
 		}()
 
 		// 02. Create a document and update it to check if the garbage is collected
-		d1 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		d1, err := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() {
 			assert.NoError(t, c1.Detach(ctx, d1))
@@ -657,7 +674,8 @@ func TestGarbageCollection(t *testing.T) {
 			assert.NoError(t, c2.Close())
 		}()
 
-		d2 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		d2, err := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() {
 			assert.NoError(t, c2.Detach(ctx, d2))

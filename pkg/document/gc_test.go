@@ -109,8 +109,9 @@ func TestTreeGC(t *testing.T) {
 	for i, tc := range tests {
 		t.Run(fmt.Sprintf("%d. %s", i+1, tc.desc), func(t *testing.T) {
 			// 01. Initial: <r><p></p></r>
-			doc := document.New("doc")
-			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			doc, err := document.New("doc")
+			assert.NoError(t, err)
+			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewTree("t", &json.TreeNode{
 					Type:     "r",
 					Children: []json.TreeNode{{Type: "p"}},
@@ -189,8 +190,8 @@ func TestTextGC(t *testing.T) {
 
 	for i, tc := range tests {
 		t.Run(fmt.Sprintf("%d. %s", i+1, tc.desc), func(t *testing.T) {
-			doc := document.New("doc")
-			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			doc, err := document.New("doc")
+			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewText("t").Edit(0, 0, "AB")
 				return nil
 			})

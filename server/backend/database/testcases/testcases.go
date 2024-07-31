@@ -310,7 +310,8 @@ func RunFindChangesBetweenServerSeqsTest(
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := document.New(key.Key(t.Name()))
+		doc, err := document.New(key.Key(t.Name()))
+		assert.NoError(t, err)
 		doc.SetActor(actorID)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
@@ -328,7 +329,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		}
 
 		// Store changes
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// Find changes
@@ -354,7 +355,8 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 
-		doc := document.New(key.Key(t.Name()))
+		doc, err := document.New(key.Key(t.Name()))
+		assert.NoError(t, err)
 		doc.SetActor(actorID)
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -922,12 +924,13 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		doc := document.New(key.Key(t.Name()))
+		doc, err := document.New(key.Key(t.Name()))
+		assert.NoError(t, err)
 		pack := doc.CreateChangePack()
 
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
@@ -954,7 +957,8 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := document.New(key.Key(t.Name()))
+		doc, err := document.New(key.Key(t.Name()))
+		assert.NoError(t, err)
 		doc.SetActor(actorID)
 
 		// 02. update document only presence

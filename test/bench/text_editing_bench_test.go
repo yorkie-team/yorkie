@@ -41,7 +41,8 @@ func BenchmarkTextEditing(b *testing.B) {
 
 	b.StartTimer()
 
-	doc := document.New("d1")
+	doc, err := document.New("d1")
+	assert.NoError(b, err)
 	err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewText("text")
 		return nil

@@ -178,7 +178,8 @@ func BenchmarkRPC(b *testing.B) {
 		err = cli.Activate(ctx)
 		assert.NoError(b, err)
 
-		d1 := document.New("doc1")
+		d1, err := document.New("doc1")
+		assert.NoError(b, err)
 		err = cli.Attach(ctx, d1)
 		assert.NoError(b, err)
 
@@ -201,8 +202,9 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(b))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(b))
+		assert.NoError(b, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -211,7 +213,8 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(helper.TestDocKey(b))
+		d2, err := document.New(helper.TestDocKey(b))
+		assert.NoError(b, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
@@ -266,10 +269,12 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(helper.TestDocKey(b))
-				doc2 := document.New(helper.TestDocKey(b))
+				doc1, err := document.New(helper.TestDocKey(b))
+				assert.NoError(b, err)
+				doc2, err := document.New(helper.TestDocKey(b))
+				assert.NoError(b, err)
 
-				err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
+				err = doc1.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
 					return nil

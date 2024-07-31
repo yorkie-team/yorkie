@@ -45,10 +45,12 @@ func TestPresence(t *testing.T) {
 	t.Run("update presence by calling Document.Update test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -73,10 +75,12 @@ func TestPresence(t *testing.T) {
 	t.Run("presence with snapshot test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -103,9 +107,11 @@ func TestPresence(t *testing.T) {
 	t.Run("presence with attach and detach test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()})))
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()})))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -126,8 +132,10 @@ func TestPresence(t *testing.T) {
 	t.Run("presence-related events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -210,8 +218,10 @@ func TestPresence(t *testing.T) {
 	t.Run("unwatch after detach events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -297,8 +307,10 @@ func TestPresence(t *testing.T) {
 	t.Run("detach after unwatch events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -387,9 +399,12 @@ func TestPresence(t *testing.T) {
 
 		// 01. Two clients attach two documents with the same key, and watch them.
 		// But the second client also attaches another document.
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t) + "2")
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d3, err := document.New(helper.TestDocKey(t) + "2")
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 

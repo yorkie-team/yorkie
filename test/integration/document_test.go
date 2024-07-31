@@ -45,8 +45,9 @@ func TestDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -60,7 +61,8 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = doc2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
@@ -71,7 +73,8 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc2.IsAttached())
 		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
 
-		doc3 := document.New("invalid$key")
+		doc3, err := document.New("invalid$key")
+		assert.NoError(t, err)
 		err = c1.Attach(ctx, doc3)
 		assert.Error(t, err)
 	})
@@ -80,7 +83,8 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. reattach a detached document
-		doc := document.New(helper.TestDocKey(t))
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, doc))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
@@ -90,12 +94,14 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(c1.Attach(ctx, doc)))
 
 		// 02. attach a new document with the same key
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, doc2))
 		assert.NoError(t, c1.Detach(ctx, doc2))
 
 		// 03. reattach but without updating the document
-		doc3 := document.New(helper.TestDocKey(t))
+		doc3, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, doc3))
 		assert.NoError(t, c1.Detach(ctx, doc3))
 	})
@@ -103,8 +109,9 @@ func TestDocument(t *testing.T) {
 	t.Run("detach removeIfNotAttached flag test", func(t *testing.T) {
 		// 01. create a document and attach it to c1
 		ctx := context.Background()
-		doc := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, doc)
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, doc)
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
@@ -115,7 +122,8 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, doc.Status(), document.StatusDetached)
 
 		// 03. attach again to c1 and check if it is attached normally
-		doc = document.New(helper.TestDocKey(t))
+		doc, err = document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c1.Attach(ctx, doc)
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
@@ -129,11 +137,13 @@ func TestDocument(t *testing.T) {
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -167,15 +177,17 @@ func TestDocument(t *testing.T) {
 
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 
-		_, _, err := c1.Subscribe(d1)
+		_, _, err = c1.Subscribe(d1)
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -223,8 +235,9 @@ func TestDocument(t *testing.T) {
 	t.Run("document tombstone test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
 		})
@@ -233,7 +246,8 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -266,7 +280,8 @@ func TestDocument(t *testing.T) {
 		defer func() {
 			assert.NoError(t, cli.Close())
 		}()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 
 		// 01. client is not activated.
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
@@ -294,8 +309,9 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and removes it.
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -304,11 +320,13 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Remove(ctx, d1))
 
 		// 02. cli2 creates d2 with the same key.
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 03. cli1 creates d3 with the same key.
-		d3 := document.New(helper.TestDocKey(t))
+		d3, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d3))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d3}, {c2, d2}})
 	})
@@ -317,15 +335,17 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -348,14 +368,16 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -370,14 +392,16 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -405,7 +429,8 @@ func TestDocument(t *testing.T) {
 		}()
 
 		// 01. abnormal behavior on detached state
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
@@ -425,8 +450,9 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. c1 creates d1 without attaching.
-		d1 := document.New(helper.TestDocKey(t))
-		_, _, err := c1.Subscribe(d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		_, _, err = c1.Subscribe(d1)
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 
 		// 02. c1 attaches d1 and watches it.
@@ -454,19 +480,22 @@ func TestDocument(t *testing.T) {
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 		d2.SubscribeBroadcastEvent("mention", handler)
 
-		d3 := document.New(helper.TestDocKey(t))
+		d3, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c3.Attach(ctx, d3))
 		rch3, _, err := c3.Subscribe(d3)
 		assert.NoError(t, err)
@@ -516,13 +545,15 @@ func TestDocument(t *testing.T) {
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
@@ -574,14 +605,16 @@ func TestDocument(t *testing.T) {
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
 		// c2 doesn't subscribe to the "mention" broadcast event.
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
@@ -620,9 +653,10 @@ func TestDocument(t *testing.T) {
 	t.Run("reject to broadcast unserializable payload", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
-		_, _, err := c1.Subscribe(d1)
+		_, _, err = c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", nil)
 
@@ -643,13 +677,15 @@ func TestDocument(t *testing.T) {
 			return ErrBroadcastEventHandlingError
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
@@ -727,7 +763,8 @@ func TestDocumentWithProjects(t *testing.T) {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 		rch, cancel1, err := c1.Subscribe(d1)
@@ -766,7 +803,8 @@ func TestDocumentWithProjects(t *testing.T) {
 				c2.ID().String(): {},
 			},
 		})
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c2.Attach(ctx, d2))
 		_, cancel2, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
@@ -779,7 +817,8 @@ func TestDocumentWithProjects(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 
 		// d3 is in another project, so c1 and c2 should not receive events.
-		d3 := document.New(helper.TestDocKey(t))
+		d3, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c3.Attach(ctx, d3))
 		_, cancel3, err := c3.Subscribe(d3)
 		assert.NoError(t, err)
@@ -811,7 +850,8 @@ func TestDocumentWithProjects(t *testing.T) {
 	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("includeSnapshot test", func(t *testing.T) {
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, cli.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 

@@ -60,8 +60,8 @@ func TestAdmin(t *testing.T) {
 			assert.NoError(t, cli.Close())
 		}()
 
-		d1 := document.New(helper.TestDocKey(t))
-
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		// 01. admin tries to remove document that does not exist.
 		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -85,7 +85,8 @@ func TestAdmin(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. c1 attaches and watches d1.
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -129,7 +130,8 @@ func TestAdmin(t *testing.T) {
 		defer func() {
 			assert.NoError(t, cli.Close())
 		}()
-		doc := document.New(helper.TestDocKey(t))
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 
 		// 01. try to remove document that does not exist.
 		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)

@@ -216,9 +216,11 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 	defer deactivateAndCloseClients(t, clients)
 
 	ctx := context.Background()
-	d1 := document.New(helper.TestDocKey(t))
+	d1, err := document.New(helper.TestDocKey(t))
+	assert.NoError(t, err)
 	assert.NoError(t, c1.Attach(ctx, d1))
-	d2 := document.New(helper.TestDocKey(t))
+	d2, err := document.New(helper.TestDocKey(t))
+	assert.NoError(t, err)
 	assert.NoError(t, c2.Attach(ctx, d2))
 
 	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {

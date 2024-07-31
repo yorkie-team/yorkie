@@ -36,8 +36,9 @@ import (
 
 func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
-		doc := document.New("d1")
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		doc, err := document.New("d1")
+		assert.NoError(t, err)
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
@@ -60,9 +61,10 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("root snapshot test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc, err := document.New("d1")
+		assert.NoError(t, err)
 
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// an object and primitive types
 			root.SetNewObject("k1").
 				SetNull("k1.0").
@@ -132,9 +134,10 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("change pack test", func(t *testing.T) {
-		d1 := document.New("d1")
+		d1, err := document.New("d1")
+		assert.NoError(t, err)
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// an object and primitive types
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).
@@ -189,7 +192,8 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		pack.MinSyncedTicket = time.MaxTicket
 
-		d2 := document.New("d1")
+		d2, err := document.New("d1")
+		assert.NoError(t, err)
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 
@@ -270,7 +274,8 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("properly encode and decode tree test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "r",

@@ -41,11 +41,13 @@ func TestObject(t *testing.T) {
 	t.Run("causal object.set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -74,8 +76,9 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -87,7 +90,8 @@ func TestObject(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -111,11 +115,13 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object.set test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -168,13 +174,15 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 01. set new object with json literal. 10 elements will be created.
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("obj", map[string]interface{}{ // 1: object
 				"str": "v",                                  // 1: string
 				"arr": []interface{}{1, "str"},              // 3: array, 1, "str"
@@ -230,13 +238,15 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal sync test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 01. Sync set new object from d1 to d2
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape", map[string]interface{}{
 				"color": "black",
 			})
@@ -266,10 +276,11 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal array type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. set nested array in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"array": []interface{}{1, 2, 3, []int{7, 8}},
@@ -290,10 +301,11 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal counter type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. set two type of counter in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"cntLong": json.NewCounter(0, crdt.LongCnt),
@@ -315,10 +327,11 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. set text in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"txt": json.NewText(),
@@ -338,10 +351,11 @@ func TestObject(t *testing.T) {
 
 	t.Run("object.set with json literal primitive type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("obj", map[string]interface{}{
 				"nill":   nil,
 				"bool":   true,
@@ -399,7 +413,8 @@ func TestObjectTypeGuard(t *testing.T) {
 	for _, tt := range typeGuardTests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
-			d1 := document.New(helper.TestDocKey(t))
+			d1, err := document.New(helper.TestDocKey(t))
+			assert.NoError(t, err)
 			assert.NoError(t, c1.Attach(ctx, d1))
 
 			val := func() {
@@ -466,7 +481,8 @@ func TestObjectSetCycle(t *testing.T) {
 	for _, tt := range cycleTests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
-			d1 := document.New(helper.TestDocKey(t))
+			d1, err := document.New(helper.TestDocKey(t))
+			assert.NoError(t, err)
 			assert.NoError(t, c1.Attach(ctx, d1))
 
 			val := func() {
@@ -651,10 +667,11 @@ func TestObjectSet(t *testing.T) {
 	for _, tt := range setTests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
-			d1 := document.New(helper.TestDocKey(t))
+			d1, err := document.New(helper.TestDocKey(t))
+			assert.NoError(t, err)
 			assert.NoError(t, c1.Attach(ctx, d1))
 
-			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewObject("obj", tt.in)
 				return nil
 			})
@@ -673,14 +690,15 @@ func TestObjectSet(t *testing.T) {
 
 	t.Run("object.set with JSON.Object", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		type T struct {
 			M json.Object
 		}
 
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("obj", map[string]interface{}{
 				"key": "value",
 			})

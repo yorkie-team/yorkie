@@ -173,8 +173,11 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 
 // BuildIndexTree builds an index tree from the given block node.
 func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
-	doc := document.New("test")
-	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+	doc, err := document.New("test")
+	if err != nil {
+		return nil
+	}
+	err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
 
 		return nil
@@ -188,8 +191,11 @@ func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 
 // BuildTreeNode builds a crdt.TreeNode from the given tree node.
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
-	doc := document.New("test")
-	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+	doc, err := document.New("test")
+	if err != nil {
+		return nil
+	}
+	err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
 
 		return nil
@@ -529,7 +535,8 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 
 	var docs []*document.Document
 	for i := 0; i < count; i++ {
-		doc := document.New(TestDocKey(t, i))
+		doc, err := document.New(TestDocKey(t, i))
+		assert.NoError(t, err)
 		assert.NoError(t, cli.Attach(ctx, doc))
 		docs = append(docs, doc)
 	}

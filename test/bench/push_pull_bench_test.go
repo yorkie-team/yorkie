@@ -95,7 +95,8 @@ func setUpClientsAndDocs(
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := document.New(docKey)
+		doc, err := document.New(docKey)
+		assert.NoError(b, err)
 		doc.SetActor(actorID)
 		assert.NoError(b, doc.Update(func(root *json.Object, _ *presence.Presence) error {
 			root.SetNewArray("array")

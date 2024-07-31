@@ -38,8 +38,9 @@ func TestPrimitive(t *testing.T) {
 
 	t.Run("causal primitive data test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -65,7 +66,8 @@ func TestPrimitive(t *testing.T) {
 		}, "nested update by c1")
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2, err := document.New(helper.TestDocKey(t))
+		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
