@@ -71,13 +71,20 @@ type Option func(*Options)
 // Options configures how we set up the document.
 type Options struct {
 	// DisableGC disables garbage collection.
-	DisableGC bool
+	DisableGC  bool
+	InitialDoc func(root *json.Object, p *presence.Presence) error
 }
 
 // WithDisableGC configures the document to disable garbage collection.
 func WithDisableGC() Option {
 	return func(o *Options) {
 		o.DisableGC = true
+	}
+}
+
+func WithInitialDoc(initialDoc func(root *json.Object, p *presence.Presence) error) Option {
+	return func(o *Options) {
+		o.InitialDoc = initialDoc
 	}
 }
 
@@ -119,13 +126,13 @@ type Document struct {
 }
 
 // New creates a new instance of Document.
-func New(key key.Key, opts ...Option) *Document {
+func New(key key.Key, opts ...Option) (*Document, error) {
 	var options Options
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	return &Document{
+	d := &Document{
 		doc:                NewInternalDocument(key),
 		options:            options,
 		events:             make(chan DocEvent, 1),
@@ -135,6 +142,14 @@ func New(key key.Key, opts ...Option) *Document {
 			topic, publisher string,
 			payload []byte) error),
 	}
+
+	if options.InitialDoc != nil {
+		if err := d.Update(options.InitialDoc, "initialDoc"); err != nil {
+			return d, err
+		}
+	}
+
+	return d, nil
 }
 
 // Update executes the given updater to update this document.
