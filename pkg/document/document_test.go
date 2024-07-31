@@ -58,7 +58,9 @@ func TestDocument(t *testing.T) {
 		doc1, err := document.New("d1")
 		assert.NoError(t, err)
 		doc2, err := document.New("d2")
+		assert.NoError(t, err)
 		doc3, err := document.New("d3")
+		assert.NoError(t, err)
 
 		err = doc1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")

@@ -191,6 +191,7 @@ func TestTextGC(t *testing.T) {
 	for i, tc := range tests {
 		t.Run(fmt.Sprintf("%d. %s", i+1, tc.desc), func(t *testing.T) {
 			doc, err := document.New("doc")
+			assert.NoError(t, err)
 			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewText("t").Edit(0, 0, "AB")
 				return nil

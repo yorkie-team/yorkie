@@ -85,6 +85,7 @@ func (c *Change) Operations() []operations.Operation {
 	return c.operations
 }
 
+// RemoveOperations clears the operations of the change.
 func (c *Change) RemoveOperations() {
 	c.operations = nil
 }

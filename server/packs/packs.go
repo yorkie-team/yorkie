@@ -85,7 +85,9 @@ func PushPull(
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
-	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode, buildSnapshot)
+	respPack, err := pullPack(
+		ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode, buildSnapshot,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -82,6 +82,9 @@ func WithDisableGC() Option {
 	}
 }
 
+// WithInitialDoc sets the initial document setup function.
+// If the document already exists on the server, the initialDoc function is discarded
+// and the snapshot from the server is applied instead.
 func WithInitialDoc(initialDoc func(root *json.Object, p *presence.Presence) error) Option {
 	return func(o *Options) {
 		o.InitialDoc = initialDoc
