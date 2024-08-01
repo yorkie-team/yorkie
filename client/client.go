@@ -778,10 +778,12 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 }
 
 // SetAttach is a temporary function.
-func (c *Client) SetAttach(doc *document.Document, docID types.ID) {
+func (c *Client) SetAttach(ctx context.Context, doc *document.Document, docID types.ID) {
+	_, cancelFunc := context.WithCancel(ctx)
 	c.attachments[doc.Key()] = &Attachment{
-		doc:   doc,
-		docID: docID,
+		doc:              doc,
+		docID:            docID,
+		closeWatchStream: cancelFunc,
 	}
 }
 

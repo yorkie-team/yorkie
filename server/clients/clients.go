@@ -23,9 +23,6 @@ import (
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -110,17 +107,14 @@ func Deactivate(
 		if err != nil {
 			return nil, err
 		}
-		cli.SetAttach(doc, docID)
+		cli.SetAttach(ctx, doc, docID)
 
-		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Clear()
-			return nil
-		}); err != nil {
+		if err := cli.Detach(ctx, doc); err != nil {
 			return nil, err
 		}
 
 		// TODO(hackerwins): This is a temporary solution to detach the document
-		// from the client. Documents are shared between multiple servers in the
+		// from the client. Documents are sharded between multiple servers in the
 		// cluster to simplify the implementation including the distributed lock.
 		// In the future, we need to request the detachments to the load balancer
 		// and the load balancer will forward the request to the server that has
@@ -131,13 +125,7 @@ func Deactivate(
 		//}); err != nil {
 		//	return nil, err
 		//}
-		if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
-			return nil, err
-		}
 	}
-	//if err = cli.Sync(ctx); err != nil {
-	//	return nil, err
-	//}
 
 	// 02. Deactivate the client.
 	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
