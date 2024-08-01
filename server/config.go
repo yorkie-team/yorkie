@@ -42,7 +42,7 @@ const (
 
 	DefaultHousekeepingIntervalDeactivateCandidates                 = 30 * time.Second
 	DefaultHousekeepingIntervalDeleteDocuments                      = 30 * time.Second
-	DefaultHousekeepingDocumentHardDeletionGracefulPeriod           = 24 * time.Hour
+	DefaultHousekeepingDocumentHardDeletionGracefulPeriod           = 14 * 24 * time.Hour
 	DefaultHousekeepingClientDeactivationCandidateLimitPerProject   = 500
 	DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject = 500
 	DefaultHousekeepingProjectFetchSize                             = 100

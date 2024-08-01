@@ -36,8 +36,8 @@ Housekeeping:
   # IntervalDeleteDocuments is the time between housekeeping runs (default: 1m).
   IntervalDeleteDocuments: 1m
 
-  # HousekeepingDocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time. (default: 24h).
-  HousekeepingDocumentHardDeletionGracefulPeriod: 24h
+  # HousekeepingDocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time. (default: 336h).
+  HousekeepingDocumentHardDeletionGracefulPeriod: 336h
 
   # ClientDeactivationCandidateLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   ClientDeactivationCandidateLimitPerProject: 100

@@ -236,6 +236,12 @@ func (c *Client) DeleteDocument(
 		return 0, nil
 	}
 
+	for _, docInfo := range candidates {
+		if docInfo.ID == "" {
+			return 0, fmt.Errorf("invalid document ID")
+		}
+	}
+
 	var idList []types.ID
 	for _, docInfo := range candidates {
 		idList = append(
@@ -250,7 +256,7 @@ func (c *Client) DeleteDocument(
 	)
 
 	if err != nil {
-		return deletedResult.DeletedCount, fmt.Errorf("deletion Error : %w", err)
+		return deletedResult.DeletedCount, fmt.Errorf("failed to delete documents: %w", err)
 	}
 
 	return deletedResult.DeletedCount, nil
@@ -769,7 +775,7 @@ func (c *Client) FindDeactivateCandidates(
 ) (types.ID, []*database.ClientInfo, error) {
 	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
-		return database.DefaultProjectID, nil, err
+		return database.DefaultProjectID, nil, fmt.Errorf("failed to find cycling project infos: %w", err)
 	}
 
 	var candidates []*database.ClientInfo
