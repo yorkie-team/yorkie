@@ -50,30 +50,31 @@ func New(conf *Config) (*Housekeeping, error) {
 func (h *Housekeeping) RegisterTask(
 	intervalDeactivateCandidates time.Duration,
 	intervalDeleteDocuments time.Duration,
-	task func(ctx context.Context) error,
+	taskDeactivateCandidates func(ctx context.Context) error,
+	taskDeleteDocuments func(ctx context.Context) error,
 ) error {
 	if _, err := h.scheduler.NewJob(
 		gocron.DurationJob(intervalDeactivateCandidates),
 		gocron.NewTask(func() {
 			ctx := context.Background()
-			if err := task(ctx); err != nil {
+			if err := taskDeactivateCandidates(ctx); err != nil {
 				logging.From(ctx).Error(err)
 			}
 		}),
 	); err != nil {
-		return fmt.Errorf("scheduler new job: %w", err)
+		return fmt.Errorf("scheduler new job for deactivating candidates: %w", err)
 	}
 
 	if _, err := h.scheduler.NewJob(
 		gocron.DurationJob(intervalDeleteDocuments),
 		gocron.NewTask(func() {
 			ctx := context.Background()
-			if err := task(ctx); err != nil {
+			if err := taskDeleteDocuments(ctx); err != nil {
 				logging.From(ctx).Error(err)
 			}
 		}),
 	); err != nil {
-		return fmt.Errorf("scheduler new job: %w", err)
+		return fmt.Errorf("scheduler new job for deleting documents: %w", err)
 	}
 
 	return nil

@@ -186,8 +186,10 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 			if err != nil {
 				return err
 			}
-
-			// Second task: Document hard deletes
+			housekeepingLastDeactivateInactivesProjectID = lastProjectDeactivateInactivesID
+			return nil
+		},
+		func(ctx context.Context) error {
 			lastProjectDeleteDocumentID, err := clients.DeleteDocument(
 				ctx,
 				be,
@@ -200,7 +202,6 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 				return err
 			}
 
-			housekeepingLastDeactivateInactivesProjectID = lastProjectDeactivateInactivesID
 			housekeepingLastDeleteDocumentProjectID = lastProjectDeleteDocumentID
 			return nil
 		})
