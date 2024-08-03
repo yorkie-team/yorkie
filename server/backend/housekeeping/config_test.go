@@ -57,7 +57,7 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf5.Validate())
 
 		conf6 := validConf
-		conf6.ProjectFetchSize = -1
+		conf6.ProjectFetchSize = 0
 		assert.Error(t, conf6.Validate())
 
 	})
