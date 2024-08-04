@@ -20,15 +20,19 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"testing"
 
+	"connectrpc.com/grpchealth"
 	"github.com/stretchr/testify/assert"
+	"github.com/yorkie-team/yorkie/server/rpc/health"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
-func TestHealthCheck(t *testing.T) {
+func TestRPCHealthCheck(t *testing.T) {
 	// use gRPC health check
 	conn, err := grpc.Dial(
 		defaultServer.RPCAddr(),
@@ -43,4 +47,19 @@ func TestHealthCheck(t *testing.T) {
 	resp, err := cli.Check(context.Background(), &healthpb.HealthCheckRequest{})
 	assert.NoError(t, err)
 	assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+}
+
+func TestHTTPHealthCheck(t *testing.T) {
+	// use HTTP health check
+	resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/healthz/")
+	defer func() {
+		assert.NoError(t, resp.Body.Close())
+	}()
+	assert.NoError(t, err)
+	assert.Equal(t, resp.StatusCode, 200)
+
+	var healthResp health.HealthCheckResponse
+	err = json.NewDecoder(resp.Body).Decode(&healthResp)
+	assert.NoError(t, err)
+	assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
 }

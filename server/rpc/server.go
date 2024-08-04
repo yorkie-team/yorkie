@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/health"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 )
 
@@ -62,16 +63,18 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		),
 	}
 
+	healthChecker := grpchealth.NewStaticChecker(
+		grpchealth.HealthV1ServiceName,
+		v1connect.YorkieServiceName,
+		v1connect.AdminServiceName,
+	)
+
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
-	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
-		grpchealth.HealthV1ServiceName,
-		v1connect.YorkieServiceName,
-		v1connect.AdminServiceName,
-	)))
-
+	mux.Handle(grpchealth.NewHandler(healthChecker))
+	mux.Handle(health.NewHTTPHealthCheckHandler(healthChecker))
 	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
 		conf: conf,
