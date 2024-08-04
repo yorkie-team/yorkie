@@ -22,8 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
-	"strings"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -119,8 +119,18 @@ func newVersionCmd() *cobra.Command {
 
 			if serverErr != nil {
 				cmd.Printf("Error fetching server version: ")
-				if strings.Contains(serverErr.Error(), "unimplemented") {
-					cmd.Printf("The server does not support this operation. You might need to check your server version.\n")
+
+				connectErr := new(connect.Error)
+				if errors.As(serverErr, &connectErr) {
+					// TODO(hyun98): Find cases where different error cases can occur,
+					// and display a user-friendly error message for each case.
+					// Furthermore, it would be good to improve it
+					// by creating a general-purpose error handling module for rpc communication.
+					// for example, rpc error handling reference: https://connectrpc.com/docs/go/errors/
+					switch connectErr.Code() {
+					case connect.CodeUnimplemented:
+						cmd.Printf("The server does not support this operation. You might need to check your server version.\n")
+					}
 				} else {
 					cmd.Print(serverErr)
 				}

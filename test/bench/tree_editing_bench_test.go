@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
+
 func BenchmarkTree(b *testing.B) {
 	verticesCounts := []int{10000, 20000, 30000}
 
