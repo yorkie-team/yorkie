@@ -46,6 +46,16 @@ func TestDocument(t *testing.T) {
 		assert.False(t, doc.IsAttached())
 	})
 
+	t.Run("WithInitialDoc test", func(t *testing.T) {
+		doc, err := document.New("d", document.WithInitialDoc(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k1", "v1")
+			return nil
+		}))
+		assert.NoError(t, err)
+		assert.True(t, doc.HasLocalChanges())
+		assert.Equal(t, `{"k1":"v1"}`, doc.Marshal())
+	})
+
 	t.Run("status test", func(t *testing.T) {
 		doc, err := document.New("d1")
 		assert.NoError(t, err)
