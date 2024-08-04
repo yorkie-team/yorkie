@@ -85,11 +85,6 @@ func (c *Change) Operations() []operations.Operation {
 	return c.operations
 }
 
-// RemoveOperations clears the operations of the change.
-func (c *Change) RemoveOperations() {
-	c.operations = nil
-}
-
 // ServerSeq returns the serverSeq of this change.
 func (c *Change) ServerSeq() int64 {
 	return c.id.ServerSeq()

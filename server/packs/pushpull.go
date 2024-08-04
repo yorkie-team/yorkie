@@ -42,25 +42,8 @@ func pushChanges(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	initialServerSeq int64,
-) (change.Checkpoint, []*change.Change, bool) {
+) (change.Checkpoint, []*change.Change) {
 	cp := clientInfo.Checkpoint(docInfo.ID)
-
-	// If there is an error in the changes, we need to create a snapshot to overwrite the client document.
-	// This ensures that the snapshot is applied instead of the changes.
-	// Changes are removed to ensure the snapshot is not corrupted.
-	buildSnapshot := false
-	if initialServerSeq != 0 && reqPack.HasChanges() &&
-		reqPack.Changes[0].Message() == "initialDoc" && len(reqPack.Changes[0].Operations()) > 0 {
-		for _, cn := range reqPack.Changes {
-			cn.RemoveOperations()
-			logging.From(ctx).Warnf(
-				"Removed change operations due to failed initialDoc, clientSeq: %d, cp: %d",
-				cn.ID().ClientSeq(),
-				cp.ClientSeq,
-			)
-		}
-		buildSnapshot = true
-	}
 
 	var pushedChanges []*change.Change
 	for _, cn := range reqPack.Changes {
@@ -93,7 +76,7 @@ func pushChanges(
 		)
 	}
 
-	return cp, pushedChanges, buildSnapshot
+	return cp, pushedChanges
 }
 
 func pullPack(
@@ -105,7 +88,6 @@ func pullPack(
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
 	mode types.SyncMode,
-	buildSnapshot bool,
 ) (*ServerPack, error) {
 	// If the client is push-only, it does not need to pull changes.
 	// So, just return the checkpoint with server seq after pushing changes.
@@ -126,7 +108,7 @@ func pullPack(
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
-	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold && !buildSnapshot {
+	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
 		cpAfterPull, pulledChanges, err := pullChangeInfos(
 			ctx,
 			be,

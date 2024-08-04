@@ -71,7 +71,8 @@ type Option func(*Options)
 // Options configures how we set up the document.
 type Options struct {
 	// DisableGC disables garbage collection.
-	DisableGC  bool
+	DisableGC bool
+	// InitialDoc initialize this document by Update.
 	InitialDoc func(root *json.Object, p *presence.Presence) error
 }
 
@@ -83,8 +84,6 @@ func WithDisableGC() Option {
 }
 
 // WithInitialDoc sets the initial document setup function.
-// If the document already exists on the server, the initialDoc function is discarded
-// and the snapshot from the server is applied instead.
 func WithInitialDoc(initialDoc func(root *json.Object, p *presence.Presence) error) Option {
 	return func(o *Options) {
 		o.InitialDoc = initialDoc
@@ -147,7 +146,7 @@ func New(key key.Key, opts ...Option) (*Document, error) {
 	}
 
 	if options.InitialDoc != nil {
-		if err := d.Update(options.InitialDoc, "initialDoc"); err != nil {
+		if err := d.Update(options.InitialDoc); err != nil {
 			return d, err
 		}
 	}

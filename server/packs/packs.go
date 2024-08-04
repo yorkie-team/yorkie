@@ -80,14 +80,12 @@ func PushPull(
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes: filter out the changes that are already saved in the database.
-	cpAfterPush, pushedChanges, buildSnapshot := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
+	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
 	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
-	respPack, err := pullPack(
-		ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode, buildSnapshot,
-	)
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}

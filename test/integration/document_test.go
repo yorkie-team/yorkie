@@ -79,57 +79,6 @@ func TestDocument(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("attach with initialDoc test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Attach a document with an initial setup
-		doc1, err := document.New(helper.TestDocKey(t), document.WithInitialDoc(func(root *json.Object, p *presence.Presence) error {
-			root.SetString("k1", "v1")
-			return nil
-		}))
-		assert.NoError(t, err)
-
-		err = c1.Attach(ctx, doc1)
-		assert.NoError(t, err)
-		assert.True(t, doc1.IsAttached())
-
-		err = c1.Detach(ctx, doc1)
-		assert.NoError(t, err)
-		assert.False(t, doc1.IsAttached())
-
-		// 02. Attach a new document with an initial setup.
-		// This should preserve the existing state of the document.
-		doc2, err := document.New(helper.TestDocKey(t), document.WithInitialDoc(func(root *json.Object, p *presence.Presence) error {
-			root.SetString("k1", "v2")
-			root.SetString("k2", "v2")
-			return nil
-		}))
-
-		err = c1.Attach(ctx, doc2)
-		assert.NoError(t, err)
-		assert.True(t, doc2.IsAttached())
-		assert.Equal(t, `{"k1":"v1"}`, doc2.Marshal())
-
-		assert.NoError(t, c1.Detach(ctx, doc2))
-
-		// 03. Reattach a new document with the same key.
-		// This time, the changes are applied directly without using an initial setup.
-		doc3, err := document.New(helper.TestDocKey(t))
-		assert.NoError(t, err)
-		err = doc3.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetString("k1", "v3")
-			return nil
-		}, "update k1 with v3")
-		assert.NoError(t, err)
-
-		err = c3.Attach(ctx, doc3)
-		assert.NoError(t, err)
-		assert.True(t, doc3.IsAttached())
-		assert.Equal(t, `{"k1":"v3"}`, doc3.Marshal())
-
-		assert.NoError(t, c3.Detach(ctx, doc3))
-	})
-
 	t.Run("reattach test", func(t *testing.T) {
 		ctx := context.Background()
 
