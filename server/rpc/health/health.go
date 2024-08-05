@@ -24,8 +24,8 @@ import (
 	"connectrpc.com/grpchealth"
 )
 
-// HealthCheckResponse represents the response structure for health checks.
-type HealthCheckResponse struct {
+// CheckResponse represents the response structure for health checks.
+type CheckResponse struct {
 	Status string `json:"status"`
 }
 
@@ -47,7 +47,7 @@ func NewHTTPHealthCheckHandler(checker grpchealth.Checker) (string, http.Handler
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		resp, err := json.Marshal(HealthCheckResponse{checkResponse.Status.String()})
+		resp, err := json.Marshal(CheckResponse{checkResponse.Status.String()})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

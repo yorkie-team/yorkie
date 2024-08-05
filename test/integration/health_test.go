@@ -58,7 +58,7 @@ func TestHTTPHealthCheck(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, resp.StatusCode, 200)
 
-	var healthResp health.HealthCheckResponse
+	var healthResp health.CheckResponse
 	err = json.NewDecoder(resp.Body).Decode(&healthResp)
 	assert.NoError(t, err)
 	assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
