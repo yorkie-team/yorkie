@@ -74,7 +74,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
-	mux.Handle(health.NewHTTPHealthCheckHandler(healthChecker))
+	mux.Handle(health.NewHTTPHandler(healthChecker))
 	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
 		conf: conf,

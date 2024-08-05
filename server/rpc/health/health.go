@@ -29,8 +29,8 @@ type CheckResponse struct {
 	Status string `json:"status"`
 }
 
-// NewHTTPHealthCheckHandler creates a new HTTP handler for health checks.
-func NewHTTPHealthCheckHandler(checker grpchealth.Checker) (string, http.Handler) {
+// NewHTTPHandler creates a new HTTP handler for health checks.
+func NewHTTPHandler(checker grpchealth.Checker) (string, http.Handler) {
 	const serviceName = "/healthz/"
 	check := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
