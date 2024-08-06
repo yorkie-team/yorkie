@@ -63,9 +63,11 @@ func Deactivate(
 	// are still attached and the client is not deactivated. In this case,
 	// the client or housekeeping process should retry the deactivation.
 
-	// NOTE(raararaara): If the environment variable GATEWAY_HOST is not set,
-	// it indicates that this deactivation is being executed client-side manually.
-	// In such cases, use the provided rpcAddr as the API host.
+	// NOTE(raararaara): If the environment variable GATEWAY_HOST is set, it
+	// indicates that the application is running in an orchestrated environment,
+	// where the host information is provided via environment variables.
+	// If not set, it defaults to using the provided rpcAddr, which is typically
+	// used for local development or non-orchestrated environments.
 	apiHost := os.Getenv("GATEWAY_HOST")
 	if apiHost == "" {
 		apiHost = rpcAddr
