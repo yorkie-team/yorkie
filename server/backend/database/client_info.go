@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 )
 
@@ -282,26 +281,4 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 		ProjectID: i.ProjectID,
 		ClientID:  i.ID,
 	}
-}
-
-// ToClient is a temporary function.
-func (i *ClientInfo) ToClient(rpcAddr, projectKey, token string) (*client.Client, error) {
-	cli, err := client.Dial(rpcAddr,
-		client.WithKey(i.Key),
-		client.WithAPIKey(projectKey),
-		client.WithToken(token),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	cli.SetActive()
-
-	actorID, err := i.ID.ToActorID()
-	if err != nil {
-		return nil, err
-	}
-	cli.SetActorID(actorID)
-
-	return cli, nil
 }

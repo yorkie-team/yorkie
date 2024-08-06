@@ -24,6 +24,7 @@ import (
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -61,6 +62,10 @@ func Deactivate(
 	// must be considered. If each step of detachments is failed, some documents
 	// are still attached and the client is not deactivated. In this case,
 	// the client or housekeeping process should retry the deactivation.
+
+	// NOTE(raararaara): If the environment variable GATEWAY_HOST is not set,
+	// it indicates that this deactivation is being executed client-side manually.
+	// In such cases, use the provided rpcAddr as the API host.
 	apiHost := os.Getenv("GATEWAY_HOST")
 	if apiHost == "" {
 		apiHost = rpcAddr
@@ -71,7 +76,7 @@ func Deactivate(
 		return nil, err
 	}
 
-	// 01. Detach attached documents from the client.
+	// 01. Temporarily create a client for document detach.
 	actorID, err := clientInfo.ID.ToActorID()
 	if err != nil {
 		return nil, err
@@ -83,13 +88,17 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
-	auth := getAuthToken(ctx)
-
-	cli, err := clientInfo.ToClient(apiHost, project.PublicKey, auth)
+	cli, err := client.Dial(apiHost,
+		client.WithKey(clientInfo.Key),
+		client.WithAPIKey(project.PublicKey),
+		client.WithToken(getAuthToken(ctx)),
+	)
 	if err != nil {
 		return nil, err
 	}
+	cli.PretendActivate(actorID)
 
+	// 02. Detach attached documents from the client.
 	for docID, info := range clientInfo.Documents {
 		if info.Status != database.DocumentAttached {
 			continue
@@ -107,27 +116,14 @@ func Deactivate(
 		if err != nil {
 			return nil, err
 		}
-		cli.SetAttach(ctx, doc, docID)
+		cli.PretendAttach(ctx, doc, docID)
 
 		if err := cli.Detach(ctx, doc); err != nil {
 			return nil, err
 		}
-
-		// TODO(hackerwins): This is a temporary solution to detach the document
-		// from the client. Documents are sharded between multiple servers in the
-		// cluster to simplify the implementation including the distributed lock.
-		// In the future, we need to request the detachments to the load balancer
-		// and the load balancer will forward the request to the server that has
-		// the document.
-		//if _, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, doc.CreateChangePack(), packs.PushPullOptions{
-		//	Mode:   types.SyncModePushOnly,
-		//	Status: document.StatusDetached,
-		//}); err != nil {
-		//	return nil, err
-		//}
 	}
 
-	// 02. Deactivate the client.
+	// 03. Deactivate the client.
 	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
 	if err != nil {
 		return nil, err

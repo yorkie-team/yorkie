@@ -777,8 +777,9 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	return nil
 }
 
-// SetAttach is a temporary function.
-func (c *Client) SetAttach(ctx context.Context, doc *document.Document, docID types.ID) {
+// PretendAttach sets the document as attached without actual activation.
+// This method is used for server-side client deactivate.
+func (c *Client) PretendAttach(ctx context.Context, doc *document.Document, docID types.ID) {
 	_, cancelFunc := context.WithCancel(ctx)
 	c.attachments[doc.Key()] = &Attachment{
 		doc:              doc,
@@ -787,14 +788,11 @@ func (c *Client) SetAttach(ctx context.Context, doc *document.Document, docID ty
 	}
 }
 
-// SetActive is a temporary function.
-func (c *Client) SetActive() {
+// PretendActivate sets the client as activated without actual activation.
+// This method is used for server-side client deactivate.
+func (c *Client) PretendActivate(actorID *time.ActorID) {
+	c.id = actorID
 	c.status = activated
-}
-
-// SetActorID is a temporary function.
-func (c *Client) SetActorID(id *time.ActorID) {
-	c.id = id
 }
 
 /**
