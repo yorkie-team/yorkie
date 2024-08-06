@@ -20,6 +20,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -60,6 +61,11 @@ func Deactivate(
 	// must be considered. If each step of detachments is failed, some documents
 	// are still attached and the client is not deactivated. In this case,
 	// the client or housekeeping process should retry the deactivation.
+	apiHost := os.Getenv("GATEWAY_HOST")
+	if apiHost == "" {
+		apiHost = rpcAddr
+	}
+
 	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
@@ -77,18 +83,12 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
-	// TODO(raararaara): Need to clean up when creating
-	auth := ""
-	if !isEmptyCtx(ctx) {
-		md := metadata.From(ctx)
-		auth = md.Authorization
-	}
+	auth := getAuthToken(ctx)
 
-	cli, err := clientInfo.ToClient(rpcAddr, project.PublicKey, auth)
+	cli, err := clientInfo.ToClient(apiHost, project.PublicKey, auth)
 	if err != nil {
 		return nil, err
 	}
-	//cli, err := server.Yorkie.CreateClient(clientInfo, project.PublicKey)
 
 	for docID, info := range clientInfo.Documents {
 		if info.Status != database.DocumentAttached {
@@ -157,4 +157,13 @@ func FindActiveClientInfo(
 func isEmptyCtx(ctx context.Context) bool {
 	emptyCtxType := reflect.TypeOf(context.Background())
 	return reflect.TypeOf(ctx) == emptyCtxType
+}
+
+func getAuthToken(ctx context.Context) string {
+	if !isEmptyCtx(ctx) {
+		md := metadata.From(ctx)
+		return md.Authorization
+	}
+
+	return ""
 }

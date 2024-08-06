@@ -3,6 +3,8 @@ yorkie:
   name: yorkie
   namespace: yorkie
 
+  gateway: yorkie-gateway
+
   autoscaling:
     enabled: false
     replicaCount: 3

@@ -97,11 +97,10 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	// TODO(raararaara): How to handle rpcAddr here?
 	_, err = clients.Deactivate(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	}, "http://localhost:"+strconv.Itoa(s.conf.Port))
+	}, s.rpcAddr())
 	if err != nil {
 		return nil, err
 	}
@@ -659,4 +658,8 @@ func (s *yorkieServer) Broadcast(
 	)
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
+}
+
+func (s *yorkieServer) rpcAddr() string {
+	return fmt.Sprintf("localhost:%d", strconv.Itoa(s.conf.Port))
 }
