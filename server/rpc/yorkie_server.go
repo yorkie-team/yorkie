@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -661,5 +660,5 @@ func (s *yorkieServer) Broadcast(
 }
 
 func (s *yorkieServer) rpcAddr() string {
-	return fmt.Sprintf("localhost:%d", strconv.Itoa(s.conf.Port))
+	return fmt.Sprintf("localhost:%d", s.conf.Port)
 }
