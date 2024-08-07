@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package health uses http GET to provide a health check for the server.
-package health
+// Package httphealth uses http GET to provide a health check for the server.
+package httphealth
 
 import (
 	"encoding/json"
@@ -29,8 +29,8 @@ type CheckResponse struct {
 	Status string `json:"status"`
 }
 
-// NewHTTPHandler creates a new HTTP handler for health checks.
-func NewHTTPHandler(checker grpchealth.Checker) (string, http.Handler) {
+// NewHandler creates a new HTTP handler for health checks.
+func NewHandler(checker grpchealth.Checker) (string, http.Handler) {
 	const serviceName = "/healthz/"
 	check := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

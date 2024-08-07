@@ -36,7 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/rpc/health"
+	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 )
 
@@ -74,7 +74,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
-	mux.Handle(health.NewHTTPHandler(healthChecker))
+	mux.Handle(httphealth.NewHandler(healthChecker))
 	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
 		conf: conf,
