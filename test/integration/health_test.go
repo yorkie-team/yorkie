@@ -48,6 +48,12 @@ func TestRPCHealthCheck(t *testing.T) {
 	resp, err := cli.Check(context.Background(), &healthpb.HealthCheckRequest{})
 	assert.NoError(t, err)
 	assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+
+	// use gRPC health check for unknown service
+	_, err = cli.Check(context.Background(), &healthpb.HealthCheckRequest{
+		Service: "unknown",
+	})
+	assert.Error(t, err)
 }
 
 func TestRPCHealthCheckYorkie(t *testing.T) {
@@ -107,24 +113,6 @@ func TestRPCHealthCheckHealthService(t *testing.T) {
 	assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
 }
 
-func TestRPCHealthCheckUnknownService(t *testing.T) {
-	// use gRPC health check for unknown service
-	conn, err := grpc.Dial(
-		defaultServer.RPCAddr(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	assert.NoError(t, err)
-	defer func() {
-		assert.NoError(t, conn.Close())
-	}()
-
-	cli := healthpb.NewHealthClient(conn)
-	_, err = cli.Check(context.Background(), &healthpb.HealthCheckRequest{
-		Service: "unknown",
-	})
-	assert.Error(t, err)
-}
-
 func TestHTTPHealthCheck(t *testing.T) {
 	// use HTTP health check
 	resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/healthz/")
@@ -138,6 +126,14 @@ func TestHTTPHealthCheck(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&healthResp)
 	assert.NoError(t, err)
 	assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
+
+	// use HTTP health check for unknown service
+	resp, err = http.Get("http://" + defaultServer.RPCAddr() + "/healthz/?service=unknown")
+	defer func() {
+		assert.NoError(t, resp.Body.Close())
+	}()
+	assert.NoError(t, err)
+	assert.Equal(t, resp.StatusCode, 404)
 }
 
 func TestHTTPHealthCheckYorkie(t *testing.T) {
@@ -183,14 +179,4 @@ func TestHTTPHealthCheckHealthService(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&healthResp)
 	assert.NoError(t, err)
 	assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
-}
-
-func TestHTTPHealthCheckUnknownService(t *testing.T) {
-	// use HTTP health check for unknown service
-	resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/healthz/?service=unknown")
-	defer func() {
-		assert.NoError(t, resp.Body.Close())
-	}()
-	assert.NoError(t, err)
-	assert.Equal(t, resp.StatusCode, 404)
 }
