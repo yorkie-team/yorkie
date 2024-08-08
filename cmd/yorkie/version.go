@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"runtime"
 
 	"connectrpc.com/connect"
@@ -45,95 +44,25 @@ func newVersionCmd() *cobra.Command {
 		Short:   "Print the version number of Yorkie",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := Validate(); err != nil {
+			if err := ValidateOptions(); err != nil {
 				return err
 			}
 
-			var versionInfo types.VersionInfo
-			versionInfo.ClientVersion = getYorkieClientVersion()
-
-			serverVersionChan := make(chan *types.VersionDetail)
-			errorChan := make(chan error)
-
-			if !clientOnly {
-				go func() {
-					rpcAddr := viper.GetString("rpcAddr")
-					auth, err := config.LoadAuth(rpcAddr)
-					if err != nil {
-						errorChan <- err
-						return
-					}
-
-					cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
-					if err != nil {
-						errorChan <- err
-						return
-					}
-					defer cli.Close()
-
-					ctx := context.Background()
-					sv, err := cli.GetServerVersion(ctx)
-					if err != nil {
-						errorChan <- err
-						return
-					}
-
-					serverVersionChan <- sv
-				}()
+			versionInfo := types.VersionInfo{
+				ClientVersion: getClientVersion(),
 			}
 
 			var serverErr error
-
 			if !clientOnly {
-				select {
-				case sv := <-serverVersionChan:
-					versionInfo.ServerVersion = sv
-				case err := <-errorChan:
-					serverErr = err
-				}
+				versionInfo.ServerVersion, serverErr = getServerVersion()
 			}
 
-			switch output {
-			case "":
-				cmd.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
-				cmd.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
-				cmd.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
-				if versionInfo.ServerVersion != nil {
-					cmd.Printf("Yorkie Server: %s\n", versionInfo.ServerVersion.YorkieVersion)
-					cmd.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
-					cmd.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
-				}
-			case "yaml":
-				marshalled, err := yaml.Marshal(&versionInfo)
-				if err != nil {
-					return errors.New("failed to marshal YAML")
-				}
-				fmt.Println(string(marshalled))
-			case "json":
-				marshalled, err := json.MarshalIndent(&versionInfo, "", "  ")
-				if err != nil {
-					return errors.New("failed to marshal JSON")
-				}
-				fmt.Println(string(marshalled))
+			if err := printVersionInfo(cmd, output, &versionInfo); err != nil {
+				return err
 			}
 
 			if serverErr != nil {
-				cmd.Printf("Error fetching server version: ")
-
-				connectErr := new(connect.Error)
-				if errors.As(serverErr, &connectErr) {
-					// TODO(hyun98): Find cases where different error cases can occur,
-					// and display a user-friendly error message for each case.
-					// Furthermore, it would be good to improve it
-					// by creating a general-purpose error handling module for rpc communication.
-					// for example, rpc error handling reference: https://connectrpc.com/docs/go/errors/
-					switch connectErr.Code() {
-					case connect.CodeUnimplemented:
-						cmd.Printf("The server does not support this operation. You might need to check your server version.\n")
-					}
-				} else {
-					cmd.Print(serverErr)
-				}
+				printServerError(cmd, serverErr)
 			}
 
 			return nil
@@ -141,21 +70,93 @@ func newVersionCmd() *cobra.Command {
 	}
 }
 
-// Validate validates the provided options.
-func Validate() error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
+func getServerVersion() (*types.VersionDetail, error) {
+	rpcAddr := viper.GetString("rpcAddr")
+	auth, err := config.LoadAuth(rpcAddr)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
+	if err != nil {
+		return nil, err
+	}
+	defer cli.Close()
+
+	ctx := context.Background()
+	sv, err := cli.GetServerVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return sv, nil
 }
 
-func getYorkieClientVersion() *types.VersionDetail {
+func getClientVersion() *types.VersionDetail {
 	return &types.VersionDetail{
 		YorkieVersion: version.Version,
 		GoVersion:     runtime.Version(),
 		BuildDate:     version.BuildDate,
 	}
+}
+
+func printServerError(cmd *cobra.Command, err error) {
+	cmd.Printf("Error fetching server version: ")
+
+	connectErr := new(connect.Error)
+	if errors.As(err, &connectErr) {
+		switch connectErr.Code() {
+		// TODO(hyun98): Find cases where different error cases can occur,
+		// and display a user-friendly error message for each case.
+		// Furthermore, it would be good to improve it
+		// by creating a general-purpose error handling module for rpc communication.
+		// for example, rpc error handling reference: https://connectrpc.com/docs/go/errors/
+		case connect.CodeUnimplemented:
+			cmd.Printf("The server does not support this operation. You might need to check your server version.\n")
+		default:
+			cmd.Println(err)
+		}
+	} else {
+		cmd.Println(err)
+	}
+}
+
+func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.VersionInfo) error {
+	switch output {
+	case "":
+		cmd.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
+		cmd.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
+		cmd.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
+		if versionInfo.ServerVersion != nil {
+			cmd.Printf("Yorkie Server: %s\n", versionInfo.ServerVersion.YorkieVersion)
+			cmd.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
+			cmd.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
+		}
+	case "yaml":
+		marshalled, err := yaml.Marshal(versionInfo)
+		if err != nil {
+			return errors.New("failed to marshal YAML")
+		}
+		cmd.Println(string(marshalled))
+	case "json":
+		marshalled, err := json.MarshalIndent(versionInfo, "", "  ")
+		if err != nil {
+			return errors.New("failed to marshal JSON")
+		}
+		cmd.Println(string(marshalled))
+	default:
+		return errors.New("unknown output format")
+	}
+	return nil
+}
+
+// ValidateOptions validates the provided options.
+func ValidateOptions() error {
+	if output != "" && output != "yaml" && output != "json" {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+
+	return nil
 }
 
 func init() {
@@ -164,7 +165,7 @@ func init() {
 		&clientOnly,
 		"client",
 		clientOnly,
-		"Shows client version only. (no server required)",
+		"Shows client version only (no server required).",
 	)
 	cmd.Flags().StringVarP(
 		&output,
