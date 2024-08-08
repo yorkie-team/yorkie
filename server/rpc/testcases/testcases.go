@@ -1134,4 +1134,11 @@ func RunAdminGetServerVersionTest(
 
 	assert.NoError(t, err)
 	assert.NotNil(t, versionResponse)
+
+	responseMsg := versionResponse.Msg
+
+	assert.NotEmpty(t, responseMsg.YorkieVersion)
+	assert.NotEmpty(t, responseMsg.GoVersion)
+	assert.Regexp(t, `^\d+\.\d+\.\d+$`, responseMsg.YorkieVersion)
+	assert.Regexp(t, `^go\d+\.\d+(\.\d+)?$`, responseMsg.GoVersion)
 }
