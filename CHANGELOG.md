@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.30] - 2024-08-09
+
+### Added
+
+- Add HTTP health check handler for server health monitoring by @taeng0204 in https://github.com/yorkie-team/yorkie/pull/952
+- Show Server Version in Yorkie CLI by @hyun98 in https://github.com/yorkie-team/yorkie/pull/938
+
 ## [0.4.29] - 2024-08-05
 
 ### Added
