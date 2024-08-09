@@ -68,6 +68,7 @@ func (t *Node[V]) rightHeight() int {
 	return t.right.height
 }
 
+// InitHeight sets initial height of this node.
 func (t *Node[V]) InitHeight() {
 	t.height = 1
 }
@@ -157,7 +158,7 @@ func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
 	return node
 }
 
-// Splay moves the given node to the root.
+// InternalSplay moves the given node to the root.
 func (t *Tree[V]) InternalSplay(node *Node[V]) {
 	if node == nil {
 		return
@@ -193,7 +194,7 @@ func (t *Tree[V]) InternalSplay(node *Node[V]) {
 	}
 }
 
-// To reduce the skewness of the splay tree, perform a MaxHeightSplay every sqrt(n) regular splays.
+// Splay perform a MaxHeightSplay every sqrt(n) regular splays and do splay, to reduce the skewness of the splay tree
 func (t *Tree[V]) Splay(node *Node[V]) {
 	t.operationCount++
 	t.splayCount++
@@ -204,7 +205,7 @@ func (t *Tree[V]) Splay(node *Node[V]) {
 	t.InternalSplay(node)
 }
 
-// Find the deepest node and splay
+// MaxHeightSplay Find the deepest node and splay
 func (t *Tree[V]) MaxHeightSplay() {
 	node := t.root
 	for node.left != nil || node.right != nil {
@@ -280,9 +281,10 @@ func (t *Tree[V]) ToTestString() string {
 
 	traverseInOrder(t.root, func(node *Node[V]) {
 		builder.WriteString(fmt.Sprintf(
-			"[%d,%d]%s",
+			"[%d,%d,%d]%s",
 			node.weight,
 			node.value.Len(),
+			node.height,
 			node.value.String(),
 		))
 	})
@@ -317,6 +319,7 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	}
 }
 
+// UpdateHeight recalculates the height of this node with the value and children.
 func (t *Tree[V]) UpdateHeight(node *Node[V]) {
 	node.InitHeight()
 
