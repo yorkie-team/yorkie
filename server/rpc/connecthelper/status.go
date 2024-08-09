@@ -48,6 +48,7 @@ var errorToConnectCode = map[error]connect.Code{
 	clients.ErrInvalidClientKey:     connect.CodeInvalidArgument,
 	key.ErrInvalidKey:               connect.CodeInvalidArgument,
 	types.ErrEmptyProjectFields:     connect.CodeInvalidArgument,
+	packs.ErrClientSeqNotSequential: connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,
@@ -100,6 +101,7 @@ var errorToCode = map[error]string{
 	clients.ErrInvalidClientKey:     "ErrInvalidClientKey",
 	key.ErrInvalidKey:               "ErrInvalidKey",
 	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
+	packs.ErrClientSeqNotSequential: "ErrClientSeqNotSequential",
 
 	database.ErrProjectNotFound:  "ErrProjectNotFound",
 	database.ErrClientNotFound:   "ErrClientNotFound",
