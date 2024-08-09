@@ -79,7 +79,7 @@ func LoadAuth(addr string) (Auth, error) {
 
 	auth, ok := config.Auths[addr]
 	if !ok {
-		return Auth{}, fmt.Errorf("auth for %s does not exist", addr)
+		return Auth{}, fmt.Errorf("auth for '%s' does not exist", addr)
 	}
 
 	return auth, nil
