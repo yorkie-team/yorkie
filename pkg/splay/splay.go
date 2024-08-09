@@ -115,8 +115,8 @@ func (t *Node[V]) hasLinks() bool {
 // original paper on Splay Trees: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type Tree[V Value] struct {
 	root           *Node[V]
-	splayCount     int64
-	operationCount int64
+	splayCount     int
+	operationCount int
 }
 
 // NewTree creates a new instance of Tree.
@@ -198,7 +198,7 @@ func (t *Tree[V]) InternalSplay(node *Node[V]) {
 func (t *Tree[V]) Splay(node *Node[V]) {
 	t.operationCount++
 	t.splayCount++
-	if t.splayCount == int64(math.Sqrt(float64(t.operationCount))) {
+	if t.splayCount > int(1e4) && t.splayCount == int(math.Sqrt(float64(t.operationCount))) {
 		t.MaxHeightSplay()
 		t.splayCount = 0
 	}
