@@ -68,7 +68,8 @@ const (
 	DefaultProjectInfoCacheSize       = 256
 	DefaultProjectInfoCacheTTL        = 10 * time.Minute
 
-	DefaultHostname = ""
+	DefaultHostname    = ""
+	DefaultGatewayAddr = ""
 )
 
 // Config is the configuration for creating a Yorkie instance.

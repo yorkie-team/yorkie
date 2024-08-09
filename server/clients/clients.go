@@ -20,7 +20,6 @@ package clients
 import (
 	"context"
 	"errors"
-	"os"
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -54,7 +53,7 @@ func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
 	refKey types.ClientRefKey,
-	rpcAddr string,
+	gatewayAddr string,
 ) (*database.ClientInfo, error) {
 	// NOTE(hackerwins): Before deactivating the client, we need to detach all
 	// attached documents from the client.
@@ -62,17 +61,6 @@ func Deactivate(
 	// must be considered. If each step of detachments is failed, some documents
 	// are still attached and the client is not deactivated. In this case,
 	// the client or housekeeping process should retry the deactivation.
-
-	// NOTE(raararaara): If the environment variable GATEWAY_HOST is set, it
-	// indicates that the application is running in an orchestrated environment,
-	// where the host information is provided via environment variables.
-	// If not set, it defaults to using the provided rpcAddr, which is typically
-	// used for local development or non-orchestrated environments.
-	apiHost := os.Getenv("GATEWAY_HOST")
-	if apiHost == "" {
-		apiHost = rpcAddr
-	}
-
 	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
@@ -90,7 +78,7 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
-	cli, err := client.Dial(apiHost,
+	cli, err := client.Dial(gatewayAddr,
 		client.WithKey(clientInfo.Key),
 		client.WithAPIKey(project.PublicKey),
 		client.WithToken(getAuthToken(ctx)),

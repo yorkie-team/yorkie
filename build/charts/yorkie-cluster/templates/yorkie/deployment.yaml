@@ -45,10 +45,9 @@ spec:
           "{{ .Values.yorkie.ports.rpcPort }}",
           "--profiling-port",
           "{{ .Values.yorkie.ports.profilingPort }}",
+          "--backend-gateway-host",
+          "{{ .Values.yorkie.gateway }}.{{ .Values.yorkie.namespace }}.svc.cluster.local",
         ]
-        env:
-          - name: GATEWAY_HOST
-            value: "{{ .Values.yorkie.gateway }}.{{ .Values.yorkie.namespace }}.svc.cluster.local"
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}
           - containerPort: {{ .Values.yorkie.ports.profilingPort }}

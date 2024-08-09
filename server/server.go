@@ -153,7 +153,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 	_, err = clients.Deactivate(ctx, r.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
-	}, r.RPCAddr())
+	}, r.conf.Backend.FetchGatewayAddr(r.RPCAddr()))
 	return err
 }
 
@@ -172,7 +172,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 			be.Housekeeping.Config.CandidatesLimitPerProject,
 			be.Housekeeping.Config.ProjectFetchSize,
 			housekeepingLastProjectID,
-			r.RPCAddr(),
+			be.Config.FetchGatewayAddr(r.RPCAddr()),
 		)
 		if err != nil {
 			return err

@@ -81,6 +81,18 @@ type Config struct {
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
+
+	// GatewayAddr is the address of the gateway server.
+	GatewayAddr string `yaml:"GatewayAddr"`
+}
+
+// FetchGatewayAddr returns the address of the gateway server.
+func (c *Config) FetchGatewayAddr(rpcAddr string) string {
+	if c.GatewayAddr == "" {
+		return rpcAddr
+	}
+
+	return c.GatewayAddr
 }
 
 // Validate validates this config.
