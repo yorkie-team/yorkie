@@ -20,6 +20,7 @@ package packs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -35,6 +36,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+var (
+	// ErrClientSeqNotSequential is returned when ClientSeq in reqPack.Changes are not sequential
+	ErrClientSeqNotSequential = errors.New("ClientSeq in reqPack.Changes are not sequential")
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -77,6 +83,11 @@ func PushPull(
 
 	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
+	err := validateClientSeqSequential(reqPack.Changes)
+	if err != nil {
+		return nil, err
+	}
+
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes: filter out the changes that are already saved in the database.
@@ -271,4 +282,25 @@ func BuildDocumentForServerSeq(
 	}
 
 	return doc, nil
+}
+
+func validateClientSeqSequential(changes []*change.Change) error {
+	if len(changes) <= 1 {
+		return nil
+	}
+
+	nextClientSeq := changes[0].ClientSeq()
+	for _, cn := range changes[1:] {
+		nextClientSeq++
+
+		if nextClientSeq != cn.ClientSeq() {
+			return fmt.Errorf(
+				"ClientSeq in Changes are not sequential (expected: %d, actual: %d) : %w",
+				nextClientSeq,
+				cn.ClientSeq(),
+				ErrClientSeqNotSequential,
+			)
+		}
+	}
+	return nil
 }
