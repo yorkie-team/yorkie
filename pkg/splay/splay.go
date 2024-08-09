@@ -20,6 +20,7 @@ package splay
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -36,6 +37,7 @@ type Value interface {
 type Node[V Value] struct {
 	value  V
 	weight int
+	height int
 
 	left   *Node[V]
 	right  *Node[V]
@@ -45,10 +47,29 @@ type Node[V Value] struct {
 // NewNode creates a new instance of Node.
 func NewNode[V Value](value V) *Node[V] {
 	n := &Node[V]{
-		value: value,
+		value:  value,
+		height: 1,
 	}
 	n.InitWeight()
 	return n
+}
+
+func (t *Node[V]) leftHeight() int {
+	if t.left == nil {
+		return 0
+	}
+	return t.left.height
+}
+
+func (t *Node[V]) rightHeight() int {
+	if t.right == nil {
+		return 0
+	}
+	return t.right.height
+}
+
+func (t *Node[V]) InitHeight() {
+	t.height = 1
 }
 
 // Value returns the value of this Node.
@@ -92,13 +113,17 @@ func (t *Node[V]) hasLinks() bool {
 // Tree is weighted binary search tree which is based on Splay tree.
 // original paper on Splay Trees: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type Tree[V Value] struct {
-	root *Node[V]
+	root           *Node[V]
+	splayCount     int64
+	operationCount int64
 }
 
 // NewTree creates a new instance of Tree.
 func NewTree[V Value](root *Node[V]) *Tree[V] {
 	return &Tree[V]{
-		root: root,
+		root:           root,
+		splayCount:     0,
+		operationCount: 0,
 	}
 }
 
@@ -126,12 +151,14 @@ func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
 
 	t.UpdateWeight(prev)
 	t.UpdateWeight(node)
+	t.UpdateHeight(prev)
+	t.UpdateHeight(node)
 
 	return node
 }
 
 // Splay moves the given node to the root.
-func (t *Tree[V]) Splay(node *Node[V]) {
+func (t *Tree[V]) InternalSplay(node *Node[V]) {
 	if node == nil {
 		return
 	}
@@ -164,6 +191,31 @@ func (t *Tree[V]) Splay(node *Node[V]) {
 			return
 		}
 	}
+}
+
+// To reduce the skewness of the splay tree, perform a MaxHeightSplay every sqrt(n) regular splays.
+func (t *Tree[V]) Splay(node *Node[V]) {
+	t.operationCount++
+	t.splayCount++
+	if t.splayCount == int64(math.Sqrt(float64(t.operationCount))) {
+		t.MaxHeightSplay()
+		t.splayCount = 0
+	}
+	t.InternalSplay(node)
+}
+
+// Find the deepest node and splay
+func (t *Tree[V]) MaxHeightSplay() {
+	node := t.root
+	for node.left != nil || node.right != nil {
+		if node.left != nil && node.leftHeight()+1 == node.height {
+			node = node.left
+		} else {
+			node = node.right
+		}
+	}
+
+	t.InternalSplay(node)
 }
 
 // IndexOf Find the index of the given node.
@@ -265,9 +317,22 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	}
 }
 
+func (t *Tree[V]) UpdateHeight(node *Node[V]) {
+	node.InitHeight()
+
+	if node.height < node.leftHeight()+1 {
+		node.height = node.leftHeight() + 1
+	}
+
+	if node.height < node.rightHeight()+1 {
+		node.height = node.rightHeight() + 1
+	}
+}
+
 func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
 	for node != nil {
 		t.UpdateWeight(node)
+		t.UpdateHeight(node)
 		node = node.parent
 	}
 }
@@ -301,6 +366,7 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 	node.unlink()
 	if t.root != nil {
 		t.UpdateWeight(t.root)
+		t.UpdateHeight(t.root)
 	}
 }
 
@@ -353,6 +419,8 @@ func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
 
 	t.UpdateWeight(root)
 	t.UpdateWeight(pivot)
+	t.UpdateHeight(root)
+	t.UpdateHeight(pivot)
 }
 
 func (t *Tree[V]) rotateRight(pivot *Node[V]) {
@@ -378,6 +446,8 @@ func (t *Tree[V]) rotateRight(pivot *Node[V]) {
 
 	t.UpdateWeight(root)
 	t.UpdateWeight(pivot)
+	t.UpdateHeight(root)
+	t.UpdateHeight(pivot)
 }
 
 func (t *Tree[V]) rightmost() *Node[V] {
