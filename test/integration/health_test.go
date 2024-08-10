@@ -54,7 +54,7 @@ func TestRPCHealthCheck(t *testing.T) {
 	t.Run("Service: default", func(t *testing.T) {
 		resp, err := cli.Check(context.Background(), &healthpb.HealthCheckRequest{})
 		assert.NoError(t, err)
-		assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+		assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 	})
 
 	// check all services
@@ -65,7 +65,7 @@ func TestRPCHealthCheck(t *testing.T) {
 				Service: service,
 			})
 			assert.NoError(t, err)
-			assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+			assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 		})
 	}
 
@@ -86,12 +86,12 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var healthResp httphealth.CheckResponse
 		err = json.NewDecoder(resp.Body).Decode(&healthResp)
 		assert.NoError(t, err)
-		assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
+		assert.Equal(t, grpchealth.StatusServing.String(), healthResp.Status)
 	})
 
 	// check all services
@@ -104,12 +104,12 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 			defer func() {
 				assert.NoError(t, resp.Body.Close())
 			}()
-			assert.Equal(t, resp.StatusCode, http.StatusOK)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 			var healthResp httphealth.CheckResponse
 			err = json.NewDecoder(resp.Body).Decode(&healthResp)
 			assert.NoError(t, err)
-			assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
+			assert.Equal(t, grpchealth.StatusServing.String(), healthResp.Status)
 		})
 	}
 
@@ -120,7 +120,7 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusNotFound)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 
@@ -132,7 +132,7 @@ func TestHTTPHEADHealthCheck(t *testing.T) {
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 
 	// check all services
@@ -145,7 +145,7 @@ func TestHTTPHEADHealthCheck(t *testing.T) {
 			defer func() {
 				assert.NoError(t, resp.Body.Close())
 			}()
-			assert.Equal(t, resp.StatusCode, http.StatusOK)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 		})
 	}
 
@@ -156,6 +156,6 @@ func TestHTTPHEADHealthCheck(t *testing.T) {
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusNotFound)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
