@@ -26,11 +26,12 @@ import (
 
 	"connectrpc.com/grpchealth"
 	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
