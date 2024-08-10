@@ -32,9 +32,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
-
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 )
 
 var services = []string{
