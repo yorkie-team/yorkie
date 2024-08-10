@@ -26,25 +26,24 @@ var (
 )
 
 func Test(t *testing.T) {
-	t.Run("test", func(t *testing.T) {
+	t.Run("push/pull sequential ClientSeq test", func(t *testing.T) {
 		RunPushPullWithSequentialClientSeqTest(t)
 	})
 
-	t.Run("test", func(t *testing.T) {
+	t.Run("push/pull not sequential ClientSeq test", func(t *testing.T) {
 		RunPushPullWithNotSequentialClientSeqTest(t)
 	})
 
-	t.Run("test", func(t *testing.T) {
+	t.Run("push/pull ClientSeq greater than ClinentInfo's ClientSeq", func(t *testing.T) {
 		RunPushPullWithClientSeqGreaterThanClientInfoTest(t)
 	})
 
-	t.Run("test", func(t *testing.T) {
+	t.Run("push/pull ServerSeq greater than DocInfo's ServerSeq", func(t *testing.T) {
 		RunPushPullWithServerSeqGreaterThanDocInfoTest(t)
 	})
 }
 
 func RunPushPullWithSequentialClientSeqTest(t *testing.T) {
-	// given
 	ctx := context.Background()
 	be := setUpBackend(t)
 	project, _ := be.DB.FindProjectInfoByID(
