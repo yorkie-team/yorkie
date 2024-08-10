@@ -65,6 +65,7 @@ func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
 		AdminUser:                 helper.AdminUser,
 		AdminPassword:             helper.AdminPassword,
+		UseDefaultProject:         helper.UseDefaultProject,
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
@@ -172,6 +173,14 @@ func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
 
 	t.Run("admin login test", func(t *testing.T) {
 		testcases.RunAdminLoginTest(t, testAdminClient)
+	})
+
+	t.Run("admin delete account test", func(t *testing.T) {
+		testcases.RunAdminDeleteAccountTest(t, testAdminClient)
+	})
+
+	t.Run("admin change password test", func(t *testing.T) {
+		testcases.RunAdminChangePasswordTest(t, testAdminClient)
 	})
 
 	t.Run("admin create project test", func(t *testing.T) {

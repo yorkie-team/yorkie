@@ -42,7 +42,9 @@ func isAdminService(method string) bool {
 
 func isRequiredAuth(method string) bool {
 	return method != "/yorkie.v1.AdminService/LogIn" &&
-		method != "/yorkie.v1.AdminService/SignUp"
+		method != "/yorkie.v1.AdminService/SignUp" &&
+		method != "/yorkie.v1.AdminService/ChangePassword" &&
+		method != "/yorkie.v1.AdminService/DeleteAccount"
 }
 
 // AdminServiceInterceptor is an interceptor for building additional context

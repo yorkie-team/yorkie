@@ -583,18 +583,15 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 	}
 
 	root := nodes[len(nodes)-1]
+	depthTable := make(map[int32]*crdt.TreeNode)
+	depthTable[pbNodes[len(nodes)-1].Depth] = nodes[len(nodes)-1]
 	for i := len(nodes) - 2; i >= 0; i-- {
-		var parent *crdt.TreeNode
-		for j := i + 1; j < len(nodes); j++ {
-			if pbNodes[i].Depth-1 == pbNodes[j].Depth {
-				parent = nodes[j]
-				break
-			}
-		}
+		var parent *crdt.TreeNode = depthTable[pbNodes[i].Depth-1]
 
 		if err := parent.Prepend(nodes[i]); err != nil {
 			return nil, err
 		}
+		depthTable[pbNodes[i].Depth] = nodes[i]
 	}
 
 	root.Index.UpdateDescendantsSize()

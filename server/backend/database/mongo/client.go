@@ -428,6 +428,35 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) error {
+	deleteResult, err := c.collection(ColUsers).DeleteOne(ctx, bson.M{
+		"username": username,
+	})
+	if err != nil {
+		return err
+	}
+	if deleteResult.DeletedCount == 0 {
+		return fmt.Errorf("no user found with username %s", username)
+	}
+	return nil
+}
+
+// ChangeUserPassword changes to new password for user.
+func (c *Client) ChangeUserPassword(ctx context.Context, username, hashedNewPassword string) error {
+	updateResult, err := c.collection(ColUsers).UpdateOne(ctx,
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"hashed_password": hashedNewPassword}},
+	)
+	if err != nil {
+		return err
+	}
+	if updateResult.ModifiedCount == 0 {
+		return fmt.Errorf("no user found with username %s", username)
+	}
+	return nil
+}
+
 // FindUserInfoByID returns a user by ID.
 func (c *Client) FindUserInfoByID(ctx context.Context, clientID types.ID) (*database.UserInfo, error) {
 	result := c.collection(ColUsers).FindOne(ctx, bson.M{
@@ -763,6 +792,38 @@ func (c *Client) FindDocInfoByKey(
 	return &docInfo, nil
 }
 
+// FindDocInfosByKeys finds the documents of the given keys.
+func (c *Client) FindDocInfosByKeys(
+	ctx context.Context,
+	projectID types.ID,
+	docKeys []key.Key,
+) ([]*database.DocInfo, error) {
+	if len(docKeys) == 0 {
+		return nil, nil
+	}
+	filter := bson.M{
+		"project_id": projectID,
+		"key": bson.M{
+			"$in": docKeys,
+		},
+		"removed_at": bson.M{
+			"$exists": false,
+		},
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("find documents: %w", err)
+	}
+
+	var docInfos []*database.DocInfo
+	if err := cursor.All(ctx, &docInfos); err != nil {
+		return nil, fmt.Errorf("fetch documents: %w", err)
+	}
+
+	return docInfos, nil
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
@@ -862,8 +923,15 @@ func (c *Client) CreateChangeInfos(
 	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
-		"updated_at": now,
 	}
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			updateFields["updated_at"] = now
+			break
+		}
+	}
+
 	if isRemoved {
 		updateFields["removed_at"] = now
 	}

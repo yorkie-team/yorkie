@@ -121,6 +121,12 @@ type Database interface {
 		hashedPassword string,
 	) (*UserInfo, error)
 
+	// DeleteUserInfoByName deletes a user by name.
+	DeleteUserInfoByName(ctx context.Context, username string) error
+
+	// ChangeUserPassword changes to new password for user.
+	ChangeUserPassword(ctx context.Context, username, hashedNewPassword string) error
+
 	// FindUserInfoByID returns a user by the given ID.
 	FindUserInfoByID(ctx context.Context, id types.ID) (*UserInfo, error)
 
@@ -163,6 +169,13 @@ type Database interface {
 		projectID types.ID,
 		docKey key.Key,
 	) (*DocInfo, error)
+
+	// FindDocInfosByKeys finds the documents of the given keys.
+	FindDocInfosByKeys(
+		ctx context.Context,
+		projectID types.ID,
+		docKeys []key.Key,
+	) ([]*DocInfo, error)
 
 	// FindDocInfoByKeyAndOwner finds the document of the given key. If the
 	// createDocIfNotExist condition is true, create the document if it does not

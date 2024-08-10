@@ -402,6 +402,52 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	info := raw.(*database.UserInfo).DeepCopy()
+	if err = txn.Delete(tblUsers, info); err != nil {
+		return fmt.Errorf("delete account %s: %w", info.ID, err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// ChangeUserPassword changes to new password.
+func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	info := raw.(*database.UserInfo).DeepCopy()
+	info.HashedPassword = hashedNewPassword
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return fmt.Errorf("change password user: %w", err)
+	}
+
+	txn.Commit()
+
+	return nil
+}
+
 // FindUserInfoByID finds a user by the given ID.
 func (d *DB) FindUserInfoByID(_ context.Context, clientID types.ID) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
@@ -756,6 +802,31 @@ func (d *DB) FindDocInfoByKey(
 	return info.DeepCopy(), nil
 }
 
+// FindDocInfosByKeys finds the documents of the given keys.
+func (d *DB) FindDocInfosByKeys(
+	_ context.Context,
+	projectID types.ID,
+	keys []key.Key,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, k := range keys {
+		info, err := d.findDocInfoByKey(txn, projectID, k)
+		if err != nil {
+			return nil, fmt.Errorf("find doc info by key: %w", err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (d *DB) FindDocInfoByRefKey(
 	_ context.Context,
@@ -875,7 +946,14 @@ func (d *DB) CreateChangeInfos(
 
 	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
-	loadedDocInfo.UpdatedAt = now
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			loadedDocInfo.UpdatedAt = now
+			break
+		}
+	}
+
 	if isRemoved {
 		loadedDocInfo.RemovedAt = now
 	}

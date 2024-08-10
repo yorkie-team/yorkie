@@ -7,6 +7,33 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.29] - 2024-08-05
+
+### Added
+
+- Support basic account action for admin by @gusah009 in https://github.com/yorkie-team/yorkie/pull/934
+
+### Changed
+
+- Update docker compose command to V2 by @fourjae in https://github.com/yorkie-team/yorkie/pull/950
+
+### Fixed
+
+- Fix FindDocInfosByKeys when keys is empty by @blurfx in https://github.com/yorkie-team/yorkie/pull/945
+- Handle panic during conversion to connectCode by @blurfx in https://github.com/yorkie-team/yorkie/pull/951
+
+## [0.4.28] - 2024-07-25
+
+### Added
+
+- Enhance housekeeping to add variety of tasks by @hackerwins in https://github.com/yorkie-team/yorkie/pull/932
+- Enhance GetDocuments API by adding bulk retrieval by @kokodak in https://github.com/yorkie-team/yorkie/pull/931
+- Improve performance for creating crdt.TreeNode by @m4ushold in https://github.com/yorkie-team/yorkie/pull/939
+
+### Changed
+
+- Update `updated_at` only when there are operations in changes by @window9u in https://github.com/yorkie-team/yorkie/pull/935
+
 ## [0.4.27] - 2024-07-11
 
 ### Changed

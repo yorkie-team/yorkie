@@ -72,6 +72,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
 		t.Skip("TODO(hackerwins): the order of docInfos is different with memDB")
 		testcases.RunFindDocInfosByQueryTest(t, cli, projectOneID)
