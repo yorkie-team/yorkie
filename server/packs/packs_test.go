@@ -27,7 +27,7 @@ var (
 )
 
 func Test(t *testing.T) {
-	t.Run("push/pull sequential ClientSeq test", func(t *testing.T) {
+	t.Run("push/pull sequential ClientSeq test (happy case)", func(t *testing.T) {
 		RunPushPullWithSequentialClientSeqTest(t)
 	})
 
@@ -35,8 +35,8 @@ func Test(t *testing.T) {
 		RunPushPullWithNotSequentialClientSeqTest(t)
 	})
 
-	t.Run("push/pull ClientSeq greater than ClinentInfo's ClientSeq", func(t *testing.T) {
-		RunPushPullWithClientSeqGreaterThanClientInfoTest(t)
+	t.Run("push/pull ClientSeq less than ClientInfo's ClientSeq (duplicated request)", func(t *testing.T) {
+		RunPushPullWithClientSeqLessThanClientInfoTest(t)
 	})
 
 	t.Run("push/pull ServerSeq greater than DocInfo's ServerSeq", func(t *testing.T) {
@@ -106,7 +106,7 @@ func RunPushPullWithNotSequentialClientSeqTest(t *testing.T) {
 	assert.Equal(t, connecthelper.CodeOf(packs.ErrClientSeqNotSequential), connecthelper.CodeOf(err))
 }
 
-func RunPushPullWithClientSeqGreaterThanClientInfoTest(t *testing.T) {
+func RunPushPullWithClientSeqLessThanClientInfoTest(t *testing.T) {
 	ctx := context.Background()
 	be := setUpBackend(t)
 	project, _ := be.DB.FindProjectInfoByID(
@@ -136,10 +136,10 @@ func RunPushPullWithClientSeqGreaterThanClientInfoTest(t *testing.T) {
 		assert.Fail(t, "failed to push pull")
 	}
 
-	changePackWithClientSeqGreaterThanClientInfo, _ :=
-		createChangePackWithClientSeqGreaterThanClientInfo(helper.TestDocKey(t).String(), actorID.Bytes())
+	changePackWithClientSeqLessThanClientInfo, _ :=
+		createChangePackWithClientSeqLessThanClientInfo(helper.TestDocKey(t).String(), actorID.Bytes())
 	_, err = packs.PushPull(ctx, be, project.ToProject(), clientInfo, docInfo,
-		changePackWithClientSeqGreaterThanClientInfo, packs.PushPullOptions{
+		changePackWithClientSeqLessThanClientInfo, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
@@ -189,7 +189,7 @@ func RunPushPullWithServerSeqGreaterThanDocInfoTest(t *testing.T) {
 func createChangePackWithSequentialClientSeq(documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 		Changes: []*api.Change{
 			createChange(0, 0, actorID),
 			createChange(1, 1, actorID),
@@ -210,12 +210,12 @@ func createChangePackWithNotSequentialClientSeq(documentKey string, actorID []by
 	})
 }
 
-func createChangePackWithClientSeqGreaterThanClientInfo(documentKey string, actorID []byte) (*change.Pack, error) {
+func createChangePackWithClientSeqLessThanClientInfo(documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 2, ClientSeq: 1e9},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 2, ClientSeq: 0},
 		Changes: []*api.Change{
-			createChange(1e9, 1e9, actorID),
+			createChange(0, 0, actorID),
 		},
 	})
 }
