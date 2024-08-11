@@ -39,7 +39,8 @@ import (
 )
 
 var (
-	// ErrClientSeqNotSequentialWithCheckpoint is returned when ClientSeq in reqPack are not sequential With DocInfo.Checkpoint.ClientSeq
+	// ErrClientSeqNotSequentialWithCheckpoint is returned
+	// when ClientSeq in change not sequential With DocInfo.Checkpoint.ClientSeq
 	ErrClientSeqNotSequentialWithCheckpoint = errors.New("ClientSeq is not sequential with DocInfo.Checkpoint.ClientSeq")
 
 	// ErrClientSeqInChangesAreNotSequential is returned when ClientSeq in reqPack.Changes are not sequential

@@ -254,7 +254,8 @@ func createChangePackWithNotSequentialClientSeqInChanges(documentKey string, act
 	})
 }
 
-func createChangePackWithNotSequentialClientSeqWithCheckpoint(documentKey string, actorID []byte) (*change.Pack, error) {
+func createChangePackWithNotSequentialClientSeqWithCheckpoint(
+	documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
 		Checkpoint:  &api.Checkpoint{ServerSeq: 3, ClientSeq: 1e9},
