@@ -31,8 +31,12 @@ func Test(t *testing.T) {
 		RunPushPullWithSequentialClientSeqTest(t)
 	})
 
-	t.Run("push/pull not sequential ClientSeq test", func(t *testing.T) {
-		RunPushPullWithNotSequentialClientSeqTest(t)
+	t.Run("push/pull not sequential ClientSeq with DocInfo.Checkpoint.ClientSeq test", func(t *testing.T) {
+		RunPushPullWithNotSequentialClientSeqWithCheckpoint(t)
+	})
+
+	t.Run("push/pull not sequential ClientSeq in changes test", func(t *testing.T) {
+		RunPushPullWithNotSequentialClientSeqInChangesTest(t)
 	})
 
 	t.Run("push/pull ClientSeq less than ClientInfo's ClientSeq (duplicated request)", func(t *testing.T) {
@@ -75,7 +79,7 @@ func RunPushPullWithSequentialClientSeqTest(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func RunPushPullWithNotSequentialClientSeqTest(t *testing.T) {
+func RunPushPullWithNotSequentialClientSeqInChangesTest(t *testing.T) {
 	ctx := context.Background()
 	be := setUpBackend(t)
 	project, _ := be.DB.FindProjectInfoByID(
@@ -87,7 +91,7 @@ func RunPushPullWithNotSequentialClientSeqTest(t *testing.T) {
 
 	actorID, _ := time.ActorIDFromHex(clientID)
 	changePackWithNotSequentialClientSeq, _ :=
-		createChangePackWithNotSequentialClientSeq(helper.TestDocKey(t).String(), actorID.Bytes())
+		createChangePackWithNotSequentialClientSeqInChanges(helper.TestDocKey(t).String(), actorID.Bytes())
 
 	docInfo, _ := documents.FindDocInfoByKeyAndOwner(ctx, be, clientInfo,
 		changePackWithNotSequentialClientSeq.DocumentKey, true)
@@ -103,7 +107,47 @@ func RunPushPullWithNotSequentialClientSeqTest(t *testing.T) {
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
-	assert.Equal(t, connecthelper.CodeOf(packs.ErrClientSeqNotSequential), connecthelper.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(packs.ErrClientSeqInChangesAreNotSequential), connecthelper.CodeOf(err))
+}
+
+func RunPushPullWithNotSequentialClientSeqWithCheckpoint(t *testing.T) {
+	ctx := context.Background()
+	be := setUpBackend(t)
+	project, _ := be.DB.FindProjectInfoByID(
+		ctx,
+		database.DefaultProjectID,
+	)
+
+	clientInfo, _ := clients.Activate(ctx, be.DB, project.ToProject(), clientID)
+
+	actorID, _ := time.ActorIDFromHex(clientID)
+	changePackFixture, _ :=
+		createChangePackFixture(helper.TestDocKey(t).String(), actorID.Bytes())
+
+	docInfo, _ := documents.FindDocInfoByKeyAndOwner(
+		ctx, be, clientInfo, changePackFixture.DocumentKey, true)
+	err := clientInfo.AttachDocument(docInfo.ID, changePackFixture.IsAttached())
+	if err != nil {
+		assert.Fail(t, "failed to attach document")
+	}
+
+	_, err = packs.PushPull(ctx, be, project.ToProject(),
+		clientInfo, docInfo, changePackFixture, packs.PushPullOptions{
+			Mode:   types.SyncModePushPull,
+			Status: document.StatusAttached,
+		})
+	if err != nil {
+		assert.Fail(t, "failed to push pull")
+	}
+
+	changePackWithNotSequentialClientSeqWithCheckpoint, _ :=
+		createChangePackWithNotSequentialClientSeqWithCheckpoint(helper.TestDocKey(t).String(), actorID.Bytes())
+	_, err = packs.PushPull(ctx, be, project.ToProject(), clientInfo, docInfo,
+		changePackWithNotSequentialClientSeqWithCheckpoint, packs.PushPullOptions{
+			Mode:   types.SyncModePushPull,
+			Status: document.StatusAttached,
+		})
+	assert.Equal(t, connecthelper.CodeOf(packs.ErrClientSeqNotSequentialWithCheckpoint), connecthelper.CodeOf(err))
 }
 
 func RunPushPullWithClientSeqLessThanClientInfoTest(t *testing.T) {
@@ -189,23 +233,33 @@ func RunPushPullWithServerSeqGreaterThanDocInfoTest(t *testing.T) {
 func createChangePackWithSequentialClientSeq(documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 		Changes: []*api.Change{
-			createChange(0, 0, actorID),
 			createChange(1, 1, actorID),
+			createChange(2, 2, actorID),
+			createChange(3, 3, actorID),
+		},
+	})
+}
+
+func createChangePackWithNotSequentialClientSeqInChanges(documentKey string, actorID []byte) (*change.Pack, error) {
+	return converter.FromChangePack(&api.ChangePack{
+		DocumentKey: documentKey,
+		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+		Changes: []*api.Change{
+			createChange(1, 1, actorID),
+			createChange(3, 3, actorID),
 			createChange(2, 2, actorID),
 		},
 	})
 }
 
-func createChangePackWithNotSequentialClientSeq(documentKey string, actorID []byte) (*change.Pack, error) {
+func createChangePackWithNotSequentialClientSeqWithCheckpoint(documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 3, ClientSeq: 1e9},
 		Changes: []*api.Change{
-			createChange(2, 2, actorID),
-			createChange(1, 1, actorID),
-			createChange(0, 0, actorID),
+			createChange(1e9, 1e9, actorID),
 		},
 	})
 }
@@ -213,7 +267,7 @@ func createChangePackWithNotSequentialClientSeq(documentKey string, actorID []by
 func createChangePackWithClientSeqLessThanClientInfo(documentKey string, actorID []byte) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 2, ClientSeq: 0},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 3, ClientSeq: 3},
 		Changes: []*api.Change{
 			createChange(0, 0, actorID),
 		},
@@ -227,7 +281,7 @@ func createChangePackFixture(documentKey string, actorID []byte) (*change.Pack, 
 func createChangePackWithServerSeqGreaterThanDocInfo(documentKey string) (*change.Pack, error) {
 	return converter.FromChangePack(&api.ChangePack{
 		DocumentKey: documentKey,
-		Checkpoint:  &api.Checkpoint{ServerSeq: 1e9, ClientSeq: 2},
+		Checkpoint:  &api.Checkpoint{ServerSeq: 1e9, ClientSeq: 3},
 	})
 }
 
