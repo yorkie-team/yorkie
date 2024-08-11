@@ -304,7 +304,7 @@ func validateClientSeqSequentialWithCheckpoint(changes []*change.Change, checkpo
 	expectedClientSeq := checkpoint.ClientSeq + 1
 	actualFirstClientSeq := changes[0].ClientSeq()
 
-	if expectedClientSeq != actualFirstClientSeq {
+	if expectedClientSeq < actualFirstClientSeq {
 		return fmt.Errorf(
 			"ClientSeq is not sequential with DocInfo.Checkpoint.ClientSeq (expected: %d, actual: %d) : %w",
 			expectedClientSeq,
