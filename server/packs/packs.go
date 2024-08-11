@@ -84,8 +84,6 @@ func PushPull(
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 	}()
 
-	// TODO: Changes may be reordered or missing during communication on the network.
-	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	checkpoint := clientInfo.Checkpoint(docInfo.ID)
 	err := validateClientSeqSequential(reqPack.Changes, checkpoint)
 	if err != nil {
