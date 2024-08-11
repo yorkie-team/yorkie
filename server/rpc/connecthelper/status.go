@@ -39,16 +39,17 @@ import (
 // errorToConnectCode maps an error to connectRPC status code.
 var errorToConnectCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:       connect.CodeInvalidArgument,
-	converter.ErrCheckpointRequired: connect.CodeInvalidArgument,
-	time.ErrInvalidHexString:        connect.CodeInvalidArgument,
-	time.ErrInvalidActorID:          connect.CodeInvalidArgument,
-	types.ErrInvalidID:              connect.CodeInvalidArgument,
-	clients.ErrInvalidClientID:      connect.CodeInvalidArgument,
-	clients.ErrInvalidClientKey:     connect.CodeInvalidArgument,
-	key.ErrInvalidKey:               connect.CodeInvalidArgument,
-	types.ErrEmptyProjectFields:     connect.CodeInvalidArgument,
-	packs.ErrClientSeqNotSequential: connect.CodeInvalidArgument,
+	converter.ErrPackRequired:                     connect.CodeInvalidArgument,
+	converter.ErrCheckpointRequired:               connect.CodeInvalidArgument,
+	time.ErrInvalidHexString:                      connect.CodeInvalidArgument,
+	time.ErrInvalidActorID:                        connect.CodeInvalidArgument,
+	types.ErrInvalidID:                            connect.CodeInvalidArgument,
+	clients.ErrInvalidClientID:                    connect.CodeInvalidArgument,
+	clients.ErrInvalidClientKey:                   connect.CodeInvalidArgument,
+	key.ErrInvalidKey:                             connect.CodeInvalidArgument,
+	types.ErrEmptyProjectFields:                   connect.CodeInvalidArgument,
+	packs.ErrClientSeqNotSequentialWithCheckpoint: connect.CodeInvalidArgument,
+	packs.ErrClientSeqInChangesAreNotSequential:   connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,
@@ -92,16 +93,17 @@ var errorToConnectCode = map[error]connect.Code{
 // TODO(hackerwins): We need to add codes by hand for each error. It would be
 // better to generate this map automatically.
 var errorToCode = map[error]string{
-	converter.ErrPackRequired:       "ErrPackRequired",
-	converter.ErrCheckpointRequired: "ErrCheckpointRequired",
-	time.ErrInvalidHexString:        "ErrInvalidHexString",
-	time.ErrInvalidActorID:          "ErrInvalidActorID",
-	types.ErrInvalidID:              "ErrInvalidID",
-	clients.ErrInvalidClientID:      "ErrInvalidClientID",
-	clients.ErrInvalidClientKey:     "ErrInvalidClientKey",
-	key.ErrInvalidKey:               "ErrInvalidKey",
-	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
-	packs.ErrClientSeqNotSequential: "ErrClientSeqNotSequential",
+	converter.ErrPackRequired:                     "ErrPackRequired",
+	converter.ErrCheckpointRequired:               "ErrCheckpointRequired",
+	time.ErrInvalidHexString:                      "ErrInvalidHexString",
+	time.ErrInvalidActorID:                        "ErrInvalidActorID",
+	types.ErrInvalidID:                            "ErrInvalidID",
+	clients.ErrInvalidClientID:                    "ErrInvalidClientID",
+	clients.ErrInvalidClientKey:                   "ErrInvalidClientKey",
+	key.ErrInvalidKey:                             "ErrInvalidKey",
+	types.ErrEmptyProjectFields:                   "ErrEmptyProjectFields",
+	packs.ErrClientSeqNotSequentialWithCheckpoint: "ErrClientSeqNotSequentialWithCheckpoint",
+	packs.ErrClientSeqInChangesAreNotSequential:   "ErrClientSeqInChangesAreNotSequential",
 
 	database.ErrProjectNotFound:  "ErrProjectNotFound",
 	database.ErrClientNotFound:   "ErrClientNotFound",
