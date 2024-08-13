@@ -24,6 +24,9 @@ import (
 	"connectrpc.com/grpchealth"
 )
 
+// HealthV1ServiceName is the fully-qualified name of the v1 version of the health service.
+const HealthV1ServiceName = "/yorkie.v1.YorkieService/health"
+
 // CheckResponse represents the response structure for health checks.
 type CheckResponse struct {
 	Status string `json:"status"`
@@ -31,7 +34,7 @@ type CheckResponse struct {
 
 // NewHandler creates a new HTTP handler for health checks.
 func NewHandler(checker grpchealth.Checker) (string, http.Handler) {
-	const serviceName = "/yorkie.v1/healthz/"
+	const serviceName = "/yorkie.v1.YorkieService/health"
 	check := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

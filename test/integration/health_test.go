@@ -81,14 +81,14 @@ func TestRPCHealthCheck(t *testing.T) {
 func TestHTTPGETHealthCheck(t *testing.T) {
 	// check default service
 	t.Run("Service: default", func(t *testing.T) {
-		resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/")
+		resp, err := http.Get("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		
-    var healthResp httphealth.CheckResponse
+
+		var healthResp httphealth.CheckResponse
 		err = json.NewDecoder(resp.Body).Decode(&healthResp)
 		assert.NoError(t, err)
 		assert.Equal(t, grpchealth.StatusServing.String(), healthResp.Status)
@@ -98,7 +98,7 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 	for _, s := range services {
 		service := s
 		t.Run("Service: "+service, func(t *testing.T) {
-			url := "http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/?service=" + service
+			url := "http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=" + service
 			resp, err := http.Get(url)
 			assert.NoError(t, err)
 			defer func() {
@@ -115,7 +115,7 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 
 	// check unknown service
 	t.Run("Service: unknown", func(t *testing.T) {
-		resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/?service=unknown")
+		resp, err := http.Get("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=unknown")
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
@@ -127,7 +127,7 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 func TestHTTPHEADHealthCheck(t *testing.T) {
 	// check default service
 	t.Run("Service: default", func(t *testing.T) {
-		resp, err := http.Head("http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/")
+		resp, err := http.Head("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
@@ -139,7 +139,7 @@ func TestHTTPHEADHealthCheck(t *testing.T) {
 	for _, s := range services {
 		service := s
 		t.Run("Service: "+service, func(t *testing.T) {
-			url := "http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/?service=" + service
+			url := "http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=" + service
 			resp, err := http.Head(url)
 			assert.NoError(t, err)
 			defer func() {
@@ -151,7 +151,7 @@ func TestHTTPHEADHealthCheck(t *testing.T) {
 
 	// check unknown service
 	t.Run("Service: unknown", func(t *testing.T) {
-		resp, err := http.Head("http://" + defaultServer.RPCAddr() + "/yorkie.v1/healthz/?service=unknown")
+		resp, err := http.Head("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=unknown")
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
