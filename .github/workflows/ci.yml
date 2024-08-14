@@ -26,17 +26,17 @@ jobs:
       sharding-test: ${{ steps.ci-target-check.outputs.sharding-test }}
 
     steps:
-      - name: CI target check by path
-        uses: dorny/paths-filter@v3
-        id: ci-target-check
-        with:
-          filters: |
-            build: '**'
-            bench: 
-              - 'pkg/**'
-              - 'server/packs/**'
-            sharding-test:
-              - 'server/backend/database/**'
+    - name: CI target check by path
+      uses: dorny/paths-filter@v3
+      id: ci-target-check
+      with:
+        filters: |
+          build: '**'
+          bench: 
+            - 'pkg/**'
+            - 'server/packs/**'
+          sharding-test:
+            - 'server/backend/database/**'
 
   build:
     name: build
@@ -46,43 +46,43 @@ jobs:
     if: ${{ needs.ci-target-check.outputs.build == 'true' }}
 
     steps:
-      - name: Set up Go ${{ env.GO_VERSION }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
+    - name: Set up Go ${{ env.GO_VERSION }}
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
 
-      - name: Setup buf action
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          github_token: ${{ github.token }}
+    - name: Setup buf action
+      uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ github.token }}
 
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Check out code
+      uses: actions/checkout@v4
 
-      - name: Get tools dependencies
-        run: make tools
+    - name: Get tools dependencies
+      run: make tools
 
-      - name: Lint
-        run: make lint
+    - name: Lint
+      run: make lint
 
-      - name: Lint proto files
-        uses: bufbuild/buf-lint-action@v1
+    - name: Lint proto files
+      uses: bufbuild/buf-lint-action@v1
 
-      - name: Build
-        run: make build
+    - name: Build
+      run: make build
 
-      - name: Stack
-        run: docker compose -f build/docker/docker-compose.yml up --build -d
+    - name: Stack
+      run: docker compose -f build/docker/docker-compose.yml up --build -d
 
-      - name: Test
-        run: go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic -v ./...
+    - name: Test
+      run: go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.txt
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.txt
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   bench:
     name: bench
@@ -94,49 +94,49 @@ jobs:
 
     steps:
 
-      - name: Check Benchmark Target
-        uses: dorny/paths-filter@v3
-        id: bench-target-filter
-        with:
-          filters: |
-            bench-target: 
-              - 'pkg/**'
-              - 'server/packs/**'
+    - name: Check Benchmark Target
+      uses: dorny/paths-filter@v3
+      id: bench-target-filter
+      with:
+        filters: |
+          bench-target: 
+            - 'pkg/**'
+            - 'server/packs/**'
 
-      - name: Set up Go ${{ env.GO_VERSION }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
+    - name: Set up Go ${{ env.GO_VERSION }}
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
 
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Check out code
+      uses: actions/checkout@v4
 
-      - name: Get tools dependencies
-        run: make tools
+    - name: Get tools dependencies
+      run: make tools
 
-      - name: Stack
-        run: docker compose -f build/docker/docker-compose.yml up --build -d
+    - name: Stack
+      run: docker compose -f build/docker/docker-compose.yml up --build -d
 
-      - name: Bench
-        run: make bench
+    - name: Bench
+      run: make bench
 
-      - name: Download previous benchmark data
-        uses: actions/cache@v3
-        with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
+    - name: Download previous benchmark data
+      uses: actions/cache@v3
+      with:
+        path: ./cache
+        key: ${{ runner.os }}-benchmark
 
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
-        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-        with:
-          name: Go Benchmark
-          tool: 'go'
-          output-file-path: output.txt
-          external-data-json-path: ./cache/benchmark-data.json
-          fail-on-alert: false
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-always: true
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      with:
+        name: Go Benchmark
+        tool: 'go'
+        output-file-path: output.txt
+        external-data-json-path: ./cache/benchmark-data.json
+        fail-on-alert: false
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        comment-always: true
 
   sharding_test:
     name: sharding_test
@@ -147,37 +147,37 @@ jobs:
 
     steps:
 
-      - name: Set up Go ${{ env.GO_VERSION }}
-        uses: actions/setup-go@v3
-        with:
-          go-version: ${{ env.GO_VERSION }}
+    - name: Set up Go ${{ env.GO_VERSION }}
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ env.GO_VERSION }}
 
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Check out code
+      uses: actions/checkout@v4
 
-      - name: Get tools dependencies
-        run: make tools
+    - name: Get tools dependencies
+      run: make tools
 
-      - name: Check Docker Compose Version
-        run: docker compose --version
+    - name: Check Docker Compose Version
+      run: docker compose --version
 
-      - name: Run the Config server, Shard 1 and Shard 2
-        run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait config1 shard1-1 shard2-1
+    - name: Run the Config server, Shard 1 and Shard 2
+      run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait config1 shard1-1 shard2-1
 
-      - name: Initialize the Config server
-        run: docker compose -f build/docker/sharding/docker-compose.yml exec config1 mongosh test /scripts/init-config1.js
+    - name: Initialize the Config server
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec config1 mongosh test /scripts/init-config1.js
 
-      - name: Initialize the Shard 1
-        run: docker compose -f build/docker/sharding/docker-compose.yml exec shard1-1 mongosh test /scripts/init-shard1-1.js
+    - name: Initialize the Shard 1
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec shard1-1 mongosh test /scripts/init-shard1-1.js
 
-      - name: Initialize the Shard 2
-        run: docker compose -f build/docker/sharding/docker-compose.yml exec shard2-1 mongosh test /scripts/init-shard2-1.js
+    - name: Initialize the Shard 2
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec shard2-1 mongosh test /scripts/init-shard2-1.js
 
-      - name: Run the Mongos
-        run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait mongos1
+    - name: Run the Mongos
+      run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait mongos1
 
-      - name: Initialize the Mongos
-        run: docker compose -f build/docker/sharding/docker-compose.yml exec mongos1 mongosh test /scripts/init-mongos1.js
+    - name: Initialize the Mongos
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec mongos1 mongosh test /scripts/init-mongos1.js
 
-      - name: Run the tests with sharding tag
-        run: go test -tags sharding -race -v ./test/sharding/...
+    - name: Run the tests with sharding tag
+      run: go test -tags sharding -race -v ./test/sharding/...
