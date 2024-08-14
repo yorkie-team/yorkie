@@ -34,7 +34,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// Add Comment For CI Sharding Test (Remove after test)
 // DB is an in-memory database for testing or temporarily.
 type DB struct {
 	db *memdb.MemDB
