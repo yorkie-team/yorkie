@@ -8,6 +8,7 @@ on:
     paths-ignore:
       - 'api/docs/**'
       - 'build/charts/**'
+      - 'design/**'
       - '**/*.md'
       - '**/*.txt'
       - '**/.gitignore'
