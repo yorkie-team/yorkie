@@ -19,11 +19,13 @@ package housekeeping
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
 
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
@@ -55,7 +57,11 @@ func (h *Housekeeping) RegisterTask(
 	if _, err := h.scheduler.NewJob(
 		gocron.DurationJob(interval),
 		gocron.NewTask(func() {
+			md := metadata.Metadata{}
+			md.Authorization = os.Getenv("YORKIE_SERVER_TOKEN")
 			ctx := context.Background()
+			ctx = metadata.With(ctx, md)
+
 			if err := task(ctx); err != nil {
 				logging.From(ctx).Error(err)
 			}

@@ -255,6 +255,7 @@ func TestConfig() *server.Config {
 			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
 			ProjectInfoCacheSize:       ProjectInfoCacheSize,
 			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
+			ServerToken:                server.DefaultServerToken,
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

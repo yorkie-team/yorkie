@@ -70,6 +70,7 @@ const (
 
 	DefaultHostname    = ""
 	DefaultGatewayAddr = ""
+	DefaultServerToken = "default-token"
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -200,6 +201,10 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.ProjectInfoCacheTTL == "" {
 		c.Backend.ProjectInfoCacheTTL = DefaultProjectInfoCacheTTL.String()
+	}
+
+	if c.Backend.ServerToken == "" {
+		c.Backend.ServerToken = DefaultServerToken
 	}
 
 	if c.Mongo != nil {

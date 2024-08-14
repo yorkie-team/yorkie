@@ -84,6 +84,8 @@ type Config struct {
 
 	// GatewayAddr is the address of the gateway server.
 	GatewayAddr string `yaml:"GatewayAddr"`
+
+	ServerToken string `yaml:"YorkieServerToken"`
 }
 
 // FetchGatewayAddr returns the address of the gateway server.
