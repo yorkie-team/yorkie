@@ -34,7 +34,6 @@ type CheckResponse struct {
 
 // NewHandler creates a new HTTP handler for health checks.
 func NewHandler(checker grpchealth.Checker) (string, http.Handler) {
-	const serviceName = "/yorkie.v1.YorkieService/health"
 	check := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -63,5 +62,5 @@ func NewHandler(checker grpchealth.Checker) (string, http.Handler) {
 			}
 		}
 	})
-	return serviceName, check
+	return HealthV1ServiceName, check
 }
