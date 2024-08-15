@@ -33,14 +33,11 @@ jobs:
         filters: |
           build: '**'
           bench: 
-            - 'api/converter/**'
-            - 'api/types/**'  
-            - 'pkg/document/**'
-            - 'pkg/locker/**'
+            - 'pkg/**'
             - 'server/**'
             - 'client/**'
             - 'admin/**'
-            - 'test/helper/**'
+            - 'api/converter/**'
           
           sharding-test:
             - 'server/backend/database/**'
