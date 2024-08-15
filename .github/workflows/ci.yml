@@ -94,15 +94,6 @@ jobs:
 
     steps:
 
-    - name: Check Benchmark Target
-      uses: dorny/paths-filter@v3
-      id: bench-target-filter
-      with:
-        filters: |
-          bench-target: 
-            - 'pkg/**'
-            - 'server/packs/**'
-
     - name: Set up Go ${{ env.GO_VERSION }}
       uses: actions/setup-go@v4
       with:
