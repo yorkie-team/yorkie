@@ -26,12 +26,11 @@ import (
 
 	"connectrpc.com/grpchealth"
 	"github.com/stretchr/testify/assert"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 )
 
 var services = []string{
@@ -55,7 +54,7 @@ func TestRPCHealthCheck(t *testing.T) {
 	t.Run("Service: default", func(t *testing.T) {
 		resp, err := cli.Check(context.Background(), &healthpb.HealthCheckRequest{})
 		assert.NoError(t, err)
-		assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+		assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 	})
 
 	// check all services
@@ -66,7 +65,7 @@ func TestRPCHealthCheck(t *testing.T) {
 				Service: service,
 			})
 			assert.NoError(t, err)
-			assert.Equal(t, resp.Status, healthpb.HealthCheckResponse_SERVING)
+			assert.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 		})
 	}
 
@@ -79,48 +78,84 @@ func TestRPCHealthCheck(t *testing.T) {
 	})
 }
 
-func TestHTTPHealthCheck(t *testing.T) {
+func TestHTTPGETHealthCheck(t *testing.T) {
 	// check default service
 	t.Run("Service: default", func(t *testing.T) {
-		resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/healthz/")
+		resp, err := http.Get("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusOK)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var healthResp httphealth.CheckResponse
 		err = json.NewDecoder(resp.Body).Decode(&healthResp)
 		assert.NoError(t, err)
-		assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
+		assert.Equal(t, grpchealth.StatusServing.String(), healthResp.Status)
 	})
 
 	// check all services
 	for _, s := range services {
 		service := s
 		t.Run("Service: "+service, func(t *testing.T) {
-			url := "http://" + defaultServer.RPCAddr() + "/healthz/?service=" + service
+			url := "http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=" + service
 			resp, err := http.Get(url)
 			assert.NoError(t, err)
 			defer func() {
 				assert.NoError(t, resp.Body.Close())
 			}()
-			assert.Equal(t, resp.StatusCode, http.StatusOK)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 			var healthResp httphealth.CheckResponse
 			err = json.NewDecoder(resp.Body).Decode(&healthResp)
 			assert.NoError(t, err)
-			assert.Equal(t, healthResp.Status, grpchealth.StatusServing.String())
+			assert.Equal(t, grpchealth.StatusServing.String(), healthResp.Status)
 		})
 	}
 
 	// check unknown service
 	t.Run("Service: unknown", func(t *testing.T) {
-		resp, err := http.Get("http://" + defaultServer.RPCAddr() + "/healthz/?service=unknown")
+		resp, err := http.Get("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=unknown")
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, resp.Body.Close())
 		}()
-		assert.Equal(t, resp.StatusCode, http.StatusNotFound)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
+
+func TestHTTPHEADHealthCheck(t *testing.T) {
+	// check default service
+	t.Run("Service: default", func(t *testing.T) {
+		resp, err := http.Head("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, resp.Body.Close())
+		}()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	// check all services
+	for _, s := range services {
+		service := s
+		t.Run("Service: "+service, func(t *testing.T) {
+			url := "http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=" + service
+			resp, err := http.Head(url)
+			assert.NoError(t, err)
+			defer func() {
+				assert.NoError(t, resp.Body.Close())
+			}()
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
+		})
+	}
+
+	// check unknown service
+	t.Run("Service: unknown", func(t *testing.T) {
+		resp, err := http.Head("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName + "?service=unknown")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, resp.Body.Close())
+		}()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
