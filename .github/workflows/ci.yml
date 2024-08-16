@@ -26,6 +26,9 @@ jobs:
       sharding-test: ${{ steps.ci-target-check.outputs.sharding-test }}
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: CI target check by path
       uses: dorny/paths-filter@v3
       id: ci-target-check
