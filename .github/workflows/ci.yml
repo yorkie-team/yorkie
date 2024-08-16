@@ -8,6 +8,7 @@ on:
     paths-ignore:
       - 'api/docs/**'
       - 'build/charts/**'
+      - 'design/**'
       - '**/*.md'
       - '**/*.txt'
       - '**/.gitignore'
@@ -16,11 +17,42 @@ env:
   GO_VERSION: '1.21'
 
 jobs:
+  ci-target-check:
+    runs-on: ubuntu-latest
+
+    outputs:
+      build: ${{ steps.ci-target-check.outputs.build }}
+      bench: ${{ steps.ci-target-check.outputs.bench }}
+      sharding-test: ${{ steps.ci-target-check.outputs.sharding-test }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: CI target check by path
+      uses: dorny/paths-filter@v3
+      id: ci-target-check
+      with:
+        filters: |
+          build: '**'
+          bench: 
+            - 'pkg/**'
+            - 'server/**'
+            - 'client/**'
+            - 'admin/**'
+            - 'api/converter/**'
+          
+          sharding-test:
+            - 'server/backend/database/**'
+
   build:
     name: build
     runs-on: ubuntu-latest
-    steps:
 
+    needs: ci-target-check
+    if: ${{ needs.ci-target-check.outputs.build == 'true' }}
+
+    steps:
     - name: Set up Go ${{ env.GO_VERSION }}
       uses: actions/setup-go@v4
       with:
@@ -58,11 +90,15 @@ jobs:
         file: ./coverage.txt
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  
+
   bench:
     name: bench
     runs-on: ubuntu-latest
     permissions: write-all
+
+    needs: ci-target-check
+    if: ${{ needs.ci-target-check.outputs.bench == 'true' }}
+
     steps:
 
     - name: Set up Go ${{ env.GO_VERSION }}
@@ -100,9 +136,13 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         comment-always: true
 
-  sharding_test:
-    name: sharding_test
+  sharding-test:
+    name: sharding-test
     runs-on: ubuntu-latest
+
+    needs: ci-target-check
+    if: ${{ needs.ci-target-check.outputs.sharding-test == 'true' }}
+
     steps:
 
     - name: Set up Go ${{ env.GO_VERSION }}
@@ -127,7 +167,7 @@ jobs:
 
     - name: Initialize the Shard 1
       run: docker compose -f build/docker/sharding/docker-compose.yml exec shard1-1 mongosh test /scripts/init-shard1-1.js
-    
+
     - name: Initialize the Shard 2
       run: docker compose -f build/docker/sharding/docker-compose.yml exec shard2-1 mongosh test /scripts/init-shard2-1.js
 
