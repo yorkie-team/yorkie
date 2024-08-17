@@ -19,13 +19,14 @@ package memory
 import "github.com/hashicorp/go-memdb"
 
 var (
-	tblProjects   = "projects"
-	tblUsers      = "users"
-	tblClients    = "clients"
-	tblDocuments  = "documents"
-	tblChanges    = "changes"
-	tblSnapshots  = "snapshots"
-	tblSyncedSeqs = "syncedseqs"
+	tblProjects      = "projects"
+	tblUsers         = "users"
+	tblClients       = "clients"
+	tblDocuments     = "documents"
+	tblChanges       = "changes"
+	tblSnapshots     = "snapshots"
+	tblSyncedSeqs    = "syncedseqs"
+	tblVersionVector = "versionvector"
 )
 
 var schema = &memdb.DBSchema{
@@ -223,6 +224,27 @@ var schema = &memdb.DBSchema{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "Lamport"},
 							&memdb.StringFieldIndex{Field: "ActorID"},
+						},
+					},
+				},
+			},
+		},
+		tblVersionVector: {
+			Name: tblVersionVector,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"project_id_doc_id_client_id": {
+					Name:   "project_id_doc_id_client_id",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.StringFieldIndex{Field: "ClientID"},
 						},
 					},
 				},
