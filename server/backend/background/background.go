@@ -50,12 +50,16 @@ type Background struct {
 
 	// routineID is used to generate routine ID.
 	routineID routineID
+
+	// metrics is used to collect metrics with prometheus.
+	metrics *prometheus.Metrics
 }
 
 // New creates a new background service.
-func New() *Background {
+func New(metrics *prometheus.Metrics) *Background {
 	return &Background{
 		closing: make(chan struct{}),
+		metrics: metrics,
 	}
 }
 
@@ -63,7 +67,6 @@ func New() *Background {
 // the background's WaitGroup.
 func (b *Background) AttachGoroutine(
 	f func(ctx context.Context),
-	metrics *prometheus.Metrics,
 	taskType string,
 ) {
 	b.wgMu.RLock() // this blocks with ongoing close(b.closing)
@@ -78,11 +81,11 @@ func (b *Background) AttachGoroutine(
 	// now safe to add since WaitGroup wait has not started yet
 	b.wg.Add(1)
 	routineLogger := logging.New(b.routineID.next())
-	metrics.AddBackgroundGoroutines(taskType)
+	b.metrics.AddBackgroundGoroutines(taskType)
 	go func() {
 		defer func() {
 			b.wg.Done()
-			metrics.RemoveBackgroundGoroutines(taskType)
+			b.metrics.RemoveBackgroundGoroutines(taskType)
 		}()
 		f(logging.With(context.Background(), routineLogger))
 	}()
