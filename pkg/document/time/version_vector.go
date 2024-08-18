@@ -103,3 +103,28 @@ func (v VersionVector) After(other *Ticket) bool {
 	ticket := NewTicket(v.VersionOf(actorID), MaxDelimiter, actorID)
 	return ticket.Compare(other) >= 0
 }
+
+// Min returns new vv consists of every min value in each column.
+func (v VersionVector) Min(other VersionVector) VersionVector {
+	minVV := NewVersionVector()
+
+	for key, value := range v {
+		if otherValue, exists := other[key]; exists {
+			if value < otherValue {
+				minVV[key] = value
+			} else {
+				minVV[key] = otherValue
+			}
+		} else {
+			minVV[key] = value
+		}
+	}
+
+	for key, value := range other {
+		if _, exists := v[key]; !exists {
+			minVV[key] = value
+		}
+	}
+
+	return minVV
+}
