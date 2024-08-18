@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/logging"
-	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -48,7 +47,6 @@ func TestRetention(t *testing.T) {
 		func(
 			_ *background.Background,
 			f func(c context.Context),
-			_ *prometheus.Metrics,
 			_ string,
 		) {
 			f(context.Background())
