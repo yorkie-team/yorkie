@@ -858,6 +858,26 @@ func (c *Client) CreateChangeInfos(
 		); err != nil {
 			return fmt.Errorf("bulk write changes: %w", err)
 		}
+
+		// last version vector in changes is max version vector
+		lastChange := changes[len(changes)-1]
+		versionVector := lastChange.ID().VersionVector()
+
+		if versionVector != nil {
+			_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"client_id":  lastChange.ID().ActorID(),
+			}, bson.M{
+				"$set": bson.M{
+					"version_vector": versionVector,
+				},
+			}, options.Update().SetUpsert(true))
+
+			if err != nil {
+				return fmt.Errorf("failed to update version vector: %w", err)
+			}
+		}
 	}
 
 	now := gotime.Now()
@@ -1162,49 +1182,30 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 		return nil, err
 	}
 
-	// 02. find min synced seq of the given document.
-	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
+	// 02. find all version vectors from the versionvector collection and calculate the minimum
+	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-	}, options.FindOne().SetSort(bson.D{
-		{Key: "server_seq", Value: 1},
-	}))
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
-	}
-	syncedSeqInfo := database.SyncedSeqInfo{}
-	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
-	}
-
-	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return nil, nil
-	}
-
-	// 03. find the version vector of the min synced seq.
-	// TODO(hackerwins): We need to find the min synced seq of the changes.
-	// min synced seq of the changes is the equivalent of LCA in the dependency graph.
-	result = c.collection(ColChanges).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": syncedSeqInfo.ServerSeq,
 	})
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return nil, nil
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find server seq's change: %w", result.Err())
+	defer cursor.Close(ctx)
+
+	var versionVectors []database.VersionVectorInfo
+	if err := cursor.All(ctx, &versionVectors); err != nil {
+		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
-	changeInfo := database.ChangeInfo{}
-	if err := result.Decode(&changeInfo); err != nil {
-		return nil, fmt.Errorf("decode change: %w", err)
+	var minVersionVector time.VersionVector
+	if len(versionVectors) > 0 {
+		minVersionVector = versionVectors[0].VersionVector
+		for _, vv := range versionVectors[1:] {
+			minVersionVector = minVersionVector.Min(vv.VersionVector)
+		}
 	}
 
-	return changeInfo.VersionVector, nil
+	return minVersionVector, nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.
