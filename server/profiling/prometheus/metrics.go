@@ -36,6 +36,7 @@ const (
 	projectIDLabel   = "project_id"
 	projectNameLabel = "project_name"
 	hostnameLabel    = "hostname"
+	taskTypeLabel    = "task_type"
 )
 
 var (
@@ -60,6 +61,8 @@ type Metrics struct {
 	pushPullSentOperationsTotal     prometheus.Counter
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
+
+	backgroundGoroutinesTotal *prometheus.GaugeVec
 
 	userAgentTotal *prometheus.CounterVec
 }
@@ -134,6 +137,12 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "snapshot_bytes_total",
 			Help:      "The total bytes of snapshots for response packs in PushPull.",
 		}),
+		backgroundGoroutinesTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "background",
+			Name:      "goroutines_total",
+			Help:      "The total number of goroutines attached by a particular background task.",
+		}, []string{taskTypeLabel}),
 		userAgentTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "user_agent",
@@ -232,6 +241,20 @@ func (m *Metrics) AddServerHandledCounter(
 		"rpc_method":  rpcMethod,
 		"rpc_code":    rpcCode,
 	}).Inc()
+}
+
+// AddBackgroundGoroutines adds the number of goroutines attached by a particular background task.
+func (m *Metrics) AddBackgroundGoroutines(taskType string) {
+	m.backgroundGoroutinesTotal.With(prometheus.Labels{
+		taskTypeLabel: taskType,
+	}).Inc()
+}
+
+// RemoveBackgroundGoroutines removes the number of goroutines attached by a particular background task.
+func (m *Metrics) RemoveBackgroundGoroutines(taskType string) {
+	m.backgroundGoroutinesTotal.With(prometheus.Labels{
+		taskTypeLabel: taskType,
+	}).Dec()
 }
 
 // Registry returns the registry of this metrics.

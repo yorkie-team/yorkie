@@ -205,7 +205,7 @@ func PushPull(
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(
 				gotime.Since(start).Seconds(),
 			)
-		})
+		}, "pushpull")
 	}
 
 	return respPack, nil
