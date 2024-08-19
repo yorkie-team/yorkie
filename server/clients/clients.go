@@ -122,6 +122,80 @@ func Deactivate(
 	return clientInfo, nil
 }
 
+// DeactivateBySystem deactivates the given client.
+func DeactivateBySystem(
+	ctx context.Context,
+	be *backend.Backend,
+	refKey types.ClientRefKey,
+	gatewayAddr string,
+) (*database.ClientInfo, error) {
+	// NOTE(hackerwins): Before deactivating the client, we need to detach all
+	// attached documents from the client.
+	// Because detachments and deactivation are separate steps, failure of steps
+	// must be considered. If each step of detachments is failed, some documents
+	// are still attached and the client is not deactivated. In this case,
+	// the client or housekeeping process should retry the deactivation.
+	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// 01. Temporarily create a client for document detach.
+	actorID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	project := projectInfo.ToProject()
+
+	cli, err := client.Dial(gatewayAddr,
+		client.WithKey(clientInfo.Key),
+		client.WithAPIKey(project.PublicKey),
+		client.WithToken(getAuthToken(ctx)),
+	)
+	if err != nil {
+		return nil, err
+	}
+	cli.PretendActivate(actorID)
+
+	// 02. Detach attached documents from the client.
+	for docID, info := range clientInfo.Documents {
+		if info.Status != database.DocumentAttached {
+			continue
+		}
+
+		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
+			ProjectID: clientInfo.ProjectID,
+			DocID:     docID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, info.ServerSeq, info.ClientSeq, actorID)
+		if err != nil {
+			return nil, err
+		}
+		cli.PretendAttach(ctx, doc, docID)
+
+		if err := cli.DetachBySystem(ctx, doc); err != nil {
+			return nil, err
+		}
+	}
+
+	// 03. Deactivate the client.
+	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientInfo, nil
+}
+
 // FindActiveClientInfo find the active client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
