@@ -44,7 +44,11 @@ func TestRetention(t *testing.T) {
 	patch, err := monkey.PatchInstanceMethodByName(
 		reflect.TypeOf(b),
 		"AttachGoroutine",
-		func(_ *background.Background, f func(c context.Context)) {
+		func(
+			_ *background.Background,
+			f func(c context.Context),
+			_ string,
+		) {
 			f(context.Background())
 		},
 	)
