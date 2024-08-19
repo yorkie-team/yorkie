@@ -97,7 +97,6 @@ type Attachment struct {
 type Client struct {
 	conn          *http.Client
 	client        v1connect.YorkieServiceClient
-	systemClient  v1connect.SystemServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
 	logger        *zap.Logger
@@ -202,7 +201,6 @@ func (c *Client) Dial(rpcAddr string) error {
 	}
 
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
-	c.systemClient = v1connect.NewSystemServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
 }
@@ -387,72 +385,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	// TODO(raararaara): We need to revert the presence clearing from the local
 	// changes, if the server fails to detach the document.
 	res, err := c.client.DetachDocument(
-		ctx,
-		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:            c.id.String(),
-			DocumentId:          attachment.docID.String(),
-			ChangePack:          pbChangePack,
-			RemoveIfNotAttached: opts.removeIfNotAttached,
-		},
-		), c.options.APIKey, doc.Key().String()))
-	if err != nil {
-		return err
-	}
-
-	pack, err := converter.FromChangePack(res.Msg.ChangePack)
-	if err != nil {
-		return err
-	}
-
-	if err := doc.ApplyChangePack(pack); err != nil {
-		return err
-	}
-	if doc.Status() != document.StatusRemoved {
-		doc.SetStatus(document.StatusDetached)
-	}
-	delete(c.attachments, doc.Key())
-
-	return nil
-}
-
-// DetachBySystem detaches the given document from this client. It tells the
-// server that this client will no longer synchronize the given document.
-//
-// To collect garbage things like CRDT tombstones left on the document, all the
-// changes should be applied to other replicas before GC time. For this, if the
-// document is no longer used by this client, it should be detached.
-func (c *Client) DetachBySystem(ctx context.Context, doc *document.Document, options ...DetachOption) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	opts := &DetachOptions{}
-	for _, opt := range options {
-		opt(opts)
-	}
-
-	attachment, ok := c.attachments[doc.Key()]
-	if !ok {
-		return ErrDocumentNotAttached
-	}
-
-	attachment.closeWatchStream()
-
-	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		p.Clear()
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
-	if err != nil {
-		return err
-	}
-
-	// TODO(raararaara): We need to revert the presence clearing from the local
-	// changes, if the server fails to detach the document.
-	res, err := c.systemClient.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:            c.id.String(),
@@ -886,8 +818,4 @@ func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Requ
 	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
 
 	return conn
-}
-
-func (c *Client) isSystemService(ctx context.Context) {
-
 }
