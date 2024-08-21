@@ -99,9 +99,16 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 
 // After returns whether this VersionVector is causally after the given ticket.
 func (v VersionVector) After(other *Ticket) bool {
-	actorID := other.ActorID()
-	ticket := NewTicket(v.VersionOf(actorID), MaxDelimiter, actorID)
-	return ticket.Compare(other) >= 0
+	if v == nil {
+		return false
+	}
+
+	for _, val := range v {
+		if val <= other.lamport {
+			return false
+		}
+	}
+	return true
 }
 
 // Min returns new vv consists of every min value in each column.
@@ -127,4 +134,29 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 	}
 
 	return minVV
+}
+
+// Max returns new vv consists of every max value in each column.
+func (v VersionVector) Max(other VersionVector) VersionVector {
+	maxVV := NewVersionVector()
+
+	for key, value := range v {
+		if otherValue, exists := other[key]; exists {
+			if value > otherValue {
+				maxVV[key] = value
+			} else {
+				maxVV[key] = otherValue
+			}
+		} else {
+			maxVV[key] = value
+		}
+	}
+
+	for key, value := range other {
+		if _, exists := v[key]; !exists {
+			maxVV[key] = value
+		}
+	}
+
+	return maxVV
 }
