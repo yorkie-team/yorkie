@@ -143,7 +143,7 @@ func RunFindDocInfosByKeysTest(
 		}
 
 		// 02. Find documents
-		infos, err := db.FindDocInfosByKeys(ctx, projectID, []key.Key{})
+		infos, err := db.FindDocInfosByKeys(ctx, projectID, nil)
 		assert.NoError(t, err)
 		assert.Len(t, infos, 0)
 	})
