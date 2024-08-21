@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.31] - 2024-08-21
+
+### Added
+
+- Add a metric to collect the number of background routines by @kokodak in https://github.com/yorkie-team/yorkie/pull/963
+
+### Changed
+
+- Modify health check endpoint and add HEAD method by @taeng0204 in https://github.com/yorkie-team/yorkie/pull/958
+- [Revised] Fine-tuned CI Workflows in PR by @krapie in https://github.com/yorkie-team/yorkie/pull/965
+
+### Fixed
+
+- Fix invalid test case in FindDocInfosByKeys by @kokodak in https://github.com/yorkie-team/yorkie/pull/972
+
 ## [0.4.30] - 2024-08-09
 
 ### Added
