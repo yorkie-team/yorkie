@@ -26,11 +26,15 @@ helm repo update
 
 _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentation._
 
-## Install Helm Chart
+## Install Helm Chart 
 
 ```bash
+# Create mongodb namespace
+kubectl create namespace yorkie
+
 # Install yorkie cluster helm chart
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enable
+d=true
 ```
 
 _See [configuration](#configuration) below for custom installation_

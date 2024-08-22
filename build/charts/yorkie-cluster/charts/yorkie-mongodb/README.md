@@ -22,7 +22,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 # Create mongodb namespace
 kubectl create namespace mongodb
 
-# Install yorkie monitoring helm chart
+# Install yorkie mongodb helm chart
 helm install [RELEASE_NAME] yorkie-team/yorkie-mongodb --namespace mongodb --set=sharded.enabled=true
 ```
 
