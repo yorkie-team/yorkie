@@ -739,6 +739,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 				"owner":      clientRefKey.ClientID,
 				"server_seq": 0,
 				"created_at": now,
+				"updated_at": now,
 			},
 		})
 	} else {
