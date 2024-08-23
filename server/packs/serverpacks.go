@@ -137,6 +137,15 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		IsRemoved:       p.IsRemoved,
 	}
 
+	if p.MinSyncedVersionVector != nil {
+		pbMinSyncedVersionVector, err := converter.ToVersionVector(p.MinSyncedVersionVector)
+		if err != nil {
+			return nil, err
+		}
+
+		pbPack.MinSyncedVersionVector = pbMinSyncedVersionVector
+	}
+
 	if p.Snapshot != nil {
 		pbVersionVector, err := converter.ToVersionVector(p.SnapshotVersionVector)
 		if err != nil {

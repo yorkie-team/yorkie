@@ -110,6 +110,13 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		IsRemoved:       pbPack.IsRemoved,
 	}
 
+	if pbPack.MinSyncedVersionVector != nil {
+		pack.MinSyncedVersionVector, err = FromVersionVector(pbPack.MinSyncedVersionVector)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if pbPack.Snapshot != nil {
 		pack.Snapshot = pbPack.Snapshot
 		pack.SnapshotVersionVector, err = FromVersionVector(pbPack.SnapshotVersionVector)
