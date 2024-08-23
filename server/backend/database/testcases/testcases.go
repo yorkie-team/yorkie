@@ -359,7 +359,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		updatedClientInfo, _ := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 
 		// Record the serverSeq value at the time the PushPull request came in.
 		initialServerSeq := docInfo.ServerSeq
