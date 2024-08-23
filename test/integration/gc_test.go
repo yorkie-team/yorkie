@@ -34,7 +34,7 @@ import (
 )
 
 func TestGarbageCollection(t *testing.T) {
-	t.Skip("TODO(hackerwins): We need to update GC test cases for the new GC algorithm.")
+	//t.Skip("TODO(hackerwins): We need to update GC test cases for the new GC algorithm.")
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
@@ -718,5 +718,88 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d2.GarbageLen())
+	})
+
+	t.Run("concurrent garbage collection test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b")
+			return nil
+		}, "sets text")
+		//fmt.Println(d1.InternalDocument().VersionVector())
+
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+		assert.NoError(t, c2.Sync(ctx))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "d")
+			return nil
+		}, "sets text")
+		//fmt.Println(d2.InternalDocument().VersionVector())
+
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Sync(ctx))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+		assert.NoError(t, c1.Sync(ctx))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "c")
+			return nil
+		}, "d2 sets text (pushonly)")
+		//fmt.Println(d2.InternalDocument().VersionVector())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "")
+			return nil
+		}, "sets text")
+		//fmt.Println(d1.InternalDocument().VersionVector())
+
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+		assert.NoError(t, c1.Sync(ctx))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "1")
+			return nil
+		}, "d2 sets text (pushonly)")
+		//fmt.Println(d2.InternalDocument().VersionVector())
+
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+		assert.NoError(t, c1.Sync(ctx))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+		//fmt.Println(d1.Marshal())
+		//fmt.Println(d2.Marshal())
+		//fmt.Println(d1.GarbageLen())
+		//fmt.Println(d2.GarbageLen())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "2")
+			return nil
+		}, "sets text (pushonly)")
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//		fmt.Println(d2.InternalDocument().VersionVector())
+		assert.NoError(t, c2.Sync(ctx))
+		//fmt.Println(d2.InternalDocument().VersionVector())
+		assert.NoError(t, c1.Sync(ctx))
+		//fmt.Println(d1.InternalDocument().VersionVector())
+		//fmt.Println(d1.GarbageLen())
+		//fmt.Println(d2.GarbageLen())
 	})
 }
