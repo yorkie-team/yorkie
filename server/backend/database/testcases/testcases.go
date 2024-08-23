@@ -343,6 +343,43 @@ func RunFindChangesBetweenServerSeqsTest(
 	})
 }
 
+// RunFindChangeInfosBetweenServerSeqsTest runs the FindChangeInfosBetweenServerSeqs test for the given db.
+func RunFindChangeInfosBetweenServerSeqsTest(
+	t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("continues editing without any interference from other users test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+
+		// Record the serverSeq value at the time the PushPull request came in.
+		initialServerSeq := docInfo.ServerSeq
+
+		// The serverSeq of the checkpoint that the server has should always be the same as
+		// the serverSeq of the user's checkpoint that came in as a request, if no other user interfered.
+		reqPackCheckpointServerSeq := updatedClientInfo.Checkpoint(docInfo.ID).ServerSeq
+
+		changeInfos, err := db.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docInfo.RefKey(),
+			reqPackCheckpointServerSeq+1,
+			initialServerSeq,
+		)
+
+		assert.NoError(t, err)
+		assert.Len(t, changeInfos, 0)
+	})
+}
+
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
 func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {

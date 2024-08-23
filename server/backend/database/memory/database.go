@@ -1051,6 +1051,9 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
+	if from > to {
+		return nil, nil
+	}
 	var infos []*database.ChangeInfo
 
 	iterator, err := txn.LowerBound(
