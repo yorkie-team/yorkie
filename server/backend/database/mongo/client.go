@@ -741,7 +741,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 				"created_at": now,
 				"updated_at": now,
 			},
-		})
+		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 	} else {
 		result = c.collection(ColDocuments).FindOne(ctx, filter)
 		if result.Err() == mongo.ErrNoDocuments {
