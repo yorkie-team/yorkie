@@ -130,11 +130,12 @@ func PushPull(
 	// 05. update and find min synced version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVector(
+	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		ctx,
 		clientInfo,
 		docRefKey,
-		reqPack.Checkpoint.ServerSeq,
+		respPack.ChangeInfos,
+		pushedChanges,
 	)
 	if err != nil {
 		return nil, err

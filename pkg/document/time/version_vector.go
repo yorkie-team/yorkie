@@ -104,7 +104,7 @@ func (v VersionVector) After(other *Ticket) bool {
 	}
 
 	for _, val := range v {
-		if val <= other.lamport {
+		if val < other.lamport {
 			return false
 		}
 	}
@@ -123,13 +123,13 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 				minVV[key] = otherValue
 			}
 		} else {
-			minVV[key] = value
+			minVV[key] = 0
 		}
 	}
 
-	for key, value := range other {
+	for key, _ := range other {
 		if _, exists := v[key]; !exists {
-			minVV[key] = value
+			minVV[key] = 0
 		}
 	}
 
