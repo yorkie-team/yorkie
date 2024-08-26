@@ -1177,19 +1177,26 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-// and returns the SyncedVersionVector of the document.
-func (d *DB) UpdateAndFindMinSyncedVersionVector(
+// UpdateVersionVector updates the given serverSeq of the given client
+func (d *DB) UpdateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (time.VersionVector, error) {
-	// 01. update synced seq of the given client and document.
-	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
-	}
+	versionVector time.VersionVector) error {
+	// TODO(JOOHOJANG): complete this function after implement version vector into mongo
+	return nil
+}
 
+// UpdateAndFindMinSyncedVersionVectorAfterPushPull updates the given serverSeq of the given client
+// and returns the SyncedVersionVector of the document.
+func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+	// TODO(JOOHOJANG): complete this function after implement version vector into mongo
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	pulledChangeInfos []*database.ChangeInfo,
+	pushedChanges []*change.Change,
+) (time.VersionVector, error) {
 	// 02. find the min synced seq of the document.
 	txn := d.db.Txn(false)
 	defer txn.Abort()
