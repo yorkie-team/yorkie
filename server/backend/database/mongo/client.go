@@ -858,26 +858,6 @@ func (c *Client) CreateChangeInfos(
 		); err != nil {
 			return fmt.Errorf("bulk write changes: %w", err)
 		}
-
-		// last version vector in changes is max version vector
-		lastChange := changes[len(changes)-1]
-		versionVector := lastChange.ID().VersionVector()
-
-		if versionVector != nil {
-			_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
-				"project_id": docRefKey.ProjectID,
-				"doc_id":     docRefKey.DocID,
-				"client_id":  lastChange.ID().ActorID(),
-			}, bson.M{
-				"$set": bson.M{
-					"version_vector": versionVector,
-				},
-			}, options.Update().SetUpsert(true))
-
-			if err != nil {
-				return fmt.Errorf("failed to update version vector: %w", err)
-			}
-		}
 	}
 
 	now := gotime.Now()
@@ -1169,20 +1149,71 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-// and returns the SyncedVersionVector of the document.
-func (c *Client) UpdateAndFindMinSyncedVersionVector(
+func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
+	pulledChangeInfos []*database.ChangeInfo,
+	pushedChanges []*change.Change,
 ) (time.VersionVector, error) {
-	// 01. update synced seq of the given client and document.
-	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
+	var versionVectors []time.VersionVector
+
+	if len(pulledChangeInfos) > 0 {
+		for _, changeInfo := range pulledChangeInfos {
+			versionVector := changeInfo.VersionVector
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
+		}
 	}
 
-	// 02. find all version vectors from the versionvector collection and calculate the minimum
+	if len(pushedChanges) > 0 {
+		for _, pushedChange := range pushedChanges {
+			versionVector := pushedChange.ID().VersionVector()
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
+		}
+	}
+
+	// 01. Update version vector
+	var maxVersionVector time.VersionVector
+	if len(versionVectors) > 0 {
+		maxVersionVector = versionVectors[0]
+		for _, vv := range versionVectors[1:] {
+			maxVersionVector = maxVersionVector.Max(vv)
+		}
+
+		result := c.collection(ColVersionVector).FindOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		})
+
+		if result.Err() != nil && result.Err() != mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find version vector: %w", result.Err())
+		}
+
+		versionVectorInfo := database.VersionVectorInfo{}
+
+		if result.Err() == nil {
+			if err := result.Decode(&versionVectorInfo); err != nil {
+				return nil, fmt.Errorf("decode version vector: %w", err)
+			}
+
+			maxVersionVector = maxVersionVector.Max(versionVectorInfo.VersionVector)
+		}
+
+		err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to update version vector: %w", err)
+		}
+	}
+
+	// 02. Find MinVersionVector
 	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
@@ -1192,20 +1223,45 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	}
 	defer cursor.Close(ctx)
 
-	var versionVectors []database.VersionVectorInfo
-	if err := cursor.All(ctx, &versionVectors); err != nil {
+	var minVersionVectors []database.VersionVectorInfo
+	if err := cursor.All(ctx, &minVersionVectors); err != nil {
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
 	var minVersionVector time.VersionVector
-	if len(versionVectors) > 0 {
-		minVersionVector = versionVectors[0].VersionVector
-		for _, vv := range versionVectors[1:] {
+	if len(minVersionVectors) > 0 {
+		minVersionVector = minVersionVectors[0].VersionVector
+		for _, vv := range minVersionVectors[1:] {
 			minVersionVector = minVersionVector.Min(vv.VersionVector)
 		}
 	}
 
 	return minVersionVector, nil
+}
+
+// UpdateVersionVector updates the given serverSeq of the given client
+func (c *Client) UpdateVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector) error {
+	if versionVector != nil {
+		_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		}, bson.M{
+			"$set": bson.M{
+				"version_vector": versionVector,
+			},
+		}, options.Update().SetUpsert(true))
+
+		if err != nil {
+			return fmt.Errorf("failed to update version vector: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.

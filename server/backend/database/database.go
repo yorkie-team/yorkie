@@ -258,13 +258,14 @@ type Database interface {
 		serverSeq int64,
 	) (*time.Ticket, error)
 
-	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+	// UpdateAndFindMinSyncedVersionVectorAfterPushPull updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
-	UpdateAndFindMinSyncedVersionVector(
+	UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
-		serverSeq int64,
+		pulledChangeInfos []*ChangeInfo,
+		pushedChanges []*change.Change,
 	) (time.VersionVector, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
@@ -273,6 +274,14 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		serverSeq int64,
+	) error
+
+	// UpdateVersionVector updates the syncedSeq of the given client.
+	UpdateVersionVector(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docRefKey types.DocRefKey,
+		versionVector time.VersionVector,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
