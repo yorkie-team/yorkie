@@ -696,12 +696,12 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		assert.NoError(t, c2.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "1")
@@ -710,14 +710,14 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d2.GarbageLen())
 
 		// NOTE(hackerwins): 👾 Encounters an error since the node is purged in Lamport order.
 		assert.NoError(t, c1.Sync(ctx))
-		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 2, d2.GarbageLen())
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
 	t.Run("concurrent garbage collection test", func(t *testing.T) {
