@@ -14,7 +14,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/cors v1.10.1
-	github.com/rs/xid v1.5.0
+	github.com/rs/xid v1.6.0
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.17.0
 	github.com/stretchr/testify v1.9.0
@@ -27,6 +27,7 @@ require (
 	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -75,7 +76,6 @@ require (
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/hashicorp/go-memdb => github.com/hackerwins/go-memdb v1.3.3-0.20211225080334-513a74641622
