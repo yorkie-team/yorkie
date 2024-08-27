@@ -221,6 +221,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 	t.Run("admin list changes test", func(t *testing.T) {
 		testcases.RunAdminListChangesTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
+
+	t.Run("admin get server version test", func(t *testing.T) {
+		testcases.RunAdminGetServerVersionTest(t, testAdminClient)
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {

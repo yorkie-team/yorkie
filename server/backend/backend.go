@@ -88,7 +88,7 @@ func New(
 
 	// 03. Create the background instance. The background instance is used to
 	// manage background tasks.
-	bg := background.New()
+	bg := background.New(metrics)
 
 	// 04. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
