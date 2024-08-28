@@ -1179,9 +1179,9 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	}
 
 	// 01. Update version vector
-	var maxVersionVector time.VersionVector
 	if len(versionVectors) > 0 {
-		maxVersionVector = versionVectors[0]
+		maxVersionVector := versionVectors[0]
+
 		for _, vv := range versionVectors[1:] {
 			maxVersionVector = maxVersionVector.Max(vv)
 		}
@@ -1203,7 +1203,9 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 				return nil, fmt.Errorf("decode version vector: %w", err)
 			}
 
-			maxVersionVector = maxVersionVector.Max(versionVectorInfo.VersionVector)
+			if versionVectorInfo.VersionVector != nil {
+				maxVersionVector = maxVersionVector.Max(versionVectorInfo.VersionVector)
+			}
 		}
 
 		err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
@@ -1223,15 +1225,15 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	}
 	defer cursor.Close(ctx)
 
-	var minVersionVectors []database.VersionVectorInfo
-	if err := cursor.All(ctx, &minVersionVectors); err != nil {
+	var versionVectorInfos []database.VersionVectorInfo
+	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
 	var minVersionVector time.VersionVector
-	if len(minVersionVectors) > 0 {
-		minVersionVector = minVersionVectors[0].VersionVector
-		for _, vv := range minVersionVectors[1:] {
+	if len(versionVectorInfos) > 0 {
+		minVersionVector = versionVectorInfos[0].VersionVector
+		for _, vv := range versionVectorInfos[1:] {
 			minVersionVector = minVersionVector.Min(vv.VersionVector)
 		}
 	}
