@@ -129,6 +129,10 @@ func (v VersionVector) After(other *Ticket) bool {
 
 // Min returns new vv consists of every min value in each column.
 func (v VersionVector) Min(other VersionVector) VersionVector {
+	if other == nil {
+		return v
+	}
+
 	minVV := NewVersionVector()
 
 	for key, value := range v {
@@ -154,6 +158,10 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 
 // Max returns new vv consists of every max value in each column.
 func (v VersionVector) Max(other VersionVector) VersionVector {
+	if other == nil {
+		return v
+	}
+
 	maxVV := NewVersionVector()
 
 	for key, value := range v {
