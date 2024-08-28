@@ -1158,34 +1158,15 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 ) (time.VersionVector, error) {
 	var versionVectors []time.VersionVector
 
-	if len(pulledChangeInfos) > 0 {
-		for _, changeInfo := range pulledChangeInfos {
-			versionVector := changeInfo.VersionVector
+	pulling := len(pulledChangeInfos) > 0
+	pushing := len(pushedChanges) > 0
 
-			if versionVector != nil {
-				versionVectors = append(versionVectors, versionVector)
-			}
-		}
-	}
+	// 01. Append version vectors from pulling changes
+	if pulling {
+		currentVersionVectorInfo := database.VersionVectorInfo{}
 
-	if len(pushedChanges) > 0 {
-		for _, pushedChange := range pushedChanges {
-			versionVector := pushedChange.ID().VersionVector()
-
-			if versionVector != nil {
-				versionVectors = append(versionVectors, versionVector)
-			}
-		}
-	}
-
-	// 01. Update version vector
-	if len(versionVectors) > 0 {
-		maxVersionVector := versionVectors[0]
-
-		for _, vv := range versionVectors[1:] {
-			maxVersionVector = maxVersionVector.Max(vv)
-		}
-
+		// 01-1. Find current version vector of client from db if it exists
+		// do this for compute and store client's version vector after apply those changes.
 		result := c.collection(ColVersionVector).FindOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
@@ -1196,16 +1177,53 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 			return nil, fmt.Errorf("find version vector: %w", result.Err())
 		}
 
-		versionVectorInfo := database.VersionVectorInfo{}
-
 		if result.Err() == nil {
-			if err := result.Decode(&versionVectorInfo); err != nil {
+			if err := result.Decode(&currentVersionVectorInfo); err != nil {
 				return nil, fmt.Errorf("decode version vector: %w", err)
 			}
 
-			if versionVectorInfo.VersionVector != nil {
-				maxVersionVector = maxVersionVector.Max(versionVectorInfo.VersionVector)
+			if currentVersionVectorInfo.VersionVector != nil {
+				versionVectors = append(versionVectors, currentVersionVectorInfo.VersionVector)
 			}
+		}
+
+		for _, changeInfo := range pulledChangeInfos {
+			versionVector := changeInfo.VersionVector
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
+		}
+	}
+
+	// 02. Append version vectors from pushing changes to compute max version vector
+	if pushing {
+		for _, pushedChange := range pushedChanges {
+			versionVector := pushedChange.ID().VersionVector()
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
+		}
+	}
+
+	// 03. Update version vector
+	if len(versionVectors) > 0 {
+		maxVersionVector := versionVectors[0]
+
+		for _, vv := range versionVectors[1:] {
+			maxVersionVector = maxVersionVector.Max(vv)
+		}
+
+		if pulling {
+			maxLamport := maxVersionVector.MaxLamport()
+			actorID, err := clientInfo.ID.ToActorID()
+
+			if err != nil {
+				return nil, err
+			}
+
+			maxVersionVector.Set(actorID, maxLamport+1)
 		}
 
 		err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
@@ -1215,7 +1233,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
-	// 02. Find MinVersionVector
+	// 04. Find MinVersionVector
 	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,

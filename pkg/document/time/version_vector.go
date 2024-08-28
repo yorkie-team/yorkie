@@ -98,7 +98,7 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	return true
 }
 
-// EqualToOrAfter returns whether this VersionVector is causally after the given ticket.
+// EqualToOrAfter returns whether this VersionVector's every field is eqaul or after than given ticket.
 func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	if v == nil {
 		return false
@@ -183,4 +183,17 @@ func (v VersionVector) Max(other VersionVector) VersionVector {
 	}
 
 	return maxVV
+}
+
+// MaxLamport returns new vv consists of every max value in each column.
+func (v VersionVector) MaxLamport() int64 {
+	var maxLamport int64 = -1
+
+	for _, value := range v {
+		if value > maxLamport {
+			maxLamport = value
+		}
+	}
+
+	return maxLamport
 }
