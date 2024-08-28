@@ -147,7 +147,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	count := 0
 
 	for _, pair := range r.gcElementPairMap {
-		if vector.After(pair.elem.RemovedAt()) {
+		if vector.EqualToOrAfter(pair.elem.RemovedAt()) {
 			if err := pair.parent.Purge(pair.elem); err != nil {
 				return 0, err
 			}
@@ -157,7 +157,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	}
 
 	for _, pair := range r.gcNodePairMap {
-		if vector.After(pair.Child.RemovedAt()) {
+		if vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			if err := pair.Parent.Purge(pair.Child); err != nil {
 				return 0, err
 			}

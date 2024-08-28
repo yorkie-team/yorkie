@@ -81,6 +81,7 @@ func (v VersionVector) Marshal() string {
 
 // AfterOrEqual returns whether this VersionVector is causally after or equal
 // the given VersionVector.
+// TODO(JOOHOJANG) check below function is necessary
 func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	for k, val := range v {
 		if val < other[k] {
@@ -97,14 +98,29 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	return true
 }
 
-// After returns whether this VersionVector is causally after the given ticket.
-func (v VersionVector) After(other *Ticket) bool {
+// EqualToOrAfter returns whether this VersionVector is causally after the given ticket.
+func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	if v == nil {
 		return false
 	}
 
 	for _, val := range v {
 		if val < other.lamport {
+			return false
+		}
+	}
+	return true
+}
+
+// After returns whether this VersionVector is causally after the given ticket.
+// TODO(JOOHOJANG) check below function is necessary
+func (v VersionVector) After(other *Ticket) bool {
+	if v == nil {
+		return false
+	}
+
+	for _, val := range v {
+		if val <= other.lamport {
 			return false
 		}
 	}
