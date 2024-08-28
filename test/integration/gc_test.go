@@ -43,10 +43,12 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
+		// minvv = [c1: 1]
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
+		// minvv = [c1: 1, c2:0]
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -56,53 +58,80 @@ func TestGarbageCollection(t *testing.T) {
 			root.SetInteger("3", 3)
 			return nil
 		}, "sets 1,2,3")
+
+		// minvv = [c1: 1, c2:0]
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		// minvv = [c1: 1, c2:1]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		// minvv = [c1: 2, c2:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
+		// removed lamport = 4
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			return nil
 		}, "removes 2")
+
+		// minvv = [c1: 3, c2:1]
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (1, 1) -> (1, 2): syncedseqs:(0, 1)
+		// minvv = [c1: 3, c2:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (1, 2) -> (2, 2): syncedseqs:(1, 1)
+		// minvv = [c1: 2, c2:4]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(1, 2)
+		// minvv = [c1: 2, c2:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		// minvv = [c1: 2, c2:4]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		// minvv = [c1: 2, c2:4]
+		// minvv is still the same, because no change was pushed from c1
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("4", 3)
+			return nil
+		}, "removes 2")
+
+		err = c1.Sync(ctx)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
+
+		// minvv = [c1: 6, c2:4]
+		// 6 >=4 && 4>=4 meet GC condition
+		err = c2.Sync(ctx)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// minvv = [c1: 6, c2:4]
+		// 6 >=4 && 4>=4 meet GC condition
+		err = c1.Sync(ctx)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
@@ -713,7 +742,6 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d2.GarbageLen())
 
-		// NOTE(hackerwins): 👾 Encounters an error since the node is purged in Lamport order.
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 0, d1.GarbageLen())
