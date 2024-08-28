@@ -303,6 +303,18 @@ func (p *Array) GetTree(idx int) *Tree {
 	}
 }
 
+// SetInteger sets element of the given index.
+func (p *Array) SetInteger(idx int, value int) *Array {
+	p.setByIndexInternal(p.Get(idx).CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+		primitive, err := crdt.NewPrimitive(value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	})
+	return p
+}
+
 // Delete deletes the element of the given index.
 func (p *Array) Delete(idx int) crdt.Element {
 	if p.Len() <= idx {
@@ -379,6 +391,38 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 	if err = p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
 		panic(err)
 	}
+}
+
+func (p *Array) setByIndexInternal(
+	createdAt *time.Ticket,
+	creator func(ticket *time.Ticket) crdt.Element,
+) crdt.Element {
+	ticket := p.context.IssueTimeTicket()
+	// NOTE(junseo): creator(createdAt), not creator(ticket)
+	elem := creator(createdAt)
+	value := toOriginal(elem)
+
+	copiedValue, err := value.DeepCopy()
+	if err != nil {
+		panic(err)
+	}
+	p.context.Push(operations.NewSetByIndex(
+		p.Array.CreatedAt(),
+		createdAt,
+		copiedValue,
+		ticket,
+	))
+
+	removed, err := p.SetByIndex(createdAt, value, ticket)
+	if err != nil {
+		panic(err)
+	}
+	if removed != nil {
+		// TODO(junseo): add GC-like logic
+		// p.context.RegisterRemovedElementPair(p, removed)
+	}
+	p.context.RegisterElement(value)
+	return elem
 }
 
 // buildArrayElements return the element slice of the given array.
