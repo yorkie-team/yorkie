@@ -63,6 +63,9 @@ var (
 	// this client.
 	ErrDocumentNotAttached = errors.New("document is not attached")
 
+	// ErrDocumentExists occurs when use initialRoot Option but document already exists.
+	ErrDocumentExists = errors.New("document already exists in server")
+
 	// ErrDocumentNotDetached occurs when the given document is not detached from
 	// this client.
 	ErrDocumentNotDetached = errors.New("document is not detached")
@@ -344,6 +347,18 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		}
 	}
 
+	if opts.InitialRoot != nil {
+		if !doc.HasElement() {
+			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+				for k, v := range opts.InitialRoot {
+					root.SetDynamicValue(k, v)
+				}
+				return nil
+			})
+		} else {
+			return ErrDocumentExists
+		}
+	}
 	return nil
 }
 
