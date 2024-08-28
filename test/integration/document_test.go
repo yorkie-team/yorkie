@@ -22,6 +22,7 @@ import (
 	"context"
 	gojson "encoding/json"
 	"errors"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"io"
 	"sync"
 	"testing"
@@ -829,5 +830,279 @@ func TestDocumentWithProjects(t *testing.T) {
 		docs, err = adminCli.ListDocuments(ctx, "default", "", 0, true, true)
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, len(docs[0].Snapshot))
+	})
+}
+
+func TestDocumentWithInitialRoot(t *testing.T) {
+	clients := activeClients(t, 3)
+	c1, c2, c3 := clients[0], clients[1], clients[2]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("attach with InitialRoot test", func(t *testing.T) {
+		ctx := context.Background()
+		doc1 := document.New(helper.TestDocKey(t))
+
+		// 01. attach empty document
+		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{})))
+		assert.True(t, doc1.IsAttached())
+		assert.Equal(t, `{}`, doc1.Marshal())
+
+		// 02. attach with initialRoot when document already exists in server and
+		// successes because document has no element and garbage.
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(0, crdt.LongCnt),
+			"content": map[string]any{
+				"x": 1,
+				"y": 1,
+			},
+			"text":   json.NewText(),
+			"number": 1,
+		})))
+		assert.True(t, doc2.IsAttached())
+		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":0,"number":1,"text":[]}`, doc2.Marshal())
+	})
+
+	t.Run("attach with InitialRoot fail test", func(t *testing.T) {
+		ctx := context.Background()
+		doc1 := document.New(helper.TestDocKey(t))
+
+		// 01. attach with initialRoot
+		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(1, crdt.LongCnt),
+			"content": map[string]any{
+				"x": 1,
+				"y": 1,
+			},
+		})))
+		assert.True(t, doc1.IsAttached())
+		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":1}`, doc1.Marshal())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 02. attach with initialRoot and fails because document has elements
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.ErrorIs(t, client.ErrDocumentExists, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(2, crdt.LongCnt),
+			"content": map[string]any{
+				"x": 2,
+				"y": 2,
+			},
+		})))
+		assert.True(t, doc2.IsAttached())
+		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":1}`, doc2.Marshal())
+
+		assert.NoError(t, doc2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("content")
+			root.Delete("counter")
+			return nil
+		}))
+		assert.NoError(t, c2.Sync(ctx))
+
+		// 03. attach with initialRoot and fails because document has no elements but garbage
+		doc3 := document.New(helper.TestDocKey(t))
+		assert.ErrorIs(t, client.ErrDocumentExists, c3.Attach(ctx, doc3, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(3, crdt.LongCnt),
+			"content": map[string]any{
+				"x": 3,
+				"y": 3,
+			},
+		})))
+		assert.True(t, doc3.IsAttached())
+		assert.Equal(t, `{}`, doc3.Marshal())
+	})
+
+	t.Run("concurrent attach WithInitialRoot test", func(t *testing.T) {
+		ctx := context.Background()
+		doc1 := document.New(helper.TestDocKey(t))
+
+		// 01. user1 attach with initialRoot and client doesn't sync
+		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{
+			"first_writer": "user1",
+		})))
+		assert.True(t, doc1.IsAttached())
+		assert.Equal(t, `{"first_writer":"user1"}`, doc1.Marshal())
+
+		// 02. user2 attach with initialRoot and client doesn't sync
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+			"first_writer": "user2",
+		})))
+		assert.True(t, doc2.IsAttached())
+		assert.Equal(t, `{"first_writer":"user2"}`, doc2.Marshal())
+
+		// 03. user1 sync first and user2 seconds
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		// 04. user1's local document's first_writer was user1
+		assert.Equal(t, `{"first_writer":"user1"}`, doc1.Marshal())
+		assert.Equal(t, `{"first_writer":"user2"}`, doc2.Marshal())
+
+		// 05. user1's local document's first_writer is overwritten by user2
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, `{"first_writer":"user2"}`, doc1.Marshal())
+	})
+
+	t.Run("attach with InitialRoot by same key test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestDocKey(t))
+
+		k1 := "key"
+		k2 := "key"
+		k3 := "key"
+		k4 := "key"
+		k5 := "key"
+		assert.NoError(t, c1.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+			k1: 1,
+			k2: 2,
+			k3: 3,
+			k4: 4,
+			k5: 5,
+		})))
+		assert.True(t, doc.IsAttached())
+		// The last value is used when the same key is used.
+		assert.Equal(t, `{"key":5}`, doc.Marshal())
+	})
+
+	t.Run("attach with initialRoot support type test", func(t *testing.T) {
+		type (
+			Myint    int
+			MyStruct struct {
+				M Myint
+			}
+			t1 struct {
+				M string
+			}
+			T1 struct {
+				M string
+			}
+			T2 struct {
+				T1
+				t1
+				M string
+			}
+		)
+		ctx := context.Background()
+		nowTime := time.Now()
+		tests := []struct {
+			caseName     string
+			input        any
+			expectedJSON string
+			expectPanic  bool
+		}{
+			// supported primitive types
+			{"nil", nil, `{"k":null}`, false},
+			{"int", 1, `{"k":1}`, false},
+			{"int32", int32(1), `{"k":1}`, false},
+			{"int64", int64(1), `{"k":1}`, false},
+			{"float32", float32(1.1), `{"k":1.100000}`, false},
+			{"float64", 1.1, `{"k":1.100000}`, false},
+			{"string", "hello", `{"k":"hello"}`, false},
+			{"bool", true, `{"k":true}`, false},
+			{"time", nowTime, `{"k":"` + nowTime.Format(time.RFC3339) + `"}`, false},
+			{"Myint", Myint(1), `{"k":1}`, false},
+
+			// unsupported primitive types
+			{"int8", int8(1), `{}`, true},
+			{"int16", int16(1), `{}`, true},
+			{"uint32", uint32(1), `{}`, true},
+			{"uint64", uint64(1), `{}`, true},
+
+			// supported slice, array types
+			{"int slice", []int{1, 2, 3}, `{"k":[1,2,3]}`, false},
+			{"&int slice", &[]int{1, 2, 3}, `{"k":[1,2,3]}`, false},
+			{"any slice", []any{nil, 1, 1.0, "hello", true, nowTime, []int{1, 2, 3}}, `{"k":[null,1,1.000000,"hello",true,"` + nowTime.Format(time.RFC3339) + `",[1,2,3]]}`, false},
+			{"&any slice", &[]any{nil, 1, 1.0, "hello", true, nowTime, []int{1, 2, 3}}, `{"k":[null,1,1.000000,"hello",true,"` + nowTime.Format(time.RFC3339) + `",[1,2,3]]}`, false},
+			{"int array", [3]int{1, 2, 3}, `{"k":[1,2,3]}`, false},
+			{"&int array", &[3]int{1, 2, 3}, `{"k":[1,2,3]}`, false},
+			{"string array", [3]string{"a", "b", "c"}, `{"k":["a","b","c"]}`, false},
+			{"&string array", &[3]string{"a", "b", "c"}, `{"k":["a","b","c"]}`, false},
+			{"any array", [7]any{nil, 1, 1.0, "hello", true, nowTime, []int{1, 2, 3}}, `{"k":[null,1,1.000000,"hello",true,"` + nowTime.Format(time.RFC3339) + `",[1,2,3]]}`, false},
+			{"&any array", &[7]any{nil, 1, 1.0, "hello", true, nowTime, []int{1, 2, 3}}, `{"k":[null,1,1.000000,"hello",true,"` + nowTime.Format(time.RFC3339) + `",[1,2,3]]}`, false},
+
+			// supported map types
+			{"string:any map", map[string]any{"a": nil, "b": 1, "c": 1.0, "d": "hello", "e": true, "f": nowTime, "g": []int{1, 2, 3}}, `{"k":{"a":null,"b":1,"c":1.000000,"d":"hello","e":true,"f":"` + nowTime.Format(time.RFC3339) + `","g":[1,2,3]}}`, false},
+			{"&string:any map", &map[string]any{"a": nil, "b": 1, "c": 1.0, "d": "hello", "e": true, "f": nowTime, "g": []int{1, 2, 3}}, `{"k":{"a":null,"b":1,"c":1.000000,"d":"hello","e":true,"f":"` + nowTime.Format(time.RFC3339) + `","g":[1,2,3]}}`, false},
+
+			// unsupported map types
+			{"int map", map[int]int{1: 1, 2: 2}, `{}`, true},
+			{"string map", map[string]string{"a": "a", "b": "b"}, `{}`, true},
+			{"int map", map[int]any{1: 1, 2: 2}, `{}`, true},
+
+			// supported JSON types
+			{"json.Text", json.NewText(), `{"k":[]}`, false},
+			{"*json.Text", *json.NewText(), `{"k":[]}`, false},
+			{"json.Tree", json.NewTree(&json.TreeNode{ // 1: tree
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			}), `{"k":{"type":"doc","children":[{"type":"p","children":[{"type":"text","value":"ab"}]}]}}`, false},
+			{"*json.Tree", *json.NewTree(&json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			}), `{"k":{"type":"doc","children":[{"type":"p","children":[{"type":"text","value":"ab"}]}]}}`, false},
+			{"json.Counter", json.NewCounter(1, crdt.LongCnt), `{"k":1}`, false},
+			{"*json.Counter", *json.NewCounter(1, crdt.LongCnt), `{"k":1}`, false},
+
+			// struct types
+			{"struct", MyStruct{M: 1}, `{"k":{"M":1}}`, false},
+			{"struct pointer", &MyStruct{M: 1}, `{"k":{"M":1}}`, false},
+			{"struct slice", []MyStruct{{M: 1}, {M: 2}}, `{"k":[{"M":1},{"M":2}]}`, false},
+			{"struct array", [2]MyStruct{{M: 1}, {M: 2}}, `{"k":[{"M":1},{"M":2}]}`, false},
+			{"anonymous struct", struct{ M string }{M: "hello"}, `{"k":{"M":"hello"}}`, false},
+			{"anonymous struct pointer", &struct{ M string }{M: "hello"}, `{"k":{"M":"hello"}}`, false},
+			{"anonymous struct slice", []struct{ M string }{{M: "a"}, {M: "b"}}, `{"k":[{"M":"a"},{"M":"b"}]}`, false},
+			{"anonymous struct array", [2]struct{ M string }{{M: "a"}, {M: "b"}}, `{"k":[{"M":"a"},{"M":"b"}]}`, false},
+			{"struct with embedded struct", T2{T1: T1{M: "a"}, t1: t1{M: "b"}, M: "c"}, `{"k":{"M":"c","T1":{"M":"a"}}}`, false},
+			{"strut with unexported field", struct {
+				t int
+				s string
+			}{t: 1, s: "hello"}, `{"k":{}}`, false},
+			{"strut with unexported field pointer", &struct {
+				t int
+				s string
+			}{t: 1, s: "hello"}, `{"k":{}}`, false},
+			{"struct with slice", struct{ M []int }{M: []int{1, 2, 3}}, `{"k":{"M":[1,2,3]}}`, false},
+			{"struct with slice pointer", &struct{ M []int }{M: []int{1, 2, 3}}, `{"k":{"M":[1,2,3]}}`, false},
+			{"struct with array", struct{ M [3]int }{M: [3]int{1, 2, 3}}, `{"k":{"M":[1,2,3]}}`, false},
+			{"struct with array pointer", &struct{ M [3]int }{M: [3]int{1, 2, 3}}, `{"k":{"M":[1,2,3]}}`, false},
+			{"struct with struct", struct{ M MyStruct }{M: MyStruct{M: 1}}, `{"k":{"M":{"M":1}}}`, false},
+			{"struct with struct pointer", &struct{ M MyStruct }{M: MyStruct{M: 1}}, `{"k":{"M":{"M":1}}}`, false},
+			{"struct with json types", struct {
+				T    json.Text
+				C    json.Counter
+				Tree json.Tree
+			}{T: *json.NewText(), C: *json.NewCounter(1, crdt.LongCnt), Tree: *json.NewTree(&json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})}, `{"k":{"C":1,"T":[],"Tree":{"type":"doc","children":[{"type":"p","children":[{"type":"text","value":"ab"}]}]}}}`, false},
+
+			// unsupported struct types
+			{"struct with unsupported map", struct{ M map[string]int }{M: map[string]int{"a": 1, "b": 2}}, `{}`, true},
+			{"struct with unsupported primitive type", struct{ M int8 }{M: 1}, `{}`, true},
+
+			{"func", func(a int, b int) int { return a + b }, `{}`, true},
+		}
+		for _, tt := range tests {
+			t.Run(tt.caseName, func(t *testing.T) {
+				doc := document.New(helper.TestDocKey(t))
+				val := func() {
+					assert.NoError(t, c1.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+						"k": tt.input,
+					})))
+				}
+				if tt.expectPanic {
+					assert.PanicsWithValue(t, "unsupported type", val)
+				} else {
+					assert.NotPanics(t, val)
+				}
+				assert.Equal(t, tt.expectedJSON, doc.Marshal())
+			})
+		}
 	})
 }
