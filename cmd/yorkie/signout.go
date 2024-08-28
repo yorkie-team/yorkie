@@ -52,6 +52,7 @@ func deleteAccountCmd() *cobra.Command {
 			if _, err := fmt.Scanln(&confirmation); err != nil {
 				return fmt.Errorf("failed to read confirmation: %w", err)
 			}
+
 			if confirmation != "DELETE" {
 				return fmt.Errorf("account deletion aborted")
 			}
