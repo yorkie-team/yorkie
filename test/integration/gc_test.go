@@ -771,6 +771,8 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
 		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 0)
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "2")
