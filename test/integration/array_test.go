@@ -471,3 +471,149 @@ func TestArraySet(t *testing.T) {
 		})
 	}
 }
+
+func TestArraySetByIndex(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("array set simple test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1").AddInteger(-1, -2, -3)
+			assert.Equal(t, `{"k1":[-1,-2,-3]}`, root.Marshal())
+			return nil
+		}, "add -1, -2, -3 by c1"))
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(1, -4)
+			assert.Equal(t, `{"k1":[-1,-4,-3]}`, root.Marshal())
+			return nil
+		}, "set k1[1] to -4 by c2"))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(0, -5)
+			assert.Equal(t, `{"k1":[-5,-2,-3]}`, root.Marshal())
+			return nil
+		}, "set k1[0] to -5 by c1"))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("concurrent array set/set simple test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1").AddInteger(0, 1, 2)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "add 0, 1, 2 by c1"))
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(0, -1)
+			assert.Equal(t, `{"k1":[-1,1,2]}`, root.Marshal())
+			return nil
+		}, "set k1[0] to -1 by c1"))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(0, -2)
+			assert.Equal(t, `{"k1":[-2,1,2]}`, root.Marshal())
+			return nil
+		}, "set k1[0] to -2 by c2"))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	// // related to https://github.com/yorkie-team/yorkie/issues/215
+	// t.Run("concurrent array set/insert simple test", func(t *testing.T) {
+	// 	ctx := context.Background()
+	// 	d1 := document.New(helper.TestDocKey(t))
+	// 	err := c1.Attach(ctx, d1)
+	// 	assert.NoError(t, err)
+
+	// 	d2 := document.New(helper.TestDocKey(t))
+	// 	err = c2.Attach(ctx, d2)
+	// 	assert.NoError(t, err)
+
+	// 	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+	// 		root.SetNewArray("k1").AddInteger(0, 1, 2)
+	// 		assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+	// 		return nil
+	// 	}, "add 0, 1, 2 by c1"))
+
+	// 	assert.NoError(t, c1.Sync(ctx))
+	// 	assert.NoError(t, c2.Sync(ctx))
+
+	// 	assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+	// 		root.GetArray("k1").InsertIntegerAfter(0, 4)
+	// 		assert.Equal(t, `{"k1":[0,4,1,2]}`, root.Marshal())
+	// 		return nil
+	// 	}, "insert 4 after k1[0] by c1"))
+
+	// 	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+	// 		root.GetArray("k1").SetInteger(1, 5)
+	// 		assert.Equal(t, `{"k1":[0,5,2]}`, root.Marshal())
+	// 		return nil
+	// 	}, "set k1[1] to 5 by c2"))
+
+	// 	syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	// })
+
+	t.Run("concurrent array move/insert simple test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1").AddInteger(0, 1, 2)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "add 0, 1, 2 by c1"))
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").InsertIntegerAfter(0, 3)
+			assert.Equal(t, `{"k1":[0,3,1,2]}`, root.Marshal())
+			return nil
+		}, "insert 3 after k1[0] by c1"))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			next := root.GetArray("k1").Get(1)
+			item := root.GetArray("k1").Get(2)
+
+			root.GetArray("k1").MoveBefore(next.CreatedAt(), item.CreatedAt())
+			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
+			return nil
+		}, "move k1[2] before k1[1] by c2"))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+}
