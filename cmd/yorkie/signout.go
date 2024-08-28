@@ -22,50 +22,56 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-var deleteAccountCmd = &cobra.Command{
-	Use:   "delete-account",
-	Short: "Delete your account",
-	RunE:  runDeleteAccount,
-}
+var (
+	usernameForSignOut string
+	passwordForSignOut string
+)
 
-func runDeleteAccount(cmd *cobra.Command, args []string) error {
-	fmt.Println("WARNING: This action is irreversible. Your account and all associated data will be permanently deleted.")
-	fmt.Print("To confirm, please type your username: ")
+func deleteAccountCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "delete-account",
+		Short:   "Delete user account",
+		PreRunE: config.Preload,
+		RunE: func(_ *cobra.Command, args []string) error {
+			fmt.Println(
+				"WARNING: This action is irreversible. Your account and all associated data will be permanently deleted.",
+			)
 
-	var username string
-	fmt.Scanln(&username)
+			conf, err := config.Load()
+			if err != nil {
+				return err
+			}
 
-	conf, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+			fmt.Print("Are you absolutely sure? Type 'DELETE' to confirm: ")
+			var confirmation string
+			if _, err := fmt.Scanln(&confirmation); err != nil {
+				return fmt.Errorf("failed to read confirmation: %w", err)
+			}
+			if confirmation != "DELETE" {
+				return fmt.Errorf("account deletion aborted")
+			}
+
+			if deleteAccountFromServer(conf, usernameForSignOut, passwordForSignOut) == nil {
+				fmt.Println("Your account has been successfully deleted.")
+			}
+
+			return nil
+		},
 	}
-
-	fmt.Print("Please enter your password: ")
-	var password string
-	fmt.Scanln(&password)
-
-	fmt.Print("Are you absolutely sure? Type 'DELETE' to confirm: ")
-	var confirmation string
-	fmt.Scanln(&confirmation)
-
-	if confirmation != "DELETE" {
-		return fmt.Errorf("account deletion aborted")
-	}
-
-	return deleteAccountFromServer(conf, username, password)
 }
 
 func deleteAccountFromServer(conf *config.Config, username, password string) error {
 	cli, err := admin.Dial(conf.RPCAddr,
 		admin.WithInsecure(false),
-		admin.WithToken(conf.Auths[conf.RPCAddr].Token), // 토큰 기반 인증
+		admin.WithToken(conf.Auths[conf.RPCAddr].Token),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return err
 	}
 	defer cli.Close()
 
@@ -73,18 +79,33 @@ func deleteAccountFromServer(conf *config.Config, username, password string) err
 	defer cancel()
 
 	if err := cli.DeleteAccount(ctx, username, password); err != nil {
-		return fmt.Errorf("failed to delete account: %w", err)
+		return err
 	}
 
 	delete(conf.Auths, conf.RPCAddr)
 	if err := config.Save(conf); err != nil {
-		return fmt.Errorf("failed to update local config: %w", err)
+		return err
 	}
 
-	fmt.Println("Your account has been successfully deleted.")
 	return nil
 }
 
 func init() {
-	rootCmd.AddCommand(deleteAccountCmd)
+	cmd := deleteAccountCmd()
+	cmd.Flags().StringVarP(
+		&usernameForSignOut,
+		"username",
+		"u",
+		"",
+		"Username (required if password is set)",
+	)
+	cmd.Flags().StringVarP(
+		&passwordForSignOut,
+		"password",
+		"p",
+		"",
+		"Password (required if username is set)",
+	)
+	cmd.MarkFlagsRequiredTogether("username", "password")
+	rootCmd.AddCommand(cmd)
 }

@@ -378,7 +378,7 @@ func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Requ
 	return conn
 }
 
-// DeleteAccount sends a request to delete the user's account.
+// DeleteAccount deletes the user's acoount.
 func (c *Client) DeleteAccount(ctx context.Context, username, password string) error {
 	_, err := c.client.DeleteAccount(ctx, connect.NewRequest(&api.DeleteAccountRequest{
 		Username: username,
@@ -387,5 +387,6 @@ func (c *Client) DeleteAccount(ctx context.Context, username, password string) e
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
