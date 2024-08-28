@@ -1166,7 +1166,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		currentVersionVectorInfo := database.VersionVectorInfo{}
 
 		// 01-1. Find current version vector of client from db if it exists
-		// do this for compute and store client's version vector after apply those changes.
+		// do this for compute and store client's version vector after apply these changes.
 		result := c.collection(ColVersionVector).FindOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
@@ -1216,6 +1216,8 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 
 		if pulling {
+			// 03-1. when pulling changes, its necessary to update client's version vector in db
+			// and the updated one must pre-reflect client's local version vector to compute min version vector when return response pack.
 			maxLamport := maxVersionVector.MaxLamport()
 			actorID, err := clientInfo.ID.ToActorID()
 
