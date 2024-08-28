@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-package main
+// Package user provides the user command.
+package user
 
 import (
 	"context"
@@ -103,5 +104,5 @@ func init() {
 		"Skip the TLS connection of the client",
 	)
 	cmd.MarkFlagsRequiredTogether("username", "password")
-	rootCmd.AddCommand(cmd)
+	SubCmd.AddCommand(cmd)
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package main
+package user
 
 import (
 	"context"
@@ -108,5 +108,5 @@ func init() {
 		"Password (required if username is set)",
 	)
 	cmd.MarkFlagsRequiredTogether("username", "password")
-	rootCmd.AddCommand(cmd)
+	SubCmd.AddCommand(cmd)
 }
