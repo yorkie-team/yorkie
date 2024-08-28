@@ -349,12 +349,14 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 
 	if opts.InitialRoot != nil {
 		if !doc.HasElement() {
-			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			if err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				for k, v := range opts.InitialRoot {
 					root.SetDynamicValue(k, v)
 				}
 				return nil
-			})
+			}); err != nil {
+				return err
+			}
 		} else {
 			return ErrDocumentExists
 		}
