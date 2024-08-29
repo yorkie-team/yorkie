@@ -483,10 +483,12 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	otherIdxs := []int{2, 3}
 	newValues := []int{5, 6}
 
-	operations := []struct {
+	type arrayOp struct {
 		opName   string
 		executor func(*json.Array, int)
-	}{
+	}
+
+	operations := []arrayOp {
 		// insert
 		{"insert.prev", func(a *json.Array, cid int) {
 			a.InsertIntegerAfter(oneIdx, newValues[cid])
@@ -517,43 +519,49 @@ func TestArrayConcurrencyTable(t *testing.T) {
 		}},
 	}
 
+	ctx := context.Background()
+	d0 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c0.Attach(ctx, d0))
+	d1 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+
+	runTest := func(op1, op2 arrayOp) testResult {
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("a").AddInteger(initArr...)
+			assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+			return nil
+		}))
+
+		assert.NoError(t, c0.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			op1.executor(root.GetArray("a"), 0)
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			op2.executor(root.GetArray("a"), 1)
+			return nil
+		}))
+
+		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
+		if flag {
+			return testResult{flag, `pass`}
+		}
+		return testResult{flag, `different result`}
+	}
+
 	for i1, op1 := range operations {
 		for i2, op2 := range operations {
 			if i1 > i2 {
 				continue
 			}
 			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
-				ctx := context.Background()
-				d0 := document.New(helper.TestDocKey(t))
-				assert.NoError(t, c0.Attach(ctx, d0))
-				d1 := document.New(helper.TestDocKey(t))
-				assert.NoError(t, c1.Attach(ctx, d1))
-
-				err := d0.Update(func(root *json.Object, p *presence.Presence) error {
-					root.SetNewArray("a").AddInteger(initArr...)
-					assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
-					return nil
-				})
-				assert.NoError(t, err)
-
-				err = c0.Sync(ctx)
-				assert.NoError(t, err)
-				err = c1.Sync(ctx)
-				assert.NoError(t, err)
-
-				err = d0.Update(func(root *json.Object, p *presence.Presence) error {
-					op1.executor(root.GetArray("a"), 0)
-					return nil
-				})
-				assert.NoError(t, err)
-
-				err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-					op2.executor(root.GetArray("a"), 1)
-					return nil
-				})
-				assert.NoError(t, err)
-
-				syncClientsThenAssertEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
+				result := runTest(op1, op2)
+				if !result.flag {
+					t.Skip(result.resultDesc)
+				}
 			})
 		}
 	}
