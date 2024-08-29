@@ -1149,6 +1149,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
+// UpdateAndFindMinSyncedVersionVectorAfterPushPull returns min synced version vector
 func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
@@ -1261,12 +1262,28 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	return minVersionVector, nil
 }
 
-// UpdateVersionVector updates the given serverSeq of the given client
+// UpdateVersionVector updates the given version vector of the given client
 func (c *Client) UpdateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector) error {
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	if !isAttached {
+		if _, err = c.collection(ColVersionVector).DeleteOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		}, options.Delete()); err != nil {
+			return fmt.Errorf("delete version vector: %w", err)
+		}
+		return nil
+	}
+
 	if versionVector != nil {
 		_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
