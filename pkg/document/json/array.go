@@ -167,6 +167,11 @@ func (p *Array) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
 	p.moveBeforeInternal(nextCreatedAt, createdAt)
 }
 
+// MoveAfterByIndex moves the given element to its new position after the given previous element.
+func (p *Array) MoveAfterByIndex(prevIndex, targetIndex int) {
+	p.moveAfterInternal(p.Get(prevIndex).CreatedAt(), p.Get(targetIndex).CreatedAt())
+}
+
 // InsertIntegerAfter inserts the given integer after the given previous
 // element.
 func (p *Array) InsertIntegerAfter(index int, v int) *Array {
@@ -389,6 +394,21 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 	))
 
 	if err = p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+		panic(err)
+	}
+}
+
+func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
+	ticket := p.context.IssueTimeTicket()
+
+	p.context.Push(operations.NewMove(
+		p.Array.CreatedAt(),
+		prevCreatedAt,
+		createdAt,
+		ticket,
+	))
+
+	if err := p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
 		panic(err)
 	}
 }
