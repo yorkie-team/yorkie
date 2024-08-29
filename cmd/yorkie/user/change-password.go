@@ -91,7 +91,7 @@ func init() {
 	cmd.Flags().StringVarP(
 		&newPassword,
 		"new-password",
-		"np",
+		"n",
 		"",
 		"New Password (required for change password)",
 	)
