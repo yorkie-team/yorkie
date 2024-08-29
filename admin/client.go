@@ -390,3 +390,17 @@ func (c *Client) DeleteAccount(ctx context.Context, username, password string) e
 
 	return nil
 }
+
+// ChangePassword change the user's password.
+func (c *Client) ChangePassword(ctx context.Context, username, password, newPassword string) error {
+	_, err := c.client.ChangePassword(ctx, connect.NewRequest(&api.ChangePasswordRequest{
+		Username:        username,
+		CurrentPassword: password,
+		NewPassword:     newPassword,
+	}))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

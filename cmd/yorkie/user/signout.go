@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2024 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package user provides the user command.
 package user
 
 import (
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -30,6 +32,8 @@ import (
 var (
 	usernameForSignOut string
 	passwordForSignOut string
+	rpcAddrForSignOut  string
+	insecureFlag       bool
 )
 
 func deleteAccountCmd() *cobra.Command {
@@ -42,11 +46,6 @@ func deleteAccountCmd() *cobra.Command {
 				"WARNING: This action is irreversible. Your account and all associated data will be permanently deleted.",
 			)
 
-			conf, err := config.Load()
-			if err != nil {
-				return err
-			}
-
 			fmt.Print("Are you absolutely sure? Type 'DELETE' to confirm: ")
 			var confirmation string
 			if _, err := fmt.Scanln(&confirmation); err != nil {
@@ -57,7 +56,16 @@ func deleteAccountCmd() *cobra.Command {
 				return fmt.Errorf("account deletion aborted")
 			}
 
-			if deleteAccountFromServer(conf, usernameForSignOut, passwordForSignOut) == nil {
+			conf, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			if rpcAddrForSignOut == "" {
+				rpcAddrForSignOut = viper.GetString("rpcAddr")
+			}
+
+			if deleteAccountFromServer(conf, rpcAddr, insecureFlag, usernameForSignOut, passwordForSignOut) == nil {
 				fmt.Println("Your account has been successfully deleted.")
 			}
 
@@ -66,10 +74,10 @@ func deleteAccountCmd() *cobra.Command {
 	}
 }
 
-func deleteAccountFromServer(conf *config.Config, username, password string) error {
-	cli, err := admin.Dial(conf.RPCAddr,
-		admin.WithInsecure(false),
-		admin.WithToken(conf.Auths[conf.RPCAddr].Token),
+func deleteAccountFromServer(conf *config.Config, rpcAddr string, insecureFlag bool, username, password string) error {
+	cli, err := admin.Dial(rpcAddr,
+		admin.WithInsecure(insecureFlag),
+		admin.WithToken(conf.Auths[rpcAddr].Token),
 	)
 	if err != nil {
 		return err
@@ -83,7 +91,14 @@ func deleteAccountFromServer(conf *config.Config, username, password string) err
 		return err
 	}
 
-	delete(conf.Auths, conf.RPCAddr)
+	delete(conf.Auths, rpcAddr)
+	if conf.RPCAddr == rpcAddr {
+		for addr := range conf.Auths {
+			conf.RPCAddr = addr
+			break
+		}
+	}
+
 	if err := config.Save(conf); err != nil {
 		return err
 	}
@@ -106,6 +121,18 @@ func init() {
 		"p",
 		"",
 		"Password (required if username is set)",
+	)
+	cmd.Flags().StringVar(
+		&rpcAddrForSignOut,
+		"rpc-addr",
+		"",
+		"Address of the RPC server",
+	)
+	cmd.Flags().BoolVar(
+		&insecureFlag,
+		"insecure",
+		false,
+		"Skip the TLS connection of the client",
 	)
 	cmd.MarkFlagsRequiredTogether("username", "password")
 	SubCmd.AddCommand(cmd)
