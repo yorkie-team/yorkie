@@ -65,15 +65,16 @@ func (o *SetByIndex) Execute(root *crdt.Root) error {
 		return err
 	}
 
-	removed, err := obj.SetByIndex(o.createdAt, value, o.executedAt)
+	_, err = obj.SetByIndex(o.createdAt, value, o.executedAt)
+	// removed, err := obj.SetByIndex(o.createdAt, value, o.executedAt)
 	if err != nil {
 		return err
 	}
 
-	if removed != nil {
-		// TODO(junseo): add GC-like logic
-		// root.RegisterRemovedElementPair(obj, removed)
-	}
+	// if removed != nil {
+	// 	// TODO(junseo): add GC-like logic
+	// 	// root.RegisterRemovedElementPair(obj, removed)
+	// }
 	root.RegisterElement(value)
 	return nil
 }

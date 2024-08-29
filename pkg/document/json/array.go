@@ -433,14 +433,15 @@ func (p *Array) setByIndexInternal(
 		ticket,
 	))
 
-	removed, err := p.SetByIndex(createdAt, value, ticket)
+	_, err = p.SetByIndex(createdAt, value, ticket)
+	// removed, err := p.SetByIndex(createdAt, value, ticket)
 	if err != nil {
 		panic(err)
 	}
-	if removed != nil {
-		// TODO(junseo): add GC-like logic
-		// p.context.RegisterRemovedElementPair(p, removed)
-	}
+	// if removed != nil {
+	// 	// TODO(junseo): add GC-like logic
+	// 	// p.context.RegisterRemovedElementPair(p, removed)
+	// }
 	p.context.RegisterElement(value)
 	return elem
 }
