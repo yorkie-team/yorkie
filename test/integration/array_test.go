@@ -472,6 +472,93 @@ func TestArraySet(t *testing.T) {
 	}
 }
 
+func TestArrayConcurrencyTable(t *testing.T) {
+	clients := activeClients(t, 2)
+	c0, c1 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	initArr := []int{1, 2, 3, 4}
+	initMarshal := `[1,2,3,4]`
+	oneIdx := 1
+	otherIdxs := []int{2, 3}
+	newValues := []int{5, 6}
+
+	operations := []struct {
+		opName   string
+		executor func(*json.Array, int)
+	}{
+		// insert
+		{"insert.prev", func(a *json.Array, cid int) {
+			a.InsertIntegerAfter(oneIdx, newValues[cid])
+		}},
+		{"insert.prev.next", func(a *json.Array, cid int) {
+			a.InsertIntegerAfter(oneIdx-1, newValues[cid])
+		}},
+
+		// move
+		{"move.prev", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(oneIdx, otherIdxs[cid])
+		}},
+		{"move.prev.next", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(oneIdx-1, otherIdxs[cid])
+		}},
+		{"move.target", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(otherIdxs[cid], oneIdx)
+		}},
+
+		// set by index
+		{"set.target", func(a *json.Array, cid int) {
+			a.SetInteger(oneIdx, newValues[cid])
+		}},
+
+		// remove
+		{"remove.target", func(a *json.Array, cid int) {
+			a.Delete(oneIdx)
+		}},
+	}
+
+	for i1, op1 := range operations {
+		for i2, op2 := range operations {
+			if i1 > i2 {
+				continue
+			}
+			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
+				ctx := context.Background()
+				d0 := document.New(helper.TestDocKey(t))
+				assert.NoError(t, c0.Attach(ctx, d0))
+				d1 := document.New(helper.TestDocKey(t))
+				assert.NoError(t, c1.Attach(ctx, d1))
+
+				err := d0.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewArray("a").AddInteger(initArr...)
+					assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+					return nil
+				})
+				assert.NoError(t, err)
+
+				err = c0.Sync(ctx)
+				assert.NoError(t, err)
+				err = c1.Sync(ctx)
+				assert.NoError(t, err)
+
+				err = d0.Update(func(root *json.Object, p *presence.Presence) error {
+					op1.executor(root.GetArray("a"), 0)
+					return nil
+				})
+				assert.NoError(t, err)
+
+				err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+					op2.executor(root.GetArray("a"), 1)
+					return nil
+				})
+				assert.NoError(t, err)
+
+				syncClientsThenAssertEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
+			})
+		}
+	}
+}
+
 func TestArraySetByIndex(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
@@ -510,6 +597,12 @@ func TestArraySetByIndex(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+}
+
+func TestArrayConcurrency(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("concurrent array set/set simple test", func(t *testing.T) {
 		ctx := context.Background()
@@ -580,7 +673,7 @@ func TestArraySetByIndex(t *testing.T) {
 	// 	syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	// })
 
-	t.Run("concurrent array move/insert simple test", func(t *testing.T) {
+	t.Run("concurrent array move/insert simple test (i)", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -613,6 +706,43 @@ func TestArraySetByIndex(t *testing.T) {
 			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
 			return nil
 		}, "move k1[2] before k1[1] by c2"))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("concurrent array move/insert simple test (ii)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1").AddInteger(0, 1, 2)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "add 0, 1, 2 by c1"))
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			next := root.GetArray("k1").Get(1)
+			item := root.GetArray("k1").Get(2)
+
+			root.GetArray("k1").MoveBefore(next.CreatedAt(), item.CreatedAt())
+			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
+			return nil
+		}, "move k1[2] before k1[1] by c1"))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").InsertIntegerAfter(2, 3)
+			assert.Equal(t, `{"k1":[0,1,2,3]}`, root.Marshal())
+			return nil
+		}, "insert 3 after k1[2] by c2"))
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
