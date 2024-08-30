@@ -18,9 +18,12 @@ package user
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -36,6 +39,22 @@ func changePasswordCmd() *cobra.Command {
 		Short:   "Change user password",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Print("Enter Password: ")
+			bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				return fmt.Errorf("failed to read password: %w", err)
+			}
+			password = string(bytePassword)
+			fmt.Println()
+
+			fmt.Print("Enter New Password: ")
+			bytePassword, err = term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				return fmt.Errorf("failed to read password: %w", err)
+			}
+			newPassword = string(bytePassword)
+			fmt.Println()
+
 			if rpcAddr == "" {
 				rpcAddr = viper.GetString("rpcAddr")
 			}
@@ -77,20 +96,6 @@ func init() {
 		"",
 		"Username (required if password is set)",
 	)
-	cmd.Flags().StringVarP(
-		&password,
-		"password",
-		"p",
-		"",
-		"Password (required if username is set)",
-	)
-	cmd.Flags().StringVarP(
-		&newPassword,
-		"new-password",
-		"n",
-		"",
-		"New Password (required for change password)",
-	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
 		"rpc-addr",
@@ -103,6 +108,5 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
-	cmd.MarkFlagsRequiredTogether("username", "password", "new-password")
 	SubCmd.AddCommand(cmd)
 }

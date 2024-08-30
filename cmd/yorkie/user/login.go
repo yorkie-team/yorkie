@@ -19,8 +19,11 @@ package user
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -39,6 +42,14 @@ func newLoginCmd() *cobra.Command {
 		Short:   "Log in to Yorkie server",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Print("Enter Password: ")
+			bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				return fmt.Errorf("failed to read password: %w", err)
+			}
+			password = string(bytePassword)
+			fmt.Println()
+
 			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
 				return err
@@ -84,13 +95,6 @@ func init() {
 		"",
 		"Username (required if password is set)",
 	)
-	cmd.Flags().StringVarP(
-		&password,
-		"password",
-		"p",
-		"",
-		"Password (required if username is set)",
-	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
 		"rpc-addr",
@@ -103,6 +107,5 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
-	cmd.MarkFlagsRequiredTogether("username", "password")
 	SubCmd.AddCommand(cmd)
 }
