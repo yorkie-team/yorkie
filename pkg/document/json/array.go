@@ -169,13 +169,22 @@ func (p *Array) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
 
 // MoveAfterByIndex moves the given element to its new position after the given previous element.
 func (p *Array) MoveAfterByIndex(prevIndex, targetIndex int) {
-	p.moveAfterInternal(p.Get(prevIndex).CreatedAt(), p.Get(targetIndex).CreatedAt())
+	prev := p.Get(prevIndex)
+	target := p.Get(targetIndex)
+	if prev == nil || target == nil {
+		panic("index out of bound")
+	}
+	p.moveAfterInternal(prev.CreatedAt(), target.CreatedAt())
 }
 
 // InsertIntegerAfter inserts the given integer after the given previous
 // element.
 func (p *Array) InsertIntegerAfter(index int, v int) *Array {
-	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+	prev := p.Get(index)
+	if prev == nil {
+		panic("index out of bound")
+	}
+	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
 			panic(err)
@@ -202,13 +211,9 @@ func (p *Array) Get(idx int) crdt.Element {
 
 // GetObject returns Object of the given index.
 func (p *Array) GetObject(idx int) *Object {
-	if idx < 0 || p.Len() <= idx {
+	element := p.Get(idx)
+	if element == nil {
 		return nil
-	}
-
-	element, err := p.Array.Get(idx)
-	if err != nil {
-		panic(err)
 	}
 
 	switch elem := element.(type) {
@@ -223,13 +228,9 @@ func (p *Array) GetObject(idx int) *Object {
 
 // GetArray returns Array of the given index.
 func (p *Array) GetArray(idx int) *Array {
-	if idx < 0 || p.Len() <= idx {
+	element := p.Get(idx)
+	if element == nil {
 		return nil
-	}
-
-	element, err := p.Array.Get(idx)
-	if err != nil {
-		panic(err)
 	}
 
 	switch elem := element.(type) {
@@ -244,13 +245,9 @@ func (p *Array) GetArray(idx int) *Array {
 
 // GetText returns Text of the given index.
 func (p *Array) GetText(idx int) *Text {
-	if idx < 0 || p.Len() <= idx {
+	element := p.Get(idx)
+	if element == nil {
 		return nil
-	}
-
-	element, err := p.Array.Get(idx)
-	if err != nil {
-		panic(err)
 	}
 
 	switch elem := element.(type) {
@@ -266,13 +263,9 @@ func (p *Array) GetText(idx int) *Text {
 
 // GetCounter returns Counter of the given index.
 func (p *Array) GetCounter(idx int) *Counter {
-	if idx < 0 || p.Len() <= idx {
+	element := p.Get(idx)
+	if element == nil {
 		return nil
-	}
-
-	element, err := p.Array.Get(idx)
-	if err != nil {
-		panic(err)
 	}
 
 	switch elem := element.(type) {
@@ -288,13 +281,9 @@ func (p *Array) GetCounter(idx int) *Counter {
 
 // GetTree returns Tree of the given index.
 func (p *Array) GetTree(idx int) *Tree {
-	if idx < 0 || p.Len() <= idx {
+	element := p.Get(idx)
+	if element == nil {
 		return nil
-	}
-
-	element, err := p.Array.Get(idx)
-	if err != nil {
-		panic(err)
 	}
 
 	switch elem := element.(type) {
@@ -310,7 +299,12 @@ func (p *Array) GetTree(idx int) *Tree {
 
 // SetInteger sets element of the given index.
 func (p *Array) SetInteger(idx int, value int) *Array {
-	p.setByIndexInternal(p.Get(idx).CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+	target := p.Get(idx)
+	if target == nil {
+		panic("index out of bound")
+	}
+
+	p.setByIndexInternal(target.CreatedAt(), func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(value, ticket)
 		if err != nil {
 			panic(err)
