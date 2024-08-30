@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// Package user provides the user command.
 package user
 
 import (
@@ -52,7 +51,7 @@ func deleteAccountCmd() *cobra.Command {
 			fmt.Print("Are you absolutely sure? Type 'DELETE' to confirm: ")
 			var confirmation string
 			if _, err := fmt.Scanln(&confirmation); err != nil {
-				return fmt.Errorf("failed to read confirmation: %w", err)
+				return fmt.Errorf("failed to read confirmation from user: %w", err)
 			}
 
 			if confirmation != "DELETE" {
@@ -83,7 +82,7 @@ func deleteAccountFromServer(conf *config.Config, rpcAddr string, insecureFlag b
 		admin.WithToken(conf.Auths[rpcAddr].Token),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to dial admin: %w", err)
 	}
 	defer cli.Close()
 
@@ -91,7 +90,7 @@ func deleteAccountFromServer(conf *config.Config, rpcAddr string, insecureFlag b
 	defer cancel()
 
 	if err := cli.DeleteAccount(ctx, username, password); err != nil {
-		return err
+		return fmt.Errorf("server failed to delete account: %w", err)
 	}
 
 	delete(conf.Auths, rpcAddr)

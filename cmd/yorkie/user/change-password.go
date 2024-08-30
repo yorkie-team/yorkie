@@ -61,7 +61,7 @@ func changePasswordCmd() *cobra.Command {
 
 			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to dial admin: %w", err)
 			}
 			defer func() {
 				cli.Close()

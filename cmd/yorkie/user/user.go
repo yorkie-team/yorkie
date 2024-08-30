@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package user provides the user command.
 package user
 
 import "github.com/spf13/cobra"
