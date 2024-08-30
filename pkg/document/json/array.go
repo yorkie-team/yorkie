@@ -188,7 +188,7 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 
 // Get element of the given index.
 func (p *Array) Get(idx int) crdt.Element {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -202,7 +202,7 @@ func (p *Array) Get(idx int) crdt.Element {
 
 // GetObject returns Object of the given index.
 func (p *Array) GetObject(idx int) *Object {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -223,7 +223,7 @@ func (p *Array) GetObject(idx int) *Object {
 
 // GetArray returns Array of the given index.
 func (p *Array) GetArray(idx int) *Array {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -244,7 +244,7 @@ func (p *Array) GetArray(idx int) *Array {
 
 // GetText returns Text of the given index.
 func (p *Array) GetText(idx int) *Text {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -266,7 +266,7 @@ func (p *Array) GetText(idx int) *Text {
 
 // GetCounter returns Counter of the given index.
 func (p *Array) GetCounter(idx int) *Counter {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -288,7 +288,7 @@ func (p *Array) GetCounter(idx int) *Counter {
 
 // GetTree returns Tree of the given index.
 func (p *Array) GetTree(idx int) *Tree {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
@@ -322,7 +322,7 @@ func (p *Array) SetInteger(idx int, value int) *Array {
 
 // Delete deletes the element of the given index.
 func (p *Array) Delete(idx int) crdt.Element {
-	if p.Len() <= idx {
+	if idx < 0 || p.Len() <= idx {
 		return nil
 	}
 
