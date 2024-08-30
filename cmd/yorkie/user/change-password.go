@@ -27,11 +27,7 @@ import (
 )
 
 var (
-	usernameForChangePassword     string
-	currentPassword               string
-	newPassword                   string
-	rpcAddrForChangePassword      string
-	insecureFlagForChangePassword bool
+	newPassword string
 )
 
 func changePasswordCmd() *cobra.Command {
@@ -40,11 +36,11 @@ func changePasswordCmd() *cobra.Command {
 		Short:   "Change user password",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if rpcAddrForChangePassword == "" {
-				rpcAddrForChangePassword = viper.GetString("rpcAddr")
+			if rpcAddr == "" {
+				rpcAddr = viper.GetString("rpcAddr")
 			}
 
-			cli, err := admin.Dial(rpcAddrForChangePassword, admin.WithInsecure(insecureFlagForChangePassword))
+			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
 				return err
 			}
@@ -53,7 +49,7 @@ func changePasswordCmd() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			if err := cli.ChangePassword(ctx, username, currentPassword, newPassword); err != nil {
+			if err := cli.ChangePassword(ctx, username, password, newPassword); err != nil {
 				return err
 			}
 
@@ -75,14 +71,14 @@ func changePasswordCmd() *cobra.Command {
 func init() {
 	cmd := changePasswordCmd()
 	cmd.Flags().StringVarP(
-		&usernameForChangePassword,
+		&username,
 		"username",
 		"u",
 		"",
 		"Username (required if password is set)",
 	)
 	cmd.Flags().StringVarP(
-		&currentPassword,
+		&password,
 		"password",
 		"p",
 		"",
@@ -96,13 +92,13 @@ func init() {
 		"New Password (required for change password)",
 	)
 	cmd.Flags().StringVar(
-		&rpcAddrForChangePassword,
+		&rpcAddr,
 		"rpc-addr",
 		"",
 		"Address of the RPC server",
 	)
 	cmd.Flags().BoolVar(
-		&insecureFlagForChangePassword,
+		&insecure,
 		"insecure",
 		false,
 		"Skip the TLS connection of the client",

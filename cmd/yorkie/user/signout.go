@@ -29,13 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-var (
-	usernameForSignOut string
-	passwordForSignOut string
-	rpcAddrForSignOut  string
-	insecureFlag       bool
-)
-
 func deleteAccountCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "delete-account",
@@ -61,11 +54,11 @@ func deleteAccountCmd() *cobra.Command {
 				return err
 			}
 
-			if rpcAddrForSignOut == "" {
-				rpcAddrForSignOut = viper.GetString("rpcAddr")
+			if rpcAddr == "" {
+				rpcAddr = viper.GetString("rpcAddr")
 			}
 
-			if deleteAccountFromServer(conf, rpcAddr, insecureFlag, usernameForSignOut, passwordForSignOut) == nil {
+			if deleteAccountFromServer(conf, rpcAddr, insecure, username, password) == nil {
 				fmt.Println("Your account has been successfully deleted.")
 			}
 
@@ -109,27 +102,27 @@ func deleteAccountFromServer(conf *config.Config, rpcAddr string, insecureFlag b
 func init() {
 	cmd := deleteAccountCmd()
 	cmd.Flags().StringVarP(
-		&usernameForSignOut,
+		&username,
 		"username",
 		"u",
 		"",
 		"Username (required if password is set)",
 	)
 	cmd.Flags().StringVarP(
-		&passwordForSignOut,
+		&password,
 		"password",
 		"p",
 		"",
 		"Password (required if username is set)",
 	)
 	cmd.Flags().StringVar(
-		&rpcAddrForSignOut,
+		&rpcAddr,
 		"rpc-addr",
 		"",
 		"Address of the RPC server",
 	)
 	cmd.Flags().BoolVar(
-		&insecureFlag,
+		&insecure,
 		"insecure",
 		false,
 		"Skip the TLS connection of the client",
