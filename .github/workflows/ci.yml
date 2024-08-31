@@ -109,9 +109,6 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v4
 
-    - name: Get tools dependencies
-      run: make tools
-
     - name: Stack
       run: docker compose -f build/docker/docker-compose.yml up --build -d
 
@@ -152,9 +149,6 @@ jobs:
 
     - name: Check out code
       uses: actions/checkout@v4
-
-    - name: Get tools dependencies
-      run: make tools
 
     - name: Check Docker Compose Version
       run: docker compose --version
