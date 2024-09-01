@@ -142,22 +142,22 @@ func BenchmarkDocument(b *testing.B) {
 				root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 				assert.Equal(b, 3, root.GetArray("k1").Len())
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").ToTestString())
+				assert.Equal(b, "[0,0,1]0[1,1,2]1[2,1,3]2[3,1,4]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").Delete(1)
 				assert.Equal(b, `{"k1":[1,3]}`, root.Marshal())
 				assert.Equal(b, 2, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", root.GetArray("k1").ToTestString())
+				assert.Equal(b, "[0,0,1]0[1,1,2]1[2,0,3]2[1,1,1]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").InsertIntegerAfter(0, 2)
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
 				assert.Equal(b, 3, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", root.GetArray("k1").ToTestString())
+				assert.Equal(b, "[0,0,1]0[1,1,2]1[3,1,3]2[1,0,2]2[1,1,1]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").InsertIntegerAfter(2, 4)
 				assert.Equal(b, `{"k1":[1,2,3,4]}`, root.Marshal())
 				assert.Equal(b, 4, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").ToTestString())
+				assert.Equal(b, "[0,0,1]0[1,1,2]1[2,1,3]2[2,0,4]2[3,1,5]3[4,1,6]4", root.GetArray("k1").ToTestString())
 
 				for i := 0; i < root.GetArray("k1").Len(); i++ {
 					assert.Equal(
