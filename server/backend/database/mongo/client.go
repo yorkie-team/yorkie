@@ -1278,6 +1278,11 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		} else if clientVersionVector != nil {
 			minVersionVector = minVersionVector.Min(clientVersionVector)
 		}
+	} else {
+		// 05-3. If min version vector is nil
+		// it means there's only one version vector stored in db which is current client's version vector
+		// in this case, client's version vector stored in db is the min version vector because value only increases after pushpull.
+		minVersionVector = clientVersionVector
 	}
 
 	return minVersionVector, nil
