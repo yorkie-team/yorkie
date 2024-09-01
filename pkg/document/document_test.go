@@ -558,14 +558,14 @@ func TestDocument(t *testing.T) {
 		docB.SetActor(actorB)
 		assert.Equal(t, "{}", docB.VersionVector().Marshal())
 		assert.NoError(t, docB.ApplyChangePack(packA))
-		assert.Equal(t, "{000000000000000000000001:2}", docB.VersionVector().Marshal())
+		assert.Equal(t, "{000000000000000000000001:2,000000000000000000000002:3}", docB.VersionVector().Marshal())
 
 		assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetString("k2", "3")
 			return nil
 		}))
 		assert.Equal(t, int64(2), docB.VersionVector().VersionOf(actorA))
-		assert.Equal(t, int64(3), docB.VersionVector().VersionOf(actorB))
+		assert.Equal(t, int64(4), docB.VersionVector().VersionOf(actorB))
 		packB := docB.CreateChangePack()
 		packB.MinSyncedTicket = time.InitialTicket
 		assert.True(t, packB.Changes[0].AfterOrEqual(packA.Changes[1]))
