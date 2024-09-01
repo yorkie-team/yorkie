@@ -380,7 +380,6 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
-		t.Skip("TOOD(JOOHOJANG): consider detached cases.")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -402,11 +401,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		// minvv =[1, 1]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		// minvv =[2, 1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -420,7 +419,6 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// (1, 1) -> (2, 1): syncedseqs:(1, 0)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 6, d1.GarbageLen())
@@ -429,13 +427,15 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Detach(ctx, d2)
 		assert.NoError(t, err)
 
-		// (2, 1) -> (2, 2): syncedseqs:(1, x)
+		// minvv = [c1:4, c2:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 6, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(2, x): meet GC condition
+		// removedAt lamport = 4
+		// before c2 detahces, min vv was [c1:4, c2:1]
+		// after c2 detaches, min vv turns into [c1:4]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
@@ -591,7 +591,6 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
-	// TODO(JOOHOJANG): TCs below need to be fixed
 	t.Run("Should work properly when there are multiple nodes to be collected in tree type", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -658,15 +657,30 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>ad</r>`, d1.Root().GetTree("tree").ToXML())
-		assert.Equal(t, 2, d1.GarbageLen()) // b,c
+		assert.Equal(t, 3, d1.GarbageLen()) // b,c
 
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>ad</r>`, d2.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 3, d1.GarbageLen())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("tree").EditByPath([]int{0}, []int{0}, &json.TreeNode{Type: "text", Value: "1"}, 0)
+			return nil
+		})
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r>1ad</r>`, d2.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 3, d1.GarbageLen())
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r>1ad</r>`, d1.Root().GetTree("tree").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 	})
 
