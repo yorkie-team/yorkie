@@ -202,3 +202,23 @@ func (v VersionVector) MaxLamport() int64 {
 
 	return maxLamport
 }
+
+// Filter returns filtered version vector which keys are only from filter
+func (v VersionVector) Filter(filter []actorID) VersionVector {
+	filteredVV := NewVersionVector()
+
+	for _, value := range filter {
+		filteredVV[value] = v[value]
+	}
+
+	return filteredVV
+}
+
+func (v VersionVector) Keys() []actorID {
+	var actors []actorID
+	for id := range v {
+		actors = append(actors, id)
+	}
+
+	return actors
+}
