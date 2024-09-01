@@ -1158,34 +1158,58 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	pushedChanges []*change.Change,
 ) (time.VersionVector, error) {
 	var versionVectors []time.VersionVector
+	var clientVersionVector time.VersionVector
+	var minVersionVector time.VersionVector
+	var maxVersionVector time.VersionVector
+	var versionVectorInfos []database.VersionVectorInfo
+
+	// 01. compute minVersionVector from all version vectors stored in db
+	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
+		return nil, fmt.Errorf("decode version vectors: %w", err)
+	}
+
+	if len(versionVectorInfos) > 0 {
+		// 01-1. Compute minVersionVector without current client's version vector
+		// because current client's version vector will be updated after pushpull
+		// we need to compute min value after max operation of client's version vector.
+		for _, vvi := range versionVectorInfos {
+			// 01-2. Find current client's version vector from db
+			// we use this version vector to find max version vector in future
+			if clientInfo.ID == vvi.ClientID {
+				clientVersionVector = vvi.VersionVector
+
+				continue
+			}
+
+			if minVersionVector == nil {
+				minVersionVector = vvi.VersionVector
+
+				continue
+			}
+
+			minVersionVector = minVersionVector.Min(vvi.VersionVector)
+		}
+	}
 
 	pulling := len(pulledChangeInfos) > 0
 	pushing := len(pushedChanges) > 0
 
-	// 01. Append version vectors from pulling changes
+	// 02. Append version vectors from pulling changes
 	if pulling {
-		currentVersionVectorInfo := database.VersionVectorInfo{}
-
-		// 01-1. Find current version vector of client from db if it exists
-		// do this for compute and store client's version vector after apply these changes.
-		result := c.collection(ColVersionVector).FindOne(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"client_id":  clientInfo.ID,
-		})
-
-		if result.Err() != nil && result.Err() != mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("find version vector: %w", result.Err())
-		}
-
-		if result.Err() == nil {
-			if err := result.Decode(&currentVersionVectorInfo); err != nil {
-				return nil, fmt.Errorf("decode version vector: %w", err)
-			}
-
-			if currentVersionVectorInfo.VersionVector != nil {
-				versionVectors = append(versionVectors, currentVersionVectorInfo.VersionVector)
-			}
+		// 02-1. Append client's version vector stored in db
+		// its necessary because we need to store version vector which reflects current client's local version vector after pushpull
+		// if its pushonly (or pushpull but no changes to pull), we don't need to do this step because client's local version vector will not be updated because there's no pulling change.
+		if clientVersionVector != nil {
+			versionVectors = append(versionVectors, clientVersionVector)
 		}
 
 		for _, changeInfo := range pulledChangeInfos {
@@ -1197,7 +1221,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
-	// 02. Append version vectors from pushing changes to compute max version vector
+	// 03. Append version vectors from pushing changes to compute max version vector
 	if pushing {
 		for _, pushedChange := range pushedChanges {
 			versionVector := pushedChange.ID().VersionVector()
@@ -1208,54 +1232,51 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
-	// 03. Update version vector
+	// 04. Update client's version vector (max version vector)
 	if len(versionVectors) > 0 {
-		maxVersionVector := versionVectors[0]
+		maxVersionVector = versionVectors[0]
 
 		for _, vv := range versionVectors[1:] {
 			maxVersionVector = maxVersionVector.Max(vv)
 		}
+		actorID, err := clientInfo.ID.ToActorID()
+
+		if err != nil {
+			return nil, err
+		}
 
 		if pulling {
-			// 03-1. when pulling changes, its necessary to update client's version vector in db
-			// and the updated one must pre-reflect client's local version vector to compute min version vector when return response pack.
+			// 04-1. when pulling changes, its necessary to update client's version vector in db
+			// and the updated one must pre-reflect client's local version vector to compute min version vector when client receives response pack.
 			maxLamport := maxVersionVector.MaxLamport()
-			actorID, err := clientInfo.ID.ToActorID()
-
-			if err != nil {
-				return nil, err
-			}
 
 			maxVersionVector.Set(actorID, maxLamport+1)
 		}
+		// 04-2. remove detached client's lamport if it exists in maxVersionVector
+		if minVersionVector != nil {
+			actors := minVersionVector.Keys()
+			// max lamport value is always client's lamport.
+			currentLamport := maxVersionVector.MaxLamport()
 
-		err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
+			maxVersionVector = maxVersionVector.Filter(actors)
+			maxVersionVector.Set(actorID, currentLamport)
+		}
+
+		err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update version vector: %w", err)
 		}
 	}
 
-	// 04. Find MinVersionVector
-	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("find all version vectors: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	var versionVectorInfos []database.VersionVectorInfo
-	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
-		return nil, fmt.Errorf("decode version vectors: %w", err)
-	}
-
-	var minVersionVector time.VersionVector
-	if len(versionVectorInfos) > 0 {
-		minVersionVector = versionVectorInfos[0].VersionVector
-		for _, vv := range versionVectorInfos[1:] {
-			minVersionVector = minVersionVector.Min(vv.VersionVector)
+	// 05. Compute min version vector
+	if minVersionVector != nil {
+		// 05-1. Compute min version vector after client update its version vector after pushpull
+		if maxVersionVector != nil {
+			minVersionVector = minVersionVector.Min(maxVersionVector)
+			// 05-2. Compute min version vector after client doesn't update its version vector (neither push nor pull)
+		} else if clientVersionVector != nil {
+			minVersionVector = minVersionVector.Min(clientVersionVector)
 		}
 	}
 
