@@ -1274,6 +1274,46 @@ func (c *Client) UpdateVersionVector(
 	}
 
 	if !isAttached {
+		cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+		})
+		if err != nil {
+			return fmt.Errorf("find all version vectors: %w", err)
+		}
+		defer cursor.Close(ctx)
+
+		var versionVectorInfos []database.VersionVectorInfo
+		if err := cursor.All(ctx, &versionVectorInfos); err != nil {
+			return fmt.Errorf("decode version vectors: %w", err)
+		}
+		actorID, err := clientInfo.ID.ToActorID()
+
+		if err != nil {
+			return err
+		}
+		for _, vvi := range versionVectorInfos {
+			exists := vvi.VersionVector.VersionOf(actorID) > 0
+
+			if exists {
+				vvi.VersionVector.UnSet(actorID)
+
+				_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
+					"project_id": docRefKey.ProjectID,
+					"doc_id":     docRefKey.DocID,
+					"client_id":  vvi.ClientID,
+				}, bson.M{
+					"$set": bson.M{
+						"version_vector": vvi.VersionVector,
+					},
+				}, options.Update().SetUpsert(true))
+
+				if err != nil {
+					return fmt.Errorf("failed to update detached client's version vector: %w", err)
+				}
+			}
+		}
+
 		if _, err = c.collection(ColVersionVector).DeleteOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,

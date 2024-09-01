@@ -38,6 +38,11 @@ func (v VersionVector) Set(id *ActorID, i int64) {
 	v[id.bytes] = i
 }
 
+// UnSet unsets the given actor's version to the given value.
+func (v VersionVector) UnSet(id *ActorID) {
+	delete(v, id.bytes)
+}
+
 // VersionOf returns the version of the given actor.
 func (v VersionVector) VersionOf(id *ActorID) int64 {
 	return v[id.bytes]
