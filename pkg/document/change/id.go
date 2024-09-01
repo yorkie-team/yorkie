@@ -123,6 +123,11 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 	return newID
 }
 
+// SetVersionVector sets version vector
+func (id ID) SetVersionVector(vector time.VersionVector) ID {
+	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, vector)
+}
+
 // SetActor sets actorID.
 func (id ID) SetActor(actor *time.ActorID) ID {
 	// TODO(hackerwins): We need to update version vector as well.
