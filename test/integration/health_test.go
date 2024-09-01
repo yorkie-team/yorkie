@@ -40,8 +40,6 @@ var services = []string{
 }
 
 func TestRPCHealthCheck(t *testing.T) {
-	t.Parallel()
-
 	conn, err := grpc.Dial(
 		defaultServer.RPCAddr(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -81,8 +79,6 @@ func TestRPCHealthCheck(t *testing.T) {
 }
 
 func TestHTTPGETHealthCheck(t *testing.T) {
-	t.Parallel()
-
 	// check default service
 	t.Run("Service: default", func(t *testing.T) {
 		resp, err := http.Get("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
@@ -129,8 +125,6 @@ func TestHTTPGETHealthCheck(t *testing.T) {
 }
 
 func TestHTTPHEADHealthCheck(t *testing.T) {
-	t.Parallel()
-
 	// check default service
 	t.Run("Service: default", func(t *testing.T) {
 		resp, err := http.Head("http://" + defaultServer.RPCAddr() + httphealth.HealthV1ServiceName)
