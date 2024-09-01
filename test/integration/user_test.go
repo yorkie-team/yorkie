@@ -29,6 +29,8 @@ import (
 )
 
 func TestUser(t *testing.T) {
+	t.Parallel()
+
 	adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
 	defer func() { adminCli.Close() }()
 

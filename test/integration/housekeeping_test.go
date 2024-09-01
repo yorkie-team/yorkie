@@ -70,6 +70,8 @@ func setupBackend(t *testing.T) *backend.Backend {
 }
 
 func TestHousekeeping(t *testing.T) {
+	t.Parallel()
+
 	be := setupBackend(t)
 	defer func() {
 		assert.NoError(t, be.Shutdown())

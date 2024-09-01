@@ -34,6 +34,8 @@ import (
 )
 
 func TestArray(t *testing.T) {
+	t.Parallel()
+
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
@@ -328,6 +330,8 @@ func TestArray(t *testing.T) {
 }
 
 func TestArraySetTypeGuard(t *testing.T) {
+	t.Parallel()
+
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
@@ -385,6 +389,8 @@ func TestArraySetTypeGuard(t *testing.T) {
 }
 
 func TestArraySet(t *testing.T) {
+	t.Parallel()
+
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)

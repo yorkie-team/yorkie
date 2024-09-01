@@ -36,6 +36,8 @@ import (
 )
 
 func TestSnapshot(t *testing.T) {
+	t.Parallel()
+
 	var b *background.Background
 	patch, err := monkey.PatchInstanceMethodByName(
 		reflect.TypeOf(b),

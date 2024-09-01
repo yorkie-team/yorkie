@@ -37,6 +37,7 @@ import (
 
 func TestClient(t *testing.T) {
 	t.Run("dial and close test", func(t *testing.T) {
+		t.Parallel()
 		cli, err := client.Dial(defaultServer.RPCAddr())
 		assert.NoError(t, err)
 
@@ -47,6 +48,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("activate/deactivate test", func(t *testing.T) {
+		t.Parallel()
 		cli, err := client.Dial(defaultServer.RPCAddr())
 		assert.NoError(t, err)
 		defer func() {
@@ -76,6 +78,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("sync option with multiple clients test", func(t *testing.T) {
+		t.Parallel()
 		clients := activeClients(t, 3)
 		defer deactivateAndCloseClients(t, clients)
 		c1, c2, c3 := clients[0], clients[1], clients[2]
@@ -131,6 +134,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("sync option with mixed mode test", func(t *testing.T) {
+		t.Parallel()
 		clients := activeClients(t, 1)
 		defer deactivateAndCloseClients(t, clients)
 		cli := clients[0]
@@ -176,6 +180,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("deactivated client's stream test", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 
 		c1, err := client.Dial(defaultServer.RPCAddr())

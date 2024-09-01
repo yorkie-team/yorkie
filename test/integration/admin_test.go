@@ -36,6 +36,8 @@ import (
 )
 
 func TestAdmin(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	adminCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))

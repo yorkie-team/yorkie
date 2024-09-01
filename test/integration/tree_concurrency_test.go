@@ -261,6 +261,8 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 	//       0   1 2 3 4    5   6 7 8 9    10   11 12 13 14    15
 	// <root> <p> a b c </p> <p> d e f </p>  <p>  g  h  i  </p>  </root>
 
+	t.Parallel()
+
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
@@ -330,6 +332,8 @@ func TestTreeConcurrencySplitSplit(t *testing.T) {
 	//       0   1   2   3   4 5 6 7 8    9   10 11 12 13 14    15    16   17 18 19 20 21    22    23    24
 	// <root> <p> <p> <p> <p> a b c d </p> <p>  e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </p>  </root>
 
+	t.Parallel()
+
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
@@ -376,6 +380,8 @@ func TestTreeConcurrencySplitSplit(t *testing.T) {
 func TestTreeConcurrencySplitEdit(t *testing.T) {
 	//       0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
 	// <root> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </root>
+
+	t.Parallel()
 
 	initialState := json.TreeNode{
 		Type: "root",
@@ -440,6 +446,8 @@ func TestTreeConcurrencyStyleStyle(t *testing.T) {
 	// 3,6 :            |----------|
 	// 6,9 :                       |----------|
 
+	t.Parallel()
+
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
@@ -479,6 +487,8 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	// 0,3 : |----------|
 	// 3,6 :            |----------|
 	// 6,9 :                       |----------|
+
+	t.Parallel()
 
 	initialState := json.TreeNode{
 		Type: "root",

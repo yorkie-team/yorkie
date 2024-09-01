@@ -31,6 +31,8 @@ import (
 )
 
 func TestHistory(t *testing.T) {
+	t.Parallel()
+
 	clients := activeClients(t, 1)
 	cli := clients[0]
 	defer deactivateAndCloseClients(t, clients)
