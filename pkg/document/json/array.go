@@ -412,7 +412,8 @@ func (p *Array) setByIndexInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
 	ticket := p.context.IssueTimeTicket()
-	// NOTE(junseo): creator(createdAt), not creator(ticket)
+	// NOTE(junseo): It uses `creator(createdAt)` instead of `creator(ticket)`
+	// because the new element must have the same `createdAt` as the old element.
 	elem := creator(createdAt)
 	value := toOriginal(elem)
 
@@ -428,14 +429,11 @@ func (p *Array) setByIndexInternal(
 	))
 
 	_, err = p.SetByIndex(createdAt, value, ticket)
-	// removed, err := p.SetByIndex(createdAt, value, ticket)
 	if err != nil {
 		panic(err)
 	}
-	// if removed != nil {
-	// 	// TODO(junseo): add GC-like logic
-	// 	// p.context.RegisterRemovedElementPair(p, removed)
-	// }
+	// TODO(junseo): GC logic is not implemented here
+	// because there is no way to distinguish between old and new element with same `createdAt`.
 	p.context.RegisterElement(value)
 	return elem
 }

@@ -358,13 +358,13 @@ func (a *RGATreeList) SetByIndex(
 	}
 
 	var removed *RGATreeListNode
-	// TODO(junseo): use UpdatedAt() instead of MovedAt()
-	// if node.elem.UpdatedAt() == nil || executedAt.After(node.elem.UpdatedAt()) {
+	// TODO(junseo): Replace `MovedAt()` with `UpdatedAt()`
+	// because `movedAt` is related to convergence of positional operations (Insert, Move).
+	// In the current implementation, concurrent Set and Insert operations do not converge.
 	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
 		removed = newRGATreeListNode(node.elem)
 
 		node.elem = element
-		// node.elem.SetUpdatedAt(executedAt)
 		node.elem.SetMovedAt(executedAt)
 	}
 	return removed, nil

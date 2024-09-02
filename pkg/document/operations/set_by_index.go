@@ -66,15 +66,12 @@ func (o *SetByIndex) Execute(root *crdt.Root) error {
 	}
 
 	_, err = obj.SetByIndex(o.createdAt, value, o.executedAt)
-	// removed, err := obj.SetByIndex(o.createdAt, value, o.executedAt)
 	if err != nil {
 		return err
 	}
 
-	// if removed != nil {
-	// 	// TODO(junseo): add GC-like logic
-	// 	// root.RegisterRemovedElementPair(obj, removed)
-	// }
+	// TODO(junseo): GC logic is not implemented here
+	// because there is no way to distinguish between old and new element with same `createdAt`.
 	root.RegisterElement(value)
 	return nil
 }
