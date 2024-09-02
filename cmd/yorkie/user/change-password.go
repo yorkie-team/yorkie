@@ -39,21 +39,10 @@ func changePasswordCmd() *cobra.Command {
 		Short:   "Change user password",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Print("Enter Password: ")
-			bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+			password, newPassword, err := getPasswords()
 			if err != nil {
-				return fmt.Errorf("failed to read password: %w", err)
+				return err
 			}
-			password = string(bytePassword)
-			fmt.Println()
-
-			fmt.Print("Enter New Password: ")
-			bytePassword, err = term.ReadPassword(int(os.Stdin.Fd()))
-			if err != nil {
-				return fmt.Errorf("failed to read password: %w", err)
-			}
-			newPassword = string(bytePassword)
-			fmt.Println()
 
 			if rpcAddr == "" {
 				rpcAddr = viper.GetString("rpcAddr")
@@ -72,19 +61,47 @@ func changePasswordCmd() *cobra.Command {
 				return err
 			}
 
-			conf, err := config.Load()
-			if err != nil {
-				return err
-			}
-
-			delete(conf.Auths, rpcAddr)
-			if err := config.Save(conf); err != nil {
+			if err := deleteAuthSession(rpcAddr); err != nil {
 				return err
 			}
 
 			return nil
 		},
 	}
+}
+
+func getPasswords() (string, string, error) {
+	fmt.Print("Enter Password: ")
+	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read password: %w", err)
+	}
+	password := string(bytePassword)
+	fmt.Println()
+
+	fmt.Print("Enter New Password: ")
+	bytePassword, err = term.ReadPassword(int(os.Stdin.Fd()))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read password: %w", err)
+	}
+	newPassword := string(bytePassword)
+	fmt.Println()
+
+	return password, newPassword, nil
+}
+
+func deleteAuthSession(rpcAddr string) error {
+	conf, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	delete(conf.Auths, rpcAddr)
+	if err := config.Save(conf); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func init() {
@@ -94,7 +111,7 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required if password is set)",
+		"Username (required)",
 	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
@@ -108,5 +125,6 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
+	_ = cmd.MarkFlagRequired("username")
 	SubCmd.AddCommand(cmd)
 }

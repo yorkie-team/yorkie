@@ -117,7 +117,7 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required if password is set)",
+		"Username (required)",
 	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
@@ -131,5 +131,6 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
+	_ = cmd.MarkFlagRequired("username")
 	SubCmd.AddCommand(cmd)
 }

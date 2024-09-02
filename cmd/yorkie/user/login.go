@@ -93,7 +93,7 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required if password is set)",
+		"Username (required)",
 	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
