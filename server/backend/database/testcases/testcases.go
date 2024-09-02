@@ -343,6 +343,185 @@ func RunFindChangesBetweenServerSeqsTest(
 	})
 }
 
+// RunFindChangeInfosBetweenServerSeqsTest runs the FindChangeInfosBetweenServerSeqs test for the given db.
+func RunFindChangeInfosBetweenServerSeqsTest(
+	t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("continues editing without any interference from other users test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		updatedClientInfo, _ := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+
+		// Record the serverSeq value at the time the PushPull request came in.
+		initialServerSeq := docInfo.ServerSeq
+
+		// The serverSeq of the checkpoint that the server has should always be the same as
+		// the serverSeq of the user's checkpoint that came in as a request, if no other user interfered.
+		reqPackCheckpointServerSeq := updatedClientInfo.Checkpoint(docInfo.ID).ServerSeq
+
+		changeInfos, err := db.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docInfo.RefKey(),
+			reqPackCheckpointServerSeq+1,
+			initialServerSeq,
+		)
+
+		assert.NoError(t, err)
+		assert.Len(t, changeInfos, 0)
+	})
+
+	t.Run("retrieving a document with snapshot that reflect the latest doc info test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		initialServerSeq := docInfo.ServerSeq
+
+		// 01. Create a document and store changes
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 5; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+
+		pack := doc.CreateChangePack()
+		for _, c := range pack.Changes {
+			serverSeq := docInfo.IncreaseServerSeq()
+			c.SetServerSeq(serverSeq)
+		}
+
+		err := db.CreateChangeInfos(
+			ctx,
+			projectID,
+			docInfo,
+			initialServerSeq,
+			pack.Changes,
+			false,
+		)
+		assert.NoError(t, err)
+
+		// 02. Create a snapshot that reflect the latest doc info
+		updatedDocInfo, _ := db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.Equal(t, int64(6), updatedDocInfo.ServerSeq)
+
+		pack = change.NewPack(
+			updatedDocInfo.Key,
+			change.InitialCheckpoint.NextServerSeq(updatedDocInfo.ServerSeq),
+			nil,
+			nil,
+		)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.Equal(t, int64(6), doc.Checkpoint().ServerSeq)
+
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
+
+		// 03. Find changeInfos with snapshot that reflect the latest doc info
+		snapshotInfo, _ := db.FindClosestSnapshotInfo(
+			ctx,
+			docRefKey,
+			updatedDocInfo.ServerSeq,
+			false,
+		)
+
+		changeInfos, _ := db.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docRefKey,
+			snapshotInfo.ServerSeq+1,
+			updatedDocInfo.ServerSeq,
+		)
+
+		assert.Len(t, changeInfos, 0)
+	})
+
+	t.Run("store changes and find changes test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		initialServerSeq := docInfo.ServerSeq
+
+		// 01. Create a document and store changes
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 5; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for _, c := range pack.Changes {
+			serverSeq := docInfo.IncreaseServerSeq()
+			c.SetServerSeq(serverSeq)
+		}
+
+		err := db.CreateChangeInfos(
+			ctx,
+			projectID,
+			docInfo,
+			initialServerSeq,
+			pack.Changes,
+			false,
+		)
+		assert.NoError(t, err)
+
+		// 02. Find changes
+		changeInfos, err := db.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docRefKey,
+			1,
+			6,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, changeInfos, 6)
+
+		changeInfos, err = db.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docRefKey,
+			3,
+			3,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, changeInfos, 1)
+	})
+}
+
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
 func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {
