@@ -586,6 +586,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d2.Marshal())
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
