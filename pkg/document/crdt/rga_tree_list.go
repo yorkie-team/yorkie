@@ -345,3 +345,27 @@ func (a *RGATreeList) insertAfter(
 	a.nodeMapByCreatedAt[value.CreatedAt().Key()] = newNode
 	return nil
 }
+
+// SetByIndex sets the given `createdAt` element to `element`.
+func (a *RGATreeList) SetByIndex(
+	createdAt *time.Ticket,
+	element Element,
+	executedAt *time.Ticket,
+) (*RGATreeListNode, error) {
+	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		return nil, fmt.Errorf("SetByIndex %s: %w", createdAt.Key(), ErrChildNotFound)
+	}
+
+	var removed *RGATreeListNode
+	// TODO(junseo): Replace `MovedAt()` with `UpdatedAt()`
+	// because `movedAt` is related to convergence of positional operations (Insert, Move).
+	// In the current implementation, concurrent Set and Insert operations do not converge.
+	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
+		removed = newRGATreeListNode(node.elem)
+
+		node.elem = element
+		node.elem.SetMovedAt(executedAt)
+	}
+	return removed, nil
+}
