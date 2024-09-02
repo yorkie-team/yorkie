@@ -107,5 +107,6 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
+	_ = cmd.MarkFlagRequired("username")
 	SubCmd.AddCommand(cmd)
 }
