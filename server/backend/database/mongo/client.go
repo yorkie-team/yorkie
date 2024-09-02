@@ -1160,7 +1160,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	var versionVectors []time.VersionVector
 	var clientVersionVector time.VersionVector
 	var minVersionVector time.VersionVector
-	var maxVersionVector time.VersionVector
+	var latestVersionVector time.VersionVector
 	var versionVectorInfos []database.VersionVectorInfo
 
 	// 01. compute minVersionVector from all version vectors stored in db
@@ -1234,10 +1234,10 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 
 	// 04. Update client's version vector (max version vector)
 	if len(versionVectors) > 0 {
-		maxVersionVector = versionVectors[0]
+		latestVersionVector = versionVectors[0]
 
 		for _, vv := range versionVectors[1:] {
-			maxVersionVector = maxVersionVector.Max(vv)
+			latestVersionVector = latestVersionVector.Max(vv)
 		}
 		actorID, err := clientInfo.ID.ToActorID()
 
@@ -1248,21 +1248,21 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		if pulling {
 			// 04-1. when pulling changes, its necessary to update client's version vector in db
 			// and the updated one must pre-reflect client's local version vector to compute min version vector when client receives response pack.
-			maxLamport := maxVersionVector.MaxLamport()
+			maxLamport := latestVersionVector.MaxLamport()
 
-			maxVersionVector.Set(actorID, maxLamport+1)
+			latestVersionVector.Set(actorID, maxLamport+1)
 		}
-		// 04-2. remove detached client's lamport if it exists in maxVersionVector
+		// 04-2. remove detached client's lamport if it exists in latestVersionVector
 		if minVersionVector != nil {
 			actors := minVersionVector.Keys()
 			// max lamport value is always client's lamport.
-			currentLamport := maxVersionVector.MaxLamport()
+			latestLamport := latestVersionVector.MaxLamport()
 
-			maxVersionVector = maxVersionVector.Filter(actors)
-			maxVersionVector.Set(actorID, currentLamport)
+			latestVersionVector = latestVersionVector.Filter(actors)
+			latestVersionVector.Set(actorID, latestLamport)
 		}
 
-		err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, maxVersionVector)
+		err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, latestVersionVector)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to update version vector: %w", err)
@@ -1272,8 +1272,8 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	// 05. Compute min version vector
 	if minVersionVector != nil {
 		// 05-1. Compute min version vector after client update its version vector after pushpull
-		if maxVersionVector != nil {
-			minVersionVector = minVersionVector.Min(maxVersionVector)
+		if latestVersionVector != nil {
+			minVersionVector = minVersionVector.Min(latestVersionVector)
 			// 05-2. Compute min version vector after client doesn't update its version vector (neither push nor pull)
 		} else if clientVersionVector != nil {
 			minVersionVector = minVersionVector.Min(clientVersionVector)
