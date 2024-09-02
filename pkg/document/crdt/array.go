@@ -203,3 +203,15 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
 }
+
+// SetByIndex sets element at given position.
+func (a *Array) SetByIndex(createdAt *time.Ticket, element Element, executedAt *time.Ticket) (Element, error) {
+	node, err := a.elements.SetByIndex(createdAt, element, executedAt)
+	if err != nil {
+		return nil, err
+	}
+	if node != nil {
+		return node.elem, nil
+	}
+	return nil, nil
+}

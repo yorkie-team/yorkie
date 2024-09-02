@@ -206,6 +206,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toTreeEdit(op)
 		case *operations.TreeStyle:
 			pbOperation.Body, err = toTreeStyle(op)
+		case *operations.SetByIndex:
+			pbOperation.Body, err = toSetByIndex(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -371,6 +373,22 @@ func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error)
 			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
 			AttributesToRemove:  style.AttributesToRemove(),
 			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
+		},
+	}, nil
+}
+
+func toSetByIndex(setByIndex *operations.SetByIndex) (*api.Operation_SetByIndex_, error) {
+	pbElem, err := toJSONElementSimple(setByIndex.Value())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_SetByIndex_{
+		SetByIndex: &api.Operation_SetByIndex{
+			ParentCreatedAt: ToTimeTicket(setByIndex.ParentCreatedAt()),
+			CreatedAt:       ToTimeTicket(setByIndex.CreatedAt()),
+			Value:           pbElem,
+			ExecutedAt:      ToTimeTicket(setByIndex.ExecutedAt()),
 		},
 	}, nil
 }
