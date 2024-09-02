@@ -1031,6 +1031,9 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	from int64,
 	to int64,
 ) ([]*database.ChangeInfo, error) {
+	if from > to {
+		return nil, nil
+	}
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
