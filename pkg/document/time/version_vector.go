@@ -17,6 +17,8 @@
 package time
 
 import (
+	"bytes"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -63,8 +65,16 @@ func (v VersionVector) Marshal() string {
 
 	builder.WriteRune('{')
 
+	keys := make([]actorID, 0, len(v))
+	for k := range v {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return bytes.Compare(keys[i][:], keys[j][:]) < 0
+	})
+
 	isFirst := true
-	for k, val := range v {
+	for _, k := range keys {
 		if !isFirst {
 			builder.WriteRune(',')
 		}
@@ -76,7 +86,7 @@ func (v VersionVector) Marshal() string {
 
 		builder.WriteString(id.String())
 		builder.WriteRune(':')
-		builder.WriteString(strconv.FormatInt(val, 10))
+		builder.WriteString(strconv.FormatInt(v[k], 10))
 		isFirst = false
 	}
 	builder.WriteRune('}')
