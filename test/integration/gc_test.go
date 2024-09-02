@@ -479,11 +479,18 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
+		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())), 3)
-		assert.Equal(t, d2.GarbageCollect(helper.MaxVectorClock(d2.ActorID())), 3)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())), 0)
+		assert.Equal(t, d2.GarbageCollect(helper.MaxVectorClock(d2.ActorID())), 0)
 	})
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
