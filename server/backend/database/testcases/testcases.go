@@ -898,6 +898,9 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		// 01. Create a client and a document then attach the document to the client.
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.Equal(t, docInfo1.Owner, clientInfo.ID)
+		assert.NotEqual(t, gotime.Date(1, gotime.January, 1, 0, 0, 0, 0, gotime.UTC), docInfo1.UpdatedAt)
+		assert.Equal(t, docInfo1.CreatedAt, docInfo1.UpdatedAt)
 		docRefKey := docInfo1.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
@@ -907,7 +910,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
-		// 02. update document only presence
+		// 02. Update document only presence
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("key", "val")
 			return nil
@@ -918,7 +921,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.Equal(t, updatedAt, docInfo2.UpdatedAt)
 
-		// 03. update document presence and operation
+		// 03. Update document presence and operation
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("key", "val")
 			root.SetNewArray("array")

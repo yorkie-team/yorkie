@@ -739,6 +739,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
+			UpdatedAt:  now,
 			AccessedAt: now,
 		}
 		if err := txn.Insert(tblDocuments, info); err != nil {
