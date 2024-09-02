@@ -67,8 +67,10 @@ func deleteAccountCmd() *cobra.Command {
 				rpcAddr = viper.GetString("rpcAddr")
 			}
 
-			if deleteAccountFromServer(conf, rpcAddr, insecure, username, password) == nil {
+			if err := deleteAccountFromServer(conf, rpcAddr, insecure, username, password); err == nil {
 				fmt.Println("Your account has been successfully deleted.")
+			} else {
+				fmt.Println("Your account has not been deleted.")
 			}
 
 			return nil
