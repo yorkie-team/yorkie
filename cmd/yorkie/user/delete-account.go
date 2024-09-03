@@ -77,6 +77,7 @@ func getPassword() (string, error) {
 	}
 	password = string(bytePassword)
 	fmt.Println()
+
 	return password, nil
 }
 
