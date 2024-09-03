@@ -1179,11 +1179,90 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 // UpdateVersionVector updates the given serverSeq of the given client
 func (d *DB) UpdateVersionVector(
-	ctx context.Context,
+	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector) error {
-	// TODO(JOOHOJANG): complete this function after implement version vector into mongo
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	if !isAttached {
+		iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
+
+		if err != nil {
+			return err
+		}
+		actorID, err := clientInfo.ID.ToActorID()
+
+		if err != nil {
+			return err
+		}
+
+		for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+			vvi := raw.(*database.VersionVectorInfo)
+
+			exists := vvi.VersionVector.VersionOf(actorID) > 0
+
+			if exists {
+				vvi.VersionVector.UnSet(actorID)
+
+				versionVectorInfo := &database.VersionVectorInfo{
+					ID:            raw.(*database.VersionVectorInfo).ID,
+					DocID:         docRefKey.DocID,
+					ClientID:      raw.(*database.VersionVectorInfo).ClientID,
+					VersionVector: vvi.VersionVector,
+				}
+
+				if err := txn.Insert(tblSyncedSeqs, versionVectorInfo); err != nil {
+					return fmt.Errorf("update other's version vector when detach of %s: %w", docRefKey.DocID, err)
+				}
+			}
+		}
+
+		if _, err = txn.DeleteAll(
+			tblVersionVector,
+			"doc_id_client_id",
+			docRefKey.DocID.String(),
+			clientInfo.ID.String(),
+		); err != nil {
+			return fmt.Errorf("delete version vector of %s: %w", docRefKey.DocID, err)
+		}
+
+		txn.Commit()
+		return nil
+	}
+
+	raw, err := txn.First(
+		tblVersionVector,
+		"doc_id_client_id",
+		docRefKey.DocID.String(),
+		clientInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
+	}
+
+	versionVectorInfo := &database.VersionVectorInfo{
+		DocID:         docRefKey.DocID,
+		ClientID:      clientInfo.ID,
+		VersionVector: versionVector,
+	}
+	if raw == nil {
+		versionVectorInfo.ID = newID()
+	} else {
+		versionVectorInfo.ID = raw.(*database.SyncedSeqInfo).ID
+	}
+
+	if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
+		return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
+	}
+
+	txn.Commit()
 	return nil
 }
 
