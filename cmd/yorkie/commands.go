@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/context"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/document"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/project"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/user"
 )
 
 var rootCmd = &cobra.Command{
@@ -49,6 +50,7 @@ func init() {
 	rootCmd.AddCommand(project.SubCmd)
 	rootCmd.AddCommand(document.SubCmd)
 	rootCmd.AddCommand(context.SubCmd)
+	rootCmd.AddCommand(user.SubCmd)
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
 	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
