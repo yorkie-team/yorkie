@@ -42,6 +42,7 @@ type DB struct {
 // New returns a new in-memory database.
 func New() (*DB, error) {
 	memDB, err := memdb.NewMemDB(schema)
+
 	if err != nil {
 		return nil, fmt.Errorf("new memdb: %w", err)
 	}
@@ -1237,89 +1238,171 @@ func (d *DB) UpdateVersionVector(
 		return nil
 	}
 
-	raw, err := txn.First(
-		tblVersionVector,
-		"doc_id_client_id",
-		docRefKey.DocID.String(),
-		clientInfo.ID.String(),
-	)
-	if err != nil {
-		return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
+	if versionVector != nil {
+		raw, err := txn.First(
+			tblVersionVector,
+			"doc_id_client_id",
+			docRefKey.DocID.String(),
+			clientInfo.ID.String(),
+		)
+		if err != nil {
+			return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
+		}
+
+		versionVectorInfo := &database.VersionVectorInfo{
+			DocID:         docRefKey.DocID,
+			ClientID:      clientInfo.ID,
+			VersionVector: versionVector,
+		}
+		if raw == nil {
+			versionVectorInfo.ID = newID()
+		} else {
+			versionVectorInfo.ID = raw.(*database.SyncedSeqInfo).ID
+		}
+
+		if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
+			return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
+		}
+
+		txn.Commit()
 	}
 
-	versionVectorInfo := &database.VersionVectorInfo{
-		DocID:         docRefKey.DocID,
-		ClientID:      clientInfo.ID,
-		VersionVector: versionVector,
-	}
-	if raw == nil {
-		versionVectorInfo.ID = newID()
-	} else {
-		versionVectorInfo.ID = raw.(*database.SyncedSeqInfo).ID
-	}
-
-	if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
-		return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
-	}
-
-	txn.Commit()
 	return nil
 }
 
 // UpdateAndFindMinSyncedVersionVectorAfterPushPull updates the given serverSeq of the given client
 // and returns the SyncedVersionVector of the document.
 func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
-	// TODO(JOOHOJANG): complete this function after implement version vector into mongo
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	pulledChangeInfos []*database.ChangeInfo,
 	pushedChanges []*change.Change,
 ) (time.VersionVector, error) {
-	// 02. find the min synced seq of the document.
-	txn := d.db.Txn(false)
+	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	iterator, err := txn.LowerBound(
-		tblSyncedSeqs,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		int64(0),
-	)
+	var versionVectors []time.VersionVector
+	var clientVersionVector time.VersionVector
+	var minVersionVector time.VersionVector
+	var latestVersionVector time.VersionVector
+
+	// 01. compute minVersionVector from all version vectors stored in db
+	iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
+		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
 
-	var syncedSeqInfo *database.SyncedSeqInfo
-	if raw := iterator.Next(); raw != nil {
-		info := raw.(*database.SyncedSeqInfo)
-		if info.DocID == docRefKey.DocID {
-			syncedSeqInfo = info
+	// 01-1. Compute minVersionVector without current client's version vector
+	// because current client's version vector will be updated after pushpull
+	// we need to compute min value after max operation of client's version vector.
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		vvi := raw.(*database.VersionVectorInfo)
+		// 01-2. Find current client's version vector from db
+		// we use this version vector to find max version vector in future
+		if clientInfo.ID == vvi.ClientID {
+			clientVersionVector = vvi.VersionVector
+
+			continue
+		}
+
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+
+			continue
+		}
+
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
+
+	pulling := len(pulledChangeInfos) > 0
+	pushing := len(pushedChanges) > 0
+
+	// 02. Append version vectors from pulling changes
+	if pulling {
+		// 02-1. Append client's version vector stored in db
+		// its necessary because we need to store version vector which reflects current client's local version vector after pushpull
+		// if its pushonly (or pushpull but no changes to pull), we don't need to do this step because client's local version vector will not be updated because there's no pulling change.
+		if clientVersionVector != nil {
+			versionVectors = append(versionVectors, clientVersionVector)
+		}
+
+		for _, changeInfo := range pulledChangeInfos {
+			versionVector := changeInfo.VersionVector
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
 		}
 	}
 
-	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return nil, nil
+	// 03. Append version vectors from pushing changes to compute max version vector
+	if pushing {
+		for _, pushedChange := range pushedChanges {
+			versionVector := pushedChange.ID().VersionVector()
+
+			if versionVector != nil {
+				versionVectors = append(versionVectors, versionVector)
+			}
+		}
 	}
 
-	// 03. find the synced version vector of the min synced seq.
-	// TODO(hackerwins): We need to find the min synced seq of the changes.
-	// min synced seq of the changes is the equivalent of LCA in the dependency graph.
-	raw, err := txn.First(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		syncedSeqInfo.ServerSeq,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, database.ErrChangeNotFound)
+	// 04. Update client's version vector (max version vector)
+	if len(versionVectors) > 0 {
+		latestVersionVector = versionVectors[0]
+
+		for _, vv := range versionVectors[1:] {
+			latestVersionVector = latestVersionVector.Max(vv)
+		}
+		actorID, err := clientInfo.ID.ToActorID()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if pulling {
+			// 04-1. when pulling changes, its necessary to update client's version vector in db
+			// and the updated one must pre-reflect client's local version vector to compute min version vector when client receives response pack.
+			maxLamport := latestVersionVector.MaxLamport()
+
+			latestVersionVector.Set(actorID, maxLamport+1)
+		}
+		// 04-2. remove detached client's lamport if it exists in latestVersionVector
+		if minVersionVector != nil {
+			actors := minVersionVector.Keys()
+			// max lamport value is always client's lamport.
+			latestLamport := latestVersionVector.MaxLamport()
+
+			latestVersionVector = latestVersionVector.Filter(actors)
+			latestVersionVector.Set(actorID, latestLamport)
+		}
+
+		err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, latestVersionVector)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to update version vector: %w", err)
+		}
 	}
 
-	changeInfo := raw.(*database.ChangeInfo)
-	return changeInfo.VersionVector.DeepCopy(), nil
+	// 05. Compute min version vector
+	if minVersionVector != nil {
+		// 05-1. Compute min version vector after client update its version vector after pushpull
+		if latestVersionVector != nil {
+			minVersionVector = minVersionVector.Min(latestVersionVector)
+			// 05-2. Compute min version vector after client doesn't update its version vector (neither push nor pull)
+		} else if clientVersionVector != nil {
+			minVersionVector = minVersionVector.Min(clientVersionVector)
+		}
+	} else {
+		// 05-3. If min version vector is nil
+		// it means there's only one version vector stored in db which is current client's version vector
+		// in this case, client's version vector stored in db is the min version vector because value only increases after pushpull.
+		minVersionVector = clientVersionVector
+	}
+
+	fmt.Println(minVersionVector)
+
+	return minVersionVector, nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
