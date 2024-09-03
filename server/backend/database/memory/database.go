@@ -1213,13 +1213,13 @@ func (d *DB) UpdateVersionVector(
 				vvi.VersionVector.UnSet(actorID)
 
 				versionVectorInfo := &database.VersionVectorInfo{
-					ID:            raw.(*database.VersionVectorInfo).ID,
+					ID:            vvi.ID,
 					DocID:         docRefKey.DocID,
-					ClientID:      raw.(*database.VersionVectorInfo).ClientID,
+					ClientID:      vvi.ClientID,
 					VersionVector: vvi.VersionVector,
 				}
 
-				if err := txn.Insert(tblSyncedSeqs, versionVectorInfo); err != nil {
+				if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
 					return fmt.Errorf("update other's version vector when detach of %s: %w", docRefKey.DocID, err)
 				}
 			}
@@ -1257,7 +1257,7 @@ func (d *DB) UpdateVersionVector(
 		if raw == nil {
 			versionVectorInfo.ID = newID()
 		} else {
-			versionVectorInfo.ID = raw.(*database.SyncedSeqInfo).ID
+			versionVectorInfo.ID = raw.(*database.VersionVectorInfo).ID
 		}
 
 		if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
@@ -1280,18 +1280,17 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	pushedChanges []*change.Change,
 ) (time.VersionVector, error) {
 	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	var versionVectors []time.VersionVector
-	var clientVersionVector time.VersionVector
-	var minVersionVector time.VersionVector
-	var latestVersionVector time.VersionVector
-
 	// 01. compute minVersionVector from all version vectors stored in db
 	iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
+	txn.Abort()
+
+	var versionVectors []time.VersionVector
+	var clientVersionVector time.VersionVector
+	var minVersionVector time.VersionVector
+	var latestVersionVector time.VersionVector
 
 	// 01-1. Compute minVersionVector without current client's version vector
 	// because current client's version vector will be updated after pushpull
