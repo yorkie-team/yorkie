@@ -421,14 +421,14 @@ func (p *Array) setByIndexInternal(
 	if err != nil {
 		panic(err)
 	}
-	p.context.Push(operations.NewSetByIndex(
+	p.context.Push(operations.NewArraySet(
 		p.Array.CreatedAt(),
 		createdAt,
 		copiedValue,
 		ticket,
 	))
 
-	_, err = p.SetByIndex(createdAt, value, ticket)
+	_, err = p.Set(createdAt, value, ticket)
 	if err != nil {
 		panic(err)
 	}

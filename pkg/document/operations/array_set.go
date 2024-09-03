@@ -21,9 +21,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// SetByIndex is an operation representing setting an element in Array.
-type SetByIndex struct {
-	// parentCreatedAt is the creation time of the Array that executes SetByIndex.
+// ArraySet is an operation representing setting an element in Array.
+type ArraySet struct {
+	// parentCreatedAt is the creation time of the Array that executes ArraySet.
 	parentCreatedAt *time.Ticket
 
 	// createdAt is the creation time of the target element to set.
@@ -36,14 +36,14 @@ type SetByIndex struct {
 	executedAt *time.Ticket
 }
 
-// NewSetByIndex creates a new instance of SetByIndex.
-func NewSetByIndex(
+// NewArraySet creates a new instance of ArraySet.
+func NewArraySet(
 	parentCreatedAt *time.Ticket,
 	createdAt *time.Ticket,
 	value crdt.Element,
 	executedAt *time.Ticket,
-) *SetByIndex {
-	return &SetByIndex{
+) *ArraySet {
+	return &ArraySet{
 		parentCreatedAt: parentCreatedAt,
 		createdAt:       createdAt,
 		value:           value,
@@ -52,7 +52,7 @@ func NewSetByIndex(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *SetByIndex) Execute(root *crdt.Root) error {
+func (o *ArraySet) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)
@@ -65,7 +65,7 @@ func (o *SetByIndex) Execute(root *crdt.Root) error {
 		return err
 	}
 
-	_, err = obj.SetByIndex(o.createdAt, value, o.executedAt)
+	_, err = obj.Set(o.createdAt, value, o.executedAt)
 	if err != nil {
 		return err
 	}
@@ -77,26 +77,26 @@ func (o *SetByIndex) Execute(root *crdt.Root) error {
 }
 
 // Value returns the value of this operation.
-func (o *SetByIndex) Value() crdt.Element {
+func (o *ArraySet) Value() crdt.Element {
 	return o.value
 }
 
 // ParentCreatedAt returns the creation time of the Array.
-func (o *SetByIndex) ParentCreatedAt() *time.Ticket {
+func (o *ArraySet) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *SetByIndex) ExecutedAt() *time.Ticket {
+func (o *ArraySet) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
 // SetActor sets the given actor to this operation.
-func (o *SetByIndex) SetActor(actorID *time.ActorID) {
+func (o *ArraySet) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
 // CreatedAt returns the creation time of the target element.
-func (o *SetByIndex) CreatedAt() *time.Ticket {
+func (o *ArraySet) CreatedAt() *time.Ticket {
 	return o.createdAt
 }

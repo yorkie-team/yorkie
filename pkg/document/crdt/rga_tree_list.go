@@ -346,15 +346,15 @@ func (a *RGATreeList) insertAfter(
 	return nil
 }
 
-// SetByIndex sets the given `createdAt` element to `element`.
-func (a *RGATreeList) SetByIndex(
+// Set sets the given element at the given creation time.
+func (a *RGATreeList) Set(
 	createdAt *time.Ticket,
 	element Element,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("SetByIndex %s: %w", createdAt.Key(), ErrChildNotFound)
+		return nil, fmt.Errorf("set %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	var removed *RGATreeListNode

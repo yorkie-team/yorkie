@@ -178,6 +178,18 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	return node.elem, nil
 }
 
+// Set sets the given element at the given position of the creation time.
+func (a *Array) Set(createdAt *time.Ticket, element Element, executedAt *time.Ticket) (Element, error) {
+	node, err := a.elements.Set(createdAt, element, executedAt)
+	if err != nil {
+		return nil, err
+	}
+	if node != nil {
+		return node.elem, nil
+	}
+	return nil, nil
+}
+
 // Len returns length of this Array.
 func (a *Array) Len() int {
 	return a.elements.Len()
@@ -202,16 +214,4 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 // RGANodes returns the slices of RGATreeListNode.
 func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
-}
-
-// SetByIndex sets element at given position.
-func (a *Array) SetByIndex(createdAt *time.Ticket, element Element, executedAt *time.Ticket) (Element, error) {
-	node, err := a.elements.SetByIndex(createdAt, element, executedAt)
-	if err != nil {
-		return nil, err
-	}
-	if node != nil {
-		return node.elem, nil
-	}
-	return nil, nil
 }
