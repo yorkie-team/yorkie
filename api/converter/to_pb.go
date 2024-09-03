@@ -206,8 +206,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toTreeEdit(op)
 		case *operations.TreeStyle:
 			pbOperation.Body, err = toTreeStyle(op)
-		case *operations.SetByIndex:
-			pbOperation.Body, err = toSetByIndex(op)
+		case *operations.ArraySet:
+			pbOperation.Body, err = toArraySet(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -377,14 +377,14 @@ func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error)
 	}, nil
 }
 
-func toSetByIndex(setByIndex *operations.SetByIndex) (*api.Operation_SetByIndex_, error) {
+func toArraySet(setByIndex *operations.ArraySet) (*api.Operation_ArraySet_, error) {
 	pbElem, err := toJSONElementSimple(setByIndex.Value())
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.Operation_SetByIndex_{
-		SetByIndex: &api.Operation_SetByIndex{
+	return &api.Operation_ArraySet_{
+		ArraySet: &api.Operation_ArraySet{
 			ParentCreatedAt: ToTimeTicket(setByIndex.ParentCreatedAt()),
 			CreatedAt:       ToTimeTicket(setByIndex.CreatedAt()),
 			Value:           pbElem,
