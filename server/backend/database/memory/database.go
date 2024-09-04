@@ -746,6 +746,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
+			UpdatedAt:  now,
 			AccessedAt: now,
 		}
 		if err := txn.Insert(tblDocuments, info); err != nil {
@@ -1051,6 +1052,9 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
+	if from > to {
+		return nil, nil
+	}
 	var infos []*database.ChangeInfo
 
 	iterator, err := txn.LowerBound(

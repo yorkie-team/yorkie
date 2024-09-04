@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package main
+package user
 
 import (
 	"github.com/spf13/cobra"
@@ -68,5 +68,5 @@ func init() {
 		false,
 		"force log out from all servers",
 	)
-	rootCmd.AddCommand(cmd)
+	SubCmd.AddCommand(cmd)
 }

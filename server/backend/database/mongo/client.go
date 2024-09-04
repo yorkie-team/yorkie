@@ -739,8 +739,9 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 				"owner":      clientRefKey.ClientID,
 				"server_seq": 0,
 				"created_at": now,
+				"updated_at": now,
 			},
-		})
+		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 	} else {
 		result = c.collection(ColDocuments).FindOne(ctx, filter)
 		if result.Err() == mongo.ErrNoDocuments {
@@ -1030,6 +1031,9 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	from int64,
 	to int64,
 ) ([]*database.ChangeInfo, error) {
+	if from > to {
+		return nil, nil
+	}
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,

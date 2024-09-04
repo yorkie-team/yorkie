@@ -471,3 +471,139 @@ func TestArraySet(t *testing.T) {
 		})
 	}
 }
+
+func TestArrayConcurrencyTable(t *testing.T) {
+	clients := activeClients(t, 2)
+	c0, c1 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	initArr := []int{1, 2, 3, 4}
+	initMarshal := `[1,2,3,4]`
+	oneIdx := 1
+	otherIdxs := []int{2, 3}
+	newValues := []int{5, 6}
+
+	type arrayOp struct {
+		opName   string
+		executor func(*json.Array, int)
+	}
+
+	// NOTE(junseo): It tests all (op1, op2) pairs in operations.
+	// `oneIdx` is the index where both op1 and op2 reference.
+	// `opName` represents the parameter of operation selected as `oneIdx'.
+	// `otherIdxs` ensures that indexs other than `oneIdx` are not duplicated.
+	operations := []arrayOp{
+		// insert
+		{"insert.prev", func(a *json.Array, cid int) {
+			a.InsertIntegerAfter(oneIdx, newValues[cid])
+		}},
+		{"insert.prev.next", func(a *json.Array, cid int) {
+			a.InsertIntegerAfter(oneIdx-1, newValues[cid])
+		}},
+
+		// move
+		{"move.prev", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(oneIdx, otherIdxs[cid])
+		}},
+		{"move.prev.next", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(oneIdx-1, otherIdxs[cid])
+		}},
+		{"move.target", func(a *json.Array, cid int) {
+			a.MoveAfterByIndex(otherIdxs[cid], oneIdx)
+		}},
+
+		// set by index
+		{"set.target", func(a *json.Array, cid int) {
+			a.SetInteger(oneIdx, newValues[cid])
+		}},
+
+		// remove
+		{"remove.target", func(a *json.Array, cid int) {
+			a.Delete(oneIdx)
+		}},
+	}
+
+	ctx := context.Background()
+	d0 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c0.Attach(ctx, d0))
+	d1 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+
+	runTest := func(op1, op2 arrayOp) testResult {
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("a").AddInteger(initArr...)
+			assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+			return nil
+		}))
+
+		assert.NoError(t, c0.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			op1.executor(root.GetArray("a"), 0)
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			op2.executor(root.GetArray("a"), 1)
+			return nil
+		}))
+
+		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
+		if flag {
+			return testResult{flag, `pass`}
+		}
+		return testResult{flag, `different result`}
+	}
+
+	for _, op1 := range operations {
+		for _, op2 := range operations {
+			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
+				result := runTest(op1, op2)
+				if !result.flag {
+					t.Skip(result.resultDesc)
+				}
+			})
+		}
+	}
+}
+
+func TestArraySetByIndex(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("array set simple test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1").AddInteger(-1, -2, -3)
+			assert.Equal(t, `{"k1":[-1,-2,-3]}`, root.Marshal())
+			return nil
+		}, "add -1, -2, -3 by c1"))
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(1, -4)
+			assert.Equal(t, `{"k1":[-1,-4,-3]}`, root.Marshal())
+			return nil
+		}, "set k1[1] to -4 by c2"))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").SetInteger(0, -5)
+			assert.Equal(t, `{"k1":[-5,-2,-3]}`, root.Marshal())
+			return nil
+		}, "set k1[0] to -5 by c1"))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+}

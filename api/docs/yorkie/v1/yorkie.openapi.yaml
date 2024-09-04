@@ -664,6 +664,12 @@ components:
           description: ""
           title: add
           type: object
+        arraySet:
+          $ref: '#/components/schemas/yorkie.v1.Operation.ArraySet'
+          additionalProperties: false
+          description: ""
+          title: array_set
+          type: object
         edit:
           $ref: '#/components/schemas/yorkie.v1.Operation.Edit'
           additionalProperties: false
@@ -749,6 +755,36 @@ components:
           title: value
           type: object
       title: Add
+      type: object
+    yorkie.v1.Operation.ArraySet:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        executedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: executed_at
+          type: object
+        parentCreatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: parent_created_at
+          type: object
+        value:
+          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: ArraySet
       type: object
     yorkie.v1.Operation.Edit:
       additionalProperties: false
