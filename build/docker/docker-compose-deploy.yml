@@ -17,6 +17,8 @@ services:
       - '3000:3000'
     command:
       - --config=/etc/grafana/grafana.ini
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
     depends_on:
       - prometheus
   mongo:
