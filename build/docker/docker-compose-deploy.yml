@@ -31,8 +31,8 @@ services:
       - '27017:27017'
   yorkie:
     build:
-        context: ../../
-        dockerfile: Dockerfile
+      context: ../../
+      dockerfile: Dockerfile
     container_name: 'yorkie'
     command:
       [
