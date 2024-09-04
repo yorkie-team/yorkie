@@ -18,6 +18,7 @@ services:
     command:
       - --config=/etc/grafana/grafana.ini
     volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
     depends_on:
       - prometheus
