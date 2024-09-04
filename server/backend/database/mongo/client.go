@@ -227,8 +227,8 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// DeleteDocument Deletes the documents completely.
-func (c *Client) DeleteDocument(
+// DeleteDocuments Deletes the documents completely.
+func (c *Client) DeleteDocuments(
 	ctx context.Context,
 	candidates []*database.DocInfo,
 ) (int64, error) {
@@ -764,37 +764,6 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 	}
 
 	return clientInfos, nil
-}
-
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (c *Client) FindDeactivateCandidates(
-	ctx context.Context,
-	documentHardDeletionCandidateLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, fmt.Errorf("failed to find cycling project infos: %w", err)
-	}
-
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		clientInfos, err := c.FindDeactivateCandidatesPerProject(ctx, project, documentHardDeletionCandidateLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, clientInfos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

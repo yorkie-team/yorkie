@@ -172,8 +172,8 @@ type Database interface {
 		documentHardDeletionGracefulPeriod gotime.Duration,
 	) ([]*DocInfo, error)
 
-	// DeleteDocument Document complete deletion in progress
-	DeleteDocument(
+	// DeleteDocuments deletes document of the given key
+	DeleteDocuments(
 		ctx context.Context,
 		candidates []*DocInfo,
 	) (int64, error)

@@ -25,11 +25,11 @@ import (
 
 // Config is the configuration for the housekeeping service.
 type Config struct {
-	// IntervalDeactivateCandidates is the time between housekeeping runs for deactivate candidates.
-	IntervalDeactivateCandidates string `yaml:"IntervalDeactivateCandidates"`
+	// DeactivateCandidatesInterval is the time between housekeeping runs for deactivate candidates.
+	DeactivateCandidatesInterval string `yaml:"DeactivateCandidatesInterval"`
 
-	// IntervalDeleteDocuments is the time between housekeeping runs for document deletion.
-	IntervalDeleteDocuments string `yaml:"IntervalDeleteDocuments"`
+	// DeleteDocumentsInterval is the time between housekeeping runs for document deletion.
+	DeleteDocumentsInterval string `yaml:"DeleteDocumentsInterval"`
 
 	// DocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time.
 	DocumentHardDeletionGracefulPeriod time.Duration `yaml:"HousekeepingDocumentHardDeletionGracefulPeriod"`
@@ -46,18 +46,18 @@ type Config struct {
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.IntervalDeactivateCandidates); err != nil {
+	if _, err := time.ParseDuration(c.DeactivateCandidatesInterval); err != nil {
 		return fmt.Errorf(
 			`invalid argument %s for "--housekeeping-interval-deactivate-candidates" flag: %w`,
-			c.IntervalDeactivateCandidates,
+			c.DeactivateCandidatesInterval,
 			err,
 		)
 	}
 
-	if _, err := time.ParseDuration(c.IntervalDeleteDocuments); err != nil {
+	if _, err := time.ParseDuration(c.DeleteDocumentsInterval); err != nil {
 		return fmt.Errorf(
 			`invalid argument %s for "--housekeeping-interval-delete-documents" flag: %w`,
-			c.IntervalDeleteDocuments,
+			c.DeleteDocumentsInterval,
 			err,
 		)
 	}

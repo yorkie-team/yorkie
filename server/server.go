@@ -94,7 +94,11 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if err := r.RegisterHousekeepingTasks(r.backend); err != nil {
+	if err := r.RegisterDeactivateInactivesTasks(r.backend); err != nil {
+		return err
+	}
+
+	if err := r.RegisterDeleteDocumentsTasks(r.backend); err != nil {
 		return err
 	}
 
@@ -157,54 +161,56 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 	return err
 }
 
-// RegisterHousekeepingTasks registers housekeeping tasks.
-func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
-	intervalDeactivateCandidates, err :=
-		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.IntervalDeactivateCandidates)
-	if err != nil {
-		return err
-	}
-
-	intervalDeleteDocuments, err :=
-		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.IntervalDeleteDocuments)
+// RegisterDeactivateInactivesTasks registers deactivate inactives housekeeping tasks.
+func (r *Yorkie) RegisterDeactivateInactivesTasks(be *backend.Backend) error {
+	deactivateCandidatesInterval, err :=
+		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.DeactivateCandidatesInterval)
 	if err != nil {
 		return err
 	}
 
 	housekeepingLastDeactivateInactivesProjectID := database.DefaultProjectID
-	housekeepingLastDeleteDocumentProjectID := database.DefaultProjectID
-	return be.Housekeeping.RegisterTask(
-		intervalDeactivateCandidates, intervalDeleteDocuments,
-		func(ctx context.Context) error {
-			lastProjectDeactivateInactivesID, err := clients.DeactivateInactives(
-				ctx,
-				be,
-				be.Housekeeping.Config.ClientDeactivationCandidateLimitPerProject,
-				be.Housekeeping.Config.ProjectFetchSize,
-				housekeepingLastDeactivateInactivesProjectID,
-			)
-			if err != nil {
-				return err
-			}
-			housekeepingLastDeactivateInactivesProjectID = lastProjectDeactivateInactivesID
-			return nil
-		},
-		func(ctx context.Context) error {
-			lastProjectDeleteDocumentID, err := clients.DeleteDocument(
-				ctx,
-				be,
-				be.Housekeeping.Config.DocumentHardDeletionCandidateLimitPerProject,
-				be.Housekeeping.Config.DocumentHardDeletionGracefulPeriod,
-				be.Housekeeping.Config.ProjectFetchSize,
-				housekeepingLastDeleteDocumentProjectID,
-			)
-			if err != nil {
-				return err
-			}
+	return be.Housekeeping.RegisterTask(deactivateCandidatesInterval, func(ctx context.Context) error {
+		lastProjectDeactivateInactivesID, err := clients.DeactivateInactives(
+			ctx,
+			be,
+			be.Housekeeping.Config.ClientDeactivationCandidateLimitPerProject,
+			be.Housekeeping.Config.ProjectFetchSize,
+			housekeepingLastDeactivateInactivesProjectID,
+		)
+		if err != nil {
+			return err
+		}
+		housekeepingLastDeactivateInactivesProjectID = lastProjectDeactivateInactivesID
+		return nil
+	})
+}
 
-			housekeepingLastDeleteDocumentProjectID = lastProjectDeleteDocumentID
-			return nil
-		})
+// RegisterDeleteDocumentsTasks registers document hard delete housekeeping tasks.
+func (r *Yorkie) RegisterDeleteDocumentsTasks(be *backend.Backend) error {
+	deleteDocumentsInterval, err :=
+		be.Housekeeping.Config.ParseInterval(be.Housekeeping.Config.DeleteDocumentsInterval)
+	if err != nil {
+		return err
+	}
+
+	housekeepingLastDeleteDocumentProjectID := database.DefaultProjectID
+	return be.Housekeeping.RegisterTask(deleteDocumentsInterval, func(ctx context.Context) error {
+		lastProjectDeleteDocumentID, err := clients.DeleteDocuments(
+			ctx,
+			be,
+			be.Housekeeping.Config.DocumentHardDeletionCandidateLimitPerProject,
+			be.Housekeeping.Config.DocumentHardDeletionGracefulPeriod,
+			be.Housekeeping.Config.ProjectFetchSize,
+			housekeepingLastDeleteDocumentProjectID,
+		)
+		if err != nil {
+			return err
+		}
+
+		housekeepingLastDeleteDocumentProjectID = lastProjectDeleteDocumentID
+		return nil
+	})
 }
 
 // DefaultProject returns the default project.

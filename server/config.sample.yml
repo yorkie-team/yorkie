@@ -30,11 +30,11 @@ Profiling:
 
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
-  # IntervalDeactivateCandidates is the time between housekeeping runs (default: 1m).
-  IntervalDeactivateCandidates: 1m
+  # DeactivateCandidatesInterval is the time between housekeeping runs (default: 1m).
+  DeactivateCandidatesInterval: 1m
 
-  # IntervalDeleteDocuments is the time between housekeeping runs (default: 1m).
-  IntervalDeleteDocuments: 1m
+  # DeleteDocumentsInterval is the time between housekeeping runs (default: 1m).
+  DeleteDocumentsInterval: 1m
 
   # HousekeepingDocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time. (default: 336h).
   HousekeepingDocumentHardDeletionGracefulPeriod: 336h

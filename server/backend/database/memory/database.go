@@ -680,30 +680,30 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 	candidatesLimit int,
 	documentHardDeletionGracefulPeriod gotime.Duration,
 ) ([]*database.DocInfo, error) {
-
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
+	offset := gotime.Now().Add(-documentHardDeletionGracefulPeriod)
+
 	var documents []*database.DocInfo
-	iterator, err := txn.Get(
+	iterator, err := txn.ReverseLowerBound(
 		tblDocuments,
-		"project_id",
+		"project_id_removed_at",
 		project.ID.String(),
+		offset,
 	)
 
 	if err != nil {
 		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
 	}
 
-	currentTime := gotime.Now()
-	conditionDocumentHardDeletionGracefulPeriod := currentTime.Add(-documentHardDeletionGracefulPeriod)
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		document := raw.(*database.DocInfo)
 		if candidatesLimit <= len(documents) && candidatesLimit != 0 {
 			break
 		}
 
-		if !document.RemovedAt.After(conditionDocumentHardDeletionGracefulPeriod) {
+		if !document.RemovedAt.After(offset) {
 			documents = append(documents, document)
 		}
 	}
@@ -755,8 +755,8 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
-// DeleteDocument Deletes the documents completely.
-func (d *DB) DeleteDocument(
+// DeleteDocuments Deletes the documents completely.
+func (d *DB) DeleteDocuments(
 	_ context.Context,
 	candidates []*database.DocInfo,
 ) (int64, error) {

@@ -39,8 +39,8 @@ var (
 	flagLogLevel string
 
 	adminTokenDuration                       time.Duration
-	housekeepingIntervalDeactivateCandidates time.Duration
-	housekeepingIntervalDeleteDocuments      time.Duration
+	housekeepingDeactivateCandidatesInterval time.Duration
+	housekeepingDeleteDocumentsInterval      time.Duration
 	documentHardDeletionGracefulPeriod       time.Duration
 	clientDeactivateThreshold                string
 
@@ -71,8 +71,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
-			conf.Housekeeping.IntervalDeactivateCandidates = housekeepingIntervalDeactivateCandidates.String()
-			conf.Housekeeping.IntervalDeleteDocuments = housekeepingIntervalDeleteDocuments.String()
+			conf.Housekeeping.DeactivateCandidatesInterval = housekeepingDeactivateCandidatesInterval.String()
+			conf.Housekeeping.DeleteDocumentsInterval = housekeepingDeleteDocumentsInterval.String()
 			conf.Housekeeping.DocumentHardDeletionGracefulPeriod = documentHardDeletionGracefulPeriod
 
 			if mongoConnectionURI != "" {
@@ -198,15 +198,15 @@ func init() {
 		"Enable runtime profiling data via HTTP server.",
 	)
 	cmd.Flags().StringVar(
-		&conf.Housekeeping.IntervalDeactivateCandidates,
+		&conf.Housekeeping.DeactivateCandidatesInterval,
 		"housekeeping-interval-Deactivate-Candidates",
-		server.DefaultHousekeepingIntervalDeactivateCandidates.String(),
+		server.DefaultHousekeepingDeactivateCandidatesInterval.String(),
 		"housekeeping Interval deactivate candidates between housekeeping runs",
 	)
 	cmd.Flags().StringVar(
-		&conf.Housekeeping.IntervalDeleteDocuments,
+		&conf.Housekeeping.DeleteDocumentsInterval,
 		"housekeeping-interval-Delete-Documents",
-		server.DefaultHousekeepingIntervalDeleteDocuments.String(),
+		server.DefaultHousekeepingDeleteDocumentsInterval.String(),
 		"housekeeping Interval delete documents between housekeeping runs",
 	)
 	cmd.Flags().DurationVar(

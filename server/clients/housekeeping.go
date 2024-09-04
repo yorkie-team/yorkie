@@ -26,9 +26,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+// Identification key for distributed work
 const (
-	deactivateCandidatesKey     = "housekeeping/deactivateCandidates"
-	documentHardDeletionLockKey = "housekeeping/DocumentHardDeletionLock"
+	DocumentHardDeletionLockKey = "housekeeping/documentHardDeletionLock"
+	DeactivateCandidatesKey     = "housekeeping/deactivateCandidates"
 )
 
 // DeactivateInactives deactivates clients that have not been active for a
@@ -42,7 +43,7 @@ func DeactivateInactives(
 ) (types.ID, error) {
 	start := time.Now()
 
-	locker, err := be.Coordinator.NewLocker(ctx, deactivateCandidatesKey)
+	locker, err := be.Coordinator.NewLocker(ctx, DeactivateCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
@@ -122,8 +123,8 @@ func FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
-// DeleteDocument deletes a document
-func DeleteDocument(
+// DeleteDocuments deletes a document
+func DeleteDocuments(
 	ctx context.Context,
 	be *backend.Backend,
 	documentHardDeletionCandidateLimitPerProject int,
@@ -133,7 +134,7 @@ func DeleteDocument(
 ) (types.ID, error) {
 
 	start := time.Now()
-	locker, err := be.Coordinator.NewLocker(ctx, documentHardDeletionLockKey)
+	locker, err := be.Coordinator.NewLocker(ctx, DocumentHardDeletionLockKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
@@ -161,7 +162,7 @@ func DeleteDocument(
 		return database.DefaultProjectID, err
 	}
 
-	deletedDocumentsCount, err := be.DB.DeleteDocument(ctx, candidates)
+	deletedDocumentsCount, err := be.DB.DeleteDocuments(ctx, candidates)
 
 	if err != nil {
 		return database.DefaultProjectID, err

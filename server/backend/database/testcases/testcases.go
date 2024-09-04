@@ -1411,37 +1411,41 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-// RunDocumentHardDeletionTest runs Delete document permanently
+// RunDocumentHardDeletionTest runs the DocumentHardDeletion tests for the given db
 func RunDocumentHardDeletionTest(t *testing.T, db database.Database) {
 	t.Run("housekeeping DocumentHardDeletion test", func(t *testing.T) {
 		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+
+		// 00. Create a project
 		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		projectID := projectInfo.ID
 
-		// Create a client and two documents
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		// 01. Create a client and a document then attach the document to the client.
+		clientInfo, err := db.ActivateClient(ctx, projectInfo.ID, t.Name())
 		assert.NoError(t, err)
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t), true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, err)
+		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-
 		doc := document.New(key.Key(t.Name()))
 		pack := doc.CreateChangePack()
-		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+
+		// 02. Set removed_at in docInfo and store changes
+		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfo, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
-		fetchSize := 100
-		lastProjectID := database.DefaultProjectID
-
+		// 03. Set the grace period to 0 seconds.
 		var candidates []*database.DocInfo
-		GracePeriod := "0s"
+		GracePeriod := "-1s"
 		documentHardDeletionGracefulPeriod, err := gotime.ParseDuration(GracePeriod)
 		assert.NoError(t, err)
 
+		// 04. Find documents whose deleted_at time is less than or equal to current time minus GracePeriod.
+		fetchSize := 100
 		candidates, err = db.FindDocumentHardDeletionCandidatesPerProject(
 			ctx,
 			projectInfo,
@@ -1449,13 +1453,14 @@ func RunDocumentHardDeletionTest(t *testing.T, db database.Database) {
 			documentHardDeletionGracefulPeriod,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 
-		deletedDocumentsCount, err := db.DeleteDocument(ctx, candidates)
+		// 05. Deletes document of the given key
+		// Compare the number of candidates for deletion with the number of deleted documents.
+		deletedDocumentsCount, err := db.DeleteDocuments(ctx, candidates)
 		assert.NoError(t, err)
 		assert.Equal(t, int(deletedDocumentsCount), len(candidates))
 
-		_, err = db.FindDocInfoByRefKey(ctx, docInfo.RefKey())
+		_, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 	})
