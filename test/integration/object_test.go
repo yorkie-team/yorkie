@@ -34,8 +34,6 @@ import (
 )
 
 func TestObject(t *testing.T) {
-	t.Parallel()
-
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
@@ -361,8 +359,6 @@ func TestObject(t *testing.T) {
 }
 
 func TestObjectTypeGuard(t *testing.T) {
-	t.Parallel()
-
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
@@ -423,8 +419,6 @@ func TestObjectTypeGuard(t *testing.T) {
 }
 
 func TestObjectSetCycle(t *testing.T) {
-	t.Parallel()
-
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
@@ -487,8 +481,6 @@ func TestObjectSetCycle(t *testing.T) {
 }
 
 func TestObjectSet(t *testing.T) {
-	t.Parallel()
-
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)

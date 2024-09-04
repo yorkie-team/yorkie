@@ -44,7 +44,6 @@ type documentSummary struct {
 
 func TestRESTAPI(t *testing.T) {
 	t.Run("document retrieval test", func(t *testing.T) {
-		t.Parallel()
 		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 3)
 		res := post(
 			t,
@@ -59,7 +58,6 @@ func TestRESTAPI(t *testing.T) {
 	})
 
 	t.Run("bulk document retrieval test", func(t *testing.T) {
-		t.Parallel()
 		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 3)
 		res := post(
 			t,
@@ -74,7 +72,6 @@ func TestRESTAPI(t *testing.T) {
 	})
 
 	t.Run("list documents test", func(t *testing.T) {
-		t.Parallel()
 		project, _ := helper.CreateProjectAndDocuments(t, defaultServer, 3)
 		res := post(
 			t,
@@ -89,7 +86,6 @@ func TestRESTAPI(t *testing.T) {
 	})
 
 	t.Run("search documents test", func(t *testing.T) {
-		t.Parallel()
 		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 3)
 		res := post(
 			t,

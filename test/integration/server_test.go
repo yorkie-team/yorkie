@@ -33,7 +33,6 @@ import (
 
 func TestServer(t *testing.T) {
 	t.Run("closing WatchDocument stream on server shutdown test", func(t *testing.T) {
-		t.Parallel()
 		ctx := context.Background()
 		svr := helper.TestServer()
 		assert.NoError(t, svr.Start())
