@@ -89,6 +89,7 @@ func storeSnapshot(
 		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
+		nil,
 	)
 	pack.MinSyncedTicket = minSyncedTicket
 

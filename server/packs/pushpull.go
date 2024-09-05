@@ -151,6 +151,7 @@ func pullSnapshot(
 			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
 			reqPack.Changes,
 			nil,
+			nil,
 		), be.Config.SnapshotDisableGC); err != nil {
 			return nil, err
 		}

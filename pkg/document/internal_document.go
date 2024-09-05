@@ -201,7 +201,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := d.localChanges
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes, nil)
+	return change.NewPack(d.key, cp, changes, d.VersionVector(), nil)
 }
 
 // SetActor sets actor into this document. This is also applied in the local

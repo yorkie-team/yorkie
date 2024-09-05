@@ -35,6 +35,9 @@ type Pack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
+	// VersionVector is the version vector of the document.
+	VersionVector time.VersionVector
+
 	// SnapshotVersionVector is the version vector of the snapshot if it exists.
 	SnapshotVersionVector time.VersionVector
 
@@ -55,13 +58,15 @@ func NewPack(
 	key key.Key,
 	cp Checkpoint,
 	changes []*Change,
+	versionVector time.VersionVector,
 	snapshot []byte,
 ) *Pack {
 	return &Pack{
-		DocumentKey: key,
-		Checkpoint:  cp,
-		Changes:     changes,
-		Snapshot:    snapshot,
+		DocumentKey:   key,
+		Checkpoint:    cp,
+		Changes:       changes,
+		VersionVector: versionVector,
+		Snapshot:      snapshot,
 	}
 }
 

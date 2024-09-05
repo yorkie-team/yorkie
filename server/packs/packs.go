@@ -134,8 +134,7 @@ func PushPull(
 		ctx,
 		clientInfo,
 		docRefKey,
-		respPack.ChangeInfos,
-		pushedChanges,
+		reqPack.VersionVector,
 	)
 	if err != nil {
 		return nil, err
@@ -273,6 +272,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
+		nil,
 		nil,
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err
