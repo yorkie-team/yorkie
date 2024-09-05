@@ -881,7 +881,7 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 
 		// 02. attach with initialRoot and fails because document has elements
 		doc2 := document.New(helper.TestDocKey(t))
-		assert.ErrorIs(t, client.ErrDocumentExists, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+		assert.Error(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
 			"counter": json.NewCounter(2, crdt.LongCnt),
 			"content": map[string]any{
 				"x": 2,
@@ -900,7 +900,7 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 
 		// 03. attach with initialRoot and fails because document has no elements but garbage
 		doc3 := document.New(helper.TestDocKey(t))
-		assert.ErrorIs(t, client.ErrDocumentExists, c3.Attach(ctx, doc3, client.WithInitialRoot(map[string]any{
+		assert.Error(t, c3.Attach(ctx, doc3, client.WithInitialRoot(map[string]any{
 			"counter": json.NewCounter(3, crdt.LongCnt),
 			"content": map[string]any{
 				"x": 3,

@@ -267,11 +267,6 @@ func (d *Document) HasLocalChanges() bool {
 	return d.doc.HasLocalChanges()
 }
 
-// HasElement returns whether this document has any elements or not.
-func (d *Document) HasElement() bool {
-	return d.doc.Root().ElementMapLen() > 1 || d.GarbageLen() > 0
-}
-
 // Marshal returns the JSON encoding of this document.
 func (d *Document) Marshal() string {
 	return d.doc.Marshal()
