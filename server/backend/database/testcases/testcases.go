@@ -48,6 +48,7 @@ const (
 
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.
 // TODO(binary-ho) : temporary comment for measure CI test time
+// TODO(binary-ho) : temporary comment for measure CI test time
 func RunFindDocInfoTest(
 	t *testing.T,
 	db database.Database,
