@@ -264,8 +264,7 @@ type Database interface {
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
-		pulledChangeInfos []*ChangeInfo,
-		pushedChanges []*change.Change,
+		versionVector time.VersionVector,
 	) (time.VersionVector, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
