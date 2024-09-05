@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.0] - 2024-09-05
+
+### Added
+
+- Add Concurrency Tests between Array Operations by @cloneot in https://github.com/yorkie-team/yorkie/pull/985
+- Add metric for WatchDocument streams by @emplam27 in https://github.com/yorkie-team/yorkie/pull/998
+
+### Changed
+
+- Optimize FindChangeInfosBetweenServerSeqs to prevent unnecessary Query by @kokodak in https://github.com/yorkie-team/yorkie/pull/974
+- Rename SetByIndex to ArraySet by @hackerwins in https://github.com/yorkie-team/yorkie/pull/995
+
+### Fixed
+
+- Set `updated_at` with `created_at` when creating Document by @window9u in https://github.com/yorkie-team/yorkie/pull/977
+
 ## [0.4.31] - 2024-08-21
 
 ### Added
