@@ -34,8 +34,6 @@ import (
 )
 
 func TestGarbageCollection(t *testing.T) {
-	//t.Skip("TODO(hackerwins): We need to update GC test cases for the new GC algorithm.")
-
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
@@ -43,15 +41,20 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		// minvv = [c1: 1]
 		err := c1.Attach(ctx, d1)
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		// minvv = [c1: 1, c2:0]
 		err = c2.Attach(ctx, d2)
+		//d2.vv = [c1: 1, c2:2]
+		//minvv = [c1: 0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 		assert.NoError(t, err)
 
+		//d1.vv = [c1: 2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
@@ -59,95 +62,92 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "sets 1,2,3")
 
-		// minvv = [c1: 1, c2:0]
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// minvv = [c1: 1, c2:1]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1: 3, c2:1]
+		//minvv = [c1: 0, c2:0]
+		//db.vv {c1: [c1:2], c2: [c2:1]}
 		assert.NoError(t, err)
 
-		// minvv = [c1: 2, c2:1]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1: 2, c2:3]
+		//minvv = [c1: 1, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 
-		// removed lamport = 4
+		//d2.vv = [c1:2, c2:4]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			return nil
 		}, "removes 2")
 
-		// minvv = [c1: 3, c2:1]
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// minvv = [c1: 3, c2:1]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1: 2, c2:4]
+		//minvv = [c1: 2, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// minvv = [c1: 2, c2:4]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1: 5, c2:4]
+		//minvv = [c1: 2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// minvv = [c1: 2, c2:4]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1: 2, c2:4]
+		//minvv = [c1: 2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// minvv = [c1: 2, c2:4]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1: 5, c2:4]
+		//minvv = [c1: 2, c2:4]
+		//db.vv {c1: [c1:5, c2:4], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
-		assert.Equal(t, 4, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
-
-		// minvv = [c1: 2, c2:4]
-		// minvv is still the same, because no change was pushed from c1
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 4, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("4", 3)
-			return nil
-		}, "removes 2")
-
-		err = c1.Sync(ctx)
-		assert.Equal(t, 4, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
-
-		// minvv = [c1: 6, c2:4]
-		// 6 >=4 && 4>=4 meet GC condition
-		err = c2.Sync(ctx)
-		assert.Equal(t, 4, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
-
-		// minvv = [c1: 6, c2:4]
-		// 6 >=4 && 4>=4 meet GC condition
-		err = c1.Sync(ctx)
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
+
+		//d2.vv = [c1: 2, c2:4]
+		//minvv = [c1: 2, c2:4]
+		//db.vv {c1: [c1:5 c2:4], c2: [c1:2, c2:4]}
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		// minvv = [c1:1]
 		err := c1.Attach(ctx, d1)
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		// minvv = [c1:1, c2:0]
 		err = c2.Attach(ctx, d2)
+		//d2.vv = [c1: 1, c2:2]
+		//minvv = [c1: 0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 		assert.NoError(t, err)
 
+		//d1.vv = [c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").
 				Edit(0, 0, "Hello world")
@@ -159,15 +159,19 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// minvv = [c1:1, c2:0]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:3, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:2], c2: [c2:1]}
 		assert.NoError(t, err)
 
-		// minvv = [c1:2, c2:1]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:3]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:1 c2:2]}
 		assert.NoError(t, err)
 
-		// removed at lamport = 4
+		//d2.vv = [c1:2, c2:4]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").
 				Edit(0, 1, "a").
@@ -180,59 +184,46 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// minvv = [c1:2, c2:4]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:4]
+		//minvv = [c1:2, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:2 c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// minvv = [c1:2, c2:4]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:5, c2:4]
+		//minvv = [c1:2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2 c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// minvv = [c1:2, c2:4]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:4]
+		//minvv = [c1:2, c2:0]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2 c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// minvv = [c1:2, c2:4]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:5, c2:4]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:5, c2:4], c2: [c1:2 c2:4]}
 		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
+		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// minvv = [c1:2, c2:4]
 		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetText("text").
-				Edit(3, 3, "a")
-			return nil
-		}, "edit text type elements")
-
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
-
-		// minvv = [c1:6, c2:4]
-		// 6>=4 && 4>=4 meet GC condition
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
-
-		// minvv = [c1:6, c2:4]
-		// 6>=4 && 4>=4 meet GC condition
-		err = c1.Sync(ctx)
+		//d2.vv = [c1:2, c2:4]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:5, c2:4], c2: [c1:2 c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
@@ -308,12 +299,19 @@ func TestGarbageCollection(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
+		//d2.vv = [c1:1, c2:2]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 		assert.NoError(t, err)
 
+		//d1.vv = [c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "doc",
@@ -336,11 +334,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:3, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:2], c2: [c2:1]}
 		assert.NoError(t, err)
 
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:3]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 
+		// d2.vv = [c1:2, c2:4]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"}, 0)
 			return nil
@@ -350,32 +355,42 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageLen(), 2)
 
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:4]
+		//minvv = [c1:2, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:5, c2:4]
+		//minvv = [c1:2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 2)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
+		//d1.vv = [c1:6, c2:4]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 0}, &json.TreeNode{Type: "text", Value: "g"}, 0)
 			return nil
 		})
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:6, c2:4]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 2)
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
+		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
 		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 2)
-		assert.Equal(t, d2.GarbageLen(), 0)
-
-		err = c1.Sync(ctx)
+		//d2.vv = [c1:6, c2:7]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
+		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, d2.GarbageLen(), 0)
 	})
 
@@ -383,12 +398,19 @@ func TestGarbageCollection(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
+		//d2.vv = [c1:1, c2:2]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 		assert.NoError(t, err)
 
+		// d1.vv = [c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
@@ -401,14 +423,19 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// minvv =[1, 1]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:3, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:2], c2: [c2:1]}
 		assert.NoError(t, err)
 
-		// minvv =[2, 1]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:2, c2:3]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 
+		//d1.vv = [c1:4, c2:1]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			root.GetText("4").Edit(0, 1, "h")
@@ -420,23 +447,24 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = c1.Sync(ctx)
+		//d2.vv = [c1:4, c2:1]
+		//minvv = [c1:1, c2:1]
+		//db.vv {c1: [c1:4, c2:1], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = c2.Detach(ctx, d2)
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:4]}
 		assert.NoError(t, err)
 
-		// minvv = [c1:4, c2:1]
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 6, d1.GarbageLen())
-		assert.Equal(t, 6, d2.GarbageLen())
-
-		// removedAt lamport = 4
-		// before c2 detahces, min vv was [c1:4, c2:1]
-		// after c2 detaches, min vv turns into [c1:4]
 		err = c1.Sync(ctx)
+		// remove c2 lamport from d1.vv after GC
+		// d1.vv = [c1:4]
+		// minvv = [c1:4]
+		// db.vv {c1: [c1:4]}
+
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 6, d2.GarbageLen())
@@ -449,8 +477,12 @@ func TestGarbageCollection(t *testing.T) {
 		d2 := document.New(docKey)
 
 		err := c1.Attach(ctx, d1)
+		// d1.vv = [c1:1]
+		// minvv = [c1:1]
+		// db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
+		// d1.vv = [c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("point").
 				SetInteger("point.x", 0).
@@ -458,10 +490,17 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		err = c1.Sync(ctx)
+		// d1.vv = [c1:2]
+		// minvv = [c1:2]
+		// db.vv {c1: [c1:2]}
 		assert.NoError(t, err)
 		err = c2.Attach(ctx, d2)
+		// d1.vv = [c1:2, c2:3]
+		// minvv = [c1:0, c2:0]
+		// db.vv {c1: [c1:2], [c2:1]}
 		assert.NoError(t, err)
 
+		// d1.vv = [c1:3]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("point")
 			return nil
@@ -469,6 +508,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 3, d1.GarbageLen())
 
+		// d2.vv = [c1:2, c2:4]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetObject("point").Delete("point.x")
 			return nil
@@ -477,20 +517,35 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 1, d2.GarbageLen())
 
 		err = c1.Sync(ctx)
+		// d1.vv = [c1:4, 1]
+		// minvv = [c1:0, c2:0]
+		// db.vv {c1: [c1:3], c2: [c2:1]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		// d2.vv = [c1:3, c2:5]
+		// minvv = [c1:2, c2:0]
+		// db.vv {c1: [c1:3], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 		err = c1.Sync(ctx)
+		// d1.vv = [c1:5, c2:4]
+		// minvv = [c1:2, c2:1]
+		// db.vv {c1: [c1:4, c2:1], c2: [c1:2, c2:4]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		// d2.vv = [c1:3, c2:5]
+		// minvv = [c1:3, c2:0]
+		// db.vv {c1: [c1:3], c2: [c1:3, c2:5]}
+		// node removedAt = 3@c1, minVV[c1] = 3 meet GC condition
+		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 		assert.NoError(t, err)
 
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())), 0)
-		assert.Equal(t, d2.GarbageCollect(helper.MaxVectorClock(d2.ActorID())), 0)
+		assert.Equal(t, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID(), d2.ActorID())), 3)
+		assert.Equal(t, d2.GarbageCollect(helper.MaxVectorClock(d1.ActorID(), d2.ActorID())), 0)
 	})
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
@@ -518,80 +573,121 @@ func TestGarbageCollection(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
-		// [1]
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
-		// [1,2]
+		//d1.vv = [c1:1, c2:2]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2:[c2:1]}
 		assert.NoError(t, err)
 
-		//[2]
+		// d1.vv = [c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "z")
 			return nil
 		})
 		assert.NoError(t, err)
-		//[3]
+		// d1.vv = [c1:3]
+		// "z" revmoedAt 3@c1
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(0, 1, "a")
 			return nil
 		})
 		assert.NoError(t, err)
-		// [4]
+		// d1.vv = [c1:4]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(1, 1, "b")
 			return nil
 		})
 		assert.NoError(t, err)
-		// [5]
+		// d1.vv = [c1:5]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "d")
 			return nil
 		})
 		assert.NoError(t, err)
-		// [6,1]
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:6, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:5], c2:[c2:1]}
 		assert.NoError(t, err)
-		// [6, 7]
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:6, c2:7]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:5], c2:[c1:1, c2:2]}
 		assert.NoError(t, err)
 
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d2.Marshal())
 		assert.Equal(t, 1, d1.GarbageLen()) // z
 
+		// d1.vv = [c1:7, c2:1]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		})
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:7, c2:1]
+		//minvv = [c1:1, c2:1]
+		//db.vv {c1: [c1:7, c2:1], c2:[c1:1, c2:2]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:7, c2:8]
+		//minvv = [c1:6, c2:1]
+		//db.vv {c1: [c1:7, c2:1], c2:[c1:6, c2:7]}
 		assert.NoError(t, err)
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d2.Marshal())
 
+		//d1.vv = [c1:8, c2:1]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		})
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:8, c2:1]
+		//minvv = [c1:6, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2:[c1:6, c2:7]}
+		// "z"'s removedAt = 6@c1, minvv[c1] =6 meet GC Condition
 		assert.NoError(t, err)
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"d"}]}`, d1.Marshal())
-		assert.Equal(t, 3, d1.GarbageLen()) // a,b,c
+		assert.Equal(t, 2, d1.GarbageLen()) // a,b,c
 
+		// d2.vv = [c1:7, c2:9]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(0, 0, "a")
 			return nil
 		})
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:8, c2:10]
+		//minvv = [c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2:[c1:7, c2:9]}
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:10, c2:9]
+		//minvv = [c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2:[c1:7, c2:9]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:8, c2:10]
+		//minvv = [c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2:[c1:8, c2:10]}
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		//d2.vv = [c1:10, c2:9]
+		//minvv = [c1:8, c2:9]
+		//db.vv {c1: [c1:10, c2:9], c2:[c1:8, c2:10]}
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		//d2.vv = [c1:8, c2:10]
+		//minvv = [c1:8, c2:9]
+		//db.vv {c1: [c1:10, c2:9], c2:[c1:8, c2:10]}
 		assert.NoError(t, err)
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d2.Marshal())
@@ -603,12 +699,19 @@ func TestGarbageCollection(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
+		//d1.vv = [c1:1]
+		//minvv = [c1:1]
+		//db.vv {c1: [c1:1]}
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
+		//d2.vv = [c1:1, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 		assert.NoError(t, err)
 
+		// d1.vv =[c1:2]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("tree", &json.TreeNode{
 				Type: "r",
@@ -619,75 +722,109 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
+		// d1.vv =[c1:3]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").EditByPath([]int{0}, []int{1}, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			return nil
 		})
 		assert.NoError(t, err)
+		// d1.vv =[c1:4]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").EditByPath([]int{1}, []int{1}, &json.TreeNode{Type: "text", Value: "b"}, 0)
 			return nil
 		})
 		assert.NoError(t, err)
+		// d1.vv =[c1:5]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").EditByPath([]int{2}, []int{2}, &json.TreeNode{Type: "text", Value: "d"}, 0)
 			return nil
 		})
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:6, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:5], c2: [c2:1]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		//d2.vv = [c1:5, c2:6]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:5], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 
 		assert.Equal(t, `<r>abd</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, `<r>abd</r>`, d2.Root().GetTree("tree").ToXML())
 		assert.Equal(t, 1, d1.GarbageLen()) // z
 
+		//d1.vv =[c1:7, c2:1]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").EditByPath([]int{2}, []int{2}, &json.TreeNode{Type: "text", Value: "c"}, 0)
 			return nil
 		})
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv =[c1:7, c2:1]
+		//minvv = [c1:1, c2:1]
+		//db.vv {c1: [c1:7, c2:1], c2: [c1:1, c2:2]}
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		//d2.vv =[c1:7, c2:8]
+		//minvv =[c1:5, c2:1]
+		//db.vv {c1: [c1:7, c2:1], c2: [c1:5, c2:6]}
+		// "z" removedAt = 3@c1, minvv[c1] =5 meet GC condition
+		assert.Equal(t, d2.GarbageLen(), 0)
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
+		//d2.vv =[c1:7, c2:8]
+		//minvv =[c1:7, c2:1]
+		//db.vv {c1: [c1:7, c2:1], c2: [c1:7, c2:8]}
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>abcd</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, `<r>abcd</r>`, d2.Root().GetTree("tree").ToXML())
 
+		// d1.vv = [c1:8, c2:1]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").EditByPath([]int{1}, []int{3}, nil, 0)
 			return nil
 		})
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv = [c1:8, c2:1]
+		//minvv = [c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>ad</r>`, d1.Root().GetTree("tree").ToXML())
-		assert.Equal(t, 3, d1.GarbageLen()) // b,c
+		assert.Equal(t, 2, d1.GarbageLen()) // b,c
 
 		err = c2.Sync(ctx)
+		//d2.vv =[c1:8, c2:9]
+		//minvv =[c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
+		//d1.vv =[c1:8, c2:1]
+		//minvv =[c1:7, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>ad</r>`, d2.Root().GetTree("tree").ToXML())
-		assert.Equal(t, 3, d1.GarbageLen())
-
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("tree").EditByPath([]int{0}, []int{0}, &json.TreeNode{Type: "text", Value: "1"}, 0)
-			return nil
-		})
+		assert.Equal(t, 2, d1.GarbageLen())
 
 		err = c2.Sync(ctx)
+		//d2.vv =[c1:8, c2:9]
+		//minvv =[c1:8, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
 		assert.NoError(t, err)
-		assert.Equal(t, `<r>1ad</r>`, d2.Root().GetTree("tree").ToXML())
-		assert.Equal(t, 3, d1.GarbageLen())
 		err = c1.Sync(ctx)
+		//d2.vv =[c1:8, c2:1]
+		//minvv =[c1:8, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
+		// "b", "c" removedAt = 8@c1, minvv[c1] = 8 meet GC condition
 		assert.NoError(t, err)
-		assert.Equal(t, `<r>1ad</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, 0, d1.GarbageLen())
 		err = c2.Sync(ctx)
+		//d2.vv =[c1:8, c2:9]
+		//minvv =[c1:8, c2:1]
+		//db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
+		// "b", "c" removedAt = 8@c1, minvv[c1] = 8 meet GC condition
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 	})
@@ -755,10 +892,17 @@ func TestGarbageCollection(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
+		//d2.vv =[c1:1]
+		//minvv =[c1:1]
+		//db.vv {c1: [c1:1]}
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
+		//d2.vv =[c1:1, c2:1]
+		//minvv =[c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 
+		//d1.vv = [c1:2]
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
@@ -767,12 +911,14 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 
+		//d2.vv =[c1:1, c2:3]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 		assert.NoError(t, err)
 
+		//d1.vv = [c1:3]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
@@ -782,12 +928,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:4, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:3], c2: [c2:1]}
 		assert.NoError(t, c2.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
+
+		//d2.vv =[c1:3, c2:4]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:3], c2: [c1:1, c2:3]}
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d2.GarbageLen())
 
+		//d2.vv =[c1:3, c2:5]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "1")
 			return nil
@@ -795,11 +947,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx))
+		//d2.vv =[c1:3, c2:5]
+		//minvv = [c1:3, c2:0]
+		//db.vv {c1: [c1:3], c2: [c1:3, c2:5]}
+		// "b", "c" removedAt = 3@c1, minvv[c1] =3 meet GC condition
 		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 2, d2.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 
+		//d1.vv = [c1:6, c2:5]
+		//minvv = [c1:3, c2:1]
+		//db.vv {c1: [c1:4, c2:1], c2: [c1:3, c2:5]}
+		// "b", "c" removedAt = 3@c1, minvv[c1] =3 meet GC condition
 		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
@@ -809,11 +968,18 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
+		//d2.vv =[c1:1]
+		//minvv =[c1:1]
+		//db.vv {c1: [c1:1]}
 
 		d2 := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, c2.Attach(ctx, d2))
+		//d2.vv =[c1:1, c2:2]
+		//minvv =[c1:0, c2:0]
+		//db.vv {c1: [c1:1], c2: [c2:1]}
 
+		// d1/vv = [c1:2]
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b")
 			return nil
@@ -821,8 +987,15 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:3, c2:1]
+		//minvv = [c1:0, c2:0]
+		//db.vv {c1: [c1:2], c2: [c2:1]}
 		assert.NoError(t, c2.Sync(ctx))
+		//d2.vv = [c1:2, c2:3]
+		//minvv = [c1:1, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
 
+		//d2.vv = [c1:2, c2:4]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "d")
 			return nil
@@ -830,13 +1003,21 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NoError(t, c2.Sync(ctx))
+		//d2.vv = [c1:2, c2:4]
+		//minvv = [c1:2, c2:0]
+		//db.vv {c1: [c1:2], c2: [c1:2, c2:4]}
 		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:5, c2:4]
+		//minvv = [c1:2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
 
+		//d2.vv = [c1:2, c2:5]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 
+		//c1.vv = [c1:6, c2:4]
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
@@ -845,8 +1026,15 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		// sync pushonly
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//d2.vv = [c1:2, c2:5]
+		//minvv = [c1:2, c2:1]
+		//db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:5]}
 		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:7, c2:5]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:5]}
 
+		//d2.vv = [c1:2, c2:6]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "1")
 			return nil
@@ -854,18 +1042,48 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//d2.vv = [c1:2, c2:6]
+		//minvv = [c1:2, c2:4]
+		//db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:6]}
 		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:8, c2:6]
+		//minvv = [c1:2, c2:5]
+		//db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:6]}
 		assert.Equal(t, d1.GarbageLen(), 2)
 		assert.Equal(t, d2.GarbageLen(), 0)
 
+		//c2.vv = [c1:2, c2:7]
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "2")
 			return nil
 		}, "insert 2 (pushonly)")
 		assert.NoError(t, err)
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		//d2.vv = [c1:2, c2:7]
+		//minvv = [c1:2, c2:5]
+		//db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:7]}
 		assert.NoError(t, c2.Sync(ctx))
+		//d2.vv = [c1:6, c2:8]
+		//minvv = [c1:2, c2:5]
+		//db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:7]}
 		assert.NoError(t, c1.Sync(ctx))
+		//d1.vv = [c1:9, c2:7]]
+		//minvv = [c1:2, c2:6]
+		//db.vv {c1: [c1:8, c2:6], c2: [c1:2, c2:7]}
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.NoError(t, c2.Sync(ctx))
+		//d2.vv = [c1:6, c2:8]
+		//minvv = [c1:6, c2:6]
+		//db.vv {c1: [c1:8, c2:6], c2: [c1:6, c2:8]}
+		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.NoError(t, c1.Sync(ctx))
+		//d2.vv = [c1:9, c2:7]
+		//minvv = [c1:6, c2:7]
+		//db.vv {c1: [c1:9, c2:7], c2: [c1:6, c2:8]}
+		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
 		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 0)
 		assert.Equal(t, d1.Marshal(), `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`)
