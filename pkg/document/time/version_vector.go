@@ -113,27 +113,14 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	return true
 }
 
-// EqualToOrAfter returns whether this VersionVector's every field is eqaul or after than given ticket.
+// EqualToOrAfter returns whether this VersionVector's every field is equal or after than given ticket.
 func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
-	if v == nil {
-		return false
-	}
-
-	for _, val := range v {
-		if val < other.lamport {
-			return false
-		}
-	}
-	return true
+	return v[other.actorID.bytes] >= other.lamport
 }
 
 // After returns whether this VersionVector is causally after the given ticket.
 // TODO(JOOHOJANG) check below function is necessary
 func (v VersionVector) After(other *Ticket) bool {
-	if v == nil {
-		return false
-	}
-
 	for _, val := range v {
 		if val <= other.lamport {
 			return false
@@ -144,10 +131,6 @@ func (v VersionVector) After(other *Ticket) bool {
 
 // Min returns new vv consists of every min value in each column.
 func (v VersionVector) Min(other VersionVector) VersionVector {
-	if other == nil {
-		return v
-	}
-
 	minVV := NewVersionVector()
 
 	for key, value := range v {
@@ -173,10 +156,6 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 
 // Max returns new vv consists of every max value in each column.
 func (v VersionVector) Max(other VersionVector) VersionVector {
-	if other == nil {
-		return v
-	}
-
 	maxVV := NewVersionVector()
 
 	for key, value := range v {
@@ -224,6 +203,7 @@ func (v VersionVector) Filter(filter []actorID) VersionVector {
 	return filteredVV
 }
 
+// TODO(JOOHOJANG) remove func
 func (v VersionVector) Keys() []actorID {
 	var actors []actorID
 	for id := range v {
