@@ -102,8 +102,9 @@ func WithPresence(presence innerpresence.Presence) AttachOption {
 	return func(o *AttachOptions) { o.Presence = presence }
 }
 
-// WithInitialRoot sets the initial root of the document.
-// If the document already exists before attachment, this initial root will not be applied.
+// WithInitialRoot sets the initial root of the document. Values in the initial
+// root will be discarded if the key already exists in the document. If some
+// keys are not in the document, they will be added.
 func WithInitialRoot(root map[string]any) AttachOption {
 	return func(o *AttachOptions) {
 		o.InitialRoot = root
