@@ -842,32 +842,39 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		ctx := context.Background()
 		doc1 := document.New(helper.TestDocKey(t))
 
-		// 01. attach empty document
-		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{})))
-		assert.True(t, doc1.IsAttached())
-		assert.Equal(t, `{}`, doc1.Marshal())
-
-		// 02. attach with initialRoot when document already exists in server and
-		// successes because document has no element and garbage.
-		doc2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+		// 01. attach and initialize document
+		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{
 			"counter": json.NewCounter(0, crdt.LongCnt),
 			"content": map[string]any{
 				"x": 1,
 				"y": 1,
 			},
-			"text":   json.NewText(),
-			"number": 1,
+		})))
+		assert.True(t, doc1.IsAttached())
+		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":0}`, doc1.Marshal())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 02. attach and initialize document with new fields and if key already exists, it will be discarded
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(1, crdt.LongCnt),
+			"content": map[string]any{
+				"x": 2,
+				"y": 2,
+			},
+			"new": map[string]any{
+				"k": "v",
+			},
 		})))
 		assert.True(t, doc2.IsAttached())
-		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":0,"number":1,"text":[]}`, doc2.Marshal())
+		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":0,"new":{"k":"v"}}`, doc2.Marshal())
 	})
 
-	t.Run("attach with InitialRoot fail test", func(t *testing.T) {
+	t.Run("attach with InitialRoot after key deletion test", func(t *testing.T) {
 		ctx := context.Background()
 		doc1 := document.New(helper.TestDocKey(t))
 
-		// 01. attach with initialRoot
+		// 01. client1 attach with initialRoot
 		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{
 			"counter": json.NewCounter(1, crdt.LongCnt),
 			"content": map[string]any{
@@ -879,18 +886,10 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":1}`, doc1.Marshal())
 		assert.NoError(t, c1.Sync(ctx))
 
-		// 02. attach with initialRoot and fails because document has elements
+		// 02. client2 attach with initialRoot and delete elements
 		doc2 := document.New(helper.TestDocKey(t))
-		assert.Error(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(2, crdt.LongCnt),
-			"content": map[string]any{
-				"x": 2,
-				"y": 2,
-			},
-		})))
+		assert.NoError(t, c2.Attach(ctx, doc2))
 		assert.True(t, doc2.IsAttached())
-		assert.Equal(t, `{"content":{"x":1,"y":1},"counter":1}`, doc2.Marshal())
-
 		assert.NoError(t, doc2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("content")
 			root.Delete("counter")
@@ -898,9 +897,9 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		}))
 		assert.NoError(t, c2.Sync(ctx))
 
-		// 03. attach with initialRoot and fails because document has no elements but garbage
+		// 03. client3 attach with initialRoot and delete elements
 		doc3 := document.New(helper.TestDocKey(t))
-		assert.Error(t, c3.Attach(ctx, doc3, client.WithInitialRoot(map[string]any{
+		assert.NoError(t, c3.Attach(ctx, doc3, client.WithInitialRoot(map[string]any{
 			"counter": json.NewCounter(3, crdt.LongCnt),
 			"content": map[string]any{
 				"x": 3,
@@ -908,10 +907,10 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 			},
 		})))
 		assert.True(t, doc3.IsAttached())
-		assert.Equal(t, `{}`, doc3.Marshal())
+		assert.Equal(t, `{"content":{"x":3,"y":3},"counter":3}`, doc3.Marshal())
 	})
 
-	t.Run("concurrent attach WithInitialRoot test", func(t *testing.T) {
+	t.Run("concurrent attach with InitialRoot test", func(t *testing.T) {
 		ctx := context.Background()
 		doc1 := document.New(helper.TestDocKey(t))
 
