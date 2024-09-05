@@ -54,6 +54,8 @@ type Metrics struct {
 	serverVersion        *prometheus.GaugeVec
 	serverHandledCounter *prometheus.CounterVec
 
+	backgroundGoroutinesTotal *prometheus.GaugeVec
+
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    prometheus.Counter
 	pushPullSentChangesTotal        prometheus.Counter
@@ -62,7 +64,8 @@ type Metrics struct {
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
 
-	backgroundGoroutinesTotal *prometheus.GaugeVec
+	watchDocumentConnectionTotal   *prometheus.GaugeVec
+	watchDocumentPayloadBytesTotal *prometheus.GaugeVec
 
 	userAgentTotal *prometheus.CounterVec
 }
@@ -143,6 +146,16 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "goroutines_total",
 			Help:      "The total number of goroutines attached by a particular background task.",
 		}, []string{taskTypeLabel}),
+		watchDocumentConnectionTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "stream",
+			Name:      "watch_document_stream_connection_total",
+			Help:      "The total number of document watch stream connection.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+		}),
 		userAgentTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "user_agent",
@@ -254,6 +267,24 @@ func (m *Metrics) AddBackgroundGoroutines(taskType string) {
 func (m *Metrics) RemoveBackgroundGoroutines(taskType string) {
 	m.backgroundGoroutinesTotal.With(prometheus.Labels{
 		taskTypeLabel: taskType,
+	}).Dec()
+}
+
+// AddWatchDocumentConnection adds the number of document watch stream connection.
+func (m *Metrics) AddWatchDocumentConnection(hostname string, project *types.Project) {
+	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Inc()
+}
+
+// RemoveWatchDocumentConnection removes the number of document watch stream connection.
+func (m *Metrics) RemoveWatchDocumentConnection(hostname string, project *types.Project) {
+	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
 	}).Dec()
 }
 
