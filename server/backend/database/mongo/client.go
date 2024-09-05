@@ -1161,6 +1161,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	var clientVersionVector time.VersionVector
 	var filteredVersionVector time.VersionVector
 
+	// 01. Find all version vector stored in db
 	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
@@ -1175,6 +1176,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
+	// 02. Compute min version vector without current client's version vector strored in db
 	if len(versionVectorInfos) > 0 {
 		for _, vvi := range versionVectorInfos {
 			if clientInfo.ID == vvi.ClientID {
@@ -1193,6 +1195,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
+	// 03. if there's more than one version vector in db.version vector table which is not client's
 	if minVersionVector != nil {
 		actorID, err := clientInfo.ID.ToActorID()
 
@@ -1201,15 +1204,21 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 
 		clientLamport := versionVector.VersionOf(actorID)
-
+		// 03-1. Filter detached client's lamport if exsits
 		filteredVersionVector = versionVector.Filter(minVersionVector.Keys())
 
 		if filteredVersionVector.VersionOf(actorID) <= 0 {
 			filteredVersionVector.Set(actorID, clientLamport)
 		}
+
+		minVersionVector = minVersionVector.Min(filteredVersionVector)
+		// 04. if there's no version vector in db.version vector or there's only one version vector which is current client's
 	} else {
+		// 04-1. if there's no version vector in db.version vector table
+		// which means there's nothing to filter and min version vector is the vv which current client just passed.
+		filteredVersionVector = versionVector
+
 		if clientVersionVector == nil {
-			filteredVersionVector = versionVector
 			minVersionVector = versionVector
 		} else {
 			minVersionVector = clientVersionVector
