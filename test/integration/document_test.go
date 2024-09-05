@@ -963,6 +963,29 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		assert.Equal(t, `{"key":5}`, doc.Marshal())
 	})
 
+	t.Run("attach with InitialRoot conflict type test", func(t *testing.T) {
+		ctx := context.Background()
+		doc1 := document.New(helper.TestDocKey(t))
+
+		// 01. attach with initialRoot and set counter
+		assert.NoError(t, c1.Attach(ctx, doc1, client.WithInitialRoot(map[string]any{
+			"k": json.NewCounter(1, crdt.LongCnt),
+		})))
+		assert.True(t, doc1.IsAttached())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 02. attach with initialRoot and set text
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2, client.WithInitialRoot(map[string]any{
+			"k": json.NewText(),
+		})))
+		assert.True(t, doc2.IsAttached())
+		assert.NoError(t, c2.Sync(ctx))
+
+		// 03. client2 try to update counter
+		assert.Panics(t, func() { doc2.Root().GetText("k").Edit(0, 1, "a") })
+	})
+
 	t.Run("attach with initialRoot support type test", func(t *testing.T) {
 		type (
 			Myint    int
