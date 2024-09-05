@@ -1278,8 +1278,95 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
 ) (time.VersionVector, error) {
+	txn := d.db.Txn(true)
 
-	return nil, nil
+	// 01. Find all version vector stored in db
+	iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
+	}
+	txn.Abort()
+
+	var versionVectorInfos []database.VersionVectorInfo
+	var minVersionVector time.VersionVector
+	var clientVersionVector time.VersionVector
+	var filteredVersionVector time.VersionVector
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		vvi := raw.(*database.VersionVectorInfo)
+		// 01-2. Find current client's version vector from db
+		// we use this version vector to find max version vector in future
+		if clientInfo.ID == vvi.ClientID {
+			clientVersionVector = vvi.VersionVector
+
+			continue
+		}
+
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+
+			continue
+		}
+
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
+
+	// 02. Compute min version vector without current client's version vector strored in db
+	if len(versionVectorInfos) > 0 {
+		for _, vvi := range versionVectorInfos {
+			if clientInfo.ID == vvi.ClientID {
+				clientVersionVector = vvi.VersionVector
+
+				continue
+			}
+
+			if minVersionVector == nil {
+				minVersionVector = vvi.VersionVector
+
+				continue
+			}
+
+			minVersionVector = minVersionVector.Min(vvi.VersionVector)
+		}
+	}
+
+	// 03. if there's more than one version vector in db.version vector table which is not client's
+	if minVersionVector != nil {
+		actorID, err := clientInfo.ID.ToActorID()
+
+		if err != nil {
+			return nil, err
+		}
+
+		clientLamport := versionVector.VersionOf(actorID)
+		// 03-1. Filter detached client's lamport if exsits
+		filteredVersionVector = versionVector.Filter(minVersionVector.Keys())
+
+		if filteredVersionVector.VersionOf(actorID) <= 0 {
+			filteredVersionVector.Set(actorID, clientLamport)
+		}
+
+		minVersionVector = minVersionVector.Min(filteredVersionVector)
+		// 04. if there's no version vector in db.version vector or there's only one version vector which is current client's
+	} else {
+		// 04-1. if there's no version vector in db.version vector table
+		// which means there's nothing to filter and min version vector is the vv which current client just passed.
+		filteredVersionVector = versionVector
+
+		if clientVersionVector == nil {
+			minVersionVector = versionVector
+		} else {
+			minVersionVector = clientVersionVector
+		}
+	}
+
+	err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, filteredVersionVector)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return minVersionVector, nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
