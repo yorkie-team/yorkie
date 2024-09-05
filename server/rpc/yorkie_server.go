@@ -430,8 +430,13 @@ func (s *yorkieServer) WatchDocument(
 		logging.From(ctx).Error(err)
 		return err
 	}
+	s.backend.Metrics.AddWatchDocumentConnection(project)
 	defer func() {
-		s.unwatchDoc(subscription, docRefKey)
+		if err := s.unwatchDoc(subscription, docRefKey); err != nil {
+			logging.From(ctx).Error(err)
+		} else {
+			s.backend.Metrics.RemoveWatchDocumentConnection(project)
+		}
 	}()
 
 	var pbClientIDs []string
@@ -583,9 +588,14 @@ func (s *yorkieServer) watchDoc(
 func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
 	documentRefKey types.DocRefKey,
-) {
+) error {
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, documentRefKey, subscription)
+	err := s.backend.Coordinator.Unsubscribe(ctx, documentRefKey, subscription)
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return err
+	}
+
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber(),
@@ -595,6 +605,8 @@ func (s *yorkieServer) unwatchDoc(
 			DocumentRefKey: documentRefKey,
 		},
 	)
+
+	return nil
 }
 
 func (s *yorkieServer) Broadcast(

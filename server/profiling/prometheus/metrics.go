@@ -64,7 +64,10 @@ type Metrics struct {
 
 	backgroundGoroutinesTotal *prometheus.GaugeVec
 
-	userAgentTotal *prometheus.CounterVec
+	watchDocumentConnectionTotal *prometheus.GaugeVec
+
+	userAgentTotal                      *prometheus.CounterVec
+	watchDocumentEventPayloadBytesTotal *prometheus.GaugeVec
 }
 
 // NewMetrics creates a new instance of Metrics.
@@ -143,6 +146,15 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "goroutines_total",
 			Help:      "The total number of goroutines attached by a particular background task.",
 		}, []string{taskTypeLabel}),
+		watchDocumentConnectionTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "stream",
+			Name:      "watch_document_stream_connection_total",
+			Help:      "The total number of document watch stream connection.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+		}),
 		userAgentTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "user_agent",
@@ -254,6 +266,22 @@ func (m *Metrics) AddBackgroundGoroutines(taskType string) {
 func (m *Metrics) RemoveBackgroundGoroutines(taskType string) {
 	m.backgroundGoroutinesTotal.With(prometheus.Labels{
 		taskTypeLabel: taskType,
+	}).Dec()
+}
+
+// AddWatchDocumentConnection adds the number of document watch stream connection.
+func (m *Metrics) AddWatchDocumentConnection(project *types.Project) {
+	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+	}).Inc()
+}
+
+// RemoveWatchDocumentConnection removes the number of document watch stream connection.
+func (m *Metrics) RemoveWatchDocumentConnection(project *types.Project) {
+	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
 	}).Dec()
 }
 
