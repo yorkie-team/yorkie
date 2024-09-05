@@ -154,6 +154,7 @@ func NewMetrics() (*Metrics, error) {
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
+			hostnameLabel,
 		}),
 		userAgentTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -270,18 +271,20 @@ func (m *Metrics) RemoveBackgroundGoroutines(taskType string) {
 }
 
 // AddWatchDocumentConnection adds the number of document watch stream connection.
-func (m *Metrics) AddWatchDocumentConnection(project *types.Project) {
+func (m *Metrics) AddWatchDocumentConnection(hostname string, project *types.Project) {
 	m.watchDocumentConnectionTotal.With(prometheus.Labels{
 		projectIDLabel:   project.ID.String(),
 		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
 	}).Inc()
 }
 
 // RemoveWatchDocumentConnection removes the number of document watch stream connection.
-func (m *Metrics) RemoveWatchDocumentConnection(project *types.Project) {
+func (m *Metrics) RemoveWatchDocumentConnection(hostname string, project *types.Project) {
 	m.watchDocumentConnectionTotal.With(prometheus.Labels{
 		projectIDLabel:   project.ID.String(),
 		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
 	}).Dec()
 }
 
