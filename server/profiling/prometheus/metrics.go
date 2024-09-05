@@ -54,6 +54,8 @@ type Metrics struct {
 	serverVersion        *prometheus.GaugeVec
 	serverHandledCounter *prometheus.CounterVec
 
+	backgroundGoroutinesTotal *prometheus.GaugeVec
+
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    prometheus.Counter
 	pushPullSentChangesTotal        prometheus.Counter
@@ -62,12 +64,10 @@ type Metrics struct {
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
 
-	backgroundGoroutinesTotal *prometheus.GaugeVec
+	watchDocumentConnectionTotal   *prometheus.GaugeVec
+	watchDocumentPayloadBytesTotal *prometheus.GaugeVec
 
-	watchDocumentConnectionTotal *prometheus.GaugeVec
-
-	userAgentTotal                      *prometheus.CounterVec
-	watchDocumentEventPayloadBytesTotal *prometheus.GaugeVec
+	userAgentTotal *prometheus.CounterVec
 }
 
 // NewMetrics creates a new instance of Metrics.
