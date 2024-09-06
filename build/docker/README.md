@@ -18,7 +18,5 @@ docker compose -f docker/docker-compose.yml down
 The docker-compose files we use are as follows:
 - `docker-compose.yml`: This file is used to run Yorkie's integration tests. It
  runs MongoDB.
-- `docker-compose-full.yml`: This file launches all the applications needed to
- develop Yorkie. It also runs monitoring tools such as Prometheus and Grafana.
-- `docker-compose-deploy.yml`: This file is used to deploy Yorkie by one command.
- It runs Yorkie, MongoDB, and monitoring tools.
+- `docker-compose-full.yml`: This file builds Yorkie and launches it. It also runs
+ MongoDB and monitoring tools such as Prometheus and Grafana.

@@ -5,16 +5,22 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
-    - '9090:9090'
+      - '9090:9090'
     command:
-    - --config.file=/etc/prometheus/prometheus.yml
+      - --config.file=/etc/prometheus/prometheus.yml
     volumes:
-    - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
       - '3000:3000'
+    command:
+      - --config=/etc/grafana/grafana.ini
+    volumes:
+      - ./grafana/dashboard.yml:/etc/grafana/provisioning/dashboards/dashboard.yml:ro
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
     depends_on:
       - prometheus
   mongo:
@@ -23,3 +29,21 @@ services:
     restart: always
     ports:
       - '27017:27017'
+  yorkie:
+    build:
+      context: ../../
+      dockerfile: Dockerfile
+    container_name: 'yorkie'
+    command:
+      [
+        'server',
+        '--mongo-connection-uri',
+        'mongodb://mongo:27017',
+        '--enable-pprof',
+      ]
+    restart: always
+    ports:
+      - '8080:8080'
+      - '8081:8081'
+    depends_on:
+      - mongo
