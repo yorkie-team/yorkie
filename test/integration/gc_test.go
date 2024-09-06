@@ -40,6 +40,10 @@ type ActorData struct {
 }
 
 func versionVectorHelper(vv time.VersionVector, actorData ...ActorData) bool {
+	if len(vv) != len(actorData) {
+		return false
+	}
+
 	for _, data := range actorData {
 		actorID := data.actorID
 		lamport := data.lamport
@@ -116,7 +120,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.Delete("2")
 			return nil
 		}, "removes 2")
-		assert.Equal(t, versionVectorHelper(d2.VersionVector(), createActorData(d2.ActorID(), 4)), true)
+		assert.Equal(t, versionVectorHelper(d2.VersionVector(), createActorData(d1.ActorID(), 2), createActorData(d2.ActorID(), 4)), true)
 
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
@@ -279,7 +283,6 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
-		assert.Equal(t, versionVectorHelper(doc.VersionVector(), createActorData(doc.ActorID(), 0)), true)
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
@@ -969,7 +972,6 @@ func TestGarbageCollection(t *testing.T) {
 
 		// 02. Create a document and update it to check if the garbage is collected
 		d1 := document.New(helper.TestDocKey(t), document.WithDisableGC())
-		assert.Equal(t, versionVectorHelper(d1.VersionVector(), createActorData(d1.ActorID(), 0)), true)
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() {
 			assert.NoError(t, c1.Detach(ctx, d1))
