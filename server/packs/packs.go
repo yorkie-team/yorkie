@@ -20,6 +20,7 @@ package packs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -35,6 +36,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+var (
+	ErrCheckpointTest = errors.New("failure for checkpoint testing purpose")
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -69,6 +74,7 @@ func PushPull(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	opts PushPullOptions,
+	cpTest bool,
 ) (*ServerPack, error) {
 	start := gotime.Now()
 	defer func() {
@@ -121,6 +127,11 @@ func PushPull(
 		); err != nil {
 			return nil, err
 		}
+	}
+
+	// For consistency testing purposes
+	if cpTest {
+		return nil, ErrCheckpointTest
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
