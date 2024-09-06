@@ -125,7 +125,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestPacks(t *testing.T) {
-	t.Run("pushpull consistency test", func(t *testing.T) {
+	t.Run("cannot detect change duplication due to clientInfo update failure", func(t *testing.T) {
 		ctx := context.Background()
 
 		projectInfo, err := testBackend.DB.FindProjectInfoByID(

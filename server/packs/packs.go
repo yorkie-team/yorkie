@@ -39,7 +39,8 @@ import (
 )
 
 var (
-	ErrCheckpointTest = errors.New("failure for checkpoint testing purpose")
+	// ErrCheckpointTest is an error for checkpoint test purposes
+	ErrCheckpointTest = errors.New("error for checkpoint testing purposes")
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
