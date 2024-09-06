@@ -4,7 +4,4 @@ scrape_configs:
   scrape_interval: 5s
   static_configs:
   - targets:
-    # win/mac hosts: Use address: host.docker.internal instead of address: localhost in the line below
-    # linux hosts: Use address: docker bridge ip (typically 172.17.0.1) instead of address: localhost in the line below
-    # when using docker-compose-deploy.yml, use address: yorkie instead of address: localhost in the line below
-    - host.docker.internal:8081
+    - yorkie:8081
