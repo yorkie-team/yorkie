@@ -34,6 +34,11 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+type testResult struct {
+	flag       bool
+	resultDesc string
+}
+
 type clientAndDocPair struct {
 	cli *client.Client
 	doc *document.Document
@@ -59,6 +64,37 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.Exit(code)
+}
+
+func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
+	assert.True(t, len(pairs) > 1)
+	ctx := context.Background()
+	// Save own changes and get previous changes.
+	for i, pair := range pairs {
+		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
+
+	// Get last client changes.
+	// Last client get all precede changes in above loop.
+	for _, pair := range pairs[:len(pairs)-1] {
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
+
+	// Assert start.
+	expected := pairs[0].doc.Marshal()
+	fmt.Printf("after d1: %s\n", expected)
+	for i, pair := range pairs[1:] {
+		v := pair.doc.Marshal()
+		fmt.Printf("after d%d: %s\n", i+2, v)
+		if expected != v {
+			return false
+		}
+	}
+
+	return true
 }
 
 func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
