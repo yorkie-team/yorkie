@@ -19,6 +19,7 @@ package packs_test
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,6 +28,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -48,10 +50,17 @@ import (
 )
 
 var (
+	// ErrUpdateClientInfoFailed occurs when updating ClientInfo failed
+	// for testing purposes.
+	ErrUpdateClientInfoFailed = errors.New("updating clientinfo failed")
+)
+
+var (
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient    v1connect.YorkieServiceClient
 	testBackend   *backend.Backend
+	testMockDB    *packs.MockDB
 )
 
 func TestMain(m *testing.M) {
@@ -83,6 +92,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	testMockDB = packs.NewMockDB(testBackend.DB)
+	testBackend.DB = testMockDB
 
 	project, err := testBackend.DB.FindProjectInfoByID(
 		context.Background(),
@@ -124,6 +135,21 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func triggerErrUpdateClientInfo(on bool) {
+	testMockDB.
+		On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
+		Unset()
+	if on {
+		testMockDB.
+			On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
+			Return(ErrUpdateClientInfoFailed)
+	} else {
+		testMockDB.
+			On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
+			Return(nil)
+	}
+}
+
 func TestPacks(t *testing.T) {
 	t.Run("cannot detect change duplication due to clientInfo update failure", func(t *testing.T) {
 		ctx := context.Background()
@@ -134,6 +160,8 @@ func TestPacks(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		project := projectInfo.ToProject()
+
+		triggerErrUpdateClientInfo(false)
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
@@ -197,11 +225,14 @@ func TestPacks(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 2-1. An arbitrary failure occurs while updating clientInfo
+		triggerErrUpdateClientInfo(true)
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, true)
-		assert.ErrorIs(t, err, packs.ErrCheckpointTest)
+		})
+		assert.ErrorIs(t, err, ErrUpdateClientInfoFailed)
+
+		triggerErrUpdateClientInfo(false)
 
 		// 2-2. pushed change is stored in the database
 		changes, err := packs.FindChanges(ctx, testBackend, docInfo, 2, 2)
@@ -226,7 +257,7 @@ func TestPacks(t *testing.T) {
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(t, err)
 
 		// 3-2. duplicated change is not stored in the database

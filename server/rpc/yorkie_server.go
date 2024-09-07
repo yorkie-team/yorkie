@@ -164,7 +164,7 @@ func (s *yorkieServer) AttachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusAttached,
-	}, false)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (s *yorkieServer) DetachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: status,
-	}, false)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (s *yorkieServer) PushPullChanges(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 		Mode:   syncMode,
 		Status: document.StatusAttached,
-	}, false)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -546,7 +546,7 @@ func (s *yorkieServer) RemoveDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusRemoved,
-	}, false)
+	})
 	if err != nil {
 		return nil, err
 	}

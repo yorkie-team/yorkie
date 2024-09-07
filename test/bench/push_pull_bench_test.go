@@ -147,7 +147,7 @@ func benchmarkPushChanges(
 		_, err = packs.PushPull(ctx, be, project, clientInfos[0], docInfo, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(b, err)
 	}
 }
@@ -177,7 +177,7 @@ func benchmarkPullChanges(
 		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(b, err)
 
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, docRefKey)
@@ -187,7 +187,7 @@ func benchmarkPullChanges(
 		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docInfo, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(b, err)
 	}
 }
@@ -220,7 +220,7 @@ func benchmarkPushSnapshots(
 			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docInfo, pushPack, packs.PushPullOptions{
 				Mode:   types.SyncModePushPull,
 				Status: document.StatusAttached,
-			}, false)
+			})
 			assert.NoError(b, err)
 
 			b.StopTimer()
@@ -259,7 +259,7 @@ func benchmarkPullSnapshot(
 		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(b, err)
 
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, docRefKey)
@@ -269,7 +269,7 @@ func benchmarkPullSnapshot(
 		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docInfo, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, false)
+		})
 		assert.NoError(b, err)
 	}
 }

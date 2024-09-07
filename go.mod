@@ -18,7 +18,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.17.0
 	github.com/stretchr/testify v1.9.0
-	github.com/undefinedlabs/go-mpatch v1.0.6
+	github.com/undefinedlabs/go-mpatch v1.0.7
 	go.mongodb.org/mongo-driver v1.11.7
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.16.0
@@ -29,6 +29,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/stretchr/objx v0.5.2 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
