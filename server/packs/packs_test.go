@@ -203,12 +203,17 @@ func TestPacks(t *testing.T) {
 		}, true)
 		assert.ErrorIs(t, err, packs.ErrCheckpointTest)
 
-		// 2-2. docInfo.ServerSeq increases from 1 to 2
+		// 2-2. pushed change is stored in the database
+		changes, err := packs.FindChanges(ctx, testBackend, docInfo, 2, 2)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 1)
+
+		// 2-3. docInfo.ServerSeq increases from 1 to 2
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), docInfo.ServerSeq)
 
-		// 2-3. clientInfo.Checkpoint has not been updated
+		// 2-4. clientInfo.Checkpoint has not been updated
 		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend.DB, types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(actorID),
@@ -224,9 +229,23 @@ func TestPacks(t *testing.T) {
 		}, false)
 		assert.NoError(t, err)
 
-		// 3-2. The server should detect the duplication and not update docInfo.ServerSeq
+		// 3-2. duplicated change is not stored in the database
+		changes, err = packs.FindChanges(ctx, testBackend, docInfo, 3, 3)
+		assert.NoError(t, err)
+		assert.Len(t, changes, 0)
+
+		// 3-3. The server should detect the duplication and not update docInfo.ServerSeq
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), docInfo.ServerSeq)
+
+		// 3-4. clientInfo.Checkpoint has been updated properly
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend.DB, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), clientInfo.Checkpoint(docID).ServerSeq)
+		assert.Equal(t, uint32(2), clientInfo.Checkpoint(docID).ClientSeq)
 	})
 }
