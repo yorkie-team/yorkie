@@ -13,12 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package packs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/stretchr/testify/mock"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -27,11 +30,13 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
+// MockDB represents a mock database for testing purposes
 type MockDB struct {
 	mock.Mock
 	realDB database.Database
 }
 
+// NewMockDB returns a mock database with a real database
 func NewMockDB(realDB database.Database) *MockDB {
 	return &MockDB{
 		realDB: realDB,
@@ -44,17 +49,30 @@ func (m *MockDB) Close() error {
 }
 
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
-func (m *MockDB) EnsureDefaultUserAndProject(ctx context.Context, username, password string, clientDeactivateThreshold string) (*database.UserInfo, *database.ProjectInfo, error) {
+func (m *MockDB) EnsureDefaultUserAndProject(
+	ctx context.Context,
+	username, password string,
+	clientDeactivateThreshold string,
+) (*database.UserInfo, *database.ProjectInfo, error) {
 	return m.realDB.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
 }
 
 // CreateProjectInfo creates a new project.
-func (m *MockDB) CreateProjectInfo(ctx context.Context, name string, owner types.ID, clientDeactivateThreshold string) (*database.ProjectInfo, error) {
+func (m *MockDB) CreateProjectInfo(
+	ctx context.Context,
+	name string,
+	owner types.ID,
+	clientDeactivateThreshold string,
+) (*database.ProjectInfo, error) {
 	return m.realDB.CreateProjectInfo(ctx, name, owner, clientDeactivateThreshold)
 }
 
 // FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-func (m *MockDB) FindNextNCyclingProjectInfos(ctx context.Context, pageSize int, lastProjectID types.ID) ([]*database.ProjectInfo, error) {
+func (m *MockDB) FindNextNCyclingProjectInfos(
+	ctx context.Context,
+	pageSize int,
+	lastProjectID types.ID,
+) ([]*database.ProjectInfo, error) {
 	return m.realDB.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
 }
 
@@ -74,7 +92,11 @@ func (m *MockDB) FindProjectInfoBySecretKey(ctx context.Context, secretKey strin
 }
 
 // FindProjectInfoByName returns a project by name.
-func (m *MockDB) FindProjectInfoByName(ctx context.Context, owner types.ID, name string) (*database.ProjectInfo, error) {
+func (m *MockDB) FindProjectInfoByName(
+	ctx context.Context,
+	owner types.ID,
+	name string,
+) (*database.ProjectInfo, error) {
 	return m.realDB.FindProjectInfoByName(ctx, owner, name)
 }
 
@@ -84,12 +106,21 @@ func (m *MockDB) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 }
 
 // UpdateProjectInfo updates the project info.
-func (m *MockDB) UpdateProjectInfo(ctx context.Context, owner types.ID, id types.ID, fields *types.UpdatableProjectFields) (*database.ProjectInfo, error) {
+func (m *MockDB) UpdateProjectInfo(
+	ctx context.Context,
+	owner types.ID,
+	id types.ID,
+	fields *types.UpdatableProjectFields,
+) (*database.ProjectInfo, error) {
 	return m.realDB.UpdateProjectInfo(ctx, owner, id, fields)
 }
 
 // CreateUserInfo creates a new user.
-func (m *MockDB) CreateUserInfo(ctx context.Context, username string, hashedPassword string) (*database.UserInfo, error) {
+func (m *MockDB) CreateUserInfo(
+	ctx context.Context,
+	username string,
+	hashedPassword string,
+) (*database.UserInfo, error) {
 	return m.realDB.CreateUserInfo(ctx, username, hashedPassword)
 }
 
@@ -134,21 +165,34 @@ func (m *MockDB) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo after handling PushPull.
-func (m *MockDB) UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *database.ClientInfo, docInfo *database.DocInfo) error {
+func (m *MockDB) UpdateClientInfoAfterPushPull(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+) error {
 	args := m.Called(ctx, clientInfo, docInfo)
 	if args.Get(0) != nil {
-		return args.Error(0)
+		return fmt.Errorf("%w", args.Error(0))
 	}
 	return m.realDB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 }
 
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (m *MockDB) FindDeactivateCandidatesPerProject(ctx context.Context, project *database.ProjectInfo, candidatesLimit int) ([]*database.ClientInfo, error) {
+func (m *MockDB) FindDeactivateCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+) ([]*database.ClientInfo, error) {
 	return m.realDB.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimit)
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key.
-func (m *MockDB) FindDocInfoByKeyAndOwner(ctx context.Context, clientRefKey types.ClientRefKey, docKey key.Key, createDocIfNotExist bool) (*database.DocInfo, error) {
+func (m *MockDB) FindDocInfoByKeyAndOwner(
+	ctx context.Context,
+	clientRefKey types.ClientRefKey,
+	docKey key.Key,
+	createDocIfNotExist bool,
+) (*database.DocInfo, error) {
 	return m.realDB.FindDocInfoByKeyAndOwner(ctx, clientRefKey, docKey, createDocIfNotExist)
 }
 
@@ -158,7 +202,11 @@ func (m *MockDB) FindDocInfoByKey(ctx context.Context, projectID types.ID, docKe
 }
 
 // FindDocInfosByKeys finds the documents of the given keys.
-func (m *MockDB) FindDocInfosByKeys(ctx context.Context, projectID types.ID, docKeys []key.Key) ([]*database.DocInfo, error) {
+func (m *MockDB) FindDocInfosByKeys(
+	ctx context.Context,
+	projectID types.ID,
+	docKeys []key.Key,
+) ([]*database.DocInfo, error) {
 	return m.realDB.FindDocInfosByKeys(ctx, projectID, docKeys)
 }
 
@@ -173,7 +221,14 @@ func (m *MockDB) UpdateDocInfoStatusToRemoved(ctx context.Context, refKey types.
 }
 
 // CreateChangeInfos stores the given changes and doc info.
-func (m *MockDB) CreateChangeInfos(ctx context.Context, projectID types.ID, docInfo *database.DocInfo, initialServerSeq int64, changes []*change.Change, isRemoved bool) error {
+func (m *MockDB) CreateChangeInfos(
+	ctx context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	initialServerSeq int64,
+	changes []*change.Change,
+	isRemoved bool,
+) error {
 	return m.realDB.CreateChangeInfos(ctx, projectID, docInfo, initialServerSeq, changes, isRemoved)
 }
 
@@ -183,27 +238,49 @@ func (m *MockDB) PurgeStaleChanges(ctx context.Context, docRefKey types.DocRefKe
 }
 
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
-func (m *MockDB) FindChangesBetweenServerSeqs(ctx context.Context, docRefKey types.DocRefKey, from int64, to int64) ([]*change.Change, error) {
+func (m *MockDB) FindChangesBetweenServerSeqs(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	from int64,
+	to int64,
+) ([]*change.Change, error) {
 	return m.realDB.FindChangesBetweenServerSeqs(ctx, docRefKey, from, to)
 }
 
 // FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
-func (m *MockDB) FindChangeInfosBetweenServerSeqs(ctx context.Context, docRefKey types.DocRefKey, from int64, to int64) ([]*database.ChangeInfo, error) {
+func (m *MockDB) FindChangeInfosBetweenServerSeqs(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	from int64,
+	to int64,
+) ([]*database.ChangeInfo, error) {
 	return m.realDB.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, from, to)
 }
 
 // CreateSnapshotInfo stores the snapshot of the given document.
-func (m *MockDB) CreateSnapshotInfo(ctx context.Context, docRefKey types.DocRefKey, doc *document.InternalDocument) error {
+func (m *MockDB) CreateSnapshotInfo(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	doc *document.InternalDocument,
+) error {
 	return m.realDB.CreateSnapshotInfo(ctx, docRefKey, doc)
 }
 
 // FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-func (m *MockDB) FindSnapshotInfoByRefKey(ctx context.Context, refKey types.SnapshotRefKey) (*database.SnapshotInfo, error) {
+func (m *MockDB) FindSnapshotInfoByRefKey(
+	ctx context.Context,
+	refKey types.SnapshotRefKey,
+) (*database.SnapshotInfo, error) {
 	return m.realDB.FindSnapshotInfoByRefKey(ctx, refKey)
 }
 
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
-func (m *MockDB) FindClosestSnapshotInfo(ctx context.Context, docRefKey types.DocRefKey, serverSeq int64, includeSnapshot bool) (*database.SnapshotInfo, error) {
+func (m *MockDB) FindClosestSnapshotInfo(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+	includeSnapshot bool,
+) (*database.SnapshotInfo, error) {
 	return m.realDB.FindClosestSnapshotInfo(ctx, docRefKey, serverSeq, includeSnapshot)
 }
 
@@ -213,26 +290,49 @@ func (m *MockDB) FindMinSyncedSeqInfo(ctx context.Context, docRefKey types.DocRe
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client and returns the min synced ticket.
-func (m *MockDB) UpdateAndFindMinSyncedTicket(ctx context.Context, clientInfo *database.ClientInfo, docRefKey types.DocRefKey, serverSeq int64) (*time.Ticket, error) {
+func (m *MockDB) UpdateAndFindMinSyncedTicket(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) (*time.Ticket, error) {
 	return m.realDB.UpdateAndFindMinSyncedTicket(ctx, clientInfo, docRefKey, serverSeq)
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.
-func (m *MockDB) FindDocInfosByPaging(ctx context.Context, projectID types.ID, paging types.Paging[types.ID]) ([]*database.DocInfo, error) {
+func (m *MockDB) FindDocInfosByPaging(
+	ctx context.Context,
+	projectID types.ID,
+	paging types.Paging[types.ID],
+) ([]*database.DocInfo, error) {
 	return m.realDB.FindDocInfosByPaging(ctx, projectID, paging)
 }
 
 // FindDocInfosByQuery returns the docInfos which match the given query.
-func (m *MockDB) FindDocInfosByQuery(ctx context.Context, projectID types.ID, query string, pageSize int) (*types.SearchResult[*database.DocInfo], error) {
+func (m *MockDB) FindDocInfosByQuery(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	pageSize int,
+) (*types.SearchResult[*database.DocInfo], error) {
 	return m.realDB.FindDocInfosByQuery(ctx, projectID, query, pageSize)
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
-func (m *MockDB) UpdateSyncedSeq(ctx context.Context, clientInfo *database.ClientInfo, docRefKey types.DocRefKey, serverSeq int64) error {
+func (m *MockDB) UpdateSyncedSeq(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) error {
 	return m.realDB.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq)
 }
 
 // IsDocumentAttached returns whether the given document is attached to clients.
-func (m *MockDB) IsDocumentAttached(ctx context.Context, docRefKey types.DocRefKey, excludeClientID types.ID) (bool, error) {
+func (m *MockDB) IsDocumentAttached(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	excludeClientID types.ID,
+) (bool, error) {
 	return m.realDB.IsDocumentAttached(ctx, docRefKey, excludeClientID)
 }
