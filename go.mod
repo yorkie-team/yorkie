@@ -6,9 +6,9 @@ require (
 	connectrpc.com/connect v1.12.0
 	connectrpc.com/grpchealth v1.3.0
 	github.com/go-co-op/gocron/v2 v2.10.1
-	github.com/go-playground/locales v0.14.0
-	github.com/go-playground/universal-translator v0.18.0
-	github.com/go-playground/validator/v10 v10.11.1
+	github.com/go-playground/locales v0.14.1
+	github.com/go-playground/universal-translator v0.18.1
+	github.com/go-playground/validator/v10 v10.22.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/hashicorp/go-memdb v1.3.3
 	github.com/jedib0t/go-pretty/v6 v6.4.9
@@ -21,14 +21,16 @@ require (
 	github.com/undefinedlabs/go-mpatch v1.0.6
 	go.mongodb.org/mongo-driver v1.11.7
 	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.16.0
-	golang.org/x/net v0.17.0
+	golang.org/x/crypto v0.19.0
+	golang.org/x/net v0.21.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230920204549-e6e6cdab5c13
 	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -44,7 +46,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jonboulle/clockwork v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
-	github.com/leodido/go-urn v1.2.1 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2 // indirect
