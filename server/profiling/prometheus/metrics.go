@@ -29,14 +29,15 @@ import (
 )
 
 const (
-	namespace        = "yorkie"
-	sdkTypeLabel     = "sdk_type"
-	sdkVersionLabel  = "sdk_version"
-	methodLabel      = "grpc_method"
-	projectIDLabel   = "project_id"
-	projectNameLabel = "project_name"
-	hostnameLabel    = "hostname"
-	taskTypeLabel    = "task_type"
+	namespace         = "yorkie"
+	sdkTypeLabel      = "sdk_type"
+	sdkVersionLabel   = "sdk_version"
+	methodLabel       = "grpc_method"
+	projectIDLabel    = "project_id"
+	projectNameLabel  = "project_name"
+	hostnameLabel     = "hostname"
+	taskTypeLabel     = "task_type"
+	docEventTypeLabel = "doc_event_type"
 )
 
 var (
@@ -64,7 +65,9 @@ type Metrics struct {
 
 	backgroundGoroutinesTotal *prometheus.GaugeVec
 
-	watchDocumentConnectionsTotal *prometheus.GaugeVec
+	watchDocumentConnectionsTotal       *prometheus.GaugeVec
+	watchDocumentEventsTotal            *prometheus.CounterVec
+	watchDocumentEventPayloadBytesTotal *prometheus.CounterVec
 
 	userAgentTotal *prometheus.CounterVec
 }
@@ -186,6 +189,28 @@ func NewMetrics() (*Metrics, error) {
 			projectIDLabel,
 			projectNameLabel,
 			hostnameLabel,
+		}),
+		watchDocumentEventsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "stream",
+			Name:      "watch_document_events_total",
+			Help:      "The total number of events in document watch stream connections.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+			docEventTypeLabel,
+		}),
+		watchDocumentEventPayloadBytesTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "stream",
+			Name:      "watch_document_event_payload_bytes_total",
+			Help:      "The total bytes of event payloads in document watch stream connections.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+			docEventTypeLabel,
 		}),
 	}
 
@@ -324,6 +349,33 @@ func (m *Metrics) RemoveWatchDocumentConnections(hostname string, project *types
 		projectNameLabel: project.Name,
 		hostnameLabel:    hostname,
 	}).Dec()
+}
+
+// AddWatchDocumentEvents adds the number of events in document watch stream connections.
+func (m *Metrics) AddWatchDocumentEvents(hostname string, project *types.Project, docEventType types.DocEventType) {
+	m.watchDocumentEventsTotal.With(prometheus.Labels{
+		projectIDLabel:    project.ID.String(),
+		projectNameLabel:  project.Name,
+		hostnameLabel:     hostname,
+		docEventTypeLabel: string(docEventType),
+	}).Inc()
+}
+
+// AddWatchDocumentEventPayloadBytes adds the bytes of event payload in document watch stream connections.
+func (m *Metrics) AddWatchDocumentEventPayloadBytes(hostname string, project *types.Project, docEventType types.DocEventType, bytes int) {
+	m.watchDocumentEventsTotal.With(prometheus.Labels{
+		projectIDLabel:    project.ID.String(),
+		projectNameLabel:  project.Name,
+		hostnameLabel:     hostname,
+		docEventTypeLabel: string(docEventType),
+	}).Inc()
+
+	m.watchDocumentEventPayloadBytesTotal.With(prometheus.Labels{
+		projectIDLabel:    project.ID.String(),
+		projectNameLabel:  project.Name,
+		hostnameLabel:     hostname,
+		docEventTypeLabel: string(docEventType),
+	}).Add(float64(bytes))
 }
 
 // Registry returns the registry of this metrics.
