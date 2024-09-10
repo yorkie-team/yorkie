@@ -54,18 +54,17 @@ type Metrics struct {
 	serverVersion        *prometheus.GaugeVec
 	serverHandledCounter *prometheus.CounterVec
 
+	pushPullResponseSeconds         prometheus.Histogram
+	pushPullReceivedChangesTotal    *prometheus.CounterVec
+	pushPullSentChangesTotal        *prometheus.CounterVec
+	pushPullReceivedOperationsTotal *prometheus.CounterVec
+	pushPullSentOperationsTotal     *prometheus.CounterVec
+	pushPullSnapshotDurationSeconds prometheus.Histogram
+	pushPullSnapshotBytesTotal      *prometheus.CounterVec
+
 	backgroundGoroutinesTotal *prometheus.GaugeVec
 
-	pushPullResponseSeconds         prometheus.Histogram
-	pushPullReceivedChangesTotal    prometheus.Counter
-	pushPullSentChangesTotal        prometheus.Counter
-	pushPullReceivedOperationsTotal prometheus.Counter
-	pushPullSentOperationsTotal     prometheus.Counter
-	pushPullSnapshotDurationSeconds prometheus.Histogram
-	pushPullSnapshotBytesTotal      prometheus.Counter
-
-	watchDocumentConnectionTotal   *prometheus.GaugeVec
-	watchDocumentPayloadBytesTotal *prometheus.GaugeVec
+	watchDocumentConnectionsTotal *prometheus.GaugeVec
 
 	userAgentTotal *prometheus.CounterVec
 }
@@ -101,32 +100,47 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "response_seconds",
 			Help:      "The response time of PushPull.",
 		}),
-		pushPullReceivedChangesTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		pushPullReceivedChangesTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "received_changes_total",
 			Help:      "The total count of changes included in request packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
 		}),
-		pushPullSentChangesTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		pushPullSentChangesTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "sent_changes_total",
 			Help:      "The total count of changes included in response packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
 		}),
-		pushPullReceivedOperationsTotal: promauto.With(reg).NewCounter(
-			prometheus.CounterOpts{
-				Namespace: namespace,
-				Subsystem: "pushpull",
-				Name:      "received_operations_total",
-				Help: "The total count of operations included in request" +
-					" packs in PushPull.",
-			}),
-		pushPullSentOperationsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		pushPullReceivedOperationsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "pushpull",
+			Name:      "received_operations_total",
+			Help: "The total count of operations included in request" +
+				" packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+		}),
+		pushPullSentOperationsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "sent_operations_total",
 			Help: "The total count of operations included in response" +
 				" packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
 		}),
 		pushPullSnapshotDurationSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
@@ -134,11 +148,15 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "snapshot_duration_seconds",
 			Help:      "The creation time of snapshot for response packs in PushPull.",
 		}),
-		pushPullSnapshotBytesTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		pushPullSnapshotBytesTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "snapshot_bytes_total",
 			Help:      "The total bytes of snapshots for response packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
 		}),
 		backgroundGoroutinesTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -146,11 +164,11 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "goroutines_total",
 			Help:      "The total number of goroutines attached by a particular background task.",
 		}, []string{taskTypeLabel}),
-		watchDocumentConnectionTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		watchDocumentConnectionsTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "stream",
-			Name:      "watch_document_stream_connection_total",
-			Help:      "The total number of document watch stream connection.",
+			Name:      "watch_document_stream_connections_total",
+			Help:      "The total number of document watch stream connections.",
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
@@ -186,26 +204,42 @@ func (m *Metrics) ObservePushPullResponseSeconds(seconds float64) {
 
 // AddPushPullReceivedChanges sets the number of changes
 // included in the request pack of PushPull.
-func (m *Metrics) AddPushPullReceivedChanges(count int) {
-	m.pushPullReceivedChangesTotal.Add(float64(count))
+func (m *Metrics) AddPushPullReceivedChanges(hostname string, project *types.Project, count int) {
+	m.pushPullReceivedChangesTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
 }
 
 // AddPushPullSentChanges adds the number of changes
 // included in the response pack of PushPull.
-func (m *Metrics) AddPushPullSentChanges(count int) {
-	m.pushPullSentChangesTotal.Add(float64(count))
+func (m *Metrics) AddPushPullSentChanges(hostname string, project *types.Project, count int) {
+	m.pushPullSentChangesTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
 }
 
 // AddPushPullReceivedOperations sets the number of operations
 // included in the request pack of PushPull.
-func (m *Metrics) AddPushPullReceivedOperations(count int) {
-	m.pushPullReceivedOperationsTotal.Add(float64(count))
+func (m *Metrics) AddPushPullReceivedOperations(hostname string, project *types.Project, count int) {
+	m.pushPullReceivedOperationsTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
 }
 
 // AddPushPullSentOperations adds the number of operations
 // included in the response pack of PushPull.
-func (m *Metrics) AddPushPullSentOperations(count int) {
-	m.pushPullSentOperationsTotal.Add(float64(count))
+func (m *Metrics) AddPushPullSentOperations(hostname string, project *types.Project, count int) {
+	m.pushPullSentOperationsTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
 }
 
 // ObservePushPullSnapshotDurationSeconds adds an observation
@@ -215,8 +249,12 @@ func (m *Metrics) ObservePushPullSnapshotDurationSeconds(seconds float64) {
 }
 
 // AddPushPullSnapshotBytes adds the snapshot byte size of response pack.
-func (m *Metrics) AddPushPullSnapshotBytes(bytes int) {
-	m.pushPullSnapshotBytesTotal.Add(float64(bytes))
+func (m *Metrics) AddPushPullSnapshotBytes(hostname string, project *types.Project, bytes int) {
+	m.pushPullSnapshotBytesTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(bytes))
 }
 
 // AddUserAgent adds the number of user agent.
@@ -270,18 +308,18 @@ func (m *Metrics) RemoveBackgroundGoroutines(taskType string) {
 	}).Dec()
 }
 
-// AddWatchDocumentConnection adds the number of document watch stream connection.
-func (m *Metrics) AddWatchDocumentConnection(hostname string, project *types.Project) {
-	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+// AddWatchDocumentConnections adds the number of document watch stream connection.
+func (m *Metrics) AddWatchDocumentConnections(hostname string, project *types.Project) {
+	m.watchDocumentConnectionsTotal.With(prometheus.Labels{
 		projectIDLabel:   project.ID.String(),
 		projectNameLabel: project.Name,
 		hostnameLabel:    hostname,
 	}).Inc()
 }
 
-// RemoveWatchDocumentConnection removes the number of document watch stream connection.
-func (m *Metrics) RemoveWatchDocumentConnection(hostname string, project *types.Project) {
-	m.watchDocumentConnectionTotal.With(prometheus.Labels{
+// RemoveWatchDocumentConnections removes the number of document watch stream connection.
+func (m *Metrics) RemoveWatchDocumentConnections(hostname string, project *types.Project) {
+	m.watchDocumentConnectionsTotal.With(prometheus.Labels{
 		projectIDLabel:   project.ID.String(),
 		projectNameLabel: project.Name,
 		hostnameLabel:    hostname,

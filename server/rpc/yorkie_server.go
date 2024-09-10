@@ -430,12 +430,12 @@ func (s *yorkieServer) WatchDocument(
 		logging.From(ctx).Error(err)
 		return err
 	}
-	s.backend.Metrics.AddWatchDocumentConnection(s.backend.Config.Hostname, project)
+	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
 		if err := s.unwatchDoc(subscription, docRefKey); err != nil {
 			logging.From(ctx).Error(err)
 		} else {
-			s.backend.Metrics.RemoveWatchDocumentConnection(s.backend.Config.Hostname, project)
+			s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 		}
 	}()
 
