@@ -66,6 +66,33 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
+	assert.True(t, len(pairs) > 1)
+	ctx := context.Background()
+	// Save own changes and get previous changes.
+	for i, pair := range pairs {
+		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
+
+	// Get last client changes.
+	// Last client get all precede changes in above loop.
+	for _, pair := range pairs[:len(pairs)-1] {
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
+
+	// Assert start.
+	expected := pairs[0].doc.Marshal()
+	fmt.Printf("after d1: %s\n", expected)
+	for i, pair := range pairs[1:] {
+		v := pair.doc.Marshal()
+		fmt.Printf("after d%d: %s\n", i+2, v)
+		assert.Equal(t, expected, v)
+	}
+}
+
 func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 	assert.True(t, len(pairs) > 1)
 	ctx := context.Background()
@@ -95,33 +122,6 @@ func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 	}
 
 	return true
-}
-
-func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
-	assert.True(t, len(pairs) > 1)
-	ctx := context.Background()
-	// Save own changes and get previous changes.
-	for i, pair := range pairs {
-		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
-		err := pair.cli.Sync(ctx)
-		assert.NoError(t, err)
-	}
-
-	// Get last client changes.
-	// Last client get all precede changes in above loop.
-	for _, pair := range pairs[:len(pairs)-1] {
-		err := pair.cli.Sync(ctx)
-		assert.NoError(t, err)
-	}
-
-	// Assert start.
-	expected := pairs[0].doc.Marshal()
-	fmt.Printf("after d1: %s\n", expected)
-	for i, pair := range pairs[1:] {
-		v := pair.doc.Marshal()
-		fmt.Printf("after d%d: %s\n", i+2, v)
-		assert.Equal(t, expected, v)
-	}
 }
 
 // activeClients creates and activates the given number of clients.
