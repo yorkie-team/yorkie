@@ -20,6 +20,7 @@ package packs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -35,6 +36,15 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+var (
+	// ErrClientSeqNotSequentialWithCheckpoint is returned
+	// when ClientSeq in change not sequential With DocInfo.Checkpoint.ClientSeq
+	ErrClientSeqNotSequentialWithCheckpoint = errors.New("ClientSeq is not sequential with DocInfo.Checkpoint.ClientSeq")
+
+	// ErrClientSeqInChangesAreNotSequential is returned when ClientSeq in reqPack.Changes are not sequential
+	ErrClientSeqInChangesAreNotSequential = errors.New("ClientSeq in reqPack.Changes are not sequential")
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -75,8 +85,12 @@ func PushPull(
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 	}()
 
-	// TODO: Changes may be reordered or missing during communication on the network.
-	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
+	checkpoint := clientInfo.Checkpoint(docInfo.ID)
+	err := validateClientSeqSequential(reqPack.Changes, checkpoint)
+	if err != nil {
+		return nil, err
+	}
+
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes: filter out the changes that are already saved in the database.
@@ -272,4 +286,48 @@ func BuildDocumentForServerSeq(
 	}
 
 	return doc, nil
+}
+
+func validateClientSeqSequential(changes []*change.Change, checkpoint change.Checkpoint) error {
+	if len(changes) < 1 {
+		return nil
+	}
+
+	if err := validateClientSeqSequentialWithCheckpoint(changes, checkpoint); err != nil {
+		return err
+	}
+
+	return validateClientSeqInChangesAreSequential(changes)
+}
+
+func validateClientSeqSequentialWithCheckpoint(changes []*change.Change, checkpoint change.Checkpoint) error {
+	expectedClientSeq := checkpoint.ClientSeq + 1
+	actualFirstClientSeq := changes[0].ClientSeq()
+
+	if expectedClientSeq < actualFirstClientSeq {
+		return fmt.Errorf(
+			"ClientSeq is not sequential with DocInfo.Checkpoint.ClientSeq (expected: %d, actual: %d) : %w",
+			expectedClientSeq,
+			actualFirstClientSeq,
+			ErrClientSeqNotSequentialWithCheckpoint,
+		)
+	}
+	return nil
+}
+
+func validateClientSeqInChangesAreSequential(changes []*change.Change) error {
+	nextClientSeq := changes[0].ClientSeq()
+	for _, cn := range changes[1:] {
+		nextClientSeq++
+
+		if nextClientSeq != cn.ClientSeq() {
+			return fmt.Errorf(
+				"ClientSeq in Changes are not sequential (expected: %d, actual: %d) : %w",
+				nextClientSeq,
+				cn.ClientSeq(),
+				ErrClientSeqInChangesAreNotSequential,
+			)
+		}
+	}
+	return nil
 }
