@@ -480,7 +480,8 @@ func (s *yorkieServer) WatchDocument(
 			if err := stream.Send(response); err != nil {
 				return err
 			}
-			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, event.Type, event.Body.PayloadLen())
+			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, event.Type,
+				event.Body.PayloadLen())
 		}
 	}
 }
@@ -583,7 +584,8 @@ func (s *yorkieServer) watchDoc(
 			DocumentRefKey: documentRefKey,
 		},
 	)
-	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, projects.From(ctx), types.DocumentWatchedEvent, 0)
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, projects.From(ctx),
+		types.DocumentWatchedEvent, 0)
 
 	return subscription, clientIDs, nil
 }
@@ -608,7 +610,8 @@ func (s *yorkieServer) unwatchDoc(
 			DocumentRefKey: documentRefKey,
 		},
 	)
-	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, projects.From(ctx), types.DocumentUnwatchedEvent, 0)
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, projects.From(ctx),
+		types.DocumentUnwatchedEvent, 0)
 
 	return nil
 }
@@ -670,7 +673,8 @@ func (s *yorkieServer) Broadcast(
 			},
 		},
 	)
-	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, docEventType, len(req.Msg.Payload))
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, docEventType,
+		len(req.Msg.Payload))
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }

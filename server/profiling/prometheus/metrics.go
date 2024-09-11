@@ -362,7 +362,8 @@ func (m *Metrics) AddWatchDocumentEvents(hostname string, project *types.Project
 }
 
 // AddWatchDocumentEventPayloadBytes adds the bytes of event payload in document watch stream connections.
-func (m *Metrics) AddWatchDocumentEventPayloadBytes(hostname string, project *types.Project, docEventType types.DocEventType, bytes int) {
+func (m *Metrics) AddWatchDocumentEventPayloadBytes(hostname string, project *types.Project,
+	docEventType types.DocEventType, bytes int) {
 	m.watchDocumentEventsTotal.With(prometheus.Labels{
 		projectIDLabel:    project.ID.String(),
 		projectNameLabel:  project.Name,
