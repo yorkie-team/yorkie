@@ -127,8 +127,7 @@ func NewMetrics() (*Metrics, error) {
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "received_operations_total",
-			Help: "The total count of operations included in request" +
-				" packs in PushPull.",
+			Help:      "The total count of operations included in request packs in PushPull.",
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
@@ -138,8 +137,7 @@ func NewMetrics() (*Metrics, error) {
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "sent_operations_total",
-			Help: "The total count of operations included in response" +
-				" packs in PushPull.",
+			Help:      "The total count of operations included in response packs in PushPull.",
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
