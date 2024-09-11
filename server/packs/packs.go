@@ -81,17 +81,18 @@ func PushPull(
 
 	// 01. push changes: filter out the changes that are already saved in the database.
 	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
-	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
-	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
+	hostname := be.Config.Hostname
+	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
+	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}
-	be.Metrics.AddPushPullSentChanges(respPack.ChangesLen())
-	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
-	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
+	be.Metrics.AddPushPullSentChanges(hostname, project, respPack.ChangesLen())
+	be.Metrics.AddPushPullSentOperations(hostname, project, respPack.OperationsLen())
+	be.Metrics.AddPushPullSnapshotBytes(hostname, project, respPack.SnapshotLen())
 
 	// 03. update the client's document and checkpoint.
 	docRefKey := docInfo.RefKey()
