@@ -92,13 +92,23 @@ type AttachOption func(*AttachOptions)
 // AttachOptions configures how we set up the document.
 type AttachOptions struct {
 	// Presence is the presence of the client.
-	Presence innerpresence.Presence
-	IsManual bool
+	Presence    innerpresence.Presence
+	InitialRoot map[string]any
+	IsManual    bool
 }
 
 // WithPresence configures the presence of the client.
 func WithPresence(presence innerpresence.Presence) AttachOption {
 	return func(o *AttachOptions) { o.Presence = presence }
+}
+
+// WithInitialRoot sets the initial root of the document. Values in the initial
+// root will be discarded if the key already exists in the document. If some
+// keys are not in the document, they will be added.
+func WithInitialRoot(root map[string]any) AttachOption {
+	return func(o *AttachOptions) {
+		o.InitialRoot = root
+	}
 }
 
 // WithManualSync configures the manual sync of the client.

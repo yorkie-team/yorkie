@@ -43,6 +43,13 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 	}
 }
 
+// SetDynamicValue sets a dynamic value for the given key.
+func (p *Object) SetDynamicValue(k string, v any) {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return toElement(p.context, buildCRDTElement(p.context, v, ticket, newBuildState()))
+	})
+}
+
 // SetNewObject sets a new Object for the given key.
 func (p *Object) SetNewObject(k string, v ...any) *Object {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
