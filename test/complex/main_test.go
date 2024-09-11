@@ -41,6 +41,11 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+type testResult struct {
+	flag       bool
+	resultDesc string
+}
+
 type clientAndDocPair struct {
 	cli *client.Client
 	doc *document.Document

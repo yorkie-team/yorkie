@@ -52,11 +52,6 @@ func parseSimpleXML(s string) []string {
 	return res
 }
 
-type testResult struct {
-	flag       bool
-	resultDesc string
-}
-
 type rangeSelector int
 
 const (
