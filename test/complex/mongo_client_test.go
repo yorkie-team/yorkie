@@ -1,4 +1,4 @@
-//go:build sharding
+//go:build complex
 
 /*
  * Copyright 2023 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package sharding
+package complex
 
 import (
 	"context"
@@ -83,6 +83,10 @@ func TestClientWithShardedDB(t *testing.T) {
 
 	t.Run("RunFindChangesBetweenServerSeqs test", func(t *testing.T) {
 		testcases.RunFindChangesBetweenServerSeqsTest(t, cli, dummyProjectID)
+	})
+
+	t.Run("RunFindChangeInfosBetweenServerSeqsTest test", func(t *testing.T) {
+		testcases.RunFindChangeInfosBetweenServerSeqsTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("RunFindClosestSnapshotInfo test", func(t *testing.T) {

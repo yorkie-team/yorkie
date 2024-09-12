@@ -208,6 +208,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromTreeEdit(decoded.TreeEdit)
 		case *api.Operation_TreeStyle_:
 			op, err = fromTreeStyle(decoded.TreeStyle)
+		case *api.Operation_ArraySet_:
+			op, err = fromArraySet(decoded.ArraySet)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -535,6 +537,31 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		to,
 		createdAtMapByActor,
 		pbTreeStyle.Attributes,
+		executedAt,
+	), nil
+}
+
+func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, error) {
+	parentCreatedAt, err := fromTimeTicket(pbSetByIndex.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := fromTimeTicket(pbSetByIndex.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbSetByIndex.Value)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbSetByIndex.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operations.NewArraySet(
+		parentCreatedAt,
+		createdAt,
+		elem,
 		executedAt,
 	), nil
 }

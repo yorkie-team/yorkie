@@ -18,8 +18,11 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -35,9 +38,13 @@ var (
 func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "login",
-		Short:   "Log in to Yorkie server",
+		Short:   "Log in to the Yorkie server",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := readPassword(); err != nil {
+				return err
+			}
+
 			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
 				return err
@@ -74,6 +81,20 @@ func newLoginCmd() *cobra.Command {
 	}
 }
 
+// readPassword reads the password from the user.
+func readPassword() error {
+	if password == "" {
+		fmt.Print("Enter Password: ")
+		bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("read password: %w", err)
+		}
+		password = string(bytePassword)
+		fmt.Println()
+	}
+	return nil
+}
+
 func init() {
 	cmd := newLoginCmd()
 	cmd.Flags().StringVarP(
@@ -81,14 +102,14 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required if password is set)",
+		"Username",
 	)
 	cmd.Flags().StringVarP(
 		&password,
 		"password",
 		"p",
 		"",
-		"Password (required if username is set)",
+		"Password (optional)",
 	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
@@ -102,6 +123,6 @@ func init() {
 		false,
 		"Skip the TLS connection of the client",
 	)
-	cmd.MarkFlagsRequiredTogether("username", "password")
+	_ = cmd.MarkFlagRequired("username")
 	rootCmd.AddCommand(cmd)
 }

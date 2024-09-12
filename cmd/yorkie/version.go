@@ -131,13 +131,13 @@ func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.Vers
 	case "yaml":
 		marshalled, err := yaml.Marshal(versionInfo)
 		if err != nil {
-			return errors.New("failed to marshal YAML")
+			return errors.New("marshal YAML")
 		}
 		cmd.Println(string(marshalled))
 	case "json":
 		marshalled, err := json.MarshalIndent(versionInfo, "", "  ")
 		if err != nil {
-			return errors.New("failed to marshal JSON")
+			return errors.New("marshal JSON")
 		}
 		cmd.Println(string(marshalled))
 	default:
