@@ -28,7 +28,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -60,8 +59,32 @@ var (
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient    v1connect.YorkieServiceClient
 	testBackend   *backend.Backend
-	testMockDB    *packs.MockDB
+	testMockDB    *MockDB
 )
+
+// MockDB represents a mock database for testing purposes
+type MockDB struct {
+	database.Database
+	mockUpdateClientInfoAfterPushPull func(context.Context, *database.ClientInfo, *database.DocInfo) error
+}
+
+// NewMockDB returns a mock database with a real database
+func NewMockDB(database database.Database) *MockDB {
+	return &MockDB{
+		Database: database,
+	}
+}
+
+func (m *MockDB) UpdateClientInfoAfterPushPull(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+) error {
+	if m.mockUpdateClientInfoAfterPushPull != nil {
+		return m.mockUpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+	}
+	return m.Database.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+}
 
 func TestMain(m *testing.M) {
 	met, err := prometheus.NewMetrics()
@@ -69,30 +92,32 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	testBackend, err = backend.New(&backend.Config{
-		AdminUser:                 helper.AdminUser,
-		AdminPassword:             helper.AdminPassword,
-		UseDefaultProject:         helper.UseDefaultProject,
-		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
-		SnapshotThreshold:         helper.SnapshotThreshold,
-		AuthWebhookCacheSize:      helper.AuthWebhookSize,
-		ProjectInfoCacheSize:      helper.ProjectInfoCacheSize,
-		ProjectInfoCacheTTL:       helper.ProjectInfoCacheTTL.String(),
-		AdminTokenDuration:        helper.AdminTokenDuration,
-	}, &mongo.Config{
-		ConnectionURI:     helper.MongoConnectionURI,
-		YorkieDatabase:    helper.TestDBName(),
-		ConnectionTimeout: helper.MongoConnectionTimeout,
-		PingTimeout:       helper.MongoPingTimeout,
-	}, &housekeeping.Config{
-		Interval:                  helper.HousekeepingInterval.String(),
-		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-		ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
-	}, met)
+	testBackend, err = backend.New(
+		&backend.Config{
+			AdminUser:                 helper.AdminUser,
+			AdminPassword:             helper.AdminPassword,
+			UseDefaultProject:         helper.UseDefaultProject,
+			ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
+			SnapshotThreshold:         helper.SnapshotThreshold,
+			AuthWebhookCacheSize:      helper.AuthWebhookSize,
+			ProjectInfoCacheSize:      helper.ProjectInfoCacheSize,
+			ProjectInfoCacheTTL:       helper.ProjectInfoCacheTTL.String(),
+			AdminTokenDuration:        helper.AdminTokenDuration,
+		}, &mongo.Config{
+			ConnectionURI:     helper.MongoConnectionURI,
+			YorkieDatabase:    helper.TestDBName(),
+			ConnectionTimeout: helper.MongoConnectionTimeout,
+			PingTimeout:       helper.MongoPingTimeout,
+		}, &housekeeping.Config{
+			Interval:                  helper.HousekeepingInterval.String(),
+			CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
+			ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
+		}, met,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	testMockDB = packs.NewMockDB(testBackend.DB)
+	testMockDB = NewMockDB(testBackend.DB)
 	testBackend.DB = testMockDB
 
 	project, err := testBackend.DB.FindProjectInfoByID(
@@ -103,9 +128,11 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port: helper.RPCPort,
-	}, testBackend)
+	testRPCServer, err = rpc.NewServer(
+		&rpc.Config{
+			Port: helper.RPCPort,
+		}, testBackend,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -136,17 +163,16 @@ func TestMain(m *testing.M) {
 }
 
 func triggerErrUpdateClientInfo(on bool) {
-	testMockDB.
-		On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
-		Unset()
 	if on {
-		testMockDB.
-			On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
-			Return(ErrUpdateClientInfoFailed)
+		testMockDB.mockUpdateClientInfoAfterPushPull = func(
+			context.Context,
+			*database.ClientInfo,
+			*database.DocInfo,
+		) error {
+			return ErrUpdateClientInfoFailed
+		}
 	} else {
-		testMockDB.
-			On("UpdateClientInfoAfterPushPull", mock.Anything, mock.Anything, mock.Anything).
-			Return(nil)
+		testMockDB.mockUpdateClientInfoAfterPushPull = nil
 	}
 }
 
@@ -177,13 +203,15 @@ func TestPacks(t *testing.T) {
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
-					Changes: []*api.Change{{
-						Id: &api.ChangeID{
-							ClientSeq: 1,
-							Lamport:   1,
-							ActorId:   clientID,
+					Changes: []*api.Change{
+						{
+							Id: &api.ChangeID{
+								ClientSeq: 1,
+								Lamport:   1,
+								ActorId:   clientID,
+							},
 						},
-					}},
+					},
 				},
 			},
 			))
@@ -215,18 +243,21 @@ func TestPacks(t *testing.T) {
 		pack, err := converter.FromChangePack(&api.ChangePack{
 			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
-			Changes: []*api.Change{{
-				Id: &api.ChangeID{
-					ClientSeq: 2,
-					Lamport:   2,
-					ActorId:   clientID,
+			Changes: []*api.Change{
+				{
+					Id: &api.ChangeID{
+						ClientSeq: 2,
+						Lamport:   2,
+						ActorId:   clientID,
+					},
 				},
-			}},
+			},
 		})
 		assert.NoError(t, err)
 
 		// 2-1. An arbitrary failure occurs while updating clientInfo
 		triggerErrUpdateClientInfo(true)
+
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
