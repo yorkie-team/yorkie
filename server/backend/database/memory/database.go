@@ -1210,7 +1210,7 @@ func (d *DB) UpdateVersionVector(
 			exists := vvi.VersionVector.VersionOf(actorID) > 0
 
 			if exists {
-				vvi.VersionVector.UnSet(actorID)
+				vvi.VersionVector.Unset(actorID)
 
 				versionVectorInfo := &database.VersionVectorInfo{
 					ID:            vvi.ID,
