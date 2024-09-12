@@ -1268,7 +1268,7 @@ func (c *Client) UpdateVersionVector(
 			exists := vvi.VersionVector.VersionOf(actorID) > 0
 
 			if exists {
-				vvi.VersionVector.UnSet(actorID)
+				vvi.VersionVector.Unset(actorID)
 
 				_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
 					"project_id": docRefKey.ProjectID,

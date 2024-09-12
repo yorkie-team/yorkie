@@ -40,8 +40,8 @@ func (v VersionVector) Set(id *ActorID, i int64) {
 	v[id.bytes] = i
 }
 
-// UnSet unsets the given actor's version to the given value.
-func (v VersionVector) UnSet(id *ActorID) {
+// Unset unsets the given actor's version to the given value.
+func (v VersionVector) Unset(id *ActorID) {
 	delete(v, id.bytes)
 }
 
@@ -96,7 +96,6 @@ func (v VersionVector) Marshal() string {
 
 // AfterOrEqual returns whether this VersionVector is causally after or equal
 // the given VersionVector.
-// TODO(JOOHOJANG) check below function is necessary
 func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	for k, val := range v {
 		if val < other[k] {
@@ -116,17 +115,6 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 // EqualToOrAfter returns whether this VersionVector's every field is equal or after than given ticket.
 func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	return v[other.actorID.bytes] >= other.lamport
-}
-
-// After returns whether this VersionVector is causally after the given ticket.
-// TODO(JOOHOJANG) check below function is necessary
-func (v VersionVector) After(other *Ticket) bool {
-	for _, val := range v {
-		if val <= other.lamport {
-			return false
-		}
-	}
-	return true
 }
 
 // Min returns new vv consists of every min value in each column.
@@ -203,7 +191,7 @@ func (v VersionVector) Filter(filter []actorID) VersionVector {
 	return filteredVV
 }
 
-// TODO(JOOHOJANG) remove func
+// Keys returns filtered version vector which keys are only from filter
 func (v VersionVector) Keys() []actorID {
 	var actors []actorID
 	for id := range v {
