@@ -36,7 +36,6 @@ type Value interface {
 type Node[V Value] struct {
 	value  V
 	weight int
-	height int
 
 	left   *Node[V]
 	right  *Node[V]
@@ -46,8 +45,7 @@ type Node[V Value] struct {
 // NewNode creates a new instance of Node.
 func NewNode[V Value](value V) *Node[V] {
 	n := &Node[V]{
-		value:  value,
-		height: 1,
+		value: value,
 	}
 	n.InitWeight()
 	return n
@@ -72,20 +70,6 @@ func (t *Node[V]) rightWeight() int {
 	return t.right.weight
 }
 
-func (t *Node[V]) leftHeight() int {
-	if t.left == nil {
-		return 0
-	}
-	return t.left.height
-}
-
-func (t *Node[V]) rightHeight() int {
-	if t.right == nil {
-		return 0
-	}
-	return t.right.height
-}
-
 // InitWeight sets initial weight of this node.
 func (t *Node[V]) InitWeight() {
 	t.weight = t.value.Len()
@@ -108,15 +92,13 @@ func (t *Node[V]) hasLinks() bool {
 // Tree is weighted binary search tree which is based on Splay tree.
 // original paper on Splay Trees: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type Tree[V Value] struct {
-	root      *Node[V]
-	nodeCount int
+	root *Node[V]
 }
 
 // NewTree creates a new instance of Tree.
 func NewTree[V Value](root *Node[V]) *Tree[V] {
 	return &Tree[V]{
-		root:      root,
-		nodeCount: 0,
+		root: root,
 	}
 }
 
@@ -132,7 +114,6 @@ func (t *Tree[V]) Insert(node *Node[V]) *Node[V] {
 
 // InsertAfter inserts the node after the given previous node.
 func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
-	t.BalancingTreeHeight()
 	t.Splay(prev)
 	t.root = node
 	node.right = prev.right
@@ -143,29 +124,10 @@ func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
 	prev.parent = node
 	prev.right = nil
 
-	t.UpdateNode(prev)
-	t.UpdateNode(node)
-	t.nodeCount++
-	return node
-}
-
-// UpdateNode recalculates the height and weight of this node with the value and children.
-func (t *Tree[V]) UpdateNode(node *Node[V]) {
+	t.UpdateWeight(prev)
 	t.UpdateWeight(node)
-	t.UpdateHeight(node)
-}
 
-// MaxHeightSplay finds and splays a deapest node.
-func (t *Tree[V]) MaxHeightSplay() {
-	node := t.root
-	for node.height > 1 {
-		if node.left != nil && node.left.height+1 == node.height {
-			node = node.left
-		} else {
-			node = node.right
-		}
-	}
-	t.Splay(node)
+	return node
 }
 
 // Splay moves the given node to the root.
@@ -204,26 +166,8 @@ func (t *Tree[V]) Splay(node *Node[V]) {
 	}
 }
 
-// BalancingTreeHeight call MaxHeightSplay if n(node count) is greater than 1000 and 50*log n
-func (t *Tree[V]) BalancingTreeHeight() {
-	if t.root != nil && t.nodeCount > 1000 {
-		var threshold uint64
-		threshold = 1
-		log := 1
-		for threshold < uint64(t.nodeCount) {
-			threshold *= 2
-			log++
-		}
-
-		if uint64(t.root.height) > uint64(50*log) {
-			t.MaxHeightSplay()
-		}
-	}
-}
-
 // IndexOf Find the index of the given node.
 func (t *Tree[V]) IndexOf(node *Node[V]) int {
-	t.BalancingTreeHeight()
 	if node == nil || node != t.root && !node.hasLinks() {
 		return -1
 	}
@@ -243,7 +187,6 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 
 // Find returns the Node and offset of the given index.
 func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
-	t.BalancingTreeHeight()
 	if t.root == nil {
 		return nil, 0, nil
 	}
@@ -285,10 +228,9 @@ func (t *Tree[V]) ToTestString() string {
 
 	traverseInOrder(t.root, func(node *Node[V]) {
 		builder.WriteString(fmt.Sprintf(
-			"[%d,%d,%d]%s",
+			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
-			node.height,
 			node.value.String(),
 		))
 	})
@@ -323,29 +265,15 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	}
 }
 
-// UpdateHeight recalculates the height of this node with the value and children.
-func (t *Tree[V]) UpdateHeight(node *Node[V]) {
-	node.height = 1
-
-	if node.left != nil && node.height < node.leftHeight()+1 {
-		node.height = node.leftHeight() + 1
-	}
-
-	if node.right != nil && node.height < node.rightHeight()+1 {
-		node.height = node.rightHeight() + 1
-	}
-}
-
 func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
 	for node != nil {
-		t.UpdateNode(node)
+		t.UpdateWeight(node)
 		node = node.parent
 	}
 }
 
 // Delete deletes the given node from this Tree.
 func (t *Tree[V]) Delete(node *Node[V]) {
-	t.BalancingTreeHeight()
 	t.Splay(node)
 
 	leftTree := NewTree(node.left)
@@ -372,9 +300,8 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 
 	node.unlink()
 	if t.root != nil {
-		t.UpdateNode(t.root)
+		t.UpdateWeight(t.root)
 	}
-	t.nodeCount--
 }
 
 // DeleteRange separates the range between given 2 boundaries from this Tree.
@@ -384,7 +311,6 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 // but rightBoundary can be nil means range to delete includes the end of tree.
 // Refer to the design document: ./design/range-deletion-in-slay-tree.md
 func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
-	t.BalancingTreeHeight()
 	if rightBoundary == nil {
 		t.Splay(leftBoundary)
 		t.cutOffRight(leftBoundary)
@@ -425,8 +351,8 @@ func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
 	pivot.left = root
 	pivot.left.parent = pivot
 
-	t.UpdateNode(root)
-	t.UpdateNode(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree[V]) rotateRight(pivot *Node[V]) {
@@ -450,8 +376,8 @@ func (t *Tree[V]) rotateRight(pivot *Node[V]) {
 	pivot.right = root
 	pivot.right.parent = pivot
 
-	t.UpdateNode(root)
-	t.UpdateNode(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree[V]) rightmost() *Node[V] {
