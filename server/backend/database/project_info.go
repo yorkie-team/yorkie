@@ -22,8 +22,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/rs/xid"
-
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
@@ -71,16 +69,23 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
+func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) (*ProjectInfo, error) {
+	publicKey, err := GenerateRandomKey(32)
+	if err != nil {
+		return nil, err
+	}
+	privateKey, err := GenerateRandomKey(32)
+	if err != nil {
+		return nil, err
+	}
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,
 		ClientDeactivateThreshold: clientDeactivateThreshold,
-		// TODO(hackerwins): Use random generated Key.
-		PublicKey: xid.New().String(),
-		SecretKey: xid.New().String(),
-		CreatedAt: time.Now(),
-	}
+		PublicKey:                 publicKey,
+		SecretKey:                 privateKey,
+		CreatedAt:                 time.Now(),
+	}, nil
 }
 
 // DeepCopy returns a deep copy of the ProjectInfo.
