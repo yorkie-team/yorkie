@@ -17,6 +17,8 @@
 package database
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"time"
 
@@ -141,4 +143,14 @@ func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, 
 	}
 
 	return clientDeactivateThreshold, nil
+}
+
+// GenerateRandomKey generates random key
+func GenerateRandomKey(length int) (string, error) {
+	bytes := make([]byte, length)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
 }
