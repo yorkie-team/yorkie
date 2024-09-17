@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -155,7 +156,7 @@ func GenerateRandomKey(length int) (string, error) {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
