@@ -18,8 +18,9 @@ package database
 
 import (
 	"errors"
-	"github.com/rs/xid"
 	"time"
+
+	"github.com/lithammer/shortuuid/v4"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
@@ -73,8 +74,8 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		Name:                      name,
 		Owner:                     owner,
 		ClientDeactivateThreshold: clientDeactivateThreshold,
-		PublicKey:                 publicKey,
-		SecretKey:                 privateKey,
+		PublicKey:                 shortuuid.New(),
+		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),
 	}
 }
