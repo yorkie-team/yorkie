@@ -29,7 +29,8 @@ func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
 		dummyOwnerID := types.ID("000000000000000000000000")
 		clientDeactivateThreshold := "1h"
-		project := database.NewProjectInfo(t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		project, err := database.NewProjectInfo(t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
 
 		testName := "testName"
 		testURL := "testUrl"
