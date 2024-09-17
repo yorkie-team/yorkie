@@ -165,13 +165,10 @@ func (c *Client) ensureDefaultProjectInfo(
 	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate, err := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("create project info: %w", err)
-	}
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 	candidate.ID = database.DefaultProjectID
 
-	_, err = c.collection(ColProjects).UpdateOne(ctx, bson.M{
+	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
@@ -209,10 +206,7 @@ func (c *Client) CreateProjectInfo(
 	owner types.ID,
 	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	info, err := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("create project info: %w", err)
-	}
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
 	result, err := c.collection(ColProjects).InsertOne(ctx, bson.M{
 		"name":                        info.Name,
 		"owner":                       owner,

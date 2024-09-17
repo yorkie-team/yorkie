@@ -17,10 +17,8 @@
 package database
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
-	"fmt"
+	"github.com/rs/xid"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -70,15 +68,7 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) (*ProjectInfo, error) {
-	publicKey, err := GenerateRandomKey(32)
-	if err != nil {
-		return nil, err
-	}
-	privateKey, err := GenerateRandomKey(32)
-	if err != nil {
-		return nil, err
-	}
+func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,
@@ -86,7 +76,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		PublicKey:                 publicKey,
 		SecretKey:                 privateKey,
 		CreatedAt:                 time.Now(),
-	}, nil
+	}
 }
 
 // DeepCopy returns a deep copy of the ProjectInfo.
@@ -149,14 +139,4 @@ func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, 
 	}
 
 	return clientDeactivateThreshold, nil
-}
-
-// GenerateRandomKey generates random key
-func GenerateRandomKey(length int) (string, error) {
-	bytes := make([]byte, length)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
 }

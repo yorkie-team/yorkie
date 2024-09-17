@@ -200,10 +200,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info, err = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
-		if err != nil {
-			return nil, fmt.Errorf("create project info: %w", err)
-		}
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -236,10 +233,7 @@ func (d *DB) CreateProjectInfo(
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info, err := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("create project info: %w", err)
-	}
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
