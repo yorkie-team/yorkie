@@ -21,7 +21,6 @@ package bench
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
 	"testing"
 	"time"
 
@@ -33,17 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/splay"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
-
-func randomArray(n, min, max int) []int {
-	arr := make([]int, n)
-	rand.Seed(time.Now().UnixNano())
-
-	for i := 0; i < n; i++ {
-		arr[i] = rand.Intn(max-min+1) + min
-	}
-
-	return arr
-}
 
 type stringValue struct {
 	content string
@@ -67,39 +55,43 @@ func (v *stringValue) String() string {
 	return v.content
 }
 
+func buildSplayTree(size int) *splay.Tree[*stringValue] {
+	tree := splay.NewTree[*stringValue](nil)
+	for i := 0; i < size; i++ {
+		tree.Insert(newSplayNode("a"))
+	}
+	return tree
+}
+
 func BenchmarkSplayTree(b *testing.B) {
 	operationCount := []int{10000, 20000, 30000}
+	rand.Seed(time.Now().UnixNano())
 
-	for _, n := range operationCount {
+	for _, size := range operationCount {
 		b.ResetTimer()
-		arr := randomArray(n, 1, n)
 
-		b.Run(fmt.Sprintf("Insert %d", n), func(b *testing.B) {
+		b.Run(fmt.Sprintf("Insert %d", size), func(b *testing.B) {
 			tree := splay.NewTree[*stringValue](nil)
-			for _, i := range arr {
-				tree.Insert(newSplayNode(strconv.FormatInt(int64(i), 10)))
+			for i := 0; i < size; i++ {
+				tree.Insert(newSplayNode("a"))
 			}
 		})
-		b.Run(fmt.Sprintf("Random read %d", n), func(b *testing.B) {
+		b.Run(fmt.Sprintf("Random read %d", size), func(b *testing.B) {
 			b.StopTimer()
-			tree := splay.NewTree[*stringValue](nil)
-			for _, i := range arr {
-				tree.Insert(newSplayNode(strconv.FormatInt(int64(i), 10)))
-			}
+			tree := buildSplayTree(size)
 			b.StartTimer()
-			for _, i := range randomArray(n, 0, n-1) {
-				tree.Find(i)
+
+			for i := 0; i < size; i++ {
+				tree.Find(rand.Intn(size - i))
 			}
 		})
-		b.Run(fmt.Sprintf("Delete %d", n), func(b *testing.B) {
+		b.Run(fmt.Sprintf("Delete %d", size), func(b *testing.B) {
 			b.StopTimer()
-			tree := splay.NewTree[*stringValue](nil)
-			for _, i := range arr {
-				tree.Insert(newSplayNode(strconv.FormatInt(int64(i), 10)))
-			}
+			tree := buildSplayTree(size)
 			b.StartTimer()
-			for _, i := range randomArray(n, 1, n) {
-				node, _, _ := tree.Find(i)
+
+			for i := 0; i < size; i++ {
+				node, _, _ := tree.Find(rand.Intn(size))
 				if node != nil {
 					tree.Delete(node)
 				}
