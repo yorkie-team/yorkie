@@ -15,7 +15,7 @@
  */
 syntax = "proto3";
 
-package system.v1;
+package yorkie.v1;
 
 import "yorkie/v1/yorkie.proto";
 
