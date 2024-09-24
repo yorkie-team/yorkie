@@ -1247,4 +1247,78 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d1.Marshal(), `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`)
 		assert.Equal(t, d2.Marshal(), `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`)
 	})
+
+	t.Run("gc doesn't run when detached client's version vector remains in db", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+		defer deactivateAndCloseClients(t, clients)
+
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		d2 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c3.Attach(ctx, d3))
+
+		// assume d3 is detached from now
+		// d3 is detached but its version vector still remains in db
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
+			return nil
+		}, "sets text")
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "c")
+			return nil
+		}, "insert c")
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "")
+			return nil
+		}, "delete bd")
+		assert.NoError(t, err)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "1")
+			return nil
+		}, "insert 1")
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
+
+		i := 0
+		for i < 100 {
+			// min version vector stays the same as when c3 detached
+			// thus no GC runs because c3's version vector remains in db
+			i++
+			assert.NoError(t, c2.Sync(ctx))
+			assert.Equal(t, 2, d1.GarbageLen())
+			assert.Equal(t, 2, d2.GarbageLen())
+
+			assert.NoError(t, c1.Sync(ctx))
+			assert.Equal(t, 2, d1.GarbageLen())
+			assert.Equal(t, 2, d2.GarbageLen())
+		}
+	})
 }
