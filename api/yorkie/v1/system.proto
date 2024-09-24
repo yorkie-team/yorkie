@@ -15,7 +15,7 @@
  */
 syntax = "proto3";
 
-package yorkie.v1;
+package system.v1;
 
 import "yorkie/v1/yorkie.proto";
 
@@ -25,15 +25,15 @@ option java_multiple_files = true;
 option java_package = "dev.yorkie.api.v1";
 
 service SystemService {
-  rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
-  rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
+  rpc ActivateClient (yorkie.v1.ActivateClientRequest) returns (yorkie.v1.ActivateClientResponse) {}
+  rpc DeactivateClient (yorkie.v1.DeactivateClientRequest) returns (yorkie.v1.DeactivateClientResponse) {}
 
-  rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
-  rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
-  rpc RemoveDocument (RemoveDocumentRequest) returns (RemoveDocumentResponse) {}
-  rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
+  rpc AttachDocument (yorkie.v1.AttachDocumentRequest) returns (yorkie.v1.AttachDocumentResponse) {}
+  rpc DetachDocument (yorkie.v1.DetachDocumentRequest) returns (yorkie.v1.DetachDocumentResponse) {}
+  rpc RemoveDocument (yorkie.v1.RemoveDocumentRequest) returns (yorkie.v1.RemoveDocumentResponse) {}
+  rpc PushPullChanges (yorkie.v1.PushPullChangesRequest) returns (yorkie.v1.PushPullChangesResponse) {}
 
-  rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
+  rpc WatchDocument (yorkie.v1.WatchDocumentRequest) returns (stream yorkie.v1.WatchDocumentResponse) {}
 
-  rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
+  rpc Broadcast (yorkie.v1.BroadcastRequest) returns (yorkie.v1.BroadcastResponse) {}
 }
