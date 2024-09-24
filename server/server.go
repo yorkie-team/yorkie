@@ -153,7 +153,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 	_, err = clients.Deactivate(ctx, r.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
-	}, r.conf.Backend.FetchGatewayAddr(r.RPCAddr()))
+	}, r.conf.Backend.FetchGatewayAddr(r.RPCAddr()), true)
 	return err
 }
 

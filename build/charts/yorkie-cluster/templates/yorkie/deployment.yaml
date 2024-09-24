@@ -48,9 +48,6 @@ spec:
           "--backend-gateway-host",
           "{{ .Values.yorkie.gateway }}.{{ .Values.yorkie.namespace }}.svc.cluster.local",
         ]
-        env:
-        - name: YORKIE_SERVER_TOKEN
-          value: "{{ .Values.yorkie.serverToken | default 'default-token' }}"
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}
           - containerPort: {{ .Values.yorkie.ports.profilingPort }}

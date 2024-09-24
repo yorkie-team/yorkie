@@ -47,12 +47,6 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 	md := metadata.From(ctx)
 	project := projects.From(ctx)
 
-	// TODO(raararaara): This conditional statement is a temporary addition.
-	// If systemService is defined later, this logic will be removed.
-	if md.Authorization == be.Config.ServerToken {
-		return nil
-	}
-
 	if !project.RequireAuth(accessInfo.Method) {
 		return nil
 	}

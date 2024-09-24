@@ -1,0 +1,65 @@
+/*
+ * Copyright 2024 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package system
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+)
+
+// Client is a client for system service.
+type Client struct {
+	conn   *http.Client
+	client v1connect.SystemServiceClient
+}
+
+// New creates an instance of Client.
+func New() (*Client, error) {
+
+	return &Client{
+		conn: &http.Client{},
+	}, nil
+}
+
+func Dial(rpcAddr string) (*Client, error) {
+	cli, err := New()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cli.Dial(rpcAddr); err != nil {
+		return nil, err
+	}
+
+	return cli, nil
+}
+
+func (c *Client) Dial(rpcAddr string) error {
+	if !strings.Contains(rpcAddr, "://") {
+		if c.conn.Transport == nil {
+			rpcAddr = "http://" + rpcAddr
+		} else {
+			rpcAddr = "https://" + rpcAddr
+		}
+	}
+
+	c.client = v1connect.NewSystemServiceClient(c.conn, rpcAddr)
+
+	return nil
+}

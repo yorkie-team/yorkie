@@ -96,7 +96,7 @@ type Attachment struct {
 // to the server to synchronize with other replicas in remote.
 type Client struct {
 	conn          *http.Client
-	client        v1connect.YorkieServiceClient
+	client        ServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
 	logger        *zap.Logger
@@ -183,7 +183,12 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
-	if err := cli.Dial(rpcAddr); err != nil {
+	var options Options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	if err := cli.Dial(rpcAddr, options.Internal); err != nil {
 		return nil, err
 	}
 
@@ -191,7 +196,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 }
 
 // Dial dials the given rpcAddr.
-func (c *Client) Dial(rpcAddr string) error {
+func (c *Client) Dial(rpcAddr string, internal bool) error {
 	if !strings.Contains(rpcAddr, "://") {
 		if c.conn.Transport == nil {
 			rpcAddr = "http://" + rpcAddr
@@ -200,7 +205,11 @@ func (c *Client) Dial(rpcAddr string) error {
 		}
 	}
 
-	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
+	if internal == true {
+		c.client = v1connect.NewSystemServiceClient(c.conn, rpcAddr, c.clientOptions...)
+	} else {
+		c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
+	}
 
 	return nil
 }

@@ -99,7 +99,7 @@ func (s *yorkieServer) DeactivateClient(
 	_, err = clients.Deactivate(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	}, s.backend.Config.FetchGatewayAddr(s.rpcAddr()))
+	}, s.backend.Config.FetchGatewayAddr(s.rpcAddr()), false)
 	if err != nil {
 		return nil, err
 	}

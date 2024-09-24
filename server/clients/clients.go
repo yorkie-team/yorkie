@@ -54,6 +54,7 @@ func Deactivate(
 	be *backend.Backend,
 	refKey types.ClientRefKey,
 	gatewayAddr string,
+	internal bool,
 ) (*database.ClientInfo, error) {
 	// NOTE(hackerwins): Before deactivating the client, we need to detach all
 	// attached documents from the client.
@@ -82,6 +83,7 @@ func Deactivate(
 		client.WithKey(clientInfo.Key),
 		client.WithAPIKey(project.PublicKey),
 		client.WithToken(getAuthToken(ctx)),
+		client.WithInternal(internal),
 	)
 	if err != nil {
 		return nil, err
