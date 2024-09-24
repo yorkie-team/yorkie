@@ -1264,8 +1264,8 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 		assert.NoError(t, c3.Attach(ctx, d3))
 
-		// assume d3 is detached from now
-		// d3 is detached but its version vector still remains in db
+		// assume c3 is detached from now
+		// c3 is detached but its version vector still remains in db
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
