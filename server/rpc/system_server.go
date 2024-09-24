@@ -46,11 +46,10 @@ type systemServer struct {
 }
 
 // newSystemServer creates a new instance of systemServer
-func newSystemServer(serviceCtx context.Context, be *backend.Backend, conf *Config) *systemServer {
+func newSystemServer(serviceCtx context.Context, be *backend.Backend) *systemServer {
 	return &systemServer{
 		backend:    be,
 		serviceCtx: serviceCtx,
-		conf:       conf,
 	}
 }
 

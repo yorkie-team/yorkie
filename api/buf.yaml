@@ -11,3 +11,6 @@ lint:
     # already stored in the DB, so we ignore the rule for now.
     ENUM_ZERO_VALUE_SUFFIX:
       - yorkie/v1/resources.proto
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - yorkie/v1/yorkie.proto
+      - yorkie/v1/system.proto
