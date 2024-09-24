@@ -44,6 +44,7 @@ type Server struct {
 	conf                *Config
 	httpServer          *http.Server
 	yorkieServiceCancel context.CancelFunc
+	systemServiceCancel context.CancelFunc
 	tokenManager        *auth.TokenManager
 }
 
@@ -64,9 +65,10 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	}
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
+	systemServiceCtx, systemServiceCancel := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be, conf), opts...))
-	mux.Handle(v1connect.NewSystemServiceHandler(newSystemServer(yorkieServiceCtx, be, conf), opts...))
+	mux.Handle(v1connect.NewSystemServiceHandler(newSystemServer(systemServiceCtx, be, conf), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
 		grpchealth.HealthV1ServiceName,
@@ -86,6 +88,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 			),
 		},
 		yorkieServiceCancel: yorkieServiceCancel,
+		systemServiceCancel: systemServiceCancel,
 	}, nil
 }
 

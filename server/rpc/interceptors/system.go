@@ -38,6 +38,8 @@ func isSystemService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.SystemService/")
 }
 
+// SystemServiceInterceptor is an interceptor for building additional context
+// and handling authentication for SystemService.
 type SystemServiceInterceptor struct {
 	backend          *backend.Backend
 	requestID        *requestID
