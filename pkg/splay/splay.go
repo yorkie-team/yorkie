@@ -172,8 +172,17 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 		return -1
 	}
 
-	t.Splay(node)
-	return t.root.leftWeight()
+	index := 0
+	current := node
+	var prev *Node[V]
+	for current != nil {
+		if prev == nil || prev == current.right {
+			index += current.value.Len() + current.leftWeight()
+		}
+		prev = current
+		current = current.parent
+	}
+	return index - node.value.Len()
 }
 
 // Find returns the Node and offset of the given index.
@@ -200,7 +209,6 @@ func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 		return nil, 0, fmt.Errorf("node length %d, index %d: %w", node.value.Len(), offset, ErrOutOfIndex)
 	}
 
-	t.Splay(node)
 	return node, offset, nil
 }
 
