@@ -50,7 +50,7 @@ func (v *stringValue) String() string {
 	return v.content
 }
 
-type editTrace struct {
+type editingTrace struct {
 	Edits     [][]interface{} `json:"edits"`
 	FinalText string          `json:"finalText"`
 }
@@ -119,7 +119,7 @@ func BenchmarkSplayTree(b *testing.B) {
 	b.Run("editing trace bench", func(b *testing.B) {
 		b.StopTimer()
 
-		var editingTrace editTrace
+		var editingTrace editingTrace
 
 		file, err := os.Open("./editing-trace.json")
 		if err != nil {
