@@ -1159,14 +1159,14 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	var versionVectorInfos []database.VersionVectorInfo
 	var minVersionVector time.VersionVector
 	var clientVersionVector time.VersionVector
-	var actorIDs []*time.ActorID
+	var activeActorIDs []*time.ActorID
 
 	// 01. record current client's actorID
 	currentActorID, err := clientInfo.ID.ToActorID()
 	if err != nil {
 		return nil, err
 	}
-	actorIDs = append(actorIDs, currentActorID)
+	activeActorIDs = append(activeActorIDs, currentActorID)
 
 	// 02. Find all version vector stored in db
 	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
@@ -1189,12 +1189,12 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 			continue
 		}
 
-		// record actorIDs to filter detached client's version vector
+		// record activeActorIDs to filter detached client's version vector
 		actorID, err := vvi.ClientID.ToActorID()
 		if err != nil {
 			return nil, err
 		}
-		actorIDs = append(actorIDs, actorID)
+		activeActorIDs = append(activeActorIDs, actorID)
 
 		if minVersionVector == nil {
 			minVersionVector = vvi.VersionVector
@@ -1225,7 +1225,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	}
 
 	// filter detached client's version vector.
-	minVersionVector = minVersionVector.Filter(actorIDs)
+	minVersionVector = minVersionVector.Filter(activeActorIDs)
 
 	return minVersionVector, nil
 }
