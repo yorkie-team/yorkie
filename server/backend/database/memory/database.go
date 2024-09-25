@@ -1310,7 +1310,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		minVersionVector = minVersionVector.Min(vvi.VersionVector)
 	}
 
-	// 02. Compute min version vector without current client's version vector strored in db
+	// 02. Compute min version vector without current client's version vector stored in db
 	if len(versionVectorInfos) > 0 {
 		for _, vvi := range versionVectorInfos {
 			if clientInfo.ID == vvi.ClientID {
