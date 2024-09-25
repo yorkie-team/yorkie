@@ -19,9 +19,6 @@
 package bench
 
 import (
-	gojson "encoding/json"
-	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,35 +68,4 @@ func BenchmarkTextEditing(b *testing.B) {
 		editingTrace.FinalText,
 		doc.Root().GetText("text").String(),
 	)
-}
-
-type editTrace struct {
-	Edits     [][]interface{} `json:"edits"`
-	FinalText string          `json:"finalText"`
-}
-
-// readEditingTraceFromFile reads trace from editing-trace.json.
-func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
-	var trace editTrace
-
-	file, err := os.Open("./editing-trace.json")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err = file.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = gojson.Unmarshal(byteValue, &trace); err != nil {
-		return nil, err
-	}
-
-	return &trace, err
 }
