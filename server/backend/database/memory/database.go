@@ -1193,7 +1193,7 @@ func (d *DB) UpdateVersionVector(
 	}
 
 	if !isAttached {
-		iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
+		iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
 		if err != nil {
 			return err
 		}
@@ -1218,14 +1218,14 @@ func (d *DB) UpdateVersionVector(
 					VersionVector: vvi.VersionVector,
 				}
 
-				if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
+				if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
 					return fmt.Errorf("update other's version vector when detach of %s: %w", docRefKey.DocID, err)
 				}
 			}
 		}
 
 		if _, err = txn.DeleteAll(
-			tblVersionVector,
+			tblVersionVectors,
 			"doc_id_client_id",
 			docRefKey.DocID.String(),
 			clientInfo.ID.String(),
@@ -1239,7 +1239,7 @@ func (d *DB) UpdateVersionVector(
 
 	if versionVector != nil {
 		raw, err := txn.First(
-			tblVersionVector,
+			tblVersionVectors,
 			"doc_id_client_id",
 			docRefKey.DocID.String(),
 			clientInfo.ID.String(),
@@ -1259,7 +1259,7 @@ func (d *DB) UpdateVersionVector(
 			versionVectorInfo.ID = raw.(*database.VersionVectorInfo).ID
 		}
 
-		if err := txn.Insert(tblVersionVector, versionVectorInfo); err != nil {
+		if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
 			return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
 		}
 
@@ -1280,7 +1280,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	txn := d.db.Txn(true)
 
 	// 01. Find all version vector stored in db
-	iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
+	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}

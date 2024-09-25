@@ -19,14 +19,14 @@ package memory
 import "github.com/hashicorp/go-memdb"
 
 var (
-	tblProjects      = "projects"
-	tblUsers         = "users"
-	tblClients       = "clients"
-	tblDocuments     = "documents"
-	tblChanges       = "changes"
-	tblSnapshots     = "snapshots"
-	tblSyncedSeqs    = "syncedseqs"
-	tblVersionVector = "versionvector"
+	tblProjects       = "projects"
+	tblUsers          = "users"
+	tblClients        = "clients"
+	tblDocuments      = "documents"
+	tblChanges        = "changes"
+	tblSnapshots      = "snapshots"
+	tblSyncedSeqs     = "syncedseqs"
+	tblVersionVectors = "versionvectors"
 )
 
 var schema = &memdb.DBSchema{
@@ -229,8 +229,8 @@ var schema = &memdb.DBSchema{
 				},
 			},
 		},
-		tblVersionVector: {
-			Name: tblVersionVector,
+		tblVersionVectors: {
+			Name: tblVersionVectors,
 			Indexes: map[string]*memdb.IndexSchema{
 				"id": {
 					Name:    "id",
