@@ -17,10 +17,11 @@
 package bench
 
 import (
+	"crypto/rand"
 	gojson "encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"os"
 	"testing"
 
@@ -54,32 +55,6 @@ type editTrace struct {
 	FinalText string          `json:"finalText"`
 }
 
-// readEditingTraceFromFile reads trace from editing-trace.json.
-func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
-	var trace editTrace
-
-	file, err := os.Open("./editing-trace.json")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err = file.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = gojson.Unmarshal(byteValue, &trace); err != nil {
-		return nil, err
-	}
-
-	return &trace, err
-}
-
 func BenchmarkSplayTree(b *testing.B) {
 	for _, cnt := range []int{100000, 200000, 300000} {
 		b.Run(fmt.Sprintf("stress test %d", cnt), func(b *testing.B) {
@@ -87,15 +62,29 @@ func BenchmarkSplayTree(b *testing.B) {
 			tree := splay.NewTree[*stringValue](nil)
 			treeSize := 1
 			for i := 0; i < cnt; i++ {
-				op := rand.Intn(3)
+				max := big.NewInt(3)
+				operation, err := rand.Int(rand.Reader, max)
+				if err != nil {
+					b.Fatal(err)
+				}
 
-				if op == 0 {
+				if int(operation.Int64()) == 0 {
 					tree.Insert(newSplayNode("A"))
 					treeSize++
-				} else if op == 1 {
-					tree.Find(rand.Intn(treeSize))
+				} else if int(operation.Int64()) == 1 {
+					max = big.NewInt(int64(treeSize))
+					index, err := rand.Int(rand.Reader, max)
+					if err != nil {
+						b.Fatal(err)
+					}
+					_, _, _ = tree.Find(int(index.Int64()))
 				} else {
-					node, _, _ := tree.Find(rand.Intn(treeSize))
+					max = big.NewInt(int64(treeSize))
+					index, err := rand.Int(rand.Reader, max)
+					if err != nil {
+						b.Fatal(err)
+					}
+					node, _, _ := tree.Find(int(index.Int64()))
 					if node != nil {
 						tree.Delete(node)
 						treeSize--
@@ -106,7 +95,7 @@ func BenchmarkSplayTree(b *testing.B) {
 	}
 
 	for _, cnt := range []int{100000, 200000, 300000} {
-		b.Run(fmt.Sprintf("random access %d", cnt), func(b *testing.B) {
+		b.Run(fmt.Sprintf("random access %d", cnt), func(_ *testing.B) {
 			// Create a skewed tree by inserting characters only at the very end.
 			b.StopTimer()
 			tree := splay.NewTree[*stringValue](nil)
@@ -117,7 +106,12 @@ func BenchmarkSplayTree(b *testing.B) {
 
 			// 1000 times random access
 			for i := 0; i < 1000; i++ {
-				tree.Find(rand.Intn(cnt))
+				max := big.NewInt(int64(cnt))
+				index, err := rand.Int(rand.Reader, max)
+				if err != nil {
+					b.Fatal(err)
+				}
+				_, _, _ = tree.Find(int(index.Int64()))
 			}
 		})
 	}
@@ -125,9 +119,24 @@ func BenchmarkSplayTree(b *testing.B) {
 	b.Run("editing trace bench", func(b *testing.B) {
 		b.StopTimer()
 
-		editingTrace, err := readEditingTraceFromFile(b)
+		var editingTrace editTrace
 
+		file, err := os.Open("./editing-trace.json")
 		if err != nil {
+			b.Fatal(err)
+		}
+		defer func() {
+			if err = file.Close(); err != nil {
+				b.Fatal(err)
+			}
+		}()
+
+		byteValue, err := io.ReadAll(file)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		if err = gojson.Unmarshal(byteValue, &editingTrace); err != nil {
 			b.Fatal(err)
 		}
 

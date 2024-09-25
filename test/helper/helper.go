@@ -19,12 +19,9 @@ package helper
 
 import (
 	"context"
-	gojson "encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"os"
 	"strings"
 	"testing"
 	gotime "time"
@@ -538,35 +535,4 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 	}
 
 	return project, docs
-}
-
-type editTrace struct {
-	Edits     [][]interface{} `json:"edits"`
-	FinalText string          `json:"finalText"`
-}
-
-// readEditingTraceFromFile reads trace from editing-trace.json.
-func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
-	var trace editTrace
-
-	file, err := os.Open("./editing-trace.json")
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err = file.Close(); err != nil {
-			b.Fatal(err)
-		}
-	}()
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = gojson.Unmarshal(byteValue, &trace); err != nil {
-		return nil, err
-	}
-
-	return &trace, err
 }
