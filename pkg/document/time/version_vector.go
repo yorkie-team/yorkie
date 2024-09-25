@@ -133,7 +133,7 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 		}
 	}
 
-	for key, _ := range other {
+	for key := range other {
 		if _, exists := v[key]; !exists {
 			minVV[key] = 0
 		}

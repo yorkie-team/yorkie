@@ -170,7 +170,7 @@ func Preload(_ *cobra.Command, _ []string) error {
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("failed to read in config: %w", err)
+		return fmt.Errorf("read in config: %w", err)
 	}
 	return nil
 }
