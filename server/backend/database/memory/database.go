@@ -1194,12 +1194,11 @@ func (d *DB) UpdateVersionVector(
 
 	if !isAttached {
 		iterator, err := txn.Get(tblVersionVector, "doc_id", docRefKey.DocID.String())
-
 		if err != nil {
 			return err
 		}
-		actorID, err := clientInfo.ID.ToActorID()
 
+		actorID, err := clientInfo.ID.ToActorID()
 		if err != nil {
 			return err
 		}
