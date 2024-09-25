@@ -181,22 +181,28 @@ func (v VersionVector) MaxLamport() int64 {
 }
 
 // Filter returns filtered version vector which keys are only from filter
-func (v VersionVector) Filter(filter []actorID) VersionVector {
+func (v VersionVector) Filter(filter []*ActorID) VersionVector {
 	filteredVV := NewVersionVector()
 
 	for _, value := range filter {
-		filteredVV[value] = v[value]
+		filteredVV[value.bytes] = v[value.bytes]
 	}
 
 	return filteredVV
 }
 
 // Keys returns filtered version vector which keys are only from filter
-func (v VersionVector) Keys() []actorID {
-	var actors []actorID
+func (v VersionVector) Keys() ([]*ActorID, error) {
+	var actors []*ActorID
+
 	for id := range v {
-		actors = append(actors, id)
+		actorID, err := ActorIDFromBytes(id[:])
+		if err != nil {
+			return nil, err
+		}
+
+		actors = append(actors, actorID)
 	}
 
-	return actors
+	return actors, nil
 }
