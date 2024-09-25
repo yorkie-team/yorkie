@@ -1193,37 +1193,6 @@ func (d *DB) UpdateVersionVector(
 	}
 
 	if !isAttached {
-		iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
-		if err != nil {
-			return err
-		}
-
-		actorID, err := clientInfo.ID.ToActorID()
-		if err != nil {
-			return err
-		}
-
-		for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-			vvi := raw.(*database.VersionVectorInfo)
-
-			exists := vvi.VersionVector.VersionOf(actorID) > 0
-
-			if exists {
-				vvi.VersionVector.Unset(actorID)
-
-				versionVectorInfo := &database.VersionVectorInfo{
-					ID:            vvi.ID,
-					DocID:         docRefKey.DocID,
-					ClientID:      vvi.ClientID,
-					VersionVector: vvi.VersionVector,
-				}
-
-				if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
-					return fmt.Errorf("update other's version vector when detach of %s: %w", docRefKey.DocID, err)
-				}
-			}
-		}
-
 		if _, err = txn.DeleteAll(
 			tblVersionVectors,
 			"doc_id_client_id",
@@ -1237,34 +1206,32 @@ func (d *DB) UpdateVersionVector(
 		return nil
 	}
 
-	if versionVector != nil {
-		raw, err := txn.First(
-			tblVersionVectors,
-			"doc_id_client_id",
-			docRefKey.DocID.String(),
-			clientInfo.ID.String(),
-		)
-		if err != nil {
-			return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
-		}
-
-		versionVectorInfo := &database.VersionVectorInfo{
-			DocID:         docRefKey.DocID,
-			ClientID:      clientInfo.ID,
-			VersionVector: versionVector,
-		}
-		if raw == nil {
-			versionVectorInfo.ID = newID()
-		} else {
-			versionVectorInfo.ID = raw.(*database.VersionVectorInfo).ID
-		}
-
-		if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
-			return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
-		}
-
-		txn.Commit()
+	raw, err := txn.First(
+		tblVersionVectors,
+		"doc_id_client_id",
+		docRefKey.DocID.String(),
+		clientInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
 	}
+
+	versionVectorInfo := &database.VersionVectorInfo{
+		DocID:         docRefKey.DocID,
+		ClientID:      clientInfo.ID,
+		VersionVector: versionVector,
+	}
+	if raw == nil {
+		versionVectorInfo.ID = newID()
+	} else {
+		versionVectorInfo.ID = raw.(*database.VersionVectorInfo).ID
+	}
+
+	if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
+		return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
+	}
+
+	txn.Commit()
 
 	return nil
 }
@@ -1279,79 +1246,55 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 ) (time.VersionVector, error) {
 	txn := d.db.Txn(true)
 
-	// 01. Find all version vector stored in db
+	var minVersionVector time.VersionVector
+	var clientVersionVector time.VersionVector
+	var actorIDs []*time.ActorID
+
+	// 01. record current client's actorID
+	currentActorID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+	actorIDs = append(actorIDs, currentActorID)
+
+	// 02. Find all version vector stored in db
 	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
 	txn.Abort()
 
-	var versionVectorInfos []database.VersionVectorInfo
-	var minVersionVector time.VersionVector
-	var clientVersionVector time.VersionVector
-	var filteredVersionVector time.VersionVector
-
+	// 03. Compute min version vector without current client's version vector stored in db
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		vvi := raw.(*database.VersionVectorInfo)
-		// 01-2. Find current client's version vector from db
-		// we use this version vector to find max version vector in future
+		// record current client's prev version vector in db
 		if clientInfo.ID == vvi.ClientID {
 			clientVersionVector = vvi.VersionVector
-
 			continue
 		}
 
-		if minVersionVector == nil {
-			minVersionVector = vvi.VersionVector
-
-			continue
-		}
-
-		minVersionVector = minVersionVector.Min(vvi.VersionVector)
-	}
-
-	// 02. Compute min version vector without current client's version vector stored in db
-	if len(versionVectorInfos) > 0 {
-		for _, vvi := range versionVectorInfos {
-			if clientInfo.ID == vvi.ClientID {
-				clientVersionVector = vvi.VersionVector
-
-				continue
-			}
-
-			if minVersionVector == nil {
-				minVersionVector = vvi.VersionVector
-
-				continue
-			}
-
-			minVersionVector = minVersionVector.Min(vvi.VersionVector)
-		}
-	}
-
-	// 03. if there's more than one version vector in db.version vector table which is not client's
-	if minVersionVector != nil {
-		actorID, err := clientInfo.ID.ToActorID()
-
+		// record actorIDs to filter detached client's version vector
+		actorID, err := vvi.ClientID.ToActorID()
 		if err != nil {
 			return nil, err
 		}
+		actorIDs = append(actorIDs, actorID)
 
-		clientLamport := versionVector.VersionOf(actorID)
-		// 03-1. Filter detached client's lamport if exsits
-		filteredVersionVector = versionVector.Filter(minVersionVector.Keys())
-
-		if filteredVersionVector.VersionOf(actorID) <= 0 {
-			filteredVersionVector.Set(actorID, clientLamport)
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+			continue
 		}
 
-		minVersionVector = minVersionVector.Min(filteredVersionVector)
-		// 04. if there's no version vector in db.version vector or there's only one version vector which is current client's
-	} else {
-		// 04-1. if there's no version vector in db.version vector table
-		// which means there's nothing to filter and min version vector is the vv which current client just passed.
-		filteredVersionVector = versionVector
+		// compute min version vector without current client's version vector
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
 
+	// 04. compute min version vector if exists
+	// which means there exists other client's version vector in db
+	if minVersionVector != nil {
+		minVersionVector = minVersionVector.Min(versionVector)
+		// 05. if there's no version vector in db.version vector or there's only one version vector which is current client's
+	} else {
 		if clientVersionVector == nil {
 			minVersionVector = versionVector
 		} else {
@@ -1359,11 +1302,15 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
-	err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, filteredVersionVector)
+	// update current client's version vector
+	err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector)
 
 	if err != nil {
 		return nil, err
 	}
+
+	// filter detached client's version vector.
+	minVersionVector = minVersionVector.Filter(actorIDs)
 
 	return minVersionVector, nil
 }
