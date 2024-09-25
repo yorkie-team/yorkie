@@ -1159,15 +1159,20 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	var versionVectorInfos []database.VersionVectorInfo
 	var minVersionVector time.VersionVector
 	var clientVersionVector time.VersionVector
-	var filteredVersionVector time.VersionVector
+	var actorIDs []*time.ActorID
 
-	// 01. Find all version vector stored in db
+	// 01. record current client's actorID
+	currentActorID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+	actorIDs = append(actorIDs, currentActorID)
+
+	// 02. Find all version vector stored in db
 	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 	})
-	defer cursor.Close(ctx)
-
 	if err != nil {
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
@@ -1176,48 +1181,36 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
-	// 02. Compute min version vector without current client's version vector strored in db
-	if len(versionVectorInfos) > 0 {
-		for _, vvi := range versionVectorInfos {
-			if clientInfo.ID == vvi.ClientID {
-				clientVersionVector = vvi.VersionVector
-
-				continue
-			}
-
-			if minVersionVector == nil {
-				minVersionVector = vvi.VersionVector
-
-				continue
-			}
-
-			minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	// 03. Compute min version vector without current client's version vector stored in db
+	for _, vvi := range versionVectorInfos {
+		// record current client's prev version vector in db
+		if clientInfo.ID == vvi.ClientID {
+			clientVersionVector = vvi.VersionVector
+			continue
 		}
-	}
 
-	// 03. if there's more than one version vector in db.version vector table which is not client's
-	if minVersionVector != nil {
-		actorID, err := clientInfo.ID.ToActorID()
-
+		// record actorIDs to filter detached client's version vector
+		actorID, err := vvi.ClientID.ToActorID()
 		if err != nil {
 			return nil, err
 		}
+		actorIDs = append(actorIDs, actorID)
 
-		clientLamport := versionVector.VersionOf(actorID)
-		// 03-1. Filter detached client's lamport if exsits
-		filteredVersionVector = versionVector.Filter(minVersionVector.Keys())
-
-		if filteredVersionVector.VersionOf(actorID) <= 0 {
-			filteredVersionVector.Set(actorID, clientLamport)
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+			continue
 		}
 
-		minVersionVector = minVersionVector.Min(filteredVersionVector)
-		// 04. if there's no version vector in db.version vector or there's only one version vector which is current client's
-	} else {
-		// 04-1. if there's no version vector in db.version vector table
-		// which means there's nothing to filter and min version vector is the vv which current client just passed.
-		filteredVersionVector = versionVector
+		// compute min version vector without current client's version vector
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
 
+	// 04. compute min version vector if exists
+	// which means there exists other client's version vector in db
+	if minVersionVector != nil {
+		minVersionVector = minVersionVector.Min(versionVector)
+		// 05. if there's no version vector in db.version vector or there's only one version vector which is current client's
+	} else {
 		if clientVersionVector == nil {
 			minVersionVector = versionVector
 		} else {
@@ -1225,11 +1218,14 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 		}
 	}
 
-	err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, filteredVersionVector)
-
+	// update current client's version vector
+	err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector)
 	if err != nil {
 		return nil, err
 	}
+
+	// filter detached client's version vector.
+	minVersionVector = minVersionVector.Filter(actorIDs)
 
 	return minVersionVector, nil
 }
@@ -1246,46 +1242,6 @@ func (c *Client) UpdateVersionVector(
 	}
 
 	if !isAttached {
-		cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-		})
-		if err != nil {
-			return fmt.Errorf("find all version vectors: %w", err)
-		}
-		defer cursor.Close(ctx)
-
-		var versionVectorInfos []database.VersionVectorInfo
-		if err := cursor.All(ctx, &versionVectorInfos); err != nil {
-			return fmt.Errorf("decode version vectors: %w", err)
-		}
-		actorID, err := clientInfo.ID.ToActorID()
-
-		if err != nil {
-			return err
-		}
-		for _, vvi := range versionVectorInfos {
-			exists := vvi.VersionVector.VersionOf(actorID) > 0
-
-			if exists {
-				vvi.VersionVector.Unset(actorID)
-
-				_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
-					"project_id": docRefKey.ProjectID,
-					"doc_id":     docRefKey.DocID,
-					"client_id":  vvi.ClientID,
-				}, bson.M{
-					"$set": bson.M{
-						"version_vector": vvi.VersionVector,
-					},
-				}, options.Update().SetUpsert(true))
-
-				if err != nil {
-					return fmt.Errorf("failed to update detached client's version vector: %w", err)
-				}
-			}
-		}
-
 		if _, err = c.collection(ColVersionVector).DeleteOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
@@ -1296,20 +1252,17 @@ func (c *Client) UpdateVersionVector(
 		return nil
 	}
 
-	if versionVector != nil {
-		_, err := c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"client_id":  clientInfo.ID,
-		}, bson.M{
-			"$set": bson.M{
-				"version_vector": versionVector,
-			},
-		}, options.Update().SetUpsert(true))
-
-		if err != nil {
-			return fmt.Errorf("failed to update version vector: %w", err)
-		}
+	_, err = c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"client_id":  clientInfo.ID,
+	}, bson.M{
+		"$set": bson.M{
+			"version_vector": versionVector,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("update version vector: %w", err)
 	}
 
 	return nil
