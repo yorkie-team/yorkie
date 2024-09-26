@@ -40,8 +40,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColSyncedSeqs represents the syncedseqs collection in the database.
 	ColSyncedSeqs = "syncedseqs"
-	// ColVersionVector represents the versionvector collection in the database.
-	ColVersionVector = "versionvectors"
+	// ColVersionVectors represents the versionvector collection in the database.
+	ColVersionVectors = "versionvectors"
 )
 
 // Collections represents the list of all collections in the database.
@@ -163,7 +163,7 @@ var collectionInfos = []collectionInfo{
 		}},
 	},
 	{
-		name: ColVersionVector,
+		name: ColVersionVectors,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)},

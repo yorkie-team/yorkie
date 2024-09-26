@@ -1176,7 +1176,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	}
 
 	// 02. Find all version vectors of the given document from DB.
-	cursor, err := c.collection(ColVersionVector).Find(ctx, bson.M{
+	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 	})
@@ -1240,7 +1240,7 @@ func (c *Client) UpdateVersionVector(
 	}
 
 	if !isAttached {
-		if _, err = c.collection(ColVersionVector).DeleteOne(ctx, bson.M{
+		if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
 			"client_id":  clientInfo.ID,
@@ -1250,7 +1250,7 @@ func (c *Client) UpdateVersionVector(
 		return nil
 	}
 
-	_, err = c.collection(ColVersionVector).UpdateOne(ctx, bson.M{
+	_, err = c.collection(ColVersionVectors).UpdateOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 		"client_id":  clientInfo.ID,
