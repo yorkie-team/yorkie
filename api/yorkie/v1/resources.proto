@@ -48,6 +48,7 @@ message ChangePack {
   TimeTicket min_synced_ticket = 5; // Deprecated
   VersionVector min_synced_version_vector = 8;
   bool is_removed = 6;
+  VersionVector version_vector = 9;
 }
 
 message Change {

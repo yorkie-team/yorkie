@@ -1149,62 +1149,121 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-// and returns the SyncedVersionVector of the document.
-func (c *Client) UpdateAndFindMinSyncedVersionVector(
+// UpdateAndFindMinSyncedVersionVectorAfterPushPull returns min synced version vector
+func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
+	versionVector time.VersionVector,
 ) (time.VersionVector, error) {
-	// 01. update synced seq of the given client and document.
-	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
+	var versionVectorInfos []database.VersionVectorInfo
+
+	// 01. Prepare attachedActorIDs including the current client.
+	// If some clients are detached, we should remove them from the min version vector.
+	// For this, we use attachedActorIDs to filter the min version vector.
+	var attachedActorIDs []*time.ActorID
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
 		return nil, err
 	}
 
-	// 02. find min synced seq of the given document.
-	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}, options.FindOne().SetSort(bson.D{
-		{Key: "server_seq", Value: 1},
-	}))
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
-	}
-	syncedSeqInfo := database.SyncedSeqInfo{}
-	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
+	if attached {
+		currentActorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		attachedActorIDs = append(attachedActorIDs, currentActorID)
 	}
 
-	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return nil, nil
-	}
-
-	// 03. find the version vector of the min synced seq.
-	// TODO(hackerwins): We need to find the min synced seq of the changes.
-	// min synced seq of the changes is the equivalent of LCA in the dependency graph.
-	result = c.collection(ColChanges).FindOne(ctx, bson.M{
+	// 02. Find all version vectors of the given document from DB.
+	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": syncedSeqInfo.ServerSeq,
 	})
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find server seq's change: %w", result.Err())
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
 
-	changeInfo := database.ChangeInfo{}
-	if err := result.Decode(&changeInfo); err != nil {
-		return nil, fmt.Errorf("decode change: %w", err)
+	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
+		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
-	return changeInfo.VersionVector, nil
+	// 03. Compute min version vector.
+	var minVersionVector time.VersionVector
+
+	// 03-1. Compute min version vector of other clients and collect attachedActorIDs.
+	for _, vvi := range versionVectorInfos {
+		if clientInfo.ID == vvi.ClientID {
+			continue
+		}
+
+		actorID, err := vvi.ClientID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		attachedActorIDs = append(attachedActorIDs, actorID)
+
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+			continue
+		}
+
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
+	if minVersionVector == nil {
+		minVersionVector = versionVector
+	}
+
+	// 03-2. Compute min version vector with current client's version vector and filter detached clients.
+	minVersionVector = minVersionVector.Min(versionVector)
+	minVersionVector = minVersionVector.Filter(attachedActorIDs)
+
+	// 04. Update current client's version vector. If the client is detached, remove it.
+	// This is only for the current client and does not affect the version vector of other clients.
+	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+		return nil, err
+	}
+
+	return minVersionVector, nil
+}
+
+// UpdateVersionVector updates the given version vector of the given client
+func (c *Client) UpdateVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector,
+) error {
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	if !isAttached {
+		if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		}, options.Delete()); err != nil {
+			return fmt.Errorf("delete version vector: %w", err)
+		}
+		return nil
+	}
+
+	_, err = c.collection(ColVersionVectors).UpdateOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"client_id":  clientInfo.ID,
+	}, bson.M{
+		"$set": bson.M{
+			"version_vector": versionVector,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("update version vector: %w", err)
+	}
+
+	return nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.

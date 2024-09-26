@@ -101,11 +101,11 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 func (id ID) SyncClocks(other ID) ID {
 	lamport := id.lamport + 1
 	if id.lamport < other.lamport {
-		lamport = other.lamport
+		lamport = other.lamport + 1
 	}
 
-	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector)
-	newID.versionVector.Set(other.actorID, other.lamport)
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(other.versionVector))
+	newID.versionVector.Set(id.actorID, lamport)
 	return newID
 }
 
@@ -114,16 +114,18 @@ func (id ID) SyncClocks(other ID) ID {
 func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 	lamport := id.lamport + 1
 	if id.lamport < otherLamport {
-		lamport = otherLamport
+		lamport = otherLamport + 1
 	}
 
-	return NewID(
-		id.clientSeq,
-		id.serverSeq,
-		lamport,
-		id.actorID,
-		vector,
-	)
+	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
+	newID.versionVector.Set(id.actorID, lamport)
+
+	return newID
+}
+
+// SetVersionVector sets version vector
+func (id ID) SetVersionVector(vector time.VersionVector) ID {
+	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, vector)
 }
 
 // SetActor sets actorID.

@@ -219,7 +219,17 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.GarbageCollect(pack.MinSyncedVersionVector)
 	}
 
-	// 05. Update the status.
+	// 05. Remove detached client's lamport from version vector if it exists
+	if pack.MinSyncedVersionVector != nil {
+		actorIDs, err := pack.MinSyncedVersionVector.Keys()
+		if err != nil {
+			return err
+		}
+
+		d.doc.changeID = d.doc.changeID.SetVersionVector(d.doc.changeID.VersionVector().Filter(actorIDs))
+	}
+
+	// 06. Update the status.
 	if pack.IsRemoved {
 		d.SetStatus(StatusRemoved)
 	}

@@ -17,6 +17,8 @@
 package time
 
 import (
+	"bytes"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -36,6 +38,11 @@ func NewVersionVector() VersionVector {
 // Set sets the given actor's version to the given value.
 func (v VersionVector) Set(id *ActorID, i int64) {
 	v[id.bytes] = i
+}
+
+// Unset unsets the given actor's version to the given value.
+func (v VersionVector) Unset(id *ActorID) {
+	delete(v, id.bytes)
 }
 
 // VersionOf returns the version of the given actor.
@@ -58,8 +65,16 @@ func (v VersionVector) Marshal() string {
 
 	builder.WriteRune('{')
 
+	keys := make([]actorID, 0, len(v))
+	for k := range v {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return bytes.Compare(keys[i][:], keys[j][:]) < 0
+	})
+
 	isFirst := true
-	for k, val := range v {
+	for _, k := range keys {
 		if !isFirst {
 			builder.WriteRune(',')
 		}
@@ -71,7 +86,7 @@ func (v VersionVector) Marshal() string {
 
 		builder.WriteString(id.String())
 		builder.WriteRune(':')
-		builder.WriteString(strconv.FormatInt(val, 10))
+		builder.WriteString(strconv.FormatInt(v[k], 10))
 		isFirst = false
 	}
 	builder.WriteRune('}')
@@ -97,9 +112,97 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	return true
 }
 
-// After returns whether this VersionVector is causally after the given ticket.
-func (v VersionVector) After(other *Ticket) bool {
-	actorID := other.ActorID()
-	ticket := NewTicket(v.VersionOf(actorID), MaxDelimiter, actorID)
-	return ticket.Compare(other) >= 0
+// EqualToOrAfter returns whether this VersionVector's every field is equal or after than given ticket.
+func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
+	return v[other.actorID.bytes] >= other.lamport
+}
+
+// Min returns new vv consists of every min value in each column.
+func (v VersionVector) Min(other VersionVector) VersionVector {
+	minVV := NewVersionVector()
+
+	for key, value := range v {
+		if otherValue, exists := other[key]; exists {
+			if value < otherValue {
+				minVV[key] = value
+			} else {
+				minVV[key] = otherValue
+			}
+		} else {
+			minVV[key] = 0
+		}
+	}
+
+	for key := range other {
+		if _, exists := v[key]; !exists {
+			minVV[key] = 0
+		}
+	}
+
+	return minVV
+}
+
+// Max returns new vv consists of every max value in each column.
+func (v VersionVector) Max(other VersionVector) VersionVector {
+	maxVV := NewVersionVector()
+
+	for key, value := range v {
+		if otherValue, exists := other[key]; exists {
+			if value > otherValue {
+				maxVV[key] = value
+			} else {
+				maxVV[key] = otherValue
+			}
+		} else {
+			maxVV[key] = value
+		}
+	}
+
+	for key, value := range other {
+		if _, exists := v[key]; !exists {
+			maxVV[key] = value
+		}
+	}
+
+	return maxVV
+}
+
+// MaxLamport returns new vv consists of every max value in each column.
+func (v VersionVector) MaxLamport() int64 {
+	var maxLamport int64 = -1
+
+	for _, value := range v {
+		if value > maxLamport {
+			maxLamport = value
+		}
+	}
+
+	return maxLamport
+}
+
+// Filter returns filtered version vector which keys are only from filter
+func (v VersionVector) Filter(filter []*ActorID) VersionVector {
+	filteredVV := NewVersionVector()
+
+	for _, value := range filter {
+		filteredVV[value.bytes] = v[value.bytes]
+	}
+
+	return filteredVV
+}
+
+// Keys returns filtered version vector which keys are only from filter
+func (v VersionVector) Keys() ([]*ActorID, error) {
+	var actors []*ActorID
+
+	for id := range v {
+		actorID, err := ActorIDFromBytes(id[:])
+		if err != nil {
+			return nil, err
+		}
+
+		actors = append(actors, actorID)
+	}
+
+	return actors, nil
 }

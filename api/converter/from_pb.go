@@ -102,12 +102,25 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
+	versionVector, err := FromVersionVector(pbPack.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
 	pack := &change.Pack{
 		DocumentKey:     key.Key(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
 		Changes:         changes,
 		MinSyncedTicket: minSyncedTicket,
 		IsRemoved:       pbPack.IsRemoved,
+		VersionVector:   versionVector,
+	}
+
+	if pbPack.MinSyncedVersionVector != nil {
+		pack.MinSyncedVersionVector, err = FromVersionVector(pbPack.MinSyncedVersionVector)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if pbPack.Snapshot != nil {

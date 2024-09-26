@@ -259,7 +259,7 @@ components:
         minSyncedTicket:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
-          description: ""
+          description: Deprecated
           title: min_synced_ticket
           type: object
         minSyncedVersionVector:
@@ -279,6 +279,12 @@ components:
           additionalProperties: false
           description: ""
           title: snapshot_version_vector
+          type: object
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
           type: object
       title: ChangePack
       type: object

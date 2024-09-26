@@ -173,6 +173,16 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 		}
 	}
 
+	// 04. Remove detached client's lamport from version vector if it exists
+	if pack.MinSyncedVersionVector != nil {
+		actorIDs, err := pack.MinSyncedVersionVector.Keys()
+		if err != nil {
+			return err
+		}
+
+		d.changeID = d.changeID.SetVersionVector(d.changeID.VersionVector().Filter(actorIDs))
+	}
+
 	return nil
 }
 
@@ -196,7 +206,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := d.localChanges
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes, nil)
+	return change.NewPack(d.key, cp, changes, d.VersionVector(), nil)
 }
 
 // SetActor sets actor into this document. This is also applied in the local
