@@ -41,7 +41,7 @@ const (
 	// ColSyncedSeqs represents the syncedseqs collection in the database.
 	ColSyncedSeqs = "syncedseqs"
 	// ColVersionVector represents the versionvector collection in the database.
-	ColVersionVector = "versionvector"
+	ColVersionVector = "versionvectors"
 )
 
 // Collections represents the list of all collections in the database.
