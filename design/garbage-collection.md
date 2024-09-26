@@ -62,10 +62,6 @@ min([c1:2, c2:3, c3:4], [c1:3, c2:1, c3:5, c4:3])
 => [c1:2, c2:1, c3:4, c4:0]
 
 ```
-
-### GC condition
-
-
 ### An example of garbage collection:
 #### State 1
 
@@ -156,6 +152,6 @@ minVersionVector = {c1:3, c2:3, c3:5}.Filter([c1]) = {c2:3, c3:5}
 ```
 
 After client receive this minVersionVector, it will filter its version vector to remove detached client's lamport.
-The next pushpull request will contains filtered version vector so that eventually db.version vector will only store attached client's version vector only.
+The next pushpull request will contains filtered version vector so that eventually db.version vector will store attached client's version vector only.
 ![filter-version-vector](media/filter-version-vector.jpg)
 
