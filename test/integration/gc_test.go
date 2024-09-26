@@ -261,7 +261,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 2)), true)
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 2)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())), 2)
+		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 2)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -274,7 +274,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 3)), true)
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 1)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())), 1)
+		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 1)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -292,7 +292,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 4)), true)
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 5)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())), 5)
+		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 5)
 		assert.Equal(t, doc.GarbageLen(), 0)
 	})
 
@@ -514,8 +514,8 @@ func TestGarbageCollection(t *testing.T) {
 		// node removedAt = 3@c1, minVV[c1] = 3 meet GC condition
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
-		assert.Equal(t, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID(), d2.ActorID())), 3)
-		assert.Equal(t, d2.GarbageCollect(helper.MaxVectorClock(d1.ActorID(), d2.ActorID())), 0)
+		assert.Equal(t, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())), 3)
+		assert.Equal(t, d2.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())), 0)
 	})
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
@@ -538,7 +538,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, 5, d1.GarbageLen())
-		assert.Equal(t, 5, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())))
+		assert.Equal(t, 5, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID())))
 	})
 
 	t.Run("Should work properly when there are multiple nodes to be collected in text type", func(t *testing.T) {

@@ -11,12 +11,12 @@
 [![CodeCov](https://img.shields.io/codecov/c/github/yorkie-team/yorkie)](https://codecov.io/gh/yorkie-team/yorkie)
 [![Godoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yorkie-team/yorkie)
 
-Yorkie is an open source document store for building collaborative editing applications. Yorkie uses JSON-like documents(CRDT) with optional types.
+Yorkie is an open-source document store for building real-time collaborative applications. It uses JSON-like documents(CRDT) with optional types.
 
 Yorkie consists of three main components: Client, Document and Server.
 
 ```
- Client "A" (Go)                Self-Hosted Server Or Cloud   MongoDB or MemDB
+ Client "A" (Go)               Server(Cloud or Self-Hosted)  MongoDB or MemDB
 ┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
 │  Document "D-1"   │◄─Changes─►│  Project "P-1"         │   │ Changes   │
 │  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │
@@ -33,10 +33,13 @@ Yorkie consists of three main components: Client, Document and Server.
 └────────────────────┘
 ```
 
-- Clients can have a replica of the document representing an application model locally on several devices.
-- Each client can independently update the document on their local device, even while offline.
-- When a network connection is available, the client figures out which changes need to be synced from one device to another, and brings them into the same state.
-- If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
+Key Features:
+
+- Clients: Clients can have a local replica of the document representing an application model on several devices.
+- Offline Editing: Each client can independently update the document on their local device, even while offline.
+- Synchronization: When a network connection is available, the client figures out which changes need to be synced from one device to another, and brings them into the same state.
+- Conflict Resolution: If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflicts.
+- Database Integration: Yorkie supports MongoDB and MemDB as the underlying data storage.
 
 ## Documentation
 

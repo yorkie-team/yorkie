@@ -19,12 +19,14 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -55,7 +57,7 @@ func (s *adminServer) SignUp(
 	ctx context.Context,
 	req *connect.Request[api.SignUpRequest],
 ) (*connect.Response[api.SignUpResponse], error) {
-	fields := &types.SignupFields{Username: &req.Msg.Username, Password: &req.Msg.Password}
+	fields := &types.UserFields{Username: &req.Msg.Username, Password: &req.Msg.Password}
 	if err := fields.Validate(); err != nil {
 		return nil, err
 	}
@@ -93,6 +95,57 @@ func (s *adminServer) LogIn(
 	return connect.NewResponse(&api.LogInResponse{
 		Token: token,
 	}), nil
+}
+
+// DeleteAccount deletes a user.
+func (s *adminServer) DeleteAccount(
+	ctx context.Context,
+	req *connect.Request[api.DeleteAccountRequest],
+) (*connect.Response[api.DeleteAccountResponse], error) {
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Msg.Username,
+		req.Msg.Password,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = users.DeleteAccountByName(ctx, s.backend, user.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.DeleteAccountResponse{}), nil
+}
+
+// ChangePassword changes to new password.
+func (s *adminServer) ChangePassword(
+	ctx context.Context,
+	req *connect.Request[api.ChangePasswordRequest],
+) (*connect.Response[api.ChangePasswordResponse], error) {
+	fields := &types.UserFields{Username: &req.Msg.Username, Password: &req.Msg.NewPassword}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Msg.Username,
+		req.Msg.CurrentPassword,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = users.ChangePassword(ctx, s.backend, user.Username, req.Msg.NewPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ChangePasswordResponse{}), nil
 }
 
 // CreateProject creates a new project.
@@ -225,6 +278,7 @@ func (s *adminServer) GetDocuments(
 		s.backend,
 		project,
 		keys,
+		req.Msg.IncludeSnapshot,
 	)
 	if err != nil {
 		return nil, err
@@ -437,5 +491,17 @@ func (s *adminServer) ListChanges(
 
 	return connect.NewResponse(&api.ListChangesResponse{
 		Changes: pbChanges,
+	}), nil
+}
+
+// GetServerVersion get the version of yorkie server.
+func (s *adminServer) GetServerVersion(
+	_ context.Context,
+	_ *connect.Request[api.GetServerVersionRequest],
+) (*connect.Response[api.GetServerVersionResponse], error) {
+	return connect.NewResponse(&api.GetServerVersionResponse{
+		YorkieVersion: version.Version,
+		GoVersion:     runtime.Version(),
+		BuildDate:     version.BuildDate,
 	}), nil
 }

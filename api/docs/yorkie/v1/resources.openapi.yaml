@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.4.27
+  version: v0.5.0
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -274,12 +274,6 @@ components:
           format: byte
           title: snapshot
           type: string
-        snapshotVersionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
-          additionalProperties: false
-          description: ""
-          title: snapshot_version_vector
-          type: object
         versionVector:
           $ref: '#/components/schemas/yorkie.v1.VersionVector'
           additionalProperties: false
@@ -704,6 +698,12 @@ components:
           description: ""
           title: add
           type: object
+        arraySet:
+          $ref: '#/components/schemas/yorkie.v1.Operation.ArraySet'
+          additionalProperties: false
+          description: ""
+          title: array_set
+          type: object
         edit:
           $ref: '#/components/schemas/yorkie.v1.Operation.Edit'
           additionalProperties: false
@@ -789,6 +789,36 @@ components:
           title: value
           type: object
       title: Add
+      type: object
+    yorkie.v1.Operation.ArraySet:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        executedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: executed_at
+          type: object
+        parentCreatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: parent_created_at
+          type: object
+        value:
+          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: ArraySet
       type: object
     yorkie.v1.Operation.Edit:
       additionalProperties: false

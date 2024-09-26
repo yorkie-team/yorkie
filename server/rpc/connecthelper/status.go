@@ -151,7 +151,17 @@ func errorToConnectError(err error) (*connect.Error, bool) {
 		cause = errors.Unwrap(cause)
 	}
 
-	connectCode, ok := errorToConnectCode[cause]
+	// NOTE(hackerwins): This prevents panic when the cause is an unhashable
+	// error.
+	var connectCode connect.Code
+	var ok bool
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+
+	connectCode, ok = errorToConnectCode[cause]
 	if !ok {
 		return nil, false
 	}

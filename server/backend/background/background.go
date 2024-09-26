@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
 
 type routineID int32
@@ -49,18 +50,25 @@ type Background struct {
 
 	// routineID is used to generate routine ID.
 	routineID routineID
+
+	// metrics is used to collect metrics with prometheus.
+	metrics *prometheus.Metrics
 }
 
 // New creates a new background service.
-func New() *Background {
+func New(metrics *prometheus.Metrics) *Background {
 	return &Background{
 		closing: make(chan struct{}),
+		metrics: metrics,
 	}
 }
 
 // AttachGoroutine creates a goroutine on a given function and tracks it using
 // the background's WaitGroup.
-func (b *Background) AttachGoroutine(f func(ctx context.Context)) {
+func (b *Background) AttachGoroutine(
+	f func(ctx context.Context),
+	taskType string,
+) {
 	b.wgMu.RLock() // this blocks with ongoing close(b.closing)
 	defer b.wgMu.RUnlock()
 	select {
@@ -73,8 +81,12 @@ func (b *Background) AttachGoroutine(f func(ctx context.Context)) {
 	// now safe to add since WaitGroup wait has not started yet
 	b.wg.Add(1)
 	routineLogger := logging.New(b.routineID.next())
+	b.metrics.AddBackgroundGoroutines(taskType)
 	go func() {
-		defer b.wg.Done()
+		defer func() {
+			b.wg.Done()
+			b.metrics.RemoveBackgroundGoroutines(taskType)
+		}()
 		f(logging.With(context.Background(), routineLogger))
 	}()
 }

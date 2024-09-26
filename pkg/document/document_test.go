@@ -488,7 +488,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		assert.Equal(t, 1, doc.GarbageLen())
-		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
@@ -521,7 +521,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
-		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})

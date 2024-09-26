@@ -28,6 +28,8 @@ option java_package = "dev.yorkie.api.v1";
 service AdminService {
   rpc SignUp(SignUpRequest) returns (SignUpResponse) {}
   rpc LogIn(LogInRequest) returns (LogInResponse) {}
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {}
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {}
 
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
@@ -42,6 +44,8 @@ service AdminService {
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
+
+  rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
 
 message SignUpRequest {
@@ -60,6 +64,23 @@ message LogInRequest {
 
 message LogInResponse {
   string token = 1;
+}
+
+message DeleteAccountRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message DeleteAccountResponse {
+}
+
+message ChangePasswordRequest {
+  string username = 1;
+  string current_password = 2;
+  string new_password = 3;
+}
+
+message ChangePasswordResponse {
 }
 
 message CreateProjectRequest {
@@ -117,6 +138,7 @@ message GetDocumentResponse {
 message GetDocumentsRequest {
   string project_name = 1;
   repeated string document_keys = 2;
+  bool include_snapshot = 3;
 }
 
 message GetDocumentsResponse {
@@ -164,4 +186,12 @@ message ListChangesRequest {
 
 message ListChangesResponse {
   repeated Change changes = 1;
+}
+
+message GetServerVersionRequest {}
+
+message GetServerVersionResponse {
+  string yorkie_version = 1;
+  string go_version = 2;
+  string build_date = 3;
 }

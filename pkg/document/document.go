@@ -187,7 +187,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	if len(pack.Snapshot) > 0 {
 		d.cloneRoot = nil
 		d.clonePresences = nil
-		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SnapshotVersionVector); err != nil {
+		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.VersionVector); err != nil {
 			return err
 		}
 	} else {

@@ -64,6 +64,8 @@ var (
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
+	AdminPasswordForSignUp                = AdminPassword + "123!"
+	UseDefaultProject                     = true
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
@@ -139,8 +141,8 @@ func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
-// MaxVectorClock return the SyncedVectorMap that contains the given actors as key and Max Lamport.
-func MaxVectorClock(actors ...*time.ActorID) time.VersionVector {
+// MaxVersionVector returns the max version vector of the given actors.
+func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 	if len(actors) == 0 {
 		actors = append(actors, time.InitialActorID)
 	}

@@ -48,12 +48,20 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
 
+	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysTest(t, db, projectID)
+	})
+
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
 		testcases.RunFindDocInfosByQueryTest(t, db, projectOneID)
 	})
 
 	t.Run("RunFindChangesBetweenServerSeqs test", func(t *testing.T) {
 		testcases.RunFindChangesBetweenServerSeqsTest(t, db, projectID)
+	})
+
+	t.Run("RunFindChangeInfosBetweenServerSeqsTest test", func(t *testing.T) {
+		testcases.RunFindChangeInfosBetweenServerSeqsTest(t, db, projectID)
 	})
 
 	t.Run("RunFindClosestSnapshotInfo test", func(t *testing.T) {

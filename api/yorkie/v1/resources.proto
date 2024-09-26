@@ -43,12 +43,12 @@ message ChangePack {
   string document_key = 1;
   Checkpoint checkpoint = 2;
   bytes snapshot = 3;
-  VersionVector snapshot_version_vector = 7;
   repeated Change changes = 4;
-  TimeTicket min_synced_ticket = 5; // Deprecated
-  VersionVector min_synced_version_vector = 8;
   bool is_removed = 6;
-  VersionVector version_vector = 9;
+  VersionVector version_vector = 7;
+  VersionVector min_synced_version_vector = 8;
+
+  TimeTicket min_synced_ticket = 5; // Deprecated
 }
 
 message Change {
@@ -144,6 +144,12 @@ message Operation {
     repeated string attributes_to_remove = 6;
     map<string, TimeTicket> created_at_map_by_actor = 7;
   }
+  message ArraySet {
+    TimeTicket parent_created_at = 1;
+    TimeTicket created_at = 2;
+    JSONElementSimple value = 3;
+    TimeTicket executed_at = 4;
+  }
 
   oneof body {
     Set set = 1;
@@ -156,6 +162,7 @@ message Operation {
     Increase increase = 8;
     TreeEdit tree_edit = 9;
     TreeStyle tree_style = 10;
+    ArraySet array_set = 11;
   }
 }
 

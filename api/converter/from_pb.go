@@ -97,38 +97,30 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
-	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
-	if err != nil {
-		return nil, err
-	}
-
 	versionVector, err := FromVersionVector(pbPack.VersionVector)
 	if err != nil {
 		return nil, err
 	}
 
+	minSyncedVersionVector, err := FromVersionVector(pbPack.MinSyncedVersionVector)
+	if err != nil {
+		return nil, err
+	}
+
+	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
+	if err != nil {
+		return nil, err
+	}
+
 	pack := &change.Pack{
-		DocumentKey:     key.Key(pbPack.DocumentKey),
-		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
-		Changes:         changes,
-		MinSyncedTicket: minSyncedTicket,
-		IsRemoved:       pbPack.IsRemoved,
-		VersionVector:   versionVector,
-	}
-
-	if pbPack.MinSyncedVersionVector != nil {
-		pack.MinSyncedVersionVector, err = FromVersionVector(pbPack.MinSyncedVersionVector)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if pbPack.Snapshot != nil {
-		pack.Snapshot = pbPack.Snapshot
-		pack.SnapshotVersionVector, err = FromVersionVector(pbPack.SnapshotVersionVector)
-		if err != nil {
-			return nil, err
-		}
+		DocumentKey:            key.Key(pbPack.DocumentKey),
+		Checkpoint:             fromCheckpoint(pbPack.Checkpoint),
+		Changes:                changes,
+		Snapshot:               pbPack.Snapshot,
+		IsRemoved:              pbPack.IsRemoved,
+		VersionVector:          versionVector,
+		MinSyncedVersionVector: minSyncedVersionVector,
+		MinSyncedTicket:        minSyncedTicket,
 	}
 
 	return pack, nil
@@ -187,8 +179,7 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 // FromVersionVector converts the given Protobuf formats to model format.
 func FromVersionVector(pbVersionVector *api.VersionVector) (time.VersionVector, error) {
 	versionVector := make(time.VersionVector)
-	// TODO(hackerwins): Old clients until v0.4.15 don't send VersionVector.
-	// Remove this check after all clients are updated to the v0.4.16 or later.
+	// TODO(hackerwins): Old clients do not send VersionVector. We should remove this later.
 	if pbVersionVector == nil {
 		return versionVector, nil
 	}
@@ -257,6 +248,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromTreeEdit(decoded.TreeEdit)
 		case *api.Operation_TreeStyle_:
 			op, err = fromTreeStyle(decoded.TreeStyle)
+		case *api.Operation_ArraySet_:
+			op, err = fromArraySet(decoded.ArraySet)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -588,6 +581,31 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 	), nil
 }
 
+func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, error) {
+	parentCreatedAt, err := fromTimeTicket(pbSetByIndex.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := fromTimeTicket(pbSetByIndex.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbSetByIndex.Value)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbSetByIndex.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operations.NewArraySet(
+		parentCreatedAt,
+		createdAt,
+		elem,
+		executedAt,
+	), nil
+}
+
 func fromCreatedAtMapByActor(
 	pbCreatedAtMapByActor map[string]*api.TimeTicket,
 ) (map[string]*time.Ticket, error) {
@@ -632,18 +650,15 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 	}
 
 	root := nodes[len(nodes)-1]
+	depthTable := make(map[int32]*crdt.TreeNode)
+	depthTable[pbNodes[len(nodes)-1].Depth] = nodes[len(nodes)-1]
 	for i := len(nodes) - 2; i >= 0; i-- {
-		var parent *crdt.TreeNode
-		for j := i + 1; j < len(nodes); j++ {
-			if pbNodes[i].Depth-1 == pbNodes[j].Depth {
-				parent = nodes[j]
-				break
-			}
-		}
+		var parent *crdt.TreeNode = depthTable[pbNodes[i].Depth-1]
 
 		if err := parent.Prepend(nodes[i]); err != nil {
 			return nil, err
 		}
+		depthTable[pbNodes[i].Depth] = nodes[i]
 	}
 
 	root.Index.UpdateDescendantsSize()

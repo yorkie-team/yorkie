@@ -146,7 +146,7 @@ func (d *InternalDocument) HasLocalChanges() bool {
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SnapshotVersionVector); err != nil {
+		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.VersionVector); err != nil {
 			return err
 		}
 	} else {

@@ -360,6 +360,20 @@ func (c *Client) ListChangeSummaries(
 	return summaries, nil
 }
 
+// GetServerVersion gets the server version.
+func (c *Client) GetServerVersion(ctx context.Context) (*types.VersionDetail, error) {
+	response, err := c.client.GetServerVersion(ctx, connect.NewRequest(&api.GetServerVersionRequest{}))
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.VersionDetail{
+		YorkieVersion: response.Msg.YorkieVersion,
+		GoVersion:     response.Msg.GoVersion,
+		BuildDate:     response.Msg.BuildDate,
+	}, nil
+}
+
 /**
  * withShardKey returns a context with the given shard key in metadata.
  */
@@ -368,4 +382,31 @@ func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Requ
 	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
 
 	return conn
+}
+
+// DeleteAccount deletes the user's account.
+func (c *Client) DeleteAccount(ctx context.Context, username, password string) error {
+	_, err := c.client.DeleteAccount(ctx, connect.NewRequest(&api.DeleteAccountRequest{
+		Username: username,
+		Password: password,
+	}))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ChangePassword changes the user's password.
+func (c *Client) ChangePassword(ctx context.Context, username, password, newPassword string) error {
+	_, err := c.client.ChangePassword(ctx, connect.NewRequest(&api.ChangePasswordRequest{
+		Username:        username,
+		CurrentPassword: password,
+		NewPassword:     newPassword,
+	}))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

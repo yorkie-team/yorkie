@@ -52,6 +52,12 @@ const (
 	AdminServiceSignUpProcedure = "/yorkie.v1.AdminService/SignUp"
 	// AdminServiceLogInProcedure is the fully-qualified name of the AdminService's LogIn RPC.
 	AdminServiceLogInProcedure = "/yorkie.v1.AdminService/LogIn"
+	// AdminServiceDeleteAccountProcedure is the fully-qualified name of the AdminService's
+	// DeleteAccount RPC.
+	AdminServiceDeleteAccountProcedure = "/yorkie.v1.AdminService/DeleteAccount"
+	// AdminServiceChangePasswordProcedure is the fully-qualified name of the AdminService's
+	// ChangePassword RPC.
+	AdminServiceChangePasswordProcedure = "/yorkie.v1.AdminService/ChangePassword"
 	// AdminServiceCreateProjectProcedure is the fully-qualified name of the AdminService's
 	// CreateProject RPC.
 	AdminServiceCreateProjectProcedure = "/yorkie.v1.AdminService/CreateProject"
@@ -84,12 +90,17 @@ const (
 	// AdminServiceListChangesProcedure is the fully-qualified name of the AdminService's ListChanges
 	// RPC.
 	AdminServiceListChangesProcedure = "/yorkie.v1.AdminService/ListChanges"
+	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
+	// GetServerVersion RPC.
+	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
 )
 
 // AdminServiceClient is a client for the yorkie.v1.AdminService service.
 type AdminServiceClient interface {
 	SignUp(context.Context, *connect.Request[v1.SignUpRequest]) (*connect.Response[v1.SignUpResponse], error)
 	LogIn(context.Context, *connect.Request[v1.LogInRequest]) (*connect.Response[v1.LogInResponse], error)
+	DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error)
+	ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error)
 	CreateProject(context.Context, *connect.Request[v1.CreateProjectRequest]) (*connect.Response[v1.CreateProjectResponse], error)
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
@@ -101,6 +112,7 @@ type AdminServiceClient interface {
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
+	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the yorkie.v1.AdminService service. By default, it
@@ -121,6 +133,16 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 		logIn: connect.NewClient[v1.LogInRequest, v1.LogInResponse](
 			httpClient,
 			baseURL+AdminServiceLogInProcedure,
+			opts...,
+		),
+		deleteAccount: connect.NewClient[v1.DeleteAccountRequest, v1.DeleteAccountResponse](
+			httpClient,
+			baseURL+AdminServiceDeleteAccountProcedure,
+			opts...,
+		),
+		changePassword: connect.NewClient[v1.ChangePasswordRequest, v1.ChangePasswordResponse](
+			httpClient,
+			baseURL+AdminServiceChangePasswordProcedure,
 			opts...,
 		),
 		createProject: connect.NewClient[v1.CreateProjectRequest, v1.CreateProjectResponse](
@@ -178,6 +200,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceListChangesProcedure,
 			opts...,
 		),
+		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
+			httpClient,
+			baseURL+AdminServiceGetServerVersionProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -185,6 +212,8 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type adminServiceClient struct {
 	signUp                *connect.Client[v1.SignUpRequest, v1.SignUpResponse]
 	logIn                 *connect.Client[v1.LogInRequest, v1.LogInResponse]
+	deleteAccount         *connect.Client[v1.DeleteAccountRequest, v1.DeleteAccountResponse]
+	changePassword        *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
 	createProject         *connect.Client[v1.CreateProjectRequest, v1.CreateProjectResponse]
 	listProjects          *connect.Client[v1.ListProjectsRequest, v1.ListProjectsResponse]
 	getProject            *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
@@ -196,6 +225,7 @@ type adminServiceClient struct {
 	getSnapshotMeta       *connect.Client[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse]
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
 	listChanges           *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
+	getServerVersion      *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 }
 
 // SignUp calls yorkie.v1.AdminService.SignUp.
@@ -206,6 +236,16 @@ func (c *adminServiceClient) SignUp(ctx context.Context, req *connect.Request[v1
 // LogIn calls yorkie.v1.AdminService.LogIn.
 func (c *adminServiceClient) LogIn(ctx context.Context, req *connect.Request[v1.LogInRequest]) (*connect.Response[v1.LogInResponse], error) {
 	return c.logIn.CallUnary(ctx, req)
+}
+
+// DeleteAccount calls yorkie.v1.AdminService.DeleteAccount.
+func (c *adminServiceClient) DeleteAccount(ctx context.Context, req *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error) {
+	return c.deleteAccount.CallUnary(ctx, req)
+}
+
+// ChangePassword calls yorkie.v1.AdminService.ChangePassword.
+func (c *adminServiceClient) ChangePassword(ctx context.Context, req *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error) {
+	return c.changePassword.CallUnary(ctx, req)
 }
 
 // CreateProject calls yorkie.v1.AdminService.CreateProject.
@@ -263,10 +303,17 @@ func (c *adminServiceClient) ListChanges(ctx context.Context, req *connect.Reque
 	return c.listChanges.CallUnary(ctx, req)
 }
 
+// GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
+func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
+	return c.getServerVersion.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the yorkie.v1.AdminService service.
 type AdminServiceHandler interface {
 	SignUp(context.Context, *connect.Request[v1.SignUpRequest]) (*connect.Response[v1.SignUpResponse], error)
 	LogIn(context.Context, *connect.Request[v1.LogInRequest]) (*connect.Response[v1.LogInResponse], error)
+	DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error)
+	ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error)
 	CreateProject(context.Context, *connect.Request[v1.CreateProjectRequest]) (*connect.Response[v1.CreateProjectResponse], error)
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
@@ -278,6 +325,7 @@ type AdminServiceHandler interface {
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
+	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -294,6 +342,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 	adminServiceLogInHandler := connect.NewUnaryHandler(
 		AdminServiceLogInProcedure,
 		svc.LogIn,
+		opts...,
+	)
+	adminServiceDeleteAccountHandler := connect.NewUnaryHandler(
+		AdminServiceDeleteAccountProcedure,
+		svc.DeleteAccount,
+		opts...,
+	)
+	adminServiceChangePasswordHandler := connect.NewUnaryHandler(
+		AdminServiceChangePasswordProcedure,
+		svc.ChangePassword,
 		opts...,
 	)
 	adminServiceCreateProjectHandler := connect.NewUnaryHandler(
@@ -351,12 +409,21 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.ListChanges,
 		opts...,
 	)
+	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
+		AdminServiceGetServerVersionProcedure,
+		svc.GetServerVersion,
+		opts...,
+	)
 	return "/yorkie.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceSignUpProcedure:
 			adminServiceSignUpHandler.ServeHTTP(w, r)
 		case AdminServiceLogInProcedure:
 			adminServiceLogInHandler.ServeHTTP(w, r)
+		case AdminServiceDeleteAccountProcedure:
+			adminServiceDeleteAccountHandler.ServeHTTP(w, r)
+		case AdminServiceChangePasswordProcedure:
+			adminServiceChangePasswordHandler.ServeHTTP(w, r)
 		case AdminServiceCreateProjectProcedure:
 			adminServiceCreateProjectHandler.ServeHTTP(w, r)
 		case AdminServiceListProjectsProcedure:
@@ -379,6 +446,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceSearchDocumentsHandler.ServeHTTP(w, r)
 		case AdminServiceListChangesProcedure:
 			adminServiceListChangesHandler.ServeHTTP(w, r)
+		case AdminServiceGetServerVersionProcedure:
+			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -394,6 +463,14 @@ func (UnimplementedAdminServiceHandler) SignUp(context.Context, *connect.Request
 
 func (UnimplementedAdminServiceHandler) LogIn(context.Context, *connect.Request[v1.LogInRequest]) (*connect.Response[v1.LogInResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.LogIn is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.DeleteAccount is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) ChangePassword(context.Context, *connect.Request[v1.ChangePasswordRequest]) (*connect.Response[v1.ChangePasswordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ChangePassword is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) CreateProject(context.Context, *connect.Request[v1.CreateProjectRequest]) (*connect.Response[v1.CreateProjectResponse], error) {
@@ -438,4 +515,8 @@ func (UnimplementedAdminServiceHandler) SearchDocuments(context.Context, *connec
 
 func (UnimplementedAdminServiceHandler) ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ListChanges is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetServerVersion is not implemented"))
 }

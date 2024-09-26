@@ -48,7 +48,7 @@ make build		# executable: ./bin/yorkie
 You can set testing environment via Docker Compose. It is needed because integration tests require local applications like MongoDB.
 
 ```sh
-docker-compose -f build/docker/docker-compose.yml up --build -d
+docker compose -f build/docker/docker-compose.yml up --build -d
 make test
 ```
 

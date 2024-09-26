@@ -35,22 +35,23 @@ type Pack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
-	// VersionVector is the version vector of the document.
+	// VersionVector represents two vectors of the document.
+	// 1. In request, it is the version vector of the document on the client.
+	// 2. In response(Snapshot), it is the version vector of the snapshot of the document.
 	VersionVector time.VersionVector
 
-	// SnapshotVersionVector is the version vector of the snapshot if it exists.
-	SnapshotVersionVector time.VersionVector
-
+	// TODO(hackerwins): Consider to merge MinSyncedVersionVector with VersionVector.
 	// MinSyncedVersionVector is the minimum version vector taken by clients who
 	// attach the document.
 	MinSyncedVersionVector time.VersionVector
 
+	// IsRemoved is a flag that indicates whether the document is removed.
+	IsRemoved bool
+
+	// TODO(hackerwins): This field is deprecated.
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
-
-	// IsRemoved is a flag that indicates whether the document is removed.
-	IsRemoved bool
 }
 
 // NewPack creates a new instance of Pack.
