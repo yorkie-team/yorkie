@@ -55,4 +55,7 @@ func init() {
 
 	rootCmd.PersistentFlags().String("rpc-addr", "localhost:8080", "Address of the rpc server")
 	_ = viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
+
+	rootCmd.PersistentFlags().StringP("output", "o", "", "One of 'yaml' or 'json'.")
+	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
 }

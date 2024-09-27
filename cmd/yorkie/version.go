@@ -44,6 +44,7 @@ func newVersionCmd() *cobra.Command {
 		Short:   "Print the version number of Yorkie",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			output = viper.GetString("output")
 			if err := validateOutputOpts(); err != nil {
 				return err
 			}
@@ -164,17 +165,6 @@ func init() {
 		"client",
 		clientOnly,
 		"Shows client version only (no server required).",
-	)
-
-	// TODO(hackerwins): Output format should be configurable globally.
-	// So, we need to move this to the root command like `--rpc-addr` and
-	// apply it to all subcommands that print output.
-	cmd.Flags().StringVarP(
-		&output,
-		"output",
-		"o",
-		output,
-		"One of 'yaml' or 'json'.",
 	)
 
 	rootCmd.AddCommand(cmd)
