@@ -79,18 +79,6 @@ func newListCommand() *cobra.Command {
 
 func printProjects(cmd *cobra.Command, outputFormat string, projects []*types.Project) error {
 	switch outputFormat {
-	case "json":
-		jsonOutput, err := json.MarshalIndent(projects, "", "  ")
-		if err != nil {
-			return errors.New("error marshaling to JSON: %w")
-		}
-		cmd.Println(string(jsonOutput))
-	case "yaml":
-		yamlOutput, err := yaml.Marshal(projects)
-		if err != nil {
-			return errors.New("error marshaling to YAML: %w")
-		}
-		cmd.Println(string(yamlOutput))
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
@@ -119,6 +107,18 @@ func printProjects(cmd *cobra.Command, outputFormat string, projects []*types.Pr
 			})
 		}
 		cmd.Println(tw.Render())
+	case "json":
+		jsonOutput, err := json.MarshalIndent(projects, "", "  ")
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(projects)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(yamlOutput))
 	default:
 		return errors.New("unknown output format")
 	}

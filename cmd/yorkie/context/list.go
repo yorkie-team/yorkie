@@ -115,6 +115,7 @@ func printContexts(cmd *cobra.Command, outputFormat string, contexts []Info) err
 	default:
 		return errors.New("unknown output format")
 	}
+
 	return nil
 }
 

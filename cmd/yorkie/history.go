@@ -91,18 +91,6 @@ func newHistoryCmd() *cobra.Command {
 
 func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSummary) error {
 	switch output {
-	case "json":
-		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
-		if err != nil {
-			return errors.New("marshal JSON")
-		}
-		cmd.Println(string(jsonOutput))
-	case "yaml":
-		yamlOutput, err := yaml.Marshal(changes)
-		if err != nil {
-			return errors.New("marshal YAML")
-		}
-		cmd.Println(string(yamlOutput))
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
@@ -123,6 +111,18 @@ func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSu
 			})
 		}
 		cmd.Printf("%s\n", tw.Render())
+	case "json":
+		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(changes)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(yamlOutput))
 	default:
 		return errors.New("unknown output format")
 	}

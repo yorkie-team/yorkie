@@ -87,18 +87,6 @@ func newListCommand() *cobra.Command {
 
 func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.DocumentSummary) error {
 	switch outputFormat {
-	case "json":
-		jsonOutput, err := json.MarshalIndent(documents, "", "  ")
-		if err != nil {
-			return errors.New("marshal JSON")
-		}
-		cmd.Println(string(jsonOutput))
-	case "yaml":
-		yamlOutput, err := yaml.Marshal(documents)
-		if err != nil {
-			return errors.New("marshal YAML")
-		}
-		cmd.Println(string(yamlOutput))
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
@@ -125,6 +113,18 @@ func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.
 			})
 		}
 		cmd.Printf("%s\n", tw.Render())
+	case "json":
+		jsonOutput, err := json.MarshalIndent(documents, "", "  ")
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(documents)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(yamlOutput))
 	default:
 		return errors.New("unknown output format")
 	}

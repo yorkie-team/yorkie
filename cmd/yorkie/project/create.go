@@ -92,7 +92,7 @@ func printCreateProjectInfo(cmd *cobra.Command, outputFormat string, project *ty
 	case "json", "":
 		encoded, err := json.Marshal(project)
 		if err != nil {
-			return errors.New("marshal project: %w")
+			return errors.New("marshal JSON")
 		}
 		cmd.Println(string(encoded))
 	case "yaml":
@@ -104,6 +104,7 @@ func printCreateProjectInfo(cmd *cobra.Command, outputFormat string, project *ty
 	default:
 		return errors.New("unknown output format")
 	}
+
 	return nil
 }
 

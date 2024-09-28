@@ -139,6 +139,7 @@ func printUpdateProjectInfo(cmd *cobra.Command, outputFormat string, project *ty
 	default:
 		return errors.New("unknown output format")
 	}
+
 	return nil
 }
 
