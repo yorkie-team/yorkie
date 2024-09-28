@@ -138,7 +138,7 @@ func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
 	return node
 }
 
-// TODO: update 여부 고민
+// TODO(binary-ho):  update 여부 고민
 func (t *Tree[K, V]) remove(node *Node[K, V], key K) *Node[K, V] {
 	if key.Compare(node.key) < 0 {
 		if !isRed(node.left) && !isRed(node.left.left) {
@@ -159,7 +159,7 @@ func (t *Tree[K, V]) remove(node *Node[K, V], key K) *Node[K, V] {
 			node = moveRedRight(node)
 		}
 
-		// TODO: 도착한 곳
+		// TODO(binary-ho):  도착한 곳
 		if key.Compare(node.key) == 0 {
 			smallest := min(node.right)
 			node.value = smallest.value
@@ -203,7 +203,7 @@ func flipColors[K Key, V Value](node *Node[K, V]) {
 	node.right.isRed = !node.right.isRed
 }
 
-// TODO: 정확히 무슨 일이 일어나는지 알아보자
+// TODO(binary-ho):  정확히 무슨 일이 일어나는지 알아보자
 func moveRedLeft[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	flipColors(node)
 	if isRed(node.right.left) {
@@ -228,7 +228,7 @@ func moveRedRight[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	return node
 }
 
-// TODO: 삭제하는 부분
+// TODO(binary-ho):  삭제하는 부분
 func removeMin[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	if node.left == nil {
 		return nil
