@@ -50,11 +50,6 @@ func newListCommand() *cobra.Command {
 			}
 			projectName := args[0]
 
-			output := viper.GetString("output")
-			if err := validateOutputOpts(output); err != nil {
-				return err
-			}
-
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
@@ -76,6 +71,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
+			output := viper.GetString("output")
 			if err := printDocuments(cmd, output, documents); err != nil {
 				return err
 			}
@@ -129,13 +125,6 @@ func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.
 		return errors.New("unknown output format")
 	}
 
-	return nil
-}
-
-func validateOutputOpts(output string) error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
-	}
 	return nil
 }
 

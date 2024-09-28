@@ -46,12 +46,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			output := viper.GetString("output")
-			if err := validateOutputOpts(output); err != nil {
-				return err
-			}
-
-			contexts := make([]ContextInfo, 0, len(conf.Auths))
+			contexts := make([]contextInfo, 0, len(conf.Auths))
 			for rpcAddr, auth := range conf.Auths {
 				current := ""
 				if rpcAddr == viper.GetString("rpcAddr") {
@@ -76,6 +71,7 @@ func newListCommand() *cobra.Command {
 				})
 			}
 
+			output := viper.GetString("output")
 			if err := printContexts(cmd, output, contexts); err != nil {
 				return err
 			}
@@ -116,13 +112,6 @@ func printContexts(cmd *cobra.Command, outputFormat string, contexts []contextIn
 		return errors.New("unknown output format")
 	}
 
-	return nil
-}
-
-func validateOutputOpts(output string) error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
-	}
 	return nil
 }
 

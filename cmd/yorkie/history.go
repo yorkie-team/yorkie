@@ -47,12 +47,6 @@ func newHistoryCmd() *cobra.Command {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")
 			}
-
-			output = viper.GetString("output")
-			if err := validateOutputOpts(); err != nil {
-				return err
-			}
-
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
@@ -80,6 +74,7 @@ func newHistoryCmd() *cobra.Command {
 				return err
 			}
 
+			output := viper.GetString("output")
 			if err := printHistories(cmd, output, changes); err != nil {
 				return err
 			}

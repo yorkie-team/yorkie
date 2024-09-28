@@ -18,6 +18,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path"
 
@@ -58,4 +59,17 @@ func init() {
 
 	rootCmd.PersistentFlags().StringP("output", "o", "", "One of 'yaml' or 'json'.")
 	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateOutputOpts()
+	}
+}
+
+// validateOutputOpts validates the output options.
+func validateOutputOpts() error {
+	output := viper.GetString("output")
+	if output != "" && output != "yaml" && output != "json" {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+	return nil
 }

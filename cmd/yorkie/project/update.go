@@ -50,11 +50,6 @@ func newUpdateCommand() *cobra.Command {
 			}
 			name := args[0]
 
-			output := viper.GetString("output")
-			if err := validateOutputOpts(output); err != nil {
-				return err
-			}
-
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
@@ -113,6 +108,7 @@ func newUpdateCommand() *cobra.Command {
 				return err
 			}
 
+			output := viper.GetString("output")
 			if err := printUpdateProjectInfo(cmd, output, updated); err != nil {
 				return err
 			}
@@ -122,8 +118,8 @@ func newUpdateCommand() *cobra.Command {
 	}
 }
 
-func printUpdateProjectInfo(cmd *cobra.Command, outputFormat string, project *types.Project) error {
-	switch outputFormat {
+func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Project) error {
+	switch output {
 	case "json", "":
 		encoded, err := json.Marshal(project)
 		if err != nil {

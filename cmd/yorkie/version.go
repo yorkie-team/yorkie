@@ -44,11 +44,6 @@ func newVersionCmd() *cobra.Command {
 		Short:   "Print the version number of Yorkie",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			output = viper.GetString("output")
-			if err := validateOutputOpts(); err != nil {
-				return err
-			}
-
 			info := types.VersionInfo{
 				ClientVersion: clientVersion(),
 			}
@@ -58,6 +53,7 @@ func newVersionCmd() *cobra.Command {
 				info.ServerVersion, serverErr = fetchServerVersion()
 			}
 
+			output = viper.GetString("output")
 			if err := printVersionInfo(cmd, output, &info); err != nil {
 				return err
 			}
@@ -143,15 +139,6 @@ func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.Vers
 		cmd.Println(string(marshalled))
 	default:
 		return errors.New("unknown output format")
-	}
-
-	return nil
-}
-
-// validateOutputOpts validates the output options.
-func validateOutputOpts() error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
 	}
 
 	return nil

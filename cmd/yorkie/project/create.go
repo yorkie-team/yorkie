@@ -44,11 +44,6 @@ func newCreateCommand() *cobra.Command {
 			}
 			name := args[0]
 
-			output := viper.GetString("output")
-			if err := validateOutputOpts(output); err != nil {
-				return err
-			}
-
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
@@ -78,6 +73,7 @@ func newCreateCommand() *cobra.Command {
 				return err
 			}
 
+			output := viper.GetString("output")
 			if err := printCreateProjectInfo(cmd, output, project); err != nil {
 				return err
 			}
@@ -87,8 +83,8 @@ func newCreateCommand() *cobra.Command {
 	}
 }
 
-func printCreateProjectInfo(cmd *cobra.Command, outputFormat string, project *types.Project) error {
-	switch outputFormat {
+func printCreateProjectInfo(cmd *cobra.Command, output string, project *types.Project) error {
+	switch output {
 	case "json", "":
 		encoded, err := json.Marshal(project)
 		if err != nil {
@@ -105,13 +101,6 @@ func printCreateProjectInfo(cmd *cobra.Command, outputFormat string, project *ty
 		return errors.New("unknown output format")
 	}
 
-	return nil
-}
-
-func validateOutputOpts(output string) error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
-	}
 	return nil
 }
 

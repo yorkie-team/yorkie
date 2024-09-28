@@ -41,11 +41,6 @@ func newListCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rpcAddr := viper.GetString("rpcAddr")
 
-			output := viper.GetString("output")
-			if err := validateOutputOpts(output); err != nil {
-				return err
-			}
-
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
@@ -65,9 +60,8 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			outputFormat := viper.GetString("output")
-
-			err2 := printProjects(cmd, outputFormat, projects)
+			output := viper.GetString("output")
+			err2 := printProjects(cmd, output, projects)
 			if err2 != nil {
 				return err2
 			}
@@ -77,8 +71,8 @@ func newListCommand() *cobra.Command {
 	}
 }
 
-func printProjects(cmd *cobra.Command, outputFormat string, projects []*types.Project) error {
-	switch outputFormat {
+func printProjects(cmd *cobra.Command, output string, projects []*types.Project) error {
+	switch output {
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
