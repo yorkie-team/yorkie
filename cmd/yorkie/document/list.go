@@ -18,14 +18,17 @@ package document
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
@@ -46,6 +49,11 @@ func newListCommand() *cobra.Command {
 				return errors.New("project is required")
 			}
 			projectName := args[0]
+
+			output := viper.GetString("output")
+			if err := validateOutputOpts(output); err != nil {
+				return err
+			}
 
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
@@ -68,34 +76,67 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"ID",
-				"KEY",
-				"CREATED AT",
-				"ACCESSED AT",
-				"UPDATED AT",
-				"SNAPSHOT",
-			})
-			for _, document := range documents {
-				tw.AppendRow(table.Row{
-					document.ID,
-					document.Key,
-					units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
-					units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
-					units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
-					document.Snapshot,
-				})
+			if err := printDocuments(cmd, output, documents); err != nil {
+				return err
 			}
-			cmd.Printf("%s\n", tw.Render())
+
 			return nil
 		},
 	}
+}
+
+func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.DocumentSummary) error {
+	switch outputFormat {
+	case "json":
+		jsonOutput, err := json.MarshalIndent(documents, "", "  ")
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(documents)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(yamlOutput))
+	case "":
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+		tw.AppendHeader(table.Row{
+			"ID",
+			"KEY",
+			"CREATED AT",
+			"ACCESSED AT",
+			"UPDATED AT",
+			"SNAPSHOT",
+		})
+		for _, document := range documents {
+			tw.AppendRow(table.Row{
+				document.ID,
+				document.Key,
+				units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
+				units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
+				units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
+				document.Snapshot,
+			})
+		}
+		cmd.Printf("%s\n", tw.Render())
+	default:
+		return errors.New("unknown output format")
+	}
+
+	return nil
+}
+
+func validateOutputOpts(output string) error {
+	if output != "" && output != "yaml" && output != "json" {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+	return nil
 }
 
 func init() {
