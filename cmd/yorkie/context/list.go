@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-type Info struct {
+type contextInfo struct {
 	Current  string `json:"current" yaml:"current"`
 	RPCAddr  string `json:"rpc_addr" yaml:"rpc_addr"`
 	Insecure string `json:"insecure" yaml:"insecure"`
@@ -51,7 +51,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			contexts := make([]Info, 0, len(conf.Auths))
+			contexts := make([]ContextInfo, 0, len(conf.Auths))
 			for rpcAddr, auth := range conf.Auths {
 				current := ""
 				if rpcAddr == viper.GetString("rpcAddr") {
@@ -68,7 +68,7 @@ func newListCommand() *cobra.Command {
 					ellipsisToken = auth.Token[:10] + "..." + auth.Token[len(auth.Token)-10:]
 				}
 
-				contexts = append(contexts, Info{
+				contexts = append(contexts, contextInfo{
 					Current:  current,
 					RPCAddr:  rpcAddr,
 					Insecure: insecure,
@@ -85,7 +85,7 @@ func newListCommand() *cobra.Command {
 	}
 }
 
-func printContexts(cmd *cobra.Command, outputFormat string, contexts []Info) error {
+func printContexts(cmd *cobra.Command, outputFormat string, contexts []contextInfo) error {
 	switch outputFormat {
 	case "":
 		tw := table.NewWriter()
