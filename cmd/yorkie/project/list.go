@@ -20,15 +20,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/yorkie-team/yorkie/api/types"
-	"gopkg.in/yaml.v3"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
