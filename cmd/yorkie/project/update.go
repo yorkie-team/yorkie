@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"gopkg.in/yaml.v3"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -48,8 +48,12 @@ func newUpdateCommand() *cobra.Command {
 			if len(args) != 1 {
 				return errors.New("name is required")
 			}
-
 			name := args[0]
+
+			output := viper.GetString("output")
+			if err := validateOutputOpts(output); err != nil {
+				return err
+			}
 
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
@@ -109,16 +113,33 @@ func newUpdateCommand() *cobra.Command {
 				return err
 			}
 
-			encoded, err := json.Marshal(updated)
-			if err != nil {
-				return fmt.Errorf("marshal project: %w", err)
+			if err := printUpdateProjectInfo(cmd, output, updated); err != nil {
+				return err
 			}
-
-			cmd.Println(string(encoded))
 
 			return nil
 		},
 	}
+}
+
+func printUpdateProjectInfo(cmd *cobra.Command, outputFormat string, project *types.Project) error {
+	switch outputFormat {
+	case "json", "":
+		encoded, err := json.Marshal(project)
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(encoded))
+	case "yaml":
+		encoded, err := yaml.Marshal(project)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(encoded))
+	default:
+		return errors.New("unknown output format")
+	}
+	return nil
 }
 
 func init() {
