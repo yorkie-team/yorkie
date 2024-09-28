@@ -120,13 +120,13 @@ func newUpdateCommand() *cobra.Command {
 
 func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Project) error {
 	switch output {
-	case "json", "":
+	case JSONOutput, DefaultOutput:
 		encoded, err := json.Marshal(project)
 		if err != nil {
 			return errors.New("marshal JSON")
 		}
 		cmd.Println(string(encoded))
-	case "yaml":
+	case YamlOutput:
 		encoded, err := yaml.Marshal(project)
 		if err != nil {
 			return errors.New("marshal YAML")

@@ -73,7 +73,7 @@ func newListCommand() *cobra.Command {
 
 func printProjects(cmd *cobra.Command, output string, projects []*types.Project) error {
 	switch output {
-	case "":
+	case DefaultOutput:
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
 		tw.Style().Options.SeparateColumns = false
@@ -101,13 +101,13 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 			})
 		}
 		cmd.Println(tw.Render())
-	case "json":
+	case JSONOutput:
 		jsonOutput, err := json.MarshalIndent(projects, "", "  ")
 		if err != nil {
 			return errors.New("marshal JSON")
 		}
 		cmd.Println(string(jsonOutput))
-	case "yaml":
+	case YamlOutput:
 		yamlOutput, err := yaml.Marshal(projects)
 		if err != nil {
 			return errors.New("marshal YAML")

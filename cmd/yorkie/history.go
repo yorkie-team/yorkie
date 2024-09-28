@@ -86,7 +86,7 @@ func newHistoryCmd() *cobra.Command {
 
 func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSummary) error {
 	switch output {
-	case "":
+	case DefaultOutput:
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
 		tw.Style().Options.SeparateColumns = false
@@ -106,13 +106,13 @@ func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSu
 			})
 		}
 		cmd.Printf("%s\n", tw.Render())
-	case "json":
+	case JSONOutput:
 		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
 		if err != nil {
 			return errors.New("marshal JSON")
 		}
 		cmd.Println(string(jsonOutput))
-	case "yaml":
+	case YamlOutput:
 		yamlOutput, err := yaml.Marshal(changes)
 		if err != nil {
 			return errors.New("marshal YAML")

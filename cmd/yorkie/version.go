@@ -116,7 +116,7 @@ func printServerError(cmd *cobra.Command, err error) {
 
 func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.VersionInfo) error {
 	switch output {
-	case "":
+	case DefaultOutput:
 		cmd.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
 		cmd.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
 		cmd.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
@@ -125,13 +125,13 @@ func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.Vers
 			cmd.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
 			cmd.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
 		}
-	case "yaml":
+	case YamlOutput:
 		marshalled, err := yaml.Marshal(versionInfo)
 		if err != nil {
 			return errors.New("marshal YAML")
 		}
 		cmd.Println(string(marshalled))
-	case "json":
+	case JSONOutput:
 		marshalled, err := json.MarshalIndent(versionInfo, "", "  ")
 		if err != nil {
 			return errors.New("marshal JSON")

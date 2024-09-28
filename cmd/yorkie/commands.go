@@ -68,7 +68,7 @@ func init() {
 // validateOutputOpts validates the output options.
 func validateOutputOpts() error {
 	output := viper.GetString("output")
-	if output != "" && output != "yaml" && output != "json" {
+	if output != DefaultOutput && output != YamlOutput && output != JSONOutput {
 		return errors.New(`--output must be 'yaml' or 'json'`)
 	}
 	return nil
