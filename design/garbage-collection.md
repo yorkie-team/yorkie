@@ -27,7 +27,11 @@ For text types, garbage collection works slightly differently: refer to [this do
 
 ## Proposal Details
 
+### Why We Need Version Vector rather than only use Lamport
+Previously we used Lamport (`min_synced_seq`) to handle `Garbage Collection`. It was simple and lightweight to use, but it has crucial weakness that Lamport doesn't guarantee causality.
+![prev-gc-issue](media/prev-gc-issue.jpg)
 
+As you can see from the image above, `min_synced_seq` doesn't guarantee every client receives change.  
 
 ### How It Works
 
