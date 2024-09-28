@@ -18,6 +18,10 @@ package project
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"github.com/yorkie-team/yorkie/api/types"
+	"gopkg.in/yaml.v3"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -36,6 +40,12 @@ func newListCommand() *cobra.Command {
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rpcAddr := viper.GetString("rpcAddr")
+
+			output := viper.GetString("output")
+			if err := validateOutputOpts(output); err != nil {
+				return err
+			}
+
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
@@ -55,37 +65,65 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"NAME",
-				"PUBLIC KEY",
-				"SECRET KEY",
-				"AUTH WEBHOOK URL",
-				"AUTH WEBHOOK METHODS",
-				"CLIENT DEACTIVATE THRESHOLD",
-				"CREATED AT",
-			})
-			for _, project := range projects {
-				tw.AppendRow(table.Row{
-					project.Name,
-					project.PublicKey,
-					project.SecretKey,
-					project.AuthWebhookURL,
-					project.AuthWebhookMethods,
-					project.ClientDeactivateThreshold,
-					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
-				})
+			outputFormat := viper.GetString("output")
+
+			err2 := printProjects(cmd, outputFormat, projects)
+			if err2 != nil {
+				return err2
 			}
-			cmd.Printf("%s\n", tw.Render())
 
 			return nil
 		},
 	}
+}
+
+func printProjects(cmd *cobra.Command, outputFormat string, projects []*types.Project) error {
+	switch outputFormat {
+	case "json":
+		jsonOutput, err := json.MarshalIndent(projects, "", "  ")
+		if err != nil {
+			return errors.New("error marshaling to JSON: %w")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(projects)
+		if err != nil {
+			return errors.New("error marshaling to YAML: %w")
+		}
+		cmd.Println(string(yamlOutput))
+	case "":
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+		tw.AppendHeader(table.Row{
+			"NAME",
+			"PUBLIC KEY",
+			"SECRET KEY",
+			"AUTH WEBHOOK URL",
+			"AUTH WEBHOOK METHODS",
+			"CLIENT DEACTIVATE THRESHOLD",
+			"CREATED AT",
+		})
+		for _, project := range projects {
+			tw.AppendRow(table.Row{
+				project.Name,
+				project.PublicKey,
+				project.SecretKey,
+				project.AuthWebhookURL,
+				project.AuthWebhookMethods,
+				project.ClientDeactivateThreshold,
+				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
+			})
+		}
+		cmd.Println(tw.Render())
+	default:
+		return errors.New("unknown output format")
+	}
+
+	return nil
 }
 
 func init() {
