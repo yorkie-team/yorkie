@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
@@ -109,17 +110,17 @@ func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSu
 	case JSONOutput:
 		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
 		if err != nil {
-			return errors.New("marshal JSON")
+			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		cmd.Println(string(jsonOutput))
 	case YamlOutput:
 		yamlOutput, err := yaml.Marshal(changes)
 		if err != nil {
-			return errors.New("marshal YAML")
+			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
 		cmd.Println(string(yamlOutput))
 	default:
-		return errors.New("unknown output format")
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil

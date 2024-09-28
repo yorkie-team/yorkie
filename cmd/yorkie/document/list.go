@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -81,8 +82,8 @@ func newListCommand() *cobra.Command {
 	}
 }
 
-func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.DocumentSummary) error {
-	switch outputFormat {
+func printDocuments(cmd *cobra.Command, output string, documents []*types.DocumentSummary) error {
+	switch output {
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
@@ -112,17 +113,17 @@ func printDocuments(cmd *cobra.Command, outputFormat string, documents []*types.
 	case "json":
 		jsonOutput, err := json.MarshalIndent(documents, "", "  ")
 		if err != nil {
-			return errors.New("marshal JSON")
+			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		cmd.Println(string(jsonOutput))
 	case "yaml":
 		yamlOutput, err := yaml.Marshal(documents)
 		if err != nil {
-			return errors.New("marshal YAML")
+			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
 		cmd.Println(string(yamlOutput))
 	default:
-		return errors.New("unknown output format")
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil

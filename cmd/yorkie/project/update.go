@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -123,17 +124,17 @@ func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Pr
 	case JSONOutput, DefaultOutput:
 		encoded, err := json.Marshal(project)
 		if err != nil {
-			return errors.New("marshal JSON")
+			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		cmd.Println(string(encoded))
 	case YamlOutput:
 		encoded, err := yaml.Marshal(project)
 		if err != nil {
-			return errors.New("marshal YAML")
+			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
 		cmd.Println(string(encoded))
 	default:
-		return errors.New("unknown output format")
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil

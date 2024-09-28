@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"runtime"
 
 	"connectrpc.com/connect"
@@ -53,7 +54,7 @@ func newVersionCmd() *cobra.Command {
 				info.ServerVersion, serverErr = fetchServerVersion()
 			}
 
-			output = viper.GetString("output")
+			output := viper.GetString("output")
 			if err := printVersionInfo(cmd, output, &info); err != nil {
 				return err
 			}
@@ -128,17 +129,17 @@ func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.Vers
 	case YamlOutput:
 		marshalled, err := yaml.Marshal(versionInfo)
 		if err != nil {
-			return errors.New("marshal YAML")
+			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
 		cmd.Println(string(marshalled))
 	case JSONOutput:
 		marshalled, err := json.MarshalIndent(versionInfo, "", "  ")
 		if err != nil {
-			return errors.New("marshal JSON")
+			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		cmd.Println(string(marshalled))
 	default:
-		return errors.New("unknown output format")
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil

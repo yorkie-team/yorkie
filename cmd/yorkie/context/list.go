@@ -18,7 +18,7 @@ package context
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
@@ -81,8 +81,8 @@ func newListCommand() *cobra.Command {
 	}
 }
 
-func printContexts(cmd *cobra.Command, outputFormat string, contexts []contextInfo) error {
-	switch outputFormat {
+func printContexts(cmd *cobra.Command, output string, contexts []contextInfo) error {
+	switch output {
 	case "":
 		tw := table.NewWriter()
 		tw.Style().Options.DrawBorder = false
@@ -99,17 +99,17 @@ func printContexts(cmd *cobra.Command, outputFormat string, contexts []contextIn
 	case "json":
 		marshalled, err := json.MarshalIndent(contexts, "", "  ")
 		if err != nil {
-			return errors.New("marshal JSON")
+			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		cmd.Println(string(marshalled))
 	case "yaml":
 		marshalled, err := yaml.Marshal(contexts)
 		if err != nil {
-			return errors.New("marshal YAML")
+			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
 		cmd.Println(string(marshalled))
 	default:
-		return errors.New("unknown output format")
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil
