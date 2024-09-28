@@ -18,13 +18,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -43,6 +46,11 @@ func newHistoryCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")
+			}
+
+			output = viper.GetString("output")
+			if err := validateOutputOpts(); err != nil {
+				return err
 			}
 
 			rpcAddr := viper.GetString("rpcAddr")
@@ -72,28 +80,54 @@ func newHistoryCmd() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"SEQ",
-				"MESSAGE",
-				"SNAPSHOT",
-			})
-			for _, change := range changes {
-				tw.AppendRow(table.Row{
-					change.ID.ServerSeq(),
-					change.Message,
-					change.Snapshot,
-				})
+			if err := printHistories(cmd, output, changes); err != nil {
+				return err
 			}
-			cmd.Printf("%s\n", tw.Render())
+
 			return nil
 		},
 	}
+}
+
+func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSummary) error {
+	switch output {
+	case "json":
+		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
+		if err != nil {
+			return errors.New("marshal JSON")
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(changes)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(yamlOutput))
+	case "":
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+		tw.AppendHeader(table.Row{
+			"SEQ",
+			"MESSAGE",
+			"SNAPSHOT",
+		})
+		for _, change := range changes {
+			tw.AppendRow(table.Row{
+				change.ID.ServerSeq(),
+				change.Message,
+				change.Snapshot,
+			})
+		}
+		cmd.Printf("%s\n", tw.Render())
+	default:
+		return errors.New("unknown output format")
+	}
+
+	return nil
 }
 
 func init() {
