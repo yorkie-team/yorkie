@@ -20,7 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/yorkie-team/yorkie/api/types"
+	"gopkg.in/yaml.v3"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -42,6 +43,11 @@ func newCreateCommand() *cobra.Command {
 				return errors.New("name is required")
 			}
 			name := args[0]
+
+			output := viper.GetString("output")
+			if err := validateOutputOpts(output); err != nil {
+				return err
+			}
 
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
@@ -72,16 +78,40 @@ func newCreateCommand() *cobra.Command {
 				return err
 			}
 
-			encoded, err := json.Marshal(project)
-			if err != nil {
-				return fmt.Errorf("marshal project: %w", err)
+			if err := printCreateProjectInfo(cmd, output, project); err != nil {
+				return err
 			}
-
-			cmd.Println(string(encoded))
 
 			return nil
 		},
 	}
+}
+
+func printCreateProjectInfo(cmd *cobra.Command, outputFormat string, project *types.Project) error {
+	switch outputFormat {
+	case "json", "":
+		encoded, err := json.Marshal(project)
+		if err != nil {
+			return errors.New("marshal project: %w")
+		}
+		cmd.Println(string(encoded))
+	case "yaml":
+		marshalled, err := yaml.Marshal(project)
+		if err != nil {
+			return errors.New("marshal YAML")
+		}
+		cmd.Println(string(marshalled))
+	default:
+		return errors.New("unknown output format")
+	}
+	return nil
+}
+
+func validateOutputOpts(output string) error {
+	if output != "" && output != "yaml" && output != "json" {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+	return nil
 }
 
 func init() {
