@@ -23,11 +23,11 @@ import (
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
+	"github.com/yorkie-team/yorkie/system"
 )
 
 var (
@@ -54,7 +54,6 @@ func Deactivate(
 	be *backend.Backend,
 	refKey types.ClientRefKey,
 	gatewayAddr string,
-	internal bool,
 ) (*database.ClientInfo, error) {
 	// NOTE(hackerwins): Before deactivating the client, we need to detach all
 	// attached documents from the client.
@@ -79,16 +78,11 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
-	cli, err := client.Dial(gatewayAddr,
-		client.WithKey(clientInfo.Key),
-		client.WithAPIKey(project.PublicKey),
-		client.WithToken(getAuthToken(ctx)),
-		client.WithInternal(internal),
-	)
+	token := getAuthToken(ctx)
+	cli, err := system.NewMockClient(clientInfo, project.PublicKey, gatewayAddr, token)
 	if err != nil {
 		return nil, err
 	}
-	cli.PretendActivate(actorID)
 
 	// 02. Detach attached documents from the client.
 	for docID, info := range clientInfo.Documents {

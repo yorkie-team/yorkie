@@ -10,54 +10,6 @@ servers:
 - description: Local server
   url: http://localhost:8080
 paths:
-  /yorkie.v1.SystemService/ActivateClient:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.ActivateClient.yorkie.v1.ActivateClientRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.ActivateClient.yorkie.v1.ActivateClientResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/AttachDocument:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.AttachDocument.yorkie.v1.AttachDocumentRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.AttachDocument.yorkie.v1.AttachDocumentResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/Broadcast:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.Broadcast.yorkie.v1.BroadcastRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.Broadcast.yorkie.v1.BroadcastResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/DeactivateClient:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.DeactivateClient.yorkie.v1.DeactivateClientRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.DeactivateClient.yorkie.v1.DeactivateClientResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
   /yorkie.v1.SystemService/DetachDocument:
     post:
       description: ""
@@ -70,80 +22,8 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/PushPullChanges:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.PushPullChanges.yorkie.v1.PushPullChangesRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.PushPullChanges.yorkie.v1.PushPullChangesResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/RemoveDocument:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.RemoveDocument.yorkie.v1.RemoveDocumentRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.RemoveDocument.yorkie.v1.RemoveDocumentResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
-  /yorkie.v1.SystemService/WatchDocument:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.WatchDocument.yorkie.v1.WatchDocumentRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.WatchDocument.yorkie.v1.WatchDocumentResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.SystemService
 components:
   requestBodies:
-    yorkie.v1.SystemService.ActivateClient.yorkie.v1.ActivateClientRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientRequest'
-      required: true
-    yorkie.v1.SystemService.AttachDocument.yorkie.v1.AttachDocumentRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentRequest'
-      required: true
-    yorkie.v1.SystemService.Broadcast.yorkie.v1.BroadcastRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequest'
-      required: true
-    yorkie.v1.SystemService.DeactivateClient.yorkie.v1.DeactivateClientRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientRequest'
-      required: true
     yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentRequest:
       content:
         application/json:
@@ -152,27 +32,6 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequest'
-      required: true
-    yorkie.v1.SystemService.PushPullChanges.yorkie.v1.PushPullChangesRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
-      required: true
-    yorkie.v1.SystemService.RemoveDocument.yorkie.v1.RemoveDocumentRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentRequest'
-      required: true
-    yorkie.v1.SystemService.WatchDocument.yorkie.v1.WatchDocumentRequest:
-      content: {}
       required: true
   responses:
     connect.error:
@@ -184,42 +43,6 @@ components:
           schema:
             $ref: '#/components/schemas/connect.error'
       description: ""
-    yorkie.v1.SystemService.ActivateClient.yorkie.v1.ActivateClientResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientResponse'
-      description: ""
-    yorkie.v1.SystemService.AttachDocument.yorkie.v1.AttachDocumentResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentResponse'
-      description: ""
-    yorkie.v1.SystemService.Broadcast.yorkie.v1.BroadcastResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponse'
-      description: ""
-    yorkie.v1.SystemService.DeactivateClient.yorkie.v1.DeactivateClientResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientResponse'
-      description: ""
     yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentResponse:
       content:
         application/json:
@@ -228,26 +51,6 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponse'
-      description: ""
-    yorkie.v1.SystemService.PushPullChanges.yorkie.v1.PushPullChangesResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
-      description: ""
-    yorkie.v1.SystemService.RemoveDocument.yorkie.v1.RemoveDocumentResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentResponse'
-      description: ""
-    yorkie.v1.SystemService.WatchDocument.yorkie.v1.WatchDocumentResponse:
       description: ""
   schemas:
     connect.error:
@@ -277,94 +80,6 @@ components:
         message:
           type: string
       title: Connect Error
-      type: object
-    yorkie.v1.ActivateClientRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientKey:
-          additionalProperties: false
-          description: ""
-          title: client_key
-          type: string
-      title: ActivateClientRequest
-      type: object
-    yorkie.v1.ActivateClientResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-      title: ActivateClientResponse
-      type: object
-    yorkie.v1.AttachDocumentRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-      title: AttachDocumentRequest
-      type: object
-    yorkie.v1.AttachDocumentResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-        documentId:
-          additionalProperties: false
-          description: ""
-          title: document_id
-          type: string
-      title: AttachDocumentResponse
-      type: object
-    yorkie.v1.BroadcastRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-        documentId:
-          additionalProperties: false
-          description: ""
-          title: document_id
-          type: string
-        payload:
-          additionalProperties: false
-          description: ""
-          format: byte
-          title: payload
-          type: string
-        topic:
-          additionalProperties: false
-          description: ""
-          title: topic
-          type: string
-      title: BroadcastRequest
-      type: object
-    yorkie.v1.BroadcastResponse:
-      additionalProperties: false
-      description: ""
-      title: BroadcastResponse
       type: object
     yorkie.v1.Change:
       additionalProperties: false
@@ -490,22 +205,6 @@ components:
           title: server_seq
       title: Checkpoint
       type: object
-    yorkie.v1.DeactivateClientRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-      title: DeactivateClientRequest
-      type: object
-    yorkie.v1.DeactivateClientResponse:
-      additionalProperties: false
-      description: ""
-      title: DeactivateClientResponse
-      type: object
     yorkie.v1.DetachDocumentRequest:
       additionalProperties: false
       description: ""
@@ -545,58 +244,6 @@ components:
           type: object
       title: DetachDocumentResponse
       type: object
-    yorkie.v1.DocEvent:
-      additionalProperties: false
-      description: ""
-      properties:
-        body:
-          $ref: '#/components/schemas/yorkie.v1.DocEventBody'
-          additionalProperties: false
-          description: ""
-          title: body
-          type: object
-        publisher:
-          additionalProperties: false
-          description: ""
-          title: publisher
-          type: string
-        type:
-          $ref: '#/components/schemas/yorkie.v1.DocEventType'
-          additionalProperties: false
-          description: ""
-          title: type
-      title: DocEvent
-      type: object
-    yorkie.v1.DocEventBody:
-      additionalProperties: false
-      description: ""
-      properties:
-        payload:
-          additionalProperties: false
-          description: ""
-          format: byte
-          title: payload
-          type: string
-        topic:
-          additionalProperties: false
-          description: ""
-          title: topic
-          type: string
-      title: DocEventBody
-      type: object
-    yorkie.v1.DocEventType:
-      description: ""
-      enum:
-      - - DOC_EVENT_TYPE_DOCUMENT_CHANGED
-        - 0
-        - DOC_EVENT_TYPE_DOCUMENT_WATCHED
-        - 1
-        - DOC_EVENT_TYPE_DOCUMENT_UNWATCHED
-        - 2
-        - DOC_EVENT_TYPE_DOCUMENT_BROADCAST
-        - 3
-      title: DocEventType
-      type: string
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
       description: ""
@@ -1244,79 +891,6 @@ components:
         - 3
       title: ChangeType
       type: string
-    yorkie.v1.PushPullChangesRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-        documentId:
-          additionalProperties: false
-          description: ""
-          title: document_id
-          type: string
-        pushOnly:
-          additionalProperties: false
-          description: ""
-          title: push_only
-          type: boolean
-      title: PushPullChangesRequest
-      type: object
-    yorkie.v1.PushPullChangesResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-      title: PushPullChangesResponse
-      type: object
-    yorkie.v1.RemoveDocumentRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-        documentId:
-          additionalProperties: false
-          description: ""
-          title: document_id
-          type: string
-      title: RemoveDocumentRequest
-      type: object
-    yorkie.v1.RemoveDocumentResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
-          additionalProperties: false
-          description: ""
-          title: change_pack
-          type: object
-      title: RemoveDocumentResponse
-      type: object
     yorkie.v1.TextNodePos:
       additionalProperties: false
       description: ""
@@ -1512,53 +1086,6 @@ components:
         - 13
       title: ValueType
       type: string
-    yorkie.v1.WatchDocumentRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-        documentId:
-          additionalProperties: false
-          description: ""
-          title: document_id
-          type: string
-      title: WatchDocumentRequest
-      type: object
-    yorkie.v1.WatchDocumentResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        event:
-          $ref: '#/components/schemas/yorkie.v1.DocEvent'
-          additionalProperties: false
-          description: ""
-          title: event
-          type: object
-        initialization:
-          $ref: '#/components/schemas/yorkie.v1.WatchDocumentResponse.Initialization'
-          additionalProperties: false
-          description: ""
-          title: initialization
-          type: object
-      title: WatchDocumentResponse
-      type: object
-    yorkie.v1.WatchDocumentResponse.Initialization:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientIds:
-          additionalProperties: false
-          description: ""
-          items:
-            type: string
-          title: client_ids
-          type: array
-      title: Initialization
-      type: object
   securitySchemes:
     ApiKeyAuth:
       in: header

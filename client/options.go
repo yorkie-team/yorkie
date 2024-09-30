@@ -49,8 +49,6 @@ type Options struct {
 
 	// MaxCallRecvMsgSize is the maximum message size in bytes the client can receive.
 	MaxCallRecvMsgSize int
-
-	Internal bool
 }
 
 // WithKey configures the key of the client.
@@ -86,11 +84,6 @@ func WithLogger(logger *zap.Logger) Option {
 // WithMaxRecvMsgSize configures the maximum message size in bytes the client can receive.
 func WithMaxRecvMsgSize(maxRecvMsgSize int) Option {
 	return func(o *Options) { o.MaxCallRecvMsgSize = maxRecvMsgSize }
-}
-
-// WithInternal configures whether service client is system service or not.
-func WithInternal(tf bool) Option {
-	return func(o *Options) { o.Internal = tf }
 }
 
 // AttachOption configures AttachOptions.

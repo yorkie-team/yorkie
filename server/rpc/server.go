@@ -100,6 +100,7 @@ func (s *Server) Start() error {
 // Shutdown shuts down this server.
 func (s *Server) Shutdown(graceful bool) {
 	s.yorkieServiceCancel()
+	s.systemServiceCancel()
 
 	if graceful {
 		if err := s.httpServer.Shutdown(context.Background()); err != nil {

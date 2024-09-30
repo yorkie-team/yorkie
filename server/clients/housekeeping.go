@@ -70,7 +70,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, clientInfo := range candidates {
-		if _, err := Deactivate(ctx, be, clientInfo.RefKey(), gatewayAddr, true); err != nil {
+		if _, err := Deactivate(ctx, be, clientInfo.RefKey(), gatewayAddr); err != nil {
 			return database.DefaultProjectID, err
 		}
 

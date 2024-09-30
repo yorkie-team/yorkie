@@ -48,41 +48,14 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SystemServiceActivateClientProcedure is the fully-qualified name of the SystemService's
-	// ActivateClient RPC.
-	SystemServiceActivateClientProcedure = "/yorkie.v1.SystemService/ActivateClient"
-	// SystemServiceDeactivateClientProcedure is the fully-qualified name of the SystemService's
-	// DeactivateClient RPC.
-	SystemServiceDeactivateClientProcedure = "/yorkie.v1.SystemService/DeactivateClient"
-	// SystemServiceAttachDocumentProcedure is the fully-qualified name of the SystemService's
-	// AttachDocument RPC.
-	SystemServiceAttachDocumentProcedure = "/yorkie.v1.SystemService/AttachDocument"
 	// SystemServiceDetachDocumentProcedure is the fully-qualified name of the SystemService's
 	// DetachDocument RPC.
 	SystemServiceDetachDocumentProcedure = "/yorkie.v1.SystemService/DetachDocument"
-	// SystemServiceRemoveDocumentProcedure is the fully-qualified name of the SystemService's
-	// RemoveDocument RPC.
-	SystemServiceRemoveDocumentProcedure = "/yorkie.v1.SystemService/RemoveDocument"
-	// SystemServicePushPullChangesProcedure is the fully-qualified name of the SystemService's
-	// PushPullChanges RPC.
-	SystemServicePushPullChangesProcedure = "/yorkie.v1.SystemService/PushPullChanges"
-	// SystemServiceWatchDocumentProcedure is the fully-qualified name of the SystemService's
-	// WatchDocument RPC.
-	SystemServiceWatchDocumentProcedure = "/yorkie.v1.SystemService/WatchDocument"
-	// SystemServiceBroadcastProcedure is the fully-qualified name of the SystemService's Broadcast RPC.
-	SystemServiceBroadcastProcedure = "/yorkie.v1.SystemService/Broadcast"
 )
 
 // SystemServiceClient is a client for the yorkie.v1.SystemService service.
 type SystemServiceClient interface {
-	ActivateClient(context.Context, *connect.Request[v1.ActivateClientRequest]) (*connect.Response[v1.ActivateClientResponse], error)
-	DeactivateClient(context.Context, *connect.Request[v1.DeactivateClientRequest]) (*connect.Response[v1.DeactivateClientResponse], error)
-	AttachDocument(context.Context, *connect.Request[v1.AttachDocumentRequest]) (*connect.Response[v1.AttachDocumentResponse], error)
 	DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequest]) (*connect.Response[v1.DetachDocumentResponse], error)
-	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
-	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
-	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest]) (*connect.ServerStreamForClient[v1.WatchDocumentResponse], error)
-	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the yorkie.v1.SystemService service. By default,
@@ -95,44 +68,9 @@ type SystemServiceClient interface {
 func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &systemServiceClient{
-		activateClient: connect.NewClient[v1.ActivateClientRequest, v1.ActivateClientResponse](
-			httpClient,
-			baseURL+SystemServiceActivateClientProcedure,
-			opts...,
-		),
-		deactivateClient: connect.NewClient[v1.DeactivateClientRequest, v1.DeactivateClientResponse](
-			httpClient,
-			baseURL+SystemServiceDeactivateClientProcedure,
-			opts...,
-		),
-		attachDocument: connect.NewClient[v1.AttachDocumentRequest, v1.AttachDocumentResponse](
-			httpClient,
-			baseURL+SystemServiceAttachDocumentProcedure,
-			opts...,
-		),
 		detachDocument: connect.NewClient[v1.DetachDocumentRequest, v1.DetachDocumentResponse](
 			httpClient,
 			baseURL+SystemServiceDetachDocumentProcedure,
-			opts...,
-		),
-		removeDocument: connect.NewClient[v1.RemoveDocumentRequest, v1.RemoveDocumentResponse](
-			httpClient,
-			baseURL+SystemServiceRemoveDocumentProcedure,
-			opts...,
-		),
-		pushPullChanges: connect.NewClient[v1.PushPullChangesRequest, v1.PushPullChangesResponse](
-			httpClient,
-			baseURL+SystemServicePushPullChangesProcedure,
-			opts...,
-		),
-		watchDocument: connect.NewClient[v1.WatchDocumentRequest, v1.WatchDocumentResponse](
-			httpClient,
-			baseURL+SystemServiceWatchDocumentProcedure,
-			opts...,
-		),
-		broadcast: connect.NewClient[v1.BroadcastRequest, v1.BroadcastResponse](
-			httpClient,
-			baseURL+SystemServiceBroadcastProcedure,
 			opts...,
 		),
 	}
@@ -140,29 +78,7 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	activateClient   *connect.Client[v1.ActivateClientRequest, v1.ActivateClientResponse]
-	deactivateClient *connect.Client[v1.DeactivateClientRequest, v1.DeactivateClientResponse]
-	attachDocument   *connect.Client[v1.AttachDocumentRequest, v1.AttachDocumentResponse]
-	detachDocument   *connect.Client[v1.DetachDocumentRequest, v1.DetachDocumentResponse]
-	removeDocument   *connect.Client[v1.RemoveDocumentRequest, v1.RemoveDocumentResponse]
-	pushPullChanges  *connect.Client[v1.PushPullChangesRequest, v1.PushPullChangesResponse]
-	watchDocument    *connect.Client[v1.WatchDocumentRequest, v1.WatchDocumentResponse]
-	broadcast        *connect.Client[v1.BroadcastRequest, v1.BroadcastResponse]
-}
-
-// ActivateClient calls yorkie.v1.SystemService.ActivateClient.
-func (c *systemServiceClient) ActivateClient(ctx context.Context, req *connect.Request[v1.ActivateClientRequest]) (*connect.Response[v1.ActivateClientResponse], error) {
-	return c.activateClient.CallUnary(ctx, req)
-}
-
-// DeactivateClient calls yorkie.v1.SystemService.DeactivateClient.
-func (c *systemServiceClient) DeactivateClient(ctx context.Context, req *connect.Request[v1.DeactivateClientRequest]) (*connect.Response[v1.DeactivateClientResponse], error) {
-	return c.deactivateClient.CallUnary(ctx, req)
-}
-
-// AttachDocument calls yorkie.v1.SystemService.AttachDocument.
-func (c *systemServiceClient) AttachDocument(ctx context.Context, req *connect.Request[v1.AttachDocumentRequest]) (*connect.Response[v1.AttachDocumentResponse], error) {
-	return c.attachDocument.CallUnary(ctx, req)
+	detachDocument *connect.Client[v1.DetachDocumentRequest, v1.DetachDocumentResponse]
 }
 
 // DetachDocument calls yorkie.v1.SystemService.DetachDocument.
@@ -170,36 +86,9 @@ func (c *systemServiceClient) DetachDocument(ctx context.Context, req *connect.R
 	return c.detachDocument.CallUnary(ctx, req)
 }
 
-// RemoveDocument calls yorkie.v1.SystemService.RemoveDocument.
-func (c *systemServiceClient) RemoveDocument(ctx context.Context, req *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error) {
-	return c.removeDocument.CallUnary(ctx, req)
-}
-
-// PushPullChanges calls yorkie.v1.SystemService.PushPullChanges.
-func (c *systemServiceClient) PushPullChanges(ctx context.Context, req *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error) {
-	return c.pushPullChanges.CallUnary(ctx, req)
-}
-
-// WatchDocument calls yorkie.v1.SystemService.WatchDocument.
-func (c *systemServiceClient) WatchDocument(ctx context.Context, req *connect.Request[v1.WatchDocumentRequest]) (*connect.ServerStreamForClient[v1.WatchDocumentResponse], error) {
-	return c.watchDocument.CallServerStream(ctx, req)
-}
-
-// Broadcast calls yorkie.v1.SystemService.Broadcast.
-func (c *systemServiceClient) Broadcast(ctx context.Context, req *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error) {
-	return c.broadcast.CallUnary(ctx, req)
-}
-
 // SystemServiceHandler is an implementation of the yorkie.v1.SystemService service.
 type SystemServiceHandler interface {
-	ActivateClient(context.Context, *connect.Request[v1.ActivateClientRequest]) (*connect.Response[v1.ActivateClientResponse], error)
-	DeactivateClient(context.Context, *connect.Request[v1.DeactivateClientRequest]) (*connect.Response[v1.DeactivateClientResponse], error)
-	AttachDocument(context.Context, *connect.Request[v1.AttachDocumentRequest]) (*connect.Response[v1.AttachDocumentResponse], error)
 	DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequest]) (*connect.Response[v1.DetachDocumentResponse], error)
-	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
-	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
-	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest], *connect.ServerStream[v1.WatchDocumentResponse]) error
-	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -208,64 +97,15 @@ type SystemServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	systemServiceActivateClientHandler := connect.NewUnaryHandler(
-		SystemServiceActivateClientProcedure,
-		svc.ActivateClient,
-		opts...,
-	)
-	systemServiceDeactivateClientHandler := connect.NewUnaryHandler(
-		SystemServiceDeactivateClientProcedure,
-		svc.DeactivateClient,
-		opts...,
-	)
-	systemServiceAttachDocumentHandler := connect.NewUnaryHandler(
-		SystemServiceAttachDocumentProcedure,
-		svc.AttachDocument,
-		opts...,
-	)
 	systemServiceDetachDocumentHandler := connect.NewUnaryHandler(
 		SystemServiceDetachDocumentProcedure,
 		svc.DetachDocument,
 		opts...,
 	)
-	systemServiceRemoveDocumentHandler := connect.NewUnaryHandler(
-		SystemServiceRemoveDocumentProcedure,
-		svc.RemoveDocument,
-		opts...,
-	)
-	systemServicePushPullChangesHandler := connect.NewUnaryHandler(
-		SystemServicePushPullChangesProcedure,
-		svc.PushPullChanges,
-		opts...,
-	)
-	systemServiceWatchDocumentHandler := connect.NewServerStreamHandler(
-		SystemServiceWatchDocumentProcedure,
-		svc.WatchDocument,
-		opts...,
-	)
-	systemServiceBroadcastHandler := connect.NewUnaryHandler(
-		SystemServiceBroadcastProcedure,
-		svc.Broadcast,
-		opts...,
-	)
 	return "/yorkie.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case SystemServiceActivateClientProcedure:
-			systemServiceActivateClientHandler.ServeHTTP(w, r)
-		case SystemServiceDeactivateClientProcedure:
-			systemServiceDeactivateClientHandler.ServeHTTP(w, r)
-		case SystemServiceAttachDocumentProcedure:
-			systemServiceAttachDocumentHandler.ServeHTTP(w, r)
 		case SystemServiceDetachDocumentProcedure:
 			systemServiceDetachDocumentHandler.ServeHTTP(w, r)
-		case SystemServiceRemoveDocumentProcedure:
-			systemServiceRemoveDocumentHandler.ServeHTTP(w, r)
-		case SystemServicePushPullChangesProcedure:
-			systemServicePushPullChangesHandler.ServeHTTP(w, r)
-		case SystemServiceWatchDocumentProcedure:
-			systemServiceWatchDocumentHandler.ServeHTTP(w, r)
-		case SystemServiceBroadcastProcedure:
-			systemServiceBroadcastHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -275,34 +115,6 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 // UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSystemServiceHandler struct{}
 
-func (UnimplementedSystemServiceHandler) ActivateClient(context.Context, *connect.Request[v1.ActivateClientRequest]) (*connect.Response[v1.ActivateClientResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.ActivateClient is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) DeactivateClient(context.Context, *connect.Request[v1.DeactivateClientRequest]) (*connect.Response[v1.DeactivateClientResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.DeactivateClient is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) AttachDocument(context.Context, *connect.Request[v1.AttachDocumentRequest]) (*connect.Response[v1.AttachDocumentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.AttachDocument is not implemented"))
-}
-
 func (UnimplementedSystemServiceHandler) DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequest]) (*connect.Response[v1.DetachDocumentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.DetachDocument is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.RemoveDocument is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.PushPullChanges is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest], *connect.ServerStream[v1.WatchDocumentResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.WatchDocument is not implemented"))
-}
-
-func (UnimplementedSystemServiceHandler) Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.Broadcast is not implemented"))
 }

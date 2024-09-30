@@ -96,7 +96,7 @@ type Attachment struct {
 // to the server to synchronize with other replicas in remote.
 type Client struct {
 	conn          *http.Client
-	client        ServiceClient
+	client        v1connect.YorkieServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
 	logger        *zap.Logger
@@ -183,12 +183,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
-	var options Options
-	for _, opt := range opts {
-		opt(&options)
-	}
-
-	if err := cli.Dial(rpcAddr, options.Internal); err != nil {
+	if err := cli.Dial(rpcAddr); err != nil {
 		return nil, err
 	}
 
@@ -196,7 +191,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 }
 
 // Dial dials the given rpcAddr.
-func (c *Client) Dial(rpcAddr string, internal bool) error {
+func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
 		if c.conn.Transport == nil {
 			rpcAddr = "http://" + rpcAddr
@@ -205,11 +200,7 @@ func (c *Client) Dial(rpcAddr string, internal bool) error {
 		}
 	}
 
-	if internal == true {
-		c.client = v1connect.NewSystemServiceClient(c.conn, rpcAddr, c.clientOptions...)
-	} else {
-		c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
-	}
+	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
 }
@@ -784,24 +775,6 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	}
 
 	return nil
-}
-
-// PretendAttach sets the document as attached without actual activation.
-// This method is used for server-side client deactivate.
-func (c *Client) PretendAttach(ctx context.Context, doc *document.Document, docID types.ID) {
-	_, cancelFunc := context.WithCancel(ctx)
-	c.attachments[doc.Key()] = &Attachment{
-		doc:              doc,
-		docID:            docID,
-		closeWatchStream: cancelFunc,
-	}
-}
-
-// PretendActivate sets the client as activated without actual activation.
-// This method is used for server-side client deactivate.
-func (c *Client) PretendActivate(actorID *time.ActorID) {
-	c.id = actorID
-	c.status = activated
 }
 
 /**
