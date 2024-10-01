@@ -17,14 +17,23 @@
 package context
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
+
+type contextInfo struct {
+	Current  string `json:"current" yaml:"current"`
+	RPCAddr  string `json:"rpc_addr" yaml:"rpc_addr"`
+	Insecure string `json:"insecure" yaml:"insecure"`
+	Token    string `json:"token" yaml:"token"`
+}
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
@@ -37,14 +46,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-
-			tw.AppendHeader(table.Row{"CURRENT", "RPC ADDR", "INSECURE", "TOKEN"})
+			contexts := make([]contextInfo, 0, len(conf.Auths))
 			for rpcAddr, auth := range conf.Auths {
 				current := ""
 				if rpcAddr == viper.GetString("rpcAddr") {
@@ -61,14 +63,56 @@ func newListCommand() *cobra.Command {
 					ellipsisToken = auth.Token[:10] + "..." + auth.Token[len(auth.Token)-10:]
 				}
 
-				tw.AppendRow(table.Row{current, rpcAddr, insecure, ellipsisToken})
+				contexts = append(contexts, contextInfo{
+					Current:  current,
+					RPCAddr:  rpcAddr,
+					Insecure: insecure,
+					Token:    ellipsisToken,
+				})
 			}
 
-			fmt.Println(tw.Render())
+			output := viper.GetString("output")
+			if err := printContexts(cmd, output, contexts); err != nil {
+				return err
+			}
 
 			return nil
 		},
 	}
+}
+
+func printContexts(cmd *cobra.Command, output string, contexts []contextInfo) error {
+	switch output {
+	case "":
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+
+		tw.AppendHeader(table.Row{"CURRENT", "RPC ADDR", "INSECURE", "TOKEN"})
+		for _, ctx := range contexts {
+			tw.AppendRow(table.Row{ctx.Current, ctx.RPCAddr, ctx.Insecure, ctx.Token})
+		}
+		cmd.Println(tw.Render())
+	case "json":
+		marshalled, err := json.MarshalIndent(contexts, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal JSON: %w", err)
+		}
+		cmd.Println(string(marshalled))
+	case "yaml":
+		marshalled, err := yaml.Marshal(contexts)
+		if err != nil {
+			return fmt.Errorf("marshal YAML: %w", err)
+		}
+		cmd.Println(string(marshalled))
+	default:
+		return fmt.Errorf("unknown output format: %s", output)
+	}
+
+	return nil
 }
 
 func init() {

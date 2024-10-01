@@ -18,14 +18,18 @@ package document
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
@@ -68,34 +72,61 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"ID",
-				"KEY",
-				"CREATED AT",
-				"ACCESSED AT",
-				"UPDATED AT",
-				"SNAPSHOT",
-			})
-			for _, document := range documents {
-				tw.AppendRow(table.Row{
-					document.ID,
-					document.Key,
-					units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
-					units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
-					units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
-					document.Snapshot,
-				})
+			output := viper.GetString("output")
+			if err := printDocuments(cmd, output, documents); err != nil {
+				return err
 			}
-			cmd.Printf("%s\n", tw.Render())
+
 			return nil
 		},
 	}
+}
+
+func printDocuments(cmd *cobra.Command, output string, documents []*types.DocumentSummary) error {
+	switch output {
+	case "":
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+		tw.AppendHeader(table.Row{
+			"ID",
+			"KEY",
+			"CREATED AT",
+			"ACCESSED AT",
+			"UPDATED AT",
+			"SNAPSHOT",
+		})
+		for _, document := range documents {
+			tw.AppendRow(table.Row{
+				document.ID,
+				document.Key,
+				units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
+				units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
+				units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
+				document.Snapshot,
+			})
+		}
+		cmd.Printf("%s\n", tw.Render())
+	case "json":
+		jsonOutput, err := json.MarshalIndent(documents, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal JSON: %w", err)
+		}
+		cmd.Println(string(jsonOutput))
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(documents)
+		if err != nil {
+			return fmt.Errorf("failed to marshal YAML: %w", err)
+		}
+		cmd.Println(string(yamlOutput))
+	default:
+		return fmt.Errorf("unknown output format: %s", output)
+	}
+
+	return nil
 }
 
 func init() {
