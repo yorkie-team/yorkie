@@ -14,17 +14,8 @@
  * limitations under the License.
  */
 
-// Package llrb2 provides a Left-leaning Red-Black tree implementation.
-package llrb2
-
-// Key represents key of Tree.
-type Key interface {
-	// Compare gives the result of a 3-way comparison
-	// a.Compare(b) = 1 => a > b
-	// a.Compare(b) = 0 => a == b
-	// a.Compare(b) = -1 => a < b
-	Compare(k Key) int
-}
+// Package statistic provides a Left-leaning Red-Black tree implementation.
+package statistic
 
 // Value represents the data stored in the nodes of Tree.
 // TODO(binary-ho) Len이 필요할까? <- isRemoved가 필요할까? <- Soft Delete가 필요할까?
@@ -34,21 +25,20 @@ type Value interface {
 }
 
 // Node is a node of Tree.
-type Node[K Key, V Value] struct {
-	key    K
+type Node[V Value] struct {
+	key    Key
 	value  V
 	weight int
 	isRed  bool
 
-	parent *Node[K, V]
-	left   *Node[K, V]
-	right  *Node[K, V]
+	parent *Node[V]
+	left   *Node[V]
+	right  *Node[V]
 }
 
 // NewNode creates a new instance of Node.
-func NewNode[K Key, V Value](key K, value V, isRed bool) *Node[K, V] {
-	node := &Node[K, V]{
-		key:   key,
+func (tree *Tree[V]) NewNode(value V, isRed bool) *Node[V] {
+	node := &Node[V]{
 		value: value,
 		isRed: isRed,
 	}
@@ -57,18 +47,22 @@ func NewNode[K Key, V Value](key K, value V, isRed bool) *Node[K, V] {
 }
 
 // initWeight sets initial weight of this node.
-func (node *Node[K, V]) initWeight() {
+func (node *Node[V]) initWeight() {
 	node.weight = node.value.Len()
 }
 
-func updateTreeWeight[K Key, V Value](node *Node[K, V]) {
+func updateTreeWeight[V Value](node *Node[V]) {
 	for node != nil {
 		updateWeight(node)
 		node = node.parent
 	}
 }
 
-func updateWeight[K Key, V Value](node *Node[K, V]) {
+func updateWeight[V Value](node *Node[V]) {
+	if node == nil {
+		return
+	}
+
 	node.initWeight()
 
 	if node.left != nil {
@@ -80,20 +74,24 @@ func updateWeight[K Key, V Value](node *Node[K, V]) {
 	}
 }
 
-func (node *Node[K, V]) leftWeight() int {
+func (node *Node[V]) leftWeight() int {
 	if node.left == nil {
 		return 0
 	}
 	return node.left.weight
 }
 
-func (node *Node[K, V]) rightWeight() int {
+func (node *Node[V]) rightWeight() int {
 	if node.right == nil {
 		return 0
 	}
 	return node.right.weight
 }
 
-func (node *Node[K, V]) increaseWeight(weight int) {
+func (node *Node[V]) increaseWeight(weight int) {
 	node.weight += weight
+}
+
+func (node *Node[V]) compare(other *Node[V]) int {
+	return node.compare(other)
 }
