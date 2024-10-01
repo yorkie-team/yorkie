@@ -38,9 +38,11 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
-	adminTokenDuration        time.Duration
-	housekeepingInterval      time.Duration
-	clientDeactivateThreshold string
+	adminTokenDuration                       time.Duration
+	housekeepingDeactivateCandidatesInterval time.Duration
+	housekeepingDeleteDocumentsInterval      time.Duration
+	documentHardDeletionGracefulPeriod       time.Duration
+	clientDeactivateThreshold                string
 
 	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
@@ -69,7 +71,9 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
-			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.DeactivateCandidatesInterval = housekeepingDeactivateCandidatesInterval.String()
+			conf.Housekeeping.DeleteDocumentsInterval = housekeepingDeleteDocumentsInterval.String()
+			conf.Housekeeping.DocumentHardDeletionGracefulPeriod = documentHardDeletionGracefulPeriod
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -193,17 +197,35 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
+	cmd.Flags().StringVar(
+		&conf.Housekeeping.DeactivateCandidatesInterval,
+		"housekeeping-interval-Deactivate-Candidates",
+		server.DefaultHousekeepingDeactivateCandidatesInterval.String(),
+		"housekeeping Interval deactivate candidates between housekeeping runs",
+	)
+	cmd.Flags().StringVar(
+		&conf.Housekeeping.DeleteDocumentsInterval,
+		"housekeeping-interval-Delete-Documents",
+		server.DefaultHousekeepingDeleteDocumentsInterval.String(),
+		"housekeeping Interval delete documents between housekeeping runs",
+	)
 	cmd.Flags().DurationVar(
-		&housekeepingInterval,
-		"housekeeping-interval",
-		server.DefaultHousekeepingInterval,
-		"housekeeping interval between housekeeping runs",
+		&conf.Housekeeping.DocumentHardDeletionGracefulPeriod,
+		"housekeeping-DocumentHardDeletion-delete-graceful-period",
+		server.DefaultHousekeepingDocumentHardDeletionGracefulPeriod,
+		"Document deletion over time after a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
-		&conf.Housekeeping.CandidatesLimitPerProject,
+		&conf.Housekeeping.ClientDeactivationCandidateLimitPerProject,
 		"housekeeping-candidates-limit-per-project",
-		server.DefaultHousekeepingCandidatesLimitPerProject,
+		server.DefaultHousekeepingClientDeactivationCandidateLimitPerProject,
 		"candidates limit per project for a single housekeeping run",
+	)
+	cmd.Flags().IntVar(
+		&conf.Housekeeping.DocumentHardDeletionCandidateLimitPerProject,
+		"housekeeping-DocumentHardDeletion-limit-per-project",
+		server.DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject,
+		"Document Deletion limit per project for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.ProjectFetchSize,

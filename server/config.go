@@ -40,9 +40,12 @@ const (
 
 	DefaultProfilingPort = 8081
 
-	DefaultHousekeepingInterval                  = 30 * time.Second
-	DefaultHousekeepingCandidatesLimitPerProject = 500
-	DefaultHousekeepingProjectFetchSize          = 100
+	DefaultHousekeepingDeactivateCandidatesInterval                 = 30 * time.Second
+	DefaultHousekeepingDeleteDocumentsInterval                      = 30 * time.Second
+	DefaultHousekeepingDocumentHardDeletionGracefulPeriod           = 14 * 24 * time.Hour
+	DefaultHousekeepingClientDeactivationCandidateLimitPerProject   = 500
+	DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject = 500
+	DefaultHousekeepingProjectFetchSize                             = 100
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -229,9 +232,12 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: profilingPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  DefaultHousekeepingInterval.String(),
-			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          DefaultHousekeepingProjectFetchSize,
+			DeactivateCandidatesInterval:                 DefaultHousekeepingDeactivateCandidatesInterval.String(),
+			DeleteDocumentsInterval:                      DefaultHousekeepingDeleteDocumentsInterval.String(),
+			DocumentHardDeletionGracefulPeriod:           DefaultHousekeepingDocumentHardDeletionGracefulPeriod,
+			ClientDeactivationCandidateLimitPerProject:   DefaultHousekeepingClientDeactivationCandidateLimitPerProject,
+			DocumentHardDeletionCandidateLimitPerProject: DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject,
+			ProjectFetchSize:                             DefaultHousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,

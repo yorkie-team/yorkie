@@ -227,6 +227,41 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
+// DeleteDocuments Deletes the documents completely.
+func (c *Client) DeleteDocuments(
+	ctx context.Context,
+	candidates []*database.DocInfo,
+) (int64, error) {
+	if len(candidates) <= 0 {
+		return 0, nil
+	}
+
+	for _, docInfo := range candidates {
+		if docInfo.ID == "" {
+			return 0, fmt.Errorf("invalid document ID")
+		}
+	}
+
+	var idList []types.ID
+	for _, docInfo := range candidates {
+		idList = append(
+			idList,
+			docInfo.ID,
+		)
+	}
+
+	deletedResult, err := c.collection(ColDocuments).DeleteMany(
+		ctx,
+		bson.M{"_id": bson.M{"$in": idList}},
+	)
+
+	if err != nil {
+		return deletedResult.DeletedCount, fmt.Errorf("failed to delete documents: %w", err)
+	}
+
+	return deletedResult.DeletedCount, nil
+}
+
 // FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 func (c *Client) FindNextNCyclingProjectInfos(
 	ctx context.Context,
@@ -670,6 +705,34 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	return nil
+}
+
+// FindDocumentHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
+func (c *Client) FindDocumentHardDeletionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+	documentHardDeletionGracefulPeriod gotime.Duration,
+) ([]*database.DocInfo, error) {
+
+	currentTime := gotime.Now()
+	hardDeletionGracefulPeriod := currentTime.Add(-documentHardDeletionGracefulPeriod)
+
+	var DocInfos []*database.DocInfo
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"project_id": project.ID,
+		"removed_at": bson.M{"$lte": hardDeletionGracefulPeriod},
+	}, options.Find().SetLimit(int64(candidatesLimit)))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cursor.All(ctx, &DocInfos); err != nil {
+		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
+	}
+
+	return DocInfos, nil
 }
 
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
