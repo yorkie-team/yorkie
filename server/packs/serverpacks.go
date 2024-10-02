@@ -48,11 +48,6 @@ type ServerPack struct {
 	// 2. In response(Snapshot), it is the version vector of the snapshot of the document.
 	VersionVector time.VersionVector
 
-	// TODO(hackerwins): Consider to merge MinSyncedVersionVector with VersionVector.
-	// MinSyncedVersionVector is the minimum version vector taken by clients who
-	// attach the document.
-	MinSyncedVersionVector time.VersionVector
-
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
 
@@ -149,15 +144,6 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	pbPack.VersionVector = pbVersionVector
-
-	if p.MinSyncedVersionVector != nil {
-		pbMinSyncedVersionVector, err := converter.ToVersionVector(p.MinSyncedVersionVector)
-		if err != nil {
-			return nil, err
-		}
-
-		pbPack.MinSyncedVersionVector = pbMinSyncedVersionVector
-	}
 
 	return pbPack, nil
 }

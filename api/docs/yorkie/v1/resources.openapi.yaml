@@ -262,12 +262,6 @@ components:
           description: Deprecated
           title: min_synced_ticket
           type: object
-        minSyncedVersionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
-          additionalProperties: false
-          description: ""
-          title: min_synced_version_vector
-          type: object
         snapshot:
           additionalProperties: false
           description: ""

@@ -140,7 +140,9 @@ func PushPull(
 	if err != nil {
 		return nil, err
 	}
-	respPack.MinSyncedVersionVector = minSyncedVersionVector
+	if respPack.SnapshotLen() == 0 {
+		respPack.VersionVector = minSyncedVersionVector
+	}
 
 	// TODO(hackerwins): This is a previous implementation before the version
 	// vector was introduced. But it is necessary to support the previous
@@ -214,7 +216,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedTicket,
+				minSyncedVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}

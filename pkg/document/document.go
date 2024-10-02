@@ -184,7 +184,9 @@ func (d *Document) Update(
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
-	if len(pack.Snapshot) > 0 {
+	hasSnapshot := len(pack.Snapshot) > 0
+
+	if hasSnapshot {
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.VersionVector); err != nil {
@@ -215,13 +217,13 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	if !d.options.DisableGC {
-		d.GarbageCollect(pack.MinSyncedVersionVector)
+	if !d.options.DisableGC && !hasSnapshot {
+		d.GarbageCollect(pack.VersionVector)
 	}
 
 	// 05. Remove detached client's lamport from version vector if it exists
-	if pack.MinSyncedVersionVector != nil {
-		actorIDs, err := pack.MinSyncedVersionVector.Keys()
+	if pack.VersionVector != nil && !hasSnapshot {
+		actorIDs, err := pack.VersionVector.Keys()
 		if err != nil {
 			return err
 		}

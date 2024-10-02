@@ -557,6 +557,10 @@ func TestDocument(t *testing.T) {
 		docB := document.New("doc")
 		docB.SetActor(actorB)
 		assert.Equal(t, "{}", docB.VersionVector().Marshal())
+		// NOTE(JOOHOJANG): Normally, docB's Lamport timestamp should be included in pack.versionVector because pack is applied after docB is attached.
+		// However, since this is not the case in this test method, docB's Lamport timestamp is manually added to packA's versionVector.
+		// In actual use, since changePacks cannot be exchanged directly between clients without going through a server, the following handling was added.
+		packA.VersionVector.Set(docB.ActorID(), docB.VersionVector().VersionOf(docB.ActorID()))
 		assert.NoError(t, docB.ApplyChangePack(packA))
 		assert.Equal(t, "{000000000000000000000001:2,000000000000000000000002:3}", docB.VersionVector().Marshal())
 

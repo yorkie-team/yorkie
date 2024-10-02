@@ -144,8 +144,10 @@ func (d *InternalDocument) HasLocalChanges() bool {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
+	hasSnapshot := len(pack.Snapshot) > 0
+
 	// 01. Apply remote changes to both the cloneRoot and the document.
-	if len(pack.Snapshot) > 0 {
+	if hasSnapshot {
 		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.VersionVector); err != nil {
 			return err
 		}
@@ -167,15 +169,15 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if !disableGC && pack.MinSyncedTicket != nil {
-		if _, err := d.GarbageCollect(pack.MinSyncedVersionVector); err != nil {
+	if !disableGC && pack.VersionVector != nil && !hasSnapshot {
+		if _, err := d.GarbageCollect(pack.VersionVector); err != nil {
 			return err
 		}
 	}
 
 	// 04. Remove detached client's lamport from version vector if it exists
-	if pack.MinSyncedVersionVector != nil {
-		actorIDs, err := pack.MinSyncedVersionVector.Keys()
+	if pack.VersionVector != nil && !hasSnapshot {
+		actorIDs, err := pack.VersionVector.Keys()
 		if err != nil {
 			return err
 		}
