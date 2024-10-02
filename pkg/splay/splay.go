@@ -92,13 +92,16 @@ func (t *Node[V]) hasLinks() bool {
 // Tree is weighted binary search tree which is based on Splay tree.
 // original paper on Splay Trees: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type Tree[V Value] struct {
-	root *Node[V]
+	root        *Node[V]
+	linearCount int
+	firstNode   *Node[V]
 }
 
 // NewTree creates a new instance of Tree.
 func NewTree[V Value](root *Node[V]) *Tree[V] {
 	return &Tree[V]{
-		root: root,
+		root:        root,
+		linearCount: 0,
 	}
 }
 
@@ -114,6 +117,18 @@ func (t *Tree[V]) Insert(node *Node[V]) *Node[V] {
 
 // InsertAfter inserts the node after the given previous node.
 func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
+	if prev == t.root {
+		t.linearCount++
+		if t.linearCount == 1 {
+			t.firstNode = node
+		} else if t.linearCount > 500 {
+			t.Splay(t.firstNode)
+			t.linearCount = 0
+		}
+	} else {
+		t.linearCount = 0
+	}
+
 	t.Splay(prev)
 	t.root = node
 	node.right = prev.right
