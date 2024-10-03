@@ -37,7 +37,7 @@ As you can see from the image above, `min_synced_seq` doesn't guarantee every cl
 
 Garbage collection checks that deleted nodes are no longer referenced remotely and purges them completely.
 
-Server records the version vector of the last change pulled by the client whenever the client requests PushPull. And Server returns the vin version vector, `minVersionVector` of all clients in response PushPull to the client. `minVersionVector` is used to check whether deleted nodes are no longer to be referenced remotely or not.
+Server records the version vector of the last change pulled by the client whenever the client requests PushPull. And Server returns the min version vector, `minVersionVector` of all clients in response PushPull to the client. `minVersionVector` is used to check whether deleted nodes are no longer to be referenced remotely or not.
 
 ### What is `minVersionVector`
 Min version vector is the vector which consists of minimum value of every version vector stored in version vector table in database.
@@ -91,7 +91,7 @@ Meanwhile, `client b` inserts `"c"` after textnode `"b"`.
 
 ![garbage-collection-4](media/garbage-collection-4.png)
 
-`Client a` pushpull but nothing to push or pull. `minVersionVector` is still `{a:1, b:1}`, so no GC happens.
+`Client a` pulls change `3b` from Server. `minVersionVector` is still `{a:1, b:1}`, so no GC happens.
 
 #### State 5
 
@@ -145,14 +145,14 @@ But it causes n+1 query problem to remove lamport from db.versionVector. So we c
 ```
 // initial state
 db.versionVector = {
-    c2: {c1:3, c2:4, c3: 5},
-    c3: {c1:3, c2:3, c3: 6}
+    c1: {c1:3, c2:4, c3: 5},
+    c2: {c1:3, c2:3, c3: 6}
 }
-min(c2.vv, c3.vv) = min({c1:3, c2:4, c3: 5}, {c1:3, c2:3, c3:5}) = 
+min(c1.vv, c2.vv) = min({c1:3, c2:4, c3: 5}, {c1:3, c2:3, c3:5}) = 
 {c1:3, c2:3, c3:5}
-c2, c3 are acitve(attached).
+c1, c2 are acitve(attached).
 
-minVersionVector = {c1:3, c2:3, c3:5}.Filter([c1]) = {c2:3, c3:5}
+minVersionVector = {c1:3, c2:3, c3:5}.Filter([c1]) = {c1:3, c2:3}
 ```
 
 After client receive this minVersionVector, it will filter its version vector to remove detached client's lamport.
