@@ -79,7 +79,7 @@ In the initial state, both clients have `"ab"`.
 
 `Client a` deletes `"b"`, which is recorded as a change with versionVector `{b:1}`. The text node of `"b"` can be referenced by remote, so it is only marked as tombstone. And the `Client a` sends change `3a` to server through PushPull API and receives as a response that `minVersionVector` is `{a:1, b:2}`. Since all clients did not receive the deletion `change 3a`, the text node is not purged by garbage collection.
 
-Meanwhile, `client b` inserts `"c"` after textnode `"b"`.
+Meanwhile, `client b` inserts `"c"` after textnode `"b"` and it has not been sent (pushpull) to server yet.
 
 #### State 3
 
@@ -152,7 +152,7 @@ min(c1.vv, c2.vv) = min({c1:3, c2:4, c3: 5}, {c1:3, c2:3, c3:5}) =
 {c1:3, c2:3, c3:5}
 c1, c2 are acitve(attached).
 
-minVersionVector = {c1:3, c2:3, c3:5}.Filter([c1]) = {c1:3, c2:3}
+minVersionVector = {c1:3, c2:3, c3:5}.Filter([c3]) = {c1:3, c2:3}
 ```
 
 After client receive this minVersionVector, it will filter its version vector to remove detached client's lamport.
