@@ -1,7 +1,11 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  {{ if .Values.ingress.nginx.enabled }}
+  name: ingress-nginx
+  {{ else }}
   name: {{ .Values.yorkie.name }}
+  {{ end }}
   namespace: {{ .Values.yorkie.namespace }}
   {{ if .Values.ingress.awsAlb.enabled }}
   annotations:
@@ -27,14 +31,18 @@ metadata:
     # If the health check fails, NCP ALB will not route the traffic to the service
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
   {{ end }}
+  {{ if .Values.ingress.nginx.enabled }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: "nginx"
+  {{ end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   rules:
     {{ if .Values.ingress.hosts.enabled }}
     - host: {{ .Values.ingress.hosts.apiHost }}
       http:
-    {{ end }}
-    {{ if not .Values.ingress.hosts.enabled }}
+    {{ else }}
     - http:
     {{ end }}
         paths:

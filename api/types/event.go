@@ -26,3 +26,8 @@ type DocEventBody struct {
 	Topic   string
 	Payload []byte
 }
+
+// PayloadLen returns the size of the payload.
+func (b *DocEventBody) PayloadLen() int {
+	return len(b.Payload)
+}

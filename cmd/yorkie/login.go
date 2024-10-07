@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-// Package user provides the user command.
-package user
+package main
 
 import (
 	"context"
@@ -39,16 +38,12 @@ var (
 func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "login",
-		Short:   "Log in to Yorkie server",
+		Short:   "Log in to the Yorkie server",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Print("Enter Password: ")
-			bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
-			if err != nil {
-				return fmt.Errorf("failed to read password: %w", err)
+			if err := readPassword(); err != nil {
+				return err
 			}
-			password = string(bytePassword)
-			fmt.Println()
 
 			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
@@ -86,6 +81,20 @@ func newLoginCmd() *cobra.Command {
 	}
 }
 
+// readPassword reads the password from the user.
+func readPassword() error {
+	if password == "" {
+		fmt.Print("Enter Password: ")
+		bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("read password: %w", err)
+		}
+		password = string(bytePassword)
+		fmt.Println()
+	}
+	return nil
+}
+
 func init() {
 	cmd := newLoginCmd()
 	cmd.Flags().StringVarP(
@@ -93,7 +102,14 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required)",
+		"Username",
+	)
+	cmd.Flags().StringVarP(
+		&password,
+		"password",
+		"p",
+		"",
+		"Password (optional)",
 	)
 	cmd.Flags().StringVar(
 		&rpcAddr,
@@ -108,5 +124,5 @@ func init() {
 		"Skip the TLS connection of the client",
 	)
 	_ = cmd.MarkFlagRequired("username")
-	SubCmd.AddCommand(cmd)
+	rootCmd.AddCommand(cmd)
 }

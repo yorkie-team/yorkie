@@ -344,6 +344,17 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		}
 	}
 
+	if err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+		for k, v := range opts.InitialRoot {
+			if root.Get(k) == nil {
+				root.SetDynamicValue(k, v)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -783,11 +794,11 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 func newTLSConfigFromFile(certFile, serverNameOverride string) (*tls.Config, error) {
 	b, err := os.ReadFile(filepath.Clean(certFile))
 	if err != nil {
-		return nil, fmt.Errorf("credentials: failed to read TLS config file %q: %w", certFile, err)
+		return nil, fmt.Errorf("read TLS config file %q: %w", certFile, err)
 	}
 	cp := x509.NewCertPool()
 	if !cp.AppendCertsFromPEM(b) {
-		return nil, fmt.Errorf("credentials: failed to append certificates")
+		return nil, fmt.Errorf("failure to append certs from PEM")
 	}
 
 	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp, MinVersion: tls.VersionTLS12}, nil

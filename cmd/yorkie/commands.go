@@ -18,6 +18,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/context"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/document"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/project"
-	"github.com/yorkie-team/yorkie/cmd/yorkie/user"
 )
 
 var rootCmd = &cobra.Command{
@@ -50,11 +50,26 @@ func init() {
 	rootCmd.AddCommand(project.SubCmd)
 	rootCmd.AddCommand(document.SubCmd)
 	rootCmd.AddCommand(context.SubCmd)
-	rootCmd.AddCommand(user.SubCmd)
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
 	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
 
 	rootCmd.PersistentFlags().String("rpc-addr", "localhost:8080", "Address of the rpc server")
 	_ = viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
+
+	rootCmd.PersistentFlags().StringP("output", "o", "", "One of 'yaml' or 'json'.")
+	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateOutputOpts()
+	}
+}
+
+// validateOutputOpts validates the output options.
+func validateOutputOpts() error {
+	output := viper.GetString("output")
+	if output != DefaultOutput && output != YamlOutput && output != JSONOutput {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+	return nil
 }

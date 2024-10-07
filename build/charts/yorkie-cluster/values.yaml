@@ -62,6 +62,9 @@ ingress:
     enabled: false
     certNo: 1234
 
+  nginx:
+    enabled: false
+
 # Configuration for ratelimit
 ratelimit:
   enabled: false

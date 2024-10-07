@@ -1,4 +1,4 @@
-//go:build sharding
+//go:build complex
 
 /*
  * Copyright 2023 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package sharding
+package complex
 
 import (
 	"context"
@@ -27,19 +27,29 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
-	"github.com/yorkie-team/yorkie/server/rpc/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
+
+type testResult struct {
+	flag       bool
+	resultDesc string
+}
+
+type clientAndDocPair struct {
+	cli *client.Client
+	doc *document.Document
+}
 
 var (
 	shardedDBNameForServer   = "test-yorkie-meta-server"
@@ -96,7 +106,7 @@ func TestMain(m *testing.M) {
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: helper.RPCPort,
-	}, be, helper.SystemPort)
+	}, be)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -132,82 +142,53 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestSDKRPCServerBackendWithShardedDB(t *testing.T) {
-	t.Run("activate/deactivate client test", func(t *testing.T) {
-		testcases.RunActivateAndDeactivateClientTest(t, testClient)
-	})
+func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
+	assert.True(t, len(pairs) > 1)
+	ctx := context.Background()
+	// Save own changes and get previous changes.
+	for i, pair := range pairs {
+		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
 
-	t.Run("attach/detach document test", func(t *testing.T) {
-		testcases.RunAttachAndDetachDocumentTest(t, testClient)
-	})
+	// Get last client changes.
+	// Last client get all precede changes in above loop.
+	for _, pair := range pairs[:len(pairs)-1] {
+		err := pair.cli.Sync(ctx)
+		assert.NoError(t, err)
+	}
 
-	t.Run("attach/detach on removed document test", func(t *testing.T) {
-		testcases.RunAttachAndDetachRemovedDocumentTest(t, testClient)
-	})
+	// Assert start.
+	expected := pairs[0].doc.Marshal()
+	fmt.Printf("after d1: %s\n", expected)
+	for i, pair := range pairs[1:] {
+		v := pair.doc.Marshal()
+		fmt.Printf("after d%d: %s\n", i+2, v)
+		if expected != v {
+			return false
+		}
+	}
 
-	t.Run("push/pull changes test", func(t *testing.T) {
-		testcases.RunPushPullChangeTest(t, testClient)
-	})
-
-	t.Run("push/pull on removed document test", func(t *testing.T) {
-		testcases.RunPushPullChangeOnRemovedDocumentTest(t, testClient)
-	})
-
-	t.Run("remove document test", func(t *testing.T) {
-		testcases.RunRemoveDocumentTest(t, testClient)
-	})
-
-	t.Run("remove document with invalid client state test", func(t *testing.T) {
-		testcases.RunRemoveDocumentWithInvalidClientStateTest(t, testClient)
-	})
-
-	t.Run("watch document test", func(t *testing.T) {
-		testcases.RunWatchDocumentTest(t, testClient)
-	})
+	return true
 }
 
-func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
-	t.Run("admin signup test", func(t *testing.T) {
-		testcases.RunAdminSignUpTest(t, testAdminClient)
-	})
+// activeClients creates and activates the given number of clients.
+func activeClients(t *testing.T, n int) (clients []*client.Client) {
+	for i := 0; i < n; i++ {
+		c, err := client.Dial(testRPCAddr)
+		assert.NoError(t, err)
+		assert.NoError(t, c.Activate(context.Background()))
 
-	t.Run("admin login test", func(t *testing.T) {
-		testcases.RunAdminLoginTest(t, testAdminClient)
-	})
+		clients = append(clients, c)
+	}
+	return
+}
 
-	t.Run("admin delete account test", func(t *testing.T) {
-		testcases.RunAdminDeleteAccountTest(t, testAdminClient)
-	})
-
-	t.Run("admin change password test", func(t *testing.T) {
-		testcases.RunAdminChangePasswordTest(t, testAdminClient)
-	})
-
-	t.Run("admin create project test", func(t *testing.T) {
-		testcases.RunAdminCreateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin list projects test", func(t *testing.T) {
-		testcases.RunAdminListProjectsTest(t, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin get project test", func(t *testing.T) {
-		testcases.RunAdminGetProjectTest(t, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin update project test", func(t *testing.T) {
-		testcases.RunAdminUpdateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin list documents test", func(t *testing.T) {
-		testcases.RunAdminListDocumentsTest(t, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin get document test", func(t *testing.T) {
-		testcases.RunAdminGetDocumentTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
-	})
-
-	t.Run("admin list changes test", func(t *testing.T) {
-		testcases.RunAdminListChangesTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
-	})
+// deactivateAndCloseClients deactivates and closes the given clients.
+func deactivateAndCloseClients(t *testing.T, clients []*client.Client) {
+	for _, c := range clients {
+		assert.NoError(t, c.Deactivate(context.Background()))
+		assert.NoError(t, c.Close())
+	}
 }

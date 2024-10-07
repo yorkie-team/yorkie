@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-package user
+package main
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/term"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -33,11 +31,16 @@ import (
 func deleteAccountCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "delete-account",
-		Short:   "Delete user account",
+		Short:   "Delete account",
 		PreRunE: config.Preload,
 		RunE: func(_ *cobra.Command, args []string) error {
-			password, err := getPassword()
+			rpcAddr := viper.GetString("rpcAddr")
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
+				return err
+			}
+
+			if err := readPassword(); err != nil {
 				return err
 			}
 
@@ -57,11 +60,8 @@ func deleteAccountCmd() *cobra.Command {
 				rpcAddr = viper.GetString("rpcAddr")
 			}
 
-			if err := deleteAccountFromServer(conf, rpcAddr, insecure, username, password); err != nil {
-				fmt.Println("Failed to delete your account." +
-					"The account may not exist or the password might be incorrect. Please try again.")
-			} else {
-				fmt.Println("Your account has been successfully deleted.")
+			if err := deleteAccount(conf, auth, rpcAddr, username, password); err != nil {
+				fmt.Println("delete account: ", err)
 			}
 
 			return nil
@@ -69,27 +69,11 @@ func deleteAccountCmd() *cobra.Command {
 	}
 }
 
-func getPassword() (string, error) {
-	fmt.Print("Enter Password: ")
-	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", fmt.Errorf("failed to read password: %w", err)
-	}
-	password = string(bytePassword)
-	fmt.Println()
-
-	return password, nil
-}
-
 func makeConfirmation() (bool, error) {
-	fmt.Println(
-		"WARNING: This action is irreversible. Your account and all associated data will be permanently deleted.",
-	)
-
-	fmt.Print("Are you absolutely sure? Type 'DELETE' to confirm: ")
+	fmt.Println("Warning: This action cannot be undone. Type 'DELETE' to confirm: ")
 	var confirmation string
 	if _, err := fmt.Scanln(&confirmation); err != nil {
-		return false, fmt.Errorf("failed to read confirmation from user: %w", err)
+		return false, fmt.Errorf("read confirmation from user: %w", err)
 	}
 
 	if confirmation != "DELETE" {
@@ -99,21 +83,20 @@ func makeConfirmation() (bool, error) {
 	return true, nil
 }
 
-func deleteAccountFromServer(conf *config.Config, rpcAddr string, insecureFlag bool, username, password string) error {
-	cli, err := admin.Dial(rpcAddr,
-		admin.WithInsecure(insecureFlag),
-		admin.WithToken(conf.Auths[rpcAddr].Token),
-	)
+func deleteAccount(conf *config.Config, auth config.Auth, rpcAddr, username, password string) error {
+	cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 	if err != nil {
-		return fmt.Errorf("failed to dial admin: %w", err)
+		return err
 	}
-	defer cli.Close()
+	defer func() {
+		cli.Close()
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := cli.DeleteAccount(ctx, username, password); err != nil {
-		return fmt.Errorf("server failed to delete account: %w", err)
+		return fmt.Errorf("delete account: %w", err)
 	}
 
 	delete(conf.Auths, rpcAddr)
@@ -138,20 +121,16 @@ func init() {
 		"username",
 		"u",
 		"",
-		"Username (required)",
+		"Username",
 	)
-	cmd.Flags().StringVar(
-		&rpcAddr,
-		"rpc-addr",
+	cmd.Flags().StringVarP(
+		&password,
+		"password",
+		"p",
 		"",
-		"Address of the RPC server",
+		"Password (optional)",
 	)
-	cmd.Flags().BoolVar(
-		&insecure,
-		"insecure",
-		false,
-		"Skip the TLS connection of the client",
-	)
+
 	_ = cmd.MarkFlagRequired("username")
-	SubCmd.AddCommand(cmd)
+	rootCmd.AddCommand(cmd)
 }

@@ -1,4 +1,4 @@
-//go:build sharding
+//go:build complex
 
 /*
  * Copyright 2023 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package sharding
+package complex
 
 import (
 	"context"

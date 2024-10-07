@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package user
+package main
 
 import (
 	"context"
@@ -29,28 +29,26 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-var (
-	newPassword string
-)
-
-func changePasswordCmd() *cobra.Command {
+func passwdCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "change-password",
-		Short:   "Change user password",
+		Use:     "passwd",
+		Short:   "Change password",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			password, newPassword, err := getPasswords()
+			rpcAddr := viper.GetString("rpcAddr")
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
 			}
 
-			if rpcAddr == "" {
-				rpcAddr = viper.GetString("rpcAddr")
+			password, newPassword, err := readPasswords()
+			if err != nil {
+				return err
 			}
 
-			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 			if err != nil {
-				return fmt.Errorf("failed to dial admin: %w", err)
+				return err
 			}
 			defer func() {
 				cli.Close()
@@ -70,11 +68,11 @@ func changePasswordCmd() *cobra.Command {
 	}
 }
 
-func getPasswords() (string, string, error) {
+func readPasswords() (string, string, error) {
 	fmt.Print("Enter Password: ")
 	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read password: %w", err)
+		return "", "", fmt.Errorf("read password: %w", err)
 	}
 	password := string(bytePassword)
 	fmt.Println()
@@ -82,7 +80,7 @@ func getPasswords() (string, string, error) {
 	fmt.Print("Enter New Password: ")
 	bytePassword, err = term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read password: %w", err)
+		return "", "", fmt.Errorf("read new password: %w", err)
 	}
 	newPassword := string(bytePassword)
 	fmt.Println()
@@ -105,26 +103,14 @@ func deleteAuthSession(rpcAddr string) error {
 }
 
 func init() {
-	cmd := changePasswordCmd()
+	cmd := passwdCmd()
 	cmd.Flags().StringVarP(
 		&username,
 		"username",
 		"u",
 		"",
-		"Username (required)",
-	)
-	cmd.Flags().StringVar(
-		&rpcAddr,
-		"rpc-addr",
-		"",
-		"Address of the RPC server",
-	)
-	cmd.Flags().BoolVar(
-		&insecure,
-		"insecure",
-		false,
-		"Skip the TLS connection of the client",
+		"Username",
 	)
 	_ = cmd.MarkFlagRequired("username")
-	SubCmd.AddCommand(cmd)
+	rootCmd.AddCommand(cmd)
 }

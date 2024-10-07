@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"runtime"
 
 	"connectrpc.com/connect"
@@ -44,10 +45,6 @@ func newVersionCmd() *cobra.Command {
 		Short:   "Print the version number of Yorkie",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := validateOutputOpts(); err != nil {
-				return err
-			}
-
 			info := types.VersionInfo{
 				ClientVersion: clientVersion(),
 			}
@@ -57,6 +54,7 @@ func newVersionCmd() *cobra.Command {
 				info.ServerVersion, serverErr = fetchServerVersion()
 			}
 
+			output := viper.GetString("output")
 			if err := printVersionInfo(cmd, output, &info); err != nil {
 				return err
 			}
@@ -119,7 +117,7 @@ func printServerError(cmd *cobra.Command, err error) {
 
 func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.VersionInfo) error {
 	switch output {
-	case "":
+	case DefaultOutput:
 		cmd.Printf("Yorkie Client: %s\n", versionInfo.ClientVersion.YorkieVersion)
 		cmd.Printf("Go: %s\n", versionInfo.ClientVersion.GoVersion)
 		cmd.Printf("Build Date: %s\n", versionInfo.ClientVersion.BuildDate)
@@ -128,29 +126,20 @@ func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.Vers
 			cmd.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
 			cmd.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
 		}
-	case "yaml":
+	case YamlOutput:
 		marshalled, err := yaml.Marshal(versionInfo)
 		if err != nil {
-			return errors.New("failed to marshal YAML")
+			return fmt.Errorf("marshal YAML: %w", err)
 		}
 		cmd.Println(string(marshalled))
-	case "json":
+	case JSONOutput:
 		marshalled, err := json.MarshalIndent(versionInfo, "", "  ")
 		if err != nil {
-			return errors.New("failed to marshal JSON")
+			return fmt.Errorf("marshal JSON: %w", err)
 		}
 		cmd.Println(string(marshalled))
 	default:
-		return errors.New("unknown output format")
-	}
-
-	return nil
-}
-
-// validateOutputOpts validates the output options.
-func validateOutputOpts() error {
-	if output != "" && output != "yaml" && output != "json" {
-		return errors.New(`--output must be 'yaml' or 'json'`)
+		return fmt.Errorf("unknown output format: %s", output)
 	}
 
 	return nil
@@ -164,17 +153,6 @@ func init() {
 		"client",
 		clientOnly,
 		"Shows client version only (no server required).",
-	)
-
-	// TODO(hackerwins): Output format should be configurable globally.
-	// So, we need to move this to the root command like `--rpc-addr` and
-	// apply it to all subcommands that print output.
-	cmd.Flags().StringVarP(
-		&output,
-		"output",
-		"o",
-		output,
-		"One of 'yaml' or 'json'.",
 	)
 
 	rootCmd.AddCommand(cmd)
