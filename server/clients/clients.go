@@ -26,13 +26,12 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
-	"github.com/yorkie-team/yorkie/system"
 )
 
 var (
@@ -71,52 +70,17 @@ func Deactivate(
 		return nil, err
 	}
 
-	// 01. Temporarily create a client for document detach.
-	actorID, err := clientInfo.ID.ToActorID()
-	if err != nil {
-		return nil, err
-	}
-
 	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	project := projectInfo.ToProject()
 
-	token := getAuthToken(ctx)
-	cli, err := system.Dial(gatewayAddr,
-		system.WithKey(clientInfo.Key),
-		system.WithAPIKey(project.PublicKey),
-		system.WithActorID(actorID),
-		system.WithToken(token),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	// 02. Detach attached documents from the client.
 	for docID, info := range clientInfo.Documents {
 		if info.Status != database.DocumentAttached {
 			continue
 		}
-
-		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: clientInfo.ProjectID,
-			DocID:     docID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, info.ServerSeq, info.ClientSeq, actorID)
-		if err != nil {
-			return nil, err
-		}
-		cli.PretendAttach(ctx, doc, docID)
-
-		//if err := cli.Detach(ctx, doc); err != nil {
-		//	return nil, err
-		//}
 
 		data := map[string]interface{}{
 			"docID":         docID,
@@ -142,8 +106,9 @@ func Deactivate(
 			return nil, fmt.Errorf("%v", err)
 		}
 
-		//json.Unmarshal(body, resp)
-		fmt.Println(string(body))
+		if "success" != strings.TrimSpace(string(body)) {
+			return nil, fmt.Errorf("detach request fails")
+		}
 	}
 
 	// 03. Deactivate the client.

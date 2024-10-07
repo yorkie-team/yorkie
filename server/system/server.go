@@ -95,11 +95,6 @@ func (s *Server) detach(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-
-	//w.Header().Set("Content-Type", "application/json")
-	//if err := json.NewEncoder(w).Encode(map[string]interface{}{"success": success}); err != nil {
-	//	return
-	//}
 }
 
 func (s *Server) listenAndServe() error {

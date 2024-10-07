@@ -118,5 +118,5 @@ func (s *systemService) DetachDocument(
 		doc.SetStatus(document.StatusDetached)
 	}
 
-	return doc.Key().String(), nil
+	return "success", nil
 }
