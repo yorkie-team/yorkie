@@ -74,6 +74,20 @@ func (s *Server) Start() error {
 	return s.listenAndServe()
 }
 
+// Shutdown shut down the server.
+func (s *Server) Shutdown(graceful bool) {
+	if graceful {
+		if err := s.httpServer.Shutdown(context.Background()); err != nil {
+			logging.DefaultLogger().Error("HTTP server Shutdown: %v", err)
+		}
+		return
+	}
+
+	if err := s.httpServer.Close(); err != nil {
+		logging.DefaultLogger().Error("HTTP server close: %v", err)
+	}
+}
+
 func (s *Server) detach(w http.ResponseWriter, r *http.Request) {
 	var req DetachRequest
 	err := json.NewDecoder(r.Body).Decode(&req)

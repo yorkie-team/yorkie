@@ -21,6 +21,7 @@ package complex
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/system"
 	"log"
 	"net/http"
 	"os"
@@ -55,6 +56,7 @@ var (
 	shardedDBNameForServer   = "test-yorkie-meta-server"
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
+	testSystemServer         *system.Server
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
@@ -104,6 +106,16 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
+	testSystemServer = system.NewServer(&system.Config{
+		Port: helper.SystemPort,
+	}, be)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := testSystemServer.Start(); err != nil {
+		log.Fatalf("failed system server listen: %s\n", err)
+	}
+
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: helper.RPCPort,
 	}, be, helper.SystemPort)
@@ -138,6 +150,8 @@ func TestMain(m *testing.M) {
 	if err := be.Shutdown(); err != nil {
 		log.Fatal(err)
 	}
+
+	testSystemServer.Shutdown(true)
 	testRPCServer.Shutdown(true)
 	os.Exit(code)
 }
