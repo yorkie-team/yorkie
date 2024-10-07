@@ -132,6 +132,7 @@ func TestMain(m *testing.M) {
 		&rpc.Config{
 			Port: helper.RPCPort,
 		}, testBackend,
+		helper.SystemPort,
 	)
 	if err != nil {
 		log.Fatal(err)

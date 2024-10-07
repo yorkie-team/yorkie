@@ -676,56 +676,6 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 	})
-
-	t.Run("ensure document detached when deactivate client test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a client
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
-		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientActivated, clientInfo.Status)
-
-		// 02. Create documents and attach them to the client
-		for i := 0; i < 3; i++ {
-			docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
-			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-			clientInfo.Documents[docInfo.ID].ServerSeq = 1
-			clientInfo.Documents[docInfo.ID].ClientSeq = 1
-			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
-
-			result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
-			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-			assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
-			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
-			assert.NoError(t, err)
-		}
-
-		// 03. Remove one document
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
-		assert.NoError(t, err)
-		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
-
-		// 04. Deactivate the client
-		result, err := db.DeactivateClient(ctx, types.ClientRefKey{
-			ProjectID: projectID,
-			ClientID:  clientInfo.ID,
-		})
-		assert.NoError(t, err)
-
-		// 05. Check whether doc.Status is reflected properly.
-		// If it was `DocumentAttached`, it should be changed to `DocumentDetached`.
-		for i := 0; i < 2; i++ {
-			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
-			assert.NoError(t, err)
-			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentDetached)
-		}
-		// If it was `DocumentRemoved`, it should be remained `DocumentRemoved`.
-		docInfo, err = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
-		assert.NoError(t, err)
-		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentRemoved)
-	})
 }
 
 // RunUpdateProjectInfoTest runs the UpdateProjectInfo tests for the given db.

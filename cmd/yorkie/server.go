@@ -345,6 +345,19 @@ func init() {
 		server.DefaultHostname,
 		"Yorkie Server Hostname",
 	)
+	cmd.Flags().StringVar(
+		&conf.Backend.GatewayAddr,
+		"backend-gateway-addr",
+		server.DefaultGatewayAddr,
+		"Gateway address",
+	)
+
+	cmd.Flags().StringVar(
+		&conf.Backend.SystemServerAddr,
+		"backend-gateway-addr",
+		server.DefaultSystemServerAddr,
+		"Gateway address",
+	)
 
 	rootCmd.AddCommand(cmd)
 }

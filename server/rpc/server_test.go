@@ -101,7 +101,7 @@ func TestMain(m *testing.M) {
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: helper.RPCPort,
-	}, be)
+	}, be, helper.SystemPort)
 	if err != nil {
 		log.Fatal(err)
 	}

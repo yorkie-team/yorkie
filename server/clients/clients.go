@@ -18,11 +18,20 @@
 package clients
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
 var (
@@ -46,42 +55,69 @@ func Activate(
 // Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	refKey types.ClientRefKey,
+	gatewayAddr string,
 ) (*database.ClientInfo, error) {
-	// TODO(hackerwins): We need to remove the presence of the client from the document.
-	// Be careful that housekeeping is executed by the leader. And documents are sharded
-	// by the servers in the cluster. So, we need to consider the case where the leader is
-	// not the same as the server that handles the document.
-
-	// TODO(raararaara): When deactivating a client, we need to update three DB properties
-	// (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
-	// Updating the sub-properties of ClientInfo guarantees atomicity as it involves a single MongoDB document.
-	// However, SyncedSeqs are stored in separate documents, so we can't ensure atomic updates for both.
-	// Currently, if SyncedSeqs update fails, it mainly impacts GC efficiency without causing major issues.
-	// We need to consider implementing a correction logic to remove SyncedSeqs in the future.
-	clientInfo, err := db.DeactivateClient(ctx, refKey)
+	// NOTE(hackerwins): Before deactivating the client, we need to detach all
+	// attached documents from the client.
+	// Because detachments and deactivation are separate steps, failure of steps
+	// must be considered. If each step of detachments is failed, some documents
+	// are still attached and the client is not deactivated. In this case,
+	// the client or housekeeping process should retry the deactivation.
+	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(raararaara): We're currently updating SyncedSeq one by one. This approach is similar
-	// to n+1 query problem. We need to investigate if we can optimize this process by using a single query in the future.
-	for docID, clientDocInfo := range clientInfo.Documents {
-		if err := db.UpdateSyncedSeq(
-			ctx,
-			clientInfo,
-			types.DocRefKey{
-				ProjectID: refKey.ProjectID,
-				DocID:     docID,
-			},
-			clientDocInfo.ServerSeq,
-		); err != nil {
-			return nil, err
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	project := projectInfo.ToProject()
+
+	// 02. Detach attached documents from the client.
+	for docID, info := range clientInfo.Documents {
+		if info.Status != database.DocumentAttached {
+			continue
+		}
+
+		data := map[string]interface{}{
+			"docID":         docID,
+			"clientDocInfo": info,
+			"clientInfo":    clientInfo,
+			"project":       project,
+		}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+
+		resp, err := http.Post(
+			"http://"+gatewayAddr+"/detach",
+			"application/json",
+			bytes.NewBuffer(jsonData),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+
+		if "success" != strings.TrimSpace(string(body)) {
+			return nil, fmt.Errorf("detach request fails")
 		}
 	}
 
-	return clientInfo, err
+	// 03. Deactivate the client.
+	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientInfo, nil
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
@@ -100,4 +136,18 @@ func FindActiveClientInfo(
 	}
 
 	return info, nil
+}
+
+func isEmptyCtx(ctx context.Context) bool {
+	emptyCtxType := reflect.TypeOf(context.Background())
+	return reflect.TypeOf(ctx) == emptyCtxType
+}
+
+func getAuthToken(ctx context.Context) string {
+	if !isEmptyCtx(ctx) {
+		md := metadata.From(ctx)
+		return md.Authorization
+	}
+
+	return ""
 }

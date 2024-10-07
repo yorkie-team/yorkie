@@ -38,6 +38,7 @@ func DeactivateInactives(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	housekeepingLastProjectID types.ID,
+	gatewayAddr string,
 ) (types.ID, error) {
 	start := time.Now()
 
@@ -69,7 +70,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, clientInfo := range candidates {
-		if _, err := Deactivate(ctx, be.DB, clientInfo.RefKey()); err != nil {
+		if _, err := Deactivate(ctx, be, clientInfo.RefKey(), gatewayAddr); err != nil {
 			return database.DefaultProjectID, err
 		}
 

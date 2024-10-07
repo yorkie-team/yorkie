@@ -41,13 +41,17 @@ import (
 type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
+	conf       *Config
+	systemPort int
 }
 
 // newYorkieServer creates a new instance of yorkieServer
-func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieServer {
+func newYorkieServer(serviceCtx context.Context, be *backend.Backend, conf *Config, systemPort int) *yorkieServer {
 	return &yorkieServer{
 		backend:    be,
 		serviceCtx: serviceCtx,
+		conf:       conf,
+		systemPort: systemPort,
 	}
 }
 
@@ -94,10 +98,10 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.Deactivate(ctx, s.backend.DB, types.ClientRefKey{
+	_, err = clients.Deactivate(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
+	}, s.backend.Config.FetchGatewayAddr(s.rpcAddr()))
 	if err != nil {
 		return nil, err
 	}
@@ -689,4 +693,8 @@ func (s *yorkieServer) Broadcast(
 		len(req.Msg.Payload))
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
+}
+
+func (s *yorkieServer) rpcAddr() string {
+	return fmt.Sprintf("localhost:%d", s.systemPort)
 }

@@ -454,6 +454,11 @@ func (d *Document) BroadcastEventHandlers() map[string]func(
 	return d.broadcastEventHandlers
 }
 
+// setInternalDoc sets the given internal document to this document.
+func (d *Document) setInternalDoc(internalDoc *InternalDocument) {
+	d.doc = internalDoc
+}
+
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	if len(msgAndArgs) == 0 {
 		return ""

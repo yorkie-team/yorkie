@@ -49,7 +49,7 @@ type Server struct {
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+func NewServer(conf *Config, be *backend.Backend, systemPort int) (*Server, error) {
 	tokenManager := auth.NewTokenManager(
 		be.Config.SecretKey,
 		be.Config.ParseAdminTokenDuration(),
@@ -71,7 +71,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
+	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be, conf, systemPort), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))

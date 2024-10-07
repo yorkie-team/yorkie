@@ -71,7 +71,7 @@ func ListDocumentSummaries(
 		}
 
 		if includeSnapshot {
-			doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 			if err != nil {
 				return nil, err
 			}
@@ -102,7 +102,7 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func GetDocumentSummaries(
 		snapshot := ""
 		if includeSnapshot {
 			// TODO(hackerwins, kokodak): Resolve the N+1 problem.
-			doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 			if err != nil {
 				return nil, err
 			}
@@ -179,7 +179,7 @@ func GetDocumentByServerSeq(
 		return nil, err
 	}
 
-	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, serverSeq)
+	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, serverSeq)
 	if err != nil {
 		return nil, err
 	}
