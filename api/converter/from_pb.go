@@ -97,19 +97,27 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
+	versionVector, err := FromVersionVector(pbPack.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
 	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
 	if err != nil {
 		return nil, err
 	}
 
-	return &change.Pack{
+	pack := &change.Pack{
 		DocumentKey:     key.Key(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
 		Changes:         changes,
 		Snapshot:        pbPack.Snapshot,
-		MinSyncedTicket: minSyncedTicket,
 		IsRemoved:       pbPack.IsRemoved,
-	}, nil
+		VersionVector:   versionVector,
+		MinSyncedTicket: minSyncedTicket,
+	}
+
+	return pack, nil
 }
 
 func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
@@ -147,12 +155,38 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	if err != nil {
 		return change.InitialID, err
 	}
+
+	vector, err := FromVersionVector(id.VersionVector)
+	if err != nil {
+		return change.InitialID, err
+	}
+
 	return change.NewID(
 		id.ClientSeq,
 		id.ServerSeq,
 		id.Lamport,
 		actorID,
+		vector,
 	), nil
+}
+
+// FromVersionVector converts the given Protobuf formats to model format.
+func FromVersionVector(pbVersionVector *api.VersionVector) (time.VersionVector, error) {
+	versionVector := make(time.VersionVector)
+	// TODO(hackerwins): Old clients do not send VersionVector. We should remove this later.
+	if pbVersionVector == nil {
+		return versionVector, nil
+	}
+
+	for id, lamport := range pbVersionVector.Vector {
+		actorID, err := time.ActorIDFromHex(id)
+		if err != nil {
+			return nil, err
+		}
+		versionVector.Set(actorID, lamport)
+	}
+
+	return versionVector, nil
 }
 
 // FromDocumentID converts the given Protobuf formats to model format.

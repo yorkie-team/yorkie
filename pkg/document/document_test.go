@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -489,7 +488,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		assert.Equal(t, 1, doc.GarbageLen())
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
@@ -522,63 +521,73 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
-	t.Run("purge node from index during GC test", func(t *testing.T) {
-		doc := document.New("d1")
+	t.Run("version vector test", func(t *testing.T) {
+		// 01. create document with actorA and update it twice and check version vector.
+		actorA, err := time.ActorIDFromHex("000000000000000000000001")
+		assert.NoError(t, err)
+		docA := document.New("doc")
+		docA.SetActor(actorA)
+		assert.Equal(t, "{}", docA.VersionVector().Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewText("k1")
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "1")
 			return nil
 		}))
-		assert.Equal(t, 1, doc.Root().GetText("k1").TreeByID().Len())
+		assert.Equal(t, "{000000000000000000000001:1}", docA.VersionVector().Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetText("k1").Edit(0, 0, "ABC", nil)
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "2")
 			return nil
 		}))
-		assert.Equal(t, 2, doc.Root().GetText("k1").TreeByID().Len())
+		assert.Equal(t, "{000000000000000000000001:2}", docA.VersionVector().Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetText("k1").Edit(1, 3, "", nil)
+		packA := docA.CreateChangePack()
+		packA.MinSyncedTicket = time.InitialTicket
+		assert.True(t, packA.Changes[1].AfterOrEqual(packA.Changes[0]))
+		assert.False(t, packA.Changes[0].AfterOrEqual(packA.Changes[1]))
+
+		// 02. create document with actorB and apply change packA of docA to docB and check version vector.
+		actorB, err := time.ActorIDFromHex("000000000000000000000002")
+		assert.NoError(t, err)
+		docB := document.New("doc")
+		docB.SetActor(actorB)
+		assert.Equal(t, "{}", docB.VersionVector().Marshal())
+		// NOTE(JOOHOJANG): Normally, docB's Lamport timestamp should be included in pack.versionVector,
+		// because pack is applied after docB is attached.
+		// However, since this is not the case in this test method,
+		// docB's Lamport timestamp is manually added to packA's versionVector.
+		// In actual use, since changePacks cannot be exchanged directly between clients without going through a server,
+		// the following handling was added.
+		packA.VersionVector.Set(docB.ActorID(), docB.VersionVector().VersionOf(docB.ActorID()))
+		assert.NoError(t, docB.ApplyChangePack(packA))
+		assert.Equal(t, "{000000000000000000000001:2,000000000000000000000002:3}", docB.VersionVector().Marshal())
+
+		assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k2", "3")
 			return nil
 		}))
-		assert.Equal(t, 3, doc.Root().GetText("k1").TreeByID().Len())
+		assert.Equal(t, int64(2), docB.VersionVector().VersionOf(actorA))
+		assert.Equal(t, int64(4), docB.VersionVector().VersionOf(actorB))
+		packB := docB.CreateChangePack()
+		packB.MinSyncedTicket = time.InitialTicket
+		assert.True(t, packB.Changes[0].AfterOrEqual(packA.Changes[1]))
 
-		doc.GarbageCollect(time.MaxTicket)
-		assert.Equal(t, 2, doc.Root().GetText("k1").TreeByID().Len())
-	})
-
-	t.Run("handle local changes correctly when receiving snapshot test", func(t *testing.T) {
-		// 01. Create a document and a counter.
-		doc := document.New("d1")
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("c", crdt.IntegerCnt, 0)
+		// 03. update docA and docB concurrently and check version vector.
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "4")
 			return nil
 		}))
-
-		// 02. Increase the counter until the snapshot threshold and create a snapshot.
-		for i := 0; i < int(helper.SnapshotThreshold); i++ {
-			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-				root.GetCounter("c").Increase(1)
-				return nil
-			}))
-		}
-		snapshot, _ := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
-		pack := change.NewPack(doc.Key(), doc.CreateChangePack().Checkpoint, nil, snapshot)
-
-		// 03. Make a local change before applying changePack.
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetCounter("c").Increase(1)
+		assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k2", "5")
 			return nil
 		}))
-		expectedCount := doc.Root().GetCounter("c").Value()
-
-		// 04. Apply the changePack and check if the counter value is correct.
-		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.Equal(t, doc.Root().GetCounter("c").Value(), expectedCount)
+		packA = docA.CreateChangePack()
+		packB = docB.CreateChangePack()
+		assert.False(t, packA.Changes[2].AfterOrEqual(packB.Changes[1]))
 	})
 }

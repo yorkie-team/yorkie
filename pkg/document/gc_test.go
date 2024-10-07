@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestTreeGC(t *testing.T) {
@@ -131,7 +131,7 @@ func TestTreeGC(t *testing.T) {
 					} else if s.op.code == DeleteNode {
 						root.GetTree("t").Edit(0, 2, nil, 0)
 					} else if s.op.code == GC {
-						doc.GarbageCollect(time.MaxTicket)
+						doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 					}
 					return nil
 				}))
@@ -140,7 +140,7 @@ func TestTreeGC(t *testing.T) {
 			}
 
 			// 03. Garbage collect
-			doc.GarbageCollect(time.MaxTicket)
+			doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 			assert.Equal(t, 0, doc.GarbageLen())
 		})
 	}
@@ -206,7 +206,7 @@ func TestTextGC(t *testing.T) {
 					} else if s.op.code == DeleteNode {
 						root.GetText("t").Edit(0, 2, "")
 					} else if s.op.code == GC {
-						doc.GarbageCollect(time.MaxTicket)
+						doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 					}
 					return nil
 				}))
@@ -215,7 +215,7 @@ func TestTextGC(t *testing.T) {
 			}
 
 			// 03. Garbage collect
-			doc.GarbageCollect(time.MaxTicket)
+			doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
 			assert.Equal(t, 0, doc.GarbageLen())
 		})
 	}

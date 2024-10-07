@@ -432,6 +432,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			updatedDocInfo.Key,
 			change.InitialCheckpoint.NextServerSeq(updatedDocInfo.ServerSeq),
 			nil,
+			doc.VersionVector(),
 			nil,
 		)
 		assert.NoError(t, doc.ApplyChangePack(pack))
@@ -548,14 +549,14 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
-		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
-		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)

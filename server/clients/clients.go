@@ -79,6 +79,18 @@ func Deactivate(
 		); err != nil {
 			return nil, err
 		}
+
+		if err := db.UpdateVersionVector(
+			ctx,
+			clientInfo,
+			types.DocRefKey{
+				ProjectID: refKey.ProjectID,
+				DocID:     docID,
+			},
+			nil,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	return clientInfo, err
