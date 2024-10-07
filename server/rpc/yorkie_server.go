@@ -42,14 +42,16 @@ type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
 	conf       *Config
+	systemPort int
 }
 
 // newYorkieServer creates a new instance of yorkieServer
-func newYorkieServer(serviceCtx context.Context, be *backend.Backend, conf *Config) *yorkieServer {
+func newYorkieServer(serviceCtx context.Context, be *backend.Backend, conf *Config, systemPort int) *yorkieServer {
 	return &yorkieServer{
 		backend:    be,
 		serviceCtx: serviceCtx,
 		conf:       conf,
+		systemPort: systemPort,
 	}
 }
 
@@ -660,5 +662,5 @@ func (s *yorkieServer) Broadcast(
 }
 
 func (s *yorkieServer) rpcAddr() string {
-	return fmt.Sprintf("localhost:%d", s.conf.Port)
+	return fmt.Sprintf("localhost:%d", s.systemPort)
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
+	"github.com/yorkie-team/yorkie/server/system"
 )
 
 // Below are the values of the default values of Yorkie config.
@@ -39,6 +40,8 @@ const (
 	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
 
 	DefaultProfilingPort = 8081
+
+	DefaultSystemServerPort = 8082
 
 	DefaultHousekeepingInterval                  = 30 * time.Second
 	DefaultHousekeepingCandidatesLimitPerProject = 500
@@ -68,15 +71,17 @@ const (
 	DefaultProjectInfoCacheSize       = 256
 	DefaultProjectInfoCacheTTL        = 10 * time.Minute
 
-	DefaultHostname    = ""
-	DefaultGatewayAddr = ""
-	DefaultServerToken = "default-token"
+	DefaultHostname         = ""
+	DefaultGatewayAddr      = ""
+	DefaultServerToken      = "default-token"
+	DefaultSystemServerAddr = ""
 )
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
 	RPC          *rpc.Config          `yaml:"RPC"`
 	Profiling    *profiling.Config    `yaml:"Profiling"`
+	System       *system.Config       `yaml:"System"`
 	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
 	Backend      *backend.Config      `yaml:"Backend"`
 	Mongo        *mongo.Config        `yaml:"Mongo"`
@@ -85,7 +90,7 @@ type Config struct {
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultProfilingPort)
+	return newConfig(DefaultRPCPort, DefaultProfilingPort, DefaultSystemServerPort)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -109,6 +114,11 @@ func (c *Config) RPCAddr() string {
 	return fmt.Sprintf("localhost:%d", c.RPC.Port)
 }
 
+// SystemServiceAddr returns the address of the system server.
+func (c *Config) SystemServiceAddr() string {
+	return fmt.Sprintf("localhost:%d", c.System.Port)
+}
+
 // Validate returns an error if the provided Config is invalidated.
 func (c *Config) Validate() error {
 	if err := c.RPC.Validate(); err != nil {
@@ -116,6 +126,10 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Profiling.Validate(); err != nil {
+		return err
+	}
+
+	if err := c.System.Validate(); err != nil {
 		return err
 	}
 
@@ -226,13 +240,16 @@ func (c *Config) ensureDefaultValue() {
 	}
 }
 
-func newConfig(port int, profilingPort int) *Config {
+func newConfig(port int, profilingPort int, systemServerPort int) *Config {
 	return &Config{
 		RPC: &rpc.Config{
 			Port: port,
 		},
 		Profiling: &profiling.Config{
 			Port: profilingPort,
+		},
+		System: &system.Config{
+			Port: systemServerPort,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                  DefaultHousekeepingInterval.String(),

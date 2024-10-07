@@ -42,7 +42,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 type status int
@@ -66,7 +65,7 @@ type Attachment struct {
 	closeWatchStream context.CancelFunc
 }
 
-// Client is TODO.
+// Client is a temporary structure created for server-to-server communication.
 type Client struct {
 	conn          *http.Client
 	client        v1connect.SystemServiceClient
@@ -120,7 +119,7 @@ func New(opts ...Option) (*Client, error) {
 	}, nil
 }
 
-// Dial creates TODO.
+// Dial creates an instance of Client and dials the given rpcAddr.
 func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 	cli, err := New(opts...)
 	if err != nil {
@@ -134,7 +133,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 	return cli, nil
 }
 
-// Dial creates TODO.
+// Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
 		if c.conn.Transport == nil {
@@ -150,7 +149,7 @@ func (c *Client) Dial(rpcAddr string) error {
 }
 
 // PretendAttach sets the document as attached without actual activation.
-// This method is used for server-side client deactivate.
+// This method is used for server-side client deactivation.
 func (c *Client) PretendAttach(ctx context.Context, doc *document.Document, docID types.ID) {
 	_, cancelFunc := context.WithCancel(ctx)
 	c.attachments[doc.Key()] = &Attachment{
@@ -158,41 +157,6 @@ func (c *Client) PretendAttach(ctx context.Context, doc *document.Document, docI
 		docID:            docID,
 		closeWatchStream: cancelFunc,
 	}
-}
-
-// pretendActivate sets the client as activated without actual activation.
-// This method is used for server-side client deactivate.
-func (c *Client) pretendActivate(actorID *time.ActorID) {
-	c.id = actorID
-	c.status = activated
-}
-
-// NewMockClient creates TODO.
-func NewMockClient(
-	clientInfo *database.ClientInfo,
-	prjPublicKey,
-	rpcAddr string,
-	token string) (*Client, error) {
-	actorID, err := clientInfo.ID.ToActorID()
-	if err != nil {
-		return nil, err
-	}
-
-	cli, err := Dial(rpcAddr,
-		WithKey(clientInfo.Key),
-		WithAPIKey(prjPublicKey),
-		WithActorID(actorID),
-		WithToken(token),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := cli.Dial(rpcAddr); err != nil {
-		return nil, err
-	}
-
-	return cli, nil
 }
 
 // Detach detaches TODO.

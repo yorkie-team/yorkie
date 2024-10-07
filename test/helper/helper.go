@@ -52,6 +52,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
+	"github.com/yorkie-team/yorkie/server/system"
 )
 
 var testStartedAt int64
@@ -61,6 +62,8 @@ var (
 	RPCPort = 11101
 
 	ProfilingPort = 11102
+
+	SystemPort = 11103
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
@@ -233,6 +236,9 @@ func TestConfig() *server.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
+		},
+		System: &system.Config{
+			Port: SystemPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),

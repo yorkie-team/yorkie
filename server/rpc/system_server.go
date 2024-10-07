@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -40,7 +39,6 @@ import (
 type systemServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
-	conf       *Config
 }
 
 // newSystemServer creates a new instance of systemServer
@@ -142,8 +140,4 @@ func (s *systemServer) DetachDocument(
 	return connect.NewResponse(&api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
-}
-
-func (s *systemServer) rpcAddr() string {
-	return fmt.Sprintf("localhost:%d", s.conf.Port)
 }

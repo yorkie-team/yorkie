@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc"
+	"github.com/yorkie-team/yorkie/server/system"
 )
 
 // Yorkie is a server of Yorkie.
@@ -44,6 +45,7 @@ type Yorkie struct {
 	backend         *backend.Backend
 	rpcServer       *rpc.Server
 	profilingServer *profiling.Server
+	systemServer    *system.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -70,7 +72,7 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewServer(conf.RPC, be)
+	rpcServer, err := rpc.NewServer(conf.RPC, be, conf.System.Port)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +82,14 @@ func New(conf *Config) (*Yorkie, error) {
 		profilingServer = profiling.NewServer(conf.Profiling, metrics)
 	}
 
+	systemServer := system.NewServer(conf.System, be)
+
 	return &Yorkie{
 		conf:            conf,
 		backend:         be,
 		rpcServer:       rpcServer,
 		profilingServer: profilingServer,
+		systemServer:    systemServer,
 		shutdownCh:      make(chan struct{}),
 	}, nil
 }
@@ -108,6 +113,12 @@ func (r *Yorkie) Start() error {
 			return err
 		}
 	}
+
+	err := r.systemServer.Start()
+	if err != nil {
+		return err
+	}
+
 	return r.rpcServer.Start()
 }
 
@@ -143,6 +154,11 @@ func (r *Yorkie) RPCAddr() string {
 	return r.conf.RPCAddr()
 }
 
+// SystemServiceAddr returns the address of the system server.
+func (r *Yorkie) SystemServiceAddr() string {
+	return r.conf.SystemServiceAddr()
+}
+
 // DeactivateClient deactivates the given client. It is used for testing.
 func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error {
 	project, err := r.DefaultProject(ctx)
@@ -153,7 +169,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 	_, err = clients.Deactivate(ctx, r.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
-	}, r.conf.Backend.FetchGatewayAddr(r.RPCAddr()))
+	}, r.conf.Backend.FetchGatewayAddr(r.SystemServiceAddr()))
 	return err
 }
 
@@ -172,7 +188,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 			be.Housekeeping.Config.CandidatesLimitPerProject,
 			be.Housekeeping.Config.ProjectFetchSize,
 			housekeepingLastProjectID,
-			be.Config.FetchGatewayAddr(r.RPCAddr()),
+			be.Config.FetchGatewayAddr(r.SystemServiceAddr()),
 		)
 		if err != nil {
 			return err

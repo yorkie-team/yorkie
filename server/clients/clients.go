@@ -18,8 +18,13 @@
 package clients
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -79,7 +84,12 @@ func Deactivate(
 	project := projectInfo.ToProject()
 
 	token := getAuthToken(ctx)
-	cli, err := system.NewMockClient(clientInfo, project.PublicKey, gatewayAddr, token)
+	cli, err := system.Dial(gatewayAddr,
+		system.WithKey(clientInfo.Key),
+		system.WithAPIKey(project.PublicKey),
+		system.WithActorID(actorID),
+		system.WithToken(token),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +114,36 @@ func Deactivate(
 		}
 		cli.PretendAttach(ctx, doc, docID)
 
-		if err := cli.Detach(ctx, doc); err != nil {
-			return nil, err
+		//if err := cli.Detach(ctx, doc); err != nil {
+		//	return nil, err
+		//}
+
+		data := map[string]interface{}{
+			"docID":         docID,
+			"clientDocInfo": info,
+			"clientInfo":    clientInfo,
+			"project":       project,
 		}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+
+		resp, err := http.Post(
+			"http://"+gatewayAddr+"/detach",
+			"application/json",
+			bytes.NewBuffer(jsonData),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+
+		//json.Unmarshal(body, resp)
+		fmt.Println(string(body))
 	}
 
 	// 03. Deactivate the client.

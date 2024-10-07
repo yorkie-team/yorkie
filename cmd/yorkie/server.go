@@ -352,5 +352,12 @@ func init() {
 		"Gateway address",
 	)
 
+	cmd.Flags().StringVar(
+		&conf.Backend.SystemServerAddr,
+		"backend-gateway-addr",
+		server.DefaultSystemServerAddr,
+		"Gateway address",
+	)
+
 	rootCmd.AddCommand(cmd)
 }
