@@ -71,4 +71,4 @@ output.txt
 **/charts/*.tgz
 /build/charts/yorkie-argocd/charts/
 /build/charts/yorkie-monitoring/charts/
-/build/charts/yorkie-mongodb/charts/
+/build/charts/yorkie-cluster/charts/yorkie-mongodb/charts/
