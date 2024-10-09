@@ -33,8 +33,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 kubectl create namespace yorkie
 
 # Install yorkie cluster helm chart
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enable
-d=true
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enabled=true
 ```
 
 _See [configuration](#configuration) below for custom installation_
