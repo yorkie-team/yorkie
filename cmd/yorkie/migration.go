@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	v060 "github.com/yorkie-team/yorkie/migrations/v0.6.0"
@@ -34,16 +37,21 @@ var (
 	to   string
 )
 
-var migrationMap = map[string]func(){
+var migrationMap = map[string]func(ctx context.Context, db *mongo.Client) error{
 	"v0.6.0": v060.RunMigration,
 }
 
-func runMigration(version string) {
+func runMigration(ctx context.Context, db *mongo.Client, version string) error {
 	if migrationFunc, exists := migrationMap[version]; exists {
-		migrationFunc()
+		err := migrationFunc(ctx, db)
+		if err != nil {
+			return err
+		}
 	} else {
 		fmt.Printf("No migration found for version: %s\n", version)
 	}
+
+	return nil
 }
 
 func filterDirectories(dirPath, from, to string) ([]string, error) {
@@ -134,9 +142,22 @@ func newMigrationCmd() *cobra.Command {
 				return err
 			}
 
+			ctx := context.Background()
+			client, err := mongo.Connect(
+				ctx,
+				options.Client().ApplyURI(mongoConnectionURI),
+			)
+			if err != nil {
+				return fmt.Errorf("connect to mongo: %w", err)
+			}
+
 			for _, dir := range validDirs {
 				fmt.Printf("Running migration for directory: %s\n", dir)
-				runMigration(dir)
+				err := runMigration(ctx, client, dir)
+
+				if err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -146,6 +167,12 @@ func newMigrationCmd() *cobra.Command {
 
 func init() {
 	cmd := newMigrationCmd()
+	cmd.Flags().StringVar(
+		&mongoConnectionURI,
+		"mongo-connection-uri",
+		"",
+		"MongoDB's connection URI",
+	)
 	cmd.Flags().StringVar(
 		&from,
 		"from",
@@ -158,6 +185,7 @@ func init() {
 		"",
 		"ending version of migration (e.g., v0.6.0)",
 	)
+	_ = cmd.MarkFlagRequired("mongo-connection-uri")
 	_ = cmd.MarkFlagRequired("from")
 	_ = cmd.MarkFlagRequired("to")
 	rootCmd.AddCommand(cmd)
