@@ -1,0 +1,164 @@
+/*
+ * Copyright 2024 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
+	v060 "github.com/yorkie-team/yorkie/migrations/v0.6.0"
+)
+
+var (
+	from string
+	to   string
+)
+
+var migrationMap = map[string]func(){
+	"v0.6.0": v060.RunMigration,
+}
+
+func runMigration(version string) {
+	if migrationFunc, exists := migrationMap[version]; exists {
+		migrationFunc()
+	} else {
+		fmt.Printf("No migration found for version: %s\n", version)
+	}
+}
+
+func filterDirectories(dirPath, from, to string) ([]string, error) {
+	var validDirs []string
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("no such directory %s: %w", dirPath, err) // 에러 래핑
+	}
+
+	for _, file := range files {
+		if file.IsDir() && strings.HasPrefix(file.Name(), "v") {
+			version := file.Name()
+			cmpFrom, _ := compareVersions(version, from)
+			cmpTo, _ := compareVersions(version, to)
+			if cmpFrom >= 0 && cmpTo <= 0 {
+				validDirs = append(validDirs, version)
+			}
+		}
+	}
+	return validDirs, nil
+}
+
+func parseVersion(version string) ([]int, error) {
+	version = strings.TrimPrefix(version, "v")
+	parts := strings.Split(version, ".")
+	result := make([]int, len(parts))
+
+	for i, part := range parts {
+		num, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, fmt.Errorf("invalid version format: %s", version)
+		}
+		result[i] = num
+	}
+
+	return result, nil
+}
+func compareVersions(v1, v2 string) (int, error) {
+	parsedV1, err := parseVersion(v1)
+	if err != nil {
+		return 0, err
+	}
+
+	parsedV2, err := parseVersion(v2)
+	if err != nil {
+		return 0, err
+	}
+
+	for i := 0; i < len(parsedV1) && i < len(parsedV2); i++ {
+		if parsedV1[i] < parsedV2[i] {
+			return -1, nil
+		} else if parsedV1[i] > parsedV2[i] {
+			return 1, nil
+		}
+	}
+
+	if len(parsedV1) < len(parsedV2) {
+		return -1, nil
+	} else if len(parsedV1) > len(parsedV2) {
+		return 1, nil
+	}
+
+	return 0, nil
+}
+
+func newMigrationCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "migration",
+		Short:   "Run MongoDB migration",
+		PreRunE: config.Preload,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := compareVersions(from, to)
+			if err != nil {
+				return err
+			}
+			if result == 1 {
+				return fmt.Errorf("to version must be larger then from version: %s %s", from, to)
+			}
+
+			migrationDir := "../migrations"
+			absMigrationDir, err := filepath.Abs(migrationDir)
+			if err != nil {
+				return fmt.Errorf("error converting to absolute path: %s", err)
+			}
+
+			validDirs, err := filterDirectories(absMigrationDir, from, to)
+			if err != nil {
+				return err
+			}
+
+			for _, dir := range validDirs {
+				fmt.Printf("Running migration for directory: %s\n", dir)
+				runMigration(dir)
+			}
+
+			return nil
+		},
+	}
+}
+
+func init() {
+	cmd := newMigrationCmd()
+	cmd.Flags().StringVar(
+		&from,
+		"from",
+		"",
+		"starting version of migration (e.g., v0.5.1)",
+	)
+	cmd.Flags().StringVar(
+		&to,
+		"to",
+		"",
+		"ending version of migration (e.g., v0.6.0)",
+	)
+	_ = cmd.MarkFlagRequired("from")
+	_ = cmd.MarkFlagRequired("to")
+	rootCmd.AddCommand(cmd)
+}
