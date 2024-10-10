@@ -18,11 +18,45 @@
 package v060
 
 import (
+	"context"
 	"fmt"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
-// RunMigration runs migrations for package version
-func RunMigration() {
+type changeInfo struct {
+	ID             types.ID `bson:"_id"`
+	ProjectID      types.ID `bson:"project_id"`
+	DocID          types.ID `bson:"doc_id"`
+	ServerSeq      int64    `bson:"server_seq"`
+	ClientSeq      uint32   `bson:"client_seq"`
+	Lamport        int64    `bson:"lamport"`
+	ActorID        types.ID `bson:"actor_id"`
+	Message        string   `bson:"message"`
+	Operations     [][]byte `bson:"operations"`
+	PresenceChange string   `bson:"presence_change"`
+}
 
-	fmt.Println("돌돌돌아간다.")
+// RunMigration runs migrations for package version
+func RunMigration(ctx context.Context, db *mongo.Client) error {
+	collection := db.Database("yorkie-meta").Collection("changes")
+
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		return err
+	}
+
+	var infos []*changeInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return fmt.Errorf("fetch project infos: %w", err)
+	}
+
+	for _, info := range infos {
+		fmt.Println(info.ActorID.String(), info.Lamport)
+	}
+
+	return nil
 }
