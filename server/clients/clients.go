@@ -93,11 +93,29 @@ func Deactivate(
 			return nil, fmt.Errorf("%v", err)
 		}
 
-		resp, err := http.Post(
+		httpClient := &http.Client{}
+		fmt.Println("sends: ")
+		req, err := http.NewRequest(
+			"POST",
 			"http://"+gatewayAddr+"/detach",
-			"application/json",
 			bytes.NewBuffer(jsonData),
 		)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(types.ShardKey, string(docID))
+		req.Header.Set("Authorization", "Bearer your_token_here")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("HTTP Status %d", resp.StatusCode)
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("%v", err)
 		}
@@ -151,3 +169,14 @@ func getAuthToken(ctx context.Context) string {
 
 	return ""
 }
+
+//func withShareKey()
+
+/*
+func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Request[T] {
+	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
+
+	return conn
+}
+
+*/

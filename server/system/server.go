@@ -96,6 +96,7 @@ func (s *Server) detach(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
+	fmt.Println("received: ")
 
 	success, err := s.service.DetachDocument(req.DocID, req.ClientInfo, req.ClientDocInfo, req.Project)
 	if err != nil {
