@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	v060 "github.com/yorkie-team/yorkie/migrations/v0.6.0"
+	yorkiemongo "github.com/yorkie-team/yorkie/server/backend/database/mongo"
 )
 
 var (
@@ -146,7 +147,10 @@ func newMigrationCmd() *cobra.Command {
 			ctx := context.Background()
 			client, err := mongo.Connect(
 				ctx,
-				options.Client().ApplyURI(mongoConnectionURI),
+				options.Client().
+					ApplyURI(mongoConnectionURI).
+					SetRegistry(yorkiemongo.NewRegistryBuilder().Build()),
+
 			)
 			if err != nil {
 				return fmt.Errorf("connect to mongo: %w", err)
