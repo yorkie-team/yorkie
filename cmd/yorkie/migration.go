@@ -33,17 +33,18 @@ import (
 )
 
 var (
-	from string
-	to   string
+	from      string
+	to        string
+	batchSize int
 )
 
-var migrationMap = map[string]func(ctx context.Context, db *mongo.Client) error{
+var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, batchSize int) error{
 	"v0.6.0": v060.RunMigration,
 }
 
-func runMigration(ctx context.Context, db *mongo.Client, version string) error {
+func runMigration(ctx context.Context, db *mongo.Client, version string, batchSize int) error {
 	if migrationFunc, exists := migrationMap[version]; exists {
-		err := migrationFunc(ctx, db)
+		err := migrationFunc(ctx, db, batchSize)
 		if err != nil {
 			return err
 		}
@@ -153,7 +154,7 @@ func newMigrationCmd() *cobra.Command {
 
 			for _, dir := range validDirs {
 				fmt.Printf("Running migration for directory: %s\n", dir)
-				err := runMigration(ctx, client, dir)
+				err := runMigration(ctx, client, dir, batchSize)
 
 				if err != nil {
 					return err
@@ -184,6 +185,12 @@ func init() {
 		"to",
 		"",
 		"ending version of migration (e.g., v0.6.0)",
+	)
+	cmd.Flags().IntVar(
+		&batchSize,
+		"batch-size",
+		1000,
+		"batch size of migration",
 	)
 	_ = cmd.MarkFlagRequired("mongo-connection-uri")
 	_ = cmd.MarkFlagRequired("from")
