@@ -15,6 +15,6 @@ kubeVersion: ">=1.23.0-0"
 
 dependencies:
   - name: mongodb-sharded
-    version: "7.2.2"
+    version: "9.0.1"
     repository: "https://charts.bitnami.com/bitnami"
     condition: sharded.enabled
