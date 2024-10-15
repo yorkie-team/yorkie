@@ -23,27 +23,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
-
-type changeInfoWithoutVersionVector struct {
-	ID             types.ID `bson:"_id"`
-	ProjectID      types.ID `bson:"project_id"`
-	DocID          types.ID `bson:"doc_id"`
-	ServerSeq      int64    `bson:"server_seq"`
-	ClientSeq      uint32   `bson:"client_seq"`
-	Lamport        int64    `bson:"lamport"`
-	ActorID        types.ID `bson:"actor_id"`
-	Message        string   `bson:"message"`
-	Operations     [][]byte `bson:"operations"`
-	PresenceChange string   `bson:"presence_change"`
-}
 
 func processMigrationBatch(
 	ctx context.Context,
 	collection *mongo.Collection,
-	infos []changeInfoWithoutVersionVector) error {
+	infos []database.ChangeInfo) error {
 	var operations []mongo.WriteModel
 
 	for _, info := range infos {
@@ -52,20 +39,15 @@ func processMigrationBatch(
 		if err != nil {
 			return err
 		}
+
 		versionVector.Set(actorID, info.Lamport)
-
-		filter := bson.M{
-			"doc_id":     info.DocID,
+		operation := mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": info.ProjectID,
+			"doc_id":     info.DocID,
 			"server_seq": info.ServerSeq,
-		}
-		update := bson.M{
-			"$set": bson.M{
-				"version_vector": versionVector,
-			},
-		}
-
-		operation := mongo.NewUpdateOneModel().SetFilter(filter).SetUpdate(update)
+		}).SetUpdate(bson.M{"$set": bson.M{
+			"version_vector": versionVector,
+		}})
 		operations = append(operations, operation)
 	}
 
@@ -88,19 +70,19 @@ func AddVersionVector(ctx context.Context, db *mongo.Client, batchSize int) erro
 		return err
 	}
 
-	var infos []changeInfoWithoutVersionVector
+	var infos []database.ChangeInfo
 
 	for cursor.Next(ctx) {
-		var info changeInfoWithoutVersionVector
+		var info database.ChangeInfo
 		if err := cursor.Decode(&info); err != nil {
-			return fmt.Errorf("failed to decode document: %w", err)
+			return fmt.Errorf("decode change info: %w", err)
 		}
 
 		infos = append(infos, info)
 
 		if len(infos) >= batchSize {
 			if err := processMigrationBatch(ctx, collection, infos); err != nil {
-				return fmt.Errorf("failed to process batch: %w", err)
+				return err
 			}
 
 			infos = infos[:0]
@@ -109,7 +91,7 @@ func AddVersionVector(ctx context.Context, db *mongo.Client, batchSize int) erro
 
 	if len(infos) > 0 {
 		if err := processMigrationBatch(ctx, collection, infos); err != nil {
-			return fmt.Errorf("failed to process final batch: %w", err)
+			return fmt.Errorf("process final batch: %w", err)
 		}
 	}
 
