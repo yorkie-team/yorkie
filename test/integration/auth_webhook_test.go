@@ -29,12 +29,15 @@ import (
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -47,9 +50,10 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 
 		var res types.AuthWebhookResponse
 		if req.Token == token {
-			res.Allowed = true
+			res.Code = types.CodeOK
 		} else {
-			res.Reason = "invalid token"
+			res.Code = types.CodeUnauthenticated
+			res.Message = "invalid token"
 		}
 
 		_, err = res.Write(w)
@@ -64,7 +68,7 @@ func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server
 		assert.NoError(t, err)
 
 		var res types.AuthWebhookResponse
-		res.Allowed = true
+		res.Code = types.CodeOK
 		if retries < recoveryCnt-1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			retries++
@@ -186,8 +190,7 @@ func TestAuthWebhook(t *testing.T) {
 	t.Run("authorization webhook that success after retries test", func(t *testing.T) {
 		ctx := context.Background()
 
-		var recoveryCnt uint64
-		recoveryCnt = 4
+		var recoveryCnt uint64 = 4
 		authServer := newUnavailableAuthServer(t, recoveryCnt)
 
 		conf := helper.TestConfig()
@@ -264,6 +267,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		err = cli.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connecthelper.CodeOf(auth.ErrWebhookTimeout), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("authorized request cache test", func(t *testing.T) {
@@ -274,7 +278,7 @@ func TestAuthWebhook(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Allowed = true
+			res.Code = types.CodeOK
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -352,7 +356,7 @@ func TestAuthWebhook(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Allowed = false
+			res.Code = types.CodePermissionDenied
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -394,14 +398,14 @@ func TestAuthWebhook(t *testing.T) {
 		// 01. multiple requests.
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
-			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 		}
 
 		// 02. multiple requests after eviction by ttl.
 		time.Sleep(unauthorizedTTL)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
-			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 		}
 		assert.Equal(t, 2, reqCnt)
 	})

@@ -33,14 +33,20 @@ import (
 )
 
 var (
-	// ErrNotAllowed is returned when the given user is not allowed for the access.
-	ErrNotAllowed = errors.New("method is not allowed for this user")
+	// ErrPermissionDenied is returned when the given user is not allowed for the access.
+	ErrPermissionDenied = errors.New("method is not allowed for this user")
 
 	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
 	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 
+	// ErrUnexpectedResponse is returned when the response from the webhook is not as expected.
+	ErrUnexpectedResponse = errors.New("unexpected response from webhook")
+
 	// ErrWebhookTimeout is returned when the webhook does not respond in time.
 	ErrWebhookTimeout = errors.New("webhook timeout")
+
+	// ErrUnauthenticated is returned when the request lacks valid authentication credentials.
+	ErrUnauthenticated = errors.New("request lacks valid authentication credentials")
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.
@@ -63,8 +69,8 @@ func verifyAccess(
 	cacheKey := string(reqBody)
 	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
 		resp := entry
-		if !resp.Allowed {
-			return fmt.Errorf("%s: %w", resp.Reason, ErrNotAllowed)
+		if resp.Code != types.CodeOK {
+			return fmt.Errorf("%s: %w", resp.Message, ErrPermissionDenied)
 		}
 		return nil
 	}
@@ -95,13 +101,19 @@ func verifyAccess(
 			return resp.StatusCode, err
 		}
 
-		if !authResp.Allowed {
-			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+		if authResp.Code == types.CodeOK {
+			return resp.StatusCode, nil
+		}
+		if authResp.Code == types.CodePermissionDenied {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Message, ErrPermissionDenied)
+		}
+		if authResp.Code == types.CodeUnauthenticated {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Message, ErrUnauthenticated)
 		}
 
-		return resp.StatusCode, nil
+		return resp.StatusCode, fmt.Errorf("%d: %w", authResp.Code, ErrUnexpectedResponse)
 	}); err != nil {
-		if errors.Is(err, ErrNotAllowed) {
+		if errors.Is(err, ErrPermissionDenied) {
 			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())
 		}
 
@@ -120,7 +132,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if err == ErrUnexpectedStatusCode {
-				return fmt.Errorf("unexpected status code from webhook: %d", statusCode)
+				return fmt.Errorf("%d: %w", statusCode, ErrUnexpectedStatusCode)
 			}
 
 			return err

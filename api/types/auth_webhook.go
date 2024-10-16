@@ -126,10 +126,27 @@ func NewAuthWebhookRequest(reader io.Reader) (*AuthWebhookRequest, error) {
 	return req, nil
 }
 
+// Code represents the result of an authentication webhook request.
+type Code int
+
+const (
+	// CodeOK indicates that the request is fully authenticated and has
+	// the necessary permissions.
+	CodeOK Code = 200
+
+	// CodeUnauthenticated indicates that the request does not have valid
+	// authentication credentials for the operation.
+	CodeUnauthenticated Code = 401
+
+	// CodePermissionDenied indicates that the authenticated request lacks
+	// the necessary permissions.
+	CodePermissionDenied Code = 403
+)
+
 // AuthWebhookResponse represents the response of authentication webhook.
 type AuthWebhookResponse struct {
-	Allowed bool   `json:"allowed"`
-	Reason  string `json:"reason"`
+	Code    Code   `json:"code"`
+	Message string `json:"message"`
 }
 
 // NewAuthWebhookResponse creates a new instance of AuthWebhookResponse.
