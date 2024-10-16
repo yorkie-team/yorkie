@@ -55,7 +55,7 @@ const (
 
 // SystemServiceClient is a client for the yorkie.v1.SystemService service.
 type SystemServiceClient interface {
-	DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequestBySystem]) (*connect.Response[v1.DetachDocumentResponseBySystem], error)
+	DetachDocument(context.Context, *connect.Request[v1.SystemServiceDetachDocumentRequest]) (*connect.Response[v1.SystemServiceDetachDocumentResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the yorkie.v1.SystemService service. By default,
@@ -68,7 +68,7 @@ type SystemServiceClient interface {
 func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &systemServiceClient{
-		detachDocument: connect.NewClient[v1.DetachDocumentRequestBySystem, v1.DetachDocumentResponseBySystem](
+		detachDocument: connect.NewClient[v1.SystemServiceDetachDocumentRequest, v1.SystemServiceDetachDocumentResponse](
 			httpClient,
 			baseURL+SystemServiceDetachDocumentProcedure,
 			opts...,
@@ -78,17 +78,17 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	detachDocument *connect.Client[v1.DetachDocumentRequestBySystem, v1.DetachDocumentResponseBySystem]
+	detachDocument *connect.Client[v1.SystemServiceDetachDocumentRequest, v1.SystemServiceDetachDocumentResponse]
 }
 
 // DetachDocument calls yorkie.v1.SystemService.DetachDocument.
-func (c *systemServiceClient) DetachDocument(ctx context.Context, req *connect.Request[v1.DetachDocumentRequestBySystem]) (*connect.Response[v1.DetachDocumentResponseBySystem], error) {
+func (c *systemServiceClient) DetachDocument(ctx context.Context, req *connect.Request[v1.SystemServiceDetachDocumentRequest]) (*connect.Response[v1.SystemServiceDetachDocumentResponse], error) {
 	return c.detachDocument.CallUnary(ctx, req)
 }
 
 // SystemServiceHandler is an implementation of the yorkie.v1.SystemService service.
 type SystemServiceHandler interface {
-	DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequestBySystem]) (*connect.Response[v1.DetachDocumentResponseBySystem], error)
+	DetachDocument(context.Context, *connect.Request[v1.SystemServiceDetachDocumentRequest]) (*connect.Response[v1.SystemServiceDetachDocumentResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -115,6 +115,6 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 // UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSystemServiceHandler struct{}
 
-func (UnimplementedSystemServiceHandler) DetachDocument(context.Context, *connect.Request[v1.DetachDocumentRequestBySystem]) (*connect.Response[v1.DetachDocumentResponseBySystem], error) {
+func (UnimplementedSystemServiceHandler) DetachDocument(context.Context, *connect.Request[v1.SystemServiceDetachDocumentRequest]) (*connect.Response[v1.SystemServiceDetachDocumentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.SystemService.DetachDocument is not implemented"))
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package clients provides the client related business logic.
+// Package clients provides the Client related business logic.
 package clients
 
 import (
@@ -22,19 +22,20 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/system"
 )
 
 var (
 	// ErrInvalidClientKey is returned when the given Key is not valid ClientKey.
-	ErrInvalidClientKey = errors.New("invalid client key")
+	ErrInvalidClientKey = errors.New("invalid Client key")
 
 	// ErrInvalidClientID is returned when the given Key is not valid ClientID.
-	ErrInvalidClientID = errors.New("invalid client id")
+	ErrInvalidClientID = errors.New("invalid Client id")
 )
 
-// Activate activates the given client.
+// Activate activates the given Client.
 func Activate(
 	ctx context.Context,
 	db database.Database,
@@ -44,23 +45,23 @@ func Activate(
 	return db.ActivateClient(ctx, project.ID, clientKey)
 }
 
-// Deactivate deactivates the given client.
+// Deactivate deactivates the given Client.
 func Deactivate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := FindActiveClientInfo(ctx, db, refKey)
+	info, err := FindActiveClientInfo(ctx, be.DB, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(hackerwins): Inject gatewayAddr
-	systemClient, err := system.Dial("localhost:8080")
+	systemClient, err := system.Dial(be.Config.GatewayAddr, system.WithInsecure(true))
 	if err != nil {
 		return nil, err
 	}
+	defer systemClient.Close()
 
 	for docID, clientDocInfo := range info.Documents {
 		// TODO(hackerwins): Solve N+1
@@ -68,7 +69,7 @@ func Deactivate(
 			continue
 		}
 
-		docInfo, err := db.FindDocInfoByRefKey(ctx, types.DocRefKey{
+		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
 		})
@@ -86,7 +87,7 @@ func Deactivate(
 		}
 	}
 
-	info, err = db.DeactivateClient(ctx, refKey)
+	info, err = be.DB.DeactivateClient(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +95,7 @@ func Deactivate(
 	return info, err
 }
 
-// FindActiveClientInfo find the active client info by the given ref key.
+// FindActiveClientInfo find the active Client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
 	db database.Database,

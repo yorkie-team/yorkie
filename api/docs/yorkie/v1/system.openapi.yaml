@@ -14,24 +14,24 @@ paths:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentRequestBySystem'
+        $ref: '#/components/requestBodies/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentRequest'
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentResponseBySystem'
+          $ref: '#/components/responses/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.SystemService
 components:
   requestBodies:
-    yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentRequestBySystem:
+    yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequestBySystem'
+            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest'
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequestBySystem'
+            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest'
       required: true
   responses:
     connect.error:
@@ -43,14 +43,14 @@ components:
           schema:
             $ref: '#/components/schemas/connect.error'
       description: ""
-    yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentResponseBySystem:
+    yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponseBySystem'
+            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse'
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponseBySystem'
+            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse'
       description: ""
   schemas:
     connect.error:
@@ -81,7 +81,7 @@ components:
           type: string
       title: Connect Error
       type: object
-    yorkie.v1.DetachDocumentRequestBySystem:
+    yorkie.v1.SystemServiceDetachDocumentRequest:
       additionalProperties: false
       description: ""
       properties:
@@ -106,12 +106,12 @@ components:
             types.Client, types.DocumentSummary'
           title: project_id
           type: string
-      title: DetachDocumentRequestBySystem
+      title: SystemServiceDetachDocumentRequest
       type: object
-    yorkie.v1.DetachDocumentResponseBySystem:
+    yorkie.v1.SystemServiceDetachDocumentResponse:
       additionalProperties: false
       description: ""
-      title: DetachDocumentResponseBySystem
+      title: SystemServiceDetachDocumentResponse
       type: object
   securitySchemes:
     ApiKeyAuth:

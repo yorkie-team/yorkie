@@ -50,8 +50,8 @@ func newSystemServer(backend *backend.Backend) *systemServer {
 // DetachDocument detaches the given document from the given client.
 func (s *systemServer) DetachDocument(
 	ctx context.Context,
-	req *connect.Request[api.DetachDocumentRequestBySystem],
-) (*connect.Response[api.DetachDocumentResponseBySystem], error) {
+	req *connect.Request[api.SystemServiceDetachDocumentRequest],
+) (*connect.Response[api.SystemServiceDetachDocumentResponse], error) {
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -100,17 +100,11 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	serverSeq, err := clientInfo.ServerSeq(docID)
+	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(docID), actorID)
 	if err != nil {
 		return nil, err
 	}
 
-	internalDoc, err := packs.BuildDocumentForServerSeq(ctx, s.backend, docInfo, serverSeq)
-	if err != nil {
-		return nil, err
-	}
-
-	doc := internalDoc.ToDocument()
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Clear()
 		return nil
@@ -133,5 +127,5 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.DetachDocumentResponseBySystem{}), nil
+	return connect.NewResponse(&api.SystemServiceDetachDocumentResponse{}), nil
 }

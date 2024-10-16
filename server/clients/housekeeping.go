@@ -69,7 +69,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, pair := range candidates {
-		if _, err := Deactivate(ctx, be.DB, pair.project.ToProject(), pair.client.RefKey()); err != nil {
+		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
 			return database.DefaultProjectID, err
 		}
 
@@ -88,10 +88,10 @@ func DeactivateInactives(
 	return lastProjectID, nil
 }
 
-// CandidatePair represents a pair of project and client.
+// CandidatePair represents a pair of Project and Client.
 type CandidatePair struct {
-	project *database.ProjectInfo
-	client  *database.ClientInfo
+	Project *database.ProjectInfo
+	Client  *database.ClientInfo
 }
 
 // FindDeactivateCandidates finds candidates to deactivate from the database.
@@ -116,8 +116,8 @@ func FindDeactivateCandidates(
 
 		for _, info := range infos {
 			candidates = append(candidates, CandidatePair{
-				project: projectInfo,
-				client:  info,
+				Project: projectInfo,
+				Client:  info,
 			})
 		}
 	}

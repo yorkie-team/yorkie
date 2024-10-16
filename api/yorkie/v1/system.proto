@@ -24,10 +24,10 @@ option java_package = "dev.yorkie.api.v1";
 
 // System is a service that provides an API for Cluster.
 service SystemService {
-  rpc DetachDocument (DetachDocumentRequestBySystem) returns (DetachDocumentResponseBySystem) {}
+  rpc DetachDocument (SystemServiceDetachDocumentRequest) returns (SystemServiceDetachDocumentResponse) {}
 }
 
-message DetachDocumentRequestBySystem {
+message SystemServiceDetachDocumentRequest {
   // TODO(hackerwins): Consider to replace this fields with types.Project, types.Client, types.DocumentSummary
   string project_id = 1;
   string client_id = 2;
@@ -35,4 +35,4 @@ message DetachDocumentRequestBySystem {
   string document_key = 4;
 }
 
-message DetachDocumentResponseBySystem {}
+message SystemServiceDetachDocumentResponse {}

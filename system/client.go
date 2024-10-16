@@ -137,7 +137,7 @@ func (c *Client) DetachDocument(
 ) error {
 	_, err := c.client.DetachDocument(
 		ctx,
-		withShardKey(connect.NewRequest(&api.DetachDocumentRequestBySystem{
+		withShardKey(connect.NewRequest(&api.SystemServiceDetachDocumentRequest{
 			ProjectId:   projectID.String(),
 			ClientId:    clientID.String(),
 			DocumentId:  docID.String(),

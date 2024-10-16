@@ -94,7 +94,7 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.Deactivate(ctx, s.backend.DB, project, types.ClientRefKey{
+	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
