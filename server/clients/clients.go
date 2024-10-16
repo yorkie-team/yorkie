@@ -64,11 +64,11 @@ func Deactivate(
 	defer systemClient.Close()
 
 	for docID, clientDocInfo := range info.Documents {
-		// TODO(hackerwins): Solve N+1
-		if clientDocInfo.Status == database.DocumentDetached {
+		if clientDocInfo.Status != database.DocumentAttached {
 			continue
 		}
 
+		// TODO(hackerwins): Solve N+1
 		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,

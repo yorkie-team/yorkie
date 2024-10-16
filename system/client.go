@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-// Package system is a package for the system service.
+// Package system is a package for the system service for communication between
+// nodes in the Yorkie cluster.
 package system
 
 import (
