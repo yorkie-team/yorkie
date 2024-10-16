@@ -112,3 +112,8 @@ func (c *Change) SetActor(actor *time.ActorID) {
 func (c *Change) PresenceChange() *innerpresence.PresenceChange {
 	return c.presenceChange
 }
+
+// AfterOrEqual returns whether this change is after or equal to the given change.
+func (c *Change) AfterOrEqual(other *Change) bool {
+	return c.id.AfterOrEqual(other.id)
+}

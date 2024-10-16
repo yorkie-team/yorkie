@@ -151,6 +151,7 @@ func pullSnapshot(
 			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
 			reqPack.Changes,
 			nil,
+			nil,
 		), be.Config.SnapshotDisableGC); err != nil {
 			return nil, err
 		}
@@ -171,7 +172,9 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
+	pack := NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot)
+	pack.VersionVector = doc.VersionVector()
+	return pack, nil
 }
 
 func pullChangeInfos(

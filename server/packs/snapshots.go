@@ -31,7 +31,7 @@ func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	minSyncedTicket *time.Ticket,
+	minSyncedVersionVector time.VersionVector,
 ) error {
 	// 01. get the closest snapshot's metadata of this docInfo
 	docRefKey := docInfo.RefKey()
@@ -77,6 +77,7 @@ func storeSnapshot(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
+		snapshotInfo.VersionVector,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
@@ -88,14 +89,21 @@ func storeSnapshot(
 		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
+		nil,
 	)
-	pack.MinSyncedTicket = minSyncedTicket
 
 	if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
 		return err
 	}
 
-	// 04. save the snapshot of the docInfo
+	// 04. perform garbage collect to remove tombstones
+	if !be.Config.SnapshotDisableGC {
+		if _, err := doc.GarbageCollect(minSyncedVersionVector); err != nil {
+			return err
+		}
+	}
+
+	// 05. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(
 		ctx,
 		docRefKey,
@@ -104,7 +112,7 @@ func storeSnapshot(
 		return err
 	}
 
-	// 05. delete changes before the smallest in `syncedseqs` to save storage.
+	// 06. delete changes before the smallest in `syncedseqs` to save storage.
 	if be.Config.SnapshotWithPurgingChanges {
 		if err := be.DB.PurgeStaleChanges(
 			ctx,

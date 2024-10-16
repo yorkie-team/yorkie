@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -54,48 +53,56 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
 	t.Run("garbage collection for text test", func(t *testing.T) {
-		steps := []struct {
-			from    int
-			to      int
-			content string
-			want    string
-			garbage int
-		}{
-			{0, 0, "Hi World", `[0:0:00:0 {} ""][0:2:00:0 {} "Hi World"]`, 0},
-			{2, 7, "Earth", `[0:0:00:0 {} ""][0:2:00:0 {} "Hi"][0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}[0:2:00:7 {} "d"]`, 1},
-			{0, 2, "", `[0:0:00:0 {} ""]{0:2:00:0 {} "Hi"}[0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}[0:2:00:7 {} "d"]`, 2},
-			{5, 6, "", `[0:0:00:0 {} ""]{0:2:00:0 {} "Hi"}[0:3:00:0 {} "Earth"]{0:2:00:2 {} " Worl"}{0:2:00:7 {} "d"}`, 3},
-		}
-
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		for _, step := range steps {
-			fromPos, toPos, _ := text.CreateRange(step.from, step.to)
-			_, _, pairs, err := text.Edit(fromPos, toPos, nil, step.content, nil, ctx.IssueTimeTicket())
-			assert.NoError(t, err)
-			registerGCPairs(root, pairs)
-			assert.Equal(t, step.want, text.ToTestString())
-			assert.Equal(t, step.garbage, root.GarbageLen())
-		}
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerGCPairs(root, pairs)
+		assert.Equal(t, "Hello World", text.String())
+		assert.Equal(t, 0, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(5, 10)
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerGCPairs(root, pairs)
+		assert.Equal(t, "HelloYorkied", text.String())
+		assert.Equal(t, 1, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(0, 5)
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerGCPairs(root, pairs)
+		assert.Equal(t, "Yorkied", text.String())
+		assert.Equal(t, 2, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(6, 7)
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerGCPairs(root, pairs)
+		assert.Equal(t, "Yorkie", text.String())
+		assert.Equal(t, 3, root.GarbageLen())
 
 		// It contains code marked tombstone.
 		// After calling the garbage collector, the node will be removed.
-		assert.Equal(t, 4, len(text.Nodes()))
+		nodeLen := len(text.Nodes())
+		assert.Equal(t, 4, nodeLen)
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
-		assert.Equal(t, 1, len(text.Nodes()))
+		nodeLen = len(text.Nodes())
+		assert.Equal(t, 1, nodeLen)
 	})
 
 	t.Run("garbage collection for fragments of text", func(t *testing.T) {
@@ -125,7 +132,39 @@ func TestRoot(t *testing.T) {
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
+		assert.NoError(t, err)
+		assert.Equal(t, 3, n)
+		assert.Equal(t, 0, root.GarbageLen())
+	})
+	t.Run("garbage collection for fragments of text", func(t *testing.T) {
+		steps := []struct {
+			from    int
+			to      int
+			content string
+			want    string
+			garbage int
+		}{
+			{from: 0, to: 0, content: "Yorkie", want: "Yorkie", garbage: 0},
+			{from: 4, to: 5, content: "", want: "Yorke", garbage: 1},
+			{from: 2, to: 3, content: "", want: "Yoke", garbage: 2},
+			{from: 0, to: 1, content: "", want: "oke", garbage: 3},
+		}
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		for _, tc := range steps {
+			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
+			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
+			registerGCPairs(root, pairs)
+			assert.Equal(t, tc.want, text.String())
+			assert.Equal(t, tc.garbage, root.GarbageLen())
+		}
+
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -162,7 +201,7 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 
-		garbageLen, err := root.GarbageCollect(time.MaxTicket)
+		garbageLen, err := root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 2, garbageLen)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -200,7 +239,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 4, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -210,7 +249,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		n, err = root.GarbageCollect(time.MaxTicket)
+		n, err = root.GarbageCollect(helper.MaxVersionVector())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
