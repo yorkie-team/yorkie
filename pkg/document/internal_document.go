@@ -372,3 +372,10 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
 }
+
+// ToDocument converts this document to Document.
+func (d *InternalDocument) ToDocument() *Document {
+	doc := New(d.key)
+	doc.setInternalDoc(d)
+	return doc
+}

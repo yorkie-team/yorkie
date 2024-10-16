@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  description: Yorkie is an open source document store for building collaborative
+    editing applications.
+  title: Yorkie
+  version: v0.5.1
+servers:
+- description: Production server
+  url: https://api.yorkie.dev
+- description: Local server
+  url: http://localhost:8080
+paths:
+  /yorkie.v1.SystemService/DetachDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentRequestBySystem'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentResponseBySystem'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.SystemService
+components:
+  requestBodies:
+    yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentRequestBySystem:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequestBySystem'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequestBySystem'
+      required: true
+  responses:
+    connect.error:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/connect.error'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/connect.error'
+      description: ""
+    yorkie.v1.SystemService.DetachDocument.yorkie.v1.DetachDocumentResponseBySystem:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponseBySystem'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponseBySystem'
+      description: ""
+  schemas:
+    connect.error:
+      additionalProperties: false
+      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      properties:
+        code:
+          enum:
+          - CodeCanceled
+          - CodeUnknown
+          - CodeInvalidArgument
+          - CodeDeadlineExceeded
+          - CodeNotFound
+          - CodeAlreadyExists
+          - CodePermissionDenied
+          - CodeResourceExhausted
+          - CodeFailedPrecondition
+          - CodeAborted
+          - CodeOutOfRange
+          - CodeInternal
+          - CodeUnavailable
+          - CodeDataLoss
+          - CodeUnauthenticated
+          examples:
+          - CodeNotFound
+          type: string
+        message:
+          type: string
+      title: Connect Error
+      type: object
+    yorkie.v1.DetachDocumentRequestBySystem:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        projectId:
+          additionalProperties: false
+          description: 'TODO(hackerwins): Consider to replace this fields with types.Project,
+            types.Client, types.DocumentSummary'
+          title: project_id
+          type: string
+      title: DetachDocumentRequestBySystem
+      type: object
+    yorkie.v1.DetachDocumentResponseBySystem:
+      additionalProperties: false
+      description: ""
+      title: DetachDocumentResponseBySystem
+      type: object
+  securitySchemes:
+    ApiKeyAuth:
+      in: header
+      name: Authorization
+      type: apiKey
+security:
+- ApiKeyAuth: []
+tags:
+- description: System is a service that provides an API for Cluster.
+  name: yorkie.v1.SystemService
