@@ -17,6 +17,8 @@ syntax = "proto3";
 
 package yorkie.v1;
 
+import "yorkie/v1/resources.proto";
+
 option go_package = "github.com/yorkie-team/yorkie/api/yorkie/v1;v1";
 
 option java_multiple_files = true;
@@ -28,11 +30,9 @@ service SystemService {
 }
 
 message SystemServiceDetachDocumentRequest {
-  // TODO(hackerwins): Consider to replace this fields with types.Project, types.Client, types.DocumentSummary
-  string project_id = 1;
+  Project project = 1;
   string client_id = 2;
-  string document_id = 3;
-  string document_key = 4;
+  DocumentSummary document_summary = 3;
 }
 
 message SystemServiceDetachDocumentResponse {}

@@ -82,7 +82,7 @@ func Deactivate(
 			return nil, err
 		}
 
-		if err := systemClient.DetachDocument(ctx, project.ID, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
+		if err := systemClient.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
 			return nil, err
 		}
 	}

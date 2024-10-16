@@ -26,7 +26,6 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -57,18 +56,10 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
-	if err != nil {
-		return nil, err
-	}
+	documentSummary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
+	project := converter.FromProject(req.Msg.Project)
 
-	info, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.ProjectId))
-	if err != nil {
-		return nil, err
-	}
-	project := info.ToProject()
-
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, documentSummary.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +83,7 @@ func (s *systemServer) DetachDocument(
 
 	docRefKey := types.DocRefKey{
 		ProjectID: project.ID,
-		DocID:     docID,
+		DocID:     documentSummary.ID,
 	}
 
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
@@ -100,7 +91,7 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(docID), actorID)
+	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(documentSummary.ID), actorID)
 	if err != nil {
 		return nil, err
 	}

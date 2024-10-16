@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
@@ -129,7 +130,7 @@ func (c *Client) Close() {
 // DetachDocument detaches the given document from the client.
 func (c *Client) DetachDocument(
 	ctx context.Context,
-	projectID types.ID,
+	project *types.Project,
 	clientID *time.ActorID,
 	docID types.ID,
 	apiKey string,
@@ -138,10 +139,12 @@ func (c *Client) DetachDocument(
 	_, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.SystemServiceDetachDocumentRequest{
-			ProjectId:   projectID.String(),
-			ClientId:    clientID.String(),
-			DocumentId:  docID.String(),
-			DocumentKey: docKey.String(),
+			Project:  converter.ToProject(project),
+			ClientId: clientID.String(),
+			DocumentSummary: converter.ToDocumentSummary(&types.DocumentSummary{
+				ID:  docID,
+				Key: docKey,
+			}),
 		},
 		), apiKey, docKey.String()))
 	if err != nil {
