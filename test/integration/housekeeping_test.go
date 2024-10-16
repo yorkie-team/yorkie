@@ -123,7 +123,7 @@ func TestHousekeeping(t *testing.T) {
 			log.Fatal(err)
 		}
 
-		_, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
+		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
 		_, candidates, err := clients.FindDeactivateCandidates(

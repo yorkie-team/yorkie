@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package clients provides the Client related business logic.
+// Package clients provides the client related business logic.
 package clients
 
 import (
@@ -29,13 +29,13 @@ import (
 
 var (
 	// ErrInvalidClientKey is returned when the given Key is not valid ClientKey.
-	ErrInvalidClientKey = errors.New("invalid Client key")
+	ErrInvalidClientKey = errors.New("invalid client key")
 
 	// ErrInvalidClientID is returned when the given Key is not valid ClientID.
-	ErrInvalidClientID = errors.New("invalid Client id")
+	ErrInvalidClientID = errors.New("invalid client id")
 )
 
-// Activate activates the given Client.
+// Activate activates the given client.
 func Activate(
 	ctx context.Context,
 	db database.Database,
@@ -45,7 +45,7 @@ func Activate(
 	return db.ActivateClient(ctx, project.ID, clientKey)
 }
 
-// Deactivate deactivates the given Client.
+// Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
@@ -95,7 +95,7 @@ func Deactivate(
 	return info, err
 }
 
-// FindActiveClientInfo find the active Client info by the given ref key.
+// FindActiveClientInfo find the active client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
 	db database.Database,
