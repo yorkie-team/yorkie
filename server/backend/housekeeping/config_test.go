@@ -27,22 +27,38 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := housekeeping.Config{
-			Interval:                  "1m",
-			CandidatesLimitPerProject: 100,
-			ProjectFetchSize:          100,
+			DeactivateCandidatesInterval:                 "1m",
+			DeleteDocumentsInterval:                      "1m",
+			DocumentHardDeletionGracefulPeriod:           60,
+			ClientDeactivationCandidateLimitPerProject:   100,
+			DocumentHardDeletionCandidateLimitPerProject: 100,
+			ProjectFetchSize:                             100,
 		}
 		assert.NoError(t, validConf.Validate())
 
 		conf1 := validConf
-		conf1.Interval = "hour"
+		conf1.DeactivateCandidatesInterval = "hour"
 		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf
-		conf2.CandidatesLimitPerProject = 0
+		conf2.DeleteDocumentsInterval = "minute"
 		assert.Error(t, conf2.Validate())
 
 		conf3 := validConf
-		conf3.ProjectFetchSize = -1
+		conf3.DocumentHardDeletionGracefulPeriod = 0
 		assert.Error(t, conf3.Validate())
+
+		conf4 := validConf
+		conf4.ClientDeactivationCandidateLimitPerProject = 0
+		assert.Error(t, conf4.Validate())
+
+		conf5 := validConf
+		conf5.DocumentHardDeletionCandidateLimitPerProject = 0
+		assert.Error(t, conf5.Validate())
+
+		conf6 := validConf
+		conf6.ProjectFetchSize = 0
+		assert.Error(t, conf6.Validate())
+
 	})
 }

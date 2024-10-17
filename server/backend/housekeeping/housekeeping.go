@@ -29,8 +29,7 @@ import (
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
 // tasks.
 type Housekeeping struct {
-	Config *Config
-
+	Config    *Config
 	scheduler gocron.Scheduler
 }
 
@@ -82,6 +81,5 @@ func (h *Housekeeping) Stop() error {
 	if err := h.scheduler.Shutdown(); err != nil {
 		return fmt.Errorf("scheduler shutdown: %w", err)
 	}
-
 	return nil
 }
