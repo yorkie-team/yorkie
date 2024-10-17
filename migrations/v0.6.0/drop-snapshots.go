@@ -19,17 +19,44 @@ package v060
 import (
 	"context"
 	"fmt"
-
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"log"
 )
 
+func validateDropSnapshot(ctx context.Context, db *mongo.Client, databaseName string) error {
+	collections, err := db.Database(databaseName).ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	collectionExists := false
+	for _, collection := range collections {
+		if collection == "snapshots" {
+			collectionExists = true
+			break
+		}
+	}
+
+	if collectionExists {
+		return fmt.Errorf("collection snapshots still exists")
+	}
+
+	return nil
+}
+
 // DropSnapshots runs migrations for drop snapshots collection
-func DropSnapshots(ctx context.Context, db *mongo.Client) error {
-	collection := db.Database("yorkie-meta").Collection("snapshots")
+func DropSnapshots(ctx context.Context, db *mongo.Client, databaseName string) error {
+	collection := db.Database(databaseName).Collection("snapshots")
 
 	if err := collection.Drop(ctx); err != nil {
 		return fmt.Errorf("drop collection: %w", err)
 	}
+	if err := validateDropSnapshot(ctx, db, databaseName); err != nil {
+		return err
+	}
+
+	fmt.Println("drop snapshots completed")
 
 	return nil
 }
