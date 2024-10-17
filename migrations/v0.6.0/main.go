@@ -19,19 +19,22 @@ package v060
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // RunMigration runs migrations for v0.6.0
-func RunMigration(ctx context.Context, db *mongo.Client, batchSize int) error {
-	if err := AddVersionVector(ctx, db, batchSize); err != nil {
+func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error {
+	if err := AddVersionVector(ctx, db, databaseName, batchSize); err != nil {
 		return err
 	}
 
-	if err := DropSnapshots(ctx, db); err != nil {
+	if err := DropSnapshots(ctx, db, databaseName); err != nil {
 		return err
 	}
+
+	fmt.Println("v0.6.0 migration completed")
 
 	return nil
 }
