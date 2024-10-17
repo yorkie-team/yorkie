@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,18 +35,19 @@ import (
 )
 
 var (
-	from      string
-	to        string
-	batchSize int
+	from         string
+	to           string
+	databaseName string
+	batchSize    int
 )
 
-var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, batchSize int) error{
+var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error{
 	"v0.6.0": v060.RunMigration,
 }
 
-func runMigration(ctx context.Context, db *mongo.Client, version string, batchSize int) error {
+func runMigration(ctx context.Context, db *mongo.Client, version string, databaseName string, batchSize int) error {
 	if migrationFunc, exists := migrationMap[version]; exists {
-		err := migrationFunc(ctx, db, batchSize)
+		err := migrationFunc(ctx, db, databaseName, batchSize)
 		if err != nil {
 			return err
 		}
@@ -150,18 +152,34 @@ func newMigrationCmd() *cobra.Command {
 				options.Client().
 					ApplyURI(mongoConnectionURI).
 					SetRegistry(yorkiemongo.NewRegistryBuilder().Build()),
-
 			)
 			if err != nil {
 				return fmt.Errorf("connect to mongo: %w", err)
 			}
 
+			databases, err := client.ListDatabaseNames(ctx, bson.M{})
+			if err != nil {
+				return err
+			}
+
+			databaseExists := false
+			for _, dbName := range databases {
+				if dbName == databaseName {
+					databaseExists = true
+					break
+				}
+			}
+
+			if !databaseExists {
+				return fmt.Errorf("database %s not found", databaseName)
+			}
+
 			for _, dir := range validDirs {
 				fmt.Printf("Running migration for directory: %s\n", dir)
-				err := runMigration(ctx, client, dir, batchSize)
+				err := runMigration(ctx, client, dir, databaseName, batchSize)
 
 				if err != nil {
-					return err
+					return fmt.Errorf("migration failed: %w\n", err)
 				}
 			}
 
@@ -196,6 +214,11 @@ func init() {
 		1000,
 		"batch size of migration",
 	)
+	cmd.Flags().StringVar(
+		&databaseName,
+		"database-name",
+		"yorkie-meta",
+		"name of migration target database")
 	_ = cmd.MarkFlagRequired("mongo-connection-uri")
 	_ = cmd.MarkFlagRequired("from")
 	_ = cmd.MarkFlagRequired("to")
