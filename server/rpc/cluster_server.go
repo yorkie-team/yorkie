@@ -35,31 +35,33 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 )
 
-type systemServer struct {
+// clusterServer is a server that provides the internal Yorkie cluster service.
+// This service is used for communication between nodes in the Yorkie cluster.
+type clusterServer struct {
 	backend *backend.Backend
 }
 
-// newSystemServer creates a new instance of systemServer.
-func newSystemServer(backend *backend.Backend) *systemServer {
-	return &systemServer{
+// newClusterServer creates a new instance of clusterServer.
+func newClusterServer(backend *backend.Backend) *clusterServer {
+	return &clusterServer{
 		backend: backend,
 	}
 }
 
 // DetachDocument detaches the given document from the given client.
-func (s *systemServer) DetachDocument(
+func (s *clusterServer) DetachDocument(
 	ctx context.Context,
-	req *connect.Request[api.SystemServiceDetachDocumentRequest],
-) (*connect.Response[api.SystemServiceDetachDocumentResponse], error) {
+	req *connect.Request[api.ClusterServiceDetachDocumentRequest],
+) (*connect.Response[api.ClusterServiceDetachDocumentResponse], error) {
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	documentSummary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
+	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, documentSummary.Key))
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +75,7 @@ func (s *systemServer) DetachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -83,7 +85,7 @@ func (s *systemServer) DetachDocument(
 
 	docRefKey := types.DocRefKey{
 		ProjectID: project.ID,
-		DocID:     documentSummary.ID,
+		DocID:     summary.ID,
 	}
 
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
@@ -91,7 +93,7 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(documentSummary.ID), actorID)
+	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(summary.ID), actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -118,5 +120,5 @@ func (s *systemServer) DetachDocument(
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.SystemServiceDetachDocumentResponse{}), nil
+	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
 }

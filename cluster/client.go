@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-// Package system is a package for the system service for communication between
+// Package cluster is a package for the cluster service for communication between
 // nodes in the Yorkie cluster.
-package system
+package cluster
 
 import (
 	"context"
@@ -45,9 +45,9 @@ func WithLogger(logger *zap.Logger) Option {
 	return func(o *Options) { o.Logger = logger }
 }
 
-// WithInsecure configures insecure option of the client.
-func WithInsecure(isInsecure bool) Option {
-	return func(o *Options) { o.IsInsecure = isInsecure }
+// WithSecure configures secure option of the client.
+func WithSecure(isSecure bool) Option {
+	return func(o *Options) { o.IsSecure = isSecure }
 }
 
 // Options configures how we set up the client.
@@ -55,15 +55,16 @@ type Options struct {
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
 
-	// IsInsecure is whether to disable the TLS connection of the client.
-	IsInsecure bool
+	// IsSecure is whether to enable the TLS connection of the client.
+	IsSecure bool
 }
 
 // Client is a client for admin service.
 type Client struct {
-	conn   *http.Client
-	client v1connect.SystemServiceClient
-	logger *zap.Logger
+	conn     *http.Client
+	client   v1connect.ClusterServiceClient
+	logger   *zap.Logger
+	isSecure bool
 }
 
 // New creates an instance of Client.
@@ -74,7 +75,7 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	conn := &http.Client{}
-	if !options.IsInsecure {
+	if options.IsSecure {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
 	}
@@ -89,8 +90,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		conn:   conn,
-		logger: logger,
+		conn:     conn,
+		logger:   logger,
+		isSecure: options.IsSecure,
 	}, nil
 }
 
@@ -111,14 +113,14 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
-		if c.conn.Transport == nil {
-			rpcAddr = "http://" + rpcAddr
-		} else {
+		if c.isSecure {
 			rpcAddr = "https://" + rpcAddr
+		} else {
+			rpcAddr = "http://" + rpcAddr
 		}
 	}
 
-	c.client = v1connect.NewSystemServiceClient(c.conn, rpcAddr)
+	c.client = v1connect.NewClusterServiceClient(c.conn, rpcAddr)
 
 	return nil
 }
@@ -139,7 +141,7 @@ func (c *Client) DetachDocument(
 ) error {
 	_, err := c.client.DetachDocument(
 		ctx,
-		withShardKey(connect.NewRequest(&api.SystemServiceDetachDocumentRequest{
+		withShardKey(connect.NewRequest(&api.ClusterServiceDetachDocumentRequest{
 			Project:  converter.ToProject(project),
 			ClientId: clientID.String(),
 			DocumentSummary: converter.ToDocumentSummary(&types.DocumentSummary{

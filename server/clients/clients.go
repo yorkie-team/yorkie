@@ -22,9 +22,9 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/cluster"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/system"
 )
 
 var (
@@ -38,11 +38,11 @@ var (
 // Activate activates the given client.
 func Activate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	project *types.Project,
 	clientKey string,
 ) (*database.ClientInfo, error) {
-	return db.ActivateClient(ctx, project.ID, clientKey)
+	return be.DB.ActivateClient(ctx, project.ID, clientKey)
 }
 
 // Deactivate deactivates the given client.
@@ -52,16 +52,18 @@ func Deactivate(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := FindActiveClientInfo(ctx, be.DB, refKey)
+	info, err := FindActiveClientInfo(ctx, be, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	systemClient, err := system.Dial(be.Config.GatewayAddr, system.WithInsecure(true))
+	// TODO(hackerwins): Introduce cluster client pool.
+	// - https://connectrpc.com/docs/go/deployment/
+	cli, err := cluster.Dial(be.Config.GatewayAddr)
 	if err != nil {
 		return nil, err
 	}
-	defer systemClient.Close()
+	defer cli.Close()
 
 	for docID, clientDocInfo := range info.Documents {
 		if clientDocInfo.Status != database.DocumentAttached {
@@ -82,26 +84,21 @@ func Deactivate(
 			return nil, err
 		}
 
-		if err := systemClient.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
+		if err := cli.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
 			return nil, err
 		}
 	}
 
-	info, err = be.DB.DeactivateClient(ctx, refKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return info, err
+	return be.DB.DeactivateClient(ctx, refKey)
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := db.FindClientInfoByRefKey(ctx, refKey)
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
