@@ -193,7 +193,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
-		if c.conn.Transport == nil {
+		if c.options.CertFile == "" {
 			rpcAddr = "http://" + rpcAddr
 		} else {
 			rpcAddr = "https://" + rpcAddr

@@ -72,6 +72,7 @@ type Client struct {
 	client          v1connect.AdminServiceClient
 	authInterceptor *AuthInterceptor
 	logger          *zap.Logger
+	isInsecure      bool
 }
 
 // New creates an instance of Client.
@@ -100,6 +101,7 @@ func New(opts ...Option) (*Client, error) {
 		conn:            conn,
 		logger:          logger,
 		authInterceptor: NewAuthInterceptor(options.Token),
+		isInsecure:      options.IsInsecure,
 	}, nil
 }
 
@@ -120,7 +122,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
-		if c.conn.Transport == nil {
+		if c.isInsecure {
 			rpcAddr = "http://" + rpcAddr
 		} else {
 			rpcAddr = "https://" + rpcAddr

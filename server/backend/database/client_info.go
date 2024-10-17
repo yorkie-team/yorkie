@@ -200,6 +200,17 @@ func (i *ClientInfo) UpdateCheckpoint(
 	return nil
 }
 
+// ServerSeq returns the server sequence of the given document.
+func (i *ClientInfo) ServerSeq(
+	docID types.ID,
+) (int64, error) {
+	if !i.hasDocument(docID) {
+		return 0, fmt.Errorf("document not found %s: %w", docID, ErrDocumentNotFound)
+	}
+
+	return i.Documents[docID].ServerSeq, nil
+}
+
 // EnsureActivated ensures the client is activated.
 func (i *ClientInfo) EnsureActivated() error {
 	if i.Status != ClientActivated {

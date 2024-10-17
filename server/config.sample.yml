@@ -87,6 +87,9 @@ Backend:
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""
 
+  # GatewayAddr is the address of the gateway server.
+  GatewayAddr: ""
+
 # Mongo is the MongoDB configuration (Optional).
 Mongo:
   # ConnectionTimeout is the timeout for connecting to MongoDB.

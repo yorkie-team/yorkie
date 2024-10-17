@@ -123,7 +123,7 @@ func TestHousekeeping(t *testing.T) {
 			log.Fatal(err)
 		}
 
-		clientC, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
+		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
 		_, candidates, err := clients.FindDeactivateCandidates(
@@ -136,9 +136,8 @@ func TestHousekeeping(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Len(t, candidates, 2)
-		assert.Equal(t, candidates[0].ID, clientA.ID)
-		assert.Equal(t, candidates[1].ID, clientB.ID)
-		assert.NotContains(t, candidates, clientC)
+		assert.Equal(t, candidates[0].Client.ID, clientA.ID)
+		assert.Equal(t, candidates[1].Client.ID, clientB.ID)
 	})
 }
 

@@ -68,8 +68,8 @@ func DeactivateInactives(
 	}
 
 	deactivatedCount := 0
-	for _, clientInfo := range candidates {
-		if _, err := Deactivate(ctx, be.DB, clientInfo.RefKey()); err != nil {
+	for _, pair := range candidates {
+		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
 			return database.DefaultProjectID, err
 		}
 
@@ -88,6 +88,12 @@ func DeactivateInactives(
 	return lastProjectID, nil
 }
 
+// CandidatePair represents a pair of Project and Client.
+type CandidatePair struct {
+	Project *database.ProjectInfo
+	Client  *database.ClientInfo
+}
+
 // FindDeactivateCandidates finds candidates to deactivate from the database.
 func FindDeactivateCandidates(
 	ctx context.Context,
@@ -95,27 +101,32 @@ func FindDeactivateCandidates(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+) (types.ID, []CandidatePair, error) {
+	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+	var candidates []CandidatePair
+	for _, projectInfo := range projectInfos {
+		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
 
-		candidates = append(candidates, infos...)
+		for _, info := range infos {
+			candidates = append(candidates, CandidatePair{
+				Project: projectInfo,
+				Client:  info,
+			})
+		}
 	}
 
 	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
+	if len(projectInfos) < projectFetchSize {
 		topProjectID = database.DefaultProjectID
 	} else {
-		topProjectID = projects[len(projects)-1].ID
+		topProjectID = projectInfos[len(projectInfos)-1].ID
 	}
 
 	return topProjectID, candidates, nil

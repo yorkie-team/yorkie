@@ -231,7 +231,7 @@ func TestPacks(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), docInfo.ServerSeq)
 
-		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend.DB, types.ClientRefKey{
+		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(actorID),
 		})
@@ -277,7 +277,7 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, int64(2), docInfo.ServerSeq)
 
 		// 2-4. clientInfo.Checkpoint has not been updated
-		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend.DB, types.ClientRefKey{
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(actorID),
 		})
@@ -303,7 +303,7 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, int64(2), docInfo.ServerSeq)
 
 		// 3-4. clientInfo.Checkpoint has been updated properly
-		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend.DB, types.ClientRefKey{
+		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(actorID),
 		})
