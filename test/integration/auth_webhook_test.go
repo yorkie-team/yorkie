@@ -53,6 +53,9 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 			res.Code = types.CodeOK
 		} else if req.Token == "not allowed token" {
 			res.Code = types.CodePermissionDenied
+		} else if req.Token == "" {
+			res.Code = types.CodeUnauthenticated
+			res.Message = "no token"
 		} else {
 			res.Code = types.CodeUnauthenticated
 			res.Message = "invalid token"
@@ -147,7 +150,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnauthenticated), converter.ErrorCodeOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "no token"}, converter.ErrorMetadataOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -159,7 +162,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnauthenticated), converter.ErrorCodeOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "invalid token"}, converter.ErrorMetadataOf(err))
 	})
 
 	t.Run("permission denied response test", func(t *testing.T) {
