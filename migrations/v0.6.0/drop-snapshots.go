@@ -19,11 +19,13 @@ package v060
 import (
 	"context"
 	"fmt"
+	"log"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
-	"log"
 )
 
+// validateDropSnapshot validates if the snapshots collection is dropped successfully.
 func validateDropSnapshot(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collections, err := db.Database(databaseName).ListCollectionNames(ctx, bson.D{})
 	if err != nil {
@@ -45,7 +47,7 @@ func validateDropSnapshot(ctx context.Context, db *mongo.Client, databaseName st
 	return nil
 }
 
-// DropSnapshots runs migrations for drop snapshots collection
+// DropSnapshots runs the migration of dropping snapshots collection.
 func DropSnapshots(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collection := db.Database(databaseName).Collection("snapshots")
 

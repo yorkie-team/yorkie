@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
+// validateAddVersionVector validates the changes collection to add version vector.
 func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collection := db.Database(databaseName).Collection("changes")
 
@@ -47,13 +48,12 @@ func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseNam
 		if err != nil {
 			return err
 		}
-		lamport := info.Lamport
 
 		if len(actors) > 1 {
 			return fmt.Errorf("found %d actor in version vector", len(actors))
 		}
 
-		if versionVector.VersionOf(actors[0]) != lamport {
+		if versionVector.VersionOf(actors[0]) != info.Lamport {
 			return fmt.Errorf("wrong lamport in version vector")
 		}
 	}
@@ -61,10 +61,12 @@ func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseNam
 	return nil
 }
 
+// processMigrationBatch processes the migration batch.
 func processMigrationBatch(
 	ctx context.Context,
 	collection *mongo.Collection,
-	infos []database.ChangeInfo) error {
+	infos []database.ChangeInfo,
+) error {
 	var operations []mongo.WriteModel
 
 	for _, info := range infos {
@@ -95,7 +97,7 @@ func processMigrationBatch(
 	return nil
 }
 
-// AddVersionVector runs migrations for add version vector
+// AddVersionVector migrates the changes collection to add version vector.
 func AddVersionVector(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error {
 	collection := db.Database(databaseName).Collection("changes")
 	totalCount, err := collection.CountDocuments(ctx, bson.M{})
@@ -139,8 +141,7 @@ func AddVersionVector(ctx context.Context, db *mongo.Client, databaseName string
 		}
 	}
 
-	err = validateAddVersionVector(ctx, db, databaseName)
-	if err != nil {
+	if err = validateAddVersionVector(ctx, db, databaseName); err != nil {
 		return err
 	}
 
