@@ -57,8 +57,8 @@ message Change {
 
 message ChangeID {
   uint32 client_seq = 1;
-  int64 server_seq = 2 [jstype = JS_STRING];
-  int64 lamport = 3 [jstype = JS_STRING];
+  int64 server_seq = 2; 
+  int64 lamport = 3;
   bytes actor_id = 4;
 }
 
@@ -332,7 +332,7 @@ message Presence {
 }
 
 message Checkpoint {
-  int64 server_seq = 1 [jstype = JS_STRING];
+  int64 server_seq = 1; 
   uint32 client_seq = 2;
 }
 
@@ -343,7 +343,7 @@ message TextNodePos {
 }
 
 message TimeTicket {
-  int64 lamport = 1 [jstype = JS_STRING];
+  int64 lamport = 1;
   uint32 delimiter = 2;
   bytes actor_id = 3;
 }
