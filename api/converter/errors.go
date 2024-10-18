@@ -25,3 +25,22 @@ func ErrorCodeOf(err error) string {
 	}
 	return ""
 }
+
+// ErrorMetadataOf returns the error metadata of the given error.
+func ErrorMetadataOf(err error) map[string]string {
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		return nil
+	}
+	for _, detail := range connectErr.Details() {
+		msg, valueErr := detail.Value()
+		if valueErr != nil {
+			continue
+		}
+
+		if errorInfo, ok := msg.(*errdetails.ErrorInfo); ok {
+			return errorInfo.GetMetadata()
+		}
+	}
+	return nil
+}
