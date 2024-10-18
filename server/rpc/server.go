@@ -70,12 +70,16 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	)
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
+
+	// TODO(hackerwins): We need to block incoming requests to the cluster service,
+	// because the cluster service is for internal communication between Yorkie nodes.
 	mux := http.NewServeMux()
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be), opts...))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
+
 	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
 		conf: conf,

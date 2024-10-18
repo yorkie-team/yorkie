@@ -93,6 +93,9 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	// TODO(hackerwins): BuildDocForCheckpoint is expensive because it reads the entire document.
+	// We need to optimize this by creating a ChangePack directly.
+	// 01. Create ChangePack with clear presence.
 	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(summary.ID), actorID)
 	if err != nil {
 		return nil, err
@@ -105,6 +108,7 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	// 02. PushPull with the created ChangePack.
 	if _, err := packs.PushPull(
 		ctx,
 		s.backend,
