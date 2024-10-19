@@ -29,12 +29,15 @@ import (
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -47,9 +50,15 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 
 		var res types.AuthWebhookResponse
 		if req.Token == token {
-			res.Allowed = true
+			res.Code = types.CodeOK
+		} else if req.Token == "not allowed token" {
+			res.Code = types.CodePermissionDenied
+		} else if req.Token == "" {
+			res.Code = types.CodeUnauthenticated
+			res.Message = "no token"
 		} else {
-			res.Reason = "invalid token"
+			res.Code = types.CodeUnauthenticated
+			res.Message = "invalid token"
 		}
 
 		_, err = res.Write(w)
@@ -58,22 +67,20 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 }
 
 func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server {
-	var retries uint64
+	var requestCount uint64
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := types.NewAuthWebhookRequest(r.Body)
 		assert.NoError(t, err)
 
 		var res types.AuthWebhookResponse
-		res.Allowed = true
-		if retries < recoveryCnt-1 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			retries++
-		} else {
-			retries = 0
-		}
+		res.Code = types.CodeOK
 
+		if requestCount < recoveryCnt {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
 		_, err = res.Write(w)
 		assert.NoError(t, err)
+		requestCount++
 	}))
 }
 
@@ -89,7 +96,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	project, err := adminCli.CreateProject(context.Background(), "auth-webhook-test")
 	assert.NoError(t, err)
 
-	t.Run("authorization webhook test", func(t *testing.T) {
+	t.Run("successful authorization test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, token := newAuthServer(t)
 
@@ -117,6 +124,22 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
+	})
+
+	t.Run("unauthenticated response test", func(t *testing.T) {
+		ctx := context.Background()
+		authServer, _ := newAuthServer(t)
+
+		// project with authorization webhook
+		project.AuthWebhookURL = authServer.URL
+		_, err := adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		// client without token
 		cliWithoutToken, err := client.Dial(
@@ -127,6 +150,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "no token"}, converter.ErrorMetadataOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -138,9 +162,38 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "invalid token"}, converter.ErrorMetadataOf(err))
 	})
 
-	t.Run("Selected method authorization webhook test", func(t *testing.T) {
+	t.Run("permission denied response test", func(t *testing.T) {
+		ctx := context.Background()
+		authServer, _ := newAuthServer(t)
+
+		// project with authorization webhook
+		project.AuthWebhookURL = authServer.URL
+		_, err := adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		// client with not allowed token
+		cliNotAllowed, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+			client.WithToken("not allowed token"),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cliNotAllowed.Close()) }()
+		err = cliNotAllowed.Activate(ctx)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		assert.Equal(t, connecthelper.CodeOf(auth.ErrPermissionDenied), converter.ErrorCodeOf(err))
+	})
+
+	t.Run("selected method authorization webhook test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, _ := newAuthServer(t)
 
@@ -182,24 +235,135 @@ func TestProjectAuthWebhook(t *testing.T) {
 	})
 }
 
-func TestAuthWebhook(t *testing.T) {
-	t.Run("authorization webhook that success after retries test", func(t *testing.T) {
-		ctx := context.Background()
+func TestAuthWebhookErrorHandling(t *testing.T) {
+	var recoveryCnt uint64 = 4
 
-		var recoveryCnt uint64
-		recoveryCnt = 4
+	conf := helper.TestConfig()
+	conf.Backend.AuthWebhookMaxRetries = recoveryCnt
+	conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
+	svr, err := server.New(conf)
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+
+	t.Run("unexpected status code test", func(t *testing.T) {
+		ctx := context.Background()
+		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Code = types.CodeOK
+
+			// unexpected status code
+			w.WriteHeader(http.StatusBadRequest)
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+		}))
+
+		// project with authorization webhook
+		project, err := adminCli.CreateProject(context.Background(), "unexpected-status-code")
+		assert.NoError(t, err)
+
+		project.AuthWebhookURL = authServer.URL
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+			client.WithToken("token"),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		err = cli.Activate(ctx)
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnexpectedStatusCode), converter.ErrorCodeOf(err))
+	})
+
+	t.Run("unexpected webhook response test", func(t *testing.T) {
+		ctx := context.Background()
+		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			// unexpected response code
+			res.Code = 555
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+		}))
+
+		// project with authorization webhook
+		project, err := adminCli.CreateProject(context.Background(), "unexpected-response-code")
+		assert.NoError(t, err)
+
+		project.AuthWebhookURL = authServer.URL
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+			client.WithToken("token"),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		err = cli.Activate(ctx)
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnexpectedResponse), converter.ErrorCodeOf(err))
+	})
+
+	t.Run("unavailable authentication server test(timeout)", func(t *testing.T) {
+		ctx := context.Background()
+		authServer := newUnavailableAuthServer(t, recoveryCnt+1)
+
+		project, err := adminCli.CreateProject(context.Background(), "unavailable-auth-server")
+		assert.NoError(t, err)
+		project.AuthWebhookURL = authServer.URL
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithToken("token"),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connecthelper.CodeOf(auth.ErrWebhookTimeout), converter.ErrorCodeOf(err))
+	})
+
+	t.Run("successful authorization after temporarily unavailable server test", func(t *testing.T) {
+		ctx := context.Background()
 		authServer := newUnavailableAuthServer(t, recoveryCnt)
 
-		conf := helper.TestConfig()
-		conf.Backend.AuthWebhookMaxRetries = recoveryCnt
-		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
-		svr, err := server.New(conf)
-		assert.NoError(t, err)
-		assert.NoError(t, svr.Start())
-		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "success-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -227,46 +391,10 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 	})
+}
 
-	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
-		ctx := context.Background()
-		authServer := newUnavailableAuthServer(t, 4)
-
-		conf := helper.TestConfig()
-		conf.Backend.AuthWebhookMaxRetries = 2
-		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
-		svr, err := server.New(conf)
-		assert.NoError(t, err)
-		assert.NoError(t, svr.Start())
-		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { adminCli.Close() }()
-		project, err := adminCli.CreateProject(context.Background(), "fail-webhook-after-retries")
-		assert.NoError(t, err)
-		project.AuthWebhookURL = authServer.URL
-		_, err = adminCli.UpdateProject(
-			ctx,
-			project.ID.String(),
-			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
-			},
-		)
-		assert.NoError(t, err)
-
-		cli, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithToken("token"),
-			client.WithAPIKey(project.PublicKey),
-		)
-		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli.Close()) }()
-
-		err = cli.Activate(ctx)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-	})
-
-	t.Run("authorized request cache test", func(t *testing.T) {
+func TestAuthWebhookCache(t *testing.T) {
+	t.Run("authorized response cache test", func(t *testing.T) {
 		ctx := context.Background()
 		reqCnt := 0
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -274,7 +402,7 @@ func TestAuthWebhook(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Allowed = true
+			res.Code = types.CodeOK
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -295,7 +423,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { adminCli.Close() }()
-		project, err := adminCli.CreateProject(context.Background(), "auth-request-cache")
+		project, err := adminCli.CreateProject(context.Background(), "authorized-response-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
@@ -344,7 +472,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.Equal(t, 2, reqCnt)
 	})
 
-	t.Run("unauthorized request cache test", func(t *testing.T) {
+	t.Run("permission denied response cache test", func(t *testing.T) {
 		ctx := context.Background()
 		reqCnt := 0
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -352,7 +480,7 @@ func TestAuthWebhook(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Allowed = false
+			res.Code = types.CodePermissionDenied
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -371,7 +499,69 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { adminCli.Close() }()
-		project, err := adminCli.CreateProject(context.Background(), "unauth-request-cache")
+		project, err := adminCli.CreateProject(context.Background(), "permission-denied-cache")
+		assert.NoError(t, err)
+		project.AuthWebhookURL = authServer.URL
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithToken("token"),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		// 01. multiple requests.
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		}
+
+		// 02. multiple requests after eviction by ttl.
+		time.Sleep(unauthorizedTTL)
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		}
+		assert.Equal(t, 2, reqCnt)
+	})
+
+	t.Run("other response not cached test", func(t *testing.T) {
+		ctx := context.Background()
+		reqCnt := 0
+		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Code = types.CodeUnauthenticated
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+
+			reqCnt++
+		}))
+
+		unauthorizedTTL := 1 * time.Second
+		conf := helper.TestConfig()
+		conf.Backend.AuthWebhookCacheUnauthTTL = unauthorizedTTL.String()
+
+		svr, err := server.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+		defer func() { adminCli.Close() }()
+		project, err := adminCli.CreateProject(context.Background(), "other-response-not-cached")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
@@ -403,6 +593,6 @@ func TestAuthWebhook(t *testing.T) {
 			err = cli.Activate(ctx)
 			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		}
-		assert.Equal(t, 2, reqCnt)
+		assert.Equal(t, 6, reqCnt)
 	})
 }
