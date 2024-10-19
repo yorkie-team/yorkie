@@ -76,7 +76,6 @@ yorkie-mongodb:
   name: mongodb
   namespace: mongodb
   port: 27017
-  clusterDomain: cluster.local
   image:
     registry: docker.io
     repository: mongo
