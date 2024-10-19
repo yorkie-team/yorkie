@@ -2,5 +2,5 @@ dependencies:
 - name: yorkie-mongodb
   repository: ""
   version: 0.4.13
-digest: sha256:0c702d4ee264c8cbc9a8959d0290c12679e013ccd7a979fcbf81a8c03519b220
-generated: "2024-10-19T15:27:57.253314+09:00"
+digest: sha256:de02be0ff7ab619effa0be7ca151150552eef1098b4866a8648abcc90ca8e401
+generated: "2024-10-19T23:13:22.777257+09:00"
