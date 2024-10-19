@@ -18,7 +18,7 @@ metadata:
   namespace: {{ index .Values "yorkie-mongodb" "namespace" }}
 subjects:
   - kind: ServiceAccount
-    name: yorkie-db-service-account
+    name: yorkie-db-provisioning-job-account
     namespace: {{ .Values.yorkie.namespace }}
 roleRef:
   kind: Role
@@ -30,6 +30,6 @@ roleRef:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: yorkie-db-service-account
+  name: yorkie-db-provisioning-job-account
   namespace: {{ .Values.yorkie.namespace }}
 {{ end -}}
