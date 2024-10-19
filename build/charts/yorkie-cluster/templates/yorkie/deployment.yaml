@@ -62,7 +62,7 @@ spec:
       volumes:
         - name: kubeconfig
           emptyDir: { }
-      serviceAccountName: yorkie-db-service-account
+      serviceAccountName: yorkie-db-provisioning-job-account
       {{ end }}
       containers:
       - name: yorkie
