@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: {{ index .Values "yorkie-mongodb" "namespace" }}
-  name: db-status-reader
+  name: db-provisioning-job-status-reader
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
@@ -22,7 +22,7 @@ subjects:
     namespace: {{ .Values.yorkie.namespace }}
 roleRef:
   kind: Role
-  name: db-status-reader
+  name: db-provisioning-job-status-reader
   apiGroup: rbac.authorization.k8s.io
 
 ---

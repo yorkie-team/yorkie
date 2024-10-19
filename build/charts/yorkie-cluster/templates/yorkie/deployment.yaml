@@ -34,7 +34,7 @@ spec:
     spec:
       {{ if index .Values "yorkie-mongodb" "sharded" "enabled"}}
       initContainers:
-      - name: wait-db
+      - name: wait-for-sharded-db-provision
         image: bitnami/kubectl:latest
         command:
           - /bin/sh
@@ -44,10 +44,10 @@ spec:
             while true; do
               job_status=$(kubectl get job -n $NAMESPACE $JOB_NAME -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')
               if [ "$job_status" = "True" ]; then
-                echo "Job completed"
+                echo "DB provisioning Job completed successfully!"
                 break
               fi
-              echo "Waiting for job to complete..."
+              echo "Waiting for DB provisioning job to complete..."
               sleep 5
             done
         env:

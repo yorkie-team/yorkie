@@ -30,10 +30,13 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Create mongodb namespace
-kubectl create namespace yorkie
+kubectl create namespace mongodb
 
 # Install yorkie cluster helm chart
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enabled=true
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster
+
+# Install yorkie cluster helm chart with standalone parameter (disable sharding)
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enabled=false
 ```
 
 _See [configuration](#configuration) below for custom installation_

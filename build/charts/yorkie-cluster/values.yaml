@@ -77,5 +77,13 @@ yorkie-mongodb:
   namespace: mongodb
   port: 27017
   clusterDomain: cluster.local
+  image:
+    registry: docker.io
+    repository: mongo
+    tag: "6.0"
+  persistence:
+    dataSize: 1Gi
+    configSize: 500Mi
+    storageClass: standard
   sharded:
-    enabled: false
+    enabled: true
