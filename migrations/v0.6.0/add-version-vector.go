@@ -19,8 +19,6 @@ package v060
 import (
 	"context"
 	"fmt"
-	"math"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
@@ -31,6 +29,9 @@ import (
 // validateAddVersionVector validates the changes collection to add version vector.
 func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collection := db.Database(databaseName).Collection("changes")
+	totalCount, err := collection.CountDocuments(ctx, bson.M{})
+	prevPercentage := 0
+	count := float64(0)
 
 	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
@@ -56,6 +57,15 @@ func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseNam
 		if versionVector.VersionOf(actors[0]) != info.Lamport {
 			return fmt.Errorf("wrong lamport in version vector")
 		}
+
+		percentage := int(count / float64(totalCount) * 100)
+
+		if percentage != prevPercentage {
+			fmt.Printf("%s.changes validate version vector %d%% completed.\n", databaseName, percentage)
+			prevPercentage = percentage
+		}
+
+		count++
 	}
 
 	return nil
@@ -105,6 +115,7 @@ func AddVersionVector(ctx context.Context, db *mongo.Client, databaseName string
 		return err
 	}
 	batchCount := 1
+	prevPercentage := 0
 
 	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
@@ -126,9 +137,12 @@ func AddVersionVector(ctx context.Context, db *mongo.Client, databaseName string
 				return err
 			}
 
-			percentage := (float64(batchSize*batchCount) / float64(totalCount)) * 100
-			rounded := math.Round(percentage)
-			fmt.Printf("%s.changes migration %0.f%% completed \n", databaseName, rounded)
+			percentage := int(float64(batchSize*batchCount) / float64(totalCount) * 100)
+
+			if percentage != prevPercentage {
+				fmt.Printf("%s.changes version vector migration %d%% completed \n", databaseName, percentage)
+				prevPercentage = percentage
+			}
 
 			infos = infos[:0]
 			batchCount++
