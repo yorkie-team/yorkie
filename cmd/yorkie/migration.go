@@ -19,8 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -59,37 +58,6 @@ func runMigration(ctx context.Context, db *mongo.Client, version string, dbName 
 	}
 
 	return nil
-}
-
-// filterDirectories filters directories that are between the given versions.
-func filterDirectories(dirPath, from, to string) ([]string, error) {
-	var validDirs []string
-	files, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("no such directory %s: %w", dirPath, err)
-	}
-
-	for _, file := range files {
-		if !file.IsDir() || !strings.HasPrefix(file.Name(), "v") {
-			continue
-		}
-
-		version := file.Name()
-		cmpFrom, err := compareVersions(version, from)
-		if err != nil {
-			return nil, err
-		}
-
-		cmpTo, err := compareVersions(version, to)
-		if err != nil {
-			return nil, err
-		}
-
-		if cmpFrom >= 0 && cmpTo <= 0 {
-			validDirs = append(validDirs, version)
-		}
-	}
-	return validDirs, nil
 }
 
 // parseVersion parses the version string into an array of integers.
@@ -139,6 +107,50 @@ func compareVersions(v1, v2 string) (int, error) {
 	return 0, nil
 }
 
+// getMigrationVersionsInRange retrieves the versions between 'from' and 'to' from the migrationMap.
+func getMigrationVersionsInRange(from, to string) ([]string, error) {
+	var versions []string
+	for version := range migrationMap {
+		isAfterFrom, err := compareVersions(version, from)
+		if err != nil {
+			return nil, err
+		}
+
+		isBeforeTo, err := compareVersions(version, to)
+		if err != nil {
+			return nil, err
+		}
+
+		if isAfterFrom >= 0 && isBeforeTo <= 0 {
+			versions = append(versions, version)
+		}
+	}
+
+	sort.Slice(versions, func(i, j int) bool {
+		compare, _ := compareVersions(versions[i], versions[j])
+		return compare == -1
+	})
+
+	return versions, nil
+}
+
+// runMigrationsInRange runs all migrations between 'from' and 'to' versions, including both.
+func runMigrationsInRange(ctx context.Context, db *mongo.Client, from, to, dbName string, batchSize int) error {
+	versions, err := getMigrationVersionsInRange(from, to)
+	if err != nil {
+		return err
+	}
+
+	for _, version := range versions {
+		fmt.Printf("Running migration for version: %s\n", version)
+		if err := runMigration(ctx, db, version, dbName, batchSize); err != nil {
+			return fmt.Errorf("run migration for version %s: %w", version, err)
+		}
+	}
+
+	return nil
+}
+
 func newMigrationCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "migration",
@@ -152,17 +164,6 @@ func newMigrationCmd() *cobra.Command {
 
 			if result == 1 {
 				return fmt.Errorf("to version must be larger then from version: %s %s", from, to)
-			}
-
-			migrationDir := "../migrations"
-			absMigrationDir, err := filepath.Abs(migrationDir)
-			if err != nil {
-				return fmt.Errorf("error converting to absolute path: %s", err)
-			}
-
-			validDirs, err := filterDirectories(absMigrationDir, from, to)
-			if err != nil {
-				return err
 			}
 
 			ctx := context.Background()
@@ -193,15 +194,7 @@ func newMigrationCmd() *cobra.Command {
 				return fmt.Errorf("database %s not found", databaseName)
 			}
 
-			for _, dir := range validDirs {
-				fmt.Printf("running migration for directory: %s\n", dir)
-
-				if err := runMigration(ctx, client, dir, databaseName, batchSize); err != nil {
-					return fmt.Errorf("migration failed: %w\n", err)
-				}
-			}
-
-			return nil
+			return runMigrationsInRange(ctx, client, from, to, databaseName, batchSize)
 		},
 	}
 }
