@@ -18,7 +18,7 @@ kubeVersion: ">=1.23.0-0"
 dependencies:
   - name: yorkie-mongodb
     version: 0.4.13
-    condition: yorkie-mongodb.auto
+    condition: yorkie-mongodb.enabled
 
 keywords:
   - yorkie
