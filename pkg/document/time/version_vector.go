@@ -191,7 +191,7 @@ func (v VersionVector) Filter(filter []*ActorID) VersionVector {
 	return filteredVV
 }
 
-// Keys returns filtered version vector which keys are only from filter
+// Keys returns a slice of ActorIDs present in the VersionVector.
 func (v VersionVector) Keys() ([]*ActorID, error) {
 	var actors []*ActorID
 

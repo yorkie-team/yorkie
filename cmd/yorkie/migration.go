@@ -166,7 +166,7 @@ func newMigrationCmd() *cobra.Command {
 			}
 
 			if result == 1 {
-				return fmt.Errorf("to version must be larger then from version: %s %s", from, to)
+				return fmt.Errorf("to version must be larger than from version: %s %s", from, to)
 			}
 
 			ctx := context.Background()
@@ -179,6 +179,12 @@ func newMigrationCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("connect to mongo: %w", err)
 			}
+
+			defer func() {
+				if err := client.Disconnect(ctx); err != nil {
+					fmt.Printf("Error disconnecting from MongoDB: %v\n", err)
+				}
+			}()
 
 			databases, err := client.ListDatabaseNames(ctx, bson.M{})
 			if err != nil {
