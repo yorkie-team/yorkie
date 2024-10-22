@@ -173,6 +173,7 @@ mongodb-sharded:
 
   # Configuration for mongos
   mongos:
+    namespaceOverride: mongodb
     replicaCount: *mongosReplicaCount
     command:
       - mongos

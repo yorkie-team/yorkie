@@ -81,6 +81,9 @@ type Config struct {
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
+
+	// GatewayAddr is the address of the gateway server.
+	GatewayAddr string `yaml:"GatewayAddr"`
 }
 
 // Validate validates this config.

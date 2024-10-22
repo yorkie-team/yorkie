@@ -19,6 +19,7 @@ package v060
 import (
 	"context"
 	"fmt"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
@@ -30,6 +31,10 @@ import (
 func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collection := db.Database(databaseName).Collection("changes")
 	totalCount, err := collection.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return err
+	}
+
 	prevPercentage := 0
 	count := float64(0)
 

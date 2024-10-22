@@ -473,6 +473,10 @@ func (d *Document) BroadcastEventHandlers() map[string]func(
 	return d.broadcastEventHandlers
 }
 
+func (d *Document) setInternalDoc(internalDoc *InternalDocument) {
+	d.doc = internalDoc
+}
+
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	if len(msgAndArgs) == 0 {
 		return ""

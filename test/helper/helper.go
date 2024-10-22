@@ -270,6 +270,7 @@ func TestConfig() *server.Config {
 			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
 			ProjectInfoCacheSize:       ProjectInfoCacheSize,
 			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
+			GatewayAddr:                fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

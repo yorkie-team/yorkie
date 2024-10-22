@@ -137,6 +137,19 @@ func (d *InternalDocument) Checkpoint() change.Checkpoint {
 	return d.checkpoint
 }
 
+// SyncCheckpoint syncs the checkpoint and the changeID with the given serverSeq
+// and clientSeq.
+func (d *InternalDocument) SyncCheckpoint(serverSeq int64, clientSeq uint32) {
+	d.changeID = change.NewID(
+		clientSeq,
+		serverSeq,
+		d.changeID.Lamport(),
+		d.changeID.ActorID(),
+		d.VersionVector(),
+	)
+	d.checkpoint = d.checkpoint.SyncClientSeq(clientSeq)
+}
+
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *InternalDocument) HasLocalChanges() bool {
 	return len(d.localChanges) > 0
@@ -393,4 +406,11 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
+}
+
+// ToDocument converts this document to Document.
+func (d *InternalDocument) ToDocument() *Document {
+	doc := New(d.key)
+	doc.setInternalDoc(d)
+	return doc
 }

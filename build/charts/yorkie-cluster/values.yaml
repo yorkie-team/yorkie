@@ -60,6 +60,9 @@ ingress:
     enabled: false
     certNo: 1234
 
+  nginx:
+    enabled: false
+
 # Configuration for ratelimit
 ratelimit:
   enabled: false
@@ -67,3 +70,19 @@ ratelimit:
   unit: minute
   requestsPerUnit: 10000
   domain: yorkie-ratelimit
+
+# Configuration for yorkie-mongodb
+yorkie-mongodb:
+  name: mongodb
+  namespace: mongodb
+  port: 27017
+  image:
+    registry: docker.io
+    repository: mongo
+    tag: "6.0"
+  persistence:
+    dataSize: 1Gi
+    configSize: 500Mi
+    storageClass: standard
+  sharded:
+    enabled: true

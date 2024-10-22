@@ -26,8 +26,10 @@ import (
 	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/status"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
@@ -72,16 +74,35 @@ func newCreateCommand() *cobra.Command {
 				return err
 			}
 
-			encoded, err := json.Marshal(project)
-			if err != nil {
-				return fmt.Errorf("marshal project: %w", err)
+			output := viper.GetString("output")
+			if err := printCreateProjectInfo(cmd, output, project); err != nil {
+				return err
 			}
-
-			cmd.Println(string(encoded))
 
 			return nil
 		},
 	}
+}
+
+func printCreateProjectInfo(cmd *cobra.Command, output string, project *types.Project) error {
+	switch output {
+	case JSONOutput, DefaultOutput:
+		encoded, err := json.Marshal(project)
+		if err != nil {
+			return fmt.Errorf("marshal JSON: %w", err)
+		}
+		cmd.Println(string(encoded))
+	case YamlOutput:
+		marshalled, err := yaml.Marshal(project)
+		if err != nil {
+			return fmt.Errorf("marshal YAML: %w", err)
+		}
+		cmd.Println(string(marshalled))
+	default:
+		return fmt.Errorf("unknown output format: %s", output)
+	}
+
+	return nil
 }
 
 func init() {
