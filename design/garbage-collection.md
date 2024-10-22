@@ -1,6 +1,6 @@
 ---
 title: garbage-collection
-target-version: 0.6.0
+target-version: 0.5.3
 ---
 
 # Garbage Collection

@@ -1,6 +1,6 @@
 ---
 title: version-vector
-target-version: 0.6.0
+target-version: 0.5.3
 ---
 
 # Version Vector
