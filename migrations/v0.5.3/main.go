@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package v060 provides migration for v0.6.0
-package v060
+// Package v053 provides migration for v0.5.3
+package v053
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// RunMigration runs migrations for v0.6.0
+// RunMigration runs migrations for v0.5.3
 func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error {
 	if err := AddVersionVector(ctx, db, databaseName, batchSize); err != nil {
 		return err
@@ -34,7 +34,7 @@ func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, ba
 		return err
 	}
 
-	fmt.Println("v0.6.0 migration completed")
+	fmt.Println("v0.5.3 migration completed")
 
 	return nil
 }

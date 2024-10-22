@@ -29,7 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
-	v060 "github.com/yorkie-team/yorkie/migrations/v0.6.0"
+	v053 "github.com/yorkie-team/yorkie/migrations/v0.5.3"
 	yorkiemongo "github.com/yorkie-team/yorkie/server/backend/database/mongo"
 )
 
@@ -42,7 +42,7 @@ var (
 
 // migrationMap is a map of migration functions for each version.
 var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, dbName string, batchSize int) error{
-	"v0.6.0": v060.RunMigration,
+	"v0.5.3": v053.RunMigration,
 }
 
 // runMigration runs the migration for the given version.
@@ -217,7 +217,7 @@ func init() {
 		&to,
 		"to",
 		"",
-		"ending version of migration (e.g., v0.6.0)",
+		"ending version of migration (e.g., v0.5.3)",
 	)
 	cmd.Flags().IntVar(
 		&batchSize,
