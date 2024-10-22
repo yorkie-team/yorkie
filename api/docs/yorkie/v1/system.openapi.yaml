@@ -1,81 +1,82 @@
 openapi: 3.1.0
 info:
-  description: Yorkie is an open source document store for building collaborative
+  description:
+    Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.5.1
+  version: v0.5.2
 servers:
-- description: Production server
-  url: https://api.yorkie.dev
-- description: Local server
-  url: http://localhost:8080
+  - description: Production server
+    url: https://api.yorkie.dev
+  - description: Local server
+    url: http://localhost:8080
 paths:
   /yorkie.v1.SystemService/DetachDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.SystemService
+        - yorkie.v1.SystemService
 components:
   requestBodies:
     yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.SystemServiceDetachDocumentRequest"
       required: true
   responses:
     connect.error:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
         application/proto:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
       description: ""
     yorkie.v1.SystemService.DetachDocument.yorkie.v1.SystemServiceDetachDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.SystemServiceDetachDocumentResponse"
       description: ""
   schemas:
     connect.error:
       additionalProperties: false
-      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      description: "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
       properties:
         code:
           enum:
-          - CodeCanceled
-          - CodeUnknown
-          - CodeInvalidArgument
-          - CodeDeadlineExceeded
-          - CodeNotFound
-          - CodeAlreadyExists
-          - CodePermissionDenied
-          - CodeResourceExhausted
-          - CodeFailedPrecondition
-          - CodeAborted
-          - CodeOutOfRange
-          - CodeInternal
-          - CodeUnavailable
-          - CodeDataLoss
-          - CodeUnauthenticated
+            - CodeCanceled
+            - CodeUnknown
+            - CodeInvalidArgument
+            - CodeDeadlineExceeded
+            - CodeNotFound
+            - CodeAlreadyExists
+            - CodePermissionDenied
+            - CodeResourceExhausted
+            - CodeFailedPrecondition
+            - CodeAborted
+            - CodeOutOfRange
+            - CodeInternal
+            - CodeUnavailable
+            - CodeDataLoss
+            - CodeUnauthenticated
           examples:
-          - CodeNotFound
+            - CodeNotFound
           type: string
         message:
           type: string
@@ -180,13 +181,13 @@ components:
       description: ""
       properties:
         accessedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: accessed_at
           type: object
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -207,7 +208,7 @@ components:
           title: snapshot
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -236,7 +237,7 @@ components:
           title: client_deactivate_threshold
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -262,7 +263,7 @@ components:
           title: secret_key
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -279,16 +280,17 @@ components:
           title: client_id
           type: string
         documentSummary:
-          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
           additionalProperties: false
           description: ""
           title: document_summary
           type: object
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
-          description: 'TODO(hackerwins): Consider to replace this fields with types.Project,
-            types.Client, types.DocumentSummary'
+          description:
+            "TODO(hackerwins): Consider to replace this fields with types.Project,
+            types.Client, types.DocumentSummary"
           title: project
           type: object
       title: SystemServiceDetachDocumentRequest
@@ -304,7 +306,7 @@ components:
       name: Authorization
       type: apiKey
 security:
-- ApiKeyAuth: []
+  - ApiKeyAuth: []
 tags:
-- description: System is a service that provides an API for Cluster.
-  name: yorkie.v1.SystemService
+  - description: System is a service that provides an API for Cluster.
+    name: yorkie.v1.SystemService

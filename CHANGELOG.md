@@ -7,6 +7,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.2] - 2024-09-22
+
+## Changed
+
+- Detach documents when client is deactivated by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1036
+- Remove `jstype=string` from resources.proto by @Aswinr24 in https://github.com/yorkie-team/yorkie/pull/1040
+- Include yorkie-mongodb to yorkie-cluster Helm Chart by @hyun98 in https://github.com/yorkie-team/yorkie/pull/1031
+
 ## [0.5.1] - 2024-09-15
 
 ### Added
