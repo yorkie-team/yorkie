@@ -86,3 +86,4 @@ yorkie-mongodb:
     storageClass: standard
   sharded:
     enabled: true
+  auto: true
