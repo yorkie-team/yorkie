@@ -26,7 +26,7 @@ import (
 // InitialVersionVector is the initial version vector.
 var InitialVersionVector = VersionVector{}
 
-// VersionVector is similar to vector clock, but it is synced with lamport
+// VersionVector is similar to vector clock, but it is synced with Lamport
 // timestamp of the current change.
 type VersionVector map[actorID]int64
 
@@ -40,7 +40,7 @@ func (v VersionVector) Set(id *ActorID, i int64) {
 	v[id.bytes] = i
 }
 
-// Unset unsets the given actor's version to the given value.
+// Unset removes the version for the given actor from the VersionVector.
 func (v VersionVector) Unset(id *ActorID) {
 	delete(v, id.bytes)
 }

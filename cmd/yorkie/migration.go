@@ -49,8 +49,7 @@ var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, dbName
 func runMigration(ctx context.Context, db *mongo.Client, version string, dbName string, batchSize int) error {
 	migrationFunc, exists := migrationMap[version]
 	if !exists {
-		fmt.Printf("migration not found for version: %s\n", version)
-		return nil
+		return fmt.Errorf("migration not found for version: %s", version)
 	}
 
 	if err := migrationFunc(ctx, db, dbName, batchSize); err != nil {
@@ -127,7 +126,11 @@ func getMigrationVersionsInRange(from, to string) ([]string, error) {
 	}
 
 	sort.Slice(versions, func(i, j int) bool {
-		compare, _ := compareVersions(versions[i], versions[j])
+		compare, err := compareVersions(versions[i], versions[j])
+		if err != nil {
+			fmt.Printf("Error comparing versions: %v\n", err)
+			return false
+		}
 		return compare == -1
 	})
 

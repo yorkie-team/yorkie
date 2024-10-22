@@ -19,8 +19,6 @@ package v053
 import (
 	"context"
 	"fmt"
-	"log"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -29,7 +27,7 @@ import (
 func validateDropSnapshot(ctx context.Context, db *mongo.Client, databaseName string) error {
 	collections, err := db.Database(databaseName).ListCollectionNames(ctx, bson.D{})
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("list collection names: %w", err)
 	}
 
 	collectionExists := false
