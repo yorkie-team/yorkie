@@ -128,8 +128,7 @@ func getMigrationVersionsInRange(from, to string) ([]string, error) {
 	sort.Slice(versions, func(i, j int) bool {
 		compare, err := compareVersions(versions[i], versions[j])
 		if err != nil {
-			fmt.Printf("Error comparing versions: %v\n", err)
-			return false
+			panic(fmt.Errorf("error comparing versions: %w", err))
 		}
 		return compare == -1
 	})

@@ -259,7 +259,7 @@ components:
         minSyncedTicket:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
-          description: Deprecated
+          description: ""
           title: min_synced_ticket
           type: object
         snapshot:
