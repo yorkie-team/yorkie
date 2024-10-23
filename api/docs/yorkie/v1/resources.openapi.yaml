@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.5.2
+  version: v0.5.3
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -220,7 +220,7 @@ components:
             - type: number
           title: server_seq
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -270,7 +270,7 @@ components:
           title: snapshot
           type: string
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -1788,8 +1788,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: value
       title: VectorEntry
       type: object
