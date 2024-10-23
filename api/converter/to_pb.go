@@ -136,12 +136,18 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 		return nil, err
 	}
 
+	pbVersionVector, err := ToVersionVector(pack.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ChangePack{
 		DocumentKey:     pack.DocumentKey.String(),
 		Checkpoint:      ToCheckpoint(pack.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
+		VersionVector:   pbVersionVector,
 		IsRemoved:       pack.IsRemoved,
 	}, nil
 }
@@ -155,13 +161,35 @@ func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
 }
 
 // ToChangeID converts the given model format to Protobuf format.
-func ToChangeID(id change.ID) *api.ChangeID {
-	return &api.ChangeID{
-		ClientSeq: id.ClientSeq(),
-		ServerSeq: id.ServerSeq(),
-		Lamport:   id.Lamport(),
-		ActorId:   id.ActorID().Bytes(),
+func ToChangeID(id change.ID) (*api.ChangeID, error) {
+	pbVersionVector, err := ToVersionVector(id.VersionVector())
+	if err != nil {
+		return nil, err
 	}
+	return &api.ChangeID{
+		ClientSeq:     id.ClientSeq(),
+		ServerSeq:     id.ServerSeq(),
+		Lamport:       id.Lamport(),
+		ActorId:       id.ActorID().Bytes(),
+		VersionVector: pbVersionVector,
+	}, nil
+}
+
+// ToVersionVector converts the given model format to Protobuf format.
+func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
+	pbVersionVector := make(map[string]int64)
+	for actor, clock := range vector {
+		id, err := time.ActorIDFromBytes(actor[:])
+		if err != nil {
+			return nil, err
+		}
+
+		pbVersionVector[id.String()] = clock
+	}
+
+	return &api.VersionVector{
+		Vector: pbVersionVector,
+	}, nil
 }
 
 // ToDocEventType converts the given model format to Protobuf format.
@@ -243,8 +271,13 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			return nil, err
 		}
 
+		pbChangeID, err := ToChangeID(c.ID())
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
-			Id:             ToChangeID(c.ID()),
+			Id:             pbChangeID,
 			Message:        c.Message(),
 			Operations:     pbOperations,
 			PresenceChange: ToPresenceChange(c.PresenceChange()),

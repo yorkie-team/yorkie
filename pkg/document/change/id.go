@@ -28,10 +28,12 @@ const (
 var (
 	// InitialID represents the initial state ID. Usually this is used to
 	// represent a state where nothing has been edited.
-	InitialID = NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID)
+	InitialID = NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.InitialVersionVector)
 )
 
-// ID is for identifying the Change. It is immutable.
+// ID represents the identifier of the change. It is used to identify the
+// change and to order the changes. It is also used to detect the relationship
+// between changes whether they are causally related or concurrent.
 type ID struct {
 	// clientSeq is the sequence of the change within the client that made the
 	// change.
@@ -48,6 +50,12 @@ type ID struct {
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
 	actorID *time.ActorID
+
+	// versionVector is similar to vector clock, and it is used to detect the
+	// relationship between changes whether they are causally related or concurrent.
+	// It is synced with lamport timestamp of the change for mapping TimeTicket to
+	// the change.
+	versionVector time.VersionVector
 }
 
 // NewID creates a new instance of ID.
@@ -56,21 +64,27 @@ func NewID(
 	serverSeq int64,
 	lamport int64,
 	actorID *time.ActorID,
+	versionVector time.VersionVector,
 ) ID {
 	return ID{
-		clientSeq: clientSeq,
-		serverSeq: serverSeq,
-		lamport:   lamport,
-		actorID:   actorID,
+		clientSeq:     clientSeq,
+		serverSeq:     serverSeq,
+		lamport:       lamport,
+		actorID:       actorID,
+		versionVector: versionVector,
 	}
 }
 
 // Next creates a next ID of this ID.
 func (id ID) Next() ID {
+	versionVector := id.versionVector.DeepCopy()
+	versionVector.Set(id.actorID, id.lamport+1)
+
 	return ID{
-		clientSeq: id.clientSeq + 1,
-		lamport:   id.lamport + 1,
-		actorID:   id.actorID,
+		clientSeq:     id.clientSeq + 1,
+		lamport:       id.lamport + 1,
+		actorID:       id.actorID,
+		versionVector: versionVector,
 	}
 }
 
@@ -83,24 +97,46 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 	)
 }
 
-// SyncLamport syncs lamport timestamp with the given ID.
-// https://en.wikipedia.org/wiki/Lamport_timestamps#Algorithm
-func (id ID) SyncLamport(otherLamport int64) ID {
-	if id.lamport < otherLamport {
-		return NewID(id.clientSeq, InitialServerSeq, otherLamport, id.actorID)
+// SyncClocks syncs logical clocks with the given ID.
+func (id ID) SyncClocks(other ID) ID {
+	lamport := id.lamport + 1
+	if id.lamport < other.lamport {
+		lamport = other.lamport + 1
 	}
 
-	return NewID(id.clientSeq, InitialServerSeq, id.lamport+1, id.actorID)
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(other.versionVector))
+	newID.versionVector.Set(id.actorID, lamport)
+	return newID
+}
+
+// SetClocks sets the given clocks to this ID. This is used when the snapshot is
+// given from the server.
+func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
+	lamport := id.lamport + 1
+	if id.lamport < otherLamport {
+		lamport = otherLamport + 1
+	}
+
+	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
+	newID.versionVector.Set(id.actorID, lamport)
+
+	return newID
+}
+
+// SetVersionVector sets version vector
+func (id ID) SetVersionVector(vector time.VersionVector) ID {
+	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, vector)
 }
 
 // SetActor sets actorID.
 func (id ID) SetActor(actor *time.ActorID) ID {
-	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor)
+	// TODO(hackerwins): We need to update version vector as well.
+	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor, id.versionVector)
 }
 
 // SetServerSeq sets server sequence of this ID.
 func (id ID) SetServerSeq(serverSeq int64) ID {
-	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID)
+	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID, id.versionVector)
 }
 
 // ClientSeq returns the client sequence of this ID.
@@ -121,4 +157,14 @@ func (id ID) Lamport() int64 {
 // ActorID returns the actorID of this ID.
 func (id ID) ActorID() *time.ActorID {
 	return id.actorID
+}
+
+// VersionVector returns the version vector of this ID.
+func (id ID) VersionVector() time.VersionVector {
+	return id.versionVector
+}
+
+// AfterOrEqual returns whether this ID is causally after or equal the given ID.
+func (id ID) AfterOrEqual(other ID) bool {
+	return id.versionVector.AfterOrEqual(other.versionVector)
 }

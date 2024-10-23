@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -223,9 +222,9 @@ func TestObject(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, 10, d1.GarbageLen())
-		assert.Equal(t, 10, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 10, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID())))
 		assert.Equal(t, 10, d2.GarbageLen())
-		assert.Equal(t, 10, d2.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 10, d2.GarbageCollect(helper.MaxVersionVector(d2.ActorID())))
 	})
 
 	t.Run("object.set with json literal sync test", func(t *testing.T) {
@@ -285,7 +284,7 @@ func TestObject(t *testing.T) {
 
 		// 03. garbage collect (3 elements: array, 1, 2)
 		assert.Equal(t, 3, d1.GarbageLen())
-		assert.Equal(t, 3, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 3, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID())))
 	})
 
 	t.Run("object.set with json literal counter type test", func(t *testing.T) {
@@ -667,7 +666,7 @@ func TestObjectSet(t *testing.T) {
 			})
 			assert.NoError(t, err)
 			assert.Equal(t, tt.tombstones, d1.GarbageLen())
-			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID())))
 		})
 	}
 

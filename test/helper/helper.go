@@ -141,6 +141,20 @@ func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
+// MaxVersionVector returns the max version vector of the given actors.
+func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
+	if len(actors) == 0 {
+		actors = append(actors, time.InitialActorID)
+	}
+
+	vector := time.NewVersionVector()
+	for i := 0; i < len(actors); i++ {
+		vector.Set(actors[i], time.MaxLamport)
+	}
+
+	return vector
+}
+
 // TokensEqualBetween is a helper function that checks the tokens between the given
 // indexes.
 func TokensEqualBetween(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
@@ -256,6 +270,7 @@ func TestConfig() *server.Config {
 			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
 			ProjectInfoCacheSize:       ProjectInfoCacheSize,
 			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
+			GatewayAddr:                fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

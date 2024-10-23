@@ -18,6 +18,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path"
 
@@ -55,4 +56,20 @@ func init() {
 
 	rootCmd.PersistentFlags().String("rpc-addr", "localhost:8080", "Address of the rpc server")
 	_ = viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
+
+	rootCmd.PersistentFlags().StringP("output", "o", "", "One of 'yaml' or 'json'.")
+	_ = viper.BindPFlag("output", rootCmd.PersistentFlags().Lookup("output"))
+
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return validateOutputOpts()
+	}
+}
+
+// validateOutputOpts validates the output options.
+func validateOutputOpts() error {
+	output := viper.GetString("output")
+	if output != DefaultOutput && output != YamlOutput && output != JSONOutput {
+		return errors.New(`--output must be 'yaml' or 'json'`)
+	}
+	return nil
 }

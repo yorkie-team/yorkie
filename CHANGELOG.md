@@ -7,6 +7,33 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.3] - 2024-09-23
+
+## Changed
+
+- Introduce VersionVector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1047
+
+## [0.5.2] - 2024-09-22
+
+## Changed
+
+- Detach documents when client is deactivated by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1036
+- Remove `jstype=string` from resources.proto by @Aswinr24 in https://github.com/yorkie-team/yorkie/pull/1040
+- Include yorkie-mongodb to yorkie-cluster Helm Chart by @hyun98 in https://github.com/yorkie-team/yorkie/pull/1031
+
+## [0.5.1] - 2024-09-15
+
+### Added
+
+- Add all-in-one Docker Compose and Grafana configuration by @window9u in https://github.com/yorkie-team/yorkie/pull/997
+- Add metrics for WatchDocuments and enhance pushpull metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1008
+- Add nginx-ingress-controller option by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1022
+
+### Changed
+
+- Reduce CI test time by optimizing task execution by @binary-ho in https://github.com/yorkie-team/yorkie/pull/988
+- Use random generated key by @window9u in https://github.com/yorkie-team/yorkie/pull/1010
+
 ## [0.5.0] - 2024-09-05
 
 ### Added

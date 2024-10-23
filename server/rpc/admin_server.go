@@ -316,9 +316,15 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
+	pbVersionVector, err := converter.ToVersionVector(doc.VersionVector())
+	if err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&api.GetSnapshotMetaResponse{
-		Lamport:  doc.Lamport(),
-		Snapshot: snapshot,
+		Lamport:       doc.Lamport(),
+		Snapshot:      snapshot,
+		VersionVector: pbVersionVector,
 	}), nil
 }
 

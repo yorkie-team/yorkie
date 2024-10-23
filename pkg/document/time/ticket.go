@@ -47,8 +47,10 @@ var (
 	)
 )
 
-// Ticket is a timestamp of the logical clock. Ticket is immutable.
-// It is created by change.ID.
+// Ticket represents the logical clock. It is used to determine the order of
+// changes and identify elements and nodes in the document. It can't be used
+// to detect the relationship between changes whether they are causally related
+// or concurrent.
 type Ticket struct {
 	lamport   int64
 	delimiter uint32

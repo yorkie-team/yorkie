@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -81,17 +82,18 @@ func PushPull(
 
 	// 01. push changes: filter out the changes that are already saved in the database.
 	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
-	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
-	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
+	hostname := be.Config.Hostname
+	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
+	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}
-	be.Metrics.AddPushPullSentChanges(respPack.ChangesLen())
-	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
-	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
+	be.Metrics.AddPushPullSentChanges(hostname, project, respPack.ChangesLen())
+	be.Metrics.AddPushPullSentOperations(hostname, project, respPack.OperationsLen())
+	be.Metrics.AddPushPullSnapshotBytes(hostname, project, respPack.SnapshotLen())
 
 	// 03. update the client's document and checkpoint.
 	docRefKey := docInfo.RefKey()
@@ -127,9 +129,26 @@ func PushPull(
 		return nil, err
 	}
 
-	// 05. update and find min synced ticket for garbage collection.
+	// 05. update and find min synced version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
+	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+		ctx,
+		clientInfo,
+		docRefKey,
+		reqPack.VersionVector,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if respPack.SnapshotLen() == 0 {
+		respPack.VersionVector = minSyncedVersionVector
+	}
+
+	// TODO(hackerwins): This is a previous implementation before the version
+	// vector was introduced. But it is necessary to support the previous
+	// SDKs that do not support the version vector. This code should be removed
+	// after all SDKs are updated.
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
@@ -140,6 +159,7 @@ func PushPull(
 		return nil, err
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
+
 	respPack.ApplyDocInfo(docInfo)
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
@@ -197,7 +217,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedTicket,
+				minSyncedVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
@@ -210,8 +230,26 @@ func PushPull(
 	return respPack, nil
 }
 
-// BuildDocumentForServerSeq returns a new document for the given serverSeq.
-func BuildDocumentForServerSeq(
+// BuildDocForCheckpoint returns a new document for the given checkpoint.
+func BuildDocForCheckpoint(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *database.DocInfo,
+	cp change.Checkpoint,
+	actorID *time.ActorID,
+) (*document.Document, error) {
+	internalDoc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, cp.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	internalDoc.SetActor(actorID)
+	internalDoc.SyncCheckpoint(cp.ServerSeq, cp.ClientSeq)
+	return internalDoc.ToDocument(), nil
+}
+
+// BuildInternalDocForServerSeq returns a new document for the given serverSeq.
+func BuildInternalDocForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
@@ -232,6 +270,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
+		snapshotInfo.VersionVector,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
@@ -255,6 +294,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
+		nil,
 		nil,
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err

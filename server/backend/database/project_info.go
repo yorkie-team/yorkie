@@ -20,7 +20,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/rs/xid"
+	"github.com/lithammer/shortuuid/v4"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
@@ -74,10 +74,9 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		Name:                      name,
 		Owner:                     owner,
 		ClientDeactivateThreshold: clientDeactivateThreshold,
-		// TODO(hackerwins): Use random generated Key.
-		PublicKey: xid.New().String(),
-		SecretKey: xid.New().String(),
-		CreatedAt: time.Now(),
+		PublicKey:                 shortuuid.New(),
+		SecretKey:                 shortuuid.New(),
+		CreatedAt:                 time.Now(),
 	}
 }
 

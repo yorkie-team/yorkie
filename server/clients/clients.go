@@ -22,6 +22,8 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/cluster"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -36,61 +38,79 @@ var (
 // Activate activates the given client.
 func Activate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	project *types.Project,
 	clientKey string,
 ) (*database.ClientInfo, error) {
-	return db.ActivateClient(ctx, project.ID, clientKey)
+	return be.DB.ActivateClient(ctx, project.ID, clientKey)
 }
 
 // Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
+	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	// TODO(hackerwins): We need to remove the presence of the client from the document.
-	// Be careful that housekeeping is executed by the leader. And documents are sharded
-	// by the servers in the cluster. So, we need to consider the case where the leader is
-	// not the same as the server that handles the document.
-
-	// TODO(raararaara): When deactivating a client, we need to update three DB properties
-	// (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
-	// Updating the sub-properties of ClientInfo guarantees atomicity as it involves a single MongoDB document.
-	// However, SyncedSeqs are stored in separate documents, so we can't ensure atomic updates for both.
-	// Currently, if SyncedSeqs update fails, it mainly impacts GC efficiency without causing major issues.
-	// We need to consider implementing a correction logic to remove SyncedSeqs in the future.
-	clientInfo, err := db.DeactivateClient(ctx, refKey)
+	info, err := FindActiveClientInfo(ctx, be, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(raararaara): We're currently updating SyncedSeq one by one. This approach is similar
-	// to n+1 query problem. We need to investigate if we can optimize this process by using a single query in the future.
-	for docID, clientDocInfo := range clientInfo.Documents {
-		if err := db.UpdateSyncedSeq(
+	// TODO(hackerwins): Introduce cluster client pool.
+	// - https://connectrpc.com/docs/go/deployment/
+	cli, err := cluster.Dial(be.Config.GatewayAddr)
+	if err != nil {
+		return nil, err
+	}
+	defer cli.Close()
+
+	for docID, clientDocInfo := range info.Documents {
+		if clientDocInfo.Status != database.DocumentAttached {
+			continue
+		}
+
+		// TODO(hackerwins): Solve N+1
+		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		actorID, err := info.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := cli.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
+			return nil, err
+		}
+
+		if err := be.DB.UpdateVersionVector(
 			ctx,
-			clientInfo,
+			info,
 			types.DocRefKey{
 				ProjectID: refKey.ProjectID,
 				DocID:     docID,
 			},
-			clientDocInfo.ServerSeq,
+			nil,
 		); err != nil {
 			return nil, err
 		}
 	}
 
-	return clientInfo, err
+	return be.DB.DeactivateClient(ctx, refKey)
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := db.FindClientInfoByRefKey(ctx, refKey)
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}

@@ -18,13 +18,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -44,7 +48,6 @@ func newHistoryCmd() *cobra.Command {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")
 			}
-
 			rpcAddr := viper.GetString("rpcAddr")
 			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
@@ -72,28 +75,55 @@ func newHistoryCmd() *cobra.Command {
 				return err
 			}
 
-			tw := table.NewWriter()
-			tw.Style().Options.DrawBorder = false
-			tw.Style().Options.SeparateColumns = false
-			tw.Style().Options.SeparateFooter = false
-			tw.Style().Options.SeparateHeader = false
-			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"SEQ",
-				"MESSAGE",
-				"SNAPSHOT",
-			})
-			for _, change := range changes {
-				tw.AppendRow(table.Row{
-					change.ID.ServerSeq(),
-					change.Message,
-					change.Snapshot,
-				})
+			output := viper.GetString("output")
+			if err := printHistories(cmd, output, changes); err != nil {
+				return err
 			}
-			cmd.Printf("%s\n", tw.Render())
+
 			return nil
 		},
 	}
+}
+
+func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSummary) error {
+	switch output {
+	case DefaultOutput:
+		tw := table.NewWriter()
+		tw.Style().Options.DrawBorder = false
+		tw.Style().Options.SeparateColumns = false
+		tw.Style().Options.SeparateFooter = false
+		tw.Style().Options.SeparateHeader = false
+		tw.Style().Options.SeparateRows = false
+		tw.AppendHeader(table.Row{
+			"SEQ",
+			"MESSAGE",
+			"SNAPSHOT",
+		})
+		for _, change := range changes {
+			tw.AppendRow(table.Row{
+				change.ID.ServerSeq(),
+				change.Message,
+				change.Snapshot,
+			})
+		}
+		cmd.Printf("%s\n", tw.Render())
+	case JSONOutput:
+		jsonOutput, err := json.MarshalIndent(changes, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal JSON: %w", err)
+		}
+		cmd.Println(string(jsonOutput))
+	case YamlOutput:
+		yamlOutput, err := yaml.Marshal(changes)
+		if err != nil {
+			return fmt.Errorf("marshal YAML: %w", err)
+		}
+		cmd.Println(string(yamlOutput))
+	default:
+		return fmt.Errorf("unknown output format: %s", output)
+	}
+
+	return nil
 }
 
 func init() {

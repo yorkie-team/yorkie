@@ -61,7 +61,7 @@ func deleteAccountCmd() *cobra.Command {
 			}
 
 			if err := deleteAccount(conf, auth, rpcAddr, username, password); err != nil {
-				fmt.Println("Failed to delete account: ", err)
+				fmt.Println("delete account: ", err)
 			}
 
 			return nil

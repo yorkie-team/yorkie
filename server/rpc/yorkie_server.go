@@ -67,7 +67,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend.DB, project, req.Msg.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.Deactivate(ctx, s.backend.DB, types.ClientRefKey{
+	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -145,7 +145,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -221,7 +221,7 @@ func (s *yorkieServer) DetachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -320,7 +320,7 @@ func (s *yorkieServer) PushPullChanges(
 		}()
 	}
 
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -386,7 +386,7 @@ func (s *yorkieServer) WatchDocument(
 		DocID:     docID,
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
@@ -430,12 +430,12 @@ func (s *yorkieServer) WatchDocument(
 		logging.From(ctx).Error(err)
 		return err
 	}
-	s.backend.Metrics.AddWatchDocumentConnection(s.backend.Config.Hostname, project)
+	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
-		if err := s.unwatchDoc(subscription, docRefKey); err != nil {
+		if err := s.unwatchDoc(ctx, subscription, docRefKey); err != nil {
 			logging.From(ctx).Error(err)
 		} else {
-			s.backend.Metrics.RemoveWatchDocumentConnection(s.backend.Config.Hostname, project)
+			s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 		}
 	}()
 
@@ -465,7 +465,7 @@ func (s *yorkieServer) WatchDocument(
 				return err
 			}
 
-			if err := stream.Send(&api.WatchDocumentResponse{
+			response := &api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
 						Type:      eventType,
@@ -476,9 +476,16 @@ func (s *yorkieServer) WatchDocument(
 						},
 					},
 				},
-			}); err != nil {
+			}
+			if err := stream.Send(response); err != nil {
 				return err
 			}
+			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+				s.backend.Config.Hostname,
+				project,
+				event.Type,
+				event.Body.PayloadLen(),
+			)
 		}
 	}
 }
@@ -526,7 +533,7 @@ func (s *yorkieServer) RemoveDocument(
 		}()
 	}
 
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -581,15 +588,21 @@ func (s *yorkieServer) watchDoc(
 			DocumentRefKey: documentRefKey,
 		},
 	)
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+		s.backend.Config.Hostname,
+		projects.From(ctx),
+		types.DocumentWatchedEvent,
+		0,
+	)
 
 	return subscription, clientIDs, nil
 }
 
 func (s *yorkieServer) unwatchDoc(
+	ctx context.Context,
 	subscription *sync.Subscription,
 	documentRefKey types.DocRefKey,
 ) error {
-	ctx := context.Background()
 	err := s.backend.Coordinator.Unsubscribe(ctx, documentRefKey, subscription)
 	if err != nil {
 		logging.From(ctx).Error(err)
@@ -604,6 +617,12 @@ func (s *yorkieServer) unwatchDoc(
 			Publisher:      subscription.Subscriber(),
 			DocumentRefKey: documentRefKey,
 		},
+	)
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+		s.backend.Config.Hostname,
+		projects.From(ctx),
+		types.DocumentUnwatchedEvent,
+		0,
 	)
 
 	return nil
@@ -645,18 +664,19 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
 		return nil, err
 	}
 
+	docEventType := types.DocumentBroadcastEvent
 	s.backend.Coordinator.Publish(
 		ctx,
 		clientID,
 		sync.DocEvent{
-			Type:           types.DocumentBroadcastEvent,
+			Type:           docEventType,
 			Publisher:      clientID,
 			DocumentRefKey: docRefKey,
 			Body: types.DocEventBody{
@@ -665,6 +685,8 @@ func (s *yorkieServer) Broadcast(
 			},
 		},
 	)
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, docEventType,
+		len(req.Msg.Payload))
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }

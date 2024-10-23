@@ -32,6 +32,38 @@ spec:
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
     spec:
+      {{ if index .Values "yorkie-mongodb" "sharded" "enabled"}}
+      initContainers:
+      - name: wait-for-sharded-db-provision
+        image: bitnami/kubectl:latest
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Wait db start"
+            while true; do
+              job_status=$(kubectl get job -n $NAMESPACE $JOB_NAME -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')
+              if [ "$job_status" = "True" ]; then
+                echo "DB provisioning Job completed successfully!"
+                break
+              fi
+              echo "Waiting for DB provisioning job to complete..."
+              sleep 5
+            done
+        env:
+          - name: NAMESPACE
+            value: "{{ index .Values "yorkie-mongodb" "namespace" }}"
+          - name: JOB_NAME
+            value: "{{ index .Values "yorkie-mongodb" "name" }}-setup-job"
+        volumeMounts:
+          - name: kubeconfig
+            mountPath: /root/.kube
+            subPath: config
+      volumes:
+        - name: kubeconfig
+          emptyDir: { }
+      serviceAccountName: yorkie-db-provisioning-job-account
+      {{ end }}
       containers:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
@@ -45,6 +77,8 @@ spec:
           "{{ .Values.yorkie.ports.rpcPort }}",
           "--profiling-port",
           "{{ .Values.yorkie.ports.profilingPort }}",
+          "--backend-gateway-addr",
+          "yorkie-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
         ]
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}

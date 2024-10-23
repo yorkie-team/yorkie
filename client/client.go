@@ -193,7 +193,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
-		if c.conn.Transport == nil {
+		if c.options.CertFile == "" {
 			rpcAddr = "http://" + rpcAddr
 		} else {
 			rpcAddr = "https://" + rpcAddr
@@ -342,6 +342,17 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		if err != nil {
 			return err
 		}
+	}
+
+	if err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+		for k, v := range opts.InitialRoot {
+			if root.Get(k) == nil {
+				root.SetDynamicValue(k, v)
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	return nil

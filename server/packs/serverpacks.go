@@ -43,12 +43,18 @@ type ServerPack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
-	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
-	// It used to collect garbage on the replica on the client.
-	MinSyncedTicket *time.Ticket
+	// VersionVector represents two vectors of the document.
+	// 1. In request, it is the version vector of the document on the client.
+	// 2. In response(Snapshot), it is the version vector of the snapshot of the document.
+	VersionVector time.VersionVector
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	// TODO(hackerwins): This field is deprecated.
+	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
+	// It used to collect garbage on the replica on the client.
+	MinSyncedTicket *time.Ticket
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -93,7 +99,8 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		if err != nil {
 			return nil, err
 		}
-		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
+
+		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID, info.VersionVector)
 
 		var pbOps []*api.Operation
 		for _, bytesOp := range info.Operations {
@@ -109,22 +116,36 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			return nil, err
 		}
 
+		pbChangeID, err := converter.ToChangeID(changeID)
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
-			Id:             converter.ToChangeID(changeID),
+			Id:             pbChangeID,
 			Message:        info.Message,
 			Operations:     pbOps,
 			PresenceChange: converter.ToPresenceChange(p),
 		})
 	}
 
-	return &api.ChangePack{
+	pbPack := &api.ChangePack{
 		DocumentKey:     p.DocumentKey.String(),
 		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        p.Snapshot,
-		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
 		IsRemoved:       p.IsRemoved,
-	}, nil
+		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
+	}
+
+	pbVersionVector, err := converter.ToVersionVector(p.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
+	pbPack.VersionVector = pbVersionVector
+
+	return pbPack, nil
 }
 
 // ApplyDocInfo applies the given DocInfo to the ServerPack.

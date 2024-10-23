@@ -1,4 +1,4 @@
-//go:build integration
+//go:build complex
 
 /*
  * Copyright 2024 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package integration
+package complex
 
 import (
 	"context"
@@ -50,11 +50,6 @@ func parseSimpleXML(s string) []string {
 		res = append(res, current)
 	}
 	return res
-}
-
-type testResult struct {
-	flag       bool
-	resultDesc string
 }
 
 type rangeSelector int
