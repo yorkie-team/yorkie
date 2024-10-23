@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.3] - 2024-09-23
+
+## Changed
+
+- Introduce VersionVector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1047
+
 ## [0.5.2] - 2024-09-22
 
 ## Changed
