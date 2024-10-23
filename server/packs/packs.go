@@ -129,9 +129,26 @@ func PushPull(
 		return nil, err
 	}
 
-	// 05. update and find min synced ticket for garbage collection.
+	// 05. update and find min synced version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
+	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+		ctx,
+		clientInfo,
+		docRefKey,
+		reqPack.VersionVector,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if respPack.SnapshotLen() == 0 {
+		respPack.VersionVector = minSyncedVersionVector
+	}
+
+	// TODO(hackerwins): This is a previous implementation before the version
+	// vector was introduced. But it is necessary to support the previous
+	// SDKs that do not support the version vector. This code should be removed
+	// after all SDKs are updated.
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
@@ -142,6 +159,7 @@ func PushPull(
 		return nil, err
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
+
 	respPack.ApplyDocInfo(docInfo)
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
@@ -199,7 +217,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedTicket,
+				minSyncedVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
@@ -252,6 +270,7 @@ func BuildInternalDocForServerSeq(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
+		snapshotInfo.VersionVector,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
@@ -275,6 +294,7 @@ func BuildInternalDocForServerSeq(
 		docInfo.Key,
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
+		nil,
 		nil,
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err

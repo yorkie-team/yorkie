@@ -156,12 +156,13 @@ message RemoveDocumentByAdminResponse {}
 message GetSnapshotMetaRequest {
   string project_name = 1;
   string document_key = 2;
-  int64 server_seq = 3  [jstype = JS_STRING];
+  int64 server_seq = 3;
 }
 
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
-  int64 lamport = 2  [jstype = JS_STRING];
+  int64 lamport = 2;
+  VersionVector version_vector = 3;
 }
 
 message SearchDocumentsRequest {
@@ -178,7 +179,7 @@ message SearchDocumentsResponse {
 message ListChangesRequest {
   string project_name = 1;
   string document_key = 2;
-  int64 previous_seq = 3  [jstype = JS_STRING];
+  int64 previous_seq = 3;
   int32  page_size = 4; 
   bool   is_forward = 5;
 }

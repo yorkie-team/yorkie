@@ -427,6 +427,12 @@ components:
             - type: string
             - type: number
           title: server_seq
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangeID
       type: object
     yorkie.v1.ChangePack:
@@ -471,6 +477,12 @@ components:
           format: byte
           title: snapshot
           type: string
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangePack
       type: object
     yorkie.v1.Checkpoint:
@@ -1549,6 +1561,35 @@ components:
           - 13
       title: ValueType
       type: string
+    yorkie.v1.VersionVector:
+      additionalProperties: false
+      description: ""
+      properties:
+        vector:
+          additionalProperties: false
+          description: ""
+          title: vector
+          type: object
+      title: VersionVector
+      type: object
+    yorkie.v1.VersionVector.VectorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: VectorEntry
+      type: object
     yorkie.v1.WatchDocumentRequest:
       additionalProperties: false
       description: ""

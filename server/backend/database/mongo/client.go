@@ -20,6 +20,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -516,7 +517,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		"key":        key,
 	}, bson.M{
 		"$set": bson.M{
-			"status":     database.ClientActivated,
+			StatusKey:    database.ClientActivated,
 			"updated_at": now,
 		},
 	}, options.Update().SetUpsert(true))
@@ -600,7 +601,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfoKey := getClientDocInfoKey(docInfo.ID)
 	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
@@ -608,12 +608,12 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	updater := bson.M{
 		"$max": bson.M{
-			clientDocInfoKey + "server_seq": clientDocInfo.ServerSeq,
-			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
+			clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
+			clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
 		},
 		"$set": bson.M{
-			clientDocInfoKey + StatusKey: clientDocInfo.Status,
-			"updated_at":                 clientInfo.UpdatedAt,
+			clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+			"updated_at":                            clientInfo.UpdatedAt,
 		},
 	}
 
@@ -625,10 +625,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if !attached {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey + "server_seq": 0,
-				clientDocInfoKey + "client_seq": 0,
-				clientDocInfoKey + StatusKey:    clientDocInfo.Status,
-				"updated_at":                    clientInfo.UpdatedAt,
+				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
+				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
+				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
+				"updated_at":                               clientInfo.UpdatedAt,
 			},
 		}
 	}
@@ -661,7 +661,7 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 
 	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
 		"project_id": project.ID,
-		"status":     database.ClientActivated,
+		StatusKey:    database.ClientActivated,
 		"updated_at": bson.M{
 			"$lte": gotime.Now().Add(-clientDeactivateThreshold),
 		},
@@ -879,6 +879,7 @@ func (c *Client) CreateChangeInfos(
 			"actor_id":        cn.ID().ActorID(),
 			"client_seq":      cn.ID().ClientSeq(),
 			"lamport":         cn.ID().Lamport(),
+			"version_vector":  cn.ID().VersionVector(),
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
 			"presence_change": encodedPresence,
@@ -1042,12 +1043,13 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"lamport":    doc.Lamport(),
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
+		"project_id":     docRefKey.ProjectID,
+		"doc_id":         docRefKey.DocID,
+		"server_seq":     doc.Checkpoint().ServerSeq,
+		"lamport":        doc.Lamport(),
+		"version_vector": doc.VersionVector(),
+		"snapshot":       snapshot,
+		"created_at":     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
 	}
@@ -1106,6 +1108,7 @@ func (c *Client) FindClosestSnapshotInfo(
 
 	snapshotInfo := &database.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
+		snapshotInfo.VersionVector = time.NewVersionVector()
 		return snapshotInfo, nil
 	}
 	if result.Err() != nil {
@@ -1154,6 +1157,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	docRefKey types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
+	// 01. update synced seq of the given client and document.
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
 		return nil, err
 	}
@@ -1166,7 +1170,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		{Key: "lamport", Value: 1},
 		{Key: "actor_id", Value: 1},
 	}))
-	if result.Err() == mongo.ErrNoDocuments {
+	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 		return time.InitialTicket, nil
 	}
 	if result.Err() != nil {
@@ -1191,6 +1195,123 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		time.MaxDelimiter,
 		actorID,
 	), nil
+}
+
+// UpdateAndFindMinSyncedVersionVectorAfterPushPull returns min synced version vector
+func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector,
+) (time.VersionVector, error) {
+	var versionVectorInfos []database.VersionVectorInfo
+
+	// 01. Prepare attachedActorIDs including the current client.
+	// If some clients are detached, we should remove them from the min version vector.
+	// For this, we use attachedActorIDs to filter the min version vector.
+	var attachedActorIDs []*time.ActorID
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return nil, err
+	}
+
+	if attached {
+		currentActorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		attachedActorIDs = append(attachedActorIDs, currentActorID)
+	}
+
+	// 02. Find all version vectors of the given document from DB.
+	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
+	}
+
+	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
+		return nil, fmt.Errorf("decode version vectors: %w", err)
+	}
+
+	// 03. Compute min version vector.
+	var minVersionVector time.VersionVector
+
+	// 03-1. Compute min version vector of other clients and collect attachedActorIDs.
+	for _, vvi := range versionVectorInfos {
+		if clientInfo.ID == vvi.ClientID {
+			continue
+		}
+
+		actorID, err := vvi.ClientID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		attachedActorIDs = append(attachedActorIDs, actorID)
+
+		if minVersionVector == nil {
+			minVersionVector = vvi.VersionVector
+			continue
+		}
+
+		minVersionVector = minVersionVector.Min(vvi.VersionVector)
+	}
+	if minVersionVector == nil {
+		minVersionVector = versionVector
+	}
+
+	// 03-2. Compute min version vector with current client's version vector and filter detached clients.
+	minVersionVector = minVersionVector.Min(versionVector)
+	minVersionVector = minVersionVector.Filter(attachedActorIDs)
+
+	// 04. Update current client's version vector. If the client is detached, remove it.
+	// This is only for the current client and does not affect the version vector of other clients.
+	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+		return nil, err
+	}
+
+	return minVersionVector, nil
+}
+
+// UpdateVersionVector updates the given version vector of the given client
+func (c *Client) UpdateVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector,
+) error {
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	if !isAttached {
+		if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		}, options.Delete()); err != nil {
+			return fmt.Errorf("delete version vector: %w", err)
+		}
+		return nil
+	}
+
+	_, err = c.collection(ColVersionVectors).UpdateOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"client_id":  clientInfo.ID,
+	}, bson.M{
+		"$set": bson.M{
+			"version_vector": versionVector,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return fmt.Errorf("update version vector: %w", err)
+	}
+
+	return nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.
@@ -1324,10 +1445,9 @@ func (c *Client) IsDocumentAttached(
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
-	clientDocInfoKey := getClientDocInfoKey(docRefKey.DocID)
 	filter := bson.M{
-		"project_id":                docRefKey.ProjectID,
-		clientDocInfoKey + "status": database.DocumentAttached,
+		"project_id": docRefKey.ProjectID,
+		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
 	}
 
 	if excludeClientID != "" {
@@ -1412,6 +1532,7 @@ func escapeRegex(str string) string {
 	return buf.String()
 }
 
-func getClientDocInfoKey(docID types.ID) string {
-	return fmt.Sprintf("documents.%s.", docID)
+// clientDocInfoKey returns the key for the client document info.
+func clientDocInfoKey(docID types.ID, prefix string) string {
+	return fmt.Sprintf("documents.%s.%s", docID, prefix)
 }

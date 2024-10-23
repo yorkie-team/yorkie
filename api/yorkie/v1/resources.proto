@@ -46,6 +46,7 @@ message ChangePack {
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
+  VersionVector version_vector = 7;
 }
 
 message Change {
@@ -60,6 +61,11 @@ message ChangeID {
   int64 server_seq = 2; 
   int64 lamport = 3;
   bytes actor_id = 4;
+  VersionVector version_vector = 5;
+}
+
+message VersionVector {
+  map<string, int64> vector = 1;
 }
 
 message Operation {

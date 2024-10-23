@@ -35,16 +35,35 @@ import (
 func TestRegistry(t *testing.T) {
 	registry := NewRegistryBuilder().Build()
 
-	id := types.ID(primitive.NewObjectID().Hex())
-	data, err := bson.MarshalWithRegistry(registry, bson.M{
-		"_id": id,
+	t.Run("types.ID test", func(t *testing.T) {
+		id := types.ID(primitive.NewObjectID().Hex())
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"_id": id,
+		})
+		assert.NoError(t, err)
+
+		info := database.ClientInfo{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		assert.Equal(t, id, info.ID)
 	})
-	assert.NoError(t, err)
 
-	info := database.ClientInfo{}
-	assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
-	assert.Equal(t, id, info.ID)
+	t.Run("versionVector test", func(t *testing.T) {
+		vector := time.NewVersionVector()
+		actorID, err := time.ActorIDFromHex(primitive.NewObjectID().Hex())
+		assert.NoError(t, err)
+		vector.Set(actorID, 1)
 
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"version_vector": vector,
+		})
+		assert.NoError(t, err)
+
+		info := struct {
+			VersionVector time.VersionVector `bson:"version_vector"`
+		}{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		assert.Equal(t, vector, info.VersionVector)
+	})
 }
 
 func TestEncoder(t *testing.T) {
