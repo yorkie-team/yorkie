@@ -271,9 +271,9 @@ type Database interface {
 		serverSeq int64,
 	) (*time.Ticket, error)
 
-	// UpdateAndFindMinSyncedVersionVectorAfterPushPull updates the given serverSeq of the given client
+	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
-	UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+	UpdateAndFindMinSyncedVersionVector(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,

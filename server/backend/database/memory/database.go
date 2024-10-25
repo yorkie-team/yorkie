@@ -1312,9 +1312,9 @@ func (d *DB) UpdateVersionVector(
 	return nil
 }
 
-// UpdateAndFindMinSyncedVersionVectorAfterPushPull updates the given serverSeq of the given client
+// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 // and returns the SyncedVersionVector of the document.
-func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+func (d *DB) UpdateAndFindMinSyncedVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1338,7 +1338,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
 	}
 
 	// 02. Find all version vectors of the given document from DB.
-	txn := d.db.Txn(true)
+	txn := d.db.Txn(false)
 	defer txn.Abort()
 	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
 	if err != nil {
