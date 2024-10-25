@@ -1197,8 +1197,8 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// UpdateAndFindMinSyncedVersionVectorAfterPushPull returns min synced version vector
-func (c *Client) UpdateAndFindMinSyncedVersionVectorAfterPushPull(
+// UpdateAndFindMinSyncedVersionVector returns min synced version vector
+func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
