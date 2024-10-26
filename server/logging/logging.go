@@ -107,7 +107,6 @@ func newLogger(name string) Logger {
 
 func encoderConfig() zapcore.EncoderConfig {
 	return zapcore.EncoderConfig{
-		TimeKey:        "T",
 		LevelKey:       "L",
 		NameKey:        "N",
 		CallerKey:      "C",

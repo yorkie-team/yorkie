@@ -55,8 +55,8 @@ const (
 	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
 	DefaultUseDefaultProject          = true
 	DefaultClientDeactivateThreshold  = "24h"
-	DefaultSnapshotThreshold          = 500
-	DefaultSnapshotInterval           = 1000
+	DefaultSnapshotThreshold          = 1000
+	DefaultSnapshotInterval           = 3000
 	DefaultSnapshotWithPurgingChanges = false
 	DefaultSnapshotDisableGC          = false
 
