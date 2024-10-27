@@ -18,62 +18,100 @@ package memory
 
 import (
 	"context"
-	gosync "sync"
-	gotime "time"
 
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// subscriptions is a map of subscriptions.
-type subscriptions struct {
-	internalMap map[string]*sync.Subscription
+// Subscriptions is a map of Subscriptions.
+type Subscriptions struct {
+	docKey      types.DocRefKey
+	internalMap *cmap.Map[string, *sync.Subscription]
 }
 
-func newSubscriptions() *subscriptions {
-	return &subscriptions{
-		internalMap: make(map[string]*sync.Subscription),
+func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
+	return &Subscriptions{
+		docKey:      docKey,
+		internalMap: cmap.New[string, *sync.Subscription](),
 	}
 }
 
-// Add adds the given subscription.
-func (s *subscriptions) Add(sub *sync.Subscription) {
-	s.internalMap[sub.ID()] = sub
+// Set adds the given subscription.
+func (s *Subscriptions) Set(sub *sync.Subscription) {
+	s.internalMap.Set(sub.ID(), sub)
 }
 
-// Map returns the internal map of these subscriptions.
-func (s *subscriptions) Map() map[string]*sync.Subscription {
-	return s.internalMap
+// Values returns the values of these subscriptions.
+func (s *Subscriptions) Values() []*sync.Subscription {
+	return s.internalMap.Values()
+}
+
+// Publish publishes the given event.
+func (s *Subscriptions) Publish(ctx context.Context, event sync.DocEvent) {
+	// TODO(hackerwins): Introduce batch publish to reduce lock contention.
+	// Problem:
+	//   - High lock contention when publishing events frequently.
+	//   - Redundant events being published in short time windows.
+	// Solution:
+	// 	 - Collect events to publish in configurable time window.
+	// 	 - Keep only the latest event for the same event type.
+	// 	 - Run dedicated publish loop in a single goroutine.
+	// 	 - Batch publish collected events when the time window expires.
+	for _, sub := range s.internalMap.Values() {
+		if sub.Subscriber().Compare(event.Publisher) == 0 {
+			continue
+		}
+
+		if logging.Enabled(zap.DebugLevel) {
+			logging.From(ctx).Debugf(
+				`Publish %s(%s,%s) to %s`,
+				event.Type,
+				s.docKey,
+				event.Publisher,
+				sub.Subscriber(),
+			)
+		}
+
+		if ok := sub.Publish(event); !ok {
+			logging.From(ctx).Warnf(
+				`Publish(%s,%s) to %s timeout or closed`,
+				s.docKey,
+				event.Publisher,
+				sub.Subscriber(),
+			)
+		}
+	}
 }
 
 // Delete deletes the subscription of the given id.
-func (s *subscriptions) Delete(id string) {
-	if subscription, ok := s.internalMap[id]; ok {
-		subscription.Close()
-	}
-	delete(s.internalMap, id)
+func (s *Subscriptions) Delete(id string) {
+	s.internalMap.Delete(id, func(sub *sync.Subscription, exists bool) bool {
+		if exists {
+			sub.Close()
+		}
+		return exists
+	})
 }
 
 // Len returns the length of these subscriptions.
-func (s *subscriptions) Len() int {
-	return len(s.internalMap)
+func (s *Subscriptions) Len() int {
+	return s.internalMap.Len()
 }
 
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	subscriptionsMapMu          *gosync.RWMutex
-	subscriptionsMapByDocRefKey map[types.DocRefKey]*subscriptions
+	subscriptionsMap *cmap.Map[types.DocRefKey, *Subscriptions]
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		subscriptionsMapMu:          &gosync.RWMutex{},
-		subscriptionsMapByDocRefKey: make(map[types.DocRefKey]*subscriptions),
+		subscriptionsMap: cmap.New[types.DocRefKey, *Subscriptions](),
 	}
 }
 
@@ -81,29 +119,30 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
-	documentRefKey types.DocRefKey,
+	docKey types.DocRefKey,
 ) (*sync.Subscription, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			documentRefKey,
+			docKey,
 			subscriber,
 		)
 	}
 
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
+	subs := m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
+		if !exists {
+			return newSubscriptions(docKey)
+		}
+		return subs
+	})
 
 	sub := sync.NewSubscription(subscriber)
-	if _, ok := m.subscriptionsMapByDocRefKey[documentRefKey]; !ok {
-		m.subscriptionsMapByDocRefKey[documentRefKey] = newSubscriptions()
-	}
-	m.subscriptionsMapByDocRefKey[documentRefKey].Add(sub)
+	subs.Set(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			documentRefKey,
+			docKey,
 			subscriber,
 		)
 	}
@@ -113,34 +152,33 @@ func (m *PubSub) Subscribe(
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
-	documentRefKey types.DocRefKey,
+	docKey types.DocRefKey,
 	sub *sync.Subscription,
 ) {
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
-
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			documentRefKey,
+			docKey,
 			sub.Subscriber(),
 		)
 	}
 
 	sub.Close()
 
-	if subs, ok := m.subscriptionsMapByDocRefKey[documentRefKey]; ok {
+	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
 		subs.Delete(sub.ID())
 
 		if subs.Len() == 0 {
-			delete(m.subscriptionsMapByDocRefKey, documentRefKey)
+			m.subscriptionsMap.Delete(docKey, func(subs *Subscriptions, exists bool) bool {
+				return exists
+			})
 		}
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			documentRefKey,
+			docKey,
 			sub.Subscriber(),
 		)
 	}
@@ -152,60 +190,36 @@ func (m *PubSub) Publish(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.subscriptionsMapMu.RLock()
-	defer m.subscriptionsMapMu.RUnlock()
+	docKey := event.DocumentRefKey
 
-	documentRefKey := event.DocumentRefKey
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) Start`,
-			documentRefKey,
-			publisherID)
+			docKey,
+			publisherID,
+		)
 	}
 
-	if subs, ok := m.subscriptionsMapByDocRefKey[documentRefKey]; ok {
-		for _, sub := range subs.Map() {
-			if sub.Subscriber().Compare(publisherID) == 0 {
-				continue
-			}
-
-			if logging.Enabled(zap.DebugLevel) {
-				logging.From(ctx).Debugf(
-					`Publish %s(%s,%s) to %s`,
-					event.Type,
-					documentRefKey,
-					publisherID,
-					sub.Subscriber(),
-				)
-			}
-
-			// NOTE: When a subscription is being closed by a subscriber,
-			// the subscriber may not receive messages.
-			select {
-			case sub.Events() <- event:
-			case <-gotime.After(100 * gotime.Millisecond):
-				logging.From(ctx).Warnf(
-					`Publish(%s,%s) to %s timeout`,
-					documentRefKey,
-					publisherID,
-					sub.Subscriber(),
-				)
-			}
-		}
+	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
+		subs.Publish(ctx, event)
 	}
+
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) End`,
-			documentRefKey,
-			publisherID)
+			docKey,
+			publisherID,
+		)
 	}
 }
 
 // ClientIDs returns the clients of the given document.
-func (m *PubSub) ClientIDs(documentRefKey types.DocRefKey) []*time.ActorID {
-	m.subscriptionsMapMu.RLock()
-	defer m.subscriptionsMapMu.RUnlock()
+func (m *PubSub) ClientIDs(docKey types.DocRefKey) []*time.ActorID {
+	subs, ok := m.subscriptionsMap.Get(docKey)
+	if !ok {
+		return nil
+	}
 
 	var ids []*time.ActorID
-	for _, sub := range m.subscriptionsMapByDocRefKey[documentRefKey].Map() {
+	for _, sub := range subs.Values() {
 		ids = append(ids, sub.Subscriber())
 	}
 	return ids
