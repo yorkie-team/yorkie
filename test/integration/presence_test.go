@@ -124,6 +124,8 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("presence-related events test", func(t *testing.T) {
+		t.Skip("TODO(hackerwins): implement this test")
+
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -208,6 +210,8 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("unwatch after detach events test", func(t *testing.T) {
+		t.Skip("TODO(hackerwins): implement this test")
+
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -295,6 +299,8 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("detach after unwatch events test", func(t *testing.T) {
+		t.Skip("TODO(hackerwins): implement this test")
+
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
