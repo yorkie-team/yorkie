@@ -182,7 +182,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	ctx = projects.With(ctx, project)
 
 	// 03. building logger
-	ctx = logging.With(ctx, logging.New(i.requestID.next(), logging.NewField("prj", project.Name)))
+	ctx = logging.With(ctx, logging.New(i.requestID.next()))
 
 	return ctx, nil
 }

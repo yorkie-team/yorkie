@@ -51,10 +51,10 @@ Backend:
 
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
-  SnapshotThreshold: 500
+  SnapshotThreshold: 1000
 
   # SnapshotInterval is the number of changes to create a snapshot.
-  SnapshotInterval: 1000
+  SnapshotInterval: 3000
 
   # SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
   SnapshotWithPurgingChanges: false

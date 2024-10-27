@@ -17,6 +17,9 @@
 package sync
 
 import (
+	"sync"
+	gotime "time"
+
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -27,6 +30,7 @@ import (
 type Subscription struct {
 	id         string
 	subscriber *time.ActorID
+	mu         sync.Mutex
 	closed     bool
 	events     chan DocEvent
 }
@@ -37,6 +41,7 @@ func NewSubscription(subscriber *time.ActorID) *Subscription {
 		id:         xid.New().String(),
 		subscriber: subscriber,
 		events:     make(chan DocEvent, 1),
+		closed:     false,
 	}
 }
 
@@ -65,10 +70,30 @@ func (s *Subscription) Subscriber() *time.ActorID {
 
 // Close closes all resources of this Subscription.
 func (s *Subscription) Close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.closed {
+		s.closed = true
+		close(s.events)
+	}
+}
+
+// Publish publishes the given event to the subscriber.
+func (s *Subscription) Publish(event DocEvent) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.closed {
-		return
+		return false
 	}
 
-	s.closed = true
-	close(s.events)
+	// NOTE: When a subscription is being closed by a subscriber,
+	// the subscriber may not receive messages.
+	select {
+	case s.Events() <- event:
+		return true
+	case <-gotime.After(100 * gotime.Millisecond):
+		return false
+	}
 }

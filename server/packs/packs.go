@@ -149,12 +149,12 @@ func PushPull(
 		pullLog = units.HumanSize(float64(respPack.SnapshotLen()))
 	}
 	logging.From(ctx).Infof(
-		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, min: %s",
+		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
 		docInfo.Key,
 		clientInfo.Key,
 		len(pushedChanges),
 		pullLog,
-		minSyncedTicket.ToTestString(),
+		gotime.Since(start),
 	)
 
 	// 06. publish document change event then store snapshot asynchronously.
