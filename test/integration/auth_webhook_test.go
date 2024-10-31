@@ -174,7 +174,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, err)
 
 		doc := document.New(helper.TestDocKey(t))
-		err = cli.Attach(ctx, doc)
+		err = cli.Attach(ctx, doc, client.WithRealtimeSync())
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 		_, _, err = cli.Subscribe(doc)

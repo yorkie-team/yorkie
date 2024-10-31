@@ -94,7 +94,7 @@ type AttachOptions struct {
 	// Presence is the presence of the client.
 	Presence    innerpresence.Presence
 	InitialRoot map[string]any
-	IsManual    bool
+	IsRealtime  bool
 }
 
 // WithPresence configures the presence of the client.
@@ -111,9 +111,9 @@ func WithInitialRoot(root map[string]any) AttachOption {
 	}
 }
 
-// WithManualSync configures the manual sync of the client.
-func WithManualSync() AttachOption {
-	return func(o *AttachOptions) { o.IsManual = true }
+// WithRealtimeSync configures the manual sync of the client.
+func WithRealtimeSync() AttachOption {
+	return func(o *AttachOptions) { o.IsRealtime = true }
 }
 
 // DetachOption configures DetachOptions.

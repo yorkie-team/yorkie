@@ -128,9 +128,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		assert.NoError(t, c1.Sync(ctx))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -216,9 +216,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Watch the first client's document.
@@ -276,9 +276,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Watch the first client's document.
@@ -337,9 +337,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		assert.NoError(t, c1.Sync(ctx))
 
 		// 02. Watch the first client's document.
@@ -426,9 +426,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		assert.NoError(t, c1.Sync(ctx))
 
 		// 02. Watch the first client's document.
@@ -516,9 +516,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Watch the first client's document.
@@ -582,9 +582,9 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 
 		// 02. Watch the first client's document.
 		var responsePairs []watchResponsePair
@@ -643,7 +643,7 @@ func TestPresence(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
 		d3 := document.New(helper.TestDocKey(t) + "2")
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
 		// 02. Watch the first client's document.
@@ -686,9 +686,9 @@ func TestPresence(t *testing.T) {
 
 		// 03. The second client attaches a document with the same key as the first client's document
 		// and another document with a different key.
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-		assert.NoError(t, c2.Attach(ctx, d3))
+		assert.NoError(t, c2.Attach(ctx, d3, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
 
 		// 04. The second client watches the documents attached by itself.
