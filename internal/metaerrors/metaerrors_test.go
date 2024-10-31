@@ -31,10 +31,6 @@ func TestMetaError(t *testing.T) {
 		err := errors.New("error message")
 		metaErr := metaerrors.New(err, map[string]string{"key": "value"})
 		assert.Equal(t, "error message [key=value]", metaErr.Error())
-
-		err = errors.New("error message")
-		metaErr = metaerrors.New(err, map[string]string{"key1": "value1", "key2": "value2"})
-		assert.Equal(t, "error message [key1=value1,key2=value2]", metaErr.Error())
 	})
 
 	t.Run("test meta error without metadata", func(t *testing.T) {

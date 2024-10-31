@@ -287,7 +287,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 		err = cli.Activate(ctx)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnexpectedStatusCode), converter.ErrorCodeOf(err))
 	})
 
@@ -327,7 +327,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 		err = cli.Activate(ctx)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 		assert.Equal(t, connecthelper.CodeOf(auth.ErrUnexpectedResponse), converter.ErrorCodeOf(err))
 	})
 
@@ -356,7 +356,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 
 		err = cli.Activate(ctx)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 		assert.Equal(t, connecthelper.CodeOf(auth.ErrWebhookTimeout), converter.ErrorCodeOf(err))
 	})
 

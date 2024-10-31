@@ -34,6 +34,9 @@ import (
 )
 
 var (
+	// ErrUnauthenticated is returned when the authentication is failed.
+	ErrUnauthenticated = errors.New("unauthenticated")
+
 	// ErrPermissionDenied is returned when the given user is not allowed for the access.
 	ErrPermissionDenied = errors.New("method is not allowed for this user")
 
@@ -45,9 +48,6 @@ var (
 
 	// ErrWebhookTimeout is returned when the webhook does not respond in time.
 	ErrWebhookTimeout = errors.New("webhook timeout")
-
-	// ErrUnauthenticated is returned when the request lacks valid authentication credentials.
-	ErrUnauthenticated = errors.New("request lacks valid authentication credentials")
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.

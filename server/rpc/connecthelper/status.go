@@ -79,11 +79,13 @@ var errorToConnectCode = map[error]connect.Code{
 	converter.ErrUnsupportedCounterType: connect.CodeUnimplemented,
 
 	// Unauthenticated means the request does not have valid authentication
-	auth.ErrUnexpectedStatusCode:   connect.CodeUnauthenticated,
-	auth.ErrUnexpectedResponse:     connect.CodeUnauthenticated,
-	auth.ErrWebhookTimeout:         connect.CodeUnauthenticated,
 	auth.ErrUnauthenticated:        connect.CodeUnauthenticated,
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
+
+	// Internal means an internal error occurred.
+	auth.ErrUnexpectedStatusCode: connect.CodeInternal,
+	auth.ErrUnexpectedResponse:   connect.CodeInternal,
+	auth.ErrWebhookTimeout:       connect.CodeInternal,
 
 	// PermissionDenied means the request does not have permission for the operation.
 	auth.ErrPermissionDenied: connect.CodePermissionDenied,
