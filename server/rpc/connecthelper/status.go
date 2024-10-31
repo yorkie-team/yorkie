@@ -26,7 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/internal/richerror"
+	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -186,10 +186,10 @@ func errorToConnectError(err error) (*connect.Error, bool) {
 	return connectErr, true
 }
 
-// richErrorToConnectError returns connect.Error from the given rich error.
-func richErrorToConnectError(err error) (*connect.Error, bool) {
-	var richError *richerror.RichError
-	if !errors.As(err, &richError) {
+// metaErrorToConnectError returns connect.Error from the given rich error.
+func metaErrorToConnectError(err error) (*connect.Error, bool) {
+	var metaErr *metaerrors.MetaError
+	if !errors.As(err, &metaErr) {
 		return nil, false
 	}
 
@@ -203,17 +203,17 @@ func richErrorToConnectError(err error) (*connect.Error, bool) {
 		}
 	}()
 
-	connectCode, ok = errorToConnectCode[richError.Err]
+	connectCode, ok = errorToConnectCode[metaErr.Err]
 	if !ok {
 		return nil, false
 	}
 
 	connectErr := connect.NewError(connectCode, err)
-	if code, ok := errorToCode[richError.Err]; ok {
+	if code, ok := errorToCode[metaErr.Err]; ok {
 		errorInfo := &errdetails.ErrorInfo{
 			Metadata: map[string]string{"code": code},
 		}
-		for key, value := range richError.Metadata {
+		for key, value := range metaErr.Metadata {
 			errorInfo.Metadata[key] = value
 		}
 		if detail, detailErr := connect.NewErrorDetail(errorInfo); detailErr == nil {
@@ -270,7 +270,7 @@ func ToStatusError(err error) error {
 		return nil
 	}
 
-	if err, ok := richErrorToConnectError(err); ok {
+	if err, ok := metaErrorToConnectError(err); ok {
 		return err
 	}
 

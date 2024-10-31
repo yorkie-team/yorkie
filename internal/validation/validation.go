@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package validation provides the validation functions.
+// Package validation provides the validation functions for form and field.
 package validation
 
 import (

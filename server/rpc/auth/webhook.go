@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/internal/richerror"
+	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -109,11 +109,10 @@ func verifyAccess(
 			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Message, ErrPermissionDenied)
 		}
 		if authResp.Code == types.CodeUnauthenticated {
-			richError := &richerror.RichError{
-				Err:      ErrUnauthenticated,
-				Metadata: map[string]string{"message": authResp.Message},
-			}
-			return resp.StatusCode, richError
+			return resp.StatusCode, metaerrors.New(
+				ErrUnauthenticated,
+				map[string]string{"message": authResp.Message},
+			)
 		}
 
 		return resp.StatusCode, fmt.Errorf("%d: %w", authResp.Code, ErrUnexpectedResponse)
