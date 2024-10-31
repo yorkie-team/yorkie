@@ -1012,6 +1012,28 @@ func (d *DB) PurgeStaleChanges(
 	return nil
 }
 
+// FindChangeInfoByServerSeq returns the change by the given server sequence.
+func (d *DB) FindChangeInfoByServerSeq(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) (*database.ChangeInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
+		docRefKey.DocID.String(),
+		serverSeq,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find snapshot by serverSeq: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", docRefKey, database.ErrChangeNotFound)
+	}
+
+	return raw.(*database.ChangeInfo).DeepCopy(), nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,

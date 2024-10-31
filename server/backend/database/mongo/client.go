@@ -977,6 +977,33 @@ func (c *Client) PurgeStaleChanges(
 	return nil
 }
 
+// FindChangeInfoByServerSeq returns the change by the given server sequence.
+func (c *Client) FindChangeInfoByServerSeq(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) (*database.ChangeInfo, error) {
+	result := c.collection(ColChanges).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"server_seq": serverSeq,
+	})
+
+	changeInfo := &database.ChangeInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return changeInfo, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find change: %w", result.Err())
+	}
+
+	if err := result.Decode(changeInfo); err != nil {
+		return nil, fmt.Errorf("decode change: %w", err)
+	}
+
+	return changeInfo, nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,

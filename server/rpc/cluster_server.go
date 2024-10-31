@@ -94,9 +94,14 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	// 02. Create changePack with presence clear change
 	cp := clientInfo.Checkpoint(summary.ID)
+	latestChange, err := s.backend.DB.FindChangeInfoByServerSeq(ctx, docRefKey, cp.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, 0, actorID, nil).Next(),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChange.Lamport, actorID, latestChange.VersionVector).Next(),
 		"",
 		nil,
 	)
@@ -106,22 +111,7 @@ func (s *clusterServer) DetachDocument(
 	changes := []*change.Change{changeCtx.ToChange()}
 	pack := change.NewPack(docInfo.Key, cp, changes, nil, nil)
 
-	// TODO(hackerwins): BuildDocForCheckpoint is expensive because it reads the entire document.
-	// We need to optimize this by creating a ChangePack directly.
-	// 01. Create ChangePack with clear presence.
-	//doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(summary.ID), actorID)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-	//	p.Clear()
-	//	return nil
-	//}); err != nil {
-	//	return nil, err
-	//}
-
-	// 02. PushPull with the created ChangePack.
+	// 03. PushPull with the created ChangePack.
 	if _, err := packs.PushPull(
 		ctx,
 		s.backend,
