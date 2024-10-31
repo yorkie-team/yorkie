@@ -224,9 +224,9 @@ func richErrorToConnectError(err error) (*connect.Error, bool) {
 	return connectErr, true
 }
 
-// structErrorToConnectError returns connect.Error from the given struct error.
-func structErrorToConnectError(err error) (*connect.Error, bool) {
-	var invalidFieldsError *validation.StructError
+// formErrorToConnectError returns connect.Error from the given form error.
+func formErrorToConnectError(err error) (*connect.Error, bool) {
+	var invalidFieldsError *validation.FormError
 	if !errors.As(err, &invalidFieldsError) {
 		return nil, false
 	}
@@ -244,7 +244,7 @@ func structErrorToConnectError(err error) (*connect.Error, bool) {
 }
 
 func badRequestFromError(err error) (*errdetails.BadRequest, bool) {
-	var invalidFieldsError *validation.StructError
+	var invalidFieldsError *validation.FormError
 	if !errors.As(err, &invalidFieldsError) {
 		return nil, false
 	}
@@ -278,7 +278,7 @@ func ToStatusError(err error) error {
 		return err
 	}
 
-	if err, ok := structErrorToConnectError(err); ok {
+	if err, ok := formErrorToConnectError(err); ok {
 		return err
 	}
 

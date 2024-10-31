@@ -119,13 +119,13 @@ func (e Violation) Error() string {
 	return e.Err.Error()
 }
 
-// StructError is the error returned by the validation of struct.
-type StructError struct {
+// FormError represents the error of the form validation.
+type FormError struct {
 	Violations []Violation
 }
 
 // Error returns the error message.
-func (s StructError) Error() string {
+func (s FormError) Error() string {
 	sb := strings.Builder{}
 
 	for _, v := range s.Violations {
@@ -223,16 +223,16 @@ func Validate(v string, tagOrRules []interface{}) error {
 // ValidateStruct validates the struct
 func ValidateStruct(s interface{}) error {
 	if err := defaultValidator.Struct(s); err != nil {
-		structError := &StructError{}
+		formErr := &FormError{}
 		for _, e := range err.(validator.ValidationErrors) {
-			structError.Violations = append(structError.Violations, Violation{
+			formErr.Violations = append(formErr.Violations, Violation{
 				Tag:         e.Tag(),
 				Field:       e.StructField(),
 				Err:         e,
 				Description: e.Translate(trans),
 			})
 		}
-		return structError
+		return formErr
 	}
 
 	return nil
