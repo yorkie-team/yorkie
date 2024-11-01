@@ -26,6 +26,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+const (
+	// publishTimeout is the timeout for publishing an event.
+	publishTimeout = 100 * gotime.Millisecond
+)
+
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
@@ -88,12 +93,12 @@ func (s *Subscription) Publish(event DocEvent) bool {
 		return false
 	}
 
-	// NOTE: When a subscription is being closed by a subscriber,
+	// NOTE(hackerwins): When a subscription is being closed by a subscriber,
 	// the subscriber may not receive messages.
 	select {
 	case s.Events() <- event:
 		return true
-	case <-gotime.After(100 * gotime.Millisecond):
+	case <-gotime.After(publishTimeout):
 		return false
 	}
 }

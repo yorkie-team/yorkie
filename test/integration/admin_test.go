@@ -86,7 +86,7 @@ func TestAdmin(t *testing.T) {
 
 		// 01. c1 attaches and watches d1.
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		rch, cancel, err := c1.Subscribe(d1)

@@ -18,6 +18,7 @@ package memory
 
 import (
 	"context"
+	gotime "time"
 
 	"go.uber.org/zap"
 
@@ -32,13 +33,16 @@ import (
 type Subscriptions struct {
 	docKey      types.DocRefKey
 	internalMap *cmap.Map[string, *sync.Subscription]
+	publisher   *BatchPublisher
 }
 
 func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
-	return &Subscriptions{
+	s := &Subscriptions{
 		docKey:      docKey,
 		internalMap: cmap.New[string, *sync.Subscription](),
 	}
+	s.publisher = NewBatchPublisher(s, 100*gotime.Millisecond)
+	return s
 }
 
 // Set adds the given subscription.
@@ -52,40 +56,8 @@ func (s *Subscriptions) Values() []*sync.Subscription {
 }
 
 // Publish publishes the given event.
-func (s *Subscriptions) Publish(ctx context.Context, event sync.DocEvent) {
-	// TODO(hackerwins): Introduce batch publish to reduce lock contention.
-	// Problem:
-	//   - High lock contention when publishing events frequently.
-	//   - Redundant events being published in short time windows.
-	// Solution:
-	// 	 - Collect events to publish in configurable time window.
-	// 	 - Keep only the latest event for the same event type.
-	// 	 - Run dedicated publish loop in a single goroutine.
-	// 	 - Batch publish collected events when the time window expires.
-	for _, sub := range s.internalMap.Values() {
-		if sub.Subscriber().Compare(event.Publisher) == 0 {
-			continue
-		}
-
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(
-				`Publish %s(%s,%s) to %s`,
-				event.Type,
-				s.docKey,
-				event.Publisher,
-				sub.Subscriber(),
-			)
-		}
-
-		if ok := sub.Publish(event); !ok {
-			logging.From(ctx).Warnf(
-				`Publish(%s,%s) to %s timeout or closed`,
-				s.docKey,
-				event.Publisher,
-				sub.Subscriber(),
-			)
-		}
-	}
+func (s *Subscriptions) Publish(event sync.DocEvent) {
+	s.publisher.Publish(event)
 }
 
 // Delete deletes the subscription of the given id.
@@ -101,6 +73,11 @@ func (s *Subscriptions) Delete(id string) {
 // Len returns the length of these subscriptions.
 func (s *Subscriptions) Len() int {
 	return s.internalMap.Len()
+}
+
+// Close closes the subscriptions.
+func (s *Subscriptions) Close() {
+	s.publisher.Close()
 }
 
 // PubSub is the memory implementation of PubSub, used for single server.
@@ -170,6 +147,7 @@ func (m *PubSub) Unsubscribe(
 
 		if subs.Len() == 0 {
 			m.subscriptionsMap.Delete(docKey, func(subs *Subscriptions, exists bool) bool {
+				subs.Close()
 				return exists
 			})
 		}
@@ -200,7 +178,7 @@ func (m *PubSub) Publish(
 	}
 
 	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
-		subs.Publish(ctx, event)
+		subs.Publish(event)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
