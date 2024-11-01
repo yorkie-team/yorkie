@@ -70,8 +70,8 @@ func verifyAccess(
 	cacheKey := string(reqBody)
 	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
 		resp := entry
-		if resp.Code != types.CodeOK {
-			return fmt.Errorf("%s: %w", resp.Message, ErrPermissionDenied)
+		if !resp.Allowed {
+			return fmt.Errorf("%s: %w", resp.Reason, ErrPermissionDenied)
 		}
 		return nil
 	}
@@ -93,7 +93,9 @@ func verifyAccess(
 			}
 		}()
 
-		if http.StatusOK != resp.StatusCode {
+		if resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusUnauthorized &&
+			resp.StatusCode != http.StatusForbidden {
 			return resp.StatusCode, ErrUnexpectedStatusCode
 		}
 
@@ -102,20 +104,20 @@ func verifyAccess(
 			return resp.StatusCode, err
 		}
 
-		if authResp.Code == types.CodeOK {
+		if resp.StatusCode == http.StatusOK && authResp.Allowed {
 			return resp.StatusCode, nil
 		}
-		if authResp.Code == types.CodePermissionDenied {
-			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Message, ErrPermissionDenied)
+		if resp.StatusCode == http.StatusForbidden && !authResp.Allowed {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrPermissionDenied)
 		}
-		if authResp.Code == types.CodeUnauthenticated {
+		if resp.StatusCode == http.StatusUnauthorized && !authResp.Allowed {
 			return resp.StatusCode, metaerrors.New(
 				ErrUnauthenticated,
-				map[string]string{"message": authResp.Message},
+				map[string]string{"reason": authResp.Reason},
 			)
 		}
 
-		return resp.StatusCode, fmt.Errorf("%d: %w", authResp.Code, ErrUnexpectedResponse)
+		return resp.StatusCode, fmt.Errorf("%d: %w", resp.StatusCode, ErrUnexpectedResponse)
 	}); err != nil {
 		if errors.Is(err, ErrPermissionDenied) {
 			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())

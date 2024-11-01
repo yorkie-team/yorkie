@@ -50,15 +50,19 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 
 		var res types.AuthWebhookResponse
 		if req.Token == token {
-			res.Code = types.CodeOK
+			w.WriteHeader(http.StatusOK) // 200
+			res.Allowed = true
 		} else if req.Token == "not allowed token" {
-			res.Code = types.CodePermissionDenied
+			w.WriteHeader(http.StatusForbidden) // 403
+			res.Allowed = false
 		} else if req.Token == "" {
-			res.Code = types.CodeUnauthenticated
-			res.Message = "no token"
+			w.WriteHeader(http.StatusUnauthorized) // 401
+			res.Allowed = false
+			res.Reason = "no token"
 		} else {
-			res.Code = types.CodeUnauthenticated
-			res.Message = "invalid token"
+			w.WriteHeader(http.StatusUnauthorized) // 401
+			res.Allowed = false
+			res.Reason = "invalid token"
 		}
 
 		_, err = res.Write(w)
@@ -73,7 +77,7 @@ func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server
 		assert.NoError(t, err)
 
 		var res types.AuthWebhookResponse
-		res.Code = types.CodeOK
+		res.Allowed = true
 
 		if requestCount < recoveryCnt {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -150,7 +154,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "no token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "no token"}, converter.ErrorMetadataOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -162,7 +166,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "message": "invalid token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "invalid token"}, converter.ErrorMetadataOf(err))
 	})
 
 	t.Run("permission denied response test", func(t *testing.T) {
@@ -256,7 +260,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Code = types.CodeOK
+			res.Allowed = true
 
 			// unexpected status code
 			w.WriteHeader(http.StatusBadRequest)
@@ -298,8 +302,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			// unexpected response code
-			res.Code = 555
+			// mismatched response
+			res.Allowed = false
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -402,7 +406,7 @@ func TestAuthWebhookCache(t *testing.T) {
 			assert.NoError(t, err)
 
 			var res types.AuthWebhookResponse
-			res.Code = types.CodeOK
+			res.Allowed = true
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -479,8 +483,9 @@ func TestAuthWebhookCache(t *testing.T) {
 			_, err := types.NewAuthWebhookRequest(r.Body)
 			assert.NoError(t, err)
 
+			w.WriteHeader(http.StatusForbidden)
 			var res types.AuthWebhookResponse
-			res.Code = types.CodePermissionDenied
+			res.Allowed = false
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -541,8 +546,9 @@ func TestAuthWebhookCache(t *testing.T) {
 			_, err := types.NewAuthWebhookRequest(r.Body)
 			assert.NoError(t, err)
 
+			w.WriteHeader(http.StatusUnauthorized)
 			var res types.AuthWebhookResponse
-			res.Code = types.CodeUnauthenticated
+			res.Allowed = false
 
 			_, err = res.Write(w)
 			assert.NoError(t, err)
@@ -598,7 +604,7 @@ func TestAuthWebhookCache(t *testing.T) {
 }
 
 func TestAuthWebhookNewToken(t *testing.T) {
-	t.Run("reactivate with new token when receiving invalid token test", func(t *testing.T) {
+	t.Run("set new token when receiving invalid token test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, validToken := newAuthServer(t)
 
@@ -633,7 +639,7 @@ func TestAuthWebhookNewToken(t *testing.T) {
 		// reactivate with new token
 		if err != nil {
 			metadata := converter.ErrorMetadataOf(err)
-			if metadata["message"] == "invalid token" {
+			if metadata["reason"] == "invalid token" {
 				err = cli.SetToken(validToken)
 				assert.NoError(t, err)
 				err = cli.Activate(ctx)
