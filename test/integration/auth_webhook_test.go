@@ -596,3 +596,49 @@ func TestAuthWebhookCache(t *testing.T) {
 		assert.Equal(t, 6, reqCnt)
 	})
 }
+
+func TestAuthWebhookNewToken(t *testing.T) {
+	t.Run("reactivate with new token when receiving invalid token test", func(t *testing.T) {
+		ctx := context.Background()
+		authServer, validToken := newAuthServer(t)
+
+		svr, err := server.New(helper.TestConfig())
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+		defer func() { adminCli.Close() }()
+		project, err := adminCli.CreateProject(context.Background(), "new-auth-token")
+		assert.NoError(t, err)
+		project.AuthWebhookURL = authServer.URL
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithToken("invalid"),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		// reactivate with new token
+		if err != nil {
+			metadata := converter.ErrorMetadataOf(err)
+			if metadata["message"] == "invalid token" {
+				err = cli.SetToken(validToken)
+				assert.NoError(t, err)
+				err = cli.Activate(ctx)
+				assert.NoError(t, err)
+			}
+		}
+	})
+}

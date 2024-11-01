@@ -183,6 +183,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
+	cli.options.RPCAddress = rpcAddr
 	if err := cli.Dial(rpcAddr); err != nil {
 		return nil, err
 	}
@@ -203,6 +204,21 @@ func (c *Client) Dial(rpcAddr string) error {
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
+}
+
+// SetToken updates the client's token for reauthentication purposes.
+func (c *Client) SetToken(token string) error {
+	newClientOptions := []connect.ClientOption{
+		connect.WithInterceptors(NewAuthInterceptor(c.options.APIKey, token)),
+	}
+	if c.options.MaxCallRecvMsgSize != 0 {
+		newClientOptions = append(newClientOptions,
+			connect.WithReadMaxBytes(c.options.MaxCallRecvMsgSize))
+	}
+	c.clientOptions = newClientOptions
+
+	c.conn.CloseIdleConnections()
+	return c.Dial(c.options.RPCAddress)
 }
 
 // Close closes all resources of this client.

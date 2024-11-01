@@ -41,6 +41,9 @@ type Options struct {
 	// CertFile is the path to the certificate file.
 	CertFile string
 
+	// RPCAddress is the address of the RPC server.
+	RPCAddress string
+
 	// ServerNameOverride is the server name override.
 	ServerNameOverride string
 
