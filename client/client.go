@@ -99,6 +99,7 @@ type Client struct {
 	client        v1connect.YorkieServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
+	interceptor   *AuthInterceptor
 	logger        *zap.Logger
 
 	id          *time.ActorID
@@ -149,8 +150,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	var clientOptions []connect.ClientOption
-
-	clientOptions = append(clientOptions, connect.WithInterceptors(NewAuthInterceptor(options.APIKey, options.Token)))
+	interceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	clientOptions = append(clientOptions, connect.WithInterceptors(interceptor))
 	if options.MaxCallRecvMsgSize != 0 {
 		clientOptions = append(clientOptions, connect.WithReadMaxBytes(options.MaxCallRecvMsgSize))
 	}
@@ -169,6 +170,7 @@ func New(opts ...Option) (*Client, error) {
 		clientOptions: clientOptions,
 		options:       options,
 		logger:        logger,
+		interceptor:   interceptor,
 
 		key:         k,
 		status:      deactivated,
@@ -203,6 +205,11 @@ func (c *Client) Dial(rpcAddr string) error {
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
+}
+
+// SetToken sets the given token of this client.
+func (c *Client) SetToken(token string) {
+	c.interceptor.SetToken(token)
 }
 
 // Close closes all resources of this client.

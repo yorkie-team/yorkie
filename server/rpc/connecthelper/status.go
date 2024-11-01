@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -78,10 +79,16 @@ var errorToConnectCode = map[error]connect.Code{
 	converter.ErrUnsupportedCounterType: connect.CodeUnimplemented,
 
 	// Unauthenticated means the request does not have valid authentication
-	auth.ErrNotAllowed:             connect.CodeUnauthenticated,
-	auth.ErrUnexpectedStatusCode:   connect.CodeUnauthenticated,
-	auth.ErrWebhookTimeout:         connect.CodeUnauthenticated,
+	auth.ErrUnauthenticated:        connect.CodeUnauthenticated,
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
+
+	// Internal means an internal error occurred.
+	auth.ErrUnexpectedStatusCode: connect.CodeInternal,
+	auth.ErrUnexpectedResponse:   connect.CodeInternal,
+	auth.ErrWebhookTimeout:       connect.CodeInternal,
+
+	// PermissionDenied means the request does not have permission for the operation.
+	auth.ErrPermissionDenied: connect.CodePermissionDenied,
 
 	// Canceled means the operation was canceled (typically by the caller).
 	context.Canceled: connect.CodeCanceled,
@@ -124,7 +131,9 @@ var errorToCode = map[error]string{
 	converter.ErrUnsupportedValueType:   "ErrUnsupportedValueType",
 	converter.ErrUnsupportedCounterType: "ErrUnsupportedCounterType",
 
-	auth.ErrNotAllowed:             "ErrNotAllowed",
+	auth.ErrPermissionDenied:       "ErrPermissionDenied",
+	auth.ErrUnauthenticated:        "ErrUnauthenticated",
+	auth.ErrUnexpectedResponse:     "ErrUnexpectedResponse",
 	auth.ErrUnexpectedStatusCode:   "ErrUnexpectedStatusCode",
 	auth.ErrWebhookTimeout:         "ErrWebhookTimeout",
 	database.ErrMismatchedPassword: "ErrMismatchedPassword",
@@ -179,9 +188,47 @@ func errorToConnectError(err error) (*connect.Error, bool) {
 	return connectErr, true
 }
 
-// structErrorToConnectError returns connect.Error from the given struct error.
-func structErrorToConnectError(err error) (*connect.Error, bool) {
-	var invalidFieldsError *validation.StructError
+// metaErrorToConnectError returns connect.Error from the given rich error.
+func metaErrorToConnectError(err error) (*connect.Error, bool) {
+	var metaErr *metaerrors.MetaError
+	if !errors.As(err, &metaErr) {
+		return nil, false
+	}
+
+	// NOTE(hackerwins): This prevents panic when the cause is an unhashable
+	// error.
+	var connectCode connect.Code
+	var ok bool
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+
+	connectCode, ok = errorToConnectCode[metaErr.Err]
+	if !ok {
+		return nil, false
+	}
+
+	connectErr := connect.NewError(connectCode, err)
+	if code, ok := errorToCode[metaErr.Err]; ok {
+		errorInfo := &errdetails.ErrorInfo{
+			Metadata: map[string]string{"code": code},
+		}
+		for key, value := range metaErr.Metadata {
+			errorInfo.Metadata[key] = value
+		}
+		if detail, detailErr := connect.NewErrorDetail(errorInfo); detailErr == nil {
+			connectErr.AddDetail(detail)
+		}
+	}
+
+	return connectErr, true
+}
+
+// formErrorToConnectError returns connect.Error from the given form error.
+func formErrorToConnectError(err error) (*connect.Error, bool) {
+	var invalidFieldsError *validation.FormError
 	if !errors.As(err, &invalidFieldsError) {
 		return nil, false
 	}
@@ -199,7 +246,7 @@ func structErrorToConnectError(err error) (*connect.Error, bool) {
 }
 
 func badRequestFromError(err error) (*errdetails.BadRequest, bool) {
-	var invalidFieldsError *validation.StructError
+	var invalidFieldsError *validation.FormError
 	if !errors.As(err, &invalidFieldsError) {
 		return nil, false
 	}
@@ -225,11 +272,15 @@ func ToStatusError(err error) error {
 		return nil
 	}
 
+	if err, ok := metaErrorToConnectError(err); ok {
+		return err
+	}
+
 	if err, ok := errorToConnectError(err); ok {
 		return err
 	}
 
-	if err, ok := structErrorToConnectError(err); ok {
+	if err, ok := formErrorToConnectError(err); ok {
 		return err
 	}
 

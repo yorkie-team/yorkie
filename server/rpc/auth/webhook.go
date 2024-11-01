@@ -28,16 +28,23 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
-	// ErrNotAllowed is returned when the given user is not allowed for the access.
-	ErrNotAllowed = errors.New("method is not allowed for this user")
+	// ErrUnauthenticated is returned when the authentication is failed.
+	ErrUnauthenticated = errors.New("unauthenticated")
+
+	// ErrPermissionDenied is returned when the given user is not allowed for the access.
+	ErrPermissionDenied = errors.New("method is not allowed for this user")
 
 	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
 	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
+
+	// ErrUnexpectedResponse is returned when the response from the webhook is not as expected.
+	ErrUnexpectedResponse = errors.New("unexpected response from webhook")
 
 	// ErrWebhookTimeout is returned when the webhook does not respond in time.
 	ErrWebhookTimeout = errors.New("webhook timeout")
@@ -64,7 +71,7 @@ func verifyAccess(
 	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
 		resp := entry
 		if !resp.Allowed {
-			return fmt.Errorf("%s: %w", resp.Reason, ErrNotAllowed)
+			return fmt.Errorf("%s: %w", resp.Reason, ErrPermissionDenied)
 		}
 		return nil
 	}
@@ -86,7 +93,9 @@ func verifyAccess(
 			}
 		}()
 
-		if http.StatusOK != resp.StatusCode {
+		if resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusUnauthorized &&
+			resp.StatusCode != http.StatusForbidden {
 			return resp.StatusCode, ErrUnexpectedStatusCode
 		}
 
@@ -95,13 +104,22 @@ func verifyAccess(
 			return resp.StatusCode, err
 		}
 
-		if !authResp.Allowed {
-			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+		if resp.StatusCode == http.StatusOK && authResp.Allowed {
+			return resp.StatusCode, nil
+		}
+		if resp.StatusCode == http.StatusForbidden && !authResp.Allowed {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrPermissionDenied)
+		}
+		if resp.StatusCode == http.StatusUnauthorized && !authResp.Allowed {
+			return resp.StatusCode, metaerrors.New(
+				ErrUnauthenticated,
+				map[string]string{"reason": authResp.Reason},
+			)
 		}
 
-		return resp.StatusCode, nil
+		return resp.StatusCode, fmt.Errorf("%d: %w", resp.StatusCode, ErrUnexpectedResponse)
 	}); err != nil {
-		if errors.Is(err, ErrNotAllowed) {
+		if errors.Is(err, ErrPermissionDenied) {
 			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())
 		}
 
@@ -120,7 +138,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if err == ErrUnexpectedStatusCode {
-				return fmt.Errorf("unexpected status code from webhook: %d", statusCode)
+				return fmt.Errorf("%d: %w", statusCode, ErrUnexpectedStatusCode)
 			}
 
 			return err
