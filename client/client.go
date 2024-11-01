@@ -99,6 +99,7 @@ type Client struct {
 	client        v1connect.YorkieServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
+	interceptor   *AuthInterceptor
 	logger        *zap.Logger
 
 	id          *time.ActorID
@@ -149,8 +150,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	var clientOptions []connect.ClientOption
-
-	clientOptions = append(clientOptions, connect.WithInterceptors(NewAuthInterceptor(options.APIKey, options.Token)))
+	interceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	clientOptions = append(clientOptions, connect.WithInterceptors(interceptor))
 	if options.MaxCallRecvMsgSize != 0 {
 		clientOptions = append(clientOptions, connect.WithReadMaxBytes(options.MaxCallRecvMsgSize))
 	}
@@ -169,6 +170,7 @@ func New(opts ...Option) (*Client, error) {
 		clientOptions: clientOptions,
 		options:       options,
 		logger:        logger,
+		interceptor:   interceptor,
 
 		key:         k,
 		status:      deactivated,
@@ -183,7 +185,6 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 		return nil, err
 	}
 
-	cli.options.RPCAddress = rpcAddr
 	if err := cli.Dial(rpcAddr); err != nil {
 		return nil, err
 	}
@@ -206,19 +207,9 @@ func (c *Client) Dial(rpcAddr string) error {
 	return nil
 }
 
-// SetToken updates the client's token for reauthentication purposes.
-func (c *Client) SetToken(token string) error {
-	newClientOptions := []connect.ClientOption{
-		connect.WithInterceptors(NewAuthInterceptor(c.options.APIKey, token)),
-	}
-	if c.options.MaxCallRecvMsgSize != 0 {
-		newClientOptions = append(newClientOptions,
-			connect.WithReadMaxBytes(c.options.MaxCallRecvMsgSize))
-	}
-	c.clientOptions = newClientOptions
-
-	c.conn.CloseIdleConnections()
-	return c.Dial(c.options.RPCAddress)
+// SetToken sets the given token of this client.
+func (c *Client) SetToken(token string) {
+	c.interceptor.SetToken(token)
 }
 
 // Close closes all resources of this client.

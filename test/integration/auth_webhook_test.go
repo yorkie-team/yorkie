@@ -604,7 +604,7 @@ func TestAuthWebhookCache(t *testing.T) {
 }
 
 func TestAuthWebhookNewToken(t *testing.T) {
-	t.Run("set new token when receiving invalid token test", func(t *testing.T) {
+	t.Run("set valid token after invalid token test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, validToken := newAuthServer(t)
 
@@ -636,15 +636,12 @@ func TestAuthWebhookNewToken(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 
 		err = cli.Activate(ctx)
-		// reactivate with new token
-		if err != nil {
-			metadata := converter.ErrorMetadataOf(err)
-			if metadata["reason"] == "invalid token" {
-				err = cli.SetToken(validToken)
-				assert.NoError(t, err)
-				err = cli.Activate(ctx)
-				assert.NoError(t, err)
-			}
-		}
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+		// activate again with valid token
+		metadata := converter.ErrorMetadataOf(err)
+		assert.Equal(t, "invalid token", metadata["reason"])
+		cli.SetToken(validToken)
+		assert.NoError(t, cli.Activate(ctx))
 	})
 }

@@ -39,6 +39,11 @@ func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
 	}
 }
 
+// SetToken sets the token.
+func (i *AuthInterceptor) SetToken(token string) {
+	i.token = token
+}
+
 // WrapUnary creates a unary server interceptor for authorization.
 func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
