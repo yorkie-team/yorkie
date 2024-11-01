@@ -7,13 +7,24 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.5.3] - 2024-09-23
+## [0.5.4] - 2024-10-28
+
+### Added
+
+- Introduce cmap for distributing mutexes per documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1051
+- Implement lock striping for cmap by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1053
+
+### Fixed
+
+- Fix transaction in UpdateAndFindMinSyncedVersionVector by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1050
+
+## [0.5.3] - 2024-10-23
 
 ## Changed
 
 - Introduce VersionVector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1047
 
-## [0.5.2] - 2024-09-22
+## [0.5.2] - 2024-10-22
 
 ## Changed
 
