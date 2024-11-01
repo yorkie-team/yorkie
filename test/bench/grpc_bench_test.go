@@ -202,7 +202,7 @@ func BenchmarkRPC(b *testing.B) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(b))
-		err := c1.Attach(ctx, d1)
+		err := c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -212,7 +212,7 @@ func BenchmarkRPC(b *testing.B) {
 		assert.NoError(b, err)
 
 		d2 := document.New(helper.TestDocKey(b))
-		err = c2.Attach(ctx, d2)
+		err = c2.Attach(ctx, d2, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
