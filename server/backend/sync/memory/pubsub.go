@@ -41,7 +41,7 @@ func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
 		docKey:      docKey,
 		internalMap: cmap.New[string, *sync.Subscription](),
 	}
-	s.publisher = NewBatchPublisher(100*gotime.Millisecond, 100, s)
+	s.publisher = NewBatchPublisher(s, 100*gotime.Millisecond)
 	return s
 }
 
@@ -56,8 +56,8 @@ func (s *Subscriptions) Values() []*sync.Subscription {
 }
 
 // Publish publishes the given event.
-func (s *Subscriptions) Publish(ctx context.Context, event sync.DocEvent) {
-	s.publisher.Publish(ctx, event)
+func (s *Subscriptions) Publish(event sync.DocEvent) {
+	s.publisher.Publish(event)
 }
 
 // Delete deletes the subscription of the given id.
@@ -178,7 +178,7 @@ func (m *PubSub) Publish(
 	}
 
 	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
-		subs.Publish(ctx, event)
+		subs.Publish(event)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {

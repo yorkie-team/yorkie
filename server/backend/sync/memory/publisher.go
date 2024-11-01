@@ -17,8 +17,9 @@
 package memory
 
 import (
-	"context"
+	"strconv"
 	gosync "sync"
+	"sync/atomic"
 	time "time"
 
 	"go.uber.org/zap"
@@ -27,21 +28,31 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+var id loggerID
+
+type loggerID int32
+
+func (c *loggerID) next() string {
+	next := atomic.AddInt32((*int32)(c), 1)
+	return "p" + strconv.Itoa(int(next))
+}
+
 // BatchPublisher is a publisher that publishes events in batch.
 type BatchPublisher struct {
-	events    []sync.DocEvent
-	mutex     gosync.Mutex
+	logger *zap.SugaredLogger
+	mutex  gosync.Mutex
+	events []sync.DocEvent
+
 	window    time.Duration
-	maxBatch  int
 	closeChan chan struct{}
 	subs      *Subscriptions
 }
 
 // NewBatchPublisher creates a new BatchPublisher instance.
-func NewBatchPublisher(window time.Duration, maxBatch int, subs *Subscriptions) *BatchPublisher {
+func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublisher {
 	bp := &BatchPublisher{
+		logger:    logging.New(id.next()),
 		window:    window,
-		maxBatch:  maxBatch,
 		closeChan: make(chan struct{}),
 		subs:      subs,
 	}
@@ -52,18 +63,13 @@ func NewBatchPublisher(window time.Duration, maxBatch int, subs *Subscriptions) 
 
 // Publish adds the given event to the batch. If the batch is full, it publishes
 // the batch.
-func (bp *BatchPublisher) Publish(ctx context.Context, event sync.DocEvent) {
+func (bp *BatchPublisher) Publish(event sync.DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 
-	// TODO(hackerwins): If the event is DocumentChangedEvent, we should merge
-	// the events to reduce the number of events to be published.
+	// TODO(hackerwins): If DocumentChangedEvent is already in the batch, we don't
+	// need to add it again.
 	bp.events = append(bp.events, event)
-
-	// TODO(hackerwins): Consider to use processLoop to publish events.
-	if len(bp.events) >= bp.maxBatch {
-		bp.publish(ctx)
-	}
 }
 
 func (bp *BatchPublisher) processLoop() {
@@ -73,22 +79,28 @@ func (bp *BatchPublisher) processLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			bp.mutex.Lock()
-			bp.publish(context.Background())
-			bp.mutex.Unlock()
+			bp.publish()
 		case <-bp.closeChan:
 			return
 		}
 	}
 }
 
-func (bp *BatchPublisher) publish(ctx context.Context) {
+func (bp *BatchPublisher) publish() {
+	bp.mutex.Lock()
+
 	if len(bp.events) == 0 {
+		bp.mutex.Unlock()
 		return
 	}
 
+	events := bp.events
+	bp.events = nil
+
+	bp.mutex.Unlock()
+
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Infof(
+		bp.logger.Infof(
 			"Publishing batch of %d events for document %s",
 			len(bp.events),
 			bp.subs.docKey,
@@ -96,13 +108,13 @@ func (bp *BatchPublisher) publish(ctx context.Context) {
 	}
 
 	for _, sub := range bp.subs.Values() {
-		for _, event := range bp.events {
+		for _, event := range events {
 			if sub.Subscriber().Compare(event.Publisher) == 0 {
 				continue
 			}
 
 			if ok := sub.Publish(event); !ok {
-				logging.From(ctx).Infof(
+				bp.logger.Infof(
 					"Publish(%s,%s) to %s timeout or closed",
 					event.Type,
 					event.Publisher,
@@ -111,8 +123,6 @@ func (bp *BatchPublisher) publish(ctx context.Context) {
 			}
 		}
 	}
-
-	bp.events = nil
 }
 
 // Close stops the batch publisher
