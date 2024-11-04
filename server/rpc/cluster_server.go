@@ -17,10 +17,8 @@
 package rpc
 
 import (
-	"context"
-
 	"connectrpc.com/connect"
-
+	"context"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -94,14 +92,19 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	// 02. Create changePack with presence clear change
+	// 01. Create changePack with presence clear change
 	cp := clientInfo.Checkpoint(summary.ID)
 	latestChange, err := s.backend.DB.FindChangeInfoByServerSeq(ctx, docRefKey, cp.ServerSeq)
 	if err != nil {
 		return nil, err
 	}
+	maxLamport := latestChange.Lamport
+	if cp.ServerSeq > maxLamport {
+		maxLamport = cp.ServerSeq
+	}
+	latestChange.VersionVector.Set(actorID, maxLamport)
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChange.Lamport, actorID, latestChange.VersionVector).Next(),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, maxLamport, actorID, latestChange.VersionVector).Next(),
 		"",
 		nil,
 	)
