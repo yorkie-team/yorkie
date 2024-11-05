@@ -50,16 +50,12 @@ func validateAddVersionVector(ctx context.Context, db *mongo.Client, databaseNam
 		}
 
 		versionVector := info.VersionVector
-		actors, err := versionVector.Keys()
+		actorID, err := info.ActorID.ToActorID()
 		if err != nil {
 			return err
 		}
 
-		if len(actors) > 1 {
-			return fmt.Errorf("found %d actor in version vector", len(actors))
-		}
-
-		if versionVector.VersionOf(actors[0]) != info.Lamport {
+		if versionVector.VersionOf(actorID) != info.Lamport {
 			return fmt.Errorf("wrong lamport in version vector")
 		}
 
