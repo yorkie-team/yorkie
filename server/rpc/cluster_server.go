@@ -100,13 +100,8 @@ func (s *clusterServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
-	maxLamport := latestChange.Lamport
-	if cp.ServerSeq > maxLamport {
-		maxLamport = cp.ServerSeq
-	}
-	latestChange.VersionVector.Set(actorID, maxLamport)
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, maxLamport, actorID, latestChange.VersionVector).Next(),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChange.Lamport, actorID, latestChange.VersionVector).Next(),
 		"",
 		nil,
 	)
@@ -125,7 +120,7 @@ func (s *clusterServer) DetachDocument(
 		docInfo,
 		pack,
 		packs.PushPullOptions{
-			Mode:   types.SyncModePushPull,
+			Mode:   types.SyncModePushOnly,
 			Status: document.StatusDetached,
 		},
 	); err != nil {
