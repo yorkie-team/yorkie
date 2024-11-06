@@ -1015,32 +1015,30 @@ func (d *DB) PurgeStaleChanges(
 // FindLatestChangeInfoByActor returns the latest change created by given actorID.
 func (d *DB) FindLatestChangeInfoByActor(
 	_ context.Context,
-	_ types.DocRefKey,
-	_ types.ID,
-) (*database.ChangeInfo, error) {
-	return nil, nil
-}
-
-// FindChangeInfoByServerSeq returns the change by the given server sequence.
-func (d *DB) FindChangeInfoByServerSeq(
-	_ context.Context,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
+	actorID types.ID,
 ) (*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
-	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
+
+	iterator, err := txn.GetReverse(
+		tblChanges,
+		"doc_id_actor_id",
 		docRefKey.DocID.String(),
-		serverSeq,
+		actorID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find snapshot by serverSeq: %w", err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", docRefKey, database.ErrChangeNotFound)
+		return nil, fmt.Errorf("fetch changes of %s: %w", actorID, err)
 	}
 
-	return raw.(*database.ChangeInfo).DeepCopy(), nil
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.ChangeInfo)
+		if info != nil && info.ActorID == actorID {
+			return info, nil
+		}
+	}
+
+	return nil, database.ErrChangeNotFound
 }
 
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.

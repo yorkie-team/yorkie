@@ -226,13 +226,6 @@ type Database interface {
 		actorID types.ID,
 	) (*ChangeInfo, error)
 
-	// FindChangeInfoByServerSeq returns the change by the given server sequence.
-	FindChangeInfoByServerSeq(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) (*ChangeInfo, error)
-
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,

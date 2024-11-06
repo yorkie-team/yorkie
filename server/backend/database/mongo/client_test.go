@@ -80,6 +80,10 @@ func TestClient(t *testing.T) {
 		testcases.RunFindChangeInfosBetweenServerSeqsTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("RunFindLatestChangeInfoTest test", func(t *testing.T) {
+		testcases.RunFindLatestChangeInfoTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("RunFindClosestSnapshotInfo test", func(t *testing.T) {
 		testcases.RunFindClosestSnapshotInfoTest(t, cli, dummyProjectID)
 	})

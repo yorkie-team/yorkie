@@ -523,6 +523,66 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 	})
 }
 
+// RunFindLatestChangeInfoTest runs the FindLatestChangeInfoByActor test for the given db.
+func RunFindLatestChangeInfoTest(t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("store changes and find latest changeInfo test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		initialServerSeq := docInfo.ServerSeq
+
+		// 01. Create a document and store changes
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 5; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for _, c := range pack.Changes {
+			serverSeq := docInfo.IncreaseServerSeq()
+			c.SetServerSeq(serverSeq)
+		}
+
+		err := db.CreateChangeInfos(
+			ctx,
+			projectID,
+			docInfo,
+			initialServerSeq,
+			pack.Changes,
+			false,
+		)
+		assert.NoError(t, err)
+
+		// 02. Find latest changeInfo
+		latestChangeInfo, err := db.FindLatestChangeInfoByActor(
+			ctx,
+			docRefKey,
+			types.ID(actorID.String()),
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, latestChangeInfo.Lamport, int64(6))
+	})
+}
+
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
 func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {
