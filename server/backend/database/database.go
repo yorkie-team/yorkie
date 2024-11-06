@@ -219,6 +219,13 @@ type Database interface {
 		docRefKey types.DocRefKey,
 	) error
 
+	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
+	FindLatestChangeInfoByActor(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		actorID types.ID,
+	) (*ChangeInfo, error)
+
 	// FindChangeInfoByServerSeq returns the change by the given server sequence.
 	FindChangeInfoByServerSeq(
 		ctx context.Context,

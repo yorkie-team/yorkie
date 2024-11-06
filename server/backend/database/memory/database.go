@@ -1012,6 +1012,15 @@ func (d *DB) PurgeStaleChanges(
 	return nil
 }
 
+// FindLatestChangeInfoByActor returns the latest change created by given actorID.
+func (d *DB) FindLatestChangeInfoByActor(
+	_ context.Context,
+	_ types.DocRefKey,
+	_ types.ID,
+) (*database.ChangeInfo, error) {
+	return nil, nil
+}
+
 // FindChangeInfoByServerSeq returns the change by the given server sequence.
 func (d *DB) FindChangeInfoByServerSeq(
 	_ context.Context,

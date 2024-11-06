@@ -17,8 +17,10 @@
 package rpc
 
 import (
-	"connectrpc.com/connect"
 	"context"
+
+	"connectrpc.com/connect"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -94,7 +96,7 @@ func (s *clusterServer) DetachDocument(
 
 	// 01. Create changePack with presence clear change
 	cp := clientInfo.Checkpoint(summary.ID)
-	latestChange, err := s.backend.DB.FindChangeInfoByServerSeq(ctx, docRefKey, cp.ServerSeq)
+	latestChange, err := s.backend.DB.FindLatestChangeInfoByActor(ctx, docRefKey, types.ID(req.Msg.ClientId))
 	if err != nil {
 		return nil, err
 	}
@@ -114,14 +116,13 @@ func (s *clusterServer) DetachDocument(
 	changes := []*change.Change{changeCtx.ToChange()}
 	pack := change.NewPack(docInfo.Key, cp, changes, nil, nil)
 
-	// 03. PushPull with the created ChangePack.
+	// 02. PushPull with the created ChangePack.
 	if _, err := packs.PushPull(
 		ctx,
 		s.backend,
 		project,
 		clientInfo,
 		docInfo,
-		//doc.CreateChangePack(),
 		pack,
 		packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
