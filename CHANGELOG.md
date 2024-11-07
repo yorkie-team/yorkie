@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.5] - 2024-11-07
+
+### Added
+
+- Introduce dedicated event publisher per document by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1052
+
+### Changed
+
+- Update Authorization Webhook Response Format and Handling by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1037
+
+### Fixed
+
+- Fix version vector validation when running migration by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1057
+
 ## [0.5.4] - 2024-10-28
 
 ### Added
