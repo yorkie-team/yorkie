@@ -25,7 +25,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -93,20 +94,27 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	// TODO(hackerwins): BuildDocForCheckpoint is expensive because it reads the entire document.
-	// We need to optimize this by creating a ChangePack directly.
-	// 01. Create ChangePack with clear presence.
-	doc, err := packs.BuildDocForCheckpoint(ctx, s.backend, docInfo, clientInfo.Checkpoint(summary.ID), actorID)
+	// 01. Create changePack with presence clear change
+	cp := clientInfo.Checkpoint(summary.ID)
+	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
+		ctx,
+		docRefKey,
+		types.ID(req.Msg.ClientId),
+		cp.ServerSeq,
+	)
 	if err != nil {
 		return nil, err
 	}
+	changeCtx := change.NewContext(
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector).Next(),
+		"",
+		nil,
+	)
+	p := presence.New(changeCtx, innerpresence.NewPresence())
+	p.Clear()
 
-	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		p.Clear()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
+	changes := []*change.Change{changeCtx.ToChange()}
+	pack := change.NewPack(docInfo.Key, cp, changes, nil, nil)
 
 	// 02. PushPull with the created ChangePack.
 	if _, err := packs.PushPull(
@@ -115,9 +123,9 @@ func (s *clusterServer) DetachDocument(
 		project,
 		clientInfo,
 		docInfo,
-		doc.CreateChangePack(),
+		pack,
 		packs.PushPullOptions{
-			Mode:   types.SyncModePushPull,
+			Mode:   types.SyncModePushOnly,
 			Status: document.StatusDetached,
 		},
 	); err != nil {

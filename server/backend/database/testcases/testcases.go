@@ -523,6 +523,82 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 	})
 }
 
+// RunFindLatestChangeInfoTest runs the FindLatestChangeInfoByActor test for the given db.
+func RunFindLatestChangeInfoTest(t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("store changes and find latest changeInfo test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		// 01. Activate client and find document info.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, err)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		initialServerSeq := docInfo.ServerSeq
+
+		// 02. Create a document and store changes.
+		bytesID, err := clientInfo.ID.Bytes()
+		assert.NoError(t, err)
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		assert.NoError(t, err)
+
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 5; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for _, c := range pack.Changes {
+			serverSeq := docInfo.IncreaseServerSeq()
+			c.SetServerSeq(serverSeq)
+		}
+
+		assert.NoError(t, db.CreateChangeInfos(
+			ctx,
+			projectID,
+			docInfo,
+			initialServerSeq,
+			pack.Changes,
+			false,
+		))
+
+		// 03. Find all changes and determine the maximum Lamport timestamp.
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docRefKey, 1, 10)
+		assert.NoError(t, err)
+		maxLamport := int64(0)
+		for _, ch := range changes {
+			if maxLamport < ch.ID().Lamport() {
+				maxLamport = ch.ID().Lamport()
+			}
+		}
+
+		// 04. Find the latest change info by actor before the given server sequence.
+		latestChangeInfo, err := db.FindLatestChangeInfoByActor(
+			ctx,
+			docRefKey,
+			types.ID(actorID.String()),
+			10,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, maxLamport, latestChangeInfo.Lamport)
+	})
+}
+
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
 func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {

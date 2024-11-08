@@ -167,6 +167,16 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
+				"doc_id_actor_id_server_seq": {
+					Name: "doc_id_actor_id_server_seq",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.StringFieldIndex{Field: "ActorID"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
+						},
+					},
+				},
 			},
 		},
 		tblSnapshots: {

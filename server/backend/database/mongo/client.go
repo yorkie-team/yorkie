@@ -977,6 +977,41 @@ func (c *Client) PurgeStaleChanges(
 	return nil
 }
 
+// FindLatestChangeInfoByActor returns the latest change created by given actorID.
+func (c *Client) FindLatestChangeInfoByActor(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	actorID types.ID,
+	serverSeq int64,
+) (*database.ChangeInfo, error) {
+	option := options.FindOne().SetSort(bson.M{
+		"server_seq": -1,
+	})
+
+	result := c.collection(ColChanges).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"actor_id":   actorID,
+		"server_seq": bson.M{
+			"$lte": serverSeq,
+		},
+	}, option)
+
+	changeInfo := &database.ChangeInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return changeInfo, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find change: %w", result.Err())
+	}
+
+	if err := result.Decode(changeInfo); err != nil {
+		return nil, fmt.Errorf("decode change: %w", err)
+	}
+
+	return changeInfo, nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
