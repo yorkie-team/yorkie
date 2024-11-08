@@ -533,17 +533,23 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		// 01. Activate client and find document info.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, err)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		initialServerSeq := docInfo.ServerSeq
 
-		// 01. Create a document and store changes
-		bytesID, _ := clientInfo.ID.Bytes()
+		// 02. Create a document and store changes.
+		bytesID, err := clientInfo.ID.Bytes()
+		assert.NoError(t, err)
 		actorID, _ := time.ActorIDFromBytes(bytesID)
+		assert.NoError(t, err)
+
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -562,17 +568,16 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 			c.SetServerSeq(serverSeq)
 		}
 
-		err := db.CreateChangeInfos(
+		assert.NoError(t, db.CreateChangeInfos(
 			ctx,
 			projectID,
 			docInfo,
 			initialServerSeq,
 			pack.Changes,
 			false,
-		)
-		assert.NoError(t, err)
+		))
 
-		// 02-1. Find all changes
+		// 03. Find all changes and determine the maximum Lamport timestamp.
 		changes, err := db.FindChangesBetweenServerSeqs(ctx, docRefKey, 1, 10)
 		assert.NoError(t, err)
 		maxLamport := int64(0)
@@ -581,7 +586,8 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 				maxLamport = ch.ID().Lamport()
 			}
 		}
-		// 02-2. Find latest changeInfo and compare results.
+
+		// 04. Find the latest change info by actor before the given server sequence.
 		latestChangeInfo, err := db.FindLatestChangeInfoByActor(
 			ctx,
 			docRefKey,
