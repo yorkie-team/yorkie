@@ -572,14 +572,24 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 		)
 		assert.NoError(t, err)
 
-		// 02. Find latest changeInfo
+		// 02-1. Find all changes
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docRefKey, 1, 10)
+		assert.NoError(t, err)
+		maxLamport := int64(0)
+		for _, ch := range changes {
+			if maxLamport < ch.ID().Lamport() {
+				maxLamport = ch.ID().Lamport()
+			}
+		}
+		// 02-2. Find latest changeInfo and compare results.
 		latestChangeInfo, err := db.FindLatestChangeInfoByActor(
 			ctx,
 			docRefKey,
 			types.ID(actorID.String()),
+			10,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, latestChangeInfo.Lamport, int64(6))
+		assert.Equal(t, maxLamport, latestChangeInfo.Lamport)
 	})
 }
 

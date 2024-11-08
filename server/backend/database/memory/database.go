@@ -1017,15 +1017,17 @@ func (d *DB) FindLatestChangeInfoByActor(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 	actorID types.ID,
+	serverSeq int64,
 ) (*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iterator, err := txn.GetReverse(
+	iterator, err := txn.ReverseLowerBound(
 		tblChanges,
-		"doc_id_actor_id",
+		"doc_id_actor_id_server_seq",
 		docRefKey.DocID.String(),
 		actorID.String(),
+		serverSeq,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch changes of %s: %w", actorID, err)

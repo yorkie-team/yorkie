@@ -124,15 +124,10 @@ var collectionInfos = []collectionInfo{
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "actor_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
-		}, {
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "actor_id", Value: bsonx.Int32(1)},
-			},
 		}},
 	}, {
 		name: ColSnapshots,

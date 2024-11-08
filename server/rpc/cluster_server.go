@@ -96,12 +96,17 @@ func (s *clusterServer) DetachDocument(
 
 	// 01. Create changePack with presence clear change
 	cp := clientInfo.Checkpoint(summary.ID)
-	latestChange, err := s.backend.DB.FindLatestChangeInfoByActor(ctx, docRefKey, types.ID(req.Msg.ClientId))
+	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
+		ctx,
+		docRefKey,
+		types.ID(req.Msg.ClientId),
+		cp.ServerSeq,
+	)
 	if err != nil {
 		return nil, err
 	}
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChange.Lamport, actorID, latestChange.VersionVector).Next(),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector).Next(),
 		"",
 		nil,
 	)

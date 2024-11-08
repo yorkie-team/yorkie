@@ -982,14 +982,20 @@ func (c *Client) FindLatestChangeInfoByActor(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 	actorID types.ID,
+	serverSeq int64,
 ) (*database.ChangeInfo, error) {
+	option := options.FindOne().SetSort(bson.M{
+		"server_seq": -1,
+	})
+
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 		"actor_id":   actorID,
-	}, options.FindOne().SetSort(bson.M{
-		"lamport": -1,
-	}))
+		"server_seq": bson.M{
+			"$lte": serverSeq,
+		},
+	}, option)
 
 	changeInfo := &database.ChangeInfo{}
 	if result.Err() == mongo.ErrNoDocuments {

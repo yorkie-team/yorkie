@@ -224,6 +224,7 @@ type Database interface {
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		actorID types.ID,
+		serverSeq int64,
 	) (*ChangeInfo, error)
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
