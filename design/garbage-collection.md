@@ -163,11 +163,15 @@ If we express the execution criterion of the GC algorithm in semantic terms, it 
 
 > "The point at which all users are aware that a specific node has been removed."
 
-We represent this point through our minimum version vector, and if the minimum lamport value of this version vector is greater than the `removedAt.lamport` of the node, it indicates that all users have acknowledged its removal.
+From the moment C detaches, information about C is removed from each version vector. So, how can we know that C deleted a specific node? Since there’s no direct way to determine this in the minimum version vector due to the lack of information, we need to verify this fact indirectly.
 
-Therefore, we can confidently execute the GC algorithm based on this criterion without issues.
+From the perspective of the version vector and the minimum version vector, this means that the minimum value in the minimum version vector should be greater than removedAt.
 
+Of course, it’s possible for a specific client to have a timestamp greater than removedAt without knowing that C deleted the node. However, this case can be addressed by calculating the minimum lamport value in the minimum version vector.
 
+What’s essential here is having a consistent criterion. If we take the node’s removedAt as this criterion, and if a lamport value greater than this criterion exists in the minimum version vector, then it is safe to delete the node.
+
+![remove-detached-clients-tombstone](media/remove-datached-clients-tombstone.jpg)
 
 ## An example of garbage collection:
 ### State 1
