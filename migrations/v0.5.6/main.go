@@ -25,7 +25,7 @@ import (
 
 // RunMigration runs migrations for v0.5.6
 func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error {
-	err := DetachDocumentsFromDeactivatedClients(ctx, db, databaseName, batchSize)
+	err := ReactivateClients(ctx, db, databaseName, batchSize)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -33,7 +32,7 @@ const (
 	StatusKey = "status"
 )
 
-func validateDetach(ctx context.Context, collection *mongo.Collection) ([]string, error) {
+func validateDetach(ctx context.Context, collection *mongo.Collection, filter bson.M) ([]string, error) {
 	var failedClients []string
 	totalCount, err := collection.CountDocuments(ctx, bson.M{})
 	if err != nil {
@@ -41,7 +40,7 @@ func validateDetach(ctx context.Context, collection *mongo.Collection) ([]string
 	}
 	fmt.Printf("Validation check for %d clients\n", totalCount)
 
-	cursor, err := collection.Find(ctx, bson.M{})
+	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -73,47 +72,34 @@ func validateDetach(ctx context.Context, collection *mongo.Collection) ([]string
 	return failedClients, nil
 }
 
-func progressMigrationBach(
+func progressMigrationBatch(
 	ctx context.Context,
 	collection *mongo.Collection,
 	infos []*database.ClientInfo,
 ) error {
 	for _, info := range infos {
-		fmt.Printf("clientID: %s\n", info.ID)
-		for docID, clientDocInfo := range info.Documents {
-			if clientDocInfo.Status != database.DocumentAttached {
-				continue
+		result := collection.FindOneAndUpdate(ctx, bson.M{
+			"project_id": info.ProjectID,
+			"_id":        info.ID,
+		}, bson.M{
+			"$set": bson.M{
+				StatusKey:    database.ClientActivated,
+				"updated_at": time.Now().AddDate(-1, 0, 0),
+			},
+		})
+		if result.Err() != nil {
+			if result.Err() == mongo.ErrNoDocuments {
+				return fmt.Errorf("%s: %w", info.Key, database.ErrClientNotFound)
 			}
-
-			updater := bson.M{
-				"$set": bson.M{
-					clientDocInfoKey(docID, "server_seq"): 0,
-					clientDocInfoKey(docID, "client_seq"): 0,
-					clientDocInfoKey(docID, StatusKey):    database.DocumentDetached,
-					"updated_at":                          time.Now(),
-				},
-			}
-
-			result := collection.FindOneAndUpdate(ctx, bson.M{
-				"project_id": info.ProjectID,
-				"_id":        info.ID,
-			}, updater)
-
-			if result.Err() != nil {
-				if result.Err() == mongo.ErrNoDocuments {
-					return fmt.Errorf("%s: %w", info.Key, database.ErrClientNotFound)
-				}
-				return fmt.Errorf("update client info: %w", result.Err())
-			}
+			return fmt.Errorf("update client info: %w", result.Err())
 		}
-
 	}
 	return nil
 }
 
-// DetachDocumentsFromDeactivatedClients migrates the client collection
-// to detach documents attached to a deactivated client.
-func DetachDocumentsFromDeactivatedClients(
+// ReactivateClients migrates the client collection to activate the clients
+// that are in a deactivated but have attached documents.
+func ReactivateClients(
 	ctx context.Context,
 	db *mongo.Client,
 	databaseName string,
@@ -171,7 +157,7 @@ func DetachDocumentsFromDeactivatedClients(
 		infos = append(infos, &clientInfo)
 
 		if len(infos) >= batchSize {
-			if err := progressMigrationBach(ctx, collection, infos); err != nil {
+			if err := progressMigrationBatch(ctx, collection, infos); err != nil {
 				return err
 			}
 
@@ -181,12 +167,12 @@ func DetachDocumentsFromDeactivatedClients(
 		}
 	}
 	if len(infos) > 0 {
-		if err := progressMigrationBach(ctx, collection, infos); err != nil {
+		if err := progressMigrationBatch(ctx, collection, infos); err != nil {
 			return err
 		}
 	}
 
-	res, err := validateDetach(ctx, collection)
+	res, err := validateDetach(ctx, collection, filter)
 	if err != nil {
 		return err
 	}
@@ -196,9 +182,4 @@ func DetachDocumentsFromDeactivatedClients(
 	}
 
 	return nil
-}
-
-// clientDocInfoKey returns the key for the client document info.
-func clientDocInfoKey(docID types.ID, prefix string) string {
-	return fmt.Sprintf("documents.%s.%s", docID, prefix)
 }
