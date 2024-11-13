@@ -18,6 +18,7 @@ package v056
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,7 @@ const (
 	StatusKey = "status"
 )
 
+// validateDetach checks whether there are deactivated clients with attached documents.
 func validateDetach(ctx context.Context, collection *mongo.Collection, filter bson.M) ([]string, error) {
 	var failedClients []string
 	totalCount, err := collection.CountDocuments(ctx, bson.M{})
@@ -72,11 +74,12 @@ func validateDetach(ctx context.Context, collection *mongo.Collection, filter bs
 	return failedClients, nil
 }
 
-func progressMigrationBatch(
+// processMigrationBatch processes the migration batch.
+func processMigrationBatch(
 	ctx context.Context,
 	collection *mongo.Collection,
 	infos []*database.ClientInfo,
-) error {
+) {
 	for _, info := range infos {
 		result := collection.FindOneAndUpdate(ctx, bson.M{
 			"project_id": info.ProjectID,
@@ -88,13 +91,13 @@ func progressMigrationBatch(
 			},
 		})
 		if result.Err() != nil {
-			if result.Err() == mongo.ErrNoDocuments {
-				return fmt.Errorf("%s: %w", info.Key, database.ErrClientNotFound)
+			if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+				_ = fmt.Errorf("%s: %w", info.Key, database.ErrClientNotFound)
+			} else {
+				_ = fmt.Errorf("update client info: %w", result.Err())
 			}
-			return fmt.Errorf("update client info: %w", result.Err())
 		}
 	}
-	return nil
 }
 
 // ReactivateClients migrates the client collection to activate the clients
@@ -133,7 +136,6 @@ func ReactivateClients(
 		},
 	}
 
-	// 01. Count the number of target clients
 	totalCount, err := collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return err
@@ -148,6 +150,7 @@ func ReactivateClients(
 	var infos []*database.ClientInfo
 
 	batchCount := 1
+	done := 0
 	for cursor.Next(ctx) {
 		var clientInfo database.ClientInfo
 		if err := cursor.Decode(&clientInfo); err != nil {
@@ -157,20 +160,20 @@ func ReactivateClients(
 		infos = append(infos, &clientInfo)
 
 		if len(infos) >= batchSize {
-			if err := progressMigrationBatch(ctx, collection, infos); err != nil {
-				return err
-			}
+			processMigrationBatch(ctx, collection, infos)
+			done += len(infos)
 
-			// TODO(raararaara): print progress
+			percentage := int(float64(batchSize*batchCount) / float64(totalCount) * 100)
+			fmt.Printf("%s.clients migration progress: %d%%(%d/%d)\n", databaseName, percentage, done, totalCount)
 			infos = infos[:0]
 			batchCount++
 		}
 	}
 	if len(infos) > 0 {
-		if err := progressMigrationBatch(ctx, collection, infos); err != nil {
-			return err
-		}
+		processMigrationBatch(ctx, collection, infos)
+		done += len(infos)
 	}
+	fmt.Printf("%s.clients migration progress: %d%%(%d/%d)\n", databaseName, 100, done, totalCount)
 
 	res, err := validateDetach(ctx, collection, filter)
 	if err != nil {
