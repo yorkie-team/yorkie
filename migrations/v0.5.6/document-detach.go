@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -34,23 +33,27 @@ const (
 )
 
 // validateDetach checks whether there are deactivated clients with attached documents.
-func validateDetach(ctx context.Context, collection *mongo.Collection, filter bson.M) ([]string, error) {
-	var failedClients []string
+func validateDetach(ctx context.Context, collection *mongo.Collection, filter bson.M) int {
+	var failCount int
 	totalCount, err := collection.CountDocuments(ctx, bson.M{})
 	if err != nil {
-		return nil, err
+		fmt.Printf("[Validation] Count total document failed\n")
+		return 0
 	}
-	fmt.Printf("Validation check for %d clients\n", totalCount)
+	fmt.Printf("[Validation] Validation check for %d clients\n", totalCount)
 
 	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
-		return nil, err
+		fmt.Printf("[Validation] Find document failed\n")
+		return 0
 	}
 
 	for cursor.Next(ctx) {
 		var info database.ClientInfo
 		if err := cursor.Decode(&info); err != nil {
-			return nil, fmt.Errorf("decode client info: %w", err)
+			fmt.Printf("[Validation] decode client info failed\n")
+			failCount++
+			continue
 		}
 
 		// 01. ensure deactivated
@@ -67,11 +70,12 @@ func validateDetach(ctx context.Context, collection *mongo.Collection, filter bs
 			}
 		}
 		if hasAttachedDocs {
-			failedClients = append(failedClients, info.ID.String())
+			fmt.Printf("[Validation] Client %s has attached documents\n", info.Key)
+			failCount++
 		}
 	}
 
-	return failedClients, nil
+	return failCount
 }
 
 // processMigrationBatch processes the migration batch.
@@ -86,15 +90,14 @@ func processMigrationBatch(
 			"_id":        info.ID,
 		}, bson.M{
 			"$set": bson.M{
-				StatusKey:    database.ClientActivated,
-				"updated_at": time.Now().AddDate(-1, 0, 0),
+				StatusKey: database.ClientActivated,
 			},
 		})
 		if result.Err() != nil {
 			if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-				_ = fmt.Errorf("%s: %w", info.Key, database.ErrClientNotFound)
+				fmt.Printf("[Migration Batch] Client not found: %s\n", info.Key)
 			} else {
-				_ = fmt.Errorf("update client info: %w", result.Err())
+				fmt.Printf("[Migration Batch] Failed to update client info: %v\n", result.Err())
 			}
 		}
 	}
@@ -175,14 +178,7 @@ func ReactivateClients(
 	}
 	fmt.Printf("%s.clients migration progress: %d%%(%d/%d)\n", databaseName, 100, done, totalCount)
 
-	res, err := validateDetach(ctx, collection, filter)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Number of failed clients: %d\n", len(res))
-	if 0 < len(res) && len(res) < 100 {
-		fmt.Print(res)
-	}
+	fmt.Printf("Number of failed clients: %d\n", validateDetach(ctx, collection, filter))
 
 	return nil
 }
