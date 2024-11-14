@@ -104,14 +104,28 @@ type PresenceChange struct {
 	Presence   Presence           `json:"presence"`
 }
 
-// NewChangeFromJSON creates a new instance of PresenceChange from JSON.
-func NewChangeFromJSON(encodedChange string) (*PresenceChange, error) {
-	if encodedChange == "" {
+// EncodeToBytes encodes the given presence change into bytes array.
+func EncodeToBytes(p *PresenceChange) ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+
+	bytes, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("marshal presence change to bytes: %w", err)
+	}
+
+	return bytes, nil
+}
+
+// PresenceChangeFromBytes unmarshals the given bytes array into PresenceChange.
+func PresenceChangeFromBytes(bytes []byte) (*PresenceChange, error) {
+	if bytes == nil {
 		return nil, nil
 	}
 
 	p := &PresenceChange{}
-	if err := json.Unmarshal([]byte(encodedChange), p); err != nil {
+	if err := json.Unmarshal(bytes, p); err != nil {
 		return nil, fmt.Errorf("unmarshal presence change: %w", err)
 	}
 

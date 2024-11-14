@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -63,6 +64,27 @@ func TestRegistry(t *testing.T) {
 		}{}
 		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
 		assert.Equal(t, vector, info.VersionVector)
+	})
+
+	t.Run("presenceChange test", func(t *testing.T) {
+		presence := innerpresence.NewPresence()
+		presence.Set("color", "orange")
+		presenceChange := &innerpresence.PresenceChange{
+			ChangeType: innerpresence.Put,
+			Presence:   presence,
+		}
+
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"presence_change": presenceChange,
+		})
+		assert.NoError(t, err)
+
+		info := struct {
+			PresenceChange *innerpresence.PresenceChange `bson:"presence_change"`
+		}{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+
+		assert.Equal(t, presenceChange, info.PresenceChange)
 	})
 }
 
