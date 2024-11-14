@@ -88,6 +88,10 @@ func Deactivate(
 			return nil, err
 		}
 
+		if err = info.DetachDocument(docID); err != nil {
+			return nil, err
+		}
+
 		if err := be.DB.UpdateVersionVector(
 			ctx,
 			info,

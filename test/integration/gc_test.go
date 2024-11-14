@@ -1190,10 +1190,8 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageLen(), 2)
 		assert.Equal(t, len(d2.VersionVector()), 2)
 
-		// TODO(JOOHOJANG): remove below comments after https://github.com/yorkie-team/yorkie/issues/1058 resolved
-		// Due to https://github.com/yorkie-team/yorkie/issues/1058, removing deactivated client's version vector is not working properly now.
-		// assert.NoError(t, c2.Sync(ctx))
-		// assert.Equal(t, d2.GarbageLen(), 0)
-		// assert.Equal(t, len(d2.VersionVector()), 1)
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.Equal(t, len(d2.VersionVector()), 1)
 	})
 }
