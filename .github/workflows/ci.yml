@@ -87,7 +87,7 @@ jobs:
       run: go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage.txt
       env:
