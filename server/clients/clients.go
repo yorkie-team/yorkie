@@ -87,22 +87,6 @@ func Deactivate(
 		if err := cli.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
 			return nil, err
 		}
-
-		if err = info.DetachDocument(docID); err != nil {
-			return nil, err
-		}
-
-		if err := be.DB.UpdateVersionVector(
-			ctx,
-			info,
-			types.DocRefKey{
-				ProjectID: refKey.ProjectID,
-				DocID:     docID,
-			},
-			nil,
-		); err != nil {
-			return nil, err
-		}
 	}
 
 	return be.DB.DeactivateClient(ctx, refKey)
