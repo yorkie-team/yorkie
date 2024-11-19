@@ -73,12 +73,12 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv = {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [c1: 1, c2:2], minvv = [c1:0, c2:0], db.vv = {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
@@ -88,55 +88,55 @@ func TestGarbageCollection(t *testing.T) {
 		}, "sets 1,2,3"))
 
 		// d1.vv = [c1: 2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:3, c2:1], minvv = [c1:0, c2:0], db.vv = {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:3], minvv = [c1:1, c2:0], db.vv = {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			return nil
 		}, "removes 2"))
 		// d2.vv = [c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1: 2, c2:4], minvv = [c1: 2, c2:0], db.vv = {c1: [c1:2], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1: 5, c2:4], minvv = [c1: 2, c2:1], db.vv = {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1: 2, c2:4], minvv = [c1: 2, c2:1], db.vv = {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 4, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1: 5, c2:4], minvv = [c1: 2, c2:4], db.vv = {c1: [c1:5, c2:4], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1: 2, c2:4], minvv = [c1: 2, c2:4], db.vv = {c1: [c1:5 c2:4], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -147,12 +147,12 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [c1: 1, c2:2], minvv = [c1: 0, c2:0], db.vv = {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		assert.NoError(t,
 			d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -164,17 +164,17 @@ func TestGarbageCollection(t *testing.T) {
 			}, "sets test and richText"),
 		)
 		// d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:3, c2:1], minvv = [c1:0, c2:0], db.vv = {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:3], minvv = [c1:1, c2:0], db.vv = {c1: [c1:2], c2: [c1:1 c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		assert.NoError(t,
 			d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -187,38 +187,38 @@ func TestGarbageCollection(t *testing.T) {
 			}, "edit text type elements"),
 		)
 		// d2.vv = [c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:4], minvv = [c1:2, c2:0], db.vv = {c1: [c1:2], c2: [c1:2 c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:4], minvv = [c1:2, c2:1], db.vv = {c1: [c1:3, c2:1], c2: [c1:2 c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:4], minvv = [c1:2, c2:0], db.vv = {c1: [c1:3, c2:1], c2: [c1:2 c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:4], minvv = [c1:2, c2:4], db.vv = {c1: [c1:5, c2:4], c2: [c1:2 c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:4], minvv = [c1:2, c2:4], db.vv = {c1: [c1:5, c2:4], c2: [c1:2 c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -245,10 +245,9 @@ func TestGarbageCollection(t *testing.T) {
 				}},
 			})
 			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
-
 			return nil
 		})
-		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 1)))
 		assert.NoError(t, err)
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -258,11 +257,11 @@ func TestGarbageCollection(t *testing.T) {
 		})
 
 		// [text(a), text(b)]
-		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 2)))
 		assert.NoError(t, err)
-		assert.Equal(t, doc.GarbageLen(), 2)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 2)
-		assert.Equal(t, doc.GarbageLen(), 0)
+		assert.Equal(t, 2, doc.GarbageLen())
+		assert.Equal(t, 2, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 0, doc.GarbageLen())
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "cv"}, 0)
@@ -271,11 +270,11 @@ func TestGarbageCollection(t *testing.T) {
 		})
 
 		// [text(gh)]
-		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 3)))
 		assert.NoError(t, err)
-		assert.Equal(t, doc.GarbageLen(), 1)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 1)
-		assert.Equal(t, doc.GarbageLen(), 0)
+		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 1, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 0, doc.GarbageLen())
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0}, []int{1}, &json.TreeNode{
@@ -289,11 +288,11 @@ func TestGarbageCollection(t *testing.T) {
 		})
 
 		// [p, tn, tn, text(cv), text(cd)]
-		assert.Equal(t, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(doc.VersionVector(), versionOf(doc.ActorID(), 4)))
 		assert.NoError(t, err)
-		assert.Equal(t, doc.GarbageLen(), 5)
-		assert.Equal(t, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())), 5)
-		assert.Equal(t, doc.GarbageLen(), 0)
+		assert.Equal(t, 5, doc.GarbageLen())
+		assert.Equal(t, 5, doc.GarbageCollect(helper.MaxVersionVector(doc.ActorID())))
+		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
@@ -301,12 +300,12 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [c1:1, c2:2], minvv = [c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
@@ -326,64 +325,64 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		//d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:3, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:3], minvv = [c1:1, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"}, 0)
 			return nil
 		})
 		// d2.vv = [c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:4], minvv = [c1:2, c2:0], db.vv {c1: [c1:2], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:4], minvv = [c1:2, c2:1], db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 2)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 0}, &json.TreeNode{Type: "text", Value: "g"}, 0)
 			return nil
 		})
 		//d1.vv = [c1:6, c2:4]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:6, c2:4], minvv = [c1:2, c2:4], db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
-		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:6, c2:7], minvv = [c1:2, c2:4], db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 7)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 7)))
 		assert.NoError(t, err)
-		assert.Equal(t, d1.GarbageLen(), 0)
+		assert.Equal(t, 0, d1.GarbageLen())
 		// node removedAt = 4@c2, minVV[c2] = 4 meet GC condition
-		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
@@ -391,12 +390,12 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [c1:1, c2:2], minvv = [c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
@@ -407,18 +406,18 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "sets 1,2,3,4,5")
 		// d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:3, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:3], minvv = [c1:1, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
@@ -427,14 +426,14 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "removes 2 and edit text type elements")
 		//d1.vv = [c1:4, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d2.vv = [c1:4, c2:1], minvv = [c1:1, c2:1], db.vv {c1: [c1:4, c2:1], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
@@ -444,7 +443,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		// remove c2 lamport from d1.vv after GC
 		// d1.vv = [c1:5], minvv = [c1:4], db.vv {c1: [c1:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 6, d2.GarbageLen())
 	})
@@ -457,7 +456,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("point").
@@ -466,22 +465,22 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:2], minvv = [c1:2], db.vv {c1: [c1:2]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d1.vv = [c1:2, c2:3], minvv = [c1:0, c2:0],  db.vv {c1: [c1:2], [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("point")
 			return nil
 		})
 		// d1.vv = [c1:3]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)))
 		assert.NoError(t, err)
 		assert.Equal(t, 3, d1.GarbageLen())
 
@@ -490,32 +489,32 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d2.vv = [c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 		assert.Equal(t, 1, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:4, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:3], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:3, c2:5], minvv = [c1:2, c2:0], db.vv {c1: [c1:3], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 5)))
 
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:4], minvv = [c1:2, c2:1], db.vv {c1: [c1:4, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:3, c2:5], minvv = [c1:3, c2:0], db.vv {c1: [c1:3], c2: [c1:3, c2:5]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 5)))
 		// node removedAt = 3@c1, minVV[c1] = 3 meet GC condition
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
-		assert.Equal(t, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())), 3)
-		assert.Equal(t, d2.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())), 0)
+		assert.Equal(t, 3, d1.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())))
+		assert.Equal(t, 0, d2.GarbageCollect(helper.MaxVersionVector(d1.ActorID(), d2.ActorID())))
 	})
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
@@ -523,7 +522,7 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			json := map[string]interface{}{
@@ -534,7 +533,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.Delete("obj")
 			return nil
 		})
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		assert.Equal(t, 5, d1.GarbageLen())
@@ -547,19 +546,19 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d1.vv = [c1:1, c2:2], minvv = [c1:0, c2:0], db.vv {c1: [c1:1], c2:[c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "z")
 			return nil
 		})
 		// d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		// "z" revmoedAt 3@c1
@@ -568,7 +567,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:3]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -576,7 +575,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:4]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -584,17 +583,17 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:5]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:6, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:5], c2:[c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		err = c2.Sync(ctx)
 		// d2.vv = [c1:5, c2:6], minvv = [c1:1, c2:0], db.vv {c1: [c1:5], c2:[c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 6)))
 
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"d"}]}`, d2.Marshal())
@@ -605,16 +604,16 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:7, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:7, c2:1], minvv = [c1:1, c2:1], db.vv {c1: [c1:7, c2:1], c2:[c1:1, c2:2]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:7, c2:8], minvv = [c1:6, c2:1], db.vv {c1: [c1:7, c2:1], c2:[c1:6, c2:7]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)))
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"b"},{"val":"c"},{"val":"d"}]}`, d2.Marshal())
 
@@ -623,12 +622,12 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		//d1.vv = [c1:8, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:8, c2:1], minvv = [c1:6, c2:1], db.vv {c1: [c1:8, c2:1], c2:[c1:6, c2:7]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		// "z"'s removedAt = 6@c1, minvv[c1] =6 meet GC Condition
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, 2, d1.GarbageLen()) // a,b,c
@@ -638,28 +637,28 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d2.vv = [c1:7, c2:9]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 9)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 9)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:8, c2:10], minvv = [c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2:[c1:7, c2:9]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:10, c2:9], minvv = [c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2:[c1:7, c2:9]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 10), versionOf(d2.ActorID(), 9)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 10), versionOf(d2.ActorID(), 9)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:8, c2:10], minvv = [c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2:[c1:8, c2:10]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d2.vv = [c1:10, c2:9], minvv = [c1:8, c2:9], db.vv {c1: [c1:10, c2:9], c2:[c1:8, c2:10]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 10), versionOf(d2.ActorID(), 9)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 10), versionOf(d2.ActorID(), 9)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:8, c2:10], minvv = [c1:8, c2:9], db.vv {c1: [c1:10, c2:9], c2:[c1:8, c2:10]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)))
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d1.Marshal())
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"a"},{"val":"d"}]}`, d2.Marshal())
 		assert.Equal(t, 0, d1.GarbageLen())
@@ -672,12 +671,12 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [c1:1], minvv = [c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [c1:1, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("tree", &json.TreeNode{
@@ -689,7 +688,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv =[c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -697,7 +696,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv =[c1:3]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -705,7 +704,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv =[c1:4]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -713,16 +712,16 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv =[c1:5]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:6, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:5], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:5, c2:6], minvv = [c1:1, c2:0], db.vv {c1: [c1:5], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 6)))
 
 		assert.Equal(t, `<r>abd</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, `<r>abd</r>`, d2.Root().GetTree("tree").ToXML())
@@ -733,22 +732,22 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		//d1.vv =[c1:7, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:7, c2:1], minvv = [c1:1, c2:1], db.vv {c1: [c1:7, c2:1], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:7, c2:8], minvv =[c1:5, c2:1], db.vv {c1: [c1:7, c2:1], c2: [c1:5, c2:6]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)))
 		// "z" removedAt = 3@c1, minvv[c1] =5 meet GC condition
-		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:7, c2:8], minvv =[c1:7, c2:1], db.vv {c1: [c1:7, c2:1], c2: [c1:7, c2:8]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 8)))
 
 		assert.Equal(t, `<r>abcd</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, `<r>abcd</r>`, d2.Root().GetTree("tree").ToXML())
@@ -758,39 +757,38 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		// d1.vv = [c1:8, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:8, c2:1], minvv = [c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		assert.Equal(t, `<r>ad</r>`, d1.Root().GetTree("tree").ToXML())
 		assert.Equal(t, 2, d1.GarbageLen()) // b,c
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:8, c2:9], minvv =[c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:8, c2:1], minvv =[c1:7, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:7, c2:8]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		assert.Equal(t, `<r>ad</r>`, d2.Root().GetTree("tree").ToXML())
 		assert.Equal(t, 2, d1.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:8, c2:9], minvv =[c1:8, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:8, c2:1], minvv =[c1:8, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		// "b", "c" removedAt = 8@c1, minvv[c1] = 8 meet GC condition
 		assert.Equal(t, 0, d1.GarbageLen())
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:8, c2:9], minvv =[c1:8, c2:1], db.vv {c1: [c1:8, c2:1], c2: [c1:8, c2:9]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)), true)
-		// "b", "c" removedAt = 8@c1, minvv[c1] = 8 meet GC condition
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)))
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 	})
@@ -828,13 +826,13 @@ func TestGarbageCollection(t *testing.T) {
 			root.SetNewText("text").Edit(0, 0, "-")
 			return nil
 		}))
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		for i := 0; i < int(conf.Backend.SnapshotInterval); i++ {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
 				return nil
 			}))
-			assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), int64(2+i+1))), true)
+			assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), int64(2+i+1))))
 		}
 		assert.Equal(t, int(conf.Backend.SnapshotInterval), d1.GarbageLen())
 		assert.NoError(t, c1.Sync(ctx))
@@ -861,35 +859,35 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[c1:1], minvv =[c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[c1:1, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
 		}, "sets text")
 		//d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:3, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:2, c2:3], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 		//d2.vv =[c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -897,18 +895,18 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "delete bd")
 		//d1.vv = [c1:4, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:1], minvv = [c1:1, c2:1], db.vv {c1: [c1:4, c2:1], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:4, c2:5], minvv = [c1:2, c2:1], db.vv {c1: [c1:4, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 5)))
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d2.GarbageLen())
 
@@ -917,19 +915,19 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "insert 1")
 		//d2.vv =[c1:4, c2:6]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 6)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:4, c2:6], minvv = [c1:4, c2:1], db.vv {c1: [c1:4, c2:1], c2: [c1:4, c2:6]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 6)))
 		// "b", "c" removedAt = 4@c1, minvv[c1] = 4 meet GC condition
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:7, c2:6], minvv = [c1:4, c2:1], db.vv {c1: [c1:5, c2:1], c2: [c1:4, c2:6]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 6)))
 		// "b", "c" removedAt = 4@c1, minvv[c1] = 4 meet GC condition
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -941,52 +939,52 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[c1:1], minvv =[c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[c1:1, c2:2], minvv =[c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b")
 			return nil
 		}, "insert ab")
 		// d1/vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:3, c2:1], minvv = [c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:3], minvv = [c1:1, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "d")
 			return nil
 		}, "insert d")
 		//d2.vv = [c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:2, c2:4], minvv = [c1:2, c2:0], db.vv {c1: [c1:2], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:5, c2:4], minvv = [c1:2, c2:1], db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:4]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 		//d2.vv = [c1:2, c2:5]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -994,73 +992,73 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "remove ac")
 		//c1.vv = [c1:6, c2:4]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		// sync pushonly
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:2, c2:5], minvv = [c1:2, c2:1], db.vv {c1: [c1:3, c2:1], c2: [c1:2, c2:5]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:7, c2:5], minvv = [c1:2, c2:4], db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:5]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 5)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 5)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "1")
 			return nil
 		}, "insert 1 (pushonly)")
 		//d2.vv = [c1:2, c2:6]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 6)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:2, c2:6], minvv = [c1:2, c2:4], db.vv {c1: [c1:6, c2:4], c2: [c1:2, c2:6]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 6)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 6)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:8, c2:6], minvv = [c1:2, c2:5], db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:6]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 6)), true)
-		assert.Equal(t, d1.GarbageLen(), 2)
-		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 6)))
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "2")
 			return nil
 		}, "insert 2 (pushonly)")
 		//c2.vv = [c1:2, c2:7]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 7)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 7)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:2, c2:7], minvv = [c1:2, c2:5], db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:7]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 7)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 7)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:6, c2:8], minvv = [c1:2, c2:5], db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:7]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 8)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 8)))
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv = [c1:9, c2:7]], minvv = [c1:2, c2:6], db.vv {c1: [c1:8, c2:6], c2: [c1:2, c2:7]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 9), versionOf(d2.ActorID(), 7)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 9), versionOf(d2.ActorID(), 7)))
 		assert.Equal(t, d1.GarbageLen(), 2)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv = [c1:6, c2:8], minvv = [c1:6, c2:6], db.vv {c1: [c1:8, c2:6], c2: [c1:6, c2:8]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 8)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 8)))
 		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
-		assert.Equal(t, d1.GarbageLen(), 2)
-		assert.Equal(t, d2.GarbageLen(), 0)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d2.vv = [c1:9, c2:7], minvv = [c1:6, c2:7], db.vv {c1: [c1:9, c2:7], c2: [c1:6, c2:8]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 9), versionOf(d2.ActorID(), 7)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 9), versionOf(d2.ActorID(), 7)))
 		// removedAt = 6@c1, minvv[c1] = 6, meet GC condition
-		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 0)
-		assert.Equal(t, d1.Marshal(), `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`)
-		assert.Equal(t, d2.Marshal(), `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"2"},{"val":"1"},{"val":"c"}]}`, d2.Marshal())
 	})
 
 	t.Run("gc doesn't run when detached client's version vector remains in db", func(t *testing.T) {
@@ -1142,35 +1140,35 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[c1:1], minvv =[c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[c1:1, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
 		}, "sets text")
 		//d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:3, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:2, c2:3], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 		//d2.vv =[c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1178,7 +1176,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "delete bd")
 		//d1.vv = [c1:4, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -1187,13 +1185,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Deactivate(ctx))
 
-		assert.Equal(t, d2.GarbageLen(), 2)
-		assert.Equal(t, len(d2.VersionVector()), 2)
+		assert.Equal(t, 2, d2.GarbageLen())
+		assert.Equal(t, 2, len(d2.VersionVector()))
 
-		// TODO(JOOHOJANG): remove below comments after https://github.com/yorkie-team/yorkie/issues/1058 resolved
-		// Due to https://github.com/yorkie-team/yorkie/issues/1058, removing deactivated client's version vector is not working properly now.
-		// assert.NoError(t, c2.Sync(ctx))
-		// assert.Equal(t, d2.GarbageLen(), 0)
-		// assert.Equal(t, len(d2.VersionVector()), 1)
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, len(d2.VersionVector()))
 	})
 }
