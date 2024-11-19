@@ -132,17 +132,5 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	if err = s.backend.DB.UpdateVersionVector(
-		ctx,
-		clientInfo,
-		types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     summary.ID,
-		},
-		nil,
-	); err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
 }

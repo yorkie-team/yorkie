@@ -1142,35 +1142,35 @@ func TestGarbageCollection(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[c1:1], minvv =[c1:1], db.vv {c1: [c1:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[c1:1, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:1], c2: [c2:1]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
 		}, "sets text")
 		//d1.vv = [c1:2]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, c1.Sync(ctx))
 		// d1.vv =[c1:3, c2:1], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c2:1]}
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1)))
 
 		assert.NoError(t, c2.Sync(ctx))
 		// d2.vv =[c1:2, c2:3], minvv =[c1:0, c2:0], db.vv {c1: [c1:2], c2: [c1:1, c2:2]}
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 3)))
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
 		//d2.vv =[c1:2, c2:4]
-		assert.Equal(t, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)), true)
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1178,7 +1178,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "delete bd")
 		//d1.vv = [c1:4, c2:1]
-		assert.Equal(t, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)), true)
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -1187,11 +1187,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Deactivate(ctx))
 
-		assert.Equal(t, d2.GarbageLen(), 2)
-		assert.Equal(t, len(d2.VersionVector()), 2)
+		assert.Equal(t, 2, d2.GarbageLen())
+		assert.Equal(t, 2, len(d2.VersionVector()))
 
 		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, d2.GarbageLen(), 0)
-		assert.Equal(t, len(d2.VersionVector()), 1)
+		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 1, len(d2.VersionVector()))
 	})
 }
