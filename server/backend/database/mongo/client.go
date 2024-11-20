@@ -866,10 +866,6 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedPresence, err := database.EncodePresenceChange(cn.PresenceChange())
-		if err != nil {
-			return err
-		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -882,7 +878,7 @@ func (c *Client) CreateChangeInfos(
 			"version_vector":  cn.ID().VersionVector(),
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
-			"presence_change": encodedPresence,
+			"presence_change": cn.PresenceChange(),
 		}}).SetUpsert(true))
 	}
 

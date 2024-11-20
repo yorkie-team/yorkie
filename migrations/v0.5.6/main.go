@@ -19,16 +19,22 @@ package v056
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // RunMigration runs migrations for v0.5.6
 func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, batchSize int) error {
-	err := ReactivateClients(ctx, db, databaseName, batchSize)
-	if err != nil {
+	if err := MigratePresenceChange(ctx, db, databaseName, batchSize); err != nil {
 		return err
 	}
+
+  if err = ReactivateClients(ctx, db, databaseName, batchSize); err != nil {
+    return err
+  }
+
+	fmt.Println("v0.5.6 migration completed")
 
 	return nil
 }
