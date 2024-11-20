@@ -17,7 +17,6 @@
 package database
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -40,17 +39,17 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID             types.ID           `bson:"_id"`
-	ProjectID      types.ID           `bson:"project_id"`
-	DocID          types.ID           `bson:"doc_id"`
-	ServerSeq      int64              `bson:"server_seq"`
-	ClientSeq      uint32             `bson:"client_seq"`
-	Lamport        int64              `bson:"lamport"`
-	ActorID        types.ID           `bson:"actor_id"`
-	VersionVector  time.VersionVector `bson:"version_vector"`
-	Message        string             `bson:"message"`
-	Operations     [][]byte           `bson:"operations"`
-	PresenceChange string             `bson:"presence_change"`
+	ID             types.ID                      `bson:"_id"`
+	ProjectID      types.ID                      `bson:"project_id"`
+	DocID          types.ID                      `bson:"doc_id"`
+	ServerSeq      int64                         `bson:"server_seq"`
+	ClientSeq      uint32                        `bson:"client_seq"`
+	Lamport        int64                         `bson:"lamport"`
+	ActorID        types.ID                      `bson:"actor_id"`
+	VersionVector  time.VersionVector            `bson:"version_vector"`
+	Message        string                        `bson:"message"`
+	Operations     [][]byte                      `bson:"operations"`
+	PresenceChange *innerpresence.PresenceChange `bson:"presence_change"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -71,20 +70,6 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	return encodedOps, nil
-}
-
-// EncodePresenceChange encodes the given presence change into string.
-func EncodePresenceChange(p *innerpresence.PresenceChange) (string, error) {
-	if p == nil {
-		return "", nil
-	}
-
-	bytes, err := json.Marshal(p)
-	if err != nil {
-		return "", fmt.Errorf("marshal presence change to bytes: %w", err)
-	}
-
-	return string(bytes), nil
 }
 
 // ToChange creates Change model from this ChangeInfo.
@@ -110,12 +95,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	p, err := innerpresence.NewChangeFromJSON(i.PresenceChange)
-	if err != nil {
-		return nil, err
-	}
-
-	c := change.New(changeID, i.Message, ops, p)
+	c := change.New(changeID, i.Message, ops, i.PresenceChange)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil
@@ -131,4 +111,32 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 	*clone = *i
 
 	return clone
+}
+
+// EncodePresenceChange encodes the given PresenceChange into bytes array.
+func EncodePresenceChange(p *innerpresence.PresenceChange) ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+
+	bytes, err := proto.Marshal(converter.ToPresenceChange(p))
+	if err != nil {
+		return nil, fmt.Errorf("encode presence change to bytes: %w", err)
+	}
+
+	return bytes, nil
+}
+
+// PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
+func PresenceChangeFromBytes(bytes []byte) (*innerpresence.PresenceChange, error) {
+	if bytes == nil {
+		return nil, nil
+	}
+
+	pbChange := &api.PresenceChange{}
+	if err := proto.Unmarshal(bytes, pbChange); err != nil {
+		return nil, fmt.Errorf("decode presence change: %w", err)
+	}
+
+	return converter.FromPresenceChange(pbChange), nil
 }

@@ -29,12 +29,15 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var tID = reflect.TypeOf(types.ID(""))
 var tActorID = reflect.TypeOf(&time.ActorID{})
 var tVersionVector = reflect.TypeOf(time.VersionVector{})
+var tPresenceChange = reflect.TypeOf(&innerpresence.PresenceChange{})
 
 // NewRegistryBuilder returns a new registry builder with the default encoder and decoder.
 func NewRegistryBuilder() *bsoncodec.RegistryBuilder {
@@ -50,11 +53,13 @@ func NewRegistryBuilder() *bsoncodec.RegistryBuilder {
 		bsoncodec.NewStringCodec(bsonoptions.StringCodec().SetDecodeObjectIDAsHex(true)),
 	)
 	rb.RegisterTypeDecoder(tVersionVector, bsoncodec.ValueDecoderFunc(versionVectorDecoder))
+	rb.RegisterTypeDecoder(tPresenceChange, bsoncodec.ValueDecoderFunc(presenceChangeDecoder))
 
 	// Register the encoders for types.ID and time.ActorID.
 	rb.RegisterTypeEncoder(tID, bsoncodec.ValueEncoderFunc(idEncoder))
 	rb.RegisterTypeEncoder(tActorID, bsoncodec.ValueEncoderFunc(actorIDEncoder))
 	rb.RegisterTypeEncoder(tVersionVector, bsoncodec.ValueEncoderFunc(versionVectorEncoder))
+	rb.RegisterTypeEncoder(tPresenceChange, bsoncodec.ValueEncoderFunc(presenceChangeEncoder))
 
 	return rb
 }
@@ -132,4 +137,60 @@ func versionVectorDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val 
 	}
 
 	return nil
+}
+
+func presenceChangeEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tPresenceChange {
+		return bsoncodec.ValueEncoderError{
+			Name: "presenceChangeEncoder", Types: []reflect.Type{tPresenceChange}, Received: val}
+	}
+
+	presenceChange := val.Interface().(*innerpresence.PresenceChange)
+	if presenceChange == nil {
+		if err := vw.WriteNull(); err != nil {
+			return fmt.Errorf("encode error: %w", err)
+		}
+		return nil
+	}
+
+	bytes, err := database.EncodePresenceChange(presenceChange)
+	if err != nil {
+		return fmt.Errorf("encode error: %w", err)
+	}
+
+	if err := vw.WriteBinary(bytes); err != nil {
+		return fmt.Errorf("encode error: %w", err)
+	}
+
+	return nil
+}
+
+func presenceChangeDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if val.Type() != tPresenceChange {
+		return bsoncodec.ValueDecoderError{
+			Name: "presenceChangeDecoder", Types: []reflect.Type{tPresenceChange}, Received: val}
+	}
+
+	switch vrType := vr.Type(); vrType {
+	case bson.TypeNull:
+		if err := vr.ReadNull(); err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+		val.Set(reflect.Zero(tPresenceChange))
+		return nil
+	case bson.TypeBinary:
+		data, _, err := vr.ReadBinary()
+		if err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+
+		presenceChange, err := database.PresenceChangeFromBytes(data)
+		if err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+		val.Set(reflect.ValueOf(presenceChange))
+		return nil
+	default:
+		return fmt.Errorf("unsupported type: %v", vr.Type())
+	}
 }

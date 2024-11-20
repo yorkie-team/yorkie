@@ -901,10 +901,6 @@ func (d *DB) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedPresence, err := database.EncodePresenceChange(cn.PresenceChange())
-		if err != nil {
-			return err
-		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
@@ -917,7 +913,7 @@ func (d *DB) CreateChangeInfos(
 			VersionVector:  cn.ID().VersionVector(),
 			Message:        cn.Message(),
 			Operations:     encodedOperations,
-			PresenceChange: encodedPresence,
+			PresenceChange: cn.PresenceChange(),
 		}); err != nil {
 			return fmt.Errorf("create change: %w", err)
 		}
