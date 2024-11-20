@@ -20,8 +20,6 @@
 package innerpresence
 
 import (
-	"encoding/json"
-	"fmt"
 	"sync"
 )
 
@@ -100,36 +98,8 @@ const (
 
 // PresenceChange represents the change of presence.
 type PresenceChange struct {
-	ChangeType PresenceChangeType `json:"changeType"`
-	Presence   Presence           `json:"presence"`
-}
-
-// EncodeToBytes encodes the given presence change into bytes array.
-func EncodeToBytes(p *PresenceChange) ([]byte, error) {
-	if p == nil {
-		return nil, nil
-	}
-
-	bytes, err := json.Marshal(p)
-	if err != nil {
-		return nil, fmt.Errorf("marshal presence change to bytes: %w", err)
-	}
-
-	return bytes, nil
-}
-
-// PresenceChangeFromBytes unmarshals the given bytes array into PresenceChange.
-func PresenceChangeFromBytes(bytes []byte) (*PresenceChange, error) {
-	if bytes == nil {
-		return nil, nil
-	}
-
-	p := &PresenceChange{}
-	if err := json.Unmarshal(bytes, p); err != nil {
-		return nil, fmt.Errorf("unmarshal presence change: %w", err)
-	}
-
-	return p, nil
+	ChangeType PresenceChangeType
+	Presence   Presence
 }
 
 // Presence represents custom presence that can be defined by the client.
@@ -146,10 +116,8 @@ func (p Presence) Set(key string, value string) {
 }
 
 // Clear clears the presence.
-func (p Presence) Clear() {
-	for k := range p {
-		delete(p, k)
-	}
+func (p *Presence) Clear() {
+	*p = make(map[string]string)
 }
 
 // DeepCopy copies itself deeply.
@@ -157,6 +125,7 @@ func (p Presence) DeepCopy() Presence {
 	if p == nil {
 		return nil
 	}
+
 	clone := make(map[string]string)
 	for k, v := range p {
 		clone[k] = v

@@ -18,6 +18,7 @@ package database
 
 import (
 	"errors"
+	"fmt"
 
 	"google.golang.org/protobuf/proto"
 
@@ -110,4 +111,32 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 	*clone = *i
 
 	return clone
+}
+
+// EncodePresenceChange encodes the given PresenceChange into bytes array.
+func EncodePresenceChange(p *innerpresence.PresenceChange) ([]byte, error) {
+	if p == nil {
+		return nil, nil
+	}
+
+	bytes, err := proto.Marshal(converter.ToPresenceChange(p))
+	if err != nil {
+		return nil, fmt.Errorf("encode presence change to bytes: %w", err)
+	}
+
+	return bytes, nil
+}
+
+// PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
+func PresenceChangeFromBytes(bytes []byte) (*innerpresence.PresenceChange, error) {
+	if bytes == nil {
+		return nil, nil
+	}
+
+	pbChange := &api.PresenceChange{}
+	if err := proto.Unmarshal(bytes, pbChange); err != nil {
+		return nil, fmt.Errorf("decode presence change: %w", err)
+	}
+
+	return converter.FromPresenceChange(pbChange), nil
 }
