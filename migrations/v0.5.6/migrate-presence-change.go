@@ -18,10 +18,14 @@ package v056
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // validatePresenceChangeMigration validates if all string presence changes are properly migrated
@@ -75,11 +79,21 @@ func processMigrationBatchPresence(
 						},
 					})
 				} else {
+					p := &innerpresence.PresenceChange{}
+					err := json.Unmarshal([]byte(presenceChangeStr), p)
+					if err != nil {
+						return fmt.Errorf("unmarshal presence change: %w", err)
+					}
+
+					bytes, err := database.EncodePresenceChange(p)
+					if err != nil {
+						return fmt.Errorf("encode error: %w", err)
+					}
 					operation = mongo.NewUpdateOneModel().SetFilter(bson.M{
 						"_id": doc["_id"],
 					}).SetUpdate(bson.M{
 						"$set": bson.M{
-							"presence_change": []byte(presenceChangeStr),
+							"presence_change": bytes,
 						},
 					})
 				}
