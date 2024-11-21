@@ -30,6 +30,10 @@ func RunMigration(ctx context.Context, db *mongo.Client, databaseName string, ba
 		return err
 	}
 
+	if err := ReactivateClients(ctx, db, databaseName, batchSize); err != nil {
+		return err
+	}
+
 	fmt.Println("v0.5.6 migration completed")
 
 	return nil
