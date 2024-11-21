@@ -168,7 +168,8 @@ var schema = &memdb.DBSchema{
 					},
 				},
 				"doc_id_actor_id_server_seq": {
-					Name: "doc_id_actor_id_server_seq",
+					Name:   "doc_id_actor_id_server_seq",
+					Unique: true,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
