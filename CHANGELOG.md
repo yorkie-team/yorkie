@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.6] - 2024-11-22
+
+### Added
+
+- Add migration script to detach documents from deactivated clients by @raararaara in https://github.com/yorkie-team/yorkie/pull/1062
+
+### Changed
+
+- Upate garbage collection algorithm design by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1061
+- Convert `presence change` from string to binary by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1069
+
+### Fixed
+
+- Add minLamport for proper GC of deactivated clients by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1060
+- Optimize document detachment in Cluster Server by @raararaara in https://github.com/yorkie-team/yorkie/pull/1055
+- Fix version vector cleanup during client deactivation by @raararaara in https://github.com/yorkie-team/yorkie/pull/1068
+- Correct ReverseLowerBound behavior in MemDB by setting unique index by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1074
+- Update presence_change migration for JSON to Protobuf conversion by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1075
+
 ## [0.5.5] - 2024-11-07
 
 ### Added
