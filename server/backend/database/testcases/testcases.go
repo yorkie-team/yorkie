@@ -1619,3 +1619,34 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	}
 	assert.EqualValues(t, expectedKeys, keys)
 }
+
+func CreateLargeSnapshotTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("store and validate large snapshot test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+
+		doc := document.New(docKey)
+		doc.SetActor(actorID)
+
+		largeData := make([]byte, 16*1024*1024+1) // 16MB + 1 byte
+		for i := range largeData {
+			largeData[i] = byte('A' + (i % 26)) // A-Z 반복
+		}
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetBytes("largeField", largeData)
+			return nil
+		}))
+
+		docRefKey := docInfo.RefKey()
+
+		// 스냅샷 생성 및 오류 확인
+		err := db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument())
+		assert.NoError(t, err)
+	})
+}

@@ -22,12 +22,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
@@ -1068,21 +1070,67 @@ func (c *Client) CreateSnapshotInfo(
 	docRefKey types.DocRefKey,
 	doc *document.InternalDocument,
 ) error {
+	// 스냅샷 생성
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
 		return err
 	}
 
-	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id":     docRefKey.ProjectID,
-		"doc_id":         docRefKey.DocID,
-		"server_seq":     doc.Checkpoint().ServerSeq,
-		"lamport":        doc.Lamport(),
-		"version_vector": doc.VersionVector(),
-		"snapshot":       snapshot,
-		"created_at":     gotime.Now(),
-	}); err != nil {
-		return fmt.Errorf("insert snapshot: %w", err)
+	// 16MB 이상이면 GridFS에 저장
+	const maxSnapshotSize = 16 * 1024 * 1024 // 16MB
+	if len(snapshot) > maxSnapshotSize {
+		log.Println("16MB over!!!")
+
+		db := c.client.Database(c.config.YorkieDatabase)
+
+		// GridFS 버킷 생성
+		bucket, err := gridfs.NewBucket(db) // MongoDB의 c.db는 데이터베이스 객체
+		if err != nil {
+			return fmt.Errorf("failed to create GridFS bucket: %w", err)
+		}
+
+		// GridFS에 파일 업로드
+		uploadStream, err := bucket.OpenUploadStream(fmt.Sprintf("%s_snapshot", docRefKey.DocID))
+		if err != nil {
+			return fmt.Errorf("failed to open GridFS upload stream: %w", err)
+		}
+		defer uploadStream.Close()
+
+		// 스냅샷 데이터를 GridFS에 저장
+		_, err = uploadStream.Write(snapshot)
+		if err != nil {
+			return fmt.Errorf("failed to write to GridFS: %w", err)
+		}
+
+		// 파일의 ID (GridFS에서 파일을 식별하는 ObjectId)
+		fileID := uploadStream.FileID
+
+		// GridFS에 저장된 파일 ID를 사용하여 문서 삽입
+		if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
+			"project_id":       docRefKey.ProjectID,
+			"doc_id":           docRefKey.DocID,
+			"server_seq":       doc.Checkpoint().ServerSeq,
+			"lamport":          doc.Lamport(),
+			"version_vector":   doc.VersionVector(),
+			"snapshot_file_id": fileID, // GridFS 파일 ID
+			"created_at":       gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("insert snapshot info: %w", err)
+		}
+
+	} else {
+		// 스냅샷이 16MB 이하일 경우 일반적인 컬렉션에 삽입
+		if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
+			"project_id":     docRefKey.ProjectID,
+			"doc_id":         docRefKey.DocID,
+			"server_seq":     doc.Checkpoint().ServerSeq,
+			"lamport":        doc.Lamport(),
+			"version_vector": doc.VersionVector(),
+			"snapshot":       snapshot,
+			"created_at":     gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("insert snapshot: %w", err)
+		}
 	}
 
 	return nil

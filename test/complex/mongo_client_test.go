@@ -171,4 +171,8 @@ func TestClientWithShardedDB(t *testing.T) {
 		assert.Equal(t, docInfo1.Key, result.Key)
 		assert.Equal(t, docInfo1.ID, result.ID)
 	})
+
+	t.Run("CreateLargeSnapshotTest test", func(t *testing.T) {
+		testcases.CreateLargeSnapshotTest(t, cli, dummyProjectID)
+	})
 }
