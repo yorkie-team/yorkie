@@ -22,7 +22,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	gotime "time"
 
@@ -45,7 +44,8 @@ import (
 
 const (
 	// StatusKey is the key of the status field.
-	StatusKey = "status"
+	StatusKey           = "status"
+	BSONMaxSnapshotSize = 16 * 1024 * 1024 // 16MB
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -1075,10 +1075,7 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	const maxSnapshotSize = 16 * 1024 * 1024 // 16MB
-	if len(snapshot) > maxSnapshotSize {
-		log.Println("16MB over!!!")
-
+	if len(snapshot) > BSONMaxSnapshotSize {
 		db := c.client.Database(c.config.YorkieDatabase)
 
 		// create GridFS bucket
