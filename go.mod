@@ -5,7 +5,7 @@ go 1.21
 require (
 	connectrpc.com/connect v1.12.0
 	connectrpc.com/grpchealth v1.3.0
-	github.com/go-co-op/gocron/v2 v2.10.1
+	github.com/go-co-op/gocron/v2 v2.12.4
 	github.com/go-playground/locales v0.14.0
 	github.com/go-playground/universal-translator v0.18.0
 	github.com/go-playground/validator/v10 v10.11.1
