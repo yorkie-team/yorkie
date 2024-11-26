@@ -41,6 +41,17 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+var allWebhookMethods = &[]string{
+	string(types.ActivateClient),
+	string(types.DeactivateClient),
+	string(types.AttachDocument),
+	string(types.DetachDocument),
+	string(types.RemoveDocument),
+	string(types.PushPull),
+	string(types.WatchDocuments),
+	string(types.Broadcast),
+}
+
 func newAuthServer(t *testing.T) (*httptest.Server, string) {
 	token := xid.New().String()
 
@@ -110,7 +121,8 @@ func TestProjectAuthWebhook(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -140,7 +152,8 @@ func TestProjectAuthWebhook(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -179,7 +192,8 @@ func TestProjectAuthWebhook(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -278,7 +292,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -318,7 +333,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -346,7 +362,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -375,7 +392,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -434,7 +452,8 @@ func TestAuthWebhookCache(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -511,7 +530,8 @@ func TestAuthWebhookCache(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -574,7 +594,8 @@ func TestAuthWebhookCache(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
@@ -622,7 +643,8 @@ func TestAuthWebhookNewToken(t *testing.T) {
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
-				AuthWebhookURL: &project.AuthWebhookURL,
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: allWebhookMethods,
 			},
 		)
 		assert.NoError(t, err)
