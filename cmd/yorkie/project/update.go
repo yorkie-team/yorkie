@@ -35,9 +35,22 @@ import (
 
 var (
 	flagAuthWebhookURL            string
+	flagAuthWebhookMethodsAdd     []string
+	flagAuthWebhookMethodsRm      []string
 	flagName                      string
 	flagClientDeactivateThreshold string
 )
+
+var allAuthWebhookMethods = []string{
+	string(types.ActivateClient),
+	string(types.DeactivateClient),
+	string(types.AttachDocument),
+	string(types.DetachDocument),
+	string(types.RemoveDocument),
+	string(types.PushPull),
+	string(types.WatchDocuments),
+	string(types.Broadcast),
+}
 
 func newUpdateCommand() *cobra.Command {
 	return &cobra.Command{
@@ -82,6 +95,31 @@ func newUpdateCommand() *cobra.Command {
 				newAuthWebhookURL = flagAuthWebhookURL
 			}
 
+			methods := make(map[string]struct{})
+			for _, m := range project.AuthWebhookMethods {
+				methods[m] = struct{}{}
+			}
+			for _, m := range flagAuthWebhookMethodsRm {
+				if m == "ALL" {
+					methods = make(map[string]struct{})
+				} else {
+					delete(methods, m)
+				}
+			}
+			for _, m := range flagAuthWebhookMethodsAdd {
+				if m == "ALL" {
+					for _, m := range allAuthWebhookMethods {
+						methods[m] = struct{}{}
+					}
+				} else {
+					methods[m] = struct{}{}
+				}
+			}
+			newAuthWebhookMethods := make([]string, 0, len(methods))
+			for m := range methods {
+				newAuthWebhookMethods = append(newAuthWebhookMethods, m)
+			}
+
 			newClientDeactivateThreshold := project.ClientDeactivateThreshold
 			if flagClientDeactivateThreshold != "" {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold
@@ -90,6 +128,7 @@ func newUpdateCommand() *cobra.Command {
 			updatableProjectFields := &types.UpdatableProjectFields{
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
+				AuthWebhookMethods:        &newAuthWebhookMethods,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			}
 
@@ -153,6 +192,18 @@ func init() {
 		"auth-webhook-url",
 		"",
 		"authorization-webhook update url",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagAuthWebhookMethodsAdd,
+		"auth-webhook-method-add",
+		[]string{},
+		"authorization-webhook methods to add ('ALL' for all methods)",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagAuthWebhookMethodsRm,
+		"auth-webhook-method-rm",
+		[]string{},
+		"authorization-webhook methods to remove ('ALL' for all methods)",
 	)
 	cmd.Flags().StringVar(
 		&flagClientDeactivateThreshold,

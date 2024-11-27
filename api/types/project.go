@@ -62,7 +62,7 @@ func (p *Project) RequireAuth(method Method) bool {
 	}
 
 	if len(p.AuthWebhookMethods) == 0 {
-		return true
+		return false
 	}
 
 	for _, m := range p.AuthWebhookMethods {

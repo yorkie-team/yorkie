@@ -35,13 +35,13 @@ func TestProjectInfo(t *testing.T) {
 		assert.True(t, info.RequireAuth(types.ActivateClient))
 		assert.False(t, info.RequireAuth(types.DetachDocument))
 
-		// 2. Allow all
+		// 2. No method specified
 		info2 := &types.Project{
 			AuthWebhookURL:     validWebhookURL,
 			AuthWebhookMethods: []string{},
 		}
-		assert.True(t, info2.RequireAuth(types.ActivateClient))
-		assert.True(t, info2.RequireAuth(types.DetachDocument))
+		assert.False(t, info2.RequireAuth(types.ActivateClient))
+		assert.False(t, info2.RequireAuth(types.DetachDocument))
 
 		// 3. Empty webhook URL
 		info3 := &types.Project{
