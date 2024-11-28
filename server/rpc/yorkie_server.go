@@ -157,6 +157,14 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	clientIDs := s.backend.Coordinator.ClientIDs(types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     docInfo.ID,
+	})
+	if len(clientIDs) >= project.MaxConcurrentConnections {
+		return nil, fmt.Errorf("max number of concurrent connections per document exceeded")
+	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}

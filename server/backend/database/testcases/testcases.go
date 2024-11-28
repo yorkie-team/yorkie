@@ -44,6 +44,7 @@ const (
 	otherOwnerID              = types.ID("000000000000000000000001")
 	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
+	maxConcurrentConnections  = 10
 )
 
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.
@@ -190,7 +191,13 @@ func RunFindProjectInfoBySecretKeyTest(
 		username := "admin@yorkie.dev"
 		password := "hashed-password"
 
-		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		_, project, err := db.EnsureDefaultUserAndProject(
+			ctx,
+			username,
+			password,
+			clientDeactivateThreshold,
+			maxConcurrentConnections,
+		)
 		assert.NoError(t, err)
 
 		info2, err := db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
@@ -214,11 +221,12 @@ func RunFindProjectInfoByNameTest(
 				fmt.Sprintf("%s-%d", t.Name(), suffix),
 				dummyOwnerID,
 				clientDeactivateThreshold,
+				maxConcurrentConnections,
 			)
 			assert.NoError(t, err)
 		}
 
-		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
 
 		// Lists all projects that the dummyOwnerID is the owner.
@@ -226,7 +234,7 @@ func RunFindProjectInfoByNameTest(
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
 
 		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
@@ -244,9 +252,9 @@ func RunFindProjectInfoByNameTest(
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
 		ctx := context.Background()
 
-		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
 
 		info2, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
@@ -674,7 +682,13 @@ func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
 		username := "findUserInfoTestAccount"
 		password := "temporary-password"
 
-		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		user, _, err := db.EnsureDefaultUserAndProject(
+			ctx,
+			username,
+			password,
+			clientDeactivateThreshold,
+			maxConcurrentConnections,
+		)
 		assert.NoError(t, err)
 
 		info1, err := db.FindUserInfoByID(ctx, user.ID)
@@ -692,7 +706,13 @@ func RunFindUserInfoByNameTest(t *testing.T, db database.Database) {
 		username := "findUserInfoTestAccount"
 		password := "temporary-password"
 
-		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		user, _, err := db.EnsureDefaultUserAndProject(
+			ctx,
+			username,
+			password,
+			clientDeactivateThreshold,
+			maxConcurrentConnections,
+		)
 		assert.NoError(t, err)
 
 		info1, err := db.FindUserInfoByName(ctx, user.Username)
@@ -769,9 +789,9 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		}
 		newClientDeactivateThreshold := "1h"
 
-		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold, maxConcurrentConnections)
 		assert.NoError(t, err)
 
 		id := info.ID
@@ -920,7 +940,13 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// dummy project setup
-		testProjectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		testProjectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name(),
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			maxConcurrentConnections,
+		)
 		assert.NoError(t, err)
 
 		// dummy document setup
@@ -1027,7 +1053,13 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// 01. Initialize a project and create documents.
-		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		projectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name(),
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			maxConcurrentConnections,
+		)
 		assert.NoError(t, err)
 
 		var docInfos []*database.DocInfo
@@ -1541,6 +1573,7 @@ func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
 				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
 				otherOwnerID,
 				clientDeactivateThreshold,
+				maxConcurrentConnections,
 			)
 			assert.NoError(t, err)
 			projects = append(projects, p)
@@ -1571,6 +1604,7 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()),
 			otherOwnerID,
 			clientDeactivateThreshold,
+			maxConcurrentConnections,
 		)
 		assert.NoError(t, err)
 
@@ -1585,6 +1619,7 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()),
 			otherOwnerID,
 			"0s",
+			maxConcurrentConnections,
 		)
 		assert.NoError(t, err)
 

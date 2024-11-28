@@ -66,10 +66,18 @@ type ProjectInfo struct {
 
 	// UpdatedAt is the time when the project was updated.
 	UpdatedAt time.Time `bson:"updated_at"`
+
+	// MaxConcurrentConnections is TODO(raa).
+	MaxConcurrentConnections int `bson:"max_concurrent_connections"`
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
+func NewProjectInfo(
+	name string,
+	owner types.ID,
+	clientDeactivateThreshold string,
+	maxConcurrentConnections int,
+) *ProjectInfo {
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,
@@ -77,6 +85,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		PublicKey:                 shortuuid.New(),
 		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),
+		MaxConcurrentConnections:  maxConcurrentConnections,
 	}
 }
 
@@ -97,6 +106,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
+		MaxConcurrentConnections:  i.MaxConcurrentConnections,
 	}
 }
 
@@ -129,6 +139,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		SecretKey:                 i.SecretKey,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
+		MaxConcurrentConnections:  i.MaxConcurrentConnections,
 	}
 }
 

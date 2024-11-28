@@ -138,13 +138,14 @@ func (d *DB) EnsureDefaultUserAndProject(
 	username,
 	password string,
 	clientDeactivateThreshold string,
+	maxConcurrentConnections int,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold, maxConcurrentConnections)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -190,6 +191,7 @@ func (d *DB) ensureDefaultProjectInfo(
 	_ context.Context,
 	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
+	defaultMaxConcurrentConnections int,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -201,7 +203,12 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+		info = database.NewProjectInfo(
+			database.DefaultProjectName,
+			defaultUserID,
+			defaultClientDeactivateThreshold,
+			defaultMaxConcurrentConnections,
+		)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -220,6 +227,7 @@ func (d *DB) CreateProjectInfo(
 	name string,
 	owner types.ID,
 	clientDeactivateThreshold string,
+	maxConcurrentConnections int,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -234,7 +242,7 @@ func (d *DB) CreateProjectInfo(
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold, maxConcurrentConnections)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)

@@ -98,6 +98,11 @@ func (c *Coordinator) Members() map[string]*sync.ServerInfo {
 	return members
 }
 
+// ClientIDs returns the clients of the given document.
+func (c *Coordinator) ClientIDs(documentRefKey types.DocRefKey) []*time.ActorID {
+	return c.pubSub.ClientIDs(documentRefKey)
+}
+
 // Close closes all resources of this Coordinator.
 func (c *Coordinator) Close() error {
 	return nil

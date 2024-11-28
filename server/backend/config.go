@@ -45,6 +45,9 @@ type Config struct {
 	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
 	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
 
+	// MaxConcurrentConnections is TODO(raa).
+	MaxConcurrentConnections int `yaml:"MaxConcurrentConnections"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`

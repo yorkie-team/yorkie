@@ -102,13 +102,14 @@ func (c *Client) EnsureDefaultUserAndProject(
 	username,
 	password string,
 	clientDeactivateThreshold string,
+	maxConcurrentConnections int,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold, maxConcurrentConnections)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -165,8 +166,14 @@ func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
+	defaultMaxConcurrentConnections int,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(
+		database.DefaultProjectName,
+		defaultUserID,
+		defaultClientDeactivateThreshold,
+		defaultMaxConcurrentConnections,
+	)
 	candidate.ID = database.DefaultProjectID
 
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
@@ -179,6 +186,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"public_key":                  candidate.PublicKey,
 			"secret_key":                  candidate.SecretKey,
 			"created_at":                  candidate.CreatedAt,
+			"max_concurrent_connections":  defaultMaxConcurrentConnections,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -206,8 +214,9 @@ func (c *Client) CreateProjectInfo(
 	name string,
 	owner types.ID,
 	clientDeactivateThreshold string,
+	maxConcurrentConnections int,
 ) (*database.ProjectInfo, error) {
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold, maxConcurrentConnections)
 	result, err := c.collection(ColProjects).InsertOne(ctx, bson.M{
 		"name":                        info.Name,
 		"owner":                       owner,
@@ -215,6 +224,7 @@ func (c *Client) CreateProjectInfo(
 		"public_key":                  info.PublicKey,
 		"secret_key":                  info.SecretKey,
 		"created_at":                  info.CreatedAt,
+		"max_concurrent_connections":  info.MaxConcurrentConnections,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {

@@ -53,6 +53,9 @@ type Project struct {
 
 	// UpdatedAt is the time when the project was updated.
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// MaxConcurrentConnections is TODO(raa).
+	MaxConcurrentConnections int `json:"max_concurrent_connections"`
 }
 
 // RequireAuth returns whether the given method requires authorization.

@@ -127,6 +127,7 @@ func New(
 			conf.AdminUser,
 			conf.AdminPassword,
 			conf.ClientDeactivateThreshold,
+			conf.MaxConcurrentConnections,
 		)
 		if err != nil {
 			return nil, err

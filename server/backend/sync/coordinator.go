@@ -57,6 +57,9 @@ type Coordinator interface {
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo
 
+	// ClientIDs returns the clients of the given document.
+	ClientIDs(documentRefKey types.DocRefKey) []*time.ActorID
+
 	// Close closes all resources of this Coordinator.
 	Close() error
 }

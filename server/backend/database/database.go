@@ -96,6 +96,7 @@ type Database interface {
 		username,
 		password string,
 		clientDeactivateThreshold string,
+		maxConcurrentConnections int,
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
@@ -104,6 +105,7 @@ type Database interface {
 		name string,
 		owner types.ID,
 		clientDeactivateThreshold string,
+		maxConcurrentConnections int,
 	) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all project infos owned by owner.

@@ -351,6 +351,12 @@ func init() {
 		server.DefaultGatewayAddr,
 		"Gateway address",
 	)
+	cmd.Flags().IntVar(
+		&conf.Backend.MaxConcurrentConnections,
+		"max-concurrent-connections",
+		server.DefaultMaxConcurrentConnections,
+		"Max concurrent connections",
+	)
 
 	rootCmd.AddCommand(cmd)
 }

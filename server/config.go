@@ -55,6 +55,7 @@ const (
 	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
 	DefaultUseDefaultProject          = true
 	DefaultClientDeactivateThreshold  = "24h"
+	DefaultMaxConcurrentConnections   = 3
 	DefaultSnapshotThreshold          = 1000
 	DefaultSnapshotInterval           = 3000
 	DefaultSnapshotWithPurgingChanges = false
@@ -236,6 +237,7 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,
+			MaxConcurrentConnections:   DefaultMaxConcurrentConnections,
 			SnapshotThreshold:          DefaultSnapshotThreshold,
 			SnapshotInterval:           DefaultSnapshotInterval,
 			SnapshotWithPurgingChanges: DefaultSnapshotWithPurgingChanges,

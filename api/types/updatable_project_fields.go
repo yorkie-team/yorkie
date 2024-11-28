@@ -41,11 +41,19 @@ type UpdatableProjectFields struct {
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
+
+	// MaxConcurrentConnections is TODO(raa): Check validate tag.
+	MaxConcurrentConnections *int `bson:"max_concurrent_connections,omitempty" validate:"omitempty,gte=1,lte=50"`
 }
 
 // Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil && i.ClientDeactivateThreshold == nil {
+	// TODO(raa): Do I need default value of MaxConcurrentConnections?
+	if i.Name == nil &&
+		i.AuthWebhookURL == nil &&
+		i.AuthWebhookMethods == nil &&
+		i.ClientDeactivateThreshold == nil &&
+		i.MaxConcurrentConnections == nil {
 		return ErrEmptyProjectFields
 	}
 
