@@ -28,7 +28,11 @@ data:
     echo "Config server address: ${configsvrAddr}"
     waitUntilReady $configsvrAddr
     echo "Configure config server"
-    mongosh $configsvrAddr --eval 'rs.initiate({"_id":"{{ include "configReplName" (list $.Values.name) }}", "members":[{"_id":0,"host":"{{ $configsvrAddr }}","priority":5}]})'
+    mongosh $configsvrAddr --eval 'rs.initiate({"_id":"{{ include "configReplName" (list $.Values.name) }}", "members":[
+      {{- range $i, $e := until ($.Values.sharded.replicaCount.configsvr | int) }}
+      {"_id":{{ printf "%d" $i }},"host":"{{ printf "%s" (include "configReplAddr" (list $.Values.name $i $domainSuffix)) }}",{{- if eq $i 0 }}"priority":5{{- end }} }
+      {{- end }}
+    ]})'
 
     {{ range $i, $e := until ($.Values.sharded.shards | int) }}
     {{ $shardsvrAddr := include "shardReplAddr" (list $.Values.name $i 0 $domainSuffix) }}
@@ -37,7 +41,11 @@ data:
     echo "{{ printf "Shard%d address: %s" $i $shardsvrAddr }}"
     waitUntilReady $shardsvrAddr
     echo "{{ printf "Configure shard%d" $i }}"
-    mongosh $shardsvrAddr --eval 'rs.initiate({"_id":"{{ include "shardReplName" (list $.Values.name $i) }}", "members":[{"_id":0,"host":"{{ $shardsvrAddr }}","priority":5}]})'
+    mongosh $shardsvrAddr --eval 'rs.initiate({"_id":"{{ include "shardReplName" (list $.Values.name $i) }}", "members":[
+      {{- range $j, $e := until ($.Values.sharded.replicaCount.shardsvr | int) }}
+      {"_id":{{ printf "%d" $j }},"host":"{{ printf "%s" (include "shardReplAddr" (list $.Values.name $i $j $domainSuffix)) }}",{{- if eq $j 0 }}"priority":5{{- end }} }
+      {{- end }}
+    ]})'
     {{ end }}
 
     {{ $mongosAddr := include "mongosAddr" (list $.Values.name $domainSuffix) }}
