@@ -80,7 +80,7 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 
 		fromPos, toPos, _ = text.CreateRange(0, 1)
-		_, _, err = text.Style(fromPos, toPos, nil, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
+		_, _, err = text.Style(fromPos, toPos, nil, map[string]string{"b": "1"}, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		assert.Equal(
 			t,

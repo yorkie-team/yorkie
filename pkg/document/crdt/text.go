@@ -294,9 +294,10 @@ func (t *Text) Edit(
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
+	_ map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
@@ -314,22 +315,24 @@ func (t *Text) Style(
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
+		actorID := node.id.createdAt.ActorID()
 		actorIDHex := node.id.createdAt.ActorIDHex()
 
-		var maxCreatedAt *time.Ticket
-		if len(maxCreatedAtMapByActor) == 0 {
-			maxCreatedAt = time.MaxTicket
+		var clientLamportAtChange int64
+		if versionVector == nil {
+			clientLamportAtChange = time.MaxLamport
 		} else {
-			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			lamport, ok := versionVector.Get(actorID)
 			if ok {
-				maxCreatedAt = createdAt
+				clientLamportAtChange = lamport
 			} else {
-				maxCreatedAt = time.InitialTicket
+				clientLamportAtChange = 0
 			}
 		}
 
-		if node.canStyle(executedAt, maxCreatedAt) {
-			maxCreatedAt = createdAtMapByActor[actorIDHex]
+		// TODO(chacha912): We should migrate db to add maxCreatedAt to change vv for existing changes.
+		if node.canStyle(executedAt, clientLamportAtChange) {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt

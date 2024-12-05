@@ -271,8 +271,8 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChan
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
-	return !s.createdAt().After(maxCreatedAt) &&
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
+	return (s.createdAt().Lamport() <= clientLamportAtChange) &&
 		(s.removedAt == nil || editedAt.After(s.removedAt))
 }
 
