@@ -326,7 +326,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			}
 		}
 
-		if err := c.Execute(d.root, d.presences); err != nil {
+		if err := c.Execute(d.root, d.presences, "remote"); err != nil {
 			return nil, err
 		}
 

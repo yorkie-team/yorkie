@@ -170,7 +170,7 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
+		if err := c.Execute(d.doc.root, d.doc.presences, "local"); err != nil {
 			return err
 		}
 
@@ -245,7 +245,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 	}
 
 	for _, c := range changes {
-		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+		if err := c.Execute(d.cloneRoot, d.clonePresences, "remote"); err != nil {
 			return err
 		}
 	}
