@@ -87,7 +87,7 @@ func NewTreeStyleRemove(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeStyle) Execute(root *crdt.Root) error {
+func (e *TreeStyle) Execute(root *crdt.Root, _ ...Option) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Tree)
 	if !ok {

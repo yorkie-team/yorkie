@@ -80,6 +80,7 @@ func (p *Text) Edit(
 		content,
 		attrs,
 		ticket,
+		nil,
 	)
 	if err != nil {
 		panic(err)

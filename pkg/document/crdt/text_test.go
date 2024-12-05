@@ -32,12 +32,12 @@ func TestText(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
-		_, _, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		_, _, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 	})
@@ -70,12 +70,12 @@ func TestText(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
-		_, _, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		_, _, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 

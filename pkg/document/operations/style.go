@@ -63,7 +63,7 @@ func NewStyle(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Style) Execute(root *crdt.Root) error {
+func (e *Style) Execute(root *crdt.Root, _ ...Option) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Text)
 	if !ok {

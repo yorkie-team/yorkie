@@ -273,6 +273,7 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
@@ -285,6 +286,7 @@ func (t *Text) Edit(
 		maxCreatedAtMapByActor,
 		val,
 		executedAt,
+		versionVector,
 	)
 }
 

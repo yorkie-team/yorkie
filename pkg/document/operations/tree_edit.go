@@ -69,7 +69,7 @@ func NewTreeEdit(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeEdit) Execute(root *crdt.Root) error {
+func (e *TreeEdit) Execute(root *crdt.Root, _ ...Option) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
