@@ -173,6 +173,21 @@ What’s essential here is having a consistent criterion. If we take the node’
 
 ![remove-detached-clients-tombstone](media/remove-datached-clients-tombstone.jpg)
 
+### What if MinVersionVector is empty?
+Since minVersionVector is consist of lamport from active clients, there's a case where min version vector is empty.
+Think about the case there's only one active client remains, and that client deactivates. After server receives deactivate request, it delete client's version vector from VersionVector table. When server compute minVersionVector for response pack with there's no active client, which means version vector table is empty, the result of computed min version vector is empty. When client receives response and applying it, GC runs
+
+If the min version vector is empty, calculating the min Lamport will return the maximum value.
+This happens because the logic for minLamport is set to return int64max when the min version vector is empty. Additionally, all remaining tombstones are removed through the garbage collection (GC) process.
+According to the GC logic, all remaining tombstones are cleared.
+
+An empty version vector indicates that there are no active clients, which means it is safe to run GC.
+This is because the document is no longer being used by any client. Of course, one could argue that the result of minLamport should be 0 instead of max when the min version vector is empty. However, this scenario—where the min version vector is empty—only occurs in special cases, such as when the last user deactivates.
+Moreover, there is no issue in removing all tombstones at the point of deactivation, as it aligns with the intended semantics.
+
+
+
+
 ## An example of garbage collection:
 ### State 1
 
