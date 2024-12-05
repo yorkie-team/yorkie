@@ -221,7 +221,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -262,7 +262,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -353,6 +353,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		splitLevel,
 		ticket,
 		t.context.IssueTimeTicket,
+		nil,
 		nil,
 	)
 	if err != nil {
