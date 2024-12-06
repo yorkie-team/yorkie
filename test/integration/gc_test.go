@@ -442,8 +442,9 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Sync(ctx))
 		// remove c2 lamport from d1.vv after GC
-		// d1.vv = [c1:5], minvv = [c1:4], db.vv {c1: [c1:4]}
-		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)))
+		// d1.vv = [c1:5, c2:4], minvv = [c1:4, c2:4], db.vv {c1: [c1:4]}
+		// TODO(JOOHOJANG): we have to consider removing detached client's lamport from version vector
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 6, d2.GarbageLen())
 	})
@@ -1190,6 +1191,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 0, d2.GarbageLen())
-		assert.Equal(t, 1, len(d2.VersionVector()))
+		// TODO(JOOHOJANG): we have to consider removing detached client's lamport from version vector
+		assert.Equal(t, 2, len(d2.VersionVector()))
 	})
 }
