@@ -1235,26 +1235,10 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
 ) (time.VersionVector, error) {
+	// TODO(JOOHOJANG): we have to consider removing detached client's lamport from min version vector
 	var versionVectorInfos []database.VersionVectorInfo
 
-	// 01. Prepare attachedActorIDs including the current client.
-	// If some clients are detached, we should remove them from the min version vector.
-	// For this, we use attachedActorIDs to filter the min version vector.
-	var attachedActorIDs []*time.ActorID
-	attached, err := clientInfo.IsAttached(docRefKey.DocID)
-	if err != nil {
-		return nil, err
-	}
-
-	if attached {
-		currentActorID, err := clientInfo.ID.ToActorID()
-		if err != nil {
-			return nil, err
-		}
-		attachedActorIDs = append(attachedActorIDs, currentActorID)
-	}
-
-	// 02. Find all version vectors of the given document from DB.
+	// 01. Find all version vectors of the given document from DB.
 	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
@@ -1267,20 +1251,14 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
-	// 03. Compute min version vector.
+	// 02. Compute min version vector.
 	var minVersionVector time.VersionVector
 
-	// 03-1. Compute min version vector of other clients and collect attachedActorIDs.
+	// 02-1. Compute min version vector of other clients and collect attachedActorIDs.
 	for _, vvi := range versionVectorInfos {
 		if clientInfo.ID == vvi.ClientID {
 			continue
 		}
-
-		actorID, err := vvi.ClientID.ToActorID()
-		if err != nil {
-			return nil, err
-		}
-		attachedActorIDs = append(attachedActorIDs, actorID)
 
 		if minVersionVector == nil {
 			minVersionVector = vvi.VersionVector
@@ -1293,11 +1271,10 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 		minVersionVector = versionVector
 	}
 
-	// 03-2. Compute min version vector with current client's version vector and filter detached clients.
+	// 02-2. Compute min version vector with current client's version vector
 	minVersionVector = minVersionVector.Min(versionVector)
-	minVersionVector = minVersionVector.Filter(attachedActorIDs)
 
-	// 04. Update current client's version vector. If the client is detached, remove it.
+	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
 	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
 		return nil, err
