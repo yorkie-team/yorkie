@@ -50,9 +50,7 @@ Conceptually, min version vector is version vector that is uniformly applied to 
 
 if (removedAt.lamport <= minVersionVector[removedAt.actor]) {
     runGC()
-} else if (removedAt.lamport < minVersionVector.minLamport()) {
-    runGC()
-}
+} 
 ```
 
 ```
@@ -68,110 +66,6 @@ min([c1:2, c2:3, c3:4], [c1:3, c2:1, c3:5, c4:3])
 => [c1:2, c2:1, c3:4, c4:0]
 
 ```
-### How we handle if min version vector includes detached client's lamport.
-We have to wipe out detached client's lamport from every version vector in db and other client's local version vector.
-![detached-user-version-vector](media/detached-user-version-vector.jpg)
-
-For example,
-```
-// initial state
-c1.versionVector = {c1:4, c2:3, c3: 4}
-c2.versionVector = {c1:3, c2:4, c3: 5}
-c3.versionVector = {c1:3, c2:3, c3: 6}
-
-db.versionVector = {
-    c1: {c1:4, c2:3, c3: 4},
-    c2: {c1:3, c2:4, c3: 5},
-    c3: {c1:3, c2:3, c3: 6}
-}
-
-// process
-1. c1 detach and remove its version vector from db.
-
-db.versionVector = {
-    c2: {c1:3, c2:4, c3: 5}
-    c3: {c1:3, c2:3, c3: 6}
-}
-
-2. compute minVersionVector
-min(c2.vv, c3.vv) = min({c1:3, c2:4, c3: 5}, {c1:3, c2:3, c3:5}) = {c1:3, c2:3, c3:5}
-
-```
-as you can see from above, c1's lamport is still inside minVersionVector, and also in every client's local document's version vector too.
-
-So we need to filter detached client's lamport from
-1. db.version vector
-2. other client's local version vector.
-
-But it causes n+1 query problem to remove lamport from db.versionVector. So we choose remove only client's version vector from table, and filter minVersionVector by active clients.
-
-```
-// initial state
-db.versionVector = {
-    c1: {c1:3, c2:4, c3: 5},
-    c2: {c1:3, c2:3, c3: 6}
-}
-min(c1.vv, c2.vv) = min({c1:3, c2:4, c3: 5}, {c1:3, c2:3, c3:5}) = 
-{c1:3, c2:3, c3:5}
-c1, c2 are acitve(attached).
-
-minVersionVector = {c1:3, c2:3, c3:5}.Filter([c3]) = {c1:3, c2:3}
-```
-
-After client receive this minVersionVector, it will filter its version vector to remove detached client's lamport.
-The next pushpull request will contains filtered version vector so that eventually db.version vector will store attached client's version vector only.
-![filter-version-vector](media/filter-version-vector.jpg)
-
-
-
-### Why `removedAt.lamport <= minVersionVector[removedAt.actor]` is not enough to run GC
-Let's consider the following scenario.
-
-Users A, B, and C are participating in a collaborative editing session. User C deletes a specific node and immediately detaches the document. In this situation, the node deleted by C remains in the document, and C's version vector is removed from the version vector table in the database.
-
-Previously, we stated that to find the minimum version vector, we query all vectors in the version vector table in the database and take the minimum value. After C detaches, if we create the minimum version vector by querying the version vector table, the resulting minimum version vector will not contain C’s information.
-
-Our existing garbage collection (GC) algorithm performs GC when the condition removedAt.lamport <= minVersionVector[removedAt.actor] is satisfied. However, if the actor who deleted the node does not exist in the minimum version vector, this logic will not function.
-
-Therefore, the algorithm needs to be designed so that GC is performed even in situations where the actor who deleted the node is not present in the minimum version vector.
-
-### Is it safe to run GC in condition `removedAt.lamport < minVersionVector.minLamport()` 
-We can understand this by considering the definitions of the version vector and the minimum version vector.
-
-A version vector indicates the editing progress of a user’s document, including how much of other users’ edits have been incorporated. For example, if A’s version vector is `[A:5, B:4, C:2]`, it means that A’s document reflects changes up to 4 made by B and up to 2 made by C.
-
-Expanding this further, let’s assume three users have the following version vectors:
-
-- A: `[A:5, B:4, C:2]`
-- B: `[A:3, B:4, C:2]`
-- C: `[A:2, B:1, C:3]`
-
-We assume that C deleted a specific node with their last change.
-
-In this situation, if C detaches from the document, only A’s and B’s version vectors remain, and the minimum version vector would become `[A:3, B:4]`. When can we perform garbage collection (GC) to delete the node removed by C at `[A:2, B:1, C:3]`?
-
-By examining the minimum version vector at this point, we can consider two scenarios:
-
-1. Only A and B were participating in the editing from the beginning.
-2. There was another user besides A and B, but that user has now detached.
-
-In the first scenario, the existing algorithm that operates when `removedAt.lamport <= minVersionVector[removedAt.actor]` applies, so we don’t need to address it further.
-
-The second scenario presents a potential issue, as a node removed by someone else remains as a tombstone. To remove this tombstone, we need a minimum guarantee.
-
-If we express the execution criterion of the GC algorithm in semantic terms, it would be:
-
-> "The point at which all users are aware that a specific node has been removed."
-
-From the moment C detaches, information about C is removed from each version vector. So, how can we know that C deleted a specific node? Since there’s no direct way to determine this in the minimum version vector due to the lack of information, we need to verify this fact indirectly.
-
-From the perspective of the version vector and the minimum version vector, this means that the minimum value in the minimum version vector should be greater than removedAt.
-
-Of course, it’s possible for a specific client to have a timestamp greater than removedAt without knowing that C deleted the node. However, this case can be addressed by calculating the minimum lamport value in the minimum version vector.
-
-What’s essential here is having a consistent criterion. If we take the node’s removedAt as this criterion, and if a lamport value greater than this criterion exists in the minimum version vector, then it is safe to delete the node.
-
-![remove-detached-clients-tombstone](media/remove-datached-clients-tombstone.jpg)
 
 ## An example of garbage collection:
 ### State 1
