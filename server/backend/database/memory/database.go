@@ -1347,7 +1347,8 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
 ) (time.VersionVector, error) {
-	// TODO(JOOHOJANG): we have to consider removing detached client's lamport from min version vector
+	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
+	// from min version vector.
 
 	// 01. Find all version vectors of the given document from DB.
 	txn := d.db.Txn(false)
@@ -1378,7 +1379,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 		minVersionVector = versionVector
 	}
 
-	// 02-2. Compute min version vector with current client's version vector\
+	// 02-2. Compute min version vector with current client's version vector.
 	minVersionVector = minVersionVector.Min(versionVector)
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
