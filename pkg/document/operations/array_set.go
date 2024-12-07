@@ -52,7 +52,7 @@ func NewArraySet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *ArraySet) Execute(root *crdt.Root) error {
+func (o *ArraySet) Execute(root *crdt.Root, _ ...Option) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)

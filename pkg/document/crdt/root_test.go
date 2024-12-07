@@ -65,28 +65,28 @@ func TestRoot(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, "Hello World", text.String())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(5, 10)
-		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, "HelloYorkied", text.String())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 5)
-		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, "Yorkied", text.String())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 7)
-		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, "Yorkie", text.String())
@@ -125,7 +125,7 @@ func TestRoot(t *testing.T) {
 
 		for _, tc := range steps {
 			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
-			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
+			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket(), nil)
 			assert.NoError(t, err)
 			registerGCPairs(root, pairs)
 			assert.Equal(t, tc.want, text.String())
@@ -157,7 +157,7 @@ func TestRoot(t *testing.T) {
 
 		for _, tc := range steps {
 			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
-			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
+			_, _, pairs, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket(), nil)
 			assert.NoError(t, err)
 			registerGCPairs(root, pairs)
 			assert.Equal(t, tc.want, text.String())
@@ -176,21 +176,21 @@ func TestRoot(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos, _ := text.CreateRange(0, 0)
-		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
-		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 6)
-		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		_, _, pairs, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket(), nil)
 		assert.NoError(t, err)
 		registerGCPairs(root, pairs)
 		assert.Equal(t, `[{"val":"Yorkie"}]`, text.Marshal())

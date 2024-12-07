@@ -43,7 +43,7 @@ func NewIncrease(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *crdt.Root) error {
+func (o *Increase) Execute(root *crdt.Root, _ ...Option) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {

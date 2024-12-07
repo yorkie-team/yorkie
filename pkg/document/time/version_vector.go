@@ -35,6 +35,13 @@ func NewVersionVector() VersionVector {
 	return make(VersionVector)
 }
 
+// Get gets the version of the given actor.
+// Returns the version and whether the actor exists in the vector.
+func (v VersionVector) Get(id *ActorID) (int64, bool) {
+	version, exists := v[id.bytes]
+	return version, exists
+}
+
 // Set sets the given actor's version to the given value.
 func (v VersionVector) Set(id *ActorID, i int64) {
 	v[id.bytes] = i
