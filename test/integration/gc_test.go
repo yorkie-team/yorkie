@@ -442,8 +442,10 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c1.Sync(ctx))
 		// remove c2 lamport from d1.vv after GC
-		// d1.vv = [c1:5], minvv = [c1:4], db.vv {c1: [c1:4]}
-		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5)))
+		// d1.vv = [c1:5, c2:4], minvv = [c1:4, c2:4], db.vv {c1: [c1:4]}
+		// TODO(JOOHOJANG): We have to consider removing detached client's lamport
+		// from version vector.
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 5), versionOf(d2.ActorID(), 4)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 6, d2.GarbageLen())
 	})
@@ -1190,7 +1192,116 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, 0, d2.GarbageLen())
-		assert.Equal(t, 1, len(d2.VersionVector()))
+		// TODO(JOOHOJANG): We have to consider removing detached client's lamport
+		// from version vector.
+		assert.Equal(t, 2, len(d2.VersionVector()))
+	})
+
+	t.Run("detach gc test", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+		defer deactivateAndCloseClients(t, clients)
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c3.Attach(ctx, d3))
+		assert.NoError(t, c3.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 3), versionOf(d2.ActorID(), 1), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 3), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d3.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 1), versionOf(d3.ActorID(), 3)))
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
+			return nil
+		}, "insert abc")
+		assert.NoError(t, err)
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 5), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d3.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1), versionOf(d3.ActorID(), 5)))
+
+		err = d3.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "") // delete bc
+			return nil
+		}, "delete bc")
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 0, "1") // 1abc
+			return nil
+		}, "insert 1")
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 0, "2") // 21abc
+			return nil
+		}, "insert 2")
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 0, "3") // 321abc
+			return nil
+		}, "insert 3")
+		assert.NoError(t, err)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(3, 3, "x") // abcx
+			return nil
+		}, "insert x")
+		assert.NoError(t, err)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(4, 4, "y") // abcxy
+			return nil
+		}, "insert x")
+		assert.NoError(t, err)
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, `{"text":[{"val":"3"},{"val":"2"},{"val":"1"},{"val":"a"},{"val":"b"},{"val":"c"},{"val":"x"},{"val":"y"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"3"},{"val":"2"},{"val":"1"},{"val":"a"},{"val":"b"},{"val":"c"},{"val":"x"},{"val":"y"}]}`, d2.Marshal())
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 9), versionOf(d2.ActorID(), 7), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 10), versionOf(d3.ActorID(), 1)))
+		assert.Equal(t, true, checkVV(d3.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1), versionOf(d3.ActorID(), 6)))
+
+		assert.NoError(t, c3.Detach(ctx, d3))
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(5, 5, "z") // 321abzcxy
+			return nil
+		}, "insert y")
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, 2, d1.GarbageLen())
+
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		// TODO(JOOHOJANG): We have to consider removing detached client's lamport
+		// from version vector.
+		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 12), versionOf(d2.ActorID(), 11), versionOf(d3.ActorID(), 7)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 13), versionOf(d3.ActorID(), 7)))
+		assert.Equal(t, `{"text":[{"val":"3"},{"val":"2"},{"val":"1"},{"val":"a"},{"val":"z"},{"val":"x"},{"val":"y"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"3"},{"val":"2"},{"val":"1"},{"val":"a"},{"val":"z"},{"val":"x"},{"val":"y"}]}`, d2.Marshal())
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageLen())
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
 	t.Run("attach > pushpull > detach lifecycle version vector test (run gc at last client detaches document)", func(t *testing.T) {
@@ -1268,10 +1379,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 6)))
 
+		// TODO(JOOHOJANG): we have to consider removing detached client's lamport from version vector
 		assert.NoError(t, c1.Detach(ctx, d1))
 
 		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d2.ActorID(), 9)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 9)))
 		assert.Equal(t, `{"text":[{"val":"a"},{"val":"c"},{"val":"1"}]}`, d2.Marshal())
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1279,7 +1391,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}, "delete all")
 		assert.NoError(t, err)
-		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d2.ActorID(), 10)))
+		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 10)))
 		assert.Equal(t, `{"text":[]}`, d2.Marshal())
 
 		assert.Equal(t, 3, d2.GarbageLen())
@@ -1288,7 +1400,6 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("detached client node deletion test", func(t *testing.T) {
-		t.Skip("remove this after implementing node deletion")
 		clients := activeClients(t, 3)
 		c1, c2, c3 := clients[0], clients[1], clients[2]
 		defer deactivateAndCloseClients(t, clients)
@@ -1334,6 +1445,6 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, `{"text":[{"val":"x"},{"val":"a"}]}`, d2.Marshal())
-		assert.Equal(t, `{"text":[{"val":"x"},{"val":"a"}]}`, d1.Marshal()) // "x1a": cannot delete 1
+		assert.Equal(t, `{"text":[{"val":"x"},{"val":"a"}]}`, d1.Marshal())
 	})
 }

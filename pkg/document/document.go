@@ -170,7 +170,7 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presences, "local"); err != nil {
+		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
 
@@ -221,17 +221,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.GarbageCollect(pack.VersionVector)
 	}
 
-	// 05. Remove detached client's lamport from version vector if it exists
-	if pack.VersionVector != nil && !hasSnapshot {
-		actorIDs, err := pack.VersionVector.Keys()
-		if err != nil {
-			return err
-		}
-
-		d.doc.changeID = d.doc.changeID.SetVersionVector(d.doc.changeID.VersionVector().Filter(actorIDs))
-	}
-
-	// 06. Update the status.
+	// 05. Update the status.
 	if pack.IsRemoved {
 		d.SetStatus(StatusRemoved)
 	}
@@ -245,7 +235,7 @@ func (d *Document) applyChanges(changes []*change.Change) error {
 	}
 
 	for _, c := range changes {
-		if err := c.Execute(d.cloneRoot, d.clonePresences, "remote"); err != nil {
+		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
 			return err
 		}
 	}

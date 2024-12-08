@@ -52,17 +52,10 @@ func New(id ID, message string, operations []operations.Operation, p *innerprese
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map, opSource string) error {
+func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
 	for _, op := range c.operations {
-		// TODO(chacha912): Remove opSource after testing.
-		if opSource == "remote" {
-			if err := op.Execute(root, operations.WithVersionVector(c.ID().versionVector)); err != nil {
-				return err
-			}
-		} else {
-			if err := op.Execute(root); err != nil {
-				return err
-			}
+		if err := op.Execute(root, operations.WithVersionVector(c.ID().versionVector)); err != nil {
+			return err
 		}
 	}
 

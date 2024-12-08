@@ -18,7 +18,6 @@ package time
 
 import (
 	"bytes"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -125,9 +124,7 @@ func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	clientLamport, ok := v[other.actorID.bytes]
 
 	if !ok {
-		minLamport := v.MinLamport()
-
-		return minLamport > other.lamport
+		return false
 	}
 
 	return clientLamport >= other.lamport
@@ -181,19 +178,6 @@ func (v VersionVector) Max(other VersionVector) VersionVector {
 	}
 
 	return maxVV
-}
-
-// MinLamport returns min lamport value in version vector.
-func (v VersionVector) MinLamport() int64 {
-	var minLamport int64 = math.MaxInt64
-
-	for _, value := range v {
-		if value < minLamport {
-			minLamport = value
-		}
-	}
-
-	return minLamport
 }
 
 // MaxLamport returns max lamport value in version vector.
