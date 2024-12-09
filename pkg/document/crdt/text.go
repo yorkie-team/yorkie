@@ -294,7 +294,7 @@ func (t *Text) Edit(
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
-	_ map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
@@ -315,23 +315,33 @@ func (t *Text) Style(
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorID := node.id.createdAt.ActorID()
 		actorIDHex := node.id.createdAt.ActorIDHex()
+		actorID := node.id.createdAt.ActorID()
 
+		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil {
+		if versionVector == nil && maxCreatedAtMapByActor == nil {
+			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else {
+		} else if versionVector != nil {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
 			} else {
 				clientLamportAtChange = 0
 			}
+		} else {
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			if ok {
+				maxCreatedAt = createdAt
+			} else {
+				maxCreatedAt = time.InitialTicket
+			}
 		}
 
-		// TODO(chacha912): We should migrate db to add maxCreatedAt to change vv for existing changes.
-		if node.canStyle(executedAt, clientLamportAtChange) {
+		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+		// (without version vector) are migrated to new Changes with version vector.
+		if node.canStyle(executedAt, maxCreatedAt, clientLamportAtChange) {
 			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {

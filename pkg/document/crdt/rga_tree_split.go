@@ -258,10 +258,18 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChange int64) bool {
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
 	justRemoved := s.removedAt == nil
 
-	if (s.createdAt().Lamport() <= clientLamportAtChange) &&
+	var nodeExisted bool
+	if maxCreatedAt == nil {
+		nodeExisted = s.createdAt().Lamport() <= clientLamportAtChange
+	} else {
+		nodeExisted = !s.createdAt().After(maxCreatedAt)
+	}
+
+	if nodeExisted &&
 		(s.removedAt == nil || removedAt.After(s.removedAt)) {
 		s.removedAt = removedAt
 		return justRemoved
@@ -271,8 +279,16 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChan
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
-	return (s.createdAt().Lamport() <= clientLamportAtChange) &&
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
+	var nodeExisted bool
+	if maxCreatedAt == nil {
+		nodeExisted = s.createdAt().Lamport() <= clientLamportAtChange
+	} else {
+		nodeExisted = !s.createdAt().After(maxCreatedAt)
+	}
+
+	return nodeExisted &&
 		(s.removedAt == nil || editedAt.After(s.removedAt))
 }
 
@@ -505,7 +521,7 @@ func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeS
 
 func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
-	_ map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
@@ -524,25 +540,33 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	nodesToKeep = append(nodesToKeep, leftEdge)
 
 	for _, node := range candidates {
-		actorID := node.createdAt().ActorID()
 		actorIDHex := node.createdAt().ActorIDHex()
+		actorID := node.createdAt().ActorID()
 
+		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil {
+		if versionVector == nil && maxCreatedAtMapByActor == nil {
+			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else {
+		} else if versionVector != nil {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
 			} else {
 				clientLamportAtChange = 0
 			}
+		} else {
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			if ok {
+				maxCreatedAt = createdAt
+			} else {
+				maxCreatedAt = time.InitialTicket
+			}
 		}
 
-		// TODO(chacha912): We should migrate db to add maxCreatedAt to change vv for existing changes.
-		// Since we've modified all changes to use vv instead of maxCreatedAt (assuming we've tested this),
-		// we need to verify this migration with tests.
-		if node.Remove(editedAt, clientLamportAtChange) {
+		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+		// (without version vector) are migrated to new Changes with version vector.
+		if node.Remove(editedAt, maxCreatedAt, clientLamportAtChange) {
 			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
