@@ -80,6 +80,7 @@ func (p *Text) Edit(
 		content,
 		attrs,
 		ticket,
+		nil,
 	)
 	if err != nil {
 		panic(err)
@@ -119,6 +120,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		nil,
 		attributes,
 		ticket,
+		nil,
 	)
 	if err != nil {
 		panic(err)

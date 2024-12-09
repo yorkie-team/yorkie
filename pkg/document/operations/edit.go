@@ -70,12 +70,13 @@ func NewEdit(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Edit) Execute(root *crdt.Root) error {
+func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, _, pairs, err := obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
+		_, _, pairs, err := obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor,
+			e.content, e.attributes, e.executedAt, versionVector)
 		if err != nil {
 			return err
 		}

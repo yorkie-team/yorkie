@@ -87,7 +87,7 @@ func NewTreeStyleRemove(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeStyle) Execute(root *crdt.Root) error {
+func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Tree)
 	if !ok {
@@ -97,12 +97,13 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	var pairs []crdt.GCPair
 	var err error
 	if len(e.attributes) > 0 {
-		_, pairs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, e.maxCreatedAtMapByActor)
+		_, pairs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, e.maxCreatedAtMapByActor, versionVector)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, e.maxCreatedAtMapByActor)
+		_, pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt,
+			e.maxCreatedAtMapByActor, versionVector)
 		if err != nil {
 			return err
 		}

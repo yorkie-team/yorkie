@@ -334,7 +334,7 @@ func fromTextNode(
 		if err != nil {
 			return nil, err
 		}
-		textNode.Remove(removedAt, time.MaxTicket)
+		textNode.Remove(removedAt, time.MaxTicket, time.MaxLamport)
 	}
 	return textNode, nil
 }

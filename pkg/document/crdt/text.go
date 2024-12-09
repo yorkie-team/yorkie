@@ -273,6 +273,7 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
@@ -285,6 +286,7 @@ func (t *Text) Edit(
 		maxCreatedAtMapByActor,
 		val,
 		executedAt,
+		versionVector,
 	)
 }
 
@@ -295,6 +297,7 @@ func (t *Text) Style(
 	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
@@ -313,10 +316,20 @@ func (t *Text) Style(
 
 	for _, node := range nodes {
 		actorIDHex := node.id.createdAt.ActorIDHex()
+		actorID := node.id.createdAt.ActorID()
 
 		var maxCreatedAt *time.Ticket
-		if len(maxCreatedAtMapByActor) == 0 {
-			maxCreatedAt = time.MaxTicket
+		var clientLamportAtChange int64
+		if versionVector == nil && maxCreatedAtMapByActor == nil {
+			// Local edit - use version vector comparison
+			clientLamportAtChange = time.MaxLamport
+		} else if versionVector != nil {
+			lamport, ok := versionVector.Get(actorID)
+			if ok {
+				clientLamportAtChange = lamport
+			} else {
+				clientLamportAtChange = 0
+			}
 		} else {
 			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
@@ -326,8 +339,10 @@ func (t *Text) Style(
 			}
 		}
 
-		if node.canStyle(executedAt, maxCreatedAt) {
-			maxCreatedAt = createdAtMapByActor[actorIDHex]
+		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+		// (without version vector) are migrated to new Changes with version vector.
+		if node.canStyle(executedAt, maxCreatedAt, clientLamportAtChange) {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
