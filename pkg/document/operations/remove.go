@@ -48,7 +48,7 @@ func NewRemove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *crdt.Root, _ ...Option) error {
+func (o *Remove) Execute(root *crdt.Root, _ time.VersionVector) error {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
 	switch parent := parentElem.(type) {

@@ -53,7 +53,7 @@ func NewSet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Set) Execute(root *crdt.Root, _ ...Option) error {
+func (o *Set) Execute(root *crdt.Root, _ time.VersionVector) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Object)

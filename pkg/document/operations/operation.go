@@ -31,26 +31,10 @@ var (
 	ErrNotApplicableDataType = errors.New("not applicable datatype")
 )
 
-// ExecuteOption contains options for executing operations.
-type ExecuteOption struct {
-	// VersionVector represents the version vector at the time of operation creation.
-	VersionVector time.VersionVector
-}
-
-// Option is a function type that configures ExecuteOption.
-type Option func(*ExecuteOption)
-
-// WithVersionVector returns an Option that sets the version vector for the operation.
-func WithVersionVector(versionVector time.VersionVector) Option {
-	return func(option *ExecuteOption) {
-		option.VersionVector = versionVector
-	}
-}
-
 // Operation represents an operation to be executed on a document.
 type Operation interface {
 	// Execute executes this operation on the given document(`root`).
-	Execute(root *crdt.Root, opts ...Option) error
+	Execute(root *crdt.Root, versionVector time.VersionVector) error
 
 	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket
