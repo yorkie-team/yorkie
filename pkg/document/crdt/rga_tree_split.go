@@ -548,7 +548,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		if versionVector == nil && maxCreatedAtMapByActor == nil {
 			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if len(versionVector) > 0 {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
