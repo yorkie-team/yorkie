@@ -161,7 +161,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if hasSnapshot {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.VersionVector); err != nil {
+		if err := d.applySnapshot(pack.Snapshot, pack.VersionVector); err != nil {
 			return err
 		}
 	} else {
@@ -260,7 +260,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64, vector time.VersionVector) error {
+func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVector) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
@@ -269,8 +269,8 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64, vecto
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 
-	// TODO(hackerwins): We need to check we can use serverSeq as lamport timestamp.
-	d.changeID = d.changeID.SetClocks(serverSeq, vector)
+	// TODO(chacha912): We need to check we can use max lamport as lamport timestamp.
+	d.changeID = d.changeID.SetClocks(vector.MaxLamport(), vector)
 
 	return nil
 }
