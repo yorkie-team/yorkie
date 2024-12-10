@@ -1488,7 +1488,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		// 01. Update changes over snapshot threshold.
 		for i := 0; i <= int(helper.SnapshotThreshold)/2; i++ {
-			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("text").Edit(0, 0, strconv.Itoa(i))
 				return nil
 			})

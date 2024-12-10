@@ -104,11 +104,16 @@ func (id ID) SyncClocks(other ID) ID {
 		lamport = other.lamport + 1
 	}
 
-	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(other.versionVector))
-	newID.versionVector.Set(id.actorID, lamport)
-	if len(other.versionVector) == 0 {
-		newID.versionVector.Set(other.actorID, other.lamport)
+	// NOTE(chacha912): Handle changes from legacy SDK (v0.5.2 or below) which have empty version vectors.
+	// Add lamport to version vector to include this change's information.
+	otherVV := other.versionVector
+	if len(otherVV) == 0 {
+		otherVV = otherVV.DeepCopy()
+		otherVV.Set(other.actorID, other.lamport)
 	}
+
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(otherVV))
+	newID.versionVector.Set(id.actorID, lamport)
 	return newID
 }
 
@@ -120,9 +125,12 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 		lamport = otherLamport + 1
 	}
 
+	// NOTE(chacha912): Snapshot's version vector from server contains initialActorID.
+	// Remove it as it's not an actual participating client.
+	vector.Unset(time.InitialActorID)
+
 	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
 	newID.versionVector.Set(id.actorID, lamport)
-	newID.versionVector.Unset(time.InitialActorID)
 
 	return newID
 }
