@@ -106,6 +106,9 @@ func (id ID) SyncClocks(other ID) ID {
 
 	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(other.versionVector))
 	newID.versionVector.Set(id.actorID, lamport)
+	if len(other.versionVector) == 0 {
+		newID.versionVector.Set(other.actorID, other.lamport)
+	}
 	return newID
 }
 
@@ -119,6 +122,7 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 
 	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
 	newID.versionVector.Set(id.actorID, lamport)
+	newID.versionVector.Unset(time.InitialActorID)
 
 	return newID
 }
