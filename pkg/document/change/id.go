@@ -104,8 +104,9 @@ func (id ID) SyncClocks(other ID) ID {
 		lamport = other.lamport + 1
 	}
 
-	// NOTE(chacha912): Handle changes from legacy SDK (v0.5.2 or below) which have empty version vectors.
-	// Add lamport to version vector to include this change's information.
+	// NOTE(chacha912): For changes created by legacy SDK prior to v0.5.2 that lack version
+	// vectors, document's version vector was not being properly accumlated. To address this,
+	// we generate a version vector using the lamport timestamp when no version vector exists.
 	otherVV := other.versionVector
 	if len(otherVV) == 0 {
 		otherVV = otherVV.DeepCopy()
@@ -125,8 +126,13 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 		lamport = otherLamport + 1
 	}
 
-	// NOTE(chacha912): Snapshot's version vector from server contains initialActorID.
-	// Remove it as it's not an actual participating client.
+	// NOTE(chacha912): Documents created by server may have an InitialActorID
+	// in their version vector. Although server is not an actual client, it
+	// generates document snapshots from changes by participating with an
+	// InitialActorID during document instance creation and accumulating stored
+	// changes in DB.
+	// Semantically, including a non-client actor in version vector is
+	// problematic. To address this, we remove the InitialActorID from snapshots.
 	vector.Unset(time.InitialActorID)
 
 	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))

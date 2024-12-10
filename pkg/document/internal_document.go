@@ -269,7 +269,13 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 
-	// TODO(chacha912): We need to check we can use max lamport as lamport timestamp.
+	// NOTE(chacha912): Documents created from snapshots were experiencing edit
+	// restrictions due to low lamport values.
+	// Previously, the code attempted to generate document lamport from ServerSeq.
+	// However, after aligning lamport logic with the original research paper,
+	// ServerSeq could potentially become smaller than the lamport value.
+	// To resolve this, we initialize document's lamport by using the highest
+	// lamport value stored in version vector as the starting point.
 	d.changeID = d.changeID.SetClocks(vector.MaxLamport(), vector)
 
 	return nil
