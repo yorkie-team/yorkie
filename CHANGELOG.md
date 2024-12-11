@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.7] - 2024-12-11
+
+### Changed
+
+- Refactor webhook method configuration and add CLI commands by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1082
+- Replace MaxCreatedAtMapByActor with VersionVector by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1088
+- Add migration script to remove version vector by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1091
+- Simplify unique constraint for documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1098
+
+### Fixed
+
+- Fix Sharding Initialization with Dynamic Replica Set Configuration by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1087
+- Preserve Detached Client's Lamport in Version Vector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1090
+- Improve Version Vector Handling for Legacy SDK and Snapshots by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1096
+- Add missing MongoDB sharding configuration for version vectors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1097
+
 ## [0.5.6] - 2024-11-22
 
 ### Added
