@@ -111,12 +111,9 @@ var collectionInfos = []collectionInfo{
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "key", Value: bsonx.Int32(1)},
+				{Key: "removed_at", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetPartialFilterExpression(
-				bsonx.Doc{
-					{Key: "removed_at", Value: bsonx.Null()},
-				},
-			).SetUnique(true),
+			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: ColChanges,
