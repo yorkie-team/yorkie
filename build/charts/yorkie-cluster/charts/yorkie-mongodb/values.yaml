@@ -57,6 +57,11 @@ sharded:
           - name: doc_id
             method: "1"
         unique: false
+      - collectionName: versionvectors
+        shardKeys:
+          - name: doc_id
+            method: "1"
+        unique: false
 
 # Configuration for manual dmongodb sharded stack
 mongodb-sharded:
