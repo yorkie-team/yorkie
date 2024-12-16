@@ -145,12 +145,14 @@ func (m *PubSub) Unsubscribe(
 	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
 		subs.Delete(sub.ID())
 
-		if subs.Len() == 0 {
-			m.subscriptionsMap.Delete(docKey, func(subs *Subscriptions, exists bool) bool {
-				subs.Close()
-				return exists
-			})
-		}
+		m.subscriptionsMap.Delete(docKey, func(subs *Subscriptions, exists bool) bool {
+			if !exists || 0 < subs.Len() {
+				return false
+			}
+
+			subs.Close()
+			return true
+		})
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
