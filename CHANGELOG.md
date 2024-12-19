@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.5.8] - 2024-12-19
+
+### Changed
+
+- Extract db name as an argument to value.yaml by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1107
+
+### Fixed
+
+- Fix panic in pubsub by deleting subs in callback by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1101
+- Fix invalid version vector check logic for backward compatibility by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1105
+
 ## [0.5.7] - 2024-12-11
 
 ### Changed
