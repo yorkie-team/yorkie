@@ -842,6 +842,9 @@ func (t *Tree) collectBetween(
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
@@ -869,10 +872,12 @@ func (t *Tree) collectBetween(
 
 			var maxCreatedAt *time.Ticket
 			var clientLamportAtChange int64
-			if versionVector == nil && maxCreatedAtMapByActor == nil {
-				// Local edit - use version vector comparison
+
+			if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+				// Case 1: local editing from json package
 				clientLamportAtChange = time.MaxLamport
-			} else if versionVector != nil {
+			} else if !isVersionVectorEmpty {
+				// Case 2: from operation with version vector(After v0.5.7)
 				lamport, ok := versionVector.Get(actorID)
 				if ok {
 					clientLamportAtChange = lamport
@@ -880,6 +885,7 @@ func (t *Tree) collectBetween(
 					clientLamportAtChange = 0
 				}
 			} else {
+				// Case 3: from operation without version vector(Before v0.5.6)
 				createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 				if ok {
 					maxCreatedAt = createdAt
@@ -1000,6 +1006,9 @@ func (t *Tree) Style(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -1009,10 +1018,11 @@ func (t *Tree) Style(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
-			// Local edit - use version vector comparison
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
@@ -1020,6 +1030,7 @@ func (t *Tree) Style(
 				clientLamportAtChange = 0
 			}
 		} else {
+			// Case 3: from operation without version vector(Before v0.5.6)
 			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
 				maxCreatedAt = createdAt
@@ -1069,6 +1080,9 @@ func (t *Tree) RemoveStyle(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -1078,10 +1092,11 @@ func (t *Tree) RemoveStyle(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
-			// Local edit - use version vector comparison
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
@@ -1089,6 +1104,7 @@ func (t *Tree) RemoveStyle(
 				clientLamportAtChange = 0
 			}
 		} else {
+			// Case 3: from operation without version vector(Before v0.5.6)
 			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
 				maxCreatedAt = createdAt
