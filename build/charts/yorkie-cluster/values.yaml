@@ -14,6 +14,7 @@ yorkie:
 
   args:
     dbConnectionUri: mongodb://mongodb.mongodb.svc.cluster.local:27017/yorkie-meta
+    dbName: yorkie-meta
 
   ports:
     rpcPort: 8080
