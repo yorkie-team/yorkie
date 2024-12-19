@@ -312,6 +312,9 @@ func (t *Text) Style(
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
@@ -320,10 +323,10 @@ func (t *Text) Style(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
 			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if !isVersionVectorEmpty {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport

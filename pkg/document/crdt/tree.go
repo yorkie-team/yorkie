@@ -842,6 +842,9 @@ func (t *Tree) collectBetween(
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
@@ -869,10 +872,10 @@ func (t *Tree) collectBetween(
 
 			var maxCreatedAt *time.Ticket
 			var clientLamportAtChange int64
-			if versionVector == nil && maxCreatedAtMapByActor == nil {
+			if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
 				// Local edit - use version vector comparison
 				clientLamportAtChange = time.MaxLamport
-			} else if versionVector != nil {
+			} else if !isVersionVectorEmpty {
 				lamport, ok := versionVector.Get(actorID)
 				if ok {
 					clientLamportAtChange = lamport
@@ -1000,6 +1003,9 @@ func (t *Tree) Style(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -1009,10 +1015,10 @@ func (t *Tree) Style(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
 			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if !isVersionVectorEmpty {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
@@ -1069,6 +1075,9 @@ func (t *Tree) RemoveStyle(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
@@ -1078,10 +1087,10 @@ func (t *Tree) RemoveStyle(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
 			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else if versionVector != nil {
+		} else if !isVersionVectorEmpty {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport

@@ -527,6 +527,8 @@ func (s *RGATreeSplit[V]) deleteNodes(
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
 
 	if len(candidates) == 0 {
 		return createdAtMapByActor, removedNodeMap
@@ -545,10 +547,10 @@ func (s *RGATreeSplit[V]) deleteNodes(
 
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if versionVector == nil && maxCreatedAtMapByActor == nil {
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
 			// Local edit - use version vector comparison
 			clientLamportAtChange = time.MaxLamport
-		} else if len(versionVector) > 0 {
+		} else if !isVersionVectorEmpty {
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
