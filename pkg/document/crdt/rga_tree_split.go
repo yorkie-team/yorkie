@@ -548,9 +548,10 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
 		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
-			// Local edit - use version vector comparison
+			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
 		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
 				clientLamportAtChange = lamport
@@ -558,6 +559,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 				clientLamportAtChange = 0
 			}
 		} else {
+			// Case 3: from operation without version vector(Before v0.5.6)
 			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
 				maxCreatedAt = createdAt
