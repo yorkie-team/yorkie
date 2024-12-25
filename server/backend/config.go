@@ -73,13 +73,13 @@ type Config struct {
 	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
 	AuthWebhookCacheUnauthTTL string `yaml:"AuthWebhookCacheUnauthTTL"`
 
-	// EventWebhookMaxRetries is the max count that retries the project webhook.
+	// EventWebhookMaxRetries is the max count that retries the project event webhook.
 	EventWebhookMaxRetries uint64 `yaml:"EventWebhookMaxRetries"`
 
-	// EventWebhookBaseWaitInterval is the base of retrying exponential backoff the project webhook.
+	// EventWebhookBaseWaitInterval is the base of retrying exponential backoff the project event webhook.
 	EventWebhookBaseWaitInterval string `yaml:"EventWebhookBaseWaitInterval"`
 
-	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the project webhook.
+	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the project event webhook.
 	EventWebhookMaxWaitInterval string `yaml:"EventWebhookMaxWaitInterval"`
 
 	// EventWebhookRequestTimeout is the time that waits time for response the project webhook.
