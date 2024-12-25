@@ -38,6 +38,12 @@ type Project struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
+	// EventWebhookURL is the url of the project webhook.
+	EventWebhookURL string `json:"event_webhook_url"`
+
+	// EventWebhookMethods is the methods that run the project webhook.
+	EventWebhookMethods []string `json:"event_webhook_methods"`
+
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
@@ -67,6 +73,25 @@ func (p *Project) RequireAuth(method Method) bool {
 
 	for _, m := range p.AuthWebhookMethods {
 		if Method(m) == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+// RequireEventWebhook returns whether the given method requires webhook.
+func (p *Project) RequireEventWebhook(method ProjectEvent) bool {
+	if len(p.EventWebhookURL) == 0 {
+		return false
+	}
+
+	if len(p.EventWebhookMethods) == 0 {
+		return false
+	}
+
+	for _, m := range p.EventWebhookMethods {
+		if ProjectEvent(m) == method {
 			return true
 		}
 	}
