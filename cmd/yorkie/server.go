@@ -47,10 +47,13 @@ var (
 	mongoYorkieDatabase    string
 	mongoPingTimeout       time.Duration
 
-	authWebhookMaxWaitInterval time.Duration
-	authWebhookCacheAuthTTL    time.Duration
-	authWebhookCacheUnauthTTL  time.Duration
-	projectInfoCacheTTL        time.Duration
+	authWebhookMaxWaitInterval   time.Duration
+	authWebhookCacheAuthTTL      time.Duration
+	authWebhookCacheUnauthTTL    time.Duration
+	eventWebhookMaxWaitInterval  time.Duration
+	eventWebhookBaseWaitInterval time.Duration
+	eventWebhookRequestTimeout   time.Duration
+	projectInfoCacheTTL          time.Duration
 
 	conf = server.NewConfig()
 )
@@ -67,6 +70,9 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
+			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
+			conf.Backend.EventWebhookBaseWaitInterval = eventWebhookBaseWaitInterval.String()
+			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
@@ -326,6 +332,30 @@ func init() {
 		"auth-webhook-cache-unauth-ttl",
 		server.DefaultAuthWebhookCacheUnauthTTL,
 		"TTL value to set when caching unauthorized webhook response.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.EventWebhookMaxRetries,
+		"project-event-webhook-max-retries",
+		server.DefaultEventWebhookMaxRetries,
+		"Maximum number of retries for a project webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookBaseWaitInterval,
+		"project-event-webhook-base-wait-interval",
+		server.DefaultEventWebhookBaseWaitInterval,
+		"Base wait interval for retrying exponential backoff the project webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookMaxWaitInterval,
+		"project-event-webhook-max-wait-interval",
+		server.DefaultEventWebhookMaxWaitInterval,
+		"Maximum wait interval for project webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookRequestTimeout,
+		"project-event-webhook-request-timeout",
+		server.DefaultEventWebhookTimeout,
+		"Time to wait for a response from the project webhook.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectInfoCacheSize,
