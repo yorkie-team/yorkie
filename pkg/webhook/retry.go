@@ -35,8 +35,13 @@ var (
 )
 
 // WithExponentialBackoff retries the given webhookFn with exponential backoff.
-func WithExponentialBackoff(ctx context.Context, maxRetries uint64, baseInterval, maxInterval gotime.Duration,
-	webhookFn func() (int, error)) error {
+func WithExponentialBackoff(
+	ctx context.Context,
+	maxRetries uint64,
+	baseInterval,
+	maxInterval gotime.Duration,
+	webhookFn func() (int, error),
+) error {
 	var retries uint64
 	var statusCode int
 	for retries <= maxRetries {
