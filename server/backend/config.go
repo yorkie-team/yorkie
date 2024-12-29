@@ -191,7 +191,7 @@ func (c *Config) ParseAuthWebhookCacheUnauthTTL() time.Duration {
 func (c *Config) ParseProjectWebhookMaxWaitInterval() time.Duration {
 	result, err := time.ParseDuration(c.EventWebhookMaxWaitInterval)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
+		fmt.Fprintln(os.Stderr, "parse project webhook max wait interval: %w", err)
 		os.Exit(1)
 	}
 
@@ -202,7 +202,7 @@ func (c *Config) ParseProjectWebhookMaxWaitInterval() time.Duration {
 func (c *Config) ParseProjectWebhookBaseWaitInterval() time.Duration {
 	result, err := time.ParseDuration(c.EventWebhookBaseWaitInterval)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
+		fmt.Fprintln(os.Stderr, "parse project webhook max wait interval: %w", err)
 		os.Exit(1)
 	}
 
@@ -213,7 +213,7 @@ func (c *Config) ParseProjectWebhookBaseWaitInterval() time.Duration {
 func (c *Config) ParseProjectWebhookTimeout() time.Duration {
 	result, err := time.ParseDuration(c.EventWebhookRequestTimeout)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
+		fmt.Fprintln(os.Stderr, "parse project webhook max wait interval: %w", err)
 		os.Exit(1)
 	}
 
