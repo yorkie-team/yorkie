@@ -50,7 +50,7 @@ func WithExponentialBackoff(
 		statusCode int
 	)
 
-	for retries <= maxRetries {
+	for retries < maxRetries {
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if errors.Is(err, ErrUnexpectedStatusCode) {
