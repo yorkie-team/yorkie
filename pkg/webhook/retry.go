@@ -30,8 +30,9 @@ var (
 	// ErrUnexpectedStatusCode is returned when the webhook returns an unexpected status code.
 	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 
-	// ErrWebhookTimeout is returned when the webhook times out.
-	ErrWebhookTimeout = errors.New("webhook timeout")
+	// ErrMaxRetriesExceeded indicates we have retried up to the specified max retries
+	// without a successful outcome.
+	ErrMaxRetriesExceeded = errors.New("exponential backoff: maximum retries exceeded")
 )
 
 // WithExponentialBackoff retries the given webhookFn with exponential backoff.
@@ -42,8 +43,13 @@ func WithExponentialBackoff(
 	maxInterval gotime.Duration,
 	webhookFn func() (int, error),
 ) error {
-	var retries uint64
-	var statusCode int
+	start := gotime.Now()
+
+	var (
+		retries    uint64
+		statusCode int
+	)
+
 	for retries <= maxRetries {
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
@@ -65,7 +71,13 @@ func WithExponentialBackoff(
 		retries++
 	}
 
-	return fmt.Errorf("unexpected status code from webhook %d: %w", statusCode, ErrWebhookTimeout)
+	return fmt.Errorf(
+		"maximum retries (%d) exceeded after %s; last status code = %d: %w",
+		maxRetries,
+		gotime.Since(start),
+		statusCode,
+		ErrMaxRetriesExceeded,
+	)
 }
 
 // waitInterval returns the interval of given retries. it returns maxWaitInterval
