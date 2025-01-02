@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/projectevent"
 )
 
 type yorkieServer struct {
@@ -155,6 +156,10 @@ func (s *yorkieServer) AttachDocument(
 	docInfo, err := documents.FindDocInfoByKeyAndOwner(ctx, s.backend, clientInfo, pack.DocumentKey, true)
 	if err != nil {
 		return nil, err
+	}
+
+	if docInfo.ServerSeq == 0 {
+		projectevent.DocumentCreated(ctx, s.backend, docInfo.Key.String(), clientInfo.Key)
 	}
 
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
@@ -557,6 +562,8 @@ func (s *yorkieServer) RemoveDocument(
 	if err != nil {
 		return nil, err
 	}
+
+	projectevent.DocumentRemoved(ctx, s.backend, docInfo.Key.String(), clientInfo.Key)
 
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {

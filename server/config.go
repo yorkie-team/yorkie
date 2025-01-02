@@ -60,13 +60,17 @@ const (
 	DefaultSnapshotWithPurgingChanges = false
 	DefaultSnapshotDisableGC          = false
 
-	DefaultAuthWebhookMaxRetries      = 10
-	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
-	DefaultAuthWebhookCacheSize       = 5000
-	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
-	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
-	DefaultProjectInfoCacheSize       = 256
-	DefaultProjectInfoCacheTTL        = 10 * time.Minute
+	DefaultAuthWebhookMaxRetries        = 10
+	DefaultAuthWebhookMaxWaitInterval   = 3000 * time.Millisecond
+	DefaultAuthWebhookCacheSize         = 5000
+	DefaultAuthWebhookCacheAuthTTL      = 10 * time.Second
+	DefaultAuthWebhookCacheUnauthTTL    = 10 * time.Second
+	DefaultEventWebhookMaxRetries       = 10
+	DefaultEventWebhookBaseWaitInterval = 3000 * time.Millisecond
+	DefaultEventWebhookMaxWaitInterval  = 3000 * time.Millisecond
+	DefaultEventWebhookTimeout          = 10 * time.Second
+	DefaultProjectInfoCacheSize         = 256
+	DefaultProjectInfoCacheTTL          = 10 * time.Minute
 
 	DefaultHostname    = ""
 	DefaultGatewayAddr = "localhost:8080"
@@ -192,6 +196,22 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
 		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
+	}
+
+	if c.Backend.EventWebhookMaxRetries == 0 {
+		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
+	}
+
+	if c.Backend.EventWebhookBaseWaitInterval == "" {
+		c.Backend.EventWebhookBaseWaitInterval = DefaultEventWebhookBaseWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookMaxWaitInterval == "" {
+		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookRequestTimeout == "" {
+		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookTimeout.String()
 	}
 
 	if c.Backend.ProjectInfoCacheSize == 0 {
