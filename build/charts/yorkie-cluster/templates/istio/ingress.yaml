@@ -50,6 +50,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: yorkie-gateway
+                name: {{ .Values.yorkie.name }}-gateway
                 port:
                   number: 80
