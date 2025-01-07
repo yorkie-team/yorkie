@@ -70,16 +70,19 @@ var (
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
 
-	AdminTokenDuration         = "10s"
-	ClientDeactivateThreshold  = "10s"
-	SnapshotThreshold          = int64(10)
-	SnapshotWithPurgingChanges = false
-	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
-	AuthWebhookSize            = 100
-	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
-	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
-	ProjectInfoCacheSize       = 256
-	ProjectInfoCacheTTL        = 5 * gotime.Second
+	AdminTokenDuration           = "10s"
+	ClientDeactivateThreshold    = "10s"
+	SnapshotThreshold            = int64(10)
+	SnapshotWithPurgingChanges   = false
+	AuthWebhookMaxWaitInterval   = 3 * gotime.Millisecond
+	AuthWebhookSize              = 100
+	AuthWebhookCacheAuthTTL      = 10 * gotime.Second
+	AuthWebhookCacheUnauthTTL    = 10 * gotime.Second
+	EventWebhookBaseWaitInterval = 3 * gotime.Millisecond
+	EventWebhookMaxWaitInterval  = 3 * gotime.Millisecond
+	EventWebhookRequestTimeout   = 10 * gotime.Second
+	ProjectInfoCacheSize         = 256
+	ProjectInfoCacheTTL          = 5 * gotime.Second
 
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
@@ -255,22 +258,25 @@ func TestConfig() *server.Config {
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
-			AdminUser:                  server.DefaultAdminUser,
-			AdminPassword:              server.DefaultAdminPassword,
-			SecretKey:                  server.DefaultSecretKey,
-			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:          true,
-			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold,
-			SnapshotInterval:           10,
-			SnapshotThreshold:          SnapshotThreshold,
-			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
-			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
-			AuthWebhookCacheSize:       AuthWebhookSize,
-			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
-			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
-			ProjectInfoCacheSize:       ProjectInfoCacheSize,
-			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
-			GatewayAddr:                fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			AdminUser:                    server.DefaultAdminUser,
+			AdminPassword:                server.DefaultAdminPassword,
+			SecretKey:                    server.DefaultSecretKey,
+			AdminTokenDuration:           server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:            true,
+			ClientDeactivateThreshold:    server.DefaultClientDeactivateThreshold,
+			SnapshotInterval:             10,
+			SnapshotThreshold:            SnapshotThreshold,
+			SnapshotWithPurgingChanges:   SnapshotWithPurgingChanges,
+			AuthWebhookMaxWaitInterval:   AuthWebhookMaxWaitInterval.String(),
+			AuthWebhookCacheSize:         AuthWebhookSize,
+			AuthWebhookCacheAuthTTL:      AuthWebhookCacheAuthTTL.String(),
+			AuthWebhookCacheUnauthTTL:    AuthWebhookCacheUnauthTTL.String(),
+			EventWebhookMaxWaitInterval:  EventWebhookMaxWaitInterval.String(),
+			EventWebhookRequestTimeout:   EventWebhookRequestTimeout.String(),
+			EventWebhookBaseWaitInterval: EventWebhookBaseWaitInterval.String(),
+			ProjectInfoCacheSize:         ProjectInfoCacheSize,
+			ProjectInfoCacheTTL:          ProjectInfoCacheTTL.String(),
+			GatewayAddr:                  fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

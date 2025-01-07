@@ -354,7 +354,7 @@ func init() {
 	cmd.Flags().DurationVar(
 		&eventWebhookRequestTimeout,
 		"project-event-webhook-request-timeout",
-		server.DefaultEventWebhookTimeout,
+		server.DefaultEventWebhookRequestTimeout,
 		"Time to wait for a response from the project webhook.",
 	)
 	cmd.Flags().IntVar(

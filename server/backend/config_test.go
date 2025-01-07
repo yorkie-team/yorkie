@@ -27,11 +27,14 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := backend.Config{
-			ClientDeactivateThreshold:  "1h",
-			AuthWebhookMaxWaitInterval: "0ms",
-			AuthWebhookCacheAuthTTL:    "10s",
-			AuthWebhookCacheUnauthTTL:  "10s",
-			ProjectInfoCacheTTL:        "10m",
+			ClientDeactivateThreshold:    "1h",
+			AuthWebhookMaxWaitInterval:   "0ms",
+			AuthWebhookCacheAuthTTL:      "10s",
+			AuthWebhookCacheUnauthTTL:    "10s",
+			EventWebhookBaseWaitInterval: "10ms",
+			EventWebhookRequestTimeout:   "10s",
+			EventWebhookMaxWaitInterval:  "10ms",
+			ProjectInfoCacheTTL:          "10m",
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -52,7 +55,19 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf4.Validate())
 
 		conf5 := validConf
-		conf5.ProjectInfoCacheTTL = "10 minutes"
+		conf5.EventWebhookBaseWaitInterval = "10 ms"
 		assert.Error(t, conf5.Validate())
+
+		conf6 := validConf
+		conf6.EventWebhookRequestTimeout = "10 seconds"
+		assert.Error(t, conf6.Validate())
+
+		conf7 := validConf
+		conf7.EventWebhookMaxWaitInterval = "10 second"
+		assert.Error(t, conf7.Validate())
+
+		conf8 := validConf
+		conf8.ProjectInfoCacheTTL = "10 minutes"
+		assert.Error(t, conf8.Validate())
 	})
 }

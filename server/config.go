@@ -68,7 +68,7 @@ const (
 	DefaultEventWebhookMaxRetries       = 10
 	DefaultEventWebhookBaseWaitInterval = 3000 * time.Millisecond
 	DefaultEventWebhookMaxWaitInterval  = 3000 * time.Millisecond
-	DefaultEventWebhookTimeout          = 10 * time.Second
+	DefaultEventWebhookRequestTimeout   = 10 * time.Second
 	DefaultProjectInfoCacheSize         = 256
 	DefaultProjectInfoCacheTTL          = 10 * time.Minute
 
@@ -211,7 +211,7 @@ func (c *Config) ensureDefaultValue() {
 	}
 
 	if c.Backend.EventWebhookRequestTimeout == "" {
-		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookTimeout.String()
+		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
 	}
 
 	if c.Backend.ProjectInfoCacheSize == 0 {

@@ -61,6 +61,7 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(server.DefaultAuthWebhookMaxRetries))
+		assert.Equal(t, conf.Backend.EventWebhookMaxRetries, uint64(server.DefaultEventWebhookMaxRetries))
 
 		ClientDeactivateThreshold := conf.Backend.ClientDeactivateThreshold
 		assert.NoError(t, err)
@@ -77,6 +78,18 @@ func TestNewConfigFromFile(t *testing.T) {
 		authWebhookCacheUnauthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheUnauthTTL)
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookCacheUnauthTTL, server.DefaultAuthWebhookCacheUnauthTTL)
+
+		eventWebhookBaseWaitInterval, err := time.ParseDuration(conf.Backend.EventWebhookBaseWaitInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookBaseWaitInterval, server.DefaultEventWebhookBaseWaitInterval)
+
+		eventWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.EventWebhookMaxWaitInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookMaxWaitInterval, server.DefaultEventWebhookMaxWaitInterval)
+
+		eventWebhookRequestTimeout, err := time.ParseDuration(conf.Backend.EventWebhookRequestTimeout)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookRequestTimeout, server.DefaultEventWebhookRequestTimeout)
 
 		projectInfoCacheTTL, err := time.ParseDuration(conf.Backend.ProjectInfoCacheTTL)
 		assert.NoError(t, err)

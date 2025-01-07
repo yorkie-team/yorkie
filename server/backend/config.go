@@ -132,6 +132,30 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if _, err := time.ParseDuration(c.EventWebhookBaseWaitInterval); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-base-wait-interval" flag: %w`,
+			c.EventWebhookBaseWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.EventWebhookMaxWaitInterval); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-max-wait-interval" flag: %w`,
+			c.EventWebhookMaxWaitInterval,
+			err,
+		)
+
+	}
+	if _, err := time.ParseDuration(c.EventWebhookRequestTimeout); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-request-timeout" flag: %w`,
+			c.EventWebhookRequestTimeout,
+			err,
+		)
+	}
+
 	if _, err := time.ParseDuration(c.ProjectInfoCacheTTL); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--project-info-cache-ttl" flag: %w`,
