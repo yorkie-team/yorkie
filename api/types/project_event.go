@@ -26,6 +26,24 @@ const (
 	DocumentRemoved ProjectEvent = "DocumentRemoved"
 )
 
+// IsProjectEvent returns whether the given event is valid event.
+func IsProjectEvent(event string) bool {
+	for _, e := range ProjectEvents() {
+		if event == string(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// ProjectEvents is a set of events that use to update a project.
+func ProjectEvents() []ProjectEvent {
+	return []ProjectEvent{
+		DocumentCreated,
+		DocumentRemoved,
+	}
+}
+
 // WebhookAttribute represents the attribute of the webhook.
 type WebhookAttribute struct {
 	DocumentKey string `json:"documentKey"`

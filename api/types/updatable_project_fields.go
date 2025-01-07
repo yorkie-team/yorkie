@@ -37,7 +37,13 @@ type UpdatableProjectFields struct {
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalid_webhook_method"`
+	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalid_auth_webhook_method"`
+
+	// EventWebhookURL is the url of the project events webhook.
+	EventWebhookURL *string `bson:"event_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
+
+	// EventWebhookEvents is the methods that run the project events webhook.
+	EventWebhookEvents *[]string `bson:"event_webhook_events,omitempty" validate:"omitempty,invalid_event_webhook_events"`
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
@@ -45,7 +51,12 @@ type UpdatableProjectFields struct {
 
 // Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil && i.ClientDeactivateThreshold == nil {
+	if i.Name == nil &&
+		i.AuthWebhookURL == nil &&
+		i.AuthWebhookMethods == nil &&
+		i.EventWebhookURL == nil &&
+		i.EventWebhookEvents == nil &&
+		i.ClientDeactivateThreshold == nil {
 		return ErrEmptyProjectFields
 	}
 
@@ -54,7 +65,7 @@ func (i *UpdatableProjectFields) Validate() error {
 
 func init() {
 	if err := validation.RegisterValidation(
-		"invalid_webhook_method",
+		"invalid_auth_webhook_method",
 		func(level validation.FieldLevel) bool {
 			methods := level.Field().Interface().([]string)
 			for _, method := range methods {
@@ -68,8 +79,28 @@ func init() {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}
-	if err := validation.RegisterTranslation("invalid_webhook_method", "given {0} is invalid method"); err != nil {
+	if err := validation.RegisterTranslation("invalid_auth_webhook_method", "given {0} is invalid method"); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}
+	if err := validation.RegisterValidation(
+		"invalid_event_webhook_events",
+		func(level validation.FieldLevel) bool {
+			events := level.Field().Interface().([]string)
+			for _, event := range events {
+				if !IsProjectEvent(event) {
+					return false
+				}
+			}
+			return true
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+	if err := validation.RegisterTranslation("invalid_event_webhook_events", "given {0} is invalid event"); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
 }
