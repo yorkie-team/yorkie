@@ -34,6 +34,7 @@ func TestProjectInfo(t *testing.T) {
 		testName := "testName"
 		testURL := "testUrl"
 		testMethods := []string{"testMethod"}
+		testEvents := []string{"testEvent"}
 		testClientDeactivateThreshold := "2h"
 
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
@@ -45,6 +46,12 @@ func TestProjectInfo(t *testing.T) {
 		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
 		assert.Equal(t, testMethods, project.AuthWebhookMethods)
 		assert.Equal(t, dummyOwnerID, project.Owner)
+
+		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookURL: &testURL})
+		assert.Equal(t, testURL, project.EventWebhookURL)
+
+		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookEvents: &testEvents})
+		assert.Equal(t, testEvents, project.EventWebhookEvents)
 
 		project.UpdateFields(&types.UpdatableProjectFields{
 			ClientDeactivateThreshold: &testClientDeactivateThreshold,
