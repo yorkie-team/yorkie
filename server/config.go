@@ -63,8 +63,7 @@ const (
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
-	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
-	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
+	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 	DefaultProjectInfoCacheSize       = 256
 	DefaultProjectInfoCacheTTL        = 10 * time.Minute
 
@@ -186,12 +185,8 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
 	}
 
-	if c.Backend.AuthWebhookCacheAuthTTL == "" {
-		c.Backend.AuthWebhookCacheAuthTTL = DefaultAuthWebhookCacheAuthTTL.String()
-	}
-
-	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
-		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
+	if c.Backend.AuthWebhookCacheTTL == "" {
+		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
 
 	if c.Backend.ProjectInfoCacheSize == 0 {

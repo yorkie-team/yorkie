@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -83,9 +84,9 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
 
 	// Internal means an internal error occurred.
-	auth.ErrUnexpectedStatusCode: connect.CodeInternal,
-	auth.ErrUnexpectedResponse:   connect.CodeInternal,
-	auth.ErrWebhookTimeout:       connect.CodeInternal,
+	webhook.ErrUnexpectedStatusCode: connect.CodeInternal,
+	webhook.ErrUnexpectedResponse:   connect.CodeInternal,
+	webhook.ErrWebhookTimeout:       connect.CodeInternal,
 
 	// PermissionDenied means the request does not have permission for the operation.
 	auth.ErrPermissionDenied: connect.CodePermissionDenied,
@@ -131,12 +132,12 @@ var errorToCode = map[error]string{
 	converter.ErrUnsupportedValueType:   "ErrUnsupportedValueType",
 	converter.ErrUnsupportedCounterType: "ErrUnsupportedCounterType",
 
-	auth.ErrPermissionDenied:       "ErrPermissionDenied",
-	auth.ErrUnauthenticated:        "ErrUnauthenticated",
-	auth.ErrUnexpectedResponse:     "ErrUnexpectedResponse",
-	auth.ErrUnexpectedStatusCode:   "ErrUnexpectedStatusCode",
-	auth.ErrWebhookTimeout:         "ErrWebhookTimeout",
-	database.ErrMismatchedPassword: "ErrMismatchedPassword",
+	auth.ErrPermissionDenied:        "ErrPermissionDenied",
+	auth.ErrUnauthenticated:         "ErrUnauthenticated",
+	webhook.ErrUnexpectedResponse:   "ErrUnexpectedResponse",
+	webhook.ErrUnexpectedStatusCode: "ErrUnexpectedStatusCode",
+	webhook.ErrWebhookTimeout:       "ErrWebhookTimeout",
+	database.ErrMismatchedPassword:  "ErrMismatchedPassword",
 }
 
 // CodeOf returns the string representation of the given error.

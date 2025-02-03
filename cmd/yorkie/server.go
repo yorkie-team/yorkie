@@ -48,8 +48,7 @@ var (
 	mongoPingTimeout       time.Duration
 
 	authWebhookMaxWaitInterval time.Duration
-	authWebhookCacheAuthTTL    time.Duration
-	authWebhookCacheUnauthTTL  time.Duration
+	authWebhookCacheTTL        time.Duration
 	projectInfoCacheTTL        time.Duration
 
 	conf = server.NewConfig()
@@ -65,8 +64,7 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
-			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
-			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
+			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
@@ -316,16 +314,10 @@ func init() {
 		"The cache size of the authorization webhook.",
 	)
 	cmd.Flags().DurationVar(
-		&authWebhookCacheAuthTTL,
+		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
-		server.DefaultAuthWebhookCacheAuthTTL,
-		"TTL value to set when caching authorized webhook response.",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookCacheUnauthTTL,
-		"auth-webhook-cache-unauth-ttl",
-		server.DefaultAuthWebhookCacheUnauthTTL,
-		"TTL value to set when caching unauthorized webhook response.",
+		server.DefaultAuthWebhookCacheTTL,
+		"TTL value to set when caching authorization webhook response.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectInfoCacheSize,
