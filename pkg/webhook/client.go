@@ -46,7 +46,8 @@ var (
 
 // Options are the options for the webhook client.
 type Options struct {
-	CacheTTL time.Duration
+	CacheKeyPrefix string
+	CacheTTL       time.Duration
 
 	MaxRetries      uint64
 	MaxWaitInterval time.Duration
@@ -54,8 +55,8 @@ type Options struct {
 
 // Client is a client for the webhook.
 type Client[Req any, Res any] struct {
-	url     string
 	cache   *cache.LRUExpireCache[string, types.Pair[int, *Res]]
+	url     string
 	options Options
 }
 
@@ -79,7 +80,7 @@ func (c *Client[Req, Res]) Send(ctx context.Context, req Req) (*Res, int, error)
 		return nil, 0, fmt.Errorf("marshal webhook request: %w", err)
 	}
 
-	cacheKey := string(body)
+	cacheKey := c.options.CacheKeyPrefix + ":" + string(body)
 	if entry, ok := c.cache.Get(cacheKey); ok {
 		return entry.Second, entry.First, nil
 	}

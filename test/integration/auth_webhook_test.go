@@ -312,7 +312,6 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 	})
 
 	t.Run("unexpected webhook response test", func(t *testing.T) {
-		t.Skip()
 		ctx := context.Background()
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := types.NewAuthWebhookRequest(r.Body)

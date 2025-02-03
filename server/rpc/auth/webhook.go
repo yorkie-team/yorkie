@@ -40,14 +40,15 @@ var (
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
-	authWebhookURL string,
+	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
 ) error {
-	cli := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		authWebhookURL,
+	cli := webhook.NewClient[types.AuthWebhookRequest](
+		prj.AuthWebhookURL,
 		be.WebhookCache,
 		webhook.Options{
+			CacheKeyPrefix:  prj.PublicKey + ":auth",
 			CacheTTL:        be.Config.ParseAuthWebhookCacheTTL(),
 			MaxRetries:      be.Config.AuthWebhookMaxRetries,
 			MaxWaitInterval: be.Config.ParseAuthWebhookMaxWaitInterval(),
