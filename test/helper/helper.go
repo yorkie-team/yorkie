@@ -76,8 +76,7 @@ var (
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
-	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
-	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
+	AuthWebhookCacheTTL        = 10 * gotime.Second
 	ProjectInfoCacheSize       = 256
 	ProjectInfoCacheTTL        = 5 * gotime.Second
 
@@ -266,8 +265,7 @@ func TestConfig() *server.Config {
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,
-			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
-			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
+			AuthWebhookCacheTTL:        AuthWebhookCacheTTL.String(),
 			ProjectInfoCacheSize:       ProjectInfoCacheSize,
 			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
 			GatewayAddr:                fmt.Sprintf("localhost:%d", RPCPort+portOffset),

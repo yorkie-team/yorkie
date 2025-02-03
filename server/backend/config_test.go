@@ -29,8 +29,7 @@ func TestConfig(t *testing.T) {
 		validConf := backend.Config{
 			ClientDeactivateThreshold:  "1h",
 			AuthWebhookMaxWaitInterval: "0ms",
-			AuthWebhookCacheAuthTTL:    "10s",
-			AuthWebhookCacheUnauthTTL:  "10s",
+			AuthWebhookCacheTTL:        "10s",
 			ProjectInfoCacheTTL:        "10m",
 		}
 		assert.NoError(t, validConf.Validate())
@@ -44,15 +43,11 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf2.Validate())
 
 		conf3 := validConf
-		conf3.AuthWebhookCacheAuthTTL = "s"
+		conf3.AuthWebhookCacheTTL = "s"
 		assert.Error(t, conf3.Validate())
 
 		conf4 := validConf
-		conf4.AuthWebhookCacheUnauthTTL = "s"
+		conf4.ProjectInfoCacheTTL = "10 minutes"
 		assert.Error(t, conf4.Validate())
-
-		conf5 := validConf
-		conf5.ProjectInfoCacheTTL = "10 minutes"
-		assert.Error(t, conf5.Validate())
 	})
 }

@@ -67,11 +67,8 @@ type Config struct {
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
-	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
-	AuthWebhookCacheAuthTTL string `yaml:"AuthWebhookCacheAuthTTL"`
-
-	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
-	AuthWebhookCacheUnauthTTL string `yaml:"AuthWebhookCacheUnauthTTL"`
+	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
+	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
 	// ProjectInfoCacheSize is the cache size of the project info.
 	ProjectInfoCacheSize int `yaml:"ProjectInfoCacheSize"`
@@ -104,18 +101,10 @@ func (c *Config) Validate() error {
 		)
 	}
 
-	if _, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL); err != nil {
+	if _, err := time.ParseDuration(c.AuthWebhookCacheTTL); err != nil {
 		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-cache-auth-ttl" flag: %w`,
-			c.AuthWebhookCacheAuthTTL,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-cache-unauth-ttl" flag: %w`,
-			c.AuthWebhookCacheUnauthTTL,
+			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
+			c.AuthWebhookCacheTTL,
 			err,
 		)
 	}
@@ -153,22 +142,11 @@ func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
 	return result
 }
 
-// ParseAuthWebhookCacheAuthTTL returns TTL for authorized cache.
-func (c *Config) ParseAuthWebhookCacheAuthTTL() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL)
+// ParseAuthWebhookCacheTTL returns TTL for authorized cache.
+func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook cache auth ttl: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseAuthWebhookCacheUnauthTTL returns TTL for unauthorized cache.
-func (c *Config) ParseAuthWebhookCacheUnauthTTL() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook cache unauth ttl: %w", err)
+		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
 		os.Exit(1)
 	}
 

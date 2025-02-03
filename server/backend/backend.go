@@ -29,6 +29,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -43,9 +44,12 @@ import (
 // Backend manages Yorkie's backend such as Database and Coordinator. And it
 // has the server status such as the information of this Server.
 type Backend struct {
-	Config           *Config
-	serverInfo       *sync.ServerInfo
-	AuthWebhookCache *cache.LRUExpireCache[string, *types.AuthWebhookResponse]
+	Config       *Config
+	serverInfo   *sync.ServerInfo
+	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+		int,
+		*types.AuthWebhookResponse,
+	]]
 
 	Metrics      *prometheus.Metrics
 	DB           database.Database
@@ -80,8 +84,9 @@ func New(
 
 	// 02. Create the auth webhook cache. The auth webhook cache is used to
 	// cache the response of the auth webhook.
-	// TODO(hackerwins): Consider to extend the cache for general purpose.
-	webhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
+	webhookCache, err := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+		conf.AuthWebhookCacheSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -145,9 +150,9 @@ func New(
 	)
 
 	return &Backend{
-		Config:           conf,
-		serverInfo:       serverInfo,
-		AuthWebhookCache: webhookCache,
+		Config:       conf,
+		serverInfo:   serverInfo,
+		WebhookCache: webhookCache,
 
 		Metrics:      metrics,
 		DB:           db,
