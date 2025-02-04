@@ -27,6 +27,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -34,7 +35,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -188,10 +188,10 @@ func PushPull(
 			be.PubSub.Publish(
 				ctx,
 				publisherID,
-				pubsub.DocEvent{
-					Type:           types.DocumentChangedEvent,
-					Publisher:      publisherID,
-					DocumentRefKey: docRefKey,
+				events.DocEvent{
+					Type:      events.DocChangedEvent,
+					Publisher: publisherID,
+					DocRefKey: docRefKey,
 				},
 			)
 

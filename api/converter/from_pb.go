@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -200,16 +201,16 @@ func FromDocumentID(pbID string) (types.ID, error) {
 }
 
 // FromEventType converts the given Protobuf formats to model format.
-func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
+func FromEventType(pbDocEventType api.DocEventType) (events.DocEventType, error) {
 	switch pbDocEventType {
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED:
-		return types.DocumentChangedEvent, nil
+		return events.DocChangedEvent, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED:
-		return types.DocumentWatchedEvent, nil
+		return events.DocWatchedEvent, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED:
-		return types.DocumentUnwatchedEvent, nil
+		return events.DocUnwatchedEvent, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST:
-		return types.DocumentBroadcastEvent, nil
+		return events.DocBroadcastEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

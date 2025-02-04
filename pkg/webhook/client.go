@@ -98,6 +98,7 @@ func (c *Client[Req, Res]) Send(ctx context.Context, req Req) (*Res, int, error)
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
+				// TODO(hackerwins): Consider to remove the dependency of logging.
 				logging.From(ctx).Error(err)
 			}
 		}()

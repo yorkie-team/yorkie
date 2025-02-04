@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 )
@@ -40,10 +41,10 @@ func TestPubSub(t *testing.T) {
 			ProjectID: types.ID("000000000000000000000000"),
 			DocID:     types.ID("000000000000000000000000"),
 		}
-		docEvent := pubsub.DocEvent{
-			Type:           types.DocumentWatchedEvent,
-			Publisher:      idB,
-			DocumentRefKey: refKey,
+		docEvent := events.DocEvent{
+			Type:      events.DocWatchedEvent,
+			Publisher: idB,
+			DocRefKey: refKey,
 		}
 
 		ctx := context.Background()

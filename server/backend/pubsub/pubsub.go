@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -32,14 +33,6 @@ const (
 	// publishTimeout is the timeout for publishing an event.
 	publishTimeout = 100 * gotime.Millisecond
 )
-
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type           types.DocEventType
-	Publisher      *time.ActorID
-	DocumentRefKey types.DocRefKey
-	Body           types.DocEventBody
-}
 
 // Subscriptions is a map of Subscriptions.
 type Subscriptions struct {
@@ -68,7 +61,7 @@ func (s *Subscriptions) Values() []*Subscription {
 }
 
 // Publish publishes the given event.
-func (s *Subscriptions) Publish(event DocEvent) {
+func (s *Subscriptions) Publish(event events.DocEvent) {
 	s.publisher.Publish(event)
 }
 
@@ -182,13 +175,13 @@ func (m *PubSub) Unsubscribe(
 func (m *PubSub) Publish(
 	ctx context.Context,
 	publisherID *time.ActorID,
-	event DocEvent,
+	event events.DocEvent,
 ) {
 	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
 	// race condition of concurrent access to the cache.
 	_ = event.Publisher.String()
 
-	docKey := event.DocumentRefKey
+	docKey := event.DocRefKey
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) Start`,

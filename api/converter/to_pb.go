@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -193,15 +194,15 @@ func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
 }
 
 // ToDocEventType converts the given model format to Protobuf format.
-func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
+func ToDocEventType(eventType events.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case types.DocumentChangedEvent:
+	case events.DocChangedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED, nil
-	case types.DocumentWatchedEvent:
+	case events.DocWatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, nil
-	case types.DocumentUnwatchedEvent:
+	case events.DocUnwatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED, nil
-	case types.DocumentBroadcastEvent:
+	case events.DocBroadcastEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)

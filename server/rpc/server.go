@@ -45,7 +45,6 @@ type Server struct {
 	conf                *Config
 	httpServer          *http.Server
 	yorkieServiceCancel context.CancelFunc
-	tokenManager        *auth.TokenManager
 }
 
 // NewServer creates a new instance of Server.
@@ -130,7 +129,6 @@ func (s *Server) listenAndServe() error {
 		if err := s.httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
 		}
-		return
 	}()
 	return nil
 }

@@ -24,6 +24,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -572,9 +573,9 @@ func (s *yorkieServer) RemoveDocument(
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
-	documentRefKey types.DocRefKey,
+	docKey types.DocRefKey,
 ) (*pubsub.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, documentRefKey)
+	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
@@ -583,16 +584,16 @@ func (s *yorkieServer) watchDoc(
 	s.backend.PubSub.Publish(
 		ctx,
 		subscription.Subscriber(),
-		pubsub.DocEvent{
-			Type:           types.DocumentWatchedEvent,
-			Publisher:      subscription.Subscriber(),
-			DocumentRefKey: documentRefKey,
+		events.DocEvent{
+			Type:      events.DocWatchedEvent,
+			Publisher: subscription.Subscriber(),
+			DocRefKey: docKey,
 		},
 	)
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		types.DocumentWatchedEvent,
+		events.DocWatchedEvent,
 		0,
 	)
 
@@ -602,23 +603,22 @@ func (s *yorkieServer) watchDoc(
 func (s *yorkieServer) unwatchDoc(
 	ctx context.Context,
 	subscription *pubsub.Subscription,
-	documentRefKey types.DocRefKey,
+	docKey types.DocRefKey,
 ) error {
-	s.backend.PubSub.Unsubscribe(ctx, documentRefKey, subscription)
-
+	s.backend.PubSub.Unsubscribe(ctx, docKey, subscription)
 	s.backend.PubSub.Publish(
 		ctx,
 		subscription.Subscriber(),
-		pubsub.DocEvent{
-			Type:           types.DocumentUnwatchedEvent,
-			Publisher:      subscription.Subscriber(),
-			DocumentRefKey: documentRefKey,
+		events.DocEvent{
+			Type:      events.DocUnwatchedEvent,
+			Publisher: subscription.Subscriber(),
+			DocRefKey: docKey,
 		},
 	)
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		types.DocumentUnwatchedEvent,
+		events.DocUnwatchedEvent,
 		0,
 	)
 
@@ -639,7 +639,7 @@ func (s *yorkieServer) Broadcast(
 	if err != nil {
 		return nil, err
 	}
-	docRefKey := types.DocRefKey{
+	docKey := types.DocRefKey{
 		ProjectID: project.ID,
 		DocID:     docID,
 	}
@@ -647,7 +647,7 @@ func (s *yorkieServer) Broadcast(
 	docInfo, err := documents.FindDocInfoByRefKey(
 		ctx,
 		s.backend,
-		docRefKey,
+		docKey,
 	)
 	if err != nil {
 		return nil, err
@@ -668,22 +668,25 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	docEventType := types.DocumentBroadcastEvent
 	s.backend.PubSub.Publish(
 		ctx,
 		clientID,
-		pubsub.DocEvent{
-			Type:           docEventType,
-			Publisher:      clientID,
-			DocumentRefKey: docRefKey,
-			Body: types.DocEventBody{
+		events.DocEvent{
+			Type:      events.DocBroadcastEvent,
+			Publisher: clientID,
+			DocRefKey: docKey,
+			Body: events.DocEventBody{
 				Topic:   req.Msg.Topic,
 				Payload: req.Msg.Payload,
 			},
 		},
 	)
-	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(s.backend.Config.Hostname, project, docEventType,
-		len(req.Msg.Payload))
+	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+		s.backend.Config.Hostname,
+		project,
+		events.DocBroadcastEvent,
+		len(req.Msg.Payload),
+	)
 
 	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }
