@@ -23,9 +23,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
-
-	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -44,7 +41,6 @@ import (
 // has the server status such as the information of this Server.
 type Backend struct {
 	Config       *Config
-	serverInfo   *sync.ServerInfo
 	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
 		int,
 		*types.AuthWebhookResponse,
@@ -73,12 +69,6 @@ func New(
 			return nil, fmt.Errorf("os.Hostname: %w", err)
 		}
 		conf.Hostname = hostname
-	}
-
-	serverInfo := &sync.ServerInfo{
-		ID:        xid.New().String(),
-		Hostname:  hostname,
-		UpdatedAt: time.Now(),
 	}
 
 	// 02. Create the auth webhook cache. The auth webhook cache is used to
@@ -111,10 +101,7 @@ func New(
 
 	// 05. Create the coordinator instance. The coordinator is used to manage
 	// the synchronization between the Yorkie servers.
-	// TODO(hackerwins): Implement the coordinator for a shard. For now, we
-	//  distribute workloads to all shards per document. In the future, we
-	//  will need to distribute workloads of a document.
-	coordinator := sync.NewCoordinator(serverInfo)
+	coordinator := sync.NewCoordinator()
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage keeping tasks such as deactivating inactive clients.
@@ -143,14 +130,12 @@ func New(
 	}
 
 	logging.DefaultLogger().Infof(
-		"backend created: id: %s, db: %s",
-		serverInfo.ID,
+		"backend created: db: %s",
 		dbInfo,
 	)
 
 	return &Backend{
 		Config:       conf,
-		serverInfo:   serverInfo,
 		WebhookCache: webhookCache,
 
 		Metrics:      metrics,
@@ -167,7 +152,7 @@ func (b *Backend) Start() error {
 		return err
 	}
 
-	logging.DefaultLogger().Infof("backend started: id: %s", b.serverInfo.ID)
+	logging.DefaultLogger().Infof("backend started")
 	return nil
 }
 
@@ -179,19 +164,10 @@ func (b *Backend) Shutdown() error {
 
 	b.Background.Close()
 
-	if err := b.Coordinator.Close(); err != nil {
-		logging.DefaultLogger().Error(err)
-	}
-
 	if err := b.DB.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}
 
-	logging.DefaultLogger().Infof("backend stopped: id: %s", b.serverInfo.ID)
+	logging.DefaultLogger().Infof("backend stopped")
 	return nil
-}
-
-// Members returns the members of this cluster.
-func (b *Backend) Members() map[string]*sync.ServerInfo {
-	return b.Coordinator.Members()
 }

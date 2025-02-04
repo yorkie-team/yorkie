@@ -19,32 +19,20 @@ package sync
 
 import (
 	"context"
-	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/locker"
 )
 
-// ServerInfo represents the information of the Server.
-type ServerInfo struct {
-	ID        string      `json:"id"`
-	Hostname  string      `json:"hostname"`
-	UpdatedAt gotime.Time `json:"updated_at"`
-}
-
-// Coordinator is a memory-based implementation of sync.Coordinator.
 type Coordinator struct {
-	serverInfo *ServerInfo
-
 	locks  *locker.Locker
 	pubSub *PubSub
 }
 
-// NewCoordinator creates an instance of Coordinator.
-func NewCoordinator(serverInfo *ServerInfo) *Coordinator {
+// NewCoordinator creates a new instance of Coordinator.
+func NewCoordinator() *Coordinator {
 	return &Coordinator{
-		serverInfo: serverInfo,
 		locks:      locker.New(),
 		pubSub:     NewPubSub(),
 	}
@@ -96,16 +84,4 @@ func (c *Coordinator) Publish(
 	// race condition of concurrent access to the cache.
 	_ = event.Publisher.String()
 	c.pubSub.Publish(ctx, publisherID, event)
-}
-
-// Members returns the members of this cluster.
-func (c *Coordinator) Members() map[string]*ServerInfo {
-	members := make(map[string]*ServerInfo)
-	members[c.serverInfo.ID] = c.serverInfo
-	return members
-}
-
-// Close closes all resources of this Coordinator.
-func (c *Coordinator) Close() error {
-	return nil
 }

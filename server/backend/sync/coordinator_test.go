@@ -29,7 +29,7 @@ import (
 
 func TestCoordinator(t *testing.T) {
 	t.Run("subscriptions map test", func(t *testing.T) {
-		coordinator := sync.NewCoordinator(nil)
+		coordinator := sync.NewCoordinator()
 		docRefKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),
 			DocID:     types.ID("000000000000000000000000"),
