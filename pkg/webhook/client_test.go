@@ -36,7 +36,7 @@ func verifySignature(signatureHeader, secret string, body []byte) error {
 	mac.Write(body)
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 	expectedSigHeader := fmt.Sprintf("sha256=%s", expectedSig)
-	if signatureHeader != expectedSigHeader {
+	if !hmac.Equal([]byte(signatureHeader), []byte(expectedSigHeader)) {
 		return errors.New("signature validation failed")
 	}
 
