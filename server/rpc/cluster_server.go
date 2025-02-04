@@ -62,7 +62,7 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
 	if err != nil {
 		return nil, err
 	}

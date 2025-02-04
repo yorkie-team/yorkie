@@ -77,8 +77,8 @@ var (
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheTTL        = 10 * gotime.Second
-	ProjectInfoCacheSize       = 256
-	ProjectInfoCacheTTL        = 5 * gotime.Second
+	ProjectCacheSize           = 256
+	ProjectCacheTTL            = 5 * gotime.Second
 
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
@@ -266,8 +266,8 @@ func TestConfig() *server.Config {
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,
 			AuthWebhookCacheTTL:        AuthWebhookCacheTTL.String(),
-			ProjectInfoCacheSize:       ProjectInfoCacheSize,
-			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
+			ProjectCacheSize:           ProjectCacheSize,
+			ProjectCacheTTL:            ProjectCacheTTL.String(),
 			GatewayAddr:                fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{

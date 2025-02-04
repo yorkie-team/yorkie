@@ -42,21 +42,18 @@ func isYorkieService(method string) bool {
 // YorkieServiceInterceptor is an interceptor for building additional context
 // and handling authentication for YorkieService.
 type YorkieServiceInterceptor struct {
-	backend          *backend.Backend
-	requestID        *requestID
-	projectInfoCache *cache.LRUExpireCache[string, *types.Project]
+	backend      *backend.Backend
+	requestID    *requestID
+	projectCache *cache.LRUExpireCache[string, *types.Project]
 }
 
 // NewYorkieServiceInterceptor creates a new instance of YorkieServiceInterceptor.
 func NewYorkieServiceInterceptor(be *backend.Backend) *YorkieServiceInterceptor {
-	projectInfoCache, err := cache.NewLRUExpireCache[string, *types.Project](be.Config.ProjectInfoCacheSize)
-	if err != nil {
-		logging.DefaultLogger().Fatal("Failed to create project info cache: %v", err)
-	}
+	cache := cache.NewLRUExpireCache[string, *types.Project](be.Config.ProjectCacheSize)
 	return &YorkieServiceInterceptor{
-		backend:          be,
-		requestID:        newRequestID("r"),
-		projectInfoCache: projectInfoCache,
+		backend:      be,
+		requestID:    newRequestID("r"),
+		projectCache: cache,
 	}
 }
 
@@ -171,14 +168,14 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	cacheKey := md.APIKey
 
 	// 02. building project
-	if _, ok := i.projectInfoCache.Get(cacheKey); !ok {
+	if _, ok := i.projectCache.Get(cacheKey); !ok {
 		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
 			return nil, connecthelper.ToStatusError(err)
 		}
-		i.projectInfoCache.Add(cacheKey, prj, i.backend.Config.ParseProjectInfoCacheTTL())
+		i.projectCache.Add(cacheKey, prj, i.backend.Config.ParseProjectCacheTTL())
 	}
-	project, _ := i.projectInfoCache.Get(cacheKey)
+	project, _ := i.projectCache.Get(cacheKey)
 	ctx = projects.With(ctx, project)
 
 	// 03. building logger

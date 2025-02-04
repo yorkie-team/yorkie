@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -131,7 +132,7 @@ func (s *yorkieServer) AttachDocument(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +208,7 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +303,7 @@ func (s *yorkieServer) PushPullChanges(
 
 	project := projects.From(ctx)
 	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(
+		locker, err := s.backend.Locker.NewLocker(
 			ctx,
 			packs.PushPullKey(project.ID, pack.DocumentKey),
 		)
@@ -409,7 +410,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	locker, err := s.backend.Coordinator.NewLocker(
+	locker, err := s.backend.Locker.NewLocker(
 		ctx,
 		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)),
 	)
@@ -518,7 +519,7 @@ func (s *yorkieServer) RemoveDocument(
 
 	project := projects.From(ctx)
 	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+		locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 		if err != nil {
 			return nil, err
 		}
@@ -572,17 +573,17 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
 	documentRefKey types.DocRefKey,
-) (*sync.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentRefKey)
+) (*pubsub.Subscription, []*time.ActorID, error) {
+	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, documentRefKey)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
 	}
 
-	s.backend.Coordinator.Publish(
+	s.backend.PubSub.Publish(
 		ctx,
 		subscription.Subscriber(),
-		sync.DocEvent{
+		pubsub.DocEvent{
 			Type:           types.DocumentWatchedEvent,
 			Publisher:      subscription.Subscriber(),
 			DocumentRefKey: documentRefKey,
@@ -600,19 +601,15 @@ func (s *yorkieServer) watchDoc(
 
 func (s *yorkieServer) unwatchDoc(
 	ctx context.Context,
-	subscription *sync.Subscription,
+	subscription *pubsub.Subscription,
 	documentRefKey types.DocRefKey,
 ) error {
-	err := s.backend.Coordinator.Unsubscribe(ctx, documentRefKey, subscription)
-	if err != nil {
-		logging.From(ctx).Error(err)
-		return err
-	}
+	s.backend.PubSub.Unsubscribe(ctx, documentRefKey, subscription)
 
-	s.backend.Coordinator.Publish(
+	s.backend.PubSub.Publish(
 		ctx,
 		subscription.Subscriber(),
-		sync.DocEvent{
+		pubsub.DocEvent{
 			Type:           types.DocumentUnwatchedEvent,
 			Publisher:      subscription.Subscriber(),
 			DocumentRefKey: documentRefKey,
@@ -672,10 +669,10 @@ func (s *yorkieServer) Broadcast(
 	}
 
 	docEventType := types.DocumentBroadcastEvent
-	s.backend.Coordinator.Publish(
+	s.backend.PubSub.Publish(
 		ctx,
 		clientID,
-		sync.DocEvent{
+		pubsub.DocEvent{
 			Type:           docEventType,
 			Publisher:      clientID,
 			DocumentRefKey: docRefKey,

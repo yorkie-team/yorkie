@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-package sync
+// Package pubsub provides a pub-sub implementation.
+package pubsub
 
 import (
 	"strconv"

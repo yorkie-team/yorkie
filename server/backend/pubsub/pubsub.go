@@ -14,16 +14,14 @@
  * limitations under the License.
  */
 
-package sync
+package pubsub
 
 import (
 	"context"
-	"sync"
 	gotime "time"
 
 	"go.uber.org/zap"
 
-	"github.com/rs/xid"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -35,76 +33,12 @@ const (
 	publishTimeout = 100 * gotime.Millisecond
 )
 
-// Subscription represents a subscription of a subscriber to documents.
-type Subscription struct {
-	id         string
-	subscriber *time.ActorID
-	mu         sync.Mutex
-	closed     bool
-	events     chan DocEvent
-}
-
-// NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber *time.ActorID) *Subscription {
-	return &Subscription{
-		id:         xid.New().String(),
-		subscriber: subscriber,
-		events:     make(chan DocEvent, 1),
-		closed:     false,
-	}
-}
-
-// ID returns the id of this subscription.
-func (s *Subscription) ID() string {
-	return s.id
-}
-
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
 	Type           types.DocEventType
 	Publisher      *time.ActorID
 	DocumentRefKey types.DocRefKey
 	Body           types.DocEventBody
-}
-
-// Events returns the DocEvent channel of this subscription.
-func (s *Subscription) Events() chan DocEvent {
-	return s.events
-}
-
-// Subscriber returns the subscriber of this subscription.
-func (s *Subscription) Subscriber() *time.ActorID {
-	return s.subscriber
-}
-
-// Close closes all resources of this Subscription.
-func (s *Subscription) Close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if !s.closed {
-		s.closed = true
-		close(s.events)
-	}
-}
-
-// Publish publishes the given event to the subscriber.
-func (s *Subscription) Publish(event DocEvent) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.closed {
-		return false
-	}
-
-	// NOTE(hackerwins): When a subscription is being closed by a subscriber,
-	// the subscriber may not receive messages.
-	select {
-	case s.Events() <- event:
-		return true
-	case <-gotime.After(publishTimeout):
-		return false
-	}
 }
 
 // Subscriptions is a map of Subscriptions.
@@ -163,8 +97,8 @@ type PubSub struct {
 	subscriptionsMap *cmap.Map[types.DocRefKey, *Subscriptions]
 }
 
-// NewPubSub creates an instance of PubSub.
-func NewPubSub() *PubSub {
+// New creates an instance of PubSub.
+func New() *PubSub {
 	return &PubSub{
 		subscriptionsMap: cmap.New[types.DocRefKey, *Subscriptions](),
 	}
@@ -175,7 +109,7 @@ func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	docKey types.DocRefKey,
-) (*Subscription, error) {
+) (*Subscription, []*time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
@@ -201,7 +135,9 @@ func (m *PubSub) Subscribe(
 			subscriber,
 		)
 	}
-	return sub, nil
+
+	ids := m.ClientIDs(docKey)
+	return sub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given docKeys.
@@ -248,6 +184,10 @@ func (m *PubSub) Publish(
 	publisherID *time.ActorID,
 	event DocEvent,
 ) {
+	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
+	// race condition of concurrent access to the cache.
+	_ = event.Publisher.String()
+
 	docKey := event.DocumentRefKey
 
 	if logging.Enabled(zap.DebugLevel) {

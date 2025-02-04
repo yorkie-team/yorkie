@@ -32,24 +32,35 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
 
-// Backend manages Yorkie's backend such as Database and Coordinator. And it
-// has the server status such as the information of this Server.
+// Backend manages Yorkie's backend such as Database and Coordinator. It also
+// provides in-memory cache, pubsub, and locker.
 type Backend struct {
-	Config       *Config
+	Config *Config
+
+	// AuthWebhookCache is used to cache the response of the auth webhook.
 	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
 		int,
 		*types.AuthWebhookResponse,
 	]]
+	// PubSub is used to publish/subscribe events to/from clients.
+	PubSub *pubsub.PubSub
+	// Locker is used to lock/unlock resources.
+	Locker *sync.LockerManager
 
-	Metrics      *prometheus.Metrics
-	DB           database.Database
-	Coordinator  *sync.Coordinator
-	Background   *background.Background
+	// Metrics is used to expose metrics.
+	Metrics *prometheus.Metrics
+	// DB is the database instance.
+	DB database.Database
+
+	// Background is used to manage background tasks.
+	Background *background.Background
+	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
 }
 
@@ -71,14 +82,12 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the auth webhook cache. The auth webhook cache is used to
-	// cache the response of the auth webhook.
-	webhookCache, err := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	// 02. Create in-memory cache, pubsub, and locker.
+	cache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
-	if err != nil {
-		return nil, err
-	}
+	locker := sync.New()
+	pubsub := pubsub.New()
 
 	// 03. Create the background instance. The background instance is used to
 	// manage background tasks.
@@ -86,6 +95,7 @@ func New(
 
 	// 04. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
+	var err error
 	var db database.Database
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
@@ -98,10 +108,6 @@ func New(
 			return nil, err
 		}
 	}
-
-	// 05. Create the coordinator instance. The coordinator is used to manage
-	// the synchronization between the Yorkie servers.
-	coordinator := sync.NewCoordinator()
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage keeping tasks such as deactivating inactive clients.
@@ -136,11 +142,12 @@ func New(
 
 	return &Backend{
 		Config:       conf,
-		WebhookCache: webhookCache,
+		WebhookCache: cache,
+		Locker:       locker,
+		PubSub:       pubsub,
 
 		Metrics:      metrics,
 		DB:           db,
-		Coordinator:  coordinator,
 		Background:   bg,
 		Housekeeping: keeping,
 	}, nil

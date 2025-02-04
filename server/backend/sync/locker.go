@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package sync provides a locker implementation.
 package sync
 
 import (
@@ -37,6 +38,29 @@ func NewKey(key string) Key {
 // String returns a string representation of this Key.
 func (k Key) String() string {
 	return string(k)
+}
+
+// LockerManager manages Lockers.
+type LockerManager struct {
+	locks *locker.Locker
+}
+
+// New creates a new instance of LockerManager.
+func New() *LockerManager {
+	return &LockerManager{
+		locks: locker.New(),
+	}
+}
+
+// NewLocker creates locker of the given key.
+func (c *LockerManager) NewLocker(
+	_ context.Context,
+	key Key,
+) (Locker, error) {
+	return &internalLocker{
+		key.String(),
+		c.locks,
+	}, nil
 }
 
 // A Locker represents an object that can be locked and unlocked.
