@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package memory
+package pubsub
 
 import (
 	"context"
@@ -25,44 +25,56 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
+
+const (
+	// publishTimeout is the timeout for publishing an event.
+	publishTimeout = 100 * gotime.Millisecond
+)
+
+// DocEvent represents events that occur related to the document.
+type DocEvent struct {
+	Type           types.DocEventType
+	Publisher      *time.ActorID
+	DocumentRefKey types.DocRefKey
+	Body           types.DocEventBody
+}
 
 // Subscriptions is a map of Subscriptions.
 type Subscriptions struct {
 	docKey      types.DocRefKey
-	internalMap *cmap.Map[string, *sync.Subscription]
+	internalMap *cmap.Map[string, *Subscription]
 	publisher   *BatchPublisher
 }
 
 func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
 	s := &Subscriptions{
 		docKey:      docKey,
-		internalMap: cmap.New[string, *sync.Subscription](),
+		internalMap: cmap.New[string, *Subscription](),
 	}
 	s.publisher = NewBatchPublisher(s, 100*gotime.Millisecond)
 	return s
 }
 
 // Set adds the given subscription.
-func (s *Subscriptions) Set(sub *sync.Subscription) {
+func (s *Subscriptions) Set(sub *Subscription) {
 	s.internalMap.Set(sub.ID(), sub)
 }
 
 // Values returns the values of these subscriptions.
-func (s *Subscriptions) Values() []*sync.Subscription {
+func (s *Subscriptions) Values() []*Subscription {
 	return s.internalMap.Values()
 }
 
 // Publish publishes the given event.
-func (s *Subscriptions) Publish(event sync.DocEvent) {
+func (s *Subscriptions) Publish(event DocEvent) {
 	s.publisher.Publish(event)
 }
 
 // Delete deletes the subscription of the given id.
 func (s *Subscriptions) Delete(id string) {
-	s.internalMap.Delete(id, func(sub *sync.Subscription, exists bool) bool {
+	s.internalMap.Delete(id, func(sub *Subscription, exists bool) bool {
 		if exists {
 			sub.Close()
 		}
@@ -85,8 +97,8 @@ type PubSub struct {
 	subscriptionsMap *cmap.Map[types.DocRefKey, *Subscriptions]
 }
 
-// NewPubSub creates an instance of PubSub.
-func NewPubSub() *PubSub {
+// New creates an instance of PubSub.
+func New() *PubSub {
 	return &PubSub{
 		subscriptionsMap: cmap.New[types.DocRefKey, *Subscriptions](),
 	}
@@ -97,7 +109,7 @@ func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	docKey types.DocRefKey,
-) (*sync.Subscription, error) {
+) (*Subscription, []*time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
@@ -113,7 +125,7 @@ func (m *PubSub) Subscribe(
 		return subs
 	})
 
-	sub := sync.NewSubscription(subscriber)
+	sub := NewSubscription(subscriber)
 	subs.Set(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
@@ -123,14 +135,16 @@ func (m *PubSub) Subscribe(
 			subscriber,
 		)
 	}
-	return sub, nil
+
+	ids := m.ClientIDs(docKey)
+	return sub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
 	docKey types.DocRefKey,
-	sub *sync.Subscription,
+	sub *Subscription,
 ) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -168,8 +182,12 @@ func (m *PubSub) Unsubscribe(
 func (m *PubSub) Publish(
 	ctx context.Context,
 	publisherID *time.ActorID,
-	event sync.DocEvent,
+	event DocEvent,
 ) {
+	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
+	// race condition of concurrent access to the cache.
+	_ = event.Publisher.String()
+
 	docKey := event.DocumentRefKey
 
 	if logging.Enabled(zap.DebugLevel) {

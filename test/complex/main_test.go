@@ -79,8 +79,8 @@ func TestMain(m *testing.M) {
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
-		ProjectInfoCacheSize:      helper.ProjectInfoCacheSize,
-		ProjectInfoCacheTTL:       helper.ProjectInfoCacheTTL.String(),
+		ProjectCacheSize:          helper.ProjectCacheSize,
+		ProjectCacheTTL:           helper.ProjectCacheTTL.String(),
 		AdminTokenDuration:        helper.AdminTokenDuration,
 		GatewayAddr:               fmt.Sprintf("localhost:%d", helper.RPCPort),
 	}, &mongo.Config{

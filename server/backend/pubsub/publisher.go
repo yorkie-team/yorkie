@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-package memory
+// Package pubsub provides a pub-sub implementation.
+package pubsub
 
 import (
 	"strconv"
@@ -24,7 +25,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -41,7 +41,7 @@ func (c *loggerID) next() string {
 type BatchPublisher struct {
 	logger *zap.SugaredLogger
 	mutex  gosync.Mutex
-	events []sync.DocEvent
+	events []DocEvent
 
 	window    time.Duration
 	closeChan chan struct{}
@@ -63,7 +63,7 @@ func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublishe
 
 // Publish adds the given event to the batch. If the batch is full, it publishes
 // the batch.
-func (bp *BatchPublisher) Publish(event sync.DocEvent) {
+func (bp *BatchPublisher) Publish(event DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 

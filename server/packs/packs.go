@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -184,17 +185,17 @@ func PushPull(
 				return
 			}
 
-			be.Coordinator.Publish(
+			be.PubSub.Publish(
 				ctx,
 				publisherID,
-				sync.DocEvent{
+				pubsub.DocEvent{
 					Type:           types.DocumentChangedEvent,
 					Publisher:      publisherID,
 					DocumentRefKey: docRefKey,
 				},
 			)
 
-			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
+			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return

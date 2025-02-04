@@ -49,7 +49,7 @@ var (
 
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookCacheTTL        time.Duration
-	projectInfoCacheTTL        time.Duration
+	projectCacheTTL            time.Duration
 
 	conf = server.NewConfig()
 )
@@ -65,7 +65,7 @@ func newServerCmd() *cobra.Command {
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
+			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
@@ -320,15 +320,15 @@ func init() {
 		"TTL value to set when caching authorization webhook response.",
 	)
 	cmd.Flags().IntVar(
-		&conf.Backend.ProjectInfoCacheSize,
+		&conf.Backend.ProjectCacheSize,
 		"project-info-cache-size",
-		server.DefaultProjectInfoCacheSize,
+		server.DefaultProjectCacheSize,
 		"The cache size of the project info.",
 	)
 	cmd.Flags().DurationVar(
-		&projectInfoCacheTTL,
+		&projectCacheTTL,
 		"project-info-cache-ttl",
-		server.DefaultProjectInfoCacheTTL,
+		server.DefaultProjectCacheTTL,
 		"TTL value to set when caching project info.",
 	)
 	cmd.Flags().StringVar(

@@ -64,8 +64,8 @@ const (
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
-	DefaultProjectInfoCacheSize       = 256
-	DefaultProjectInfoCacheTTL        = 10 * time.Minute
+	DefaultProjectCacheSize           = 256
+	DefaultProjectCacheTTL            = 10 * time.Minute
 
 	DefaultHostname    = ""
 	DefaultGatewayAddr = "localhost:8080"
@@ -189,12 +189,12 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
 
-	if c.Backend.ProjectInfoCacheSize == 0 {
-		c.Backend.ProjectInfoCacheSize = DefaultProjectInfoCacheSize
+	if c.Backend.ProjectCacheSize == 0 {
+		c.Backend.ProjectCacheSize = DefaultProjectCacheSize
 	}
 
-	if c.Backend.ProjectInfoCacheTTL == "" {
-		c.Backend.ProjectInfoCacheTTL = DefaultProjectInfoCacheTTL.String()
+	if c.Backend.ProjectCacheTTL == "" {
+		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}
 
 	if c.Mongo != nil {

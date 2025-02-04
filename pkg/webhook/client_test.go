@@ -71,12 +71,9 @@ func TestHMAC(t *testing.T) {
 	defer testServer.Close()
 
 	t.Run("webhook client with valid HMAC key test", func(t *testing.T) {
-		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
-		assert.NoError(t, err)
-
 		client := webhook.NewClient[testRequest, testResponse](
 			testServer.URL,
-			testCache,
+			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
 			webhook.Options{
 				CacheKeyPrefix:  "testPrefix-hmac",
 				CacheTTL:        5 * time.Second,
@@ -95,12 +92,9 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client with invalid HMAC key test", func(t *testing.T) {
-		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
-		assert.NoError(t, err)
-
 		client := webhook.NewClient[testRequest, testResponse](
 			testServer.URL,
-			testCache,
+			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
 			webhook.Options{
 				CacheKeyPrefix:  "testPrefix-hmac",
 				CacheTTL:        5 * time.Second,
@@ -118,12 +112,9 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client without HMAC key test", func(t *testing.T) {
-		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
-		assert.NoError(t, err)
-
-		client := webhook.NewClient[testRequest, testResponse](
+		client := webhook.NewClient[testRequest](
 			testServer.URL,
-			testCache,
+			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
 			webhook.Options{
 				CacheKeyPrefix:  "testPrefix-hmac",
 				CacheTTL:        5 * time.Second,
@@ -140,12 +131,9 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client with empty body test", func(t *testing.T) {
-		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
-		assert.NoError(t, err)
-
-		client := webhook.NewClient[testRequest, testResponse](
+		client := webhook.NewClient[testRequest](
 			testServer.URL,
-			testCache,
+			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
 			webhook.Options{
 				CacheKeyPrefix:  "testPrefix-hmac",
 				CacheTTL:        5 * time.Second,

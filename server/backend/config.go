@@ -70,11 +70,11 @@ type Config struct {
 	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
-	// ProjectInfoCacheSize is the cache size of the project info.
-	ProjectInfoCacheSize int `yaml:"ProjectInfoCacheSize"`
+	// ProjectCacheSize is the cache size of the project metadata.
+	ProjectCacheSize int `yaml:"ProjectCacheSize"`
 
-	// ProjectInfoCacheTTL is the TTL value to set when caching the project info.
-	ProjectInfoCacheTTL string `yaml:"ProjectInfoCacheTTL"`
+	// ProjectCacheTTL is the TTL value to set when caching the project metadata.
+	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
@@ -109,10 +109,10 @@ func (c *Config) Validate() error {
 		)
 	}
 
-	if _, err := time.ParseDuration(c.ProjectInfoCacheTTL); err != nil {
+	if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--project-info-cache-ttl" flag: %w`,
-			c.ProjectInfoCacheTTL,
+			c.ProjectCacheTTL,
 			err,
 		)
 	}
@@ -153,11 +153,11 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	return result
 }
 
-// ParseProjectInfoCacheTTL returns TTL for project info cache.
-func (c *Config) ParseProjectInfoCacheTTL() time.Duration {
-	result, err := time.ParseDuration(c.ProjectInfoCacheTTL)
+// ParseProjectCacheTTL returns TTL for project metadata cache.
+func (c *Config) ParseProjectCacheTTL() time.Duration {
+	result, err := time.ParseDuration(c.ProjectCacheTTL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse project info cache ttl: %w", err)
+		fmt.Fprintln(os.Stderr, "parse project metadata cache ttl: %w", err)
 		os.Exit(1)
 	}
 

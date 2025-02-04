@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package sync
+package pubsub
 
 import (
 	"sync"
@@ -22,13 +22,7 @@ import (
 
 	"github.com/rs/xid"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-)
-
-const (
-	// publishTimeout is the timeout for publishing an event.
-	publishTimeout = 100 * gotime.Millisecond
 )
 
 // Subscription represents a subscription of a subscriber to documents.
@@ -53,14 +47,6 @@ func NewSubscription(subscriber *time.ActorID) *Subscription {
 // ID returns the id of this subscription.
 func (s *Subscription) ID() string {
 	return s.id
-}
-
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type           types.DocEventType
-	Publisher      *time.ActorID
-	DocumentRefKey types.DocRefKey
-	Body           types.DocEventBody
 }
 
 // Events returns the DocEvent channel of this subscription.

@@ -41,7 +41,7 @@ func DeactivateInactives(
 ) (types.ID, error) {
 	start := time.Now()
 
-	locker, err := be.Coordinator.NewLocker(ctx, deactivateCandidatesKey)
+	locker, err := be.Locker.NewLocker(ctx, deactivateCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
