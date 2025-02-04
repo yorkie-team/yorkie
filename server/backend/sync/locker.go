@@ -19,6 +19,8 @@ package sync
 import (
 	"context"
 	"errors"
+
+	"github.com/yorkie-team/yorkie/pkg/locker"
 )
 
 // ErrAlreadyLocked is returned when the lock is already locked.
@@ -47,4 +49,34 @@ type Locker interface {
 
 	// Unlock unlocks the mutex.
 	Unlock(ctx context.Context) error
+}
+
+type internalLocker struct {
+	key   string
+	locks *locker.Locker
+}
+
+// Lock locks the mutex.
+func (il *internalLocker) Lock(_ context.Context) error {
+	il.locks.Lock(il.key)
+
+	return nil
+}
+
+// TryLock locks the mutex if not already locked by another session.
+func (il *internalLocker) TryLock(_ context.Context) error {
+	if !il.locks.TryLock(il.key) {
+		return ErrAlreadyLocked
+	}
+
+	return nil
+}
+
+// Unlock unlocks the mutex.
+func (il *internalLocker) Unlock(_ context.Context) error {
+	if err := il.locks.Unlock(il.key); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
@@ -53,7 +52,7 @@ type Backend struct {
 
 	Metrics      *prometheus.Metrics
 	DB           database.Database
-	Coordinator  sync.Coordinator
+	Coordinator  *sync.Coordinator
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
 }
@@ -115,7 +114,7 @@ func New(
 	// TODO(hackerwins): Implement the coordinator for a shard. For now, we
 	//  distribute workloads to all shards per document. In the future, we
 	//  will need to distribute workloads of a document.
-	coordinator := memsync.NewCoordinator(serverInfo)
+	coordinator := sync.NewCoordinator(serverInfo)
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage keeping tasks such as deactivating inactive clients.

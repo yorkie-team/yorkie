@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package memory_test
+package sync_test
 
 import (
 	"context"
@@ -24,12 +24,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
 func TestCoordinator(t *testing.T) {
 	t.Run("subscriptions map test", func(t *testing.T) {
-		coordinator := memory.NewCoordinator(nil)
+		coordinator := sync.NewCoordinator(nil)
 		docRefKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),
 			DocID:     types.ID("000000000000000000000000"),

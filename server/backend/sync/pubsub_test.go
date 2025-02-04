@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package memory_test
+package sync_test
 
 import (
 	"context"
@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 )
 
 func TestPubSub(t *testing.T) {
@@ -36,7 +35,7 @@ func TestPubSub(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("publish subscribe test", func(t *testing.T) {
-		pubSub := memory.NewPubSub()
+		pubSub := sync.NewPubSub()
 		refKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),
 			DocID:     types.ID("000000000000000000000000"),
