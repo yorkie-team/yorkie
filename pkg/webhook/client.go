@@ -20,6 +20,9 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,6 +54,8 @@ type Options struct {
 
 	MaxRetries      uint64
 	MaxWaitInterval time.Duration
+
+	HMACKey string
 }
 
 // Client is a client for the webhook.
@@ -87,12 +92,7 @@ func (c *Client[Req, Res]) Send(ctx context.Context, req Req) (*Res, int, error)
 
 	var res Res
 	status, err := c.withExponentialBackoff(ctx, func() (int, error) {
-		// TODO(hackerwins, window9u): We should consider using HMAC to sign the request.
-		resp, err := http.Post(
-			c.url,
-			"application/json",
-			bytes.NewBuffer(body),
-		)
+		resp, err := c.post("application/json", body)
 		if err != nil {
 			return 0, fmt.Errorf("post to webhook: %w", err)
 		}
@@ -124,6 +124,33 @@ func (c *Client[Req, Res]) Send(ctx context.Context, req Req) (*Res, int, error)
 	}
 
 	return &res, status, nil
+}
+
+// post sends an HTTP POST request with HMAC-SHA256 signature headers.
+// If key is empty, post sends an HTTP POST without signature.
+func (c *Client[Req, Res]) post(contentType string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	if c.options.HMACKey != "" {
+		mac := hmac.New(sha256.New, []byte(c.options.HMACKey))
+		if _, err := mac.Write(body); err != nil {
+			return nil, fmt.Errorf("write HMAC body: %w", err)
+		}
+		signature := mac.Sum(nil)
+		signatureHex := hex.EncodeToString(signature) // Convert to hex string
+		req.Header.Set("X-Signature-256", fmt.Sprintf("sha256=%s", signatureHex))
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send to %s: %w", c.url, err) // Wrapped with context
+	}
+
+	return resp, nil
 }
 
 func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn func() (int, error)) (int, error) {
