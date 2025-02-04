@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/internal/version"
 )
 
@@ -350,7 +351,7 @@ func (m *Metrics) RemoveWatchDocumentConnections(hostname string, project *types
 }
 
 // AddWatchDocumentEvents adds the number of events in document watch stream connections.
-func (m *Metrics) AddWatchDocumentEvents(hostname string, project *types.Project, docEventType types.DocEventType) {
+func (m *Metrics) AddWatchDocumentEvents(hostname string, project *types.Project, docEventType events.DocEventType) {
 	m.watchDocumentEventsTotal.With(prometheus.Labels{
 		projectIDLabel:    project.ID.String(),
 		projectNameLabel:  project.Name,
@@ -361,7 +362,7 @@ func (m *Metrics) AddWatchDocumentEvents(hostname string, project *types.Project
 
 // AddWatchDocumentEventPayloadBytes adds the bytes of event payload in document watch stream connections.
 func (m *Metrics) AddWatchDocumentEventPayloadBytes(hostname string, project *types.Project,
-	docEventType types.DocEventType, bytes int) {
+	docEventType events.DocEventType, bytes int) {
 	m.watchDocumentEventsTotal.With(prometheus.Labels{
 		projectIDLabel:    project.ID.String(),
 		projectNameLabel:  project.Name,

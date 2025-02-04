@@ -22,6 +22,7 @@ import (
 
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -31,7 +32,7 @@ type Subscription struct {
 	subscriber *time.ActorID
 	mu         sync.Mutex
 	closed     bool
-	events     chan DocEvent
+	events     chan events.DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
@@ -39,7 +40,7 @@ func NewSubscription(subscriber *time.ActorID) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
-		events:     make(chan DocEvent, 1),
+		events:     make(chan events.DocEvent, 1),
 		closed:     false,
 	}
 }
@@ -50,7 +51,7 @@ func (s *Subscription) ID() string {
 }
 
 // Events returns the DocEvent channel of this subscription.
-func (s *Subscription) Events() chan DocEvent {
+func (s *Subscription) Events() chan events.DocEvent {
 	return s.events
 }
 
@@ -71,7 +72,7 @@ func (s *Subscription) Close() {
 }
 
 // Publish publishes the given event to the subscriber.
-func (s *Subscription) Publish(event DocEvent) bool {
+func (s *Subscription) Publish(event events.DocEvent) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

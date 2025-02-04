@@ -25,6 +25,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -41,7 +42,7 @@ func (c *loggerID) next() string {
 type BatchPublisher struct {
 	logger *zap.SugaredLogger
 	mutex  gosync.Mutex
-	events []DocEvent
+	events []events.DocEvent
 
 	window    time.Duration
 	closeChan chan struct{}
@@ -63,7 +64,7 @@ func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublishe
 
 // Publish adds the given event to the batch. If the batch is full, it publishes
 // the batch.
-func (bp *BatchPublisher) Publish(event DocEvent) {
+func (bp *BatchPublisher) Publish(event events.DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 

@@ -25,12 +25,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -431,10 +431,10 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	s.backend.PubSub.Publish(
 		ctx,
 		publisherID,
-		pubsub.DocEvent{
-			Type:           types.DocumentChangedEvent,
-			Publisher:      publisherID,
-			DocumentRefKey: docInfo.RefKey(),
+		events.DocEvent{
+			Type:      events.DocChangedEvent,
+			Publisher: publisherID,
+			DocRefKey: docInfo.RefKey(),
 		},
 	)
 

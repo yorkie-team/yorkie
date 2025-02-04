@@ -37,6 +37,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -619,9 +620,9 @@ func handleResponse(
 		}
 
 		switch eventType {
-		case types.DocumentChangedEvent:
+		case events.DocChangedEvent:
 			return &WatchResponse{Type: DocumentChanged}, nil
-		case types.DocumentWatchedEvent:
+		case events.DocWatchedEvent:
 			doc.AddOnlineClient(cli.String())
 			if doc.Presence(cli.String()) == nil {
 				return nil, nil
@@ -633,7 +634,7 @@ func handleResponse(
 					cli.String(): doc.Presence(cli.String()),
 				},
 			}, nil
-		case types.DocumentUnwatchedEvent:
+		case events.DocUnwatchedEvent:
 			p := doc.Presence(cli.String())
 			doc.RemoveOnlineClient(cli.String())
 			if p == nil {
@@ -646,7 +647,7 @@ func handleResponse(
 					cli.String(): p,
 				},
 			}, nil
-		case types.DocumentBroadcastEvent:
+		case events.DocBroadcastEvent:
 			eventBody := resp.Event.Body
 			// If the handler exists, it means that the broadcast topic has been subscribed to.
 			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
