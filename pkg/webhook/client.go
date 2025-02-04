@@ -131,14 +131,14 @@ func (c *Client[Req, Res]) Send(ctx context.Context, req Req) (*Res, int, error)
 func (c *Client[Req, Res]) post(contentType string, body []byte) (*http.Response, error) {
 	req, err := http.NewRequest("POST", c.url, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+		return nil, fmt.Errorf("create HTTP request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", contentType)
 	if c.options.HMACKey != "" {
 		mac := hmac.New(sha256.New, []byte(c.options.HMACKey))
 		if _, err := mac.Write(body); err != nil {
-			return nil, fmt.Errorf("failed to write HMAC body: %w", err)
+			return nil, fmt.Errorf("write HMAC body: %w", err)
 		}
 		signature := mac.Sum(nil)
 		signatureHex := hex.EncodeToString(signature) // Convert to hex string
@@ -147,7 +147,7 @@ func (c *Client[Req, Res]) post(contentType string, body []byte) (*http.Response
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP POST request failed: %w", err) // Wrapped with context
+		return nil, fmt.Errorf("send to %s: %w", c.url, err) // Wrapped with context
 	}
 
 	return resp, nil
