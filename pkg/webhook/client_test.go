@@ -51,6 +51,10 @@ func TestHMAC(t *testing.T) {
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		signatureHeader := r.Header.Get("X-Signature-256")
+		if signatureHeader == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -111,5 +115,51 @@ func TestHMAC(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusForbidden, statusCode)
 		assert.Nil(t, resp)
+	})
+
+	t.Run("webhook client without HMAC key test", func(t *testing.T) {
+		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
+		assert.NoError(t, err)
+
+		client := webhook.NewClient[testRequest, testResponse](
+			testServer.URL,
+			testCache,
+			webhook.Options{
+				CacheKeyPrefix:  "testPrefix-hmac",
+				CacheTTL:        5 * time.Second,
+				MaxRetries:      0,
+				MaxWaitInterval: 200 * time.Millisecond,
+			},
+		)
+
+		ctx := context.Background()
+		resp, statusCode, err := client.Send(ctx, reqData)
+		assert.Error(t, err)
+		assert.Equal(t, http.StatusUnauthorized, statusCode)
+		assert.Nil(t, resp)
+	})
+
+	t.Run("webhook client with empty body test", func(t *testing.T) {
+		testCache, err := cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100)
+		assert.NoError(t, err)
+
+		client := webhook.NewClient[testRequest, testResponse](
+			testServer.URL,
+			testCache,
+			webhook.Options{
+				CacheKeyPrefix:  "testPrefix-hmac",
+				CacheTTL:        5 * time.Second,
+				MaxRetries:      0,
+				MaxWaitInterval: 200 * time.Millisecond,
+				HMACKey:         secretKey,
+			},
+		)
+
+		ctx := context.Background()
+		resp, statusCode, err := client.Send(ctx, testRequest{})
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.NotNil(t, resp)
+		assert.Equal(t, resData.Greeting, resp.Greeting)
 	})
 }
