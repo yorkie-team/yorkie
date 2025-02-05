@@ -109,13 +109,6 @@ func (c *Client[Req, Res]) Send(
 
 		return nil, statusCode, fmt.Errorf("post webhook request: %w", err)
 	}
-	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		if cerr := resp.Body.Close(); cerr != nil {
-			// TODO(hackerwins): Consider to remove the dependency of logging.
-			logging.From(ctx).Error(cerr)
-		}
-	}()
 
 	if !isExpectedCode(resp.StatusCode) {
 		return nil, resp.StatusCode, fmt.Errorf("%d: %w", resp.StatusCode, ErrUnexpectedStatusCode)
