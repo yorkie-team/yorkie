@@ -25,15 +25,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hashicorp/go-retryablehttp"
-	"github.com/yorkie-team/yorkie/pkg/cache"
-	"github.com/yorkie-team/yorkie/pkg/types"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"io"
-	"log"
 	"net/http"
 	"syscall"
 	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
+	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -66,36 +67,38 @@ type Client[Req any, Res any] struct {
 
 // NewClient creates a new instance of Client.
 func NewClient[Req any, Res any](
-	Cache *cache.LRUExpireCache[string, types.Pair[int, *Res]],
+	cache *cache.LRUExpireCache[string, types.Pair[int, *Res]],
 	options Options,
 ) *Client[Req, Res] {
-	return &Client[Req, Res]{
-		cache: Cache,
-		retryClient: &retryablehttp.Client{
-			HTTPClient: &http.Client{
-				Timeout: options.RequestTimeout,
-			},
-			RetryMax:     int(options.MaxRetries),
-			RetryWaitMin: options.MinWaitInterval,
-			RetryWaitMax: options.MaxWaitInterval,
-			CheckRetry:   shouldRetry,
-			Logger:       nil,
-			Backoff:      retryablehttp.DefaultBackoff,
-			ErrorHandler: func(resp *http.Response, err error, numTries int) (*http.Response, error) {
-				if err == nil && numTries == int(options.MaxRetries)+1 {
-					return nil, ErrWebhookTimeout
-				}
-				return resp, fmt.Errorf("after %d attempts, errors were: %w", numTries, err)
-			},
+	retryClient := &retryablehttp.Client{
+		HTTPClient: &http.Client{
+			Timeout: options.RequestTimeout,
 		},
-		options: options,
+		RetryMax:     int(options.MaxRetries),
+		RetryWaitMin: options.MinWaitInterval,
+		RetryWaitMax: options.MaxWaitInterval,
+		CheckRetry:   shouldRetry,
+		Logger:       nil,
+		Backoff:      retryablehttp.DefaultBackoff,
+		ErrorHandler: func(resp *http.Response, err error, numTries int) (*http.Response, error) {
+			if err == nil && numTries == int(options.MaxRetries)+1 {
+				return nil, ErrWebhookTimeout
+			}
+			return resp, fmt.Errorf("after %d attempts, errors were: %w", numTries, err)
+		},
+	}
+
+	return &Client[Req, Res]{
+		cache:       cache,
+		retryClient: retryClient,
+		options:     options,
 	}
 }
 
 // Send sends the given request to the webhook.
 func (c *Client[Req, Res]) Send(
 	ctx context.Context,
-	CacheKeyPrefix, url, HMACKey string,
+	cacheKeyPrefix, url, hmacKey string,
 	reqData Req,
 ) (*Res, int, error) {
 	body, err := json.Marshal(reqData)
@@ -103,31 +106,30 @@ func (c *Client[Req, Res]) Send(
 		return nil, 0, fmt.Errorf("marshal webhook request: %w", err)
 	}
 
-	cacheKey := CacheKeyPrefix + ":" + string(body)
+	cacheKey := fmt.Sprintf("%s:%s", cacheKeyPrefix, string(body))
 	if entry, ok := c.cache.Get(cacheKey); ok {
 		return entry.Second, entry.First, nil
 	}
 
-	req, err := c.buildRequest(ctx, url, HMACKey, body)
+	req, err := c.buildRequest(ctx, url, hmacKey, body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("build request: %w", err)
 	}
 
 	resp, err := c.retryClient.Do(req)
 	if err != nil {
-		var statusCode int
+		statusCode := 0
 		if resp != nil {
 			statusCode = resp.StatusCode
 		}
-		log.Println(err)
 
-		return nil, statusCode, fmt.Errorf("post to webhook: %w", err)
+		return nil, statusCode, fmt.Errorf("post webhook request: %w", err)
 	}
 	defer func() {
 		io.Copy(io.Discard, resp.Body)
-		if err := resp.Body.Close(); err != nil {
+		if cerr := resp.Body.Close(); cerr != nil {
 			// TODO(hackerwins): Consider to remove the dependency of logging.
-			logging.From(ctx).Error(err)
+			logging.From(ctx).Error(cerr)
 		}
 	}()
 
@@ -140,7 +142,6 @@ func (c *Client[Req, Res]) Send(
 		return nil, resp.StatusCode, ErrUnexpectedResponse
 	}
 
-	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if resp.StatusCode != http.StatusUnauthorized {
 		c.cache.Add(cacheKey, types.Pair[int, *Res]{First: resp.StatusCode, Second: &res}, c.options.CacheTTL)
 	}
@@ -148,32 +149,31 @@ func (c *Client[Req, Res]) Send(
 	return &res, resp.StatusCode, nil
 }
 
-func (c *Client[Req, Res]) buildRequest(ctx context.Context, url, HMACKey string, body []byte) (*retryablehttp.Request, error) {
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", url, body)
+// buildRequest creates a new HTTP POST request with the appropriate headers.
+func (c *Client[Req, Res]) buildRequest(ctx context.Context, url, hmacKey string, body []byte) (*retryablehttp.Request, error) {
+	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("create POST request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-
-	if HMACKey != "" {
-		if err := setSignature(req, body, HMACKey); err != nil {
-			return req, fmt.Errorf("set HMAC signature: %w", err)
+	if hmacKey != "" {
+		if err := setSignature(req, body, hmacKey); err != nil {
+			return nil, fmt.Errorf("set HMAC signature: %w", err)
 		}
 	}
 
 	return req, nil
 }
 
-func setSignature(req *retryablehttp.Request, Data []byte, HMACKey string) error {
-	mac := hmac.New(sha256.New, []byte(HMACKey))
-	if _, err := mac.Write(Data); err != nil {
+// setSignature sets the HMAC signature header for the request.
+func setSignature(req *retryablehttp.Request, data []byte, hmacKey string) error {
+	mac := hmac.New(sha256.New, []byte(hmacKey))
+	if _, err := mac.Write(data); err != nil {
 		return fmt.Errorf("write HMAC body: %w", err)
 	}
-	signature := mac.Sum(nil)
-	signatureHex := hex.EncodeToString(signature)
+	signatureHex := hex.EncodeToString(mac.Sum(nil))
 	req.Header.Set("X-Signature-256", fmt.Sprintf("sha256=%s", signatureHex))
-
 	return nil
 }
 
@@ -203,10 +203,14 @@ func shouldRetry(ctx context.Context, resp *http.Response, err error) (bool, err
 	return false, nil
 }
 
+// isExpectedCode checks if the status code is acceptable.
 func isExpectedCode(code int) bool {
-	return code == http.StatusOK || code == http.StatusUnauthorized || code == http.StatusForbidden
+	return code == http.StatusOK ||
+		code == http.StatusUnauthorized ||
+		code == http.StatusForbidden
 }
 
+// isRetryCode checks if the status code is one that should trigger a retry.
 func isRetryCode(code int) bool {
 	return code == http.StatusInternalServerError ||
 		code == http.StatusServiceUnavailable ||
