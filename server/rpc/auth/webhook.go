@@ -18,12 +18,14 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/metaerrors"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend"
 )
@@ -44,36 +46,58 @@ func verifyAccess(
 	token string,
 	accessInfo *types.AccessInfo,
 ) error {
-	res, status, err := be.AuthWebhookClient.Send(
+	req := types.AuthWebhookRequest{
+		Token:      token,
+		Method:     accessInfo.Method,
+		Attributes: accessInfo.Attributes,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal webhook request: %w", err)
+	}
+
+	cacheKey := generateCacheKey(prj.PublicKey, body)
+	if entry, ok := be.WebhookCache.Get(cacheKey); ok {
+		return handleWebhookResponse(entry.First, entry.Second)
+	}
+
+	res, status, err := be.WebhookClient.Send(
 		ctx,
-		prj.PublicKey+":auth",
 		prj.AuthWebhookURL,
 		"",
-		types.AuthWebhookRequest{
-			Token:      token,
-			Method:     accessInfo.Method,
-			Attributes: accessInfo.Attributes,
-		},
+		body,
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)
 	}
 
-	if status == http.StatusOK && res.Allowed {
-		return nil
-	}
-	if status == http.StatusForbidden && !res.Allowed {
-		return metaerrors.New(
-			ErrPermissionDenied,
-			map[string]string{"reason": res.Reason},
-		)
-	}
-	if status == http.StatusUnauthorized && !res.Allowed {
-		return metaerrors.New(
-			ErrUnauthenticated,
-			map[string]string{"reason": res.Reason},
+	if status != http.StatusUnauthorized {
+		be.WebhookCache.Add(
+			cacheKey,
+			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
+			be.Config.ParseAuthWebhookCacheTTL(),
 		)
 	}
 
-	return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
+	return handleWebhookResponse(status, res)
+}
+
+// generateCacheKey creates a unique key for caching webhook responses.
+func generateCacheKey(publicKey string, body []byte) string {
+	return fmt.Sprintf("%s:auth:%s", publicKey, body)
+}
+
+// handleWebhookResponse processes the webhook response and returns an error if necessary.
+func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
+	switch {
+	case status == http.StatusOK && res.Allowed:
+		return nil
+	case status == http.StatusForbidden && !res.Allowed:
+		return metaerrors.New(ErrPermissionDenied, map[string]string{"reason": res.Reason})
+	case status == http.StatusUnauthorized && !res.Allowed:
+		return metaerrors.New(ErrUnauthenticated, map[string]string{"reason": res.Reason})
+	default:
+		return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
+	}
 }

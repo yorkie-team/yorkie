@@ -32,8 +32,6 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 
-	"github.com/yorkie-team/yorkie/pkg/cache"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -50,8 +48,6 @@ var (
 
 // Options are the options for the webhook client.
 type Options struct {
-	CacheTTL time.Duration
-
 	MaxRetries      uint64
 	MinWaitInterval time.Duration
 	MaxWaitInterval time.Duration
@@ -60,14 +56,12 @@ type Options struct {
 
 // Client is a client for the webhook.
 type Client[Req any, Res any] struct {
-	cache       *cache.LRUExpireCache[string, types.Pair[int, *Res]]
 	retryClient *retryablehttp.Client
 	options     Options
 }
 
 // NewClient creates a new instance of Client.
 func NewClient[Req any, Res any](
-	cache *cache.LRUExpireCache[string, types.Pair[int, *Res]],
 	options Options,
 ) *Client[Req, Res] {
 	retryClient := &retryablehttp.Client{
@@ -89,7 +83,6 @@ func NewClient[Req any, Res any](
 	}
 
 	return &Client[Req, Res]{
-		cache:       cache,
 		retryClient: retryClient,
 		options:     options,
 	}
@@ -98,18 +91,9 @@ func NewClient[Req any, Res any](
 // Send sends the given request to the webhook.
 func (c *Client[Req, Res]) Send(
 	ctx context.Context,
-	cacheKeyPrefix, url, hmacKey string,
-	reqData Req,
+	url, hmacKey string,
+	body []byte,
 ) (*Res, int, error) {
-	body, err := json.Marshal(reqData)
-	if err != nil {
-		return nil, 0, fmt.Errorf("marshal webhook request: %w", err)
-	}
-
-	cacheKey := fmt.Sprintf("%s:%s", cacheKeyPrefix, string(body))
-	if entry, ok := c.cache.Get(cacheKey); ok {
-		return entry.Second, entry.First, nil
-	}
 
 	req, err := c.buildRequest(ctx, url, hmacKey, body)
 	if err != nil {
@@ -140,10 +124,6 @@ func (c *Client[Req, Res]) Send(
 	var res Res
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return nil, resp.StatusCode, ErrUnexpectedResponse
-	}
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		c.cache.Add(cacheKey, types.Pair[int, *Res]{First: resp.StatusCode, Second: &res}, c.options.CacheTTL)
 	}
 
 	return &res, resp.StatusCode, nil

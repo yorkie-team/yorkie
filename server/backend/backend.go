@@ -45,8 +45,13 @@ import (
 type Backend struct {
 	Config *Config
 
-	// AuthWebhookClient is used to send auth webhook.
-	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	// AuthWebhookCache is used to cache the response of the auth webhook.
+	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+		int,
+		*types.AuthWebhookResponse,
+	]]
+	// WebhookClient is used to send auth webhook.
+	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
@@ -82,27 +87,28 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create auth webhook client with in-memory cache, pubsub, and locker.
+	// 02. Create auth webhook client and cache.
+	cache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+		conf.AuthWebhookCacheSize,
+	)
 	auth := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
-			conf.AuthWebhookCacheSize,
-		),
 		webhook.Options{
-			CacheTTL:        conf.ParseAuthWebhookCacheTTL(),
 			MaxRetries:      conf.AuthWebhookMaxRetries,
 			MinWaitInterval: 200 * time.Millisecond,
 			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
 			RequestTimeout:  30 * time.Second,
 		},
 	)
+
+	// 03. Create pubsub, and locker.
 	locker := sync.New()
 	pubsub := pubsub.New()
 
-	// 03. Create the background instance. The background instance is used to
+	// 04. Create the background instance. The background instance is used to
 	// manage background tasks.
 	bg := background.New(metrics)
 
-	// 04. Create the database instance. If the MongoDB configuration is given,
+	// 05. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var err error
 	var db database.Database
@@ -150,10 +156,11 @@ func New(
 	)
 
 	return &Backend{
-		Config:            conf,
-		AuthWebhookClient: auth,
-		Locker:            locker,
-		PubSub:            pubsub,
+		Config:        conf,
+		WebhookCache:  cache,
+		WebhookClient: auth,
+		Locker:        locker,
+		PubSub:        pubsub,
 
 		Metrics:      metrics,
 		DB:           db,
