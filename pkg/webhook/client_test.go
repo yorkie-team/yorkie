@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
-	"github.com/yorkie-team/yorkie/pkg/types"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
@@ -46,7 +46,6 @@ func verifySignature(signatureHeader, secret string, body []byte) error {
 func TestHMAC(t *testing.T) {
 	const secretKey = "my-secret-key"
 	const wrongKey = "wrong-key"
-	reqData := testRequest{Name: "HMAC Tester"}
 	resData := testResponse{Greeting: "HMAC OK"}
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,22 +68,26 @@ func TestHMAC(t *testing.T) {
 		assert.NoError(t, json.NewEncoder(w).Encode(resData))
 	}))
 	defer testServer.Close()
-
+	client := webhook.NewClient[testRequest, testResponse](
+		cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *testResponse]](
+			100,
+		),
+		webhook.Options{
+			CacheTTL:        10 * time.Second,
+			MaxRetries:      0,
+			MinWaitInterval: 2 * time.Second,
+			MaxWaitInterval: 10 * time.Second,
+			RequestTimeout:  30 * time.Second,
+		},
+	)
 	t.Run("webhook client with valid HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest, testResponse](
+		resp, statusCode, err := client.Send(
+			context.Background(),
+			":auth",
 			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         secretKey,
-			},
+			secretKey,
+			testRequest{Name: t.Name()},
 		)
-
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
@@ -92,59 +95,39 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client with invalid HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest, testResponse](
+		resp, statusCode, err := client.Send(
+			context.Background(),
+			":auth",
 			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         wrongKey,
-			},
+			wrongKey,
+			testRequest{Name: t.Name()},
 		)
-
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusForbidden, statusCode)
 		assert.Nil(t, resp)
 	})
 
 	t.Run("webhook client without HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest](
+		resp, statusCode, err := client.Send(
+			context.Background(),
+			":auth",
 			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-			},
+			"",
+			testRequest{Name: t.Name()},
 		)
-
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, statusCode)
 		assert.Nil(t, resp)
 	})
 
 	t.Run("webhook client with empty body test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest](
+		resp, statusCode, err := client.Send(
+			context.Background(),
+			":auth",
 			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         secretKey,
-			},
+			secretKey,
+			testRequest{},
 		)
-
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, testRequest{})
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
