@@ -16,8 +16,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/cache"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
@@ -69,11 +67,7 @@ func TestHMAC(t *testing.T) {
 	}))
 	defer testServer.Close()
 	client := webhook.NewClient[testRequest, testResponse](
-		cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *testResponse]](
-			100,
-		),
 		webhook.Options{
-			CacheTTL:        10 * time.Second,
 			MaxRetries:      0,
 			MinWaitInterval: 2 * time.Second,
 			MaxWaitInterval: 10 * time.Second,
@@ -81,12 +75,14 @@ func TestHMAC(t *testing.T) {
 		},
 	)
 	t.Run("webhook client with valid HMAC key test", func(t *testing.T) {
+		body, err := json.Marshal(testRequest{Name: t.Name()})
+		assert.NoError(t, err)
+
 		resp, statusCode, err := client.Send(
 			context.Background(),
-			":auth",
 			testServer.URL,
 			secretKey,
-			testRequest{Name: t.Name()},
+			body,
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
@@ -95,12 +91,14 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client with invalid HMAC key test", func(t *testing.T) {
+		body, err := json.Marshal(testRequest{Name: t.Name()})
+		assert.NoError(t, err)
+
 		resp, statusCode, err := client.Send(
 			context.Background(),
-			":auth",
 			testServer.URL,
 			wrongKey,
-			testRequest{Name: t.Name()},
+			body,
 		)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusForbidden, statusCode)
@@ -108,12 +106,14 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client without HMAC key test", func(t *testing.T) {
+		body, err := json.Marshal(testRequest{Name: t.Name()})
+		assert.NoError(t, err)
+
 		resp, statusCode, err := client.Send(
 			context.Background(),
-			":auth",
 			testServer.URL,
 			"",
-			testRequest{Name: t.Name()},
+			body,
 		)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, statusCode)
@@ -121,12 +121,14 @@ func TestHMAC(t *testing.T) {
 	})
 
 	t.Run("webhook client with empty body test", func(t *testing.T) {
+		body, err := json.Marshal(testRequest{})
+		assert.NoError(t, err)
+
 		resp, statusCode, err := client.Send(
 			context.Background(),
-			":auth",
 			testServer.URL,
 			secretKey,
-			testRequest{},
+			body,
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
