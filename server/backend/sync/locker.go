@@ -73,6 +73,12 @@ type Locker interface {
 
 	// Unlock unlocks the mutex.
 	Unlock(ctx context.Context) error
+
+	// RLock acquires a read lock with a cancelable context.
+	RLock(ctx context.Context) error
+
+	// RUnlock releases a read lock previously acquired by RLock.
+	RUnlock(ctx context.Context) error
 }
 
 type internalLocker struct {
@@ -99,6 +105,31 @@ func (il *internalLocker) TryLock(_ context.Context) error {
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(_ context.Context) error {
 	if err := il.locks.Unlock(il.key); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RLock locks the mutex for reading..
+func (il *internalLocker) RLock(_ context.Context) error {
+	il.locks.RLock(il.key)
+
+	return nil
+}
+
+// TryRLock locks the mutex for reading if not already locked by another session.
+func (il *internalLocker) TryRLock(_ context.Context) error {
+	if !il.locks.TryRLock(il.key) {
+		return ErrAlreadyLocked
+	}
+
+	return nil
+}
+
+// RUnlock unlocks the read lock.
+func (il *internalLocker) RUnlock(_ context.Context) error {
+	if err := il.locks.RUnlock(il.key); err != nil {
 		return err
 	}
 

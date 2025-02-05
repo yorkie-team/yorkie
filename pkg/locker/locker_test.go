@@ -29,15 +29,15 @@ import (
 
 func TestLockCounter(t *testing.T) {
 	l := &lockCtr{}
-	l.inc()
+	l.incWaiters()
 
 	if l.waiters != 1 {
-		t.Fatal("counter inc failed")
+		t.Fatal("counter incWaiters failed")
 	}
 
-	l.dec()
+	l.decWaiters()
 	if l.waiters != 0 {
-		t.Fatal("counter dec failed")
+		t.Fatal("counter decWaiters failed")
 	}
 }
 
@@ -119,8 +119,10 @@ func TestLockerConcurrency(t *testing.T) {
 	for i := 0; i <= 1000; i++ {
 		wg.Add(1)
 		go func() {
+			//fmt.Println("locked: ")
 			l.Lock("test")
 			// if there is a concurrency issue, will very likely panic here
+			//fmt.Println("unLock: ")
 			assert.NoError(t, l.Unlock("test"))
 			wg.Done()
 		}()
