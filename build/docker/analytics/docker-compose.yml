@@ -1,0 +1,175 @@
+version: "3"
+services:
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:2.5.4
+    hostname: starrocks-fe
+    container_name: starrocks-fe
+    user: root
+    ports:
+      - 8030:8030
+      - 9020:9020
+      - 9030:9030
+    command: /opt/starrocks/fe/bin/start_fe.sh
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "show frontends\G" | grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      # - fe.conf:/opt/starrocks/fe/conf/fe.conf
+      - ./starrocks/starrocks-fe/meta:/opt/starrocks/fe/meta
+      - ./starrocks/fe/log:/opt/starrocks/fe/log
+    networks:
+      network:
+        ipv4_address: 10.5.0.2
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:2.5.4
+    hostname: starrocks-be
+    container_name: starrocks-be
+    user: root
+    ports:
+      - 8040:8040
+    depends_on:
+      - starrocks-fe
+    command:
+      - /bin/bash
+      - -c
+      - |
+        sleep 15s; mysql --connect-timeout 2 -h starrocks-fe -P 9030 -u root -e "alter system add backend \"starrocks-be:9050\";"  
+        /opt/starrocks/be/bin/start_be.sh
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "show backends\G" | grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      # - be.conf:/opt/starrocks/be/conf/be.conf
+      - ./starrocks/starrocks-be/storage:/opt/starrocks/be/storage
+      - ./starrocks/starrocks-be/log:/opt/starrocks/be/log
+    networks:
+      network:
+        ipv4_address: 10.5.0.3
+
+  kafka:
+    image: docker.io/bitnami/kafka:3.9
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    volumes:
+      - "kafka_data:/bitnami"
+    environment:
+      # KRaft settings
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      # Listeners
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    healthcheck:
+      test: kafka-topics.sh --bootstrap-server kafka:9092 --list
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      network:
+        ipv4_address: 10.5.0.5
+
+  init-kafka-topics:
+    image: docker.io/bitnami/kafka:3.9
+    depends_on:
+      - kafka
+    working_dir: /opt/bitnami/kafka/bin
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo -e 'Waiting for Kafka to be ready...'
+      kafka-topics.sh --bootstrap-server kafka:9092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user-events --replication-factor 1 --partitions 1
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics.sh --bootstrap-server kafka:9092 --list
+      "
+    networks:
+      network:
+        ipv4_address: 10.5.0.6
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - "8989:8080"
+    depends_on:
+      - kafka
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    networks:
+      network:
+        ipv4_address: 10.5.0.7
+
+  init-starrocks-database:
+    image: starrocks/fe-ubuntu:2.5.4
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+      starrocks-be:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      init-kafka-topics:
+        condition: service_completed_successfully
+    volumes:
+      - ./init-user-events-db.sql:/init-user-events-db.sql
+      - ./init-routine-load.sql:/init-routine-load.sql
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo -e 'Checking Starrocks status'
+      mysql -u root -h starrocks-fe -P 9030 -e 'show frontends\\G' | grep 'Alive: true' || echo -e 'Frontend is not ready'
+      mysql -u root -h starrocks-fe -P 9030 -e 'show backends\\G' | grep 'Alive: true' || echo -e 'Backend is not ready'
+
+
+      echo -e 'Creating Yorkie database, tables and routine load'
+      mysql -P 9030 -h starrocks-fe -u root < /init-user-events-db.sql
+
+      echo -e 'Checking Yorkie database'
+      mysql -P 9030 -h starrocks-fe -u root -e 'show databases\\G'
+      mysql -P 9030 -h starrocks-fe -u root -e 'show databases\\G' | grep 'Database: yorkie' || echo -e 'Yorkie database not found'
+
+      echo -e 'Checking user_event table'
+      mysql -P 9030 -h starrocks-fe -u root -e 'show tables from yorkie\\G'
+      mysql -P 9030 -h starrocks-fe -u root -e 'show tables from yorkie\\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
+
+
+      sleep 5s
+
+      echo -e 'Creating routine load'
+      mysql -P 9030 -h starrocks-fe -u root < /init-routine-load.sql
+
+      echo -e 'Checking event routine load'
+
+      mysql -P 9030 -h starrocks-fe -u root -e 'show routine load from yorkie\\G'
+      mysql -P 9030 -h starrocks-fe -u root -e 'show routine load from yorkie\\G' | grep 'State: RUNNING' || echo -e 'Routine load is not running'
+      "
+    networks:
+      network:
+        ipv4_address: 10.5.0.4
+
+networks:
+  network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
+          gateway: 10.5.0.1
+
+volumes:
+  kafka_data:
+    driver: local
