@@ -1,6 +1,6 @@
 module github.com/yorkie-team/yorkie
 
-go 1.21
+go 1.23
 
 require (
 	connectrpc.com/connect v1.12.0
