@@ -151,7 +151,6 @@ func (l *Locker) Lock(name string) {
 	// once locked then we can decrement the number of waiters for this lock
 	nameLock.Lock()
 
-	nameLock.decWaiters()
 	nameLock.setWriter(1)
 }
 
@@ -176,7 +175,6 @@ func (l *Locker) TryLock(name string) bool {
 	// Lock the nameLock outside the main mutex so we don't block other operations
 	// once locked then we can decrement the number of waiters for this lock
 	succeeded := nameLock.TryLock()
-	nameLock.decWaiters()
 	nameLock.setWriter(1)
 
 	return succeeded
@@ -195,6 +193,7 @@ func (l *Locker) Unlock(name string) error {
 
 	nameLock.Unlock()
 	nameLock.setWriter(0)
+	nameLock.decWaiters()
 
 	if nameLock.canDelete() {
 		delete(l.locks, name)
