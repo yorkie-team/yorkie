@@ -72,3 +72,6 @@ output.txt
 /build/charts/yorkie-argocd/charts/
 /build/charts/yorkie-monitoring/charts/
 /build/charts/yorkie-cluster/charts/yorkie-mongodb/charts/
+
+# Analytics data
+/build/docker/analytics/starrocks/
