@@ -44,22 +44,17 @@ func verifyAccess(
 	token string,
 	accessInfo *types.AccessInfo,
 ) error {
-	cli := webhook.NewClient[types.AuthWebhookRequest](
+	res, status, err := be.AuthWebhookClient.Send(
+		ctx,
+		prj.PublicKey+":auth",
 		prj.AuthWebhookURL,
-		be.WebhookCache,
-		webhook.Options{
-			CacheKeyPrefix:  prj.PublicKey + ":auth",
-			CacheTTL:        be.Config.ParseAuthWebhookCacheTTL(),
-			MaxRetries:      be.Config.AuthWebhookMaxRetries,
-			MaxWaitInterval: be.Config.ParseAuthWebhookMaxWaitInterval(),
+		"",
+		types.AuthWebhookRequest{
+			Token:      token,
+			Method:     accessInfo.Method,
+			Attributes: accessInfo.Attributes,
 		},
 	)
-
-	res, status, err := cli.Send(ctx, types.AuthWebhookRequest{
-		Token:      token,
-		Method:     accessInfo.Method,
-		Attributes: accessInfo.Attributes,
-	})
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)
 	}

@@ -22,7 +22,9 @@ package backend
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -43,11 +45,9 @@ import (
 type Backend struct {
 	Config *Config
 
-	// AuthWebhookCache is used to cache the response of the auth webhook.
-	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
-		int,
-		*types.AuthWebhookResponse,
-	]]
+	// AuthWebhookClient is used to send auth webhook.
+	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
 	// Locker is used to lock/unlock resources.
@@ -82,9 +82,18 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create in-memory cache, pubsub, and locker.
-	cache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
-		conf.AuthWebhookCacheSize,
+	// 02. Create auth webhook client with in-memory cache, pubsub, and locker.
+	auth := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+		cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+			conf.AuthWebhookCacheSize,
+		),
+		webhook.Options{
+			CacheTTL:        conf.ParseAuthWebhookCacheTTL(),
+			MaxRetries:      conf.AuthWebhookMaxRetries,
+			MinWaitInterval: 200 * time.Millisecond,
+			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
+			RequestTimeout:  30 * time.Second,
+		},
 	)
 	locker := sync.New()
 	pubsub := pubsub.New()
@@ -141,10 +150,10 @@ func New(
 	)
 
 	return &Backend{
-		Config:       conf,
-		WebhookCache: cache,
-		Locker:       locker,
-		PubSub:       pubsub,
+		Config:            conf,
+		AuthWebhookClient: auth,
+		Locker:            locker,
+		PubSub:            pubsub,
 
 		Metrics:      metrics,
 		DB:           db,
