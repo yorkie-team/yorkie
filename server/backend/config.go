@@ -64,6 +64,12 @@ type Config struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `yaml:"AuthWebhookMaxWaitInterval"`
 
+	// AuthWebhookMinWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMinWaitInterval string `yaml:"AuthWebhookMinWaitInterval"`
+
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request
+	AuthWebhookRequestTimeout string `yaml:"AuthWebhookRequestTimeout"`
+
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
@@ -97,6 +103,22 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-max-wait-interval" flag: %w`,
 			c.AuthWebhookMaxWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookMinWaitInterval); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--auth-webhook-min-wait-interval" flag: %w`,
+			c.AuthWebhookMinWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookRequestTimeout); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--auth-webhook-reqeust-timeout" flag: %w`,
+			c.AuthWebhookRequestTimeout,
 			err,
 		)
 	}
@@ -136,6 +158,28 @@ func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookMinWaitInterval returns max wait interval.
+func (c *Config) ParseAuthWebhookMinWaitInterval() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookMinWaitInterval)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse auth webhook min wait interval: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookRequestTimeout returns max wait interval.
+func (c *Config) ParseAuthWebhookRequestTimeout() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookRequestTimeout)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse auth webhook request timeout: %w", err)
 		os.Exit(1)
 	}
 

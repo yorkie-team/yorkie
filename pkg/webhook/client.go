@@ -68,9 +68,10 @@ func NewClient[Req any, Res any](
 		RetryMax:     int(options.MaxRetries),
 		RetryWaitMin: options.MinWaitInterval,
 		RetryWaitMax: options.MaxWaitInterval,
-		CheckRetry:   shouldRetry,
-		Logger:       nil,
-		Backoff:      retryablehttp.DefaultBackoff,
+		// Note(window9u): I think we could replace shouldRetry with `retryablehttp.DefaultRetryPolicy`
+		CheckRetry: shouldRetry,
+		Logger:     nil,
+		Backoff:    retryablehttp.DefaultBackoff,
 		ErrorHandler: func(resp *http.Response, err error, numTries int) (*http.Response, error) {
 			if err == nil && numTries == int(options.MaxRetries)+1 {
 				return nil, ErrWebhookTimeout

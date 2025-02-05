@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -94,9 +93,9 @@ func New(
 	auth := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		webhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
-			MinWaitInterval: 200 * time.Millisecond,
+			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
 			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
-			RequestTimeout:  30 * time.Second,
+			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
 		},
 	)
 

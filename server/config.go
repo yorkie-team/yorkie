@@ -62,6 +62,8 @@ const (
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookMinWaitInterval = 200 * time.Millisecond
+	DefaultAuthWebhookRequestTimeout  = 30 * time.Second
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 	DefaultProjectCacheSize           = 256
@@ -183,6 +185,14 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.AuthWebhookMaxWaitInterval == "" {
 		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.AuthWebhookMinWaitInterval == "" {
+		c.Backend.AuthWebhookMinWaitInterval = DefaultAuthWebhookMinWaitInterval.String()
+	}
+
+	if c.Backend.AuthWebhookRequestTimeout == "" {
+		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
 	}
 
 	if c.Backend.AuthWebhookCacheTTL == "" {

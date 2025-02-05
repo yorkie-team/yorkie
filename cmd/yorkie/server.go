@@ -48,6 +48,8 @@ var (
 	mongoPingTimeout       time.Duration
 
 	authWebhookMaxWaitInterval time.Duration
+	authWebhookMinWaitInterval time.Duration
+	authWebhookRequestTimeout  time.Duration
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
 
@@ -64,6 +66,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
+			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
+			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
@@ -306,6 +310,18 @@ func init() {
 		"auth-webhook-max-wait-interval",
 		server.DefaultAuthWebhookMaxWaitInterval,
 		"Maximum wait interval for authorization webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&authWebhookMinWaitInterval,
+		"auth-webhook-min-wait-interval",
+		server.DefaultAuthWebhookMinWaitInterval,
+		"Minimum wait interval for authorization webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&authWebhookRequestTimeout,
+		"auth-webhook-request-timeout",
+		server.DefaultAuthWebhookRequestTimeout,
+		"Maximum wait time per authorization webhook request.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
