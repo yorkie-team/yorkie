@@ -25,14 +25,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"syscall"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
-
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -94,7 +91,6 @@ func (c *Client[Req, Res]) Send(
 	url, hmacKey string,
 	body []byte,
 ) (*Res, int, error) {
-
 	req, err := c.buildRequest(ctx, url, hmacKey, body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("build request: %w", err)
@@ -123,7 +119,11 @@ func (c *Client[Req, Res]) Send(
 }
 
 // buildRequest creates a new HTTP POST request with the appropriate headers.
-func (c *Client[Req, Res]) buildRequest(ctx context.Context, url, hmacKey string, body []byte) (*retryablehttp.Request, error) {
+func (c *Client[Req, Res]) buildRequest(
+	ctx context.Context,
+	url, hmacKey string,
+	body []byte,
+) (*retryablehttp.Request, error) {
 	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("create POST request with context: %w", err)
@@ -152,7 +152,7 @@ func setSignature(req *retryablehttp.Request, data []byte, hmacKey string) error
 
 // shouldRetry returns true if the given error should be retried.
 // Refer to https://github.com/kubernetes/kubernetes/search?q=DefaultShouldRetry
-func shouldRetry(ctx context.Context, resp *http.Response, err error) (bool, error) {
+func shouldRetry(_ context.Context, resp *http.Response, err error) (bool, error) {
 	// If the connection is reset, we should retry.
 	if err != nil {
 		var errno syscall.Errno
