@@ -62,8 +62,8 @@ const (
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
-	DefaultAuthWebhookMinWaitInterval = 200 * time.Millisecond
-	DefaultAuthWebhookRequestTimeout  = 30 * time.Second
+	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
+	DefaultAuthWebhookRequestTimeout  = 10 * time.Second
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 	DefaultProjectCacheSize           = 256
