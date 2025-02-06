@@ -68,15 +68,19 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
-		AdminUser:                 helper.AdminUser,
-		AdminPassword:             helper.AdminPassword,
-		UseDefaultProject:         helper.UseDefaultProject,
-		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
-		SnapshotThreshold:         helper.SnapshotThreshold,
-		AuthWebhookCacheSize:      helper.AuthWebhookSize,
-		ProjectCacheSize:          helper.ProjectCacheSize,
-		ProjectCacheTTL:           helper.ProjectCacheTTL.String(),
-		AdminTokenDuration:        helper.AdminTokenDuration,
+		AdminUser:                  helper.AdminUser,
+		AdminPassword:              helper.AdminPassword,
+		UseDefaultProject:          helper.UseDefaultProject,
+		ClientDeactivateThreshold:  helper.ClientDeactivateThreshold,
+		SnapshotThreshold:          helper.SnapshotThreshold,
+		AuthWebhookCacheSize:       helper.AuthWebhookSize,
+		AuthWebhookCacheTTL:        helper.AuthWebhookCacheTTL.String(),
+		AuthWebhookMaxWaitInterval: helper.AuthWebhookMaxWaitInterval.String(),
+		AuthWebhookMinWaitInterval: helper.AuthWebhookMinWaitInterval.String(),
+		AuthWebhookRequestTimeout:  helper.AuthWebhookRequestTimeout.String(),
+		ProjectCacheSize:           helper.ProjectCacheSize,
+		ProjectCacheTTL:            helper.ProjectCacheTTL.String(),
+		AdminTokenDuration:         helper.AdminTokenDuration,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),

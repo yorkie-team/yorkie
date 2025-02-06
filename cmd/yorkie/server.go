@@ -48,6 +48,8 @@ var (
 	mongoPingTimeout       time.Duration
 
 	authWebhookMaxWaitInterval time.Duration
+	authWebhookMinWaitInterval time.Duration
+	authWebhookRequestTimeout  time.Duration
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
 
@@ -64,6 +66,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
+			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
+			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
@@ -295,17 +299,29 @@ func init() {
 		server.DefaultSnapshotDisableGC,
 		"Whether to disable garbage collection of snapshots.",
 	)
+	cmd.Flags().DurationVar(
+		&authWebhookRequestTimeout,
+		"auth-webhook-request-timeout",
+		server.DefaultAuthWebhookRequestTimeout,
+		"Timeout for each authorization webhook request.",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
 		"auth-webhook-max-retries",
 		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for an authorization webhook.",
+		"Maximum number of retries for authorization webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&authWebhookMinWaitInterval,
+		"auth-webhook-min-wait-interval",
+		server.DefaultAuthWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookMaxWaitInterval,
 		"auth-webhook-max-wait-interval",
 		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval for authorization webhook.",
+		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,

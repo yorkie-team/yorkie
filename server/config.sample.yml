@@ -65,10 +65,16 @@ Backend:
   # AuthWebhookMethods is the list of methods to use for authorization.
   AuthWebhookMethods: []
 
-  # AuthWebhookMaxRetries is the max count that retries the authorization webhook.
+  # AuthWebhookRequestTimeout is the timeout for each authorization webhook request.
+  AuthWebhookRequestTimeout: "3s"
+
+  # AuthWebhookMaxRetries is the max number of retries for the authorization webhook.
   AuthWebhookMaxRetries: 10
 
-  # AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+  # AuthWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
+  AuthWebhookMinWaitInterval: "100ms"
+
+  # AuthWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
   AuthWebhookMaxWaitInterval: "3s"
 
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.

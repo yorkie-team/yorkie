@@ -11,13 +11,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/cache"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
@@ -31,6 +30,7 @@ type testResponse struct {
 	Greeting string `json:"greeting"`
 }
 
+// verifySignature verifies that the HMAC signature in the header matches the expected value.
 func verifySignature(signatureHeader, secret string, body []byte) error {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
@@ -39,115 +39,252 @@ func verifySignature(signatureHeader, secret string, body []byte) error {
 	if !hmac.Equal([]byte(signatureHeader), []byte(expectedSigHeader)) {
 		return errors.New("signature validation failed")
 	}
-
 	return nil
 }
 
-func TestHMAC(t *testing.T) {
-	const secretKey = "my-secret-key"
-	const wrongKey = "wrong-key"
-	reqData := testRequest{Name: "HMAC Tester"}
-	resData := testResponse{Greeting: "HMAC OK"}
-
-	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// newHMACTestServer creates a new httptest.Server that verifies the HMAC signature.
+// It returns a valid JSON response if the signature is correct.
+func newHMACTestServer(t *testing.T, validSecret string, responseData testResponse) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		signatureHeader := r.Header.Get("X-Signature-256")
 		if signatureHeader == "" {
-			w.WriteHeader(http.StatusUnauthorized)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+
 		bodyBytes, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
 
-		if err := verifySignature(signatureHeader, secretKey, bodyBytes); err != nil {
-			w.WriteHeader(http.StatusForbidden)
+		if err := verifySignature(signatureHeader, validSecret, bodyBytes); err != nil {
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
+
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		assert.NoError(t, json.NewEncoder(w).Encode(resData))
+		assert.NoError(t, json.NewEncoder(w).Encode(responseData))
 	}))
+}
+
+func newRetryServer(t *testing.T, replyAfter int, responseData testResponse) *httptest.Server {
+	var requestCount int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := int(atomic.AddInt32(&requestCount, 1))
+		if count < replyAfter {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		assert.NoError(t, json.NewEncoder(w).Encode(responseData))
+	}))
+}
+
+func newDelayServer(t *testing.T, delayTime time.Duration, responseData testResponse) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), delayTime)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			assert.NoError(t, json.NewEncoder(w).Encode(responseData))
+		}
+	}))
+}
+func TestHMAC(t *testing.T) {
+	const validSecret = "my-secret-key"
+	const invalidSecret = "wrong-key"
+	expectedResponse := testResponse{Greeting: "HMAC OK"}
+
+	testServer := newHMACTestServer(t, validSecret, expectedResponse)
 	defer testServer.Close()
 
-	t.Run("webhook client with valid HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest, testResponse](
-			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         secretKey,
-			},
-		)
+	client := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		MaxRetries:      0,
+		MinWaitInterval: 0,
+		MaxWaitInterval: 0,
+		RequestTimeout:  1 * time.Second,
+	})
 
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
+	t.Run("valid HMAC key test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "ValidHMAC"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
-		assert.Equal(t, resData.Greeting, resp.Greeting)
+		assert.Equal(t, expectedResponse.Greeting, resp.Greeting)
 	})
 
-	t.Run("webhook client with invalid HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest, testResponse](
-			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         wrongKey,
-			},
-		)
+	t.Run("invalid HMAC key test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "InvalidHMAC"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
 
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, invalidSecret, body)
 		assert.Error(t, err)
+		// The server responds with 403 Forbidden if the signature is invalid.
 		assert.Equal(t, http.StatusForbidden, statusCode)
 		assert.Nil(t, resp)
 	})
 
-	t.Run("webhook client without HMAC key test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest](
-			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-			},
-		)
+	t.Run("missing HMAC key test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "MissingHMAC"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
 
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, reqData)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, "", body)
 		assert.Error(t, err)
+		// The server responds with 401 Unauthorized if no signature header is provided.
 		assert.Equal(t, http.StatusUnauthorized, statusCode)
 		assert.Nil(t, resp)
 	})
 
-	t.Run("webhook client with empty body test", func(t *testing.T) {
-		client := webhook.NewClient[testRequest](
-			testServer.URL,
-			cache.NewLRUExpireCache[string, types.Pair[int, *testResponse]](100),
-			webhook.Options{
-				CacheKeyPrefix:  "testPrefix-hmac",
-				CacheTTL:        5 * time.Second,
-				MaxRetries:      0,
-				MaxWaitInterval: 200 * time.Millisecond,
-				HMACKey:         secretKey,
-			},
-		)
+	t.Run("empty body test", func(t *testing.T) {
+		reqPayload := testRequest{}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
 
-		ctx := context.Background()
-		resp, statusCode, err := client.Send(ctx, testRequest{})
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
-		assert.Equal(t, resData.Greeting, resp.Greeting)
+		assert.Equal(t, expectedResponse.Greeting, resp.Greeting)
+	})
+}
+
+func TestBackoff(t *testing.T) {
+	replyAfter := 4
+	reachableRetries := replyAfter - 1
+	unreachableRetries := replyAfter - 2
+	expectedResponse := testResponse{Greeting: "retry succeed"}
+	server := newRetryServer(t, replyAfter, expectedResponse)
+	defer server.Close()
+
+	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  10 * time.Millisecond,
+		MaxRetries:      uint64(reachableRetries),
+		MinWaitInterval: 1 * time.Millisecond,
+		MaxWaitInterval: 5 * time.Millisecond,
+	})
+
+	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  10 * time.Millisecond,
+		MaxRetries:      uint64(unreachableRetries),
+		MinWaitInterval: 1 * time.Millisecond,
+		MaxWaitInterval: 5 * time.Millisecond,
+	})
+
+	t.Run("retry fail test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "retry fails"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := unreachableClient.Send(context.Background(), server.URL, "", body)
+		assert.Error(t, err)
+		assert.ErrorContains(t, err, webhook.ErrWebhookTimeout.Error())
+		assert.Equal(t, http.StatusServiceUnavailable, statusCode)
+		assert.Nil(t, resp)
+	})
+
+	t.Run("retry succeed timeout", func(t *testing.T) {
+		reqPayload := testRequest{Name: "retry succeed"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := reachableClient.Send(context.Background(), server.URL, "", body)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.NotNil(t, resp)
+		assert.Equal(t, expectedResponse.Greeting, resp.Greeting)
+	})
+}
+
+func TestRequestTimeout(t *testing.T) {
+	delayTime := 10 * time.Millisecond
+	expectedResponse := testResponse{Greeting: "hello"}
+	server := newDelayServer(t, delayTime, expectedResponse)
+	defer server.Close()
+
+	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  15 * time.Millisecond,
+		MaxRetries:      0,
+		MinWaitInterval: 0,
+		MaxWaitInterval: 0,
+	})
+
+	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  5 * time.Millisecond,
+		MaxRetries:      0,
+		MinWaitInterval: 0,
+		MaxWaitInterval: 0,
+	})
+
+	t.Run("request succeed after timeout", func(t *testing.T) {
+		reqPayload := testRequest{Name: "TimeoutTest"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := reachableClient.Send(context.Background(), server.URL, "", body)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.NotNil(t, resp)
+		assert.Equal(t, expectedResponse.Greeting, resp.Greeting)
+	})
+
+	t.Run("request fails with timeout test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "TimeoutTest"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := unreachableClient.Send(context.Background(), server.URL, "", body)
+		assert.Error(t, err)
+		assert.Equal(t, 0, statusCode)
+		assert.Nil(t, resp)
+	})
+}
+
+func TestErrorHandling(t *testing.T) {
+	expectedResponse := testResponse{Greeting: "hello"}
+	server := newRetryServer(t, 2, expectedResponse)
+	defer server.Close()
+
+	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  50 * time.Millisecond,
+		MaxRetries:      0,
+		MinWaitInterval: 0,
+		MaxWaitInterval: 0,
+	})
+
+	t.Run("request fails with context done test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "ContextDone"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		resp, statusCode, err := unreachableClient.Send(ctx, server.URL, "", body)
+		assert.Error(t, err)
+		assert.Equal(t, http.StatusServiceUnavailable, statusCode)
+		assert.Nil(t, resp)
+	})
+
+	t.Run("request fails with unreachable url test", func(t *testing.T) {
+		reqPayload := testRequest{Name: "invalidURL"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		resp, statusCode, err := unreachableClient.Send(context.Background(), "", "", body)
+		assert.Error(t, err)
+		assert.Equal(t, 0, statusCode)
+		assert.Nil(t, resp)
 	})
 }
