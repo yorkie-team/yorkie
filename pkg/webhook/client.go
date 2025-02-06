@@ -155,8 +155,10 @@ func createSignature(data []byte, hmacKey string) (string, error) {
 func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn func() (int, error)) (int, error) {
 	var retries uint64
 	var statusCode int
+	var err error
+
 	for retries <= c.options.MaxRetries {
-		statusCode, err := webhookFn()
+		statusCode, err = webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if errors.Is(err, ErrUnexpectedStatusCode) {
 				return statusCode, fmt.Errorf("%d: %w", statusCode, ErrUnexpectedStatusCode)
