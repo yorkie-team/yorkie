@@ -1,4 +1,4 @@
-/*
+/*  
  * Copyright 2020 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,6 +72,17 @@ func (s *yorkieServer) ActivateClient(
 	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := s.backend.MessageBroker.ProduceUserEvent(
+		ctx,
+		req.Msg.UserId,
+		&events.ClientEvent{Type: events.ClientActivatedEvent},
+		project.ID.String(),
+		req.Header().Get("x-yorkie-user-agent"),
+		req.Msg.Metadata,
+	); err != nil {
+		logging.From(ctx).Error(err)
 	}
 
 	return connect.NewResponse(&api.ActivateClientResponse{

@@ -8,7 +8,7 @@ CREATE TABLE user_events (
     event_type VARCHAR(32),
     project_id VARCHAR(64),
     user_agent VARCHAR(32),
-    metadata STRING
+    metadata JSON
 ) ENGINE = OLAP  
 DUPLICATE KEY(user_id)  
 DISTRIBUTED BY HASH(user_id) BUCKETS 10

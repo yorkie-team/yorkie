@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -50,6 +51,9 @@ var (
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
+
+	messagebrokerConnectionURL string
+	messagebrokerTopic         string
 
 	conf = server.NewConfig()
 )
@@ -75,6 +79,13 @@ func newServerCmd() *cobra.Command {
 					ConnectionTimeout: mongoConnectionTimeout.String(),
 					YorkieDatabase:    mongoYorkieDatabase,
 					PingTimeout:       mongoPingTimeout.String(),
+				}
+			}
+
+			if messagebrokerConnectionURL != "" && messagebrokerTopic != "" {
+				conf.MessageBroker = &messagebroker.Config{
+					ConnectionURL: messagebrokerConnectionURL,
+					Topic:         messagebrokerTopic,
 				}
 			}
 
@@ -342,6 +353,18 @@ func init() {
 		"backend-gateway-addr",
 		server.DefaultGatewayAddr,
 		"Gateway address",
+	)
+	cmd.Flags().StringVar(
+		&messagebrokerConnectionURL,
+		"messagebroker-connection-url",
+		"",
+		"Yorkie Analytics's message broker connection URL",
+	)
+	cmd.Flags().StringVar(
+		&messagebrokerTopic,
+		"messagebroker-topic",
+		"",
+		"Yorkie Analytics's message broker topic name",
 	)
 
 	rootCmd.AddCommand(cmd)

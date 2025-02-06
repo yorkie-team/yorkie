@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -73,11 +74,12 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC          *rpc.Config          `yaml:"RPC"`
-	Profiling    *profiling.Config    `yaml:"Profiling"`
-	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
-	Backend      *backend.Config      `yaml:"Backend"`
-	Mongo        *mongo.Config        `yaml:"Mongo"`
+	RPC           *rpc.Config           `yaml:"RPC"`
+	Profiling     *profiling.Config     `yaml:"Profiling"`
+	Housekeeping  *housekeeping.Config  `yaml:"Housekeeping"`
+	Backend       *backend.Config       `yaml:"Backend"`
+	Mongo         *mongo.Config         `yaml:"Mongo"`
+	MessageBroker *messagebroker.Config `yaml:"MessageBroker"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -127,6 +129,12 @@ func (c *Config) Validate() error {
 
 	if c.Mongo != nil {
 		if err := c.Mongo.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if c.MessageBroker != nil {
+		if err := c.MessageBroker.Validate(); err != nil {
 			return err
 		}
 	}

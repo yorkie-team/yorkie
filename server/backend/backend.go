@@ -32,6 +32,7 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -62,6 +63,8 @@ type Backend struct {
 	Background *background.Background
 	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
+	// MessageBroker is used to send the message to the message broker.
+	MessageBroker *messagebroker.KafkaProducer
 }
 
 // New creates a new instance of Backend.
@@ -70,6 +73,7 @@ func New(
 	mongoConf *mongo.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
+	messagebrokerConf *messagebroker.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
 	// current machine.
@@ -130,6 +134,19 @@ func New(
 		}
 	}
 
+	// 08. Create the message broker producer instance. The message broker producer is used to
+	// send the message to the message broker.
+	var kafkaProducer *messagebroker.KafkaProducer
+	if messagebrokerConf != nil && messagebrokerConf.ConnectionURL != "" && messagebrokerConf.Topic != "" {
+		kafkaProducer = messagebroker.NewKafkaProducer(messagebrokerConf.ConnectionURL, messagebrokerConf.Topic)
+		logging.DefaultLogger().Infof("message broker producer: URL: %s, Topic: %s",
+			messagebrokerConf.ConnectionURL, messagebrokerConf.Topic)
+	} else {
+		kafkaProducer = nil
+		logging.DefaultLogger().Infof("message broker producer is not created")
+	}
+
+	// 09. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
@@ -146,10 +163,11 @@ func New(
 		Locker:       locker,
 		PubSub:       pubsub,
 
-		Metrics:      metrics,
-		DB:           db,
-		Background:   bg,
-		Housekeeping: keeping,
+		Metrics:       metrics,
+		DB:            db,
+		Background:    bg,
+		Housekeeping:  keeping,
+		MessageBroker: kafkaProducer,
 	}, nil
 }
 
