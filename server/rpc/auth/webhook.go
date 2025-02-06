@@ -72,6 +72,7 @@ func verifyAccess(
 		return fmt.Errorf("send to webhook: %w", err)
 	}
 
+	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if status != http.StatusUnauthorized {
 		be.WebhookCache.Add(
 			cacheKey,

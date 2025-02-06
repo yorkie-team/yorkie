@@ -18,6 +18,7 @@
 package webhook
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -25,11 +26,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"syscall"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -53,36 +55,19 @@ type Options struct {
 
 // Client is a client for the webhook.
 type Client[Req any, Res any] struct {
-	retryClient *retryablehttp.Client
-	options     Options
+	client  *http.Client
+	options Options
 }
 
 // NewClient creates a new instance of Client.
 func NewClient[Req any, Res any](
 	options Options,
 ) *Client[Req, Res] {
-	retryClient := &retryablehttp.Client{
-		HTTPClient: &http.Client{
+	return &Client[Req, Res]{
+		client: &http.Client{
 			Timeout: options.RequestTimeout,
 		},
-		RetryMax:     int(options.MaxRetries),
-		RetryWaitMin: options.MinWaitInterval,
-		RetryWaitMax: options.MaxWaitInterval,
-		// Note(window9u): I think we could replace shouldRetry with `retryablehttp.DefaultRetryPolicy`
-		CheckRetry: shouldRetry,
-		Logger:     nil,
-		Backoff:    retryablehttp.DefaultBackoff,
-		ErrorHandler: func(resp *http.Response, err error, numTries int) (*http.Response, error) {
-			if err == nil && numTries == int(options.MaxRetries)+1 {
-				return nil, ErrWebhookTimeout
-			}
-			return resp, fmt.Errorf("after %d attempts, errors were: %w", numTries, err)
-		},
-	}
-
-	return &Client[Req, Res]{
-		retryClient: retryClient,
-		options:     options,
+		options: options,
 	}
 }
 
@@ -92,102 +77,129 @@ func (c *Client[Req, Res]) Send(
 	url, hmacKey string,
 	body []byte,
 ) (*Res, int, error) {
-	req, err := c.buildRequest(ctx, url, hmacKey, body)
+	signature, err := createSignature(body, hmacKey)
 	if err != nil {
-		return nil, 0, fmt.Errorf("build request: %w", err)
-	}
-
-	resp, err := c.retryClient.Do(req)
-	if err != nil {
-		statusCode := 0
-		if resp != nil {
-			statusCode = resp.StatusCode
-		}
-
-		return nil, statusCode, fmt.Errorf("post webhook request: %w", err)
-	}
-
-	if !isExpectedCode(resp.StatusCode) {
-		return nil, resp.StatusCode, fmt.Errorf("%d: %w", resp.StatusCode, ErrUnexpectedStatusCode)
+		return nil, 0, fmt.Errorf("create signature: %w", err)
 	}
 
 	var res Res
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, resp.StatusCode, ErrUnexpectedResponse
+	status, err := c.withExponentialBackoff(ctx, func() (int, error) {
+		req, err := c.buildRequest(ctx, url, signature, body)
+		if err != nil {
+			return 0, fmt.Errorf("build request: %w", err)
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return 0, fmt.Errorf("do request: %w", err)
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				// TODO(hackerwins): Consider to remove the dependency of logging.
+				logging.From(ctx).Error(err)
+			}
+		}()
+
+		if resp.StatusCode != http.StatusOK &&
+			resp.StatusCode != http.StatusUnauthorized &&
+			resp.StatusCode != http.StatusForbidden {
+			return resp.StatusCode, ErrUnexpectedStatusCode
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+			return resp.StatusCode, ErrUnexpectedResponse
+		}
+
+		return resp.StatusCode, nil
+	})
+	if err != nil {
+		return nil, status, err
 	}
 
-	return &res, resp.StatusCode, nil
+	return &res, status, nil
 }
 
 // buildRequest creates a new HTTP POST request with the appropriate headers.
 func (c *Client[Req, Res]) buildRequest(
 	ctx context.Context,
-	url, hmacKey string,
+	url, hmac string,
 	body []byte,
-) (*retryablehttp.Request, error) {
-	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodPost, url, body)
+) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("create POST request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if hmacKey != "" {
-		if err := setSignature(req, body, hmacKey); err != nil {
-			return nil, fmt.Errorf("set HMAC signature: %w", err)
-		}
+
+	if hmac != "" {
+		req.Header.Set("X-Signature-256", hmac)
 	}
 
 	return req, nil
 }
 
-// setSignature sets the HMAC signature header for the request.
-func setSignature(req *retryablehttp.Request, data []byte, hmacKey string) error {
+// createSignature sets the HMAC signature header for the request.
+func createSignature(data []byte, hmacKey string) (string, error) {
+	if hmacKey == "" {
+		return "", nil
+	}
 	mac := hmac.New(sha256.New, []byte(hmacKey))
 	if _, err := mac.Write(data); err != nil {
-		return fmt.Errorf("write HMAC body: %w", err)
+		return "", fmt.Errorf("write HMAC body: %w", err)
 	}
 	signatureHex := hex.EncodeToString(mac.Sum(nil))
-	req.Header.Set("X-Signature-256", fmt.Sprintf("sha256=%s", signatureHex))
-	return nil
+	return fmt.Sprintf("sha256=%s", signatureHex), nil
+}
+
+func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn func() (int, error)) (int, error) {
+	var retries uint64
+	var statusCode int
+	for retries <= c.options.MaxRetries {
+		statusCode, err := webhookFn()
+		if !shouldRetry(statusCode, err) {
+			if errors.Is(err, ErrUnexpectedStatusCode) {
+				return statusCode, fmt.Errorf("%d: %w", statusCode, ErrUnexpectedStatusCode)
+			}
+
+			return statusCode, err
+		}
+
+		waitBeforeRetry := waitInterval(retries, c.options.MinWaitInterval, c.options.MaxWaitInterval)
+
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(waitBeforeRetry):
+		}
+
+		retries++
+	}
+
+	return statusCode, fmt.Errorf("unexpected status code from webhook %d: %w", statusCode, ErrWebhookTimeout)
+}
+
+// waitInterval returns the interval of given retries. (2^retries * minWaitInterval) .
+func waitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration) time.Duration {
+	interval := time.Duration(math.Pow(2, float64(retries))) * minWaitInterval
+	if maxWaitInterval < interval {
+		return maxWaitInterval
+	}
+
+	return interval
 }
 
 // shouldRetry returns true if the given error should be retried.
 // Refer to https://github.com/kubernetes/kubernetes/search?q=DefaultShouldRetry
-func shouldRetry(_ context.Context, resp *http.Response, err error) (bool, error) {
+func shouldRetry(statusCode int, err error) bool {
 	// If the connection is reset, we should retry.
-	if err != nil {
-		var errno syscall.Errno
-		if errors.As(err, &errno) && errors.Is(errno, syscall.ECONNRESET) {
-			return true, nil
-		}
-
-		return false, err
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errors.Is(errno, syscall.ECONNRESET)
 	}
 
-	if resp != nil {
-		code := resp.StatusCode
-		if isExpectedCode(code) {
-			return false, nil
-		}
-		if isRetryCode(code) {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-// isExpectedCode checks if the status code is acceptable.
-func isExpectedCode(code int) bool {
-	return code == http.StatusOK ||
-		code == http.StatusUnauthorized ||
-		code == http.StatusForbidden
-}
-
-// isRetryCode checks if the status code is one that should trigger a retry.
-func isRetryCode(code int) bool {
-	return code == http.StatusInternalServerError ||
-		code == http.StatusServiceUnavailable ||
-		code == http.StatusGatewayTimeout ||
-		code == http.StatusTooManyRequests
+	return statusCode == http.StatusInternalServerError ||
+		statusCode == http.StatusServiceUnavailable ||
+		statusCode == http.StatusGatewayTimeout ||
+		statusCode == http.StatusTooManyRequests
 }
