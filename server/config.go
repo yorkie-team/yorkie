@@ -60,10 +60,10 @@ const (
 	DefaultSnapshotWithPurgingChanges = false
 	DefaultSnapshotDisableGC          = false
 
+	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
 	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
-	DefaultAuthWebhookRequestTimeout  = 10 * time.Second
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 	DefaultProjectCacheSize           = 256

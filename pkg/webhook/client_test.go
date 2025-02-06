@@ -161,7 +161,7 @@ func TestHMAC(t *testing.T) {
 	})
 }
 
-func TestRetryRequest(t *testing.T) {
+func TestBackoff(t *testing.T) {
 	replyAfter := 4
 	reachableRetries := replyAfter - 1
 	unreachableRetries := replyAfter - 2
@@ -170,17 +170,17 @@ func TestRetryRequest(t *testing.T) {
 	defer server.Close()
 
 	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  10 * time.Millisecond,
 		MaxRetries:      uint64(reachableRetries),
 		MinWaitInterval: 1 * time.Millisecond,
 		MaxWaitInterval: 5 * time.Millisecond,
-		RequestTimeout:  10 * time.Millisecond,
 	})
 
 	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  10 * time.Millisecond,
 		MaxRetries:      uint64(unreachableRetries),
 		MinWaitInterval: 1 * time.Millisecond,
 		MaxWaitInterval: 5 * time.Millisecond,
-		RequestTimeout:  10 * time.Millisecond,
 	})
 
 	t.Run("retry fail test", func(t *testing.T) {
@@ -215,17 +215,17 @@ func TestRequestTimeout(t *testing.T) {
 	defer server.Close()
 
 	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  15 * time.Millisecond,
 		MaxRetries:      0,
 		MinWaitInterval: 0,
 		MaxWaitInterval: 0,
-		RequestTimeout:  15 * time.Millisecond,
 	})
 
 	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  5 * time.Millisecond,
 		MaxRetries:      0,
 		MinWaitInterval: 0,
 		MaxWaitInterval: 0,
-		RequestTimeout:  5 * time.Millisecond,
 	})
 
 	t.Run("request succeed after timeout", func(t *testing.T) {
@@ -258,10 +258,10 @@ func TestErrorHandling(t *testing.T) {
 	defer server.Close()
 
 	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
+		RequestTimeout:  50 * time.Millisecond,
 		MaxRetries:      0,
 		MinWaitInterval: 0,
 		MaxWaitInterval: 0,
-		RequestTimeout:  50 * time.Millisecond,
 	})
 
 	t.Run("request fails with context done test", func(t *testing.T) {

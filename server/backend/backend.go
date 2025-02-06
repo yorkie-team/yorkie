@@ -86,11 +86,11 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create auth webhook client and cache.
-	cache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	// 02. Create the webhook webhookCache and client.
+	webhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
-	auth := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+	webhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		webhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
 			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
@@ -155,11 +155,13 @@ func New(
 	)
 
 	return &Backend{
-		Config:        conf,
-		WebhookCache:  cache,
-		WebhookClient: auth,
-		Locker:        locker,
-		PubSub:        pubsub,
+		Config: conf,
+
+		WebhookCache:  webhookCache,
+		WebhookClient: webhookClient,
+
+		Locker: locker,
+		PubSub: pubsub,
 
 		Metrics:      metrics,
 		DB:           db,

@@ -299,29 +299,29 @@ func init() {
 		server.DefaultSnapshotDisableGC,
 		"Whether to disable garbage collection of snapshots.",
 	)
+	cmd.Flags().DurationVar(
+		&authWebhookRequestTimeout,
+		"auth-webhook-request-timeout",
+		server.DefaultAuthWebhookRequestTimeout,
+		"Timeout for each authorization webhook request.",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
 		"auth-webhook-max-retries",
 		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for an authorization webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMaxWaitInterval,
-		"auth-webhook-max-wait-interval",
-		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval for authorization webhook.",
+		"Maximum number of retries for authorization webhook.",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookMinWaitInterval,
 		"auth-webhook-min-wait-interval",
 		server.DefaultAuthWebhookMinWaitInterval,
-		"Minimum wait interval for authorization webhook.",
+		"Minimum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().DurationVar(
-		&authWebhookRequestTimeout,
-		"auth-webhook-request-timeout",
-		server.DefaultAuthWebhookRequestTimeout,
-		"Maximum wait time per authorization webhook request.",
+		&authWebhookMaxWaitInterval,
+		"auth-webhook-max-wait-interval",
+		server.DefaultAuthWebhookMaxWaitInterval,
+		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
