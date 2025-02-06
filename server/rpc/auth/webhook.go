@@ -91,6 +91,10 @@ func generateCacheKey(publicKey string, body []byte) string {
 
 // handleWebhookResponse processes the webhook response and returns an error if necessary.
 func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
+	if res == nil {
+		return fmt.Errorf("nil response for status %d: %w", status, webhook.ErrUnexpectedResponse)
+	}
+
 	switch {
 	case status == http.StatusOK && res.Allowed:
 		return nil

@@ -86,13 +86,17 @@ func newRetryServer(t *testing.T, replyAfter int, responseData testResponse) *ht
 
 func newDelayServer(t *testing.T, delayTime time.Duration, responseData testResponse) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(delayTime)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		assert.NoError(t, json.NewEncoder(w).Encode(responseData))
+		ctx, cancel := context.WithTimeout(r.Context(), delayTime)
+		defer cancel()
+
+		select {
+		case <-ctx.Done():
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			assert.NoError(t, json.NewEncoder(w).Encode(responseData))
+		}
 	}))
 }
-
 func TestHMAC(t *testing.T) {
 	const validSecret = "my-secret-key"
 	const invalidSecret = "wrong-key"

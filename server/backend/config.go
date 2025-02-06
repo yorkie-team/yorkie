@@ -64,7 +64,7 @@ type Config struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `yaml:"AuthWebhookMaxWaitInterval"`
 
-	// AuthWebhookMinWaitInterval is the max interval that waits before retrying the authorization webhook.
+	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
 	AuthWebhookMinWaitInterval string `yaml:"AuthWebhookMinWaitInterval"`
 
 	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request
@@ -117,7 +117,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.AuthWebhookRequestTimeout); err != nil {
 		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-reqeust-timeout" flag: %w`,
+			`invalid argument "%s" for "--auth-webhook-request-timeout" flag: %w`,
 			c.AuthWebhookRequestTimeout,
 			err,
 		)
@@ -164,7 +164,7 @@ func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
 	return result
 }
 
-// ParseAuthWebhookMinWaitInterval returns max wait interval.
+// ParseAuthWebhookMinWaitInterval returns min wait interval.
 func (c *Config) ParseAuthWebhookMinWaitInterval() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookMinWaitInterval)
 	if err != nil {
@@ -175,7 +175,7 @@ func (c *Config) ParseAuthWebhookMinWaitInterval() time.Duration {
 	return result
 }
 
-// ParseAuthWebhookRequestTimeout returns max wait interval.
+// ParseAuthWebhookRequestTimeout returns request timeout.
 func (c *Config) ParseAuthWebhookRequestTimeout() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookRequestTimeout)
 	if err != nil {
