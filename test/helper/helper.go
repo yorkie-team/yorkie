@@ -75,6 +75,8 @@ var (
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
+	AuthWebhookMinWaitInterval = 3 * gotime.Millisecond
+	AuthWebhookRequestTimeout  = 100 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheTTL        = 10 * gotime.Second
 	ProjectCacheSize           = 256
@@ -264,6 +266,8 @@ func TestConfig() *server.Config {
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
+			AuthWebhookMinWaitInterval: AuthWebhookMinWaitInterval.String(),
+			AuthWebhookRequestTimeout:  AuthWebhookRequestTimeout.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,
 			AuthWebhookCacheTTL:        AuthWebhookCacheTTL.String(),
 			ProjectCacheSize:           ProjectCacheSize,

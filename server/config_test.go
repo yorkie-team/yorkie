@@ -70,6 +70,14 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookMaxWaitInterval, server.DefaultAuthWebhookMaxWaitInterval)
 
+		authWebhookMinWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMinWaitInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, authWebhookMinWaitInterval, server.DefaultAuthWebhookMinWaitInterval)
+
+		authWebhookRequestTimeout, err := time.ParseDuration(conf.Backend.AuthWebhookRequestTimeout)
+		assert.NoError(t, err)
+		assert.Equal(t, authWebhookRequestTimeout, server.DefaultAuthWebhookRequestTimeout)
+
 		authWebhookCacheTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheTTL)
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookCacheTTL, server.DefaultAuthWebhookCacheTTL)

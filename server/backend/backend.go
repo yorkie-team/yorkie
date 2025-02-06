@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -49,6 +50,9 @@ type Backend struct {
 		int,
 		*types.AuthWebhookResponse,
 	]]
+	// WebhookClient is used to send auth webhook.
+	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
 	// Locker is used to lock/unlock resources.
@@ -86,18 +90,28 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create in-memory cache, pubsub, and locker.
-	cache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	// 02. Create the webhook webhookCache and client.
+	webhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
+	webhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+		webhook.Options{
+			MaxRetries:      conf.AuthWebhookMaxRetries,
+			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
+			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
+			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
+		},
+	)
+
+	// 03. Create pubsub, and locker.
 	locker := sync.New()
 	pubsub := pubsub.New()
 
-	// 03. Create the background instance. The background instance is used to
+	// 04. Create the background instance. The background instance is used to
 	// manage background tasks.
 	bg := background.New(metrics)
 
-	// 04. Create the database instance. If the MongoDB configuration is given,
+	// 05. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var err error
 	var db database.Database
@@ -158,10 +172,13 @@ func New(
 	)
 
 	return &Backend{
-		Config:       conf,
-		WebhookCache: cache,
-		Locker:       locker,
-		PubSub:       pubsub,
+		Config: conf,
+
+		WebhookCache:  webhookCache,
+		WebhookClient: webhookClient,
+
+		Locker: locker,
+		PubSub: pubsub,
 
 		Metrics:       metrics,
 		DB:            db,
