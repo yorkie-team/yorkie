@@ -45,7 +45,7 @@ var (
 	ErrWebhookTimeout = errors.New("webhook timeout")
 )
 
-// Options are the options for the webhook client.
+// Options are the options for the webhook httpClient.
 type Options struct {
 	MaxRetries      uint64
 	MinWaitInterval time.Duration
@@ -53,10 +53,10 @@ type Options struct {
 	RequestTimeout  time.Duration
 }
 
-// Client is a client for the webhook.
+// Client is a httpClient for the webhook.
 type Client[Req any, Res any] struct {
-	client  *http.Client
-	options Options
+	httpClient *http.Client
+	options    Options
 }
 
 // NewClient creates a new instance of Client.
@@ -64,7 +64,7 @@ func NewClient[Req any, Res any](
 	options Options,
 ) *Client[Req, Res] {
 	return &Client[Req, Res]{
-		client: &http.Client{
+		httpClient: &http.Client{
 			Timeout: options.RequestTimeout,
 		},
 		options: options,
@@ -89,7 +89,7 @@ func (c *Client[Req, Res]) Send(
 			return 0, fmt.Errorf("build request: %w", err)
 		}
 
-		resp, err := c.client.Do(req)
+		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			return 0, fmt.Errorf("do request: %w", err)
 		}
@@ -100,9 +100,7 @@ func (c *Client[Req, Res]) Send(
 			}
 		}()
 
-		if resp.StatusCode != http.StatusOK &&
-			resp.StatusCode != http.StatusUnauthorized &&
-			resp.StatusCode != http.StatusForbidden {
+		if !isExpectedStatus(resp.StatusCode) {
 			return resp.StatusCode, ErrUnexpectedStatusCode
 		}
 
@@ -204,4 +202,10 @@ func shouldRetry(statusCode int, err error) bool {
 		statusCode == http.StatusServiceUnavailable ||
 		statusCode == http.StatusGatewayTimeout ||
 		statusCode == http.StatusTooManyRequests
+}
+
+func isExpectedStatus(statusCode int) bool {
+	return statusCode == http.StatusOK ||
+		statusCode == http.StatusUnauthorized ||
+		statusCode == http.StatusForbidden
 }
