@@ -63,6 +63,7 @@ func setUpBackend(
 		conf.Mongo,
 		conf.Housekeeping,
 		metrics,
+		nil,
 	)
 	assert.NoError(b, err)
 

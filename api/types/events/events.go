@@ -22,11 +22,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Event represents an event that occurs in the document or the client.
-type Event interface {
-	GetType() string
-}
-
 // DocEventType represents the type of the DocEvent.
 type DocEventType string
 
@@ -74,11 +69,6 @@ type DocEvent struct {
 	Body DocEventBody
 }
 
-// GetType returns the type of the DocEvent.
-func (e *DocEvent) GetType() string {
-	return string(e.Type)
-}
-
 // ClientEventType represents the type of the ClientEvent.
 type ClientEventType string
 
@@ -91,9 +81,4 @@ const (
 type ClientEvent struct {
 	// Type is the type of the event.
 	Type ClientEventType
-}
-
-// GetType returns the type of the ClientEvent.
-func (e *ClientEvent) GetType() string {
-	return string(e.Type)
 }

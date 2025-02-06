@@ -65,7 +65,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Mongo,
 		conf.Housekeeping,
 		metrics,
-		conf.MessageBroker,
+		conf.Kafka,
 	)
 	if err != nil {
 		return nil, err

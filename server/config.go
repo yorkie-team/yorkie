@@ -76,12 +76,12 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC           *rpc.Config           `yaml:"RPC"`
-	Profiling     *profiling.Config     `yaml:"Profiling"`
-	Housekeeping  *housekeeping.Config  `yaml:"Housekeeping"`
-	Backend       *backend.Config       `yaml:"Backend"`
-	Mongo         *mongo.Config         `yaml:"Mongo"`
-	MessageBroker *messagebroker.Config `yaml:"MessageBroker"`
+	RPC          *rpc.Config           `yaml:"RPC"`
+	Profiling    *profiling.Config     `yaml:"Profiling"`
+	Housekeeping *housekeeping.Config  `yaml:"Housekeeping"`
+	Backend      *backend.Config       `yaml:"Backend"`
+	Mongo        *mongo.Config         `yaml:"Mongo"`
+	Kafka        *messagebroker.Config `yaml:"Kafka"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -135,8 +135,8 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.MessageBroker != nil {
-		if err := c.MessageBroker.Validate(); err != nil {
+	if c.Kafka != nil {
+		if err := c.Kafka.Validate(); err != nil {
 			return err
 		}
 	}

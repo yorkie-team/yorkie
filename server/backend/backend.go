@@ -62,13 +62,13 @@ type Backend struct {
 	Metrics *prometheus.Metrics
 	// DB is the database instance.
 	DB database.Database
+	// MsgBroker is the message producer instance.
+	MsgBroker messagebroker.Broker
 
 	// Background is used to manage background tasks.
 	Background *background.Background
 	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
-	// MessageBroker is used to send the message to the message broker.
-	MessageBroker *messagebroker.KafkaProducer
 }
 
 // New creates a new instance of Backend.
@@ -77,7 +77,7 @@ func New(
 	mongoConf *mongo.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
-	messagebrokerConf *messagebroker.Config,
+	kafkaConf *messagebroker.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
 	// current machine.
@@ -148,17 +148,8 @@ func New(
 		}
 	}
 
-	// 08. Create the message broker producer instance. The message broker producer is used to
-	// send the message to the message broker.
-	var kafkaProducer *messagebroker.KafkaProducer
-	if messagebrokerConf != nil && messagebrokerConf.ConnectionURL != "" && messagebrokerConf.Topic != "" {
-		kafkaProducer = messagebroker.NewKafkaProducer(messagebrokerConf.ConnectionURL, messagebrokerConf.Topic)
-		logging.DefaultLogger().Infof("message broker producer: URL: %s, Topic: %s",
-			messagebrokerConf.ConnectionURL, messagebrokerConf.Topic)
-	} else {
-		kafkaProducer = nil
-		logging.DefaultLogger().Infof("message broker producer is not created")
-	}
+	// 08. Create the message broker instance.
+	broker := messagebroker.Ensure(kafkaConf)
 
 	// 09. Return the backend instance.
 	dbInfo := "memory"
@@ -180,11 +171,11 @@ func New(
 		Locker: locker,
 		PubSub: pubsub,
 
-		Metrics:       metrics,
-		DB:            db,
-		Background:    bg,
-		Housekeeping:  keeping,
-		MessageBroker: kafkaProducer,
+		Metrics:      metrics,
+		DB:           db,
+		Background:   bg,
+		Housekeeping: keeping,
+		MsgBroker:    broker,
 	}, nil
 }
 
@@ -205,6 +196,10 @@ func (b *Backend) Shutdown() error {
 	}
 
 	b.Background.Close()
+
+	if err := b.MsgBroker.Close(); err != nil {
+		logging.DefaultLogger().Error(err)
+	}
 
 	if err := b.DB.Close(); err != nil {
 		logging.DefaultLogger().Error(err)

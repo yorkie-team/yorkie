@@ -54,8 +54,8 @@ var (
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
 
-	messagebrokerConnectionURL string
-	messagebrokerTopic         string
+	kafkaAddress string
+	kafkaTopic   string
 
 	conf = server.NewConfig()
 )
@@ -86,10 +86,10 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			if messagebrokerConnectionURL != "" && messagebrokerTopic != "" {
-				conf.MessageBroker = &messagebroker.Config{
-					ConnectionURL: messagebrokerConnectionURL,
-					Topic:         messagebrokerTopic,
+			if kafkaAddress != "" && kafkaTopic != "" {
+				conf.Kafka = &messagebroker.Config{
+					Address: kafkaAddress,
+					Topic:   kafkaTopic,
 				}
 			}
 
@@ -371,16 +371,16 @@ func init() {
 		"Gateway address",
 	)
 	cmd.Flags().StringVar(
-		&messagebrokerConnectionURL,
-		"messagebroker-connection-url",
+		&kafkaAddress,
+		"kafka-address",
 		"",
-		"Yorkie Analytics's message broker connection URL",
+		"Kafka address to publish events",
 	)
 	cmd.Flags().StringVar(
-		&messagebrokerTopic,
-		"messagebroker-topic",
+		&kafkaTopic,
+		"kafka-topic",
 		"",
-		"Yorkie Analytics's message broker topic name",
+		"Kafka topic name to publish events",
 	)
 
 	rootCmd.AddCommand(cmd)

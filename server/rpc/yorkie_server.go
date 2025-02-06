@@ -1,4 +1,4 @@
-/*  
+/*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -74,13 +75,16 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	if err := s.backend.MessageBroker.ProduceUserEvent(
+	if err := s.backend.MsgBroker.Produce(
 		ctx,
-		req.Msg.UserId,
-		&events.ClientEvent{Type: events.ClientActivatedEvent},
-		project.ID.String(),
-		req.Header().Get("x-yorkie-user-agent"),
-		req.Msg.Metadata,
+		messagebroker.UserEventMessage{
+			// TODO(hackerwins): Use client ID as user ID if it is empty.
+			UserID:    req.Msg.UserId,
+			EventType: events.ClientActivatedEvent,
+			ProjectID: project.ID.String(),
+			UserAgent: req.Header().Get("x-yorkie-user-agent"),
+			Metadata:  req.Msg.Metadata,
+		},
 	); err != nil {
 		logging.From(ctx).Error(err)
 	}

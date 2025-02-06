@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,74 +18,50 @@ package messagebroker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	gotime "time"
 
 	"github.com/segmentio/kafka-go"
-
-	"github.com/yorkie-team/yorkie/api/types/events"
 )
 
-// KafkaProducer is a producer for Kafka.
-type KafkaProducer struct {
+// KafkaBroker is a producer for Kafka.
+type KafkaBroker struct {
 	writer *kafka.Writer
 }
 
-// NewKafkaProducer creates a new instance of KafkaProducer.
-func NewKafkaProducer(kafkaURL string, topic string) *KafkaProducer {
-	if kafkaURL == "" || topic == "" {
-		return nil
-	}
-
-	return &KafkaProducer{
+// newKafkaBroker creates a new instance of KafkaProducer.
+func newKafkaBroker(address string, topic string) *KafkaBroker {
+	return &KafkaBroker{
 		writer: &kafka.Writer{
-			Addr:     kafka.TCP(kafkaURL),
+			Addr:     kafka.TCP(address),
 			Topic:    topic,
 			Balancer: &kafka.LeastBytes{},
 		},
 	}
 }
 
-// ProduceMessage produces a message to Kafka.
-func (kafkaWriter *KafkaProducer) ProduceMessage(ctx context.Context, message kafka.Message) error {
-	if kafkaWriter == nil || kafkaWriter.writer == nil {
-		return nil
-	}
-	err := kafkaWriter.writer.WriteMessages(ctx, message)
+// Produce produces a user event to Kafka.
+func (mb *KafkaBroker) Produce(
+	ctx context.Context,
+	msg Message,
+) error {
+	value, err := msg.Marshal()
 	if err != nil {
+		return fmt.Errorf("marshal message: %v", err)
+	}
+
+	// TODO(hackerwins): Consider using message batching.
+	if err := mb.writer.WriteMessages(ctx, kafka.Message{Value: value}); err != nil {
 		return fmt.Errorf("write message to kafka: %v", err)
 	}
+
 	return nil
 }
 
-// ProduceUserEvent produces a user event to Kafka.
-func (kafkaWriter *KafkaProducer) ProduceUserEvent(ctx context.Context, userID string,
-	eventType events.Event, projectID string, userAgent string, metadata map[string]string) error {
-	jsonMetadata, err := json.Marshal(metadata)
-	if err != nil {
-		log.Printf("could not marshal metadata  %v", err)
-	}
-	return kafkaWriter.ProduceMessage(ctx,
-		kafka.Message{
-			Value: []byte(fmt.Sprintf(`{
-					"user_id": "%s",
-					"timestamp": "%s",
-					"event_type": "%s",
-					"project_id": "%s",
-					"user_agent": "%s",
-					"metadata": %s
-				}`, userID, gotime.Now(), eventType.GetType(), projectID, userAgent, jsonMetadata)),
-		},
-	)
-}
-
 // Close closes the KafkaProducer.
-func (kafkaWriter *KafkaProducer) Close() error {
-	err := kafkaWriter.writer.Close()
-	if err != nil {
+func (mb *KafkaBroker) Close() error {
+	if err := mb.writer.Close(); err != nil {
 		return fmt.Errorf("close kafka writer: %v", err)
 	}
+
 	return nil
 }

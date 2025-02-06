@@ -16,14 +16,20 @@
 
 package messagebroker
 
-// Config is the configuration for creating a message broker instance.
-type Config struct {
-	Address string `yaml:"ConnectionURL"`
-	Topic   string `yaml:"Topic"`
+import (
+	"context"
+)
+
+// DummyBroker is a dummy broker that does nothing. It is used when the message
+// broker is not configured.
+type DummyBroker struct{}
+
+// Produce does nothing.
+func (mb *DummyBroker) Produce(_ context.Context, _ Message) error {
+	return nil
 }
 
-// Validate validates this config.
-func (c *Config) Validate() error {
-	// TODO(hackerwins): Implement this.
+// Close does nothing.
+func (mb *DummyBroker) Close() error {
 	return nil
 }

@@ -30,7 +30,6 @@ require (
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-
 )
 
 require github.com/pierrec/lz4/v4 v4.1.15 // indirect
