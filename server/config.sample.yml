@@ -72,10 +72,10 @@ Backend:
   AuthWebhookMaxWaitInterval: "3s"
 
   # AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
-  AuthWebhookMinWaitInterval: "200ms"
+  AuthWebhookMinWaitInterval: "100ms"
 
   # AuthWebhookRequestTimeout is the max waiting time per authorization webhook request.
-  AuthWebhookRequestTimeout: "30s"
+  AuthWebhookRequestTimeout: "10s"
 
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
   AuthWebhookCacheTTL: "10s"
