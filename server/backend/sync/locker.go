@@ -47,4 +47,10 @@ type Locker interface {
 
 	// Unlock unlocks the mutex.
 	Unlock(ctx context.Context) error
+
+	// RLock locks the mutex with a cancelable context
+	RLock(ctx context.Context) error
+
+	// RUnlock unlocks the mutex.
+	RUnlock(ctx context.Context) error
 }

@@ -52,3 +52,19 @@ func (il *internalLocker) Unlock(_ context.Context) error {
 
 	return nil
 }
+
+// RLock locks the mutex for reading..
+func (il *internalLocker) RLock(_ context.Context) error {
+	il.locks.RLock(il.key)
+
+	return nil
+}
+
+// RUnlock unlocks the read lock.
+func (il *internalLocker) RUnlock(_ context.Context) error {
+	if err := il.locks.RUnlock(il.key); err != nil {
+		return err
+	}
+
+	return nil
+}
