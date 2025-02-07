@@ -165,3 +165,41 @@ func TestTryLock(t *testing.T) {
 		}
 	}
 }
+
+func TestRWLockerConcurrency(t *testing.T) {
+	l := New()
+
+	var wg sync.WaitGroup
+	for i := 0; i <= 1000; i++ {
+		wg.Add(1)
+		go func(i int) {
+			if i%2 == 0 {
+				l.Lock("test")
+				// if there is a concurrency issue, will very likely panic here
+				assert.NoError(t, l.Unlock("test"))
+			} else {
+				l.RLock("test")
+				// if there is a concurrency issue, will very likely panic here
+				assert.NoError(t, l.RUnlock("test"))
+			}
+			wg.Done()
+		}(i)
+	}
+
+	chDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for locks to complete")
+	}
+
+	// Since everything has unlocked this should not exist anymore
+	if ctr, exists := l.locks["test"]; exists {
+		t.Fatalf("lock should not exist: %v", ctr)
+	}
+}
