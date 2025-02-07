@@ -118,15 +118,6 @@ func (il *internalLocker) RLock(_ context.Context) error {
 	return nil
 }
 
-// TryRLock locks the mutex for reading if not already locked by another session.
-func (il *internalLocker) TryRLock(_ context.Context) error {
-	if !il.locks.TryRLock(il.key) {
-		return ErrAlreadyLocked
-	}
-
-	return nil
-}
-
 // RUnlock unlocks the read lock.
 func (il *internalLocker) RUnlock(_ context.Context) error {
 	if err := il.locks.RUnlock(il.key); err != nil {
