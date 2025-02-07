@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
@@ -63,6 +64,10 @@ func (s *yorkieServer) ActivateClient(
 		return nil, clients.ErrInvalidClientKey
 	}
 
+	if req.Msg.UserId == "" {
+		req.Msg.UserId = req.Msg.ClientKey
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.ActivateClient,
 	}); err != nil {
@@ -70,7 +75,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.UserId)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +83,8 @@ func (s *yorkieServer) ActivateClient(
 	if err := s.backend.MsgBroker.Produce(
 		ctx,
 		messagebroker.UserEventMessage{
-			// TODO(hackerwins): Use client ID as user ID if it is empty.
 			UserID:    req.Msg.UserId,
+			Timestamp: gotime.Now(),
 			EventType: events.ClientActivatedEvent,
 			ProjectID: project.ID.String(),
 			UserAgent: req.Header().Get("x-yorkie-user-agent"),

@@ -510,11 +510,12 @@ func (c *Client) ListUserInfos(
 }
 
 // ActivateClient activates the client of the given key.
-func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key string) (*database.ClientInfo, error) {
+func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key string, userID string) (*database.ClientInfo, error) {
 	now := gotime.Now()
 	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
+		"user_id":    userID,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
