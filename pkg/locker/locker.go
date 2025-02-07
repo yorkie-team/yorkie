@@ -123,7 +123,7 @@ func (l *Locker) Lock(name string) {
 	// Lock the nameLock outside the main mutex so we don't block other operations
 	// once locked then we can decrement the number of waiters for this lock
 	nameLock.Lock()
-	nameLock.dec()
+	//nameLock.dec()
 }
 
 // TryLock locks a mutex with the given name. If it doesn't exist, one is created.
@@ -147,7 +147,6 @@ func (l *Locker) TryLock(name string) bool {
 	// Lock the nameLock outside the main mutex so we don't block other operations
 	// once locked then we can decrement the number of waiters for this lock
 	succeeded := nameLock.TryLock()
-	nameLock.dec()
 
 	return succeeded
 }
@@ -162,10 +161,12 @@ func (l *Locker) Unlock(name string) error {
 		return ErrNoSuchLock
 	}
 
+	nameLock.Unlock()
+	nameLock.dec()
+
 	if nameLock.count() == 0 {
 		delete(l.locks, name)
 	}
-	nameLock.Unlock()
 
 	l.mu.Unlock()
 	return nil
@@ -193,7 +194,7 @@ func (l *Locker) RLock(name string) {
 	// Lock the nameLock outside the main mutex so we don't block other operations
 	// once locked then we can decrement the number of waiters for this lock
 	nameLock.RLock()
-	nameLock.dec()
+	//nameLock.dec()
 }
 
 // RUnlock releases a read lock for the given name.
@@ -205,10 +206,12 @@ func (l *Locker) RUnlock(name string) error {
 		return ErrNoSuchLock
 	}
 
+	nameLock.RUnlock()
+	nameLock.dec()
+
 	if nameLock.count() == 0 {
 		delete(l.locks, name)
 	}
-	nameLock.RUnlock()
 
 	l.mu.Unlock()
 	return nil

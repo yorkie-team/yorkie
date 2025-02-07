@@ -46,8 +46,8 @@ func TestLockerLock(t *testing.T) {
 	l.Lock("test")
 	ctr := l.locks["test"]
 
-	if ctr.count() != 0 {
-		t.Fatalf("expected waiters to be 0, got :%d", ctr.waiters)
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got :%d", ctr.waiters)
 	}
 
 	chDone := make(chan struct{})
@@ -59,7 +59,7 @@ func TestLockerLock(t *testing.T) {
 	chWaiting := make(chan struct{})
 	go func() {
 		for range time.Tick(1 * time.Millisecond) {
-			if ctr.count() == 1 {
+			if ctr.count() == 2 {
 				close(chWaiting)
 				break
 			}
@@ -86,6 +86,10 @@ func TestLockerLock(t *testing.T) {
 	case <-chDone:
 	case <-time.After(3 * time.Second):
 		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
 	}
 
 	if ctr.count() != 0 {
