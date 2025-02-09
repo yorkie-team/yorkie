@@ -64,8 +64,11 @@ func (s *yorkieServer) ActivateClient(
 		return nil, clients.ErrInvalidClientKey
 	}
 
-	if req.Msg.UserId == "" {
-		req.Msg.UserId = req.Msg.ClientKey
+	logging.DefaultLogger().Error(req.Msg.Metadata)
+
+	userId, exist := req.Msg.Metadata["userId"]
+	if !exist {
+		userId = req.Msg.ClientKey
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
@@ -75,7 +78,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.UserId)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, userId)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +86,11 @@ func (s *yorkieServer) ActivateClient(
 	if err := s.backend.MsgBroker.Produce(
 		ctx,
 		messagebroker.UserEventMessage{
-			UserID:    req.Msg.UserId,
+			UserID:    userId,
 			Timestamp: gotime.Now(),
 			EventType: events.ClientActivatedEvent,
 			ProjectID: project.ID.String(),
 			UserAgent: req.Header().Get("x-yorkie-user-agent"),
-			Metadata:  req.Msg.Metadata,
 		},
 	); err != nil {
 		logging.From(ctx).Error(err)

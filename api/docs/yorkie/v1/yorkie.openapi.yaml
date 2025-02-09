@@ -292,11 +292,6 @@ components:
           description: ""
           title: metadata
           type: object
-        userId:
-          additionalProperties: false
-          description: ""
-          title: user_id
-          type: string
       title: ActivateClientRequest
       type: object
     yorkie.v1.ActivateClientRequest.MetadataEntry:

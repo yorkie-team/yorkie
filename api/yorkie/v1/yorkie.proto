@@ -41,8 +41,7 @@ service YorkieService {
 
 message ActivateClientRequest {
   string client_key = 1;
-  string user_id = 2;
-  map<string, string> metadata = 3;
+  map<string, string> metadata = 2;
 }
 
 message ActivateClientResponse {

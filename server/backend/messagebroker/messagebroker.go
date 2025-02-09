@@ -39,7 +39,7 @@ type UserEventMessage struct {
 	EventType events.ClientEventType `json:"event_type"`
 	ProjectID string                 `json:"project_id"`
 	UserAgent string                 `json:"user_agent"`
-	Metadata  map[string]string      `json:"metadata"`
+	// Metadata  map[string]string      `json:"metadata"`
 }
 
 // Marshal marshals the user event message to JSON.
