@@ -64,8 +64,6 @@ func (s *yorkieServer) ActivateClient(
 		return nil, clients.ErrInvalidClientKey
 	}
 
-	logging.DefaultLogger().Error(req.Msg.Metadata)
-
 	userID, exist := req.Msg.Metadata["userId"]
 	if !exist {
 		userID = req.Msg.ClientKey

@@ -116,15 +116,15 @@ func TestHousekeeping(t *testing.T) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		clientA, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()))
+		clientA, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()), t.Name())
 		assert.NoError(t, err)
-		clientB, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()))
+		clientB, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()), t.Name())
 		assert.NoError(t, err)
 		if err = patch.Unpatch(); err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
+		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()), t.Name())
 		assert.NoError(t, err)
 
 		_, candidates, err := clients.FindDeactivateCandidates(
