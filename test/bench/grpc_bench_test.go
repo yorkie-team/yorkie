@@ -71,14 +71,6 @@ func activeClients(b *testing.B, n int) (clients []*client.Client) {
 	return
 }
 
-// cleanupClients is a helper function to clean up clients.
-func cleanupClients(b *testing.B, clients []*client.Client) {
-	for _, c := range clients {
-		assert.NoError(b, c.Deactivate(context.Background()))
-		assert.NoError(b, c.Close())
-	}
-}
-
 func benchmarkUpdateAndSync(
 	ctx context.Context,
 	b *testing.B,
@@ -197,7 +189,7 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("client to client via server", func(b *testing.B) {
 		clients := activeClients(b, 2)
 		c1, c2 := clients[0], clients[1]
-		defer cleanupClients(b, clients)
+		defer helper.CleanupClients(b, clients)
 
 		ctx := context.Background()
 
@@ -263,7 +255,7 @@ func BenchmarkRPC(b *testing.B) {
 			func() {
 				clients := activeClients(b, 2)
 				c1, c2 := clients[0], clients[1]
-				defer cleanupClients(b, clients)
+				defer helper.CleanupClients(b, clients)
 
 				ctx := context.Background()
 				doc1 := document.New(helper.TestDocKey(b))
