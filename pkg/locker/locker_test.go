@@ -170,6 +170,114 @@ func TestTryLock(t *testing.T) {
 	}
 }
 
+func TestRWLockerRLock(t *testing.T) {
+	l := New()
+	l.RLock("test")
+	ctr := l.locks["test"]
+
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got :%d", ctr.waiters)
+	}
+
+	chDone := make(chan struct{})
+	go func() {
+		l.RLock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got: %d", ctr.count())
+	}
+
+	if _, exists := l.locks["test"]; !exists {
+		t.Fatal("expected lock not to be deleted")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if ctr.count() != 0 {
+		t.Fatalf("expected waiters to be 0, got: %d", ctr.count())
+	}
+
+	if _, exists := l.locks["test"]; exists {
+		t.Fatal("expected lock to be deleted")
+	}
+}
+
+func TestRWLockerMixed(t *testing.T) {
+	l := New()
+
+	// RLock after Lock
+	l.RLock("test")
+
+	chDone := make(chan struct{})
+	go func() {
+		l.Lock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+		t.Fatal("lock should not have returned while it was still held")
+	default:
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lock after RLock
+	l.Lock("test")
+
+	chDone = make(chan struct{})
+	go func() {
+		l.RLock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+		t.Fatal("lock should not have returned while it was still held")
+	default:
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRWLockerConcurrency(t *testing.T) {
 	l := New()
 
