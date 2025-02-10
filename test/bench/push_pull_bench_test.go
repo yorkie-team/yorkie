@@ -87,7 +87,7 @@ func setUpClientsAndDocs(
 	var docID types.ID
 	var docs []*document.Document
 	for i := 0; i < n; i++ {
-		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i))
+		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i), fmt.Sprintf("user-%d", i))
 		assert.NoError(b, err)
 		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(b, err)
