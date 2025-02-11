@@ -16,8 +16,10 @@
 
 package types
 
-import (
-	"github.com/yorkie-team/yorkie/api/types/events"
+type EventWebhookType string
+
+const (
+	DocRootChanged EventWebhookType = "DocumentRootChanged"
 )
 
 // EventWebhookAttribute represents the attribute of the webhook.
@@ -28,7 +30,7 @@ type EventWebhookAttribute struct {
 
 // EventWebhookRequest represents the request of the webhook.
 type EventWebhookRequest struct {
-	Type       events.DocEventType   `json:"type"`
+	Type       EventWebhookType      `json:"type"`
 	Attributes EventWebhookAttribute `json:"attributes"`
 }
 

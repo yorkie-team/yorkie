@@ -37,12 +37,17 @@ func SendEvent(
 	docKey string,
 	eventType events.DocEventType,
 ) error {
-	if !prj.RequireEventWebhook(eventType) {
+	eventWebhookType := eventType.WebhookType()
+	if eventWebhookType == "" {
+		return fmt.Errorf("invalid event webhook type")
+	}
+
+	if !prj.RequireEventWebhook(eventWebhookType) {
 		return nil
 	}
 
 	req := types.EventWebhookRequest{
-		Type: eventType,
+		Type: eventWebhookType,
 		Attributes: types.EventWebhookAttribute{
 			Key:      docKey,
 			IssuedAt: gotime.Now().String(),

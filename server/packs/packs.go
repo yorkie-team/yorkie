@@ -21,14 +21,13 @@ package packs
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/api/types/events"
-	"github.com/yorkie-team/yorkie/server/rpc/webhook"
 	"strconv"
 	gotime "time"
 
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -38,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/webhook"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.

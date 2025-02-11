@@ -19,8 +19,6 @@ package types
 
 import (
 	"time"
-
-	"github.com/yorkie-team/yorkie/api/types/events"
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -83,7 +81,7 @@ func (p *Project) RequireAuth(method Method) bool {
 }
 
 // RequireEventWebhook returns whether the given method requires to send event webhook.
-func (p *Project) RequireEventWebhook(eventType events.DocEventType) bool {
+func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	if len(p.EventWebhookURL) == 0 {
 		return false
 	}
@@ -93,7 +91,7 @@ func (p *Project) RequireEventWebhook(eventType events.DocEventType) bool {
 	}
 
 	for _, t := range p.EventWebhookTypes {
-		if events.DocEventType(t) == eventType {
+		if EventWebhookType(t) == eventType {
 			return true
 		}
 	}

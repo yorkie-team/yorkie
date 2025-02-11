@@ -47,6 +47,16 @@ const (
 	DocBroadcastEvent DocEventType = "document-broadcast"
 )
 
+// WebhookType returns a matched event webhook type.
+func (t DocEventType) WebhookType() types.EventWebhookType {
+	switch t {
+	case DocRootChangedEvent:
+		return types.DocRootChanged
+	default:
+		return ""
+	}
+}
+
 // DocEventBody includes additional data specific to the DocEvent.
 type DocEventBody struct {
 	Topic   string
