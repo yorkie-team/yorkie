@@ -30,6 +30,10 @@ const (
 	// modified by a change.
 	DocChangedEvent DocEventType = "document-changed"
 
+	// DocRootChangedEvent is an event indicating that document's root content
+	// is being changed by operation.
+	DocRootChangedEvent DocEventType = "document-root-changed"
+
 	// DocWatchedEvent is an event that occurs when document is watched
 	// by other clients.
 	DocWatchedEvent DocEventType = "document-watched"

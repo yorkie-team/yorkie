@@ -19,6 +19,8 @@ package types
 
 import (
 	"time"
+
+	"github.com/yorkie-team/yorkie/api/types/events"
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -37,6 +39,12 @@ type Project struct {
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
+
+	// EventWebhookURL is the url of the event webhook.
+	EventWebhookURL string `json:"event_webhook_url"`
+
+	// EventWebhookTypes is the types that send the event webhook.
+	EventWebhookTypes []string `json:"event_webhook_types"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -67,6 +75,25 @@ func (p *Project) RequireAuth(method Method) bool {
 
 	for _, m := range p.AuthWebhookMethods {
 		if Method(m) == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+// RequireEventWebhook returns whether the given method requires to send event webhook.
+func (p *Project) RequireEventWebhook(eventType events.DocEventType) bool {
+	if len(p.EventWebhookURL) == 0 {
+		return false
+	}
+
+	if len(p.EventWebhookTypes) == 0 {
+		return false
+	}
+
+	for _, t := range p.EventWebhookTypes {
+		if events.DocEventType(t) == eventType {
 			return true
 		}
 	}

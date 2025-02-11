@@ -21,13 +21,14 @@ package packs
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/server/rpc/webhook"
 	"strconv"
 	gotime "time"
 
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -194,6 +195,19 @@ func PushPull(
 					DocRefKey: docRefKey,
 				},
 			)
+
+			if reqPack.OperationsLen() > 0 {
+				if err := webhook.SendEvent(
+					ctx,
+					be,
+					project,
+					docInfo.Key.String(),
+					events.DocRootChangedEvent,
+				); err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
+			}
 
 			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {

@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -52,6 +53,14 @@ type Backend struct {
 	]]
 	// WebhookClient is used to send auth webhook.
 	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+
+	// EventWebhookCache is used to cache the response of the event webhook.
+	EventWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+		int,
+		*types.EventWebhookResponse,
+	]]
+	// EventWebhookClient is used to send event webhook
+	EventWebhookClient *webhook.Client[types.EventWebhookRequest, types.EventWebhookResponse]
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
@@ -100,6 +109,18 @@ func New(
 			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
 			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
 			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
+		},
+	)
+
+	eventWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.EventWebhookResponse]](
+		100,
+	)
+	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, types.EventWebhookResponse](
+		webhook.Options{
+			MaxRetries:      4,
+			MinWaitInterval: 1 * gotime.Second,
+			MaxWaitInterval: 4 * gotime.Second,
+			RequestTimeout:  3 * gotime.Second,
 		},
 	)
 
@@ -167,6 +188,9 @@ func New(
 
 		WebhookCache:  webhookCache,
 		WebhookClient: webhookClient,
+
+		EventWebhookClient: eventWebhookClient,
+		EventWebhookCache:  eventWebhookCache,
 
 		Locker: locker,
 		PubSub: pubsub,
