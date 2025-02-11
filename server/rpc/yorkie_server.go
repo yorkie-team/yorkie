@@ -303,29 +303,21 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Locker.NewLocker(
-		ctx,
-		packs.PushPullKey(project.ID, pack.DocumentKey),
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	if pack.HasChanges() {
+		locker, err := s.backend.Locker.NewLocker(
+			ctx,
+			packs.PushPullKey(project.ID, pack.DocumentKey),
+		)
+		if err != nil {
+			return nil, err
+		}
+
 		if err := locker.Lock(ctx); err != nil {
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	} else {
-		if err := locker.RLock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.RUnlock(ctx); err != nil {
 				logging.DefaultLogger().Error(err)
 			}
 		}()
@@ -528,26 +520,18 @@ func (s *yorkieServer) RemoveDocument(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
-	if err != nil {
-		return nil, err
-	}
 
 	if pack.HasChanges() {
+		locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+		if err != nil {
+			return nil, err
+		}
+
 		if err := locker.Lock(ctx); err != nil {
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	} else {
-		if err := locker.RLock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.RUnlock(ctx); err != nil {
 				logging.DefaultLogger().Error(err)
 			}
 		}()
