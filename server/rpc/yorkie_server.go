@@ -303,6 +303,7 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	project := projects.From(ctx)
+
 	if pack.HasChanges() {
 		locker, err := s.backend.Locker.NewLocker(
 			ctx,
@@ -519,6 +520,7 @@ func (s *yorkieServer) RemoveDocument(
 	}
 
 	project := projects.From(ctx)
+
 	if pack.HasChanges() {
 		locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 		if err != nil {
