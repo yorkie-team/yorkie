@@ -107,10 +107,10 @@ Mongo:
   # PingTimeout is the timeout for pinging MongoDB.
   PingTimeout: "5s"
 
-# MessageBroker is the yorkie analytics message broker configuration (Optional).
-MessageBroker:
-  # ConnectionURI is the URI to connect to message broker.
-  ConnectionURL: "localhost:29092"
+# Kafka is the yorkie analytics message broker configuration (Optional).
+Kafka:
+  # Addresses is the URI to connect to message broker.
+  Addresses: "localhost:29092"
 
   # Topic is the message broker topic to use.
   Topic: "user-events"

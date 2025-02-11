@@ -29,10 +29,10 @@ type KafkaBroker struct {
 }
 
 // newKafkaBroker creates a new instance of KafkaProducer.
-func newKafkaBroker(address string, topic string) *KafkaBroker {
+func newKafkaBroker(addresses []string, topic string) *KafkaBroker {
 	return &KafkaBroker{
 		writer: &kafka.Writer{
-			Addr:     kafka.TCP(address),
+			Addr:     kafka.TCP(addresses...),
 			Topic:    topic,
 			Balancer: &kafka.LeastBytes{},
 		},

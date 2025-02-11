@@ -54,8 +54,8 @@ var (
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
 
-	kafkaAddress string
-	kafkaTopic   string
+	kafkaAddresses string
+	kafkaTopic     string
 
 	conf = server.NewConfig()
 )
@@ -86,10 +86,10 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			if kafkaAddress != "" && kafkaTopic != "" {
+			if kafkaAddresses != "" && kafkaTopic != "" {
 				conf.Kafka = &messagebroker.Config{
-					Address: kafkaAddress,
-					Topic:   kafkaTopic,
+					Addresses: kafkaAddresses,
+					Topic:     kafkaTopic,
 				}
 			}
 
@@ -371,10 +371,10 @@ func init() {
 		"Gateway address",
 	)
 	cmd.Flags().StringVar(
-		&kafkaAddress,
-		"kafka-address",
+		&kafkaAddresses,
+		"kafka-addresses",
 		"",
-		"Kafka address to publish events",
+		"Comma-separated list of Kafka addresses (e.g., localhost:9092,localhost:9093)",
 	)
 	cmd.Flags().StringVar(
 		&kafkaTopic,

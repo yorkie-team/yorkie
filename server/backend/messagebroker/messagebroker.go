@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -59,15 +60,19 @@ type Broker interface {
 
 // Ensure creates a message broker based on the given configuration.
 func Ensure(kafkaConf *Config) Broker {
-	if kafkaConf == nil || kafkaConf.Address == "" || kafkaConf.Topic == "" {
+	if kafkaConf == nil {
+		return &DummyBroker{}
+	}
+
+	if err := kafkaConf.Validate(); err != nil {
 		return &DummyBroker{}
 	}
 
 	logging.DefaultLogger().Infof(
 		"connecting to kafka: %s, topic: %s",
-		kafkaConf.Address,
+		kafkaConf.Addresses,
 		kafkaConf.Topic,
 	)
 
-	return newKafkaBroker(kafkaConf.Address, kafkaConf.Topic)
+	return newKafkaBroker(strings.Split(kafkaConf.Addresses, ","), kafkaConf.Topic)
 }
