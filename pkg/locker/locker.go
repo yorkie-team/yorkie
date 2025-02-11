@@ -70,7 +70,7 @@ func (l *lockCtr) count() int32 {
 	return atomic.LoadInt32(&l.waiters)
 }
 
-// Lock locks the mutex
+// Lock locks the mutex for writing
 func (l *lockCtr) Lock() {
 	l.mu.Lock()
 }
@@ -80,17 +80,17 @@ func (l *lockCtr) TryLock() bool {
 	return l.mu.TryLock()
 }
 
-// Unlock unlocks the mutex
+// Unlock unlocks the mutex for writing
 func (l *lockCtr) Unlock() {
 	l.mu.Unlock()
 }
 
-// RLock locks the mutex
+// RLock locks the mutex for reading
 func (l *lockCtr) RLock() {
 	l.mu.RLock()
 }
 
-// RUnlock unlocks the mutex
+// RUnlock unlocks the mutex for reading
 func (l *lockCtr) RUnlock() {
 	l.mu.RUnlock()
 }
@@ -121,9 +121,7 @@ func (l *Locker) Lock(name string) {
 	l.mu.Unlock()
 
 	// Lock the nameLock outside the main mutex so we don't block other operations
-	// once locked then we can decrement the number of waiters for this lock
 	nameLock.Lock()
-	//nameLock.dec()
 }
 
 // TryLock locks a mutex with the given name. If it doesn't exist, one is created.
@@ -145,7 +143,6 @@ func (l *Locker) TryLock(name string) bool {
 	l.mu.Unlock()
 
 	// Lock the nameLock outside the main mutex so we don't block other operations
-	// once locked then we can decrement the number of waiters for this lock
 	succeeded := nameLock.TryLock()
 
 	return succeeded
@@ -162,6 +159,8 @@ func (l *Locker) Unlock(name string) error {
 	}
 
 	nameLock.Unlock()
+	// Decrement waiters here to ensure the lock isn't deleted prematurely
+	// while another goroutine might still be using it.
 	nameLock.dec()
 
 	if nameLock.count() == 0 {
@@ -192,9 +191,7 @@ func (l *Locker) RLock(name string) {
 	l.mu.Unlock()
 
 	// Lock the nameLock outside the main mutex so we don't block other operations
-	// once locked then we can decrement the number of waiters for this lock
 	nameLock.RLock()
-	//nameLock.dec()
 }
 
 // RUnlock releases a read lock for the given name.
@@ -207,6 +204,8 @@ func (l *Locker) RUnlock(name string) error {
 	}
 
 	nameLock.RUnlock()
+	// Decrement waiters here to ensure the lock isn't deleted prematurely
+	// while another goroutine might still be using it.
 	nameLock.dec()
 
 	if nameLock.count() == 0 {

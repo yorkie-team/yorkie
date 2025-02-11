@@ -216,7 +216,7 @@ func TestRWLockerRLock(t *testing.T) {
 	}
 }
 
-func TestRWLockerMixed(t *testing.T) {
+func TestLockRLock(t *testing.T) {
 	l := New()
 
 	// RLock after Lock
