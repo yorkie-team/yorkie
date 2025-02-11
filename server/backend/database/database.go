@@ -140,7 +140,7 @@ type Database interface {
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
 	// ActivateClient activates the client of the given key.
-	ActivateClient(ctx context.Context, projectID types.ID, key string, userID string) (*ClientInfo, error)
+	ActivateClient(ctx context.Context, projectID types.ID, key string, metadata map[string]string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given refKey.
 	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)

@@ -64,7 +64,7 @@ func (s *yorkieServer) ActivateClient(
 		return nil, clients.ErrInvalidClientKey
 	}
 
-	userID, exist := req.Msg.Metadata["userId"]
+	userID, exist := req.Msg.Metadata["userID"]
 	if !exist {
 		userID = req.Msg.ClientKey
 	}
@@ -76,7 +76,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, userID)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
 	if err != nil {
 		return nil, err
 	}

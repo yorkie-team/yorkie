@@ -70,14 +70,14 @@ type ClientInfo struct {
 	// Key is the key of the client. It is used to identify the client by users.
 	Key string `bson:"key"`
 
-	// UserID is the key of the client's user. It is used to identify the user.
-	UserID string `bson:"user_id"`
-
 	// Status is the status of the client.
 	Status string `bson:"status"`
 
 	// Documents is a map of document which is attached to the client.
 	Documents ClientDocInfoMap `bson:"documents"`
+
+	// Metadata is the metadata of the client.
+	Metadata map[string]string `bson:"metadata"`
 
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -278,9 +278,9 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		ID:        i.ID,
 		ProjectID: i.ProjectID,
 		Key:       i.Key,
-		UserID:    i.UserID,
 		Status:    i.Status,
 		Documents: documents,
+		Metadata:  i.Metadata,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: i.UpdatedAt,
 	}

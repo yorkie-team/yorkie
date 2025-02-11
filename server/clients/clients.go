@@ -41,9 +41,9 @@ func Activate(
 	be *backend.Backend,
 	project *types.Project,
 	clientKey string,
-	userID string,
+	metadata map[string]string,
 ) (*database.ClientInfo, error) {
-	return be.DB.ActivateClient(ctx, project.ID, clientKey, userID)
+	return be.DB.ActivateClient(ctx, project.ID, clientKey, metadata)
 }
 
 // Deactivate deactivates the given client.

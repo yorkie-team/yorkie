@@ -513,13 +513,14 @@ func (c *Client) ListUserInfos(
 func (c *Client) ActivateClient(
 	ctx context.Context,
 	projectID types.ID,
-	key string, userID string,
+	key string,
+	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
 	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"user_id":    userID,
+		"metadata":   metadata,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
