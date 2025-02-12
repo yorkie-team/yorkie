@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -35,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -91,9 +91,9 @@ func benchmarkUpdateAndSync(
 	}
 }
 
-func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client) error {
+func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client, project *types.Project) error {
 	for i := 0; i < cnt; i++ {
-		name := fmt.Sprintf("name%d", i)
+		name := fmt.Sprintf("name%d-%d", i, gotime.Now().UnixMilli())
 		authWebhookURL := fmt.Sprintf("http://authWebhookURL%d", i)
 		var authWebhookMethods []string
 		for _, m := range types.AuthMethods() {
@@ -103,7 +103,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 
 		_, err := adminCli.UpdateProject(
 			ctx,
-			database.DefaultProjectID.String(),
+			project.ID.String(),
 			&types.UpdatableProjectFields{
 				Name:                      &name,
 				AuthWebhookURL:            &authWebhookURL,
@@ -296,8 +296,11 @@ func BenchmarkRPC(b *testing.B) {
 		defer func() { adminCli.Close() }()
 
 		ctx := context.Background()
+		project, err := adminCli.CreateProject(ctx, "admin-cli-test")
+		assert.NoError(b, err)
+
 		for i := 0; i < b.N; i++ {
-			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli))
+			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli, project))
 		}
 	})
 }
