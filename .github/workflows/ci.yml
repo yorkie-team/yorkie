@@ -36,6 +36,7 @@ jobs:
           filters: |
             build: '**'
             bench: 
+              - 'test/bench/**'
               - 'pkg/**'
               - 'server/**'
               - 'client/**'
