@@ -25,17 +25,20 @@ import (
 
 // KafkaBroker is a producer for Kafka.
 type KafkaBroker struct {
+	conf   *Config
 	writer *kafka.Writer
 }
 
 // newKafkaBroker creates a new instance of KafkaProducer.
-func newKafkaBroker(addresses []string, topic string) *KafkaBroker {
+func newKafkaBroker(conf *Config) *KafkaBroker {
 	return &KafkaBroker{
+		conf: conf,
 		writer: &kafka.Writer{
-			Addr:     kafka.TCP(addresses...),
-			Topic:    topic,
-			Balancer: &kafka.LeastBytes{},
-			Async:    true,
+			Addr:         kafka.TCP(conf.SplitAddresses()...),
+			Topic:        conf.Topic,
+			WriteTimeout: conf.MustParseWriteTimeout(),
+			Balancer:     &kafka.LeastBytes{},
+			Async:        true,
 		},
 	}
 }
@@ -47,12 +50,11 @@ func (mb *KafkaBroker) Produce(
 ) error {
 	value, err := msg.Marshal()
 	if err != nil {
-		return fmt.Errorf("marshal message: %v", err)
+		return fmt.Errorf("marshal message: %w", err)
 	}
 
-	// TODO(hackerwins): Consider using message batching.
 	if err := mb.writer.WriteMessages(ctx, kafka.Message{Value: value}); err != nil {
-		return fmt.Errorf("write message to kafka: %v", err)
+		return fmt.Errorf("write message to kafka: %w", err)
 	}
 
 	return nil
@@ -61,7 +63,7 @@ func (mb *KafkaBroker) Produce(
 // Close closes the KafkaProducer.
 func (mb *KafkaBroker) Close() error {
 	if err := mb.writer.Close(); err != nil {
-		return fmt.Errorf("close kafka writer: %v", err)
+		return fmt.Errorf("close kafka writer: %w", err)
 	}
 
 	return nil

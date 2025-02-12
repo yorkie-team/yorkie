@@ -114,3 +114,6 @@ Kafka:
 
   # Topic is the message broker topic to use.
   Topic: "user-events"
+
+  # WriteTimeout is the timeout for writing to the message broker.
+  WriteTimeout: "5s"

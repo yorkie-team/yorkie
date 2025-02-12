@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -35,10 +34,10 @@ type Message interface {
 
 // UserEventMessage represents a message for user events
 type UserEventMessage struct {
+	ProjectID string                 `json:"project_id"`
+	EventType events.ClientEventType `json:"event_type"`
 	UserID    string                 `json:"user_id"`
 	Timestamp time.Time              `json:"timestamp"`
-	EventType events.ClientEventType `json:"event_type"`
-	ProjectID string                 `json:"project_id"`
 	UserAgent string                 `json:"user_agent"`
 }
 
@@ -74,5 +73,5 @@ func Ensure(kafkaConf *Config) Broker {
 		kafkaConf.Topic,
 	)
 
-	return newKafkaBroker(strings.Split(kafkaConf.Addresses, ","), kafkaConf.Topic)
+	return newKafkaBroker(kafkaConf)
 }

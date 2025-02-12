@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 var (
@@ -29,12 +30,31 @@ var (
 
 	// ErrEmptyTopic is returned when the topic is empty.
 	ErrEmptyTopic = errors.New("topic cannot be empty")
+
+	// ErrInvalidDuration is returned when the duration is invalid.
+	ErrInvalidDuration = errors.New("invalid duration")
 )
 
 // Config is the configuration for creating a message broker instance.
 type Config struct {
-	Addresses string `yaml:"Addresses"`
-	Topic     string `yaml:"Topic"`
+	Addresses    string `yaml:"Addresses"`
+	Topic        string `yaml:"Topic"`
+	WriteTimeout string `yaml:"WriteTimeout"`
+}
+
+// SplitAddresses splits the addresses by comma.
+func (c *Config) SplitAddresses() []string {
+	return strings.Split(c.Addresses, ",")
+}
+
+// MustParseWriteTimeout parses the write timeout and returns the duration.
+func (c *Config) MustParseWriteTimeout() time.Duration {
+	d, err := time.ParseDuration(c.WriteTimeout)
+	if err != nil {
+		panic(ErrInvalidDuration)
+	}
+
+	return d
 }
 
 // Validate validates this config.
@@ -56,6 +76,10 @@ func (c *Config) Validate() error {
 
 	if c.Topic == "" {
 		return ErrEmptyTopic
+	}
+
+	if _, err := time.ParseDuration(c.WriteTimeout); err != nil {
+		return fmt.Errorf(`parse write timeout "%s": %w`, c.WriteTimeout, ErrInvalidDuration)
 	}
 
 	return nil

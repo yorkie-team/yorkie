@@ -50,6 +50,9 @@ const (
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
+	DefaultKafkaTopic        = "user-events"
+	DefaultKafkaWriteTimeout = 5 * time.Second
+
 	DefaultAdminUser                  = "admin"
 	DefaultAdminPassword              = "admin"
 	DefaultSecretKey                  = "yorkie-secret"

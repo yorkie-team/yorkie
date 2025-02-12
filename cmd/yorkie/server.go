@@ -54,8 +54,9 @@ var (
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
 
-	kafkaAddresses string
-	kafkaTopic     string
+	kafkaAddresses    string
+	kafkaTopic        string
+	kafkaWriteTimeout time.Duration
 
 	conf = server.NewConfig()
 )
@@ -379,8 +380,14 @@ func init() {
 	cmd.Flags().StringVar(
 		&kafkaTopic,
 		"kafka-topic",
-		"",
+		server.DefaultKafkaTopic,
 		"Kafka topic name to publish events",
+	)
+	cmd.Flags().DurationVar(
+		&kafkaWriteTimeout,
+		"kafka-write-timeout",
+		server.DefaultKafkaWriteTimeout,
+		"Timeout for writing messages to Kafka",
 	)
 
 	rootCmd.AddCommand(cmd)
