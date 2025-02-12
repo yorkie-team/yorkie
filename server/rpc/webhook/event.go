@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
-// SendEvent send an event to project endpoint.
+// SendEvent sends an event to the project's event webhook endpoint.
 func SendEvent(
 	ctx context.Context,
 	be *backend.Backend,
@@ -37,30 +37,22 @@ func SendEvent(
 	docKey string,
 	eventType events.DocEventType,
 ) error {
-	eventWebhookType := eventType.WebhookType()
-	if eventWebhookType == "" {
+	webhookType := eventType.WebhookType()
+	if webhookType == "" {
 		return fmt.Errorf("invalid event webhook type")
 	}
 
-	if !prj.RequireEventWebhook(eventWebhookType) {
+	if !prj.RequireEventWebhook(webhookType) {
 		return nil
 	}
 
-	req := types.EventWebhookRequest{
-		Type: eventWebhookType,
-		Attributes: types.EventWebhookAttribute{
-			Key:      docKey,
-			IssuedAt: gotime.Now().String(),
-		},
-	}
-
-	body, err := json.Marshal(req)
+	body, err := buildEventWebhookBody(docKey, webhookType)
 	if err != nil {
 		return fmt.Errorf("marshal event webhook request: %w", err)
 	}
 
-	cacheKey := generateCacheKey(prj.PublicKey, docKey, string(eventType))
-	if _, ok := be.EventWebhookCache.Get(cacheKey); ok {
+	cacheKey := generateEventCacheKey(prj.PublicKey, docKey, string(webhookType))
+	if _, found := be.EventWebhookCache.Get(cacheKey); found {
 		return nil
 	}
 
@@ -76,14 +68,35 @@ func SendEvent(
 
 	be.EventWebhookCache.Add(
 		cacheKey,
-		pkgtypes.Pair[int, *types.EventWebhookResponse]{First: status, Second: res},
+		pkgtypes.Pair[int, *types.EventWebhookResponse]{
+			First:  status,
+			Second: res,
+		},
 		be.Config.ParseEventWebhookCacheTTL(),
 	)
 
 	return nil
 }
 
-// generateCacheKey creates a unique key for caching webhook responses.
-func generateCacheKey(publicKey string, docKey, event string) string {
-	return fmt.Sprintf("%s:event:%s:%s", publicKey, docKey, event)
+// buildEventWebhookBody creates a new EventWebhookRequest given a document key and webhook type.
+func buildEventWebhookBody(docKey string, webhookType types.EventWebhookType) ([]byte, error) {
+	req := types.EventWebhookRequest{
+		Type: webhookType,
+		Attributes: types.EventWebhookAttribute{
+			Key:      docKey,
+			IssuedAt: gotime.Now().Format(gotime.RFC3339),
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event webhook request: %w", err)
+	}
+
+	return body, nil
+}
+
+// generateEventCacheKey creates a unique cache key for an event webhook.
+func generateEventCacheKey(publicKey, docKey, webhookType string) string {
+	return fmt.Sprintf("%s:event:%s:%s", publicKey, docKey, webhookType)
 }
