@@ -81,6 +81,12 @@ spec:
           "{{ .Values.yorkie.ports.profilingPort }}",
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
+          {{- if and .Values.yorkie.args.kafkaAddresses .Values.yorkie.args.kafkaTopic }}
+          "--kafka-addresses",
+          "{{ .Values.yorkie.args.kafkaAddresses }}",
+          "--kafka-topic",
+          "{{ .Values.yorkie.args.kafkaTopic }}",
+          {{- end }}
         ]
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}
