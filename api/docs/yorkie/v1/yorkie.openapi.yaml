@@ -457,9 +457,8 @@ components:
       type: object
     yorkie.v1.ChangePack:
       additionalProperties: false
-      description: |-
-        ChangePack is a message that contains all changes that occurred in a document.
-         It is used to synchronize changes between clients and servers.
+      description: "ChangePack is a message that contains all changes that occurred
+        in a document.\r\n It is used to synchronize changes between clients and servers."
       properties:
         changes:
           additionalProperties: false
@@ -977,11 +976,10 @@ components:
       type: object
     yorkie.v1.Operation.Select:
       additionalProperties: false
-      description: |-
-        NOTE(hackerwins): Select Operation is not used in the current version.
-         In the previous version, it was used to represent selection of Text.
-         However, it has been replaced by Presence now. It is retained for backward
-         compatibility purposes.
+      description: "NOTE(hackerwins): Select Operation is not used in the current
+        version.\r\n In the previous version, it was used to represent selection of
+        Text.\r\n However, it has been replaced by Presence now. It is retained for
+        backward\r\n compatibility purposes."
       properties:
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'

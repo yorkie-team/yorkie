@@ -228,9 +228,8 @@ components:
       type: object
     yorkie.v1.ChangePack:
       additionalProperties: false
-      description: |-
-        ChangePack is a message that contains all changes that occurred in a document.
-         It is used to synchronize changes between clients and servers.
+      description: "ChangePack is a message that contains all changes that occurred
+        in a document.\r\n It is used to synchronize changes between clients and servers."
       properties:
         changes:
           additionalProperties: false
@@ -972,11 +971,10 @@ components:
       type: object
     yorkie.v1.Operation.Select:
       additionalProperties: false
-      description: |-
-        NOTE(hackerwins): Select Operation is not used in the current version.
-         In the previous version, it was used to represent selection of Text.
-         However, it has been replaced by Presence now. It is retained for backward
-         compatibility purposes.
+      description: "NOTE(hackerwins): Select Operation is not used in the current
+        version.\r\n In the previous version, it was used to represent selection of
+        Text.\r\n However, it has been replaced by Presence now. It is retained for
+        backward\r\n compatibility purposes."
       properties:
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
@@ -1400,10 +1398,8 @@ components:
       type: object
     yorkie.v1.Snapshot:
       additionalProperties: false
-      description: |-
-        ///////////////////////////////////////
-         Messages for Snapshot               //
-        ///////////////////////////////////////
+      description: "///////////////////////////////////////\r\n Messages for Snapshot
+        \              //\r\n///////////////////////////////////////"
       properties:
         presences:
           additionalProperties: false
@@ -1687,6 +1683,18 @@ components:
           description: ""
           title: client_deactivate_threshold
           type: object
+        eventWebhookTypes:
+          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookTypes'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_types
+          type: object
+        eventWebhookUrl:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: object
         name:
           $ref: '#/components/schemas/google.protobuf.StringValue'
           additionalProperties: false
@@ -1707,6 +1715,19 @@ components:
           title: methods
           type: array
       title: AuthWebhookMethods
+      type: object
+    yorkie.v1.UpdatableProjectFields.EventWebhookTypes:
+      additionalProperties: false
+      description: ""
+      properties:
+        types:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: types
+          type: array
+      title: EventWebhookTypes
       type: object
     yorkie.v1.User:
       additionalProperties: false

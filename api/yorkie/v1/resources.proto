@@ -307,10 +307,16 @@ message UpdatableProjectFields {
     repeated string methods = 1;
   }
 
+  message EventWebhookTypes {
+    repeated string types = 1;
+  }
+
   google.protobuf.StringValue name = 1;
   google.protobuf.StringValue auth_webhook_url = 2;
   AuthWebhookMethods auth_webhook_methods = 3;
-  google.protobuf.StringValue client_deactivate_threshold = 4;
+  google.protobuf.StringValue event_webhook_url = 4;
+  EventWebhookTypes event_webhook_types = 5;
+  google.protobuf.StringValue client_deactivate_threshold = 6;
 }
 
 message DocumentSummary {
