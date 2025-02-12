@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -52,6 +53,10 @@ var (
 	authWebhookRequestTimeout  time.Duration
 	authWebhookCacheTTL        time.Duration
 	projectCacheTTL            time.Duration
+
+	kafkaAddresses    string
+	kafkaTopic        string
+	kafkaWriteTimeout time.Duration
 
 	conf = server.NewConfig()
 )
@@ -79,6 +84,13 @@ func newServerCmd() *cobra.Command {
 					ConnectionTimeout: mongoConnectionTimeout.String(),
 					YorkieDatabase:    mongoYorkieDatabase,
 					PingTimeout:       mongoPingTimeout.String(),
+				}
+			}
+
+			if kafkaAddresses != "" && kafkaTopic != "" {
+				conf.Kafka = &messagebroker.Config{
+					Addresses: kafkaAddresses,
+					Topic:     kafkaTopic,
 				}
 			}
 
@@ -358,6 +370,24 @@ func init() {
 		"backend-gateway-addr",
 		server.DefaultGatewayAddr,
 		"Gateway address",
+	)
+	cmd.Flags().StringVar(
+		&kafkaAddresses,
+		"kafka-addresses",
+		"",
+		"Comma-separated list of Kafka addresses (e.g., localhost:9092,localhost:9093)",
+	)
+	cmd.Flags().StringVar(
+		&kafkaTopic,
+		"kafka-topic",
+		server.DefaultKafkaTopic,
+		"Kafka topic name to publish events",
+	)
+	cmd.Flags().DurationVar(
+		&kafkaWriteTimeout,
+		"kafka-write-timeout",
+		server.DefaultKafkaWriteTimeout,
+		"Timeout for writing messages to Kafka",
 	)
 
 	rootCmd.AddCommand(cmd)

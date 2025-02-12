@@ -49,7 +49,7 @@ type Locker struct {
 
 // lockCtr is used by Locker to represent a lock with a given name.
 type lockCtr struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	// waiters is the number of waiters waiting to acquire the lock
 	// this is int32 instead of uint32 so we can add `-1` in `dec()`
 	waiters int32
@@ -70,7 +70,7 @@ func (l *lockCtr) count() int32 {
 	return atomic.LoadInt32(&l.waiters)
 }
 
-// Lock locks the mutex
+// Lock locks the mutex for writing
 func (l *lockCtr) Lock() {
 	l.mu.Lock()
 }
@@ -80,9 +80,19 @@ func (l *lockCtr) TryLock() bool {
 	return l.mu.TryLock()
 }
 
-// Unlock unlocks the mutex
+// Unlock unlocks the mutex for writing
 func (l *lockCtr) Unlock() {
 	l.mu.Unlock()
+}
+
+// RLock locks the mutex for reading
+func (l *lockCtr) RLock() {
+	l.mu.RLock()
+}
+
+// RUnlock unlocks the mutex for reading
+func (l *lockCtr) RUnlock() {
+	l.mu.RUnlock()
 }
 
 // New creates a new Locker
@@ -111,9 +121,7 @@ func (l *Locker) Lock(name string) {
 	l.mu.Unlock()
 
 	// Lock the nameLock outside the main mutex so we don't block other operations
-	// once locked then we can decrement the number of waiters for this lock
 	nameLock.Lock()
-	nameLock.dec()
 }
 
 // TryLock locks a mutex with the given name. If it doesn't exist, one is created.
@@ -135,9 +143,7 @@ func (l *Locker) TryLock(name string) bool {
 	l.mu.Unlock()
 
 	// Lock the nameLock outside the main mutex so we don't block other operations
-	// once locked then we can decrement the number of waiters for this lock
 	succeeded := nameLock.TryLock()
-	nameLock.dec()
 
 	return succeeded
 }
@@ -152,10 +158,59 @@ func (l *Locker) Unlock(name string) error {
 		return ErrNoSuchLock
 	}
 
+	nameLock.Unlock()
+	// Decrement waiters here to ensure the lock isn't deleted prematurely
+	// while another goroutine might still be using it.
+	nameLock.dec()
+
 	if nameLock.count() == 0 {
 		delete(l.locks, name)
 	}
-	nameLock.Unlock()
+
+	l.mu.Unlock()
+	return nil
+}
+
+// RLock acquires a read lock for the given name.
+// If there is no lock for that name, a new one is created.
+func (l *Locker) RLock(name string) {
+	l.mu.Lock()
+	if l.locks == nil {
+		l.locks = make(map[string]*lockCtr)
+	}
+
+	nameLock, exists := l.locks[name]
+	if !exists {
+		nameLock = &lockCtr{}
+		l.locks[name] = nameLock
+	}
+
+	// increment the nameLock waiters while inside the main mutex
+	// this makes sure that the lock isn't deleted if `Lock` and `Unlock` are called concurrently
+	nameLock.inc()
+	l.mu.Unlock()
+
+	// Lock the nameLock outside the main mutex so we don't block other operations
+	nameLock.RLock()
+}
+
+// RUnlock releases a read lock for the given name.
+func (l *Locker) RUnlock(name string) error {
+	l.mu.Lock()
+	nameLock, exists := l.locks[name]
+	if !exists {
+		l.mu.Unlock()
+		return ErrNoSuchLock
+	}
+
+	nameLock.RUnlock()
+	// Decrement waiters here to ensure the lock isn't deleted prematurely
+	// while another goroutine might still be using it.
+	nameLock.dec()
+
+	if nameLock.count() == 0 {
+		delete(l.locks, name)
+	}
 
 	l.mu.Unlock()
 	return nil

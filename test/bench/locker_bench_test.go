@@ -22,6 +22,7 @@
 package bench
 
 import (
+	"fmt"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -62,6 +63,33 @@ func BenchmarkLockerMoreKeys(b *testing.B) {
 			k := keys[rand.Intn(len(keys))]
 			l.Lock(k)
 			assert.NoError(b, l.Unlock(k))
+		}
+	})
+}
+
+func BenchmarkRWLocker(b *testing.B) {
+	b.SetParallelism(128)
+
+	rates := []int{2, 10, 100, 1000}
+	for _, rate := range rates {
+		b.Run(fmt.Sprintf("RWLock rate %d", rate), func(b *testing.B) {
+			benchmarkRWLockerParallel(rate, b)
+		})
+	}
+}
+
+func benchmarkRWLockerParallel(rate int, b *testing.B) {
+	l := locker.New()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			if rand.Intn(rate) == 0 {
+				l.Lock("test")
+				assert.NoError(b, l.Unlock("test"))
+			} else {
+				l.RLock("test")
+				assert.NoError(b, l.RUnlock("test"))
+			}
 		}
 	})
 }

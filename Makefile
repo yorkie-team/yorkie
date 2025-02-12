@@ -52,6 +52,10 @@ test: ## runs integration tests that require local applications such as MongoDB
 	go clean -testcache
 	go test -tags integration -race ./...
 
+test-complex: ## runs complex tests that take a long time
+	go clean -testcache
+	go test -tags complex -race -v ./test/complex/...
+
 bench: ## runs benchmark tests
 	rm -f pipe output.txt mem.prof cpu.prof bench.test
 	mkfifo pipe

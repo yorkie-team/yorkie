@@ -508,6 +508,7 @@ func (d *DB) ActivateClient(
 	_ context.Context,
 	projectID types.ID,
 	key string,
+	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -522,6 +523,7 @@ func (d *DB) ActivateClient(
 	clientInfo := &database.ClientInfo{
 		ProjectID: projectID,
 		Key:       key,
+		Metadata:  metadata,
 		Status:    database.ClientActivated,
 		UpdatedAt: now,
 	}

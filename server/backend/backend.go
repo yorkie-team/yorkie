@@ -33,6 +33,7 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -61,6 +62,8 @@ type Backend struct {
 	Metrics *prometheus.Metrics
 	// DB is the database instance.
 	DB database.Database
+	// MsgBroker is the message producer instance.
+	MsgBroker messagebroker.Broker
 
 	// Background is used to manage background tasks.
 	Background *background.Background
@@ -74,6 +77,7 @@ func New(
 	mongoConf *mongo.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
+	kafkaConf *messagebroker.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
 	// current machine.
@@ -144,6 +148,10 @@ func New(
 		}
 	}
 
+	// 08. Create the message broker instance.
+	broker := messagebroker.Ensure(kafkaConf)
+
+	// 09. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
@@ -167,6 +175,7 @@ func New(
 		DB:           db,
 		Background:   bg,
 		Housekeeping: keeping,
+		MsgBroker:    broker,
 	}, nil
 }
 
@@ -187,6 +196,10 @@ func (b *Backend) Shutdown() error {
 	}
 
 	b.Background.Close()
+
+	if err := b.MsgBroker.Close(); err != nil {
+		logging.DefaultLogger().Error(err)
+	}
 
 	if err := b.DB.Close(); err != nil {
 		logging.DefaultLogger().Error(err)

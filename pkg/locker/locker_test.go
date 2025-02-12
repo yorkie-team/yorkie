@@ -46,8 +46,8 @@ func TestLockerLock(t *testing.T) {
 	l.Lock("test")
 	ctr := l.locks["test"]
 
-	if ctr.count() != 0 {
-		t.Fatalf("expected waiters to be 0, got :%d", ctr.waiters)
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got :%d", ctr.waiters)
 	}
 
 	chDone := make(chan struct{})
@@ -59,7 +59,7 @@ func TestLockerLock(t *testing.T) {
 	chWaiting := make(chan struct{})
 	go func() {
 		for range time.Tick(1 * time.Millisecond) {
-			if ctr.count() == 1 {
+			if ctr.count() == 2 {
 				close(chWaiting)
 				break
 			}
@@ -86,6 +86,10 @@ func TestLockerLock(t *testing.T) {
 	case <-chDone:
 	case <-time.After(3 * time.Second):
 		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
 	}
 
 	if ctr.count() != 0 {
@@ -163,5 +167,151 @@ func TestTryLock(t *testing.T) {
 		if l.Unlock("test") != nil {
 			t.Fatal("unlock should not have failed")
 		}
+	}
+}
+
+func TestRWLockerRLock(t *testing.T) {
+	l := New()
+	l.RLock("test")
+	ctr := l.locks["test"]
+
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got :%d", ctr.waiters)
+	}
+
+	chDone := make(chan struct{})
+	go func() {
+		l.RLock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if ctr.count() != 1 {
+		t.Fatalf("expected waiters to be 1, got: %d", ctr.count())
+	}
+
+	if _, exists := l.locks["test"]; !exists {
+		t.Fatal("expected lock not to be deleted")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	if ctr.count() != 0 {
+		t.Fatalf("expected waiters to be 0, got: %d", ctr.count())
+	}
+
+	if _, exists := l.locks["test"]; exists {
+		t.Fatal("expected lock to be deleted")
+	}
+}
+
+func TestLockRLock(t *testing.T) {
+	l := New()
+
+	// RLock after Lock
+	l.RLock("test")
+
+	chDone := make(chan struct{})
+	go func() {
+		l.Lock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+		t.Fatal("lock should not have returned while it was still held")
+	default:
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lock after RLock
+	l.Lock("test")
+
+	chDone = make(chan struct{})
+	go func() {
+		l.RLock("test")
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+		t.Fatal("lock should not have returned while it was still held")
+	default:
+	}
+
+	if err := l.Unlock("test"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-chDone:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("lock should have completed")
+	}
+
+	if err := l.RUnlock("test"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRWLockerConcurrency(t *testing.T) {
+	l := New()
+
+	var wg sync.WaitGroup
+	for i := 0; i <= 1000; i++ {
+		wg.Add(1)
+		go func(i int) {
+			if i%2 == 0 {
+				l.Lock("test")
+				// if there is a concurrency issue, will very likely panic here
+				assert.NoError(t, l.Unlock("test"))
+			} else {
+				l.RLock("test")
+				// if there is a concurrency issue, will very likely panic here
+				assert.NoError(t, l.RUnlock("test"))
+			}
+			wg.Done()
+		}(i)
+	}
+
+	chDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(chDone)
+	}()
+
+	select {
+	case <-chDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for locks to complete")
+	}
+
+	// Since everything has unlocked this should not exist anymore
+	if ctr, exists := l.locks["test"]; exists {
+		t.Fatalf("lock should not exist: %v", ctr)
 	}
 }

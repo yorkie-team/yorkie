@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -62,6 +64,11 @@ func (s *yorkieServer) ActivateClient(
 		return nil, clients.ErrInvalidClientKey
 	}
 
+	userID, exist := req.Msg.Metadata["userID"]
+	if !exist {
+		userID = req.Msg.ClientKey
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.ActivateClient,
 	}); err != nil {
@@ -69,9 +76,22 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := s.backend.MsgBroker.Produce(
+		ctx,
+		messagebroker.UserEventMessage{
+			UserID:    userID,
+			Timestamp: gotime.Now(),
+			EventType: events.ClientActivatedEvent,
+			ProjectID: project.ID.String(),
+			UserAgent: req.Header().Get("x-yorkie-user-agent"),
+		},
+	); err != nil {
+		logging.From(ctx).Error(err)
 	}
 
 	return connect.NewResponse(&api.ActivateClientResponse{
@@ -303,6 +323,7 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	project := projects.From(ctx)
+
 	if pack.HasChanges() {
 		locker, err := s.backend.Locker.NewLocker(
 			ctx,
@@ -519,6 +540,7 @@ func (s *yorkieServer) RemoveDocument(
 	}
 
 	project := projects.From(ctx)
+
 	if pack.HasChanges() {
 		locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 		if err != nil {
