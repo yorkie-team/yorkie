@@ -35,6 +35,7 @@ func newKafkaBroker(addresses []string, topic string) *KafkaBroker {
 			Addr:     kafka.TCP(addresses...),
 			Topic:    topic,
 			Balancer: &kafka.LeastBytes{},
+			Async:    true,
 		},
 	}
 }
