@@ -52,7 +52,13 @@ var (
 	authWebhookMinWaitInterval time.Duration
 	authWebhookRequestTimeout  time.Duration
 	authWebhookCacheTTL        time.Duration
-	projectCacheTTL            time.Duration
+
+	eventWebhookMaxWaitInterval time.Duration
+	eventWebhookMinWaitInterval time.Duration
+	eventWebhookRequestTimeout  time.Duration
+	eventWebhookCacheTTL        time.Duration
+
+	projectCacheTTL time.Duration
 
 	kafkaAddresses    string
 	kafkaTopic        string
@@ -74,6 +80,12 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
 			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
+
+			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
+			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
+			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
+			conf.Backend.EventWebhookCacheTTL = eventWebhookCacheTTL.String()
+
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
@@ -347,6 +359,42 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookRequestTimeout,
+		"event-webhook-request-timeout",
+		server.DefaultEventWebhookRequestTimeout,
+		"Timeout for each event webhook request.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.EventWebhookMaxRetries,
+		"event-webhook-max-retries",
+		server.DefaultEventWebhookMaxRetries,
+		"Maximum number of retries for event webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookMinWaitInterval,
+		"event-webhook-min-wait-interval",
+		server.DefaultEventWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookMaxWaitInterval,
+		"event-webhook-max-wait-interval",
+		server.DefaultEventWebhookMaxWaitInterval,
+		"Maximum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().IntVar(
+		&conf.Backend.EventWebhookCacheSize,
+		"event-webhook-cache-size",
+		server.DefaultEventWebhookCacheSize,
+		"The cache size of the event webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookCacheTTL,
+		"event-webhook-cache-auth-ttl",
+		server.DefaultEventWebhookCacheTTL,
+		"TTL value to set when caching event webhook response.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

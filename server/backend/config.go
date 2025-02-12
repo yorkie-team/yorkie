@@ -67,7 +67,7 @@ type Config struct {
 	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
 	AuthWebhookMinWaitInterval string `yaml:"AuthWebhookMinWaitInterval"`
 
-	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
 	AuthWebhookRequestTimeout string `yaml:"AuthWebhookRequestTimeout"`
 
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
@@ -75,6 +75,24 @@ type Config struct {
 
 	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
+
+	// EventWebhookMaxRetries is the max count that retries the event webhook.
+	EventWebhookMaxRetries uint64 `yaml:"EventWebhookMaxRetries"`
+
+	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
+	EventWebhookMaxWaitInterval string `yaml:"EventWebhookMaxWaitInterval"`
+
+	// EventWebhookMinWaitInterval is the min interval that waits before retrying the event webhook.
+	EventWebhookMinWaitInterval string `yaml:"EventWebhookMinWaitInterval"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout string `yaml:"EventWebhookRequestTimeout"`
+
+	// EventWebhookCacheSize is the cache size of the event webhook.
+	EventWebhookCacheSize int `yaml:"EventWebhookCacheSize"`
+
+	// EventWebhookCacheTTL is the TTL value to set when caching the event webhook result.
+	EventWebhookCacheTTL string `yaml:"EventWebhookCacheTTL"`
 
 	// ProjectCacheSize is the cache size of the project metadata.
 	ProjectCacheSize int `yaml:"ProjectCacheSize"`
@@ -131,6 +149,37 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if _, err := time.ParseDuration(c.EventWebhookMaxWaitInterval); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-max-wait-interval" flag: %w`,
+			c.EventWebhookMaxWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.EventWebhookMinWaitInterval); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-min-wait-interval" flag: %w`,
+			c.EventWebhookMinWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.EventWebhookRequestTimeout); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-request-timeout" flag: %w`,
+			c.EventWebhookRequestTimeout,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.EventWebhookCacheTTL); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--event-webhook-cache-ttl" flag: %w`,
+			c.EventWebhookCacheTTL,
+			err,
+		)
+	}
 	if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--project-info-cache-ttl" flag: %w`,
@@ -191,6 +240,50 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseEventWebhookMaxWaitInterval returns max wait interval.
+func (c *Config) ParseEventWebhookMaxWaitInterval() time.Duration {
+	result, err := time.ParseDuration(c.EventWebhookMaxWaitInterval)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse event webhook max wait interval: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseEventWebhookMinWaitInterval returns min wait interval.
+func (c *Config) ParseEventWebhookMinWaitInterval() time.Duration {
+	result, err := time.ParseDuration(c.EventWebhookMinWaitInterval)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse event webhook min wait interval: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseEventWebhookRequestTimeout returns request timeout.
+func (c *Config) ParseEventWebhookRequestTimeout() time.Duration {
+	result, err := time.ParseDuration(c.EventWebhookRequestTimeout)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse event webhook request timeout: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseEventWebhookCacheTTL returns TTL for event webhook cache.
+func (c *Config) ParseEventWebhookCacheTTL() time.Duration {
+	result, err := time.ParseDuration(c.EventWebhookCacheTTL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "parse event webhook cache ttl: %w", err)
 		os.Exit(1)
 	}
 

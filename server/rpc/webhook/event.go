@@ -77,7 +77,7 @@ func SendEvent(
 	be.EventWebhookCache.Add(
 		cacheKey,
 		pkgtypes.Pair[int, *types.EventWebhookResponse]{First: status, Second: res},
-		5*gotime.Second,
+		be.Config.ParseEventWebhookCacheTTL(),
 	)
 
 	return nil

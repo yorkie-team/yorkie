@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -117,10 +116,10 @@ func New(
 	)
 	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, types.EventWebhookResponse](
 		webhook.Options{
-			MaxRetries:      4,
-			MinWaitInterval: 1 * gotime.Second,
-			MaxWaitInterval: 4 * gotime.Second,
-			RequestTimeout:  3 * gotime.Second,
+			MaxRetries:      conf.EventWebhookMaxRetries,
+			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
+			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
+			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
 		},
 	)
 

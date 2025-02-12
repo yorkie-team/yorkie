@@ -16,6 +16,7 @@
 
 package types
 
+// EventWebhookType represents event webhook type
 type EventWebhookType string
 
 const (
