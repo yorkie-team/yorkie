@@ -76,6 +76,9 @@ type ClientInfo struct {
 	// Documents is a map of document which is attached to the client.
 	Documents ClientDocInfoMap `bson:"documents"`
 
+	// Metadata is the metadata of the client.
+	Metadata map[string]string `bson:"metadata"`
+
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -277,6 +280,7 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		Key:       i.Key,
 		Status:    i.Status,
 		Documents: documents,
+		Metadata:  i.Metadata,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: i.UpdatedAt,
 	}

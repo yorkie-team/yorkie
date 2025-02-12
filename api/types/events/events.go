@@ -68,3 +68,17 @@ type DocEvent struct {
 	// Body includes additional data specific to the DocEvent.
 	Body DocEventBody
 }
+
+// ClientEventType represents the type of the ClientEvent.
+type ClientEventType string
+
+const (
+	// ClientActivatedEvent is an event that occurs when the client is activated.
+	ClientActivatedEvent ClientEventType = "client-activated"
+)
+
+// ClientEvent represents an event that occurs in the client.
+type ClientEvent struct {
+	// Type is the type of the event.
+	Type ClientEventType
+}

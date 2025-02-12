@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -48,6 +49,9 @@ const (
 	DefaultMongoConnectionTimeout = 5 * time.Second
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
+
+	DefaultKafkaTopic        = "user-events"
+	DefaultKafkaWriteTimeout = 5 * time.Second
 
 	DefaultAdminUser                  = "admin"
 	DefaultAdminPassword              = "admin"
@@ -75,11 +79,12 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC          *rpc.Config          `yaml:"RPC"`
-	Profiling    *profiling.Config    `yaml:"Profiling"`
-	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
-	Backend      *backend.Config      `yaml:"Backend"`
-	Mongo        *mongo.Config        `yaml:"Mongo"`
+	RPC          *rpc.Config           `yaml:"RPC"`
+	Profiling    *profiling.Config     `yaml:"Profiling"`
+	Housekeeping *housekeeping.Config  `yaml:"Housekeeping"`
+	Backend      *backend.Config       `yaml:"Backend"`
+	Mongo        *mongo.Config         `yaml:"Mongo"`
+	Kafka        *messagebroker.Config `yaml:"Kafka"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -129,6 +134,12 @@ func (c *Config) Validate() error {
 
 	if c.Mongo != nil {
 		if err := c.Mongo.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if c.Kafka != nil {
+		if err := c.Kafka.Validate(); err != nil {
 			return err
 		}
 	}

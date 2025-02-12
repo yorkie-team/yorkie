@@ -116,8 +116,7 @@ func TestMain(m *testing.M) {
 			Interval:                  helper.HousekeepingInterval.String(),
 			CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
 			ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
-		}, met,
-	)
+		}, met, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

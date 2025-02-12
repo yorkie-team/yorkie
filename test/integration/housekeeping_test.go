@@ -63,6 +63,7 @@ func setupBackend(t *testing.T) *backend.Backend {
 		conf.Mongo,
 		conf.Housekeeping,
 		metrics,
+		nil,
 	)
 	assert.NoError(t, err)
 
@@ -115,15 +116,15 @@ func TestHousekeeping(t *testing.T) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		clientA, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()))
+		clientA, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()), map[string]string{"userID": fmt.Sprintf("%s-A", t.Name())})
 		assert.NoError(t, err)
-		clientB, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()))
+		clientB, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()), map[string]string{"userID": fmt.Sprintf("%s-B", t.Name())})
 		assert.NoError(t, err)
 		if err = patch.Unpatch(); err != nil {
 			log.Fatal(err)
 		}
 
-		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
+		_, err = be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()), map[string]string{"userID": fmt.Sprintf("%s-C", t.Name())})
 		assert.NoError(t, err)
 
 		_, candidates, err := clients.FindDeactivateCandidates(
