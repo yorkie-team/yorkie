@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -35,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -71,14 +71,6 @@ func activeClients(b *testing.B, n int) (clients []*client.Client) {
 	return
 }
 
-// cleanupClients is a helper function to clean up clients.
-func cleanupClients(b *testing.B, clients []*client.Client) {
-	for _, c := range clients {
-		assert.NoError(b, c.Deactivate(context.Background()))
-		assert.NoError(b, c.Close())
-	}
-}
-
 func benchmarkUpdateAndSync(
 	ctx context.Context,
 	b *testing.B,
@@ -99,9 +91,9 @@ func benchmarkUpdateAndSync(
 	}
 }
 
-func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client) error {
+func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client, project *types.Project) error {
 	for i := 0; i < cnt; i++ {
-		name := fmt.Sprintf("name%d", i)
+		name := fmt.Sprintf("name%d-%d", i, gotime.Now().UnixMilli())
 		authWebhookURL := fmt.Sprintf("http://authWebhookURL%d", i)
 		var authWebhookMethods []string
 		for _, m := range types.AuthMethods() {
@@ -111,7 +103,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 
 		_, err := adminCli.UpdateProject(
 			ctx,
-			database.DefaultProjectID.String(),
+			project.ID.String(),
 			&types.UpdatableProjectFields{
 				Name:                      &name,
 				AuthWebhookURL:            &authWebhookURL,
@@ -197,7 +189,7 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("client to client via server", func(b *testing.B) {
 		clients := activeClients(b, 2)
 		c1, c2 := clients[0], clients[1]
-		defer cleanupClients(b, clients)
+		defer helper.CleanupClients(b, clients)
 
 		ctx := context.Background()
 
@@ -263,7 +255,7 @@ func BenchmarkRPC(b *testing.B) {
 			func() {
 				clients := activeClients(b, 2)
 				c1, c2 := clients[0], clients[1]
-				defer cleanupClients(b, clients)
+				defer helper.CleanupClients(b, clients)
 
 				ctx := context.Background()
 				doc1 := document.New(helper.TestDocKey(b))
@@ -304,8 +296,11 @@ func BenchmarkRPC(b *testing.B) {
 		defer func() { adminCli.Close() }()
 
 		ctx := context.Background()
+		project, err := adminCli.CreateProject(ctx, "admin-cli-test")
+		assert.NoError(b, err)
+
 		for i := 0; i < b.N; i++ {
-			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli))
+			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli, project))
 		}
 	})
 }

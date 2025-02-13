@@ -553,3 +553,11 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 
 	return project, docs
 }
+
+// CleanupClients is a helper function to clean up clients.
+func CleanupClients(b *testing.B, clients []*client.Client) {
+	for _, c := range clients {
+		assert.NoError(b, c.Deactivate(context.Background()))
+		assert.NoError(b, c.Close())
+	}
+}
