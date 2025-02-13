@@ -89,8 +89,9 @@ func newServerCmd() *cobra.Command {
 
 			if kafkaAddresses != "" && kafkaTopic != "" {
 				conf.Kafka = &messagebroker.Config{
-					Addresses: kafkaAddresses,
-					Topic:     kafkaTopic,
+					Addresses:    kafkaAddresses,
+					Topic:        kafkaTopic,
+					WriteTimeout: kafkaWriteTimeout.String(),
 				}
 			}
 
