@@ -108,6 +108,8 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				Name:                      &name,
 				AuthWebhookURL:            &authWebhookURL,
 				AuthWebhookMethods:        &authWebhookMethods,
+				EventWebhookURL:           &eventWebhookURL,
+				EventWebhookTypes:         &eventWebhookTypes,
 				ClientDeactivateThreshold: &clientDeactivateThreshold,
 			},
 		)

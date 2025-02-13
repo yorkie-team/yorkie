@@ -783,9 +783,9 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			EventWebhookURL:           &newEventWebhookURL,
 			EventWebhookTypes:         &newEventWebhookTypes,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)

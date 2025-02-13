@@ -922,6 +922,12 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.AuthWebhookMethods != nil {
 		updatableProjectFields.AuthWebhookMethods = &pbProjectFields.AuthWebhookMethods.Methods
 	}
+	if pbProjectFields.EventWebhookUrl != nil {
+		updatableProjectFields.EventWebhookURL = &pbProjectFields.EventWebhookUrl.Value
+	}
+	if pbProjectFields.EventWebhookTypes != nil {
+		updatableProjectFields.EventWebhookTypes = &pbProjectFields.EventWebhookTypes.Types
+	}
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
 	}

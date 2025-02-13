@@ -23,6 +23,11 @@ const (
 	DocRootChanged EventWebhookType = "DocumentRootChanged"
 )
 
+// IsValidEventType checks whether the given event type is valid.
+func IsValidEventType(eventType string) bool {
+	return eventType == string(DocRootChanged)
+}
+
 // EventWebhookAttribute represents the attribute of the webhook.
 type EventWebhookAttribute struct {
 	Key      string `json:"key"`
