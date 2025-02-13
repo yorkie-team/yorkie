@@ -59,6 +59,8 @@ func ToProject(project *types.Project) *api.Project {
 		Name:                      project.Name,
 		AuthWebhookUrl:            project.AuthWebhookURL,
 		AuthWebhookMethods:        project.AuthWebhookMethods,
+		EventWebhookUrl:           project.EventWebhookURL,
+		EventWebhookTypes:         project.EventWebhookTypes,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,

@@ -55,6 +55,8 @@ func FromProject(pbProject *api.Project) *types.Project {
 		Name:                      pbProject.Name,
 		AuthWebhookURL:            pbProject.AuthWebhookUrl,
 		AuthWebhookMethods:        pbProject.AuthWebhookMethods,
+		EventWebhookURL:           pbProject.EventWebhookUrl,
+		EventWebhookTypes:         pbProject.EventWebhookTypes,
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,

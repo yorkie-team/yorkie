@@ -1825,6 +1825,18 @@ components:
           description: ""
           title: created_at
           type: object
+        eventWebhookTypes:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: event_webhook_types
+          type: array
+        eventWebhookUrl:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: string
         id:
           additionalProperties: false
           description: ""
