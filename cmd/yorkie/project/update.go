@@ -37,6 +37,9 @@ var (
 	flagAuthWebhookURL            string
 	flagAuthWebhookMethodsAdd     []string
 	flagAuthWebhookMethodsRm      []string
+	flagEventWebhookURL           string
+	flagEventWebhookEventsAdd     []string
+	flagEventWebhookEventsRm      []string
 	flagName                      string
 	flagClientDeactivateThreshold string
 )
@@ -50,6 +53,10 @@ var allAuthWebhookMethods = []string{
 	string(types.PushPull),
 	string(types.WatchDocuments),
 	string(types.Broadcast),
+}
+
+var allEventWebhookTypes = []string{
+	string(types.DocRootChanged),
 }
 
 func newUpdateCommand() *cobra.Command {
@@ -95,30 +102,24 @@ func newUpdateCommand() *cobra.Command {
 				newAuthWebhookURL = flagAuthWebhookURL
 			}
 
-			methods := make(map[string]struct{})
-			for _, m := range project.AuthWebhookMethods {
-				methods[m] = struct{}{}
+			newAuthWebhookMethods := updateStringSlice(
+				project.AuthWebhookMethods, // prev
+				flagAuthWebhookMethodsRm,   // removes
+				flagAuthWebhookMethodsAdd,  // adds
+				allAuthWebhookMethods,      // all
+			)
+
+			newEventWebhookURL := project.EventWebhookURL
+			if cmd.Flags().Lookup("event-webhook-url").Changed { // allow empty string
+				newEventWebhookURL = flagEventWebhookURL
 			}
-			for _, m := range flagAuthWebhookMethodsRm {
-				if m == "ALL" {
-					methods = make(map[string]struct{})
-				} else {
-					delete(methods, m)
-				}
-			}
-			for _, m := range flagAuthWebhookMethodsAdd {
-				if m == "ALL" {
-					for _, m := range allAuthWebhookMethods {
-						methods[m] = struct{}{}
-					}
-				} else {
-					methods[m] = struct{}{}
-				}
-			}
-			newAuthWebhookMethods := make([]string, 0, len(methods))
-			for m := range methods {
-				newAuthWebhookMethods = append(newAuthWebhookMethods, m)
-			}
+
+			newEventWebhookTypes := updateStringSlice(
+				project.EventWebhookTypes, // prev
+				flagEventWebhookEventsRm,  // removes
+				flagEventWebhookEventsAdd, // adds
+				allEventWebhookTypes,      // all
+			)
 
 			newClientDeactivateThreshold := project.ClientDeactivateThreshold
 			if flagClientDeactivateThreshold != "" {
@@ -129,6 +130,8 @@ func newUpdateCommand() *cobra.Command {
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
 				AuthWebhookMethods:        &newAuthWebhookMethods,
+				EventWebhookURL:           &newEventWebhookURL,
+				EventWebhookTypes:         &newEventWebhookTypes,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			}
 
@@ -179,6 +182,40 @@ func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Pr
 	return nil
 }
 
+func updateStringSlice(
+	prev, removes, adds, all []string,
+) []string {
+	stringSet := make(map[string]struct{})
+
+	for _, p := range prev {
+		stringSet[p] = struct{}{}
+	}
+
+	for _, r := range removes {
+		if r == "ALL" {
+			stringSet = make(map[string]struct{})
+		} else {
+			delete(stringSet, r)
+		}
+	}
+
+	for _, a := range adds {
+		if a == "ALL" {
+			for _, m := range all {
+				stringSet[m] = struct{}{}
+			}
+		} else {
+			stringSet[a] = struct{}{}
+		}
+	}
+
+	updated := make([]string, 0, len(stringSet))
+	for s := range stringSet {
+		updated = append(updated, s)
+	}
+	return updated
+}
+
 func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
@@ -204,6 +241,24 @@ func init() {
 		"auth-webhook-method-rm",
 		[]string{},
 		"authorization-webhook methods to remove ('ALL' for all methods)",
+	)
+	cmd.Flags().StringVar(
+		&flagEventWebhookURL,
+		"event-webhook-url",
+		"",
+		"event-webhook update url",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagEventWebhookEventsAdd,
+		"event-webhook-types-add",
+		[]string{},
+		"event-webhook methods to add ('ALL' for all events)",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagEventWebhookEventsRm,
+		"event-webhook-types-rm",
+		[]string{},
+		"event-webhook types to remove ('ALL' for all events)",
 	)
 	cmd.Flags().StringVar(
 		&flagClientDeactivateThreshold,
