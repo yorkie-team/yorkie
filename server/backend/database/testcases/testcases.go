@@ -838,7 +838,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 04. Update EventWebhookTypes test
-		newEventWebhookTypes2 := []string{""}
+		var newEventWebhookTypes2 []string
 		newAuthWebhookMethods2 := []string{
 			string(types.DetachDocument),
 			string(types.PushPull),
