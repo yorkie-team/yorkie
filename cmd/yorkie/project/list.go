@@ -86,6 +86,8 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 			"SECRET KEY",
 			"AUTH WEBHOOK URL",
 			"AUTH WEBHOOK METHODS",
+			"EVENT WEBHOOK URL",
+			"EVENT WEBHOOK TYPES",
 			"CLIENT DEACTIVATE THRESHOLD",
 			"CREATED AT",
 		})
@@ -96,6 +98,8 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 				project.SecretKey,
 				project.AuthWebhookURL,
 				project.AuthWebhookMethods,
+				project.EventWebhookURL,
+				project.EventWebhookTypes,
 				project.ClientDeactivateThreshold,
 				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
 			})
