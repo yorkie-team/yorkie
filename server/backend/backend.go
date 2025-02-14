@@ -54,12 +54,9 @@ type Backend struct {
 	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
 	// EventWebhookCache is used to cache the response of the event webhook.
-	EventWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
-		int,
-		*types.EventWebhookResponse,
-	]]
+	EventWebhookCache *cache.LRUExpireCache[string, int]
 	// EventWebhookClient is used to send event webhook
-	EventWebhookClient *webhook.Client[types.EventWebhookRequest, types.EventWebhookResponse]
+	EventWebhookClient *webhook.Client[types.EventWebhookRequest, int]
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
@@ -111,10 +108,10 @@ func New(
 		},
 	)
 
-	eventWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.EventWebhookResponse]](
-		100,
+	eventWebhookCache := cache.NewLRUExpireCache[string, int](
+		conf.EventWebhookCacheSize,
 	)
-	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, types.EventWebhookResponse](
+	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, int](
 		webhook.Options{
 			MaxRetries:      conf.EventWebhookMaxRetries,
 			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),

@@ -104,6 +104,10 @@ func (c *Client[Req, Res]) Send(
 			return resp.StatusCode, ErrUnexpectedStatusCode
 		}
 
+		if _, ok := any(res).(int); ok {
+			return resp.StatusCode, nil
+		}
+
 		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
 			return resp.StatusCode, ErrUnexpectedResponse
 		}

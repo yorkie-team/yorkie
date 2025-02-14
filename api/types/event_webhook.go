@@ -39,7 +39,3 @@ type EventWebhookRequest struct {
 	Type       EventWebhookType      `json:"type"`
 	Attributes EventWebhookAttribute `json:"attributes"`
 }
-
-// EventWebhookResponse represents the request of the webhook.
-type EventWebhookResponse struct {
-}

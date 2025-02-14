@@ -25,7 +25,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
@@ -56,7 +55,7 @@ func SendEvent(
 		return nil
 	}
 
-	res, status, err := be.EventWebhookClient.Send(
+	_, status, err := be.EventWebhookClient.Send(
 		ctx,
 		prj.EventWebhookURL,
 		prj.SecretKey,
@@ -68,10 +67,7 @@ func SendEvent(
 
 	be.EventWebhookCache.Add(
 		cacheKey,
-		pkgtypes.Pair[int, *types.EventWebhookResponse]{
-			First:  status,
-			Second: res,
-		},
+		status,
 		be.Config.ParseEventWebhookCacheTTL(),
 	)
 
