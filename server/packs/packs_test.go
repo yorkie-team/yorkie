@@ -104,6 +104,7 @@ func TestMain(m *testing.M) {
 			AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookMinWaitInterval:  helper.AuthWebhookMinWaitInterval.String(),
 			AuthWebhookRequestTimeout:   helper.AuthWebhookRequestTimeout.String(),
+			EventWebhookCacheSize:       helper.EventWebhookSize,
 			EventWebhookCacheTTL:        helper.EventWebhookCacheTTL.String(),
 			EventWebhookMaxWaitInterval: helper.EventWebhookMaxWaitInterval.String(),
 			EventWebhookMinWaitInterval: helper.EventWebhookMinWaitInterval.String(),
