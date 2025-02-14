@@ -33,6 +33,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -79,168 +80,135 @@ func newUserServer(t *testing.T, requestCounter *atomic.Int32, secretKey, docKey
 		assert.Equal(t, types.DocRootChanged, req.Type)
 		assert.Equal(t, docKey, req.Attributes.Key)
 
-		assert.NoError(t, err)
 		w.WriteHeader(http.StatusOK)
 	}))
 }
 
-func TestRegisterEventWebhook(t *testing.T) {
-	// 01. setup yorkie server
+// setupYorkieServer initializes the Yorkie server and admin client.
+func setupYorkieServer(t *testing.T, webhookCacheTTL string) (*server.Yorkie, *admin.Client) {
 	conf := helper.TestConfig()
-	conf.Backend.EventWebhookCacheTTL = "0ms"
+	conf.Backend.EventWebhookCacheTTL = webhookCacheTTL
 	conf.Backend.ProjectCacheTTL = "0ms"
 	svr, err := server.New(conf)
 	assert.NoError(t, err)
 	assert.NoError(t, svr.Start())
-	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+	t.Cleanup(func() { assert.NoError(t, svr.Shutdown(true)) })
 
-	// 02. setup admin client
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { adminCli.Close() }()
+	t.Cleanup(func() { adminCli.Close() })
 
-	t.Run("register and unregister event webhook test", func(t *testing.T) {
-		// 01. setup project
-		project, err := adminCli.CreateProject(context.Background(), "event-webhook-test")
-		assert.NoError(t, err)
+	return svr, adminCli
+}
 
-		// 02. setup client
-		ctx := context.Background()
-		cli, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithAPIKey(project.PublicKey),
-		)
-		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli.Close()) }()
-		assert.NoError(t, cli.Activate(ctx))
-		defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
+// createProjectAndClient creates a project and sets up a Yorkie client.
+func createProjectAndClient(t *testing.T, ctx context.Context, adminCli *admin.Client, rpcAddr string) (*types.Project, *client.Client) {
+	project, err := adminCli.CreateProject(ctx, "event-webhook-test")
+	assert.NoError(t, err)
 
-		// 03. setup document
-		docKey := helper.TestDocKey(t)
-		doc := document.New(docKey)
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
-
-		// 04. setup user server
-		requestCnt := atomic.NewInt32(0)
-		userServer := newUserServer(t, requestCnt, project.SecretKey, docKey.String())
-
-		// 05. register event webhook
-		project.EventWebhookURL = userServer.URL
-		prj, err := adminCli.UpdateProject(
-			ctx,
-			project.ID.String(),
-			&types.UpdatableProjectFields{
-				EventWebhookURL:   &project.EventWebhookURL,
-				EventWebhookTypes: &[]string{string(types.DocRootChanged)},
-			},
-		)
-		assert.NoError(t, err)
-		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
-		assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookTypes[0])
-
-		// 06. test DocRootChanged event
-		prev := requestCnt.Load()
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			cnt := root.GetCounter("counter")
-			cnt.Increase(1)
-			return nil
-		}))
-		assert.NoError(t, cli.Sync(ctx))
-		assert.Equal(t, prev+1, requestCnt.Load())
-
-		// 07. unregister event webhook
-		prj, err = adminCli.UpdateProject(
-			ctx,
-			project.ID.String(),
-			&types.UpdatableProjectFields{
-				EventWebhookURL:   &project.EventWebhookURL,
-				EventWebhookTypes: &[]string{},
-			},
-		)
-		assert.NoError(t, err)
-		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
-		assert.Equal(t, 0, len(prj.EventWebhookTypes))
-
-		// 08. check webhook isn't triggered
-		prev = requestCnt.Load()
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			cnt := root.GetCounter("counter")
-			cnt.Increase(1)
-			return nil
-		}))
-		assert.NoError(t, cli.Sync(ctx))
-		assert.Equal(t, prev, requestCnt.Load())
+	cli, err := client.Dial(rpcAddr, client.WithAPIKey(project.PublicKey))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+	t.Cleanup(func() {
+		assert.NoError(t, cli.Deactivate(ctx))
+		assert.NoError(t, cli.Close())
 	})
 
+	return project, cli
+}
+
+// attachTestDocument attaches a new document with an initial root.
+func attachTestDocument(t *testing.T, ctx context.Context, cli *client.Client) (*document.Document, string) {
+	docKey := helper.TestDocKey(t)
+	doc := document.New(docKey)
+	initialRoot := map[string]any{
+		"counter": json.NewCounter(0, crdt.LongCnt),
+	}
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(initialRoot)))
+	return doc, docKey.String()
+}
+
+// registerWebhook updates the project to register (or unregister) the webhook.
+func registerWebhook(t *testing.T, ctx context.Context, adminCli *admin.Client, project *types.Project, webhookURL string, eventTypes []string) *types.Project {
+	project.EventWebhookURL = webhookURL
+	prj, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+		EventWebhookURL:   &project.EventWebhookURL,
+		EventWebhookTypes: &eventTypes,
+	})
+	assert.NoError(t, err)
+	return prj
+}
+
+func TestRegisterEventWebhook(t *testing.T) {
+	ctx := context.Background()
+	svr, adminCli := setupYorkieServer(t, "0ms")
+	project, cli := createProjectAndClient(t, ctx, adminCli, svr.RPCAddr())
+
+	// 01. Attach a new document.
+	doc, docKey := attachTestDocument(t, ctx, cli)
+
+	// 02. Set up the user webhook server.
+	requestCnt := atomic.NewInt32(0)
+	userServer := newUserServer(t, requestCnt, project.SecretKey, docKey)
+	defer userServer.Close()
+
+	// 03. Register the event webhook.
+	prj := registerWebhook(t, ctx, adminCli, project, userServer.URL, []string{string(types.DocRootChanged)})
+	assert.Equal(t, userServer.URL, prj.EventWebhookURL)
+	assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookTypes[0])
+
+	// 04. Test the DocRootChanged event is sent to the user server
+	prev := requestCnt.Load()
+	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetCounter("counter").Increase(1)
+		return nil
+	}))
+	assert.NoError(t, cli.Sync(ctx))
+	assert.Equal(t, prev+1, requestCnt.Load())
+
+	// 05. Unregister the event webhook.
+	prj = registerWebhook(t, ctx, adminCli, project, userServer.URL, []string{})
+	assert.Equal(t, userServer.URL, prj.EventWebhookURL)
+	assert.Equal(t, 0, len(prj.EventWebhookTypes))
+
+	// 06. Test the DocRootChanged event is not sent to the user server
+	prev = requestCnt.Load()
+	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetCounter("counter").Increase(1)
+		return nil
+	}))
+	assert.NoError(t, cli.Sync(ctx))
+	assert.Equal(t, prev, requestCnt.Load())
 }
 
 func TestDocRootChangedEventWebhook(t *testing.T) {
-	// 01. setup yorkie server
-	conf := helper.TestConfig()
-	conf.Backend.EventWebhookCacheTTL = "0ms"
-	conf.Backend.ProjectCacheTTL = "0ms"
-	svr, err := server.New(conf)
-	assert.NoError(t, err)
-	assert.NoError(t, svr.Start())
-	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-	// 02. setup admin client
-	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { adminCli.Close() }()
-
-	// 01. setup project
-	project, err := adminCli.CreateProject(context.Background(), "event-webhook-test")
-	assert.NoError(t, err)
-
-	// 02. setup client
 	ctx := context.Background()
-	cli, err := client.Dial(
-		svr.RPCAddr(),
-		client.WithAPIKey(project.PublicKey),
-	)
-	assert.NoError(t, err)
-	defer func() { assert.NoError(t, cli.Close()) }()
-	assert.NoError(t, cli.Activate(ctx))
-	defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
+	svr, adminCli := setupYorkieServer(t, "0ms")
+	project, cli := createProjectAndClient(t, ctx, adminCli, svr.RPCAddr())
 
 	t.Run("DocRootChanged event test", func(t *testing.T) {
-		// 03. setup document
-		docKey := helper.TestDocKey(t)
-		doc := document.New(docKey)
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
+		// 01. Attach a new document.
+		doc, docKey := attachTestDocument(t, ctx, cli)
 
-		// 04. setup user server
+		// 02. Set up the user webhook server.
 		requestCnt := atomic.NewInt32(0)
-		userServer := newUserServer(t, requestCnt, project.SecretKey, docKey.String())
+		userServer := newUserServer(t, requestCnt, project.SecretKey, docKey)
+		defer userServer.Close()
 
-		// 05. register event webhook
-		project.EventWebhookURL = userServer.URL
-		prj, err := adminCli.UpdateProject(
-			ctx,
-			project.ID.String(),
-			&types.UpdatableProjectFields{
-				EventWebhookURL:   &project.EventWebhookURL,
-				EventWebhookTypes: &[]string{string(types.DocRootChanged)},
-			},
-		)
-		assert.NoError(t, err)
+		// 03. Register the event webhook.
+		prj := registerWebhook(t, ctx, adminCli, project, userServer.URL, []string{string(types.DocRootChanged)})
 		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
 		assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookTypes[0])
 
-		// 01. Update only root
+		// 04. Update only root.
 		prev := requestCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			cnt := root.GetCounter("counter")
-			cnt.Increase(1)
+			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 		assert.Equal(t, prev+1, requestCnt.Load())
 
-		// 02. Update only presence
+		// 05. Update only presence.
 		prev = requestCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "2")
@@ -249,12 +217,11 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx))
 		assert.Equal(t, prev, requestCnt.Load())
 
-		// 03. Update root and presence
+		// 06. Update both root and presence.
 		prev = requestCnt.Load()
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "3")
-			cnt := root.GetCounter("counter")
-			cnt.Increase(1)
+			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
@@ -264,65 +231,30 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 
 func TestEventWebhookCache(t *testing.T) {
 	cacheTTL := 10 * time.Millisecond
-	// 01. setup yorkie server
-	conf := helper.TestConfig()
-	conf.Backend.EventWebhookCacheTTL = cacheTTL.String()
-	conf.Backend.ProjectCacheTTL = "0ms"
-	svr, err := server.New(conf)
-	assert.NoError(t, err)
-	assert.NoError(t, svr.Start())
-	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-	// 02. setup admin client
-	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { adminCli.Close() }()
-
-	// 01. setup project
-	project, err := adminCli.CreateProject(context.Background(), "event-webhook-test")
-	assert.NoError(t, err)
-
-	// 02. setup client
 	ctx := context.Background()
-	cli, err := client.Dial(
-		svr.RPCAddr(),
-		client.WithAPIKey(project.PublicKey),
-	)
-	assert.NoError(t, err)
-	defer func() { assert.NoError(t, cli.Close()) }()
-	assert.NoError(t, cli.Activate(ctx))
-	defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
+	svr, adminCli := setupYorkieServer(t, cacheTTL.String())
+	project, cli := createProjectAndClient(t, ctx, adminCli, svr.RPCAddr())
 
 	t.Run("throttling event test", func(t *testing.T) {
-		// 03. setup document
-		docKey := helper.TestDocKey(t)
-		doc := document.New(docKey)
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
+		// 01. Attach a new document.
+		doc, docKey := attachTestDocument(t, ctx, cli)
 
-		// 04. setup user server
+		// 02. Set up the user webhook server.
 		requestCnt := atomic.NewInt32(0)
-		userServer := newUserServer(t, requestCnt, project.SecretKey, docKey.String())
+		userServer := newUserServer(t, requestCnt, project.SecretKey, docKey)
+		defer userServer.Close()
 
-		// 05. register event webhook
-		project.EventWebhookURL = userServer.URL
-		prj, err := adminCli.UpdateProject(
-			ctx,
-			project.ID.String(),
-			&types.UpdatableProjectFields{
-				EventWebhookURL:   &project.EventWebhookURL,
-				EventWebhookTypes: &[]string{string(types.DocRootChanged)},
-			},
-		)
-		assert.NoError(t, err)
+		// 03. Register the event webhook.
+		prj := registerWebhook(t, ctx, adminCli, project, userServer.URL, []string{string(types.DocRootChanged)})
 		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
 		assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookTypes[0])
 
+		// 04. Test request throttled
 		prevCount := requestCnt.Load()
 
 		expectedUpdates := 5
-		testDuration := cacheTTL * time.Duration(expectedUpdates) // Total test duration
-		interval := cacheTTL / 2                                  // Throttling interval
+		testDuration := cacheTTL * time.Duration(expectedUpdates)
+		interval := cacheTTL / 10
 
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
