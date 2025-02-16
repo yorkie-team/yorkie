@@ -22,6 +22,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestID(t *testing.T) {
@@ -38,4 +41,141 @@ func TestID(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, bytes, bytesID)
 	})
+}
+
+func TestFindMinVersionVector(t *testing.T) {
+	actor1, _ := time.ActorIDFromHex("000000000000000000000001")
+	actor2, _ := time.ActorIDFromHex("000000000000000000000002")
+	actor3, _ := time.ActorIDFromHex("000000000000000000000003")
+
+	tests := []struct {
+		name            string
+		vvInfos         []database.VersionVectorInfo
+		excludeClientID types.ID
+		expect          time.VersionVector
+	}{
+		{
+			name:            "empty version vector infos",
+			vvInfos:         []database.VersionVectorInfo{},
+			excludeClientID: "",
+			expect:          nil,
+		},
+		{
+			name: "single version vector info",
+			vvInfos: []database.VersionVectorInfo{
+				{
+					ClientID: "client1",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 5,
+						actor2: 3,
+					}),
+				},
+			},
+			excludeClientID: "",
+			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+				actor1: 5,
+				actor2: 3,
+			}),
+		},
+		{
+			name: "exclude client",
+			vvInfos: []database.VersionVectorInfo{
+				{
+					ClientID: "client1",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 5,
+						actor2: 3,
+					}),
+				},
+				{
+					ClientID: "client2",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 3,
+						actor2: 4,
+					}),
+				},
+			},
+			excludeClientID: "client1",
+			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+				actor1: 3,
+				actor2: 4,
+			}),
+		},
+		{
+			name: "exclude all clients",
+			vvInfos: []database.VersionVectorInfo{
+				{
+					ClientID: "client1",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 5,
+					}),
+				},
+			},
+			excludeClientID: "client1",
+			expect:          nil,
+		},
+		{
+			name: "multiple clients with different actors",
+			vvInfos: []database.VersionVectorInfo{
+				{
+					ClientID: "client1",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 5,
+						actor2: 3,
+					}),
+				},
+				{
+					ClientID: "client2",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor2: 2,
+						actor3: 4,
+					}),
+				},
+			},
+			excludeClientID: "",
+			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+				actor1: 0,
+				actor2: 2,
+				actor3: 0,
+			}),
+		},
+		{
+			name: "all clients have same actors",
+			vvInfos: []database.VersionVectorInfo{
+				{
+					ClientID: "client1",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 5,
+						actor2: 3,
+					}),
+				},
+				{
+					ClientID: "client2",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 3,
+						actor2: 4,
+					}),
+				},
+				{
+					ClientID: "client3",
+					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+						actor1: 4,
+						actor2: 2,
+					}),
+				},
+			},
+			excludeClientID: "",
+			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+				actor1: 3,
+				actor2: 2,
+			}),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := database.FindMinVersionVector(tc.vvInfos, tc.excludeClientID)
+			assert.Equal(t, tc.expect, result)
+		})
+	}
 }
