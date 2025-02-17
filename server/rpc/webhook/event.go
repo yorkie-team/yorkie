@@ -80,7 +80,7 @@ func buildEventWebhookBody(docKey string, webhookType types.EventWebhookType) ([
 		Type: webhookType,
 		Attributes: types.EventWebhookAttribute{
 			Key:      docKey,
-			IssuedAt: gotime.Now().Format(gotime.RFC3339),
+			IssuedAt: gotime.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		},
 	}
 
