@@ -1258,28 +1258,14 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 		return nil, fmt.Errorf("decode version vectors: %w", err)
 	}
 
-	// 02. Compute min version vector.
-	var minVersionVector time.VersionVector
-
-	// 02-1. Compute min version vector of other clients and collect attachedActorIDs.
-	for _, vvi := range versionVectorInfos {
-		if clientInfo.ID == vvi.ClientID {
-			continue
-		}
-
-		if minVersionVector == nil {
-			minVersionVector = vvi.VersionVector
-			continue
-		}
-
-		minVersionVector = minVersionVector.Min(vvi.VersionVector)
-	}
+	// 02-1. Compute min version vector of other clients.
+	minVersionVector := database.FindMinVersionVector(versionVectorInfos, clientInfo.ID)
+	// 02-2. Compute min version vector with current client's version vector.
 	if minVersionVector == nil {
 		minVersionVector = versionVector
+	} else {
+		minVersionVector = minVersionVector.Min(versionVector)
 	}
-
-	// 02-2. Compute min version vector with current client's version vector.
-	minVersionVector = minVersionVector.Min(versionVector)
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.

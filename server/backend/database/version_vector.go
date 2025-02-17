@@ -29,3 +29,36 @@ type VersionVectorInfo struct {
 	ClientID      types.ID           `bson:"client_id"`
 	VersionVector time.VersionVector `bson:"version_vector"`
 }
+
+// FindMinVersionVector finds the minimum version vector from the given version vector infos.
+// It excludes the version vector of the given client ID if specified.
+func FindMinVersionVector(vvInfos []VersionVectorInfo, excludeClientID types.ID) time.VersionVector {
+	var minVV time.VersionVector
+
+	for _, vvi := range vvInfos {
+		if vvi.ClientID == excludeClientID {
+			continue
+		}
+
+		if minVV == nil {
+			minVV = vvi.VersionVector.DeepCopy()
+			continue
+		}
+
+		for actorID, lamport := range vvi.VersionVector {
+			if currentLamport, exists := minVV[actorID]; !exists {
+				minVV[actorID] = 0
+			} else if lamport < currentLamport {
+				minVV[actorID] = lamport
+			}
+		}
+
+		for actorID := range minVV {
+			if _, exists := vvi.VersionVector[actorID]; !exists {
+				minVV[actorID] = 0
+			}
+		}
+	}
+
+	return minVV
+}

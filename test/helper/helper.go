@@ -156,6 +156,15 @@ func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 	return vector
 }
 
+// VersionVectorOf creates a new version vector from the given actors.
+func VersionVectorOf(actors map[*time.ActorID]int64) time.VersionVector {
+	vector := time.NewVersionVector()
+	for actor, lamport := range actors {
+		vector.Set(actor, lamport)
+	}
+	return vector
+}
+
 // TokensEqualBetween is a helper function that checks the tokens between the given
 // indexes.
 func TokensEqualBetween(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
