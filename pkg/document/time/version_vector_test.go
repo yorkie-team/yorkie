@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package time_test
 
 import (
@@ -28,12 +44,12 @@ func TestVersionVector(t *testing.T) {
 		},
 		{
 			name: "v1 has values, v2 is empty",
-			v1: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
 			v2: time.NewVersionVector(),
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 0,
 				actor2: 0,
 			}),
@@ -41,41 +57,41 @@ func TestVersionVector(t *testing.T) {
 		{
 			name: "v2 has values, v1 is empty",
 			v1:   time.NewVersionVector(),
-			v2: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 0,
 				actor2: 0,
 			}),
 		},
 		{
 			name: "both vectors have same keys with different values",
-			v1: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			v2: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 3,
 				actor2: 4,
 			}),
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 3,
 				actor2: 3,
 			}),
 		},
 		{
 			name: "vectors have different keys",
-			v1: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			v2: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor2: 4,
 				actor3: 6,
 			}),
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 0,
 				actor2: 3,
 				actor3: 0,

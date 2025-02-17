@@ -156,8 +156,8 @@ func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 	return vector
 }
 
-// NewVersionVectorFromActors creates a new VersionVector from a map of ActorIDs and their lamport timestamps.
-func NewVersionVectorFromActors(actors map[*time.ActorID]int64) time.VersionVector {
+// VersionVectorOf creates a new version vector from the given actors.
+func VersionVectorOf(actors map[*time.ActorID]int64) time.VersionVector {
 	vector := time.NewVersionVector()
 	for actor, lamport := range actors {
 		vector.Set(actor, lamport)

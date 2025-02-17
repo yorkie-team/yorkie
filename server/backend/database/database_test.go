@@ -65,14 +65,14 @@ func TestFindMinVersionVector(t *testing.T) {
 			vvInfos: []database.VersionVectorInfo{
 				{
 					ClientID: "client1",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 5,
 						actor2: 3,
 					}),
 				},
 			},
 			excludeClientID: "",
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
@@ -82,21 +82,21 @@ func TestFindMinVersionVector(t *testing.T) {
 			vvInfos: []database.VersionVectorInfo{
 				{
 					ClientID: "client1",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 5,
 						actor2: 3,
 					}),
 				},
 				{
 					ClientID: "client2",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 3,
 						actor2: 4,
 					}),
 				},
 			},
 			excludeClientID: "client1",
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 3,
 				actor2: 4,
 			}),
@@ -106,7 +106,7 @@ func TestFindMinVersionVector(t *testing.T) {
 			vvInfos: []database.VersionVectorInfo{
 				{
 					ClientID: "client1",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 5,
 					}),
 				},
@@ -119,21 +119,21 @@ func TestFindMinVersionVector(t *testing.T) {
 			vvInfos: []database.VersionVectorInfo{
 				{
 					ClientID: "client1",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 5,
 						actor2: 3,
 					}),
 				},
 				{
 					ClientID: "client2",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor2: 2,
 						actor3: 4,
 					}),
 				},
 			},
 			excludeClientID: "",
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 0,
 				actor2: 2,
 				actor3: 0,
@@ -144,28 +144,28 @@ func TestFindMinVersionVector(t *testing.T) {
 			vvInfos: []database.VersionVectorInfo{
 				{
 					ClientID: "client1",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 5,
 						actor2: 3,
 					}),
 				},
 				{
 					ClientID: "client2",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 3,
 						actor2: 4,
 					}),
 				},
 				{
 					ClientID: "client3",
-					VersionVector: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+					VersionVector: helper.VersionVectorOf(map[*time.ActorID]int64{
 						actor1: 4,
 						actor2: 2,
 					}),
 				},
 			},
 			excludeClientID: "",
-			expect: helper.NewVersionVectorFromActors(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
 				actor1: 3,
 				actor2: 2,
 			}),
