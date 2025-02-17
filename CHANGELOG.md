@@ -7,6 +7,32 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-02-17
+
+### Added
+
+- Add HMAC Signing Support for Webhook Client Security by @window9u in https://github.com/yorkie-team/yorkie/pull/1134
+- Add Request Timing Controls for Auth Webhook Client by @window9u in https://github.com/yorkie-team/yorkie/pull/1142
+- Extend RWMutex Interface for locker package by @raararaara in https://github.com/yorkie-team/yorkie/pull/1135
+- Add Kafka Producer for Analytics and User Metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1143
+- Add Benchmarks for VersionVector Performance Analysis by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1150
+- Add Kafka options to yorkie-cluster and missing WriteTimeout by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1149
+- Optimize Minimum VersionVector Computation for Performance by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1153
+
+### Changed
+
+- Extract `pkg/webhook` package from `rpc/auth` package by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1133
+- Simplify Coordinator by Refactoring to Locker and PubSub by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1136
+- Extract DocEvent into events package by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1137
+- Update go.mod to use v1.23 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1141
+- Send UserEvent Message if userID exists by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1154
+
+### Fixed
+
+- Fix invalid yaml file by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1108
+- Modify `--backend-gateway-addr` argument in helm deployment resource by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1115
+- Fix complex complex test failures by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1148
+
 ## [0.5.8] - 2024-12-19
 
 ### Changed
