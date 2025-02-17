@@ -20,6 +20,7 @@ package types
 type EventWebhookType string
 
 const (
+	// DocRootChanged is an event that indicates the document's content was modified.
 	DocRootChanged EventWebhookType = "DocumentRootChanged"
 )
 
