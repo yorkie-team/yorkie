@@ -113,7 +113,7 @@ func (id ID) SyncClocks(other ID) ID {
 		otherVV.Set(other.actorID, other.lamport)
 	}
 
-	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(otherVV))
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(&otherVV))
 	newID.versionVector.Set(id.actorID, lamport)
 	return newID
 }
@@ -135,7 +135,7 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 	// problematic. To address this, we remove the InitialActorID from snapshots.
 	vector.Unset(time.InitialActorID)
 
-	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
+	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(&vector))
 	newID.versionVector.Set(id.actorID, lamport)
 
 	return newID

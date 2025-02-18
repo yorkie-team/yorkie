@@ -156,28 +156,30 @@ func (v VersionVector) Min(other VersionVector) VersionVector {
 }
 
 // Max returns new vv consists of every max value in each column.
-func (v VersionVector) Max(other VersionVector) VersionVector {
-	maxVV := NewVersionVector()
+func (v VersionVector) Max(other *VersionVector) VersionVector {
+	if other == nil {
+		return v
+	}
 
 	for key, value := range v {
-		if otherValue, exists := other[key]; exists {
+		if otherValue, exists := (*other)[key]; exists {
 			if value > otherValue {
-				maxVV[key] = value
+				v[key] = value
 			} else {
-				maxVV[key] = otherValue
+				v[key] = otherValue
 			}
 		} else {
-			maxVV[key] = value
+			v[key] = value
 		}
 	}
 
-	for key, value := range other {
+	for key, value := range *other {
 		if _, exists := v[key]; !exists {
-			maxVV[key] = value
+			v[key] = value
 		}
 	}
 
-	return maxVV
+	return v
 }
 
 // MaxLamport returns max lamport value in version vector.
