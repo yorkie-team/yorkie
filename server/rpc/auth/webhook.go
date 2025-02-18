@@ -58,11 +58,11 @@ func verifyAccess(
 	}
 
 	cacheKey := generateCacheKey(prj.PublicKey, body)
-	if entry, ok := be.WebhookCache.Get(cacheKey); ok {
+	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
 		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
-	res, status, err := be.WebhookClient.Send(
+	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
 		"",
@@ -74,7 +74,7 @@ func verifyAccess(
 
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
 	if status != http.StatusUnauthorized {
-		be.WebhookCache.Add(
+		be.AuthWebhookCache.Add(
 			cacheKey,
 			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
 			be.Config.ParseAuthWebhookCacheTTL(),

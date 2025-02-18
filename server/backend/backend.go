@@ -46,12 +46,12 @@ type Backend struct {
 	Config *Config
 
 	// AuthWebhookCache is used to cache the response of the auth webhook.
-	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+	AuthWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
 		int,
 		*types.AuthWebhookResponse,
 	]]
-	// WebhookClient is used to send auth webhook.
-	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	// AuthWebhookClient is used to send auth webhook.
+	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
 	// EventWebhookCache is used to cache the response of the event webhook.
 	EventWebhookCache *cache.LRUExpireCache[string, int]
@@ -95,11 +95,11 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the webhook webhookCache and client.
-	webhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	// 02. Create the webhook authWebhookCache and client.
+	authWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
-	webhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+	authWebhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		webhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
 			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
@@ -182,8 +182,8 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		WebhookCache:  webhookCache,
-		WebhookClient: webhookClient,
+		AuthWebhookCache:  authWebhookCache,
+		AuthWebhookClient: authWebhookClient,
 
 		EventWebhookClient: eventWebhookClient,
 		EventWebhookCache:  eventWebhookCache,
