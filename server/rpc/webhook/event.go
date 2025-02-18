@@ -38,7 +38,7 @@ func SendEvent(
 ) error {
 	webhookType := eventType.WebhookType()
 	if webhookType == "" {
-		return fmt.Errorf("invalid event webhook type")
+		return fmt.Errorf("invalid event webhook type: %s", eventType)
 	}
 
 	if !prj.RequireEventWebhook(webhookType) {

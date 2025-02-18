@@ -392,7 +392,7 @@ func init() {
 	)
 	cmd.Flags().DurationVar(
 		&eventWebhookCacheTTL,
-		"event-webhook-cache-auth-ttl",
+		"event-webhook-cache-ttl",
 		server.DefaultEventWebhookCacheTTL,
 		"TTL value to set when caching event webhook response.",
 	)
