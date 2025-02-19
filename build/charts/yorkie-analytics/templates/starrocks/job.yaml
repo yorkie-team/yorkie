@@ -1,0 +1,42 @@
+{{- if index .Values "yorkie-analytics" "starrocks" "enabled" }}      
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.name }}-init-starrocks-database-job
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: starrocks
+    app.kubernetes.io/part-of: yorkie-analytics
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      serviceAccountName: starrocks
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-starrocks-fe
+          image: bitnami/kubectl
+          command: [ "kubectl", "wait", "pod/kube-starrocks-fe-0", "--for", "condition=Ready", "--namespace", "{{ .Values.namespace }}", "--timeout", "300s" ]
+        - name: wait-for-starrocks-be
+          image: bitnami/kubectl
+          command: [ "kubectl", "wait", "pod/kube-starrocks-be-0", "--for", "condition=Ready", "--namespace", "{{ .Values.namespace }}", "--timeout", "300s" ]
+        {{- if index .Values "yorkie-analytics" "kafka" "enabled" }}
+        - name: wait-for-kafka
+          image: bitnami/kubectl
+          command: [ "kubectl", "wait", "pod/{{ $.Values.name }}-kafka-controller-0", "--for", "condition=Ready", "--namespace", "{{ .Values.namespace }}", "--timeout", "300s" ]
+        {{- end }}
+      containers:
+        - name: init-starrocks-database
+          image: {{ index .Values "yorkie-analytics" "starrocks" "image" "repository" }}:{{ index .Values "yorkie-analytics" "starrocks" "image" "tag" }}
+          command: [ "/bin/bash", "/etc/config/init-starrocks-database.sh" ]
+          volumeMounts:
+          - name: init-starrocks-database-script
+            mountPath: /etc/config
+      volumes:
+      - name: init-starrocks-database-script
+        configMap:
+          name: {{ .Values.name }}-init-starrocks-database-script
+  backoffLimit: 10
+{{- end }}

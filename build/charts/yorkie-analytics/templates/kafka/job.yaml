@@ -1,0 +1,34 @@
+{{- if index .Values "yorkie-analytics" "kafka" "enabled" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.name }}-init-kafka-topics-job
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: kafka
+    app.kubernetes.io/part-of: yorkie-analytics
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      serviceAccountName: starrocks
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-kafka
+          image: bitnami/kubectl
+          command: [ "kubectl", "wait", "pod/{{ $.Values.name }}-kafka-controller-0", "--for", "condition=Ready", "--namespace", "{{ .Values.namespace }}", "--timeout", "300s" ]
+      containers:
+        - name: init-kafka-topics
+          image: {{ index .Values "yorkie-analytics" "kafka" "image" "repository" }}:{{ index .Values "yorkie-analytics" "kafka" "image" "tag" }}
+          command: [ "/bin/bash", "/etc/config/init-kafka-topics.sh" ]
+          volumeMounts:
+          - name: init-kafka-topics-script
+            mountPath: /etc/config
+      volumes:
+      - name: init-kafka-topics-script
+        configMap:
+          name: {{ .Values.name }}-init-kafka-topics-script
+  backoffLimit: 10
+{{- end }}

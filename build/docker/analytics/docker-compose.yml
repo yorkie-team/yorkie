@@ -116,32 +116,34 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: |
       "
+      STARROCKS_MYSQL_HOST=starrocks-fe
+
+      sleep 5s
       echo -e 'Checking Starrocks status'
-      mysql -u root -h starrocks-fe -P 9030 -e 'show frontends\\G' | grep 'Alive: true' || echo -e 'Frontend is not ready'
-      mysql -u root -h starrocks-fe -P 9030 -e 'show backends\\G' | grep 'Alive: true' || echo -e 'Backend is not ready'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show frontends\\G' | grep 'Alive: true' || echo -e 'Frontend is not ready'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show backends\\G' | grep 'Alive: true' || echo -e 'Backend is not ready'
 
 
       echo -e 'Creating Yorkie database, tables and routine load'
-      mysql -P 9030 -h starrocks-fe -u root < /init-user-events-db.sql
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /init-user-events-db.sql
 
       echo -e 'Checking Yorkie database'
-      mysql -P 9030 -h starrocks-fe -u root -e 'show databases\\G'
-      mysql -P 9030 -h starrocks-fe -u root -e 'show databases\\G' | grep 'Database: yorkie' || echo -e 'Yorkie database not found'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show databases\\G'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show databases\\G' | grep 'Database: yorkie' || echo -e 'Yorkie database not found'
 
       echo -e 'Checking user_event table'
-      mysql -P 9030 -h starrocks-fe -u root -e 'show tables from yorkie\\G'
-      mysql -P 9030 -h starrocks-fe -u root -e 'show tables from yorkie\\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\\G'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
 
 
       sleep 5s
-
       echo -e 'Creating routine load'
-      mysql -P 9030 -h starrocks-fe -u root < /init-routine-load.sql
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /init-routine-load.sql
 
+      sleep 10s
       echo -e 'Checking event routine load'
-
-      mysql -P 9030 -h starrocks-fe -u root -e 'show routine load from yorkie\\G'
-      mysql -P 9030 -h starrocks-fe -u root -e 'show routine load from yorkie\\G' | grep -E "State: NEED_SCHEDULE|State: RUNNING" || echo -e 'Routine load is not running'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\\G'
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\\G' | grep -E "State: NEED_SCHEDULE|State: RUNNING" || echo -e 'Routine load is not running'
       "
 
 volumes:

@@ -1,0 +1,75 @@
+{{- if index .Values "yorkie-analytics" "starrocks" "enabled" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-init-starrocks-database-script
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: starrocks
+    app.kubernetes.io/part-of: yorkie-analytics
+data:
+  init-user-events-db.sql: |
+    CREATE DATABASE IF NOT EXISTS yorkie;
+
+    USE yorkie;
+
+    CREATE TABLE user_events (
+        user_id VARCHAR(64),
+        timestamp DATETIME, 
+        event_type VARCHAR(32),
+        project_id VARCHAR(64),
+        user_agent VARCHAR(32)
+    ) ENGINE = OLAP  
+    DUPLICATE KEY(user_id)  
+    DISTRIBUTED BY HASH(user_id) BUCKETS 10
+    PROPERTIES (  
+        "replication_num" = "1"  
+    );
+
+  init-routine-load.sql: |
+    CREATE ROUTINE LOAD yorkie.events ON user_events
+    PROPERTIES
+    (
+        "format" = "JSON",
+        "desired_concurrent_number"="1"
+    )
+    FROM KAFKA
+    (   
+        "kafka_broker_list" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-broker-list" }}",
+        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-topic" }}",
+        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "property-group-id" }}"
+    );
+
+  init-starrocks-database.sh: |
+    #!/bin/bash
+
+    STARROCKS_MYSQL_HOST=kube-starrocks-fe-service.{{ .Values.namespace }}.svc.cluster.local
+    
+    sleep 5s
+    echo -e 'Checking Starrocks status'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show frontends\G' | grep 'Alive: true' || echo -e 'Frontend is not ready'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show backends\G' | grep 'Alive: true' || echo -e 'Starrocks BE is not ready'
+
+
+    echo -e 'Creating Yorkie database, tables and routine load'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-user-events-db.sql
+
+    echo -e 'Checking Yorkie database'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show databases\G'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show databases\G' | grep 'Database: yorkie' || echo -e 'Yorkie database not found'
+
+    echo -e 'Checking user_event table'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
+
+
+    sleep 5s
+    echo -e 'Creating routine load'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-routine-load.sql
+
+    sleep 10s
+    echo -e 'Checking event routine load'
+
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G' | grep -E "State: NEED_SCHEDULE|State: RUNNING" || echo -e 'Routine load is not running'
+{{- end }}
