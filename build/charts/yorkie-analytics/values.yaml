@@ -28,7 +28,7 @@ kube-starrocks:
         tag: *starrocks-fe-tag
       resources:
         requests:
-          cpu: 1
+          cpu: "300m"
           memory: 1Gi
       storageSpec:
         name: fe
@@ -37,8 +37,8 @@ kube-starrocks:
       replicas: 1
       resources:
         requests:
-          cpu: 1
-          memory: 2Gi
+          cpu: "300m"
+          memory: 1Gi
       storageSpec:
         name: be
         storageSize: 15Gi

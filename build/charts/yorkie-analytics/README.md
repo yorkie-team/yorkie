@@ -1,6 +1,6 @@
 # yorkie-analytics
 
-Installs the yorkie-analytics, which provides analytics system with StarRocks and Grafana for analyizing usage of yorkie cluster.
+Installs the yorkie-analytics, which provides analytics system with Kafka and StarRocks for analyizing usage of yorkie cluster.
 
 ## Prerequisites
 

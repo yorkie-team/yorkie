@@ -1,6 +1,6 @@
 apiVersion: v2
 name: yorkie-analytics
-description: yorkie-analytics provides analytics system with kafka and starrocks for analyzing yorkie cluster
+description: yorkie-analytics provides analytics system with kafka and starrocks for analyzing usage of yorkie cluster
 type: application
 icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
 maintainers:
@@ -24,11 +24,11 @@ keywords:
 
 # Kube Kafka and Starrocks stack dependencies
 dependencies:
-  - name: kube-starrocks
-    version: 1.9.10
-    repository: https://starrocks.github.io/starrocks-kubernetes-operator
-    condition: yorkie-analytics.starrocks.enabled
   - name: kafka
     version: 31.3.1
     repository: oci://registry-1.docker.io/bitnamicharts
     condition: yorkie-analytics.kafka.enabled
+  - name: kube-starrocks
+    version: 1.9.10
+    repository: https://starrocks.github.io/starrocks-kubernetes-operator
+    condition: yorkie-analytics.starrocks.enabled
