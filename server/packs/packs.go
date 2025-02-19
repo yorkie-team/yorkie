@@ -37,7 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
-	"github.com/yorkie-team/yorkie/server/rpc/webhook"
+	"github.com/yorkie-team/yorkie/server/webhook"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
