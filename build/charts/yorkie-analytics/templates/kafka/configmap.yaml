@@ -1,0 +1,24 @@
+{{- if index .Values "yorkie-analytics" "kafka" "enabled" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-init-kafka-topics-script
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: kafka
+    app.kubernetes.io/part-of: yorkie-analytics
+data:
+  init-kafka-topics.sh: |
+    #!/bin/bash
+
+    KAFKA_HOST={{ .Values.name }}-kafka.{{ .Values.namespace }}.svc.cluster.local:9092
+    
+    echo -e 'Waiting for Kafka to be ready...'
+    kafka-topics.sh --bootstrap-server $KAFKA_HOST --list
+
+    echo -e 'Creating kafka topics'
+    kafka-topics.sh --bootstrap-server $KAFKA_HOST --create --if-not-exists --topic {{ index .Values "yorkie-analytics" "kafka" "topic" "name" }}
+
+    echo -e 'Successfully created the following topics:'
+    kafka-topics.sh --bootstrap-server $KAFKA_HOST --list
+{{- end }}
