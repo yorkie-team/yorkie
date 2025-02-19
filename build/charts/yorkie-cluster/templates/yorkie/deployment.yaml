@@ -81,11 +81,17 @@ spec:
           "{{ .Values.yorkie.ports.profilingPort }}",
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
-          {{- if and .Values.yorkie.args.kafkaAddresses .Values.yorkie.args.kafkaTopic }}
+          {{- if .Values.yorkie.args.kafkaAddresses }}
           "--kafka-addresses",
           "{{ .Values.yorkie.args.kafkaAddresses }}",
+          {{- if .Values.yorkie.args.kafkaTopic }}
           "--kafka-topic",
           "{{ .Values.yorkie.args.kafkaTopic }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.kafkaWriteTimeout }}
+          "--kafka-write-timeout",
+          "{{ .Values.yorkie.args.kafkaWriteTimeout }}",
+          {{- end }}
           {{- end }}
         ]
         ports:
