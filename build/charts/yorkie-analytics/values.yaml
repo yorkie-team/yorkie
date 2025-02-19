@@ -18,6 +18,8 @@ yorkie-analytics:
       tag: latest
     topic:
       name: user-events
+      partitions: 1
+      replicationFactor: 1
 
 kube-starrocks:
   starrocks:
@@ -51,9 +53,6 @@ kube-starrocks:
 kafka:
   kraft:
     clusterId: yorkie-analytics
-  provisioning:
-    replicationFactor: 1
-    numPartitions: 1
   listeners:
     client:
       protocol: PLAINTEXT

@@ -17,7 +17,7 @@ data:
     kafka-topics.sh --bootstrap-server $KAFKA_HOST --list
 
     echo -e 'Creating kafka topics'
-    kafka-topics.sh --bootstrap-server $KAFKA_HOST --create --if-not-exists --topic {{ index .Values "yorkie-analytics" "kafka" "topic" "name" }}
+    kafka-topics.sh --bootstrap-server $KAFKA_HOST --create --if-not-exists --topic {{ index .Values "yorkie-analytics" "kafka" "topic" "name" }} --partitions {{ index .Values "yorkie-analytics" "kafka" "topic" "partitions" }} --replication-factor {{ index .Values "yorkie-analytics" "kafka" "topic" "replicationFactor" }}
 
     echo -e 'Successfully created the following topics:'
     kafka-topics.sh --bootstrap-server $KAFKA_HOST --list
