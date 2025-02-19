@@ -1,0 +1,9 @@
+dependencies:
+- name: kube-starrocks
+  repository: https://starrocks.github.io/starrocks-kubernetes-operator
+  version: 1.9.10
+- name: kafka
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 31.3.1
+digest: sha256:0f2023982286f9d21800f964d4e6ed142569a478f5a30aac2367e68c2c953bf5
+generated: "2025-02-16T04:31:13.325546+09:00"
