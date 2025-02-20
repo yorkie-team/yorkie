@@ -287,8 +287,6 @@ func TestConfig() *server.Config {
 			EventWebhookMaxWaitInterval: EventWebhookMaxWaitInterval.String(),
 			EventWebhookMinWaitInterval: EventWebhookMinWaitInterval.String(),
 			EventWebhookRequestTimeout:  EventWebhookRequestTimeout.String(),
-			EventWebhookCacheSize:       EventWebhookSize,
-			EventWebhookCacheTTL:        EventWebhookCacheTTL.String(),
 			ProjectCacheSize:            ProjectCacheSize,
 			ProjectCacheTTL:             ProjectCacheTTL.String(),
 			GatewayAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),

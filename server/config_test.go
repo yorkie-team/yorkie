@@ -95,10 +95,6 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, eventWebhookRequestTimeout, server.DefaultEventWebhookRequestTimeout)
 
-		eventWebhookCacheTTL, err := time.ParseDuration(conf.Backend.EventWebhookCacheTTL)
-		assert.NoError(t, err)
-		assert.Equal(t, eventWebhookCacheTTL, server.DefaultEventWebhookCacheTTL)
-
 		projectCacheTTL, err := time.ParseDuration(conf.Backend.ProjectCacheTTL)
 		assert.NoError(t, err)
 		assert.Equal(t, projectCacheTTL, server.DefaultProjectCacheTTL)

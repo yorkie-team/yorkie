@@ -80,11 +80,8 @@ func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server,
 }
 
 // newYorkieServer initializes the Yorkie server and admin client.
-func newYorkieServer(t *testing.T, webhookCacheTTL, projectCacheTTL string) *server.Yorkie {
+func newYorkieServer(t *testing.T, projectCacheTTL string) *server.Yorkie {
 	conf := helper.TestConfig()
-	if webhookCacheTTL != "default" {
-		conf.Backend.EventWebhookCacheTTL = webhookCacheTTL
-	}
 	if projectCacheTTL != "default" {
 		conf.Backend.ProjectCacheTTL = projectCacheTTL
 	}
@@ -115,7 +112,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 
 	// Set up yorkie server
 	projectCacheTTL := 1 * time.Millisecond
-	svr := newYorkieServer(t, "0ms", projectCacheTTL.String())
+	svr := newYorkieServer(t, projectCacheTTL.String())
 
 	// Set up project
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -189,7 +186,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 func TestDocRootChangedEventWebhook(t *testing.T) {
 	ctx := context.Background()
 
-	svr := newYorkieServer(t, "0ms", "default")
+	svr := newYorkieServer(t, "default")
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 	project, err := adminCli.CreateProject(ctx, "doc-root-changed-event-webhook")
@@ -251,7 +248,7 @@ func TestEventWebhookCache(t *testing.T) {
 	ctx := context.Background()
 
 	webhookCacheTTL := 10 * time.Millisecond
-	svr := newYorkieServer(t, webhookCacheTTL.String(), "default")
+	svr := newYorkieServer(t, "default")
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 	project, err := adminCli.CreateProject(ctx, "event-webhook-cache-webhook")
@@ -272,7 +269,7 @@ func TestEventWebhookCache(t *testing.T) {
 
 	waitWebhookReceived := 20 * time.Millisecond
 	t.Run("throttling event test", func(t *testing.T) {
-		t.Skip("remove this after implement advanced event cache control")
+		t.Skip("remove this after implement advanced event timing control")
 
 		expectedUpdates := 5
 		testDuration := webhookCacheTTL * time.Duration(expectedUpdates)

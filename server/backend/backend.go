@@ -53,8 +53,6 @@ type Backend struct {
 	// AuthWebhookClient is used to send auth webhook.
 	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
-	// EventWebhookCache is used to cache the response of the event webhook.
-	EventWebhookCache *cache.LRUExpireCache[string, int]
 	// EventWebhookClient is used to send event webhook
 	EventWebhookClient *webhook.Client[types.EventWebhookRequest, int]
 
@@ -108,9 +106,6 @@ func New(
 		},
 	)
 
-	eventWebhookCache := cache.NewLRUExpireCache[string, int](
-		conf.EventWebhookCacheSize,
-	)
 	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, int](
 		webhook.Options{
 			MaxRetries:      conf.EventWebhookMaxRetries,
@@ -186,7 +181,6 @@ func New(
 		AuthWebhookClient: authWebhookClient,
 
 		EventWebhookClient: eventWebhookClient,
-		EventWebhookCache:  eventWebhookCache,
 
 		Locker: locker,
 		PubSub: pubsub,

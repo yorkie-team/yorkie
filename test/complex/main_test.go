@@ -86,8 +86,6 @@ func TestMain(m *testing.M) {
 		EventWebhookMaxWaitInterval: helper.EventWebhookMaxWaitInterval.String(),
 		EventWebhookMinWaitInterval: helper.EventWebhookMinWaitInterval.String(),
 		EventWebhookRequestTimeout:  helper.EventWebhookRequestTimeout.String(),
-		EventWebhookCacheSize:       helper.EventWebhookSize,
-		EventWebhookCacheTTL:        helper.EventWebhookCacheTTL.String(),
 		ProjectCacheSize:            helper.ProjectCacheSize,
 		ProjectCacheTTL:             helper.ProjectCacheTTL.String(),
 		AdminTokenDuration:          helper.AdminTokenDuration,

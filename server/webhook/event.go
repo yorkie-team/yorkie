@@ -50,26 +50,15 @@ func SendEvent(
 		return fmt.Errorf("marshal event webhook request: %w", err)
 	}
 
-	cacheKey := generateEventCacheKey(prj.PublicKey, docKey, string(webhookType))
-	if _, found := be.EventWebhookCache.Get(cacheKey); found {
-		return nil
-	}
-
-	_, status, err := be.EventWebhookClient.Send(
+	// TODO(window9u): we should handle this returned status code properly.
+	if _, _, err := be.EventWebhookClient.Send(
 		ctx,
 		prj.EventWebhookURL,
 		prj.SecretKey,
 		body,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("send event webhook: %w", err)
 	}
-
-	be.EventWebhookCache.Add(
-		cacheKey,
-		status,
-		be.Config.ParseEventWebhookCacheTTL(),
-	)
 
 	return nil
 }
@@ -90,9 +79,4 @@ func buildEventWebhookBody(docKey string, webhookType types.EventWebhookType) ([
 	}
 
 	return body, nil
-}
-
-// generateEventCacheKey creates a unique cache key for an event webhook.
-func generateEventCacheKey(publicKey, docKey, webhookType string) string {
-	return fmt.Sprintf("%s:event:%s:%s", publicKey, docKey, webhookType)
 }

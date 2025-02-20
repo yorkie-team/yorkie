@@ -75,8 +75,6 @@ const (
 	DefaultEventWebhookMaxRetries      = 10
 	DefaultEventWebhookMaxWaitInterval = 3000 * time.Millisecond
 	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
-	DefaultEventWebhookCacheSize       = 5000
-	DefaultEventWebhookCacheTTL        = 10 * time.Second
 
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
@@ -218,10 +216,6 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
 
-	if c.Backend.EventWebhookCacheSize == 0 {
-		c.Backend.EventWebhookCacheSize = DefaultEventWebhookCacheSize
-	}
-
 	if c.Backend.EventWebhookMaxRetries == 0 {
 		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
 	}
@@ -236,10 +230,6 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.EventWebhookRequestTimeout == "" {
 		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
-	}
-
-	if c.Backend.EventWebhookCacheTTL == "" {
-		c.Backend.EventWebhookCacheTTL = DefaultEventWebhookCacheTTL.String()
 	}
 
 	if c.Backend.ProjectCacheSize == 0 {

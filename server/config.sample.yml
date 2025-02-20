@@ -92,9 +92,6 @@ Backend:
   # EventWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
   EventWebhookMaxWaitInterval: "3s"
 
-  # EventWebhookCacheTTL is the TTL value to set when caching the event result.
-  EventWebhookCacheTTL: "10s"
-
   # ProjectCacheSize is the size of the project metadata cache.
   ProjectCacheSize: 256
 

@@ -84,7 +84,6 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
 			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
 			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
-			conf.Backend.EventWebhookCacheTTL = eventWebhookCacheTTL.String()
 
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
@@ -383,18 +382,6 @@ func init() {
 		"event-webhook-max-wait-interval",
 		server.DefaultEventWebhookMaxWaitInterval,
 		"Maximum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().IntVar(
-		&conf.Backend.EventWebhookCacheSize,
-		"event-webhook-cache-size",
-		server.DefaultEventWebhookCacheSize,
-		"The cache size of the event webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookCacheTTL,
-		"event-webhook-cache-ttl",
-		server.DefaultEventWebhookCacheTTL,
-		"TTL value to set when caching event webhook response.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

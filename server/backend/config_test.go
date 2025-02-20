@@ -36,7 +36,6 @@ func TestConfig(t *testing.T) {
 			EventWebhookMaxWaitInterval: "0ms",
 			EventWebhookMinWaitInterval: "0ms",
 			EventWebhookRequestTimeout:  "0ms",
-			EventWebhookCacheTTL:        "10s",
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -75,9 +74,5 @@ func TestConfig(t *testing.T) {
 		conf9 := validConf
 		conf9.EventWebhookRequestTimeout = "1"
 		assert.Error(t, conf9.Validate())
-
-		conf10 := validConf
-		conf10.EventWebhookCacheTTL = "s"
-		assert.Error(t, conf10.Validate())
 	})
 }

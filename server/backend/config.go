@@ -88,12 +88,6 @@ type Config struct {
 	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
 	EventWebhookRequestTimeout string `yaml:"EventWebhookRequestTimeout"`
 
-	// EventWebhookCacheSize is the cache size of the event webhook.
-	EventWebhookCacheSize int `yaml:"EventWebhookCacheSize"`
-
-	// EventWebhookCacheTTL is the TTL value to set when caching the event webhook result.
-	EventWebhookCacheTTL string `yaml:"EventWebhookCacheTTL"`
-
 	// ProjectCacheSize is the cache size of the project metadata.
 	ProjectCacheSize int `yaml:"ProjectCacheSize"`
 
@@ -169,14 +163,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--event-webhook-request-timeout" flag: %w`,
 			c.EventWebhookRequestTimeout,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.EventWebhookCacheTTL); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--event-webhook-cache-ttl" flag: %w`,
-			c.EventWebhookCacheTTL,
 			err,
 		)
 	}
@@ -273,17 +259,6 @@ func (c *Config) ParseEventWebhookRequestTimeout() time.Duration {
 	result, err := time.ParseDuration(c.EventWebhookRequestTimeout)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse event webhook request timeout: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseEventWebhookCacheTTL returns TTL for event webhook cache.
-func (c *Config) ParseEventWebhookCacheTTL() time.Duration {
-	result, err := time.ParseDuration(c.EventWebhookCacheTTL)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse event webhook cache ttl: %w", err)
 		os.Exit(1)
 	}
 
