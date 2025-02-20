@@ -200,7 +200,7 @@ func benchmarkVV(
 func BenchmarkVersionVector(b *testing.B) {
 	err := logging.SetLogLevel("error")
 	assert.NoError(b, err)
-	startTestServer(100000, 100000)
+	startTestServer(10, 5)
 	defer func() {
 		if testServer == nil {
 			return
