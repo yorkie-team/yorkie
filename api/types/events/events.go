@@ -30,6 +30,10 @@ const (
 	// modified by a change.
 	DocChangedEvent DocEventType = "document-changed"
 
+	// DocRootChangedEvent is an event indicating that document's root content
+	// is being changed by operation.
+	DocRootChangedEvent DocEventType = "document-root-changed"
+
 	// DocWatchedEvent is an event that occurs when document is watched
 	// by other clients.
 	DocWatchedEvent DocEventType = "document-watched"
@@ -42,6 +46,16 @@ const (
 	// on a specific topic.
 	DocBroadcastEvent DocEventType = "document-broadcast"
 )
+
+// WebhookType returns a matched event webhook type.
+func (t DocEventType) WebhookType() types.EventWebhookType {
+	switch t {
+	case DocRootChangedEvent:
+		return types.DocRootChanged
+	default:
+		return ""
+	}
+}
 
 // DocEventBody includes additional data specific to the DocEvent.
 type DocEventBody struct {

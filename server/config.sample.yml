@@ -80,6 +80,18 @@ Backend:
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
   AuthWebhookCacheTTL: "10s"
 
+  # EventWebhookRequestTimeout is the timeout for each event webhook request.
+  EventWebhookRequestTimeout: "3s"
+
+  # EventWebhookMaxRetries is the max number of retries for the event webhook.
+  EventWebhookMaxRetries: 10
+
+  # EventWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
+  EventWebhookMinWaitInterval: "100ms"
+
+  # EventWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
+  EventWebhookMaxWaitInterval: "3s"
+
   # ProjectCacheSize is the size of the project metadata cache.
   ProjectCacheSize: 256
 

@@ -49,4 +49,27 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.False(t, info3.RequireAuth(types.ActivateClient))
 	})
+
+	t.Run("require event webhook test", func(t *testing.T) {
+		// 1. Specify which event types to allow
+		validWebhookURL := "ValidWebhookURL"
+		info := &types.Project{
+			EventWebhookURL:    validWebhookURL,
+			EventWebhookEvents: []string{string(types.DocRootChanged)},
+		}
+		assert.True(t, info.RequireEventWebhook(types.DocRootChanged))
+
+		// 2. No event types specified
+		info2 := &types.Project{
+			EventWebhookURL:    validWebhookURL,
+			EventWebhookEvents: []string{},
+		}
+		assert.False(t, info2.RequireEventWebhook(types.DocRootChanged))
+
+		// 3. Empty webhook URL
+		info3 := &types.Project{
+			EventWebhookURL: "",
+		}
+		assert.False(t, info3.RequireEventWebhook(types.DocRootChanged))
+	})
 }

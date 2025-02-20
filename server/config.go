@@ -70,8 +70,14 @@ const (
 	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
-	DefaultProjectCacheSize           = 256
-	DefaultProjectCacheTTL            = 10 * time.Minute
+
+	DefaultEventWebhookRequestTimeout  = 3 * time.Second
+	DefaultEventWebhookMaxRetries      = 10
+	DefaultEventWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
+
+	DefaultProjectCacheSize = 256
+	DefaultProjectCacheTTL  = 10 * time.Minute
 
 	DefaultHostname    = ""
 	DefaultGatewayAddr = "localhost:8080"
@@ -208,6 +214,22 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.AuthWebhookCacheTTL == "" {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
+	}
+
+	if c.Backend.EventWebhookMaxRetries == 0 {
+		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
+	}
+
+	if c.Backend.EventWebhookMaxWaitInterval == "" {
+		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookMinWaitInterval == "" {
+		c.Backend.EventWebhookMinWaitInterval = DefaultEventWebhookMinWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookRequestTimeout == "" {
+		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
 	}
 
 	if c.Backend.ProjectCacheSize == 0 {

@@ -269,6 +269,18 @@ components:
           description: ""
           title: created_at
           type: object
+        eventWebhookEvents:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: event_webhook_events
+          type: array
+        eventWebhookUrl:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: string
         id:
           additionalProperties: false
           description: ""

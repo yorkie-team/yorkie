@@ -1335,6 +1335,18 @@ components:
           description: ""
           title: created_at
           type: object
+        eventWebhookEvents:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: event_webhook_events
+          type: array
+        eventWebhookUrl:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: string
         id:
           additionalProperties: false
           description: ""
@@ -1687,6 +1699,18 @@ components:
           description: ""
           title: client_deactivate_threshold
           type: object
+        eventWebhookEvents:
+          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_events
+          type: object
+        eventWebhookUrl:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: object
         name:
           $ref: '#/components/schemas/google.protobuf.StringValue'
           additionalProperties: false
@@ -1707,6 +1731,19 @@ components:
           title: methods
           type: array
       title: AuthWebhookMethods
+      type: object
+    yorkie.v1.UpdatableProjectFields.EventWebhookEvents:
+      additionalProperties: false
+      description: ""
+      properties:
+        events:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: events
+          type: array
+      title: EventWebhookEvents
       type: object
     yorkie.v1.User:
       additionalProperties: false

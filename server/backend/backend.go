@@ -46,12 +46,15 @@ type Backend struct {
 	Config *Config
 
 	// AuthWebhookCache is used to cache the response of the auth webhook.
-	WebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+	AuthWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
 		int,
 		*types.AuthWebhookResponse,
 	]]
-	// WebhookClient is used to send auth webhook.
-	WebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	// AuthWebhookClient is used to send auth webhook.
+	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+
+	// EventWebhookClient is used to send event webhook
+	EventWebhookClient *webhook.Client[types.EventWebhookRequest, int]
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
@@ -90,16 +93,25 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the webhook webhookCache and client.
-	webhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	// 02. Create the webhook authWebhookCache and client.
+	authWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
-	webhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+	authWebhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		webhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
 			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
 			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
 			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
+		},
+	)
+
+	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, int](
+		webhook.Options{
+			MaxRetries:      conf.EventWebhookMaxRetries,
+			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
+			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
+			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
 		},
 	)
 
@@ -165,8 +177,9 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		WebhookCache:  webhookCache,
-		WebhookClient: webhookClient,
+		AuthWebhookCache:   authWebhookCache,
+		AuthWebhookClient:  authWebhookClient,
+		EventWebhookClient: eventWebhookClient,
 
 		Locker: locker,
 		PubSub: pubsub,

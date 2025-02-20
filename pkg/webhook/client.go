@@ -59,7 +59,8 @@ type Client[Req any, Res any] struct {
 	options    Options
 }
 
-// NewClient creates a new instance of Client.
+// NewClient creates a new instance of Client. If you only want to get the status code,
+// then set Res to int.
 func NewClient[Req any, Res any](
 	options Options,
 ) *Client[Req, Res] {
@@ -102,6 +103,10 @@ func (c *Client[Req, Res]) Send(
 
 		if !isExpectedStatus(resp.StatusCode) {
 			return resp.StatusCode, ErrUnexpectedStatusCode
+		}
+
+		if _, ok := any(res).(int); ok {
+			return resp.StatusCode, nil
 		}
 
 		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {

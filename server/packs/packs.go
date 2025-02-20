@@ -37,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/webhook"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -185,6 +186,9 @@ func PushPull(
 				return
 			}
 
+			// TODO(hackerwins): For now, we are publishing the event to pubsub and
+			// webhook manually. But we need to consider unified event handling system
+			// to handle this with rate-limiter and retry mechanism.
 			be.PubSub.Publish(
 				ctx,
 				publisherID,
@@ -194,6 +198,19 @@ func PushPull(
 					DocRefKey: docRefKey,
 				},
 			)
+
+			if reqPack.OperationsLen() > 0 {
+				if err := webhook.SendEvent(
+					ctx,
+					be,
+					project,
+					docInfo.Key.String(),
+					events.DocRootChangedEvent,
+				); err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
+			}
 
 			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
