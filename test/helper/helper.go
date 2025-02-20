@@ -117,7 +117,12 @@ func TestRoot() *crdt.Root {
 // TextChangeContext returns the context of test change.
 func TextChangeContext(root *crdt.Root) *change.Context {
 	return change.NewContext(
-		change.InitialID,
+		change.NewID(
+			change.InitialClientSeq,
+			change.InitialServerSeq,
+			change.InitialLamport,
+			time.InitialActorID,
+			time.NewVersionVector()),
 		"",
 		root,
 	)

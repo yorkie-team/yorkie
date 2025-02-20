@@ -93,11 +93,16 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(root),
-		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID,
+		key:        k,
+		status:     StatusDetached,
+		root:       crdt.NewRoot(root),
+		checkpoint: change.InitialCheckpoint,
+		changeID: change.NewID(
+			change.InitialClientSeq,
+			change.InitialServerSeq,
+			change.InitialLamport,
+			time.InitialActorID,
+			time.NewVersionVector()),
 		presences:     innerpresence.NewMap(),
 		onlineClients: &gosync.Map{},
 	}
@@ -116,6 +121,14 @@ func NewInternalDocumentFromSnapshot(
 		return nil, err
 	}
 
+	changeID := change.NewID(
+		change.InitialClientSeq,
+		change.InitialServerSeq,
+		change.InitialLamport,
+		time.InitialActorID,
+		time.NewVersionVector())
+	changeID.SetClocks(lamport, vector)
+
 	return &InternalDocument{
 		key:           k,
 		status:        StatusDetached,
@@ -123,7 +136,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:     presences,
 		onlineClients: &gosync.Map{},
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      change.InitialID.SetClocks(lamport, vector),
+		changeID:      changeID,
 	}, nil
 }
 
