@@ -135,12 +135,12 @@ func TestRegisterEventWebhook(t *testing.T) {
 	t.Run("register event webhook test", func(t *testing.T) {
 		// 01. Register event webhook
 		prj, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-			EventWebhookURL:   &userServer.URL,
-			EventWebhookTypes: &[]string{string(types.DocRootChanged)},
+			EventWebhookURL:    &userServer.URL,
+			EventWebhookEvents: &[]string{string(types.DocRootChanged)},
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
-		assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookTypes[0])
+		assert.Equal(t, string(types.DocRootChanged), prj.EventWebhookEvents[0])
 
 		// 02. Wait project cache expired
 		time.Sleep(projectCacheTTL)
@@ -159,12 +159,12 @@ func TestRegisterEventWebhook(t *testing.T) {
 	t.Run("unregister event webhook test", func(t *testing.T) {
 		// 01. Unregister event webhook
 		prj, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-			EventWebhookURL:   &userServer.URL,
-			EventWebhookTypes: &[]string{},
+			EventWebhookURL:    &userServer.URL,
+			EventWebhookEvents: &[]string{},
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
-		assert.Equal(t, 0, len(prj.EventWebhookTypes))
+		assert.Equal(t, 0, len(prj.EventWebhookEvents))
 
 		// 02. Wait project cache expired
 		time.Sleep(projectCacheTTL)
@@ -197,8 +197,8 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 
 	project.EventWebhookURL = userServer.URL
 	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-		EventWebhookURL:   &project.EventWebhookURL,
-		EventWebhookTypes: &[]string{string(types.DocRootChanged)},
+		EventWebhookURL:    &project.EventWebhookURL,
+		EventWebhookEvents: &[]string{string(types.DocRootChanged)},
 	})
 	assert.NoError(t, err)
 
@@ -257,8 +257,8 @@ func TestEventWebhookCache(t *testing.T) {
 	doc := document.New(helper.TestDocKey(t))
 	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-		EventWebhookURL:   &userServer.URL,
-		EventWebhookTypes: &[]string{string(types.DocRootChanged)},
+		EventWebhookURL:    &userServer.URL,
+		EventWebhookEvents: &[]string{string(types.DocRootChanged)},
 	})
 	assert.NoError(t, err)
 

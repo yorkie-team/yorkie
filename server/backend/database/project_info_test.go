@@ -49,8 +49,8 @@ func TestProjectInfo(t *testing.T) {
 		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookURL: &testURL})
 		assert.Equal(t, testURL, project.EventWebhookURL)
 
-		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookTypes: &testEvents})
-		assert.Equal(t, testEvents, project.EventWebhookTypes)
+		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookEvents: &testEvents})
+		assert.Equal(t, testEvents, project.EventWebhookEvents)
 
 		assert.Equal(t, dummyOwnerID, project.Owner)
 

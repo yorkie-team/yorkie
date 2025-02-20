@@ -186,6 +186,9 @@ func PushPull(
 				return
 			}
 
+			// TODO(hackerwins): For now, we are publishing the event to pubsub and
+			// webhook manually. But we need to consider unified event handling system
+			// to handle this with rate-limiter and retry mechanism.
 			be.PubSub.Publish(
 				ctx,
 				publisherID,

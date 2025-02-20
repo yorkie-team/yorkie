@@ -42,8 +42,8 @@ type UpdatableProjectFields struct {
 	// EventWebhookURL is the URL of the event webhook.
 	EventWebhookURL *string `bson:"event_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
 
-	// EventWebhookTypes is the types of events that trigger the webhook.
-	EventWebhookTypes *[]string `bson:"event_webhook_types,omitempty" validate:"omitempty,invalid_webhook_event"`
+	// EventWebhookEvents is the events that trigger the webhook.
+	EventWebhookEvents *[]string `bson:"event_webhook_events,omitempty" validate:"omitempty,invalid_webhook_event"`
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
@@ -56,7 +56,7 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.AuthWebhookMethods == nil &&
 		i.ClientDeactivateThreshold == nil &&
 		i.EventWebhookURL == nil &&
-		i.EventWebhookTypes == nil {
+		i.EventWebhookEvents == nil {
 		return ErrEmptyProjectFields
 	}
 

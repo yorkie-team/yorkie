@@ -768,7 +768,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			string(types.WatchDocuments),
 		}
 		newEventWebhookURL := "http://localhost:4000"
-		newEventWebhookTypes := []string{string(types.DocRootChanged)}
+		newEventWebhookEvents := []string{string(types.DocRootChanged)}
 		newClientDeactivateThreshold := "1h"
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
@@ -784,7 +784,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookTypes:         &newEventWebhookTypes,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -798,7 +798,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
-		assert.Equal(t, newEventWebhookTypes, updateInfo.EventWebhookTypes)
+		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -814,7 +814,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
-		assert.Equal(t, newEventWebhookTypes, updateInfo.EventWebhookTypes)
+		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 03. Update authWebhookURL and eventWebhookURL test
@@ -837,15 +837,15 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 04. Update EventWebhookTypes test
-		var newEventWebhookTypes2 []string
+		// 04. Update EventWebhookEvents test
+		var newEventWebhookEvents2 []string
 		newAuthWebhookMethods2 := []string{
 			string(types.DetachDocument),
 			string(types.PushPull),
 		}
 		fields = &types.UpdatableProjectFields{
 			AuthWebhookMethods: &newAuthWebhookMethods2,
-			EventWebhookTypes:  &newEventWebhookTypes2,
+			EventWebhookEvents: &newEventWebhookEvents2,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -853,7 +853,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 		assert.Equal(t, res, updateInfo)
-		assert.Equal(t, newEventWebhookTypes2, updateInfo.EventWebhookTypes)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
 
 		// 05. Update clientDeactivateThreshold test
@@ -871,7 +871,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookURL2, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
-		assert.Equal(t, newEventWebhookTypes2, updateInfo.EventWebhookTypes)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.NotEqual(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 06. Duplicated name test

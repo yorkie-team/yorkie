@@ -298,7 +298,7 @@ message Project {
   string auth_webhook_url = 5;
   repeated string auth_webhook_methods = 6;
   string event_webhook_url = 7;
-  repeated string event_webhook_types = 8;
+  repeated string event_webhook_events = 8;
   string client_deactivate_threshold = 9;
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp updated_at = 11;
@@ -309,15 +309,15 @@ message UpdatableProjectFields {
     repeated string methods = 1;
   }
 
-  message EventWebhookTypes {
-    repeated string types = 1;
+  message EventWebhookEvents {
+    repeated string events = 1;
   }
 
   google.protobuf.StringValue name = 1;
   google.protobuf.StringValue auth_webhook_url = 2;
   AuthWebhookMethods auth_webhook_methods = 3;
   google.protobuf.StringValue event_webhook_url = 4;
-  EventWebhookTypes event_webhook_types = 5;
+  EventWebhookEvents event_webhook_events = 5;
   google.protobuf.StringValue client_deactivate_threshold = 6;
 }
 

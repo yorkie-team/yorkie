@@ -41,8 +41,8 @@ type Project struct {
 	// EventWebhookURL is the url of the event webhook.
 	EventWebhookURL string `json:"event_webhook_url"`
 
-	// EventWebhookTypes is the types that send the event webhook.
-	EventWebhookTypes []string `json:"event_webhook_types"`
+	// EventWebhookEvents are the events that event webhook will be triggered.
+	EventWebhookEvents []string `json:"event_webhook_events"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -80,17 +80,17 @@ func (p *Project) RequireAuth(method Method) bool {
 	return false
 }
 
-// RequireEventWebhook returns whether the given method requires to send event webhook.
+// RequireEventWebhook returns whether the given type requires to send event webhook.
 func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	if len(p.EventWebhookURL) == 0 {
 		return false
 	}
 
-	if len(p.EventWebhookTypes) == 0 {
+	if len(p.EventWebhookEvents) == 0 {
 		return false
 	}
 
-	for _, t := range p.EventWebhookTypes {
+	for _, t := range p.EventWebhookEvents {
 		if EventWebhookType(t) == eventType {
 			return true
 		}

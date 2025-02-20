@@ -55,7 +55,7 @@ var allAuthWebhookMethods = []string{
 	string(types.Broadcast),
 }
 
-var allEventWebhookTypes = []string{
+var allEventWebhookEvents = []string{
 	string(types.DocRootChanged),
 }
 
@@ -114,11 +114,11 @@ func newUpdateCommand() *cobra.Command {
 				newEventWebhookURL = flagEventWebhookURL
 			}
 
-			newEventWebhookTypes := updateStringSlice(
-				project.EventWebhookTypes, // prev
-				flagEventWebhookEventsRm,  // removes
-				flagEventWebhookEventsAdd, // adds
-				allEventWebhookTypes,      // all
+			newEventWebhookEvents := updateStringSlice(
+				project.EventWebhookEvents, // prev
+				flagEventWebhookEventsRm,   // removes
+				flagEventWebhookEventsAdd,  // adds
+				allEventWebhookEvents,      // all
 			)
 
 			newClientDeactivateThreshold := project.ClientDeactivateThreshold
@@ -131,7 +131,7 @@ func newUpdateCommand() *cobra.Command {
 				AuthWebhookURL:            &newAuthWebhookURL,
 				AuthWebhookMethods:        &newAuthWebhookMethods,
 				EventWebhookURL:           &newEventWebhookURL,
-				EventWebhookTypes:         &newEventWebhookTypes,
+				EventWebhookEvents:        &newEventWebhookEvents,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			}
 
@@ -182,35 +182,40 @@ func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Pr
 	return nil
 }
 
+// updateStringSlice updates the string slice with the given items to remove and add.
+// If the item is "ALL", it will be replaced with all items.
 func updateStringSlice(
-	prev, removes, adds, all []string,
+	prevItems,
+	itemsToRemove,
+	itemsToAdd,
+	allItems []string,
 ) []string {
-	stringSet := make(map[string]struct{})
+	items := make(map[string]struct{})
 
-	for _, p := range prev {
-		stringSet[p] = struct{}{}
+	for _, p := range prevItems {
+		items[p] = struct{}{}
 	}
 
-	for _, r := range removes {
+	for _, r := range itemsToRemove {
 		if r == "ALL" {
-			stringSet = make(map[string]struct{})
+			items = make(map[string]struct{})
 		} else {
-			delete(stringSet, r)
+			delete(items, r)
 		}
 	}
 
-	for _, a := range adds {
+	for _, a := range itemsToAdd {
 		if a == "ALL" {
-			for _, m := range all {
-				stringSet[m] = struct{}{}
+			for _, m := range allItems {
+				items[m] = struct{}{}
 			}
 		} else {
-			stringSet[a] = struct{}{}
+			items[a] = struct{}{}
 		}
 	}
 
-	updated := make([]string, 0, len(stringSet))
-	for s := range stringSet {
+	updated := make([]string, 0, len(items))
+	for s := range items {
 		updated = append(updated, s)
 	}
 	return updated
@@ -250,15 +255,15 @@ func init() {
 	)
 	cmd.Flags().StringArrayVar(
 		&flagEventWebhookEventsAdd,
-		"event-webhook-types-add",
+		"event-webhook-events-add",
 		[]string{},
-		"event-webhook methods to add ('ALL' for all events)",
+		"event-webhook events to add ('ALL' for all events)",
 	)
 	cmd.Flags().StringArrayVar(
 		&flagEventWebhookEventsRm,
-		"event-webhook-types-rm",
+		"event-webhook-events-rm",
 		[]string{},
-		"event-webhook types to remove ('ALL' for all events)",
+		"event-webhook events to remove ('ALL' for all events)",
 	)
 	cmd.Flags().StringVar(
 		&flagClientDeactivateThreshold,

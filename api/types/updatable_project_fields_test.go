@@ -35,7 +35,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.WatchDocuments),
 		}
 		newEventWebhookURL := "http://localhost:4000"
-		newEventWebhookTypes := []string{
+		newEventWebhookEvents := []string{
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
@@ -44,7 +44,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookTypes:         &newEventWebhookTypes,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -69,15 +69,15 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newAuthWebhookMethods = []string{
 			"InvalidMethods",
 		}
-		// invalid EventWebhookTypes
-		newEventWebhookTypes = []string{
+		// invalid EventWebhookEvents
+		newEventWebhookEvents = []string{
 			"DocChanged",
 		}
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			EventWebhookTypes:         &newEventWebhookTypes,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)

@@ -177,9 +177,8 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		AuthWebhookCache:  authWebhookCache,
-		AuthWebhookClient: authWebhookClient,
-
+		AuthWebhookCache:   authWebhookCache,
+		AuthWebhookClient:  authWebhookClient,
 		EventWebhookClient: eventWebhookClient,
 
 		Locker: locker,

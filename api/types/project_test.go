@@ -54,15 +54,15 @@ func TestProjectInfo(t *testing.T) {
 		// 1. Specify which event types to allow
 		validWebhookURL := "ValidWebhookURL"
 		info := &types.Project{
-			EventWebhookURL:   validWebhookURL,
-			EventWebhookTypes: []string{string(types.DocRootChanged)},
+			EventWebhookURL:    validWebhookURL,
+			EventWebhookEvents: []string{string(types.DocRootChanged)},
 		}
 		assert.True(t, info.RequireEventWebhook(types.DocRootChanged))
 
 		// 2. No event types specified
 		info2 := &types.Project{
-			EventWebhookURL:   validWebhookURL,
-			EventWebhookTypes: []string{},
+			EventWebhookURL:    validWebhookURL,
+			EventWebhookEvents: []string{},
 		}
 		assert.False(t, info2.RequireEventWebhook(types.DocRootChanged))
 

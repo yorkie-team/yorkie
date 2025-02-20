@@ -20,12 +20,19 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/server/backend"
+)
+
+var (
+	// ErrUnexpectedStatusCode is returned when the webhook returns an unexpected status code.
+	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 )
 
 // SendEvent sends an event to the project's event webhook endpoint.
@@ -45,26 +52,29 @@ func SendEvent(
 		return nil
 	}
 
-	body, err := buildEventWebhookBody(docKey, webhookType)
+	body, err := buildRequestBody(docKey, webhookType)
 	if err != nil {
 		return fmt.Errorf("marshal event webhook request: %w", err)
 	}
 
-	// TODO(window9u): we should handle this returned status code properly.
-	if _, _, err := be.EventWebhookClient.Send(
+	_, status, err := be.EventWebhookClient.Send(
 		ctx,
 		prj.EventWebhookURL,
 		prj.SecretKey,
 		body,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("send event webhook: %w", err)
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("send event webhook %d: %w", status, ErrUnexpectedStatusCode)
 	}
 
 	return nil
 }
 
-// buildEventWebhookBody creates a new EventWebhookRequest given a document key and webhook type.
-func buildEventWebhookBody(docKey string, webhookType types.EventWebhookType) ([]byte, error) {
+// buildRequestBody builds the request body for the event webhook.
+func buildRequestBody(docKey string, webhookType types.EventWebhookType) ([]byte, error) {
 	req := types.EventWebhookRequest{
 		Type: webhookType,
 		Attributes: types.EventWebhookAttribute{

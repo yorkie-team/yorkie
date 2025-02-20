@@ -60,8 +60,8 @@ type ProjectInfo struct {
 	// EventWebhookURL is the URL of the event webhook.
 	EventWebhookURL string `bson:"event_webhook_url"`
 
-	// EventWebhookTypes is the types of events that trigger the webhook.
-	EventWebhookTypes []string `bson:"event_webhook_types"`
+	// EventWebhookEvents is the events that the event webhook listens to.
+	EventWebhookEvents []string `bson:"event_webhook_events"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -101,7 +101,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AuthWebhookURL:            i.AuthWebhookURL,
 		AuthWebhookMethods:        i.AuthWebhookMethods,
 		EventWebhookURL:           i.EventWebhookURL,
-		EventWebhookTypes:         i.EventWebhookTypes,
+		EventWebhookEvents:        i.EventWebhookEvents,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
@@ -122,8 +122,8 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.EventWebhookURL != nil {
 		i.EventWebhookURL = *fields.EventWebhookURL
 	}
-	if fields.EventWebhookTypes != nil {
-		i.EventWebhookTypes = *fields.EventWebhookTypes
+	if fields.EventWebhookEvents != nil {
+		i.EventWebhookEvents = *fields.EventWebhookEvents
 	}
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
@@ -139,7 +139,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		AuthWebhookURL:            i.AuthWebhookURL,
 		AuthWebhookMethods:        i.AuthWebhookMethods,
 		EventWebhookURL:           i.EventWebhookURL,
-		EventWebhookTypes:         i.EventWebhookTypes,
+		EventWebhookEvents:        i.EventWebhookEvents,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,

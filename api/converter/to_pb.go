@@ -60,7 +60,7 @@ func ToProject(project *types.Project) *api.Project {
 		AuthWebhookUrl:            project.AuthWebhookURL,
 		AuthWebhookMethods:        project.AuthWebhookMethods,
 		EventWebhookUrl:           project.EventWebhookURL,
-		EventWebhookTypes:         project.EventWebhookTypes,
+		EventWebhookEvents:        project.EventWebhookEvents,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
@@ -567,12 +567,12 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.EventWebhookURL != nil {
 		pbUpdatableProjectFields.EventWebhookUrl = &wrapperspb.StringValue{Value: *fields.EventWebhookURL}
 	}
-	if fields.EventWebhookTypes != nil {
-		pbUpdatableProjectFields.EventWebhookTypes = &api.UpdatableProjectFields_EventWebhookTypes{
-			Types: *fields.EventWebhookTypes,
+	if fields.EventWebhookEvents != nil {
+		pbUpdatableProjectFields.EventWebhookEvents = &api.UpdatableProjectFields_EventWebhookEvents{
+			Events: *fields.EventWebhookEvents,
 		}
 	} else {
-		pbUpdatableProjectFields.EventWebhookTypes = nil
+		pbUpdatableProjectFields.EventWebhookEvents = nil
 	}
 	if fields.ClientDeactivateThreshold != nil {
 		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{

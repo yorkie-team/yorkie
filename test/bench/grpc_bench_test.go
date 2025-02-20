@@ -100,7 +100,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 			authWebhookMethods = append(authWebhookMethods, string(m))
 		}
 		eventWebhookURL := fmt.Sprintf("http://eventWebhookURL%d", i)
-		eventWebhookTypes := []string{string(types.DocRootChanged)}
+		eventWebhookEvents := []string{string(types.DocRootChanged)}
 		clientDeactivateThreshold := "1h"
 
 		_, err := adminCli.UpdateProject(
@@ -111,7 +111,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				AuthWebhookURL:            &authWebhookURL,
 				AuthWebhookMethods:        &authWebhookMethods,
 				EventWebhookURL:           &eventWebhookURL,
-				EventWebhookTypes:         &eventWebhookTypes,
+				EventWebhookEvents:        &eventWebhookEvents,
 				ClientDeactivateThreshold: &clientDeactivateThreshold,
 			},
 		)
