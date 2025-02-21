@@ -154,24 +154,12 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
-		return change.NewID(
-			change.InitialClientSeq,
-			change.InitialServerSeq,
-			change.InitialLamport,
-			time.InitialActorID,
-			time.NewVersionVector(),
-		), err
+		return change.InitialID(), err
 	}
 
 	vector, err := FromVersionVector(id.VersionVector)
 	if err != nil {
-		return change.NewID(
-			change.InitialClientSeq,
-			change.InitialServerSeq,
-			change.InitialLamport,
-			time.InitialActorID,
-			time.NewVersionVector(),
-		), err
+		return change.InitialID(), err
 	}
 
 	return change.NewID(

@@ -1264,7 +1264,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	if minVersionVector == nil {
 		minVersionVector = versionVector
 	} else {
-		minVersionVector = minVersionVector.Min(versionVector)
+		minVersionVector = minVersionVector.Min(&versionVector)
 	}
 
 	// 03. Update current client's version vector. If the client is detached, remove it.

@@ -25,12 +25,6 @@ const (
 	InitialLamport = 0
 )
 
-var (
-	// InitialID represents the initial state ID. Usually this is used to
-	// represent a state where nothing has been edited.
-	InitialID = NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.InitialVersionVector)
-)
-
 // ID represents the identifier of the change. It is used to identify the
 // change and to order the changes. It is also used to detect the relationship
 // between changes whether they are causally related or concurrent.
@@ -73,6 +67,12 @@ func NewID(
 		actorID:       actorID,
 		versionVector: versionVector,
 	}
+}
+
+// InitialID creates an initial state ID. Usually this is used to
+// represent a state where nothing has been edited.
+func InitialID() ID {
+	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.NewVersionVector())
 }
 
 // Next creates a next ID of this ID.
