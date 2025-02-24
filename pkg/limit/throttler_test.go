@@ -188,14 +188,17 @@ func TestContextCancellation(t *testing.T) {
 		assert.NoError(t, th.Execute(ctx, callback))
 		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 		// Launch a trailing call that will be affected by cancellation.
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			err := th.Execute(ctx, callback)
 			assert.ErrorAs(t, err, &context.Canceled)
+			// Verify that the trailing call was not executed.
+			assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 		}()
 		// Cancel the context to cancel any pending trailing call.
 		cancel()
-		// Verify that the trailing call was not executed.
-		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
+		<-done
 	})
 }
 
