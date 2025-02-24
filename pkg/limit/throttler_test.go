@@ -20,6 +20,7 @@ package throttle
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ import (
 // execute the callback immediately without any delays.
 func TestSynchronousExecute(t *testing.T) {
 	ctx := context.Background()
-	throttleWindow := 10 * time.Millisecond
+	const throttleWindow = 10 * time.Millisecond
 
 	t.Run("Single call executes callback exactly once", func(t *testing.T) {
 		th := New(throttleWindow)
@@ -54,7 +55,7 @@ func TestSynchronousExecute(t *testing.T) {
 			return nil
 		}
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			assert.NoError(t, th.Execute(ctx, callback))
 		}
 		assert.Equal(t, int32(10), atomic.LoadInt32(&callCount))
@@ -64,25 +65,30 @@ func TestSynchronousExecute(t *testing.T) {
 // TestConcurrentExecute verifies that the throttler behaves as expected under concurrent invocations.
 func TestConcurrentExecute(t *testing.T) {
 	ctx := context.Background()
-	throttleWindow := 10 * time.Millisecond
+	const throttleWindow = 100 * time.Millisecond
 
 	// In this test, many concurrent calls are made. The throttler should execute one immediate call
 	// and then schedule a trailing call, resulting in exactly two executions.
 	t.Run("Concurrent calls result in one immediate and one trailing execution", func(t *testing.T) {
 		th := New(throttleWindow)
+		const numRoutines = 1000
 		var callCount int32
 		callback := func() error {
 			atomic.AddInt32(&callCount, 1)
 			return nil
 		}
 
-		for i := 0; i < 1000; i++ {
+		var wg sync.WaitGroup
+		wg.Add(numRoutines)
+
+		for range numRoutines {
 			go func() {
 				assert.NoError(t, th.Execute(ctx, callback))
+				wg.Done()
 			}()
 		}
-		// Allow enough time for the trailing call to be scheduled.
-		time.Sleep(throttleWindow)
+
+		wg.Wait()
 		// Expect exactly one immediate and one trailing callback execution.
 		assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
 	})
@@ -91,11 +97,16 @@ func TestConcurrentExecute(t *testing.T) {
 	// It triggers multiple concurrent calls at a regular interval and checks that throttling
 	// limits the total number of callback invocations to one per window plus one trailing call.
 	t.Run("Throttling over continuous event stream", func(t *testing.T) {
-		th := New(throttleWindow)
-		numWindows := int32(10)
+		const (
+			numWindows     = 10
+			eventPerWindow = 100
+			numRoutines    = 10
+		)
 		totalDuration := throttleWindow * time.Duration(numWindows)
-		eventsPerWindow := 100
-		interval := throttleWindow / time.Duration(eventsPerWindow)
+		interval := throttleWindow / time.Duration(eventPerWindow)
+
+		th := New(throttleWindow)
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
@@ -113,7 +124,7 @@ func TestConcurrentExecute(t *testing.T) {
 			select {
 			case <-ticker.C:
 				// Each tick triggers multiple concurrent calls.
-				for i := 0; i < 10; i++ {
+				for range numRoutines {
 					go func() {
 						assert.NoError(t, th.Execute(ctx, callback))
 					}()
@@ -122,7 +133,7 @@ func TestConcurrentExecute(t *testing.T) {
 				// Allow any trailing call to execute.
 				time.Sleep(throttleWindow)
 				// Expect one execution per window plus one trailing call.
-				assert.Equal(t, numWindows+1, atomic.LoadInt32(&callCount))
+				assert.Equal(t, int32(numWindows+1), atomic.LoadInt32(&callCount))
 				return
 			}
 		}
@@ -133,7 +144,7 @@ func TestConcurrentExecute(t *testing.T) {
 // are immediately propagated back to the caller.
 func TestCallbackErrorPropagation(t *testing.T) {
 	ctx := context.Background()
-	throttleWindow := 10 * time.Millisecond
+	const throttleWindow = 10 * time.Millisecond
 	expectedErr := errors.New("callback error")
 
 	t.Run("Immediate callback error is propagated", func(t *testing.T) {
@@ -149,7 +160,7 @@ func TestCallbackErrorPropagation(t *testing.T) {
 // TestContextCancellation verifies the throttler's behavior when the context
 // expires (deadline exceeded) or is canceled.
 func TestContextCancellation(t *testing.T) {
-	throttleWindow := 10 * time.Millisecond
+	const throttleWindow = 10 * time.Millisecond
 
 	// In this test the context deadline is shorter than the throttle window.
 	// The trailing call should fail with a deadline exceeded error.
@@ -188,29 +199,32 @@ func TestContextCancellation(t *testing.T) {
 		assert.NoError(t, th.Execute(ctx, callback))
 		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 		// Launch a trailing call that will be affected by cancellation.
-		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
+
 		go func() {
-			defer close(done)
 			err := th.Execute(ctx, callback)
 			assert.ErrorAs(t, err, &context.Canceled)
 			// Verify that the trailing call was not executed.
 			assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
+			wg.Done()
 		}()
 		// Cancel the context to cancel any pending trailing call.
 		cancel()
-		<-done
+		wg.Wait()
 	})
 }
 
 // TestCallAsyncDelayed verifies that if the rate limiter does not allow an immediate call,
 // ExecuteOrSchedule schedules a trailing callback which eventually executes.
 func TestExecuteOrSchedule(t *testing.T) {
-	throttleWindow := 10 * time.Millisecond
+	const (
+		throttleWindow = 10 * time.Millisecond
+		numRoutines    = 100
+	)
 	th := New(throttleWindow)
-	var callCount int32
-	done := make(chan struct{}, 2)
-	defer close(done)
 
+	var callCount int32
 	callback := func() {
 		atomic.AddInt32(&callCount, 1)
 	}
@@ -222,7 +236,7 @@ func TestExecuteOrSchedule(t *testing.T) {
 	// Second call should be rate limited and schedule a trailing call.
 	before := time.Now()
 	// it schedules only one callback
-	for range 100 {
+	for range numRoutines {
 		th.ExecuteOrSchedule(callback)
 	}
 	duration := time.Since(before)
@@ -234,17 +248,18 @@ func TestExecuteOrSchedule(t *testing.T) {
 
 // TestConcurrentExecuteOrSchedule verifies that the throttler behaves as expected under concurrent invocations.
 func TestConcurrentExecuteOrSchedule(t *testing.T) {
-	ctx := context.Background()
-	throttleWindow := 10 * time.Millisecond
+	const throttleWindow = 10 * time.Millisecond
 
 	t.Run("Concurrent calls result in one immediate and one trailing execution", func(t *testing.T) {
 		th := New(throttleWindow)
+		const numRoutines = 100
+
 		var callCount int32
 		callback := func() {
 			atomic.AddInt32(&callCount, 1)
 		}
 
-		for i := 0; i < 100; i++ {
+		for range numRoutines {
 			th.ExecuteOrSchedule(callback)
 		}
 		// Allow enough time for the trailing call to be scheduled.
@@ -257,15 +272,20 @@ func TestConcurrentExecuteOrSchedule(t *testing.T) {
 	// It triggers multiple concurrent calls at a regular interval and checks that throttling
 	// limits the total number of callback invocations to one per window plus one trailing call.
 	t.Run("Throttling over continuous event stream", func(t *testing.T) {
-		th := New(throttleWindow)
-		numWindows := int32(10)
+		const (
+			numWindows     = 10
+			eventPerWindow = 100
+			numRoutines    = 10
+		)
 		totalDuration := throttleWindow * time.Duration(numWindows)
-		eventsPerWindow := 100
-		interval := throttleWindow / time.Duration(eventsPerWindow)
+		interval := throttleWindow / time.Duration(eventPerWindow)
+
+		th := New(throttleWindow)
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
-		timeCtx, cancel := context.WithTimeout(ctx, totalDuration)
+		ctx, cancel := context.WithTimeout(context.Background(), totalDuration)
 		defer cancel()
 
 		var callCount int32
@@ -278,14 +298,14 @@ func TestConcurrentExecuteOrSchedule(t *testing.T) {
 			select {
 			case <-ticker.C:
 				// Each tick triggers multiple concurrent calls.
-				for i := 0; i < 10; i++ {
+				for range numRoutines {
 					th.ExecuteOrSchedule(callback)
 				}
-			case <-timeCtx.Done():
+			case <-ctx.Done():
 				// Allow any trailing call to execute.
 				time.Sleep(throttleWindow * 2)
 				// Expect one execution per window plus one trailing call.
-				assert.Equal(t, numWindows+1, atomic.LoadInt32(&callCount))
+				assert.Equal(t, int32(numWindows+1), atomic.LoadInt32(&callCount))
 				return
 			}
 		}
