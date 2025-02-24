@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package throttle provide event timing control components
-package throttle
+// Package limit provide event timing control components
+package limit
 
 import (
 	"context"
