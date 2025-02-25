@@ -60,7 +60,12 @@ func (l *Limiter) Execute(ctx context.Context, callback func() error) error {
 		return fmt.Errorf("wait for limiter: %w", err)
 	}
 
+	if err := callback(); err != nil {
+		atomic.StoreInt32(&l.debouncing, 0)
+		return fmt.Errorf("callback: %w", err)
+	}
 	atomic.StoreInt32(&l.debouncing, 0)
+
 	return callback()
 }
 
@@ -79,7 +84,7 @@ func (l *Limiter) Schedule(callback func()) {
 	}
 	delay := l.lim.Reserve().Delay()
 	time.AfterFunc(delay, func() {
-		atomic.StoreInt32(&l.debouncing, 0)
 		callback()
+		atomic.StoreInt32(&l.debouncing, 0)
 	})
 }
