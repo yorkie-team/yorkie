@@ -22,10 +22,10 @@ import (
 	"errors"
 	"fmt"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
@@ -137,13 +137,21 @@ func newUpdateCommand() *cobra.Command {
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
-				// TODO(chacha912): consider creating the error details type to remove the dependency on gRPC.
-				st := status.Convert(err)
-				for _, detail := range st.Details() {
-					switch t := detail.(type) {
-					case *errdetails.BadRequest:
-						for _, violation := range t.GetFieldViolations() {
-							cmd.Printf("Invalid Fields: The %q field was wrong: %s\n", violation.GetField(), violation.GetDescription())
+				var connErr *connect.Error
+				if errors.As(err, &connErr) {
+					for _, detail := range connErr.Details() {
+						value, err := detail.Value()
+						if err != nil {
+							continue
+						}
+
+						badReq, ok := value.(*errdetails.BadRequest)
+						if !ok {
+							continue
+						}
+
+						for _, violation := range badReq.GetFieldViolations() {
+							cmd.Printf("Invalid Field: %q - %s\n", violation.GetField(), violation.GetDescription())
 						}
 					}
 				}
