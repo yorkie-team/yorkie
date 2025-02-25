@@ -140,9 +140,7 @@ func (v VersionVector) Min(other *VersionVector) VersionVector {
 
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
-			if value < otherValue {
-				v[key] = value
-			} else {
+			if value > otherValue {
 				v[key] = otherValue
 			}
 		} else {
@@ -169,13 +167,9 @@ func (v VersionVector) Max(other *VersionVector) VersionVector {
 
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
-			if value > otherValue {
-				v[key] = value
-			} else {
+			if value < otherValue {
 				v[key] = otherValue
 			}
-		} else {
-			v[key] = value
 		}
 	}
 
