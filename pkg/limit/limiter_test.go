@@ -49,16 +49,17 @@ func TestSynchronousExecute(t *testing.T) {
 
 	t.Run("Ten consecutive calls execute callback each time", func(t *testing.T) {
 		th := New(throttleWindow)
+		const numExecute = 10
 		var callCount int32
 		callback := func() error {
 			atomic.AddInt32(&callCount, 1)
 			return nil
 		}
 
-		for range 10 {
+		for range numExecute {
 			assert.NoError(t, th.Execute(ctx, callback))
 		}
-		assert.Equal(t, int32(10), atomic.LoadInt32(&callCount))
+		assert.Equal(t, int32(numExecute), atomic.LoadInt32(&callCount))
 	})
 }
 
@@ -185,7 +186,7 @@ func TestContextCancellation(t *testing.T) {
 	})
 
 	// This test verifies that when the context is canceled,
-	// any pending (trailing) call does not execute.
+	// any debouncing (trailing) call does not execute.
 	t.Run("Trailing call fails due to context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		th := New(throttleWindow)
@@ -209,15 +210,15 @@ func TestContextCancellation(t *testing.T) {
 			assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 			wg.Done()
 		}()
-		// Cancel the context to cancel any pending trailing call.
+		// Cancel the context to cancel any debouncing trailing call.
 		cancel()
 		wg.Wait()
 	})
 }
 
-// TestCallAsyncDelayed verifies that if the rate limiter does not allow an immediate call,
-// ExecuteOrSchedule schedules a trailing callback which eventually executes.
-func TestExecuteOrSchedule(t *testing.T) {
+// TestSchedule verifies that if the rate limiter does not allow an immediate call,
+// Schedule schedules a trailing callback which eventually executes.
+func TestSchedule(t *testing.T) {
 	const (
 		throttleWindow = 10 * time.Millisecond
 		numRoutines    = 100
@@ -230,14 +231,15 @@ func TestExecuteOrSchedule(t *testing.T) {
 	}
 
 	// First call should be allowed immediately.
-	th.ExecuteOrSchedule(callback)
+	th.Schedule(callback)
+	time.Sleep(throttleWindow / 10)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 
 	// Second call should be rate limited and schedule a trailing call.
 	before := time.Now()
 	// it schedules only one callback
 	for range numRoutines {
-		th.ExecuteOrSchedule(callback)
+		th.Schedule(callback)
 	}
 	duration := time.Since(before)
 	assert.Less(t, duration, throttleWindow/10, "Execution time exceeded expected threshold")
@@ -246,8 +248,8 @@ func TestExecuteOrSchedule(t *testing.T) {
 	assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
 }
 
-// TestConcurrentExecuteOrSchedule verifies that the throttler behaves as expected under concurrent invocations.
-func TestConcurrentExecuteOrSchedule(t *testing.T) {
+// TestConcurrentSchedule verifies that the throttler behaves as expected under concurrent invocations.
+func TestConcurrentSchedule(t *testing.T) {
 	const throttleWindow = 10 * time.Millisecond
 
 	t.Run("Concurrent calls result in one immediate and one trailing execution", func(t *testing.T) {
@@ -260,7 +262,7 @@ func TestConcurrentExecuteOrSchedule(t *testing.T) {
 		}
 
 		for range numRoutines {
-			th.ExecuteOrSchedule(callback)
+			th.Schedule(callback)
 		}
 		// Allow enough time for the trailing call to be scheduled.
 		time.Sleep(throttleWindow * 2)
@@ -299,7 +301,7 @@ func TestConcurrentExecuteOrSchedule(t *testing.T) {
 			case <-ticker.C:
 				// Each tick triggers multiple concurrent calls.
 				for range numRoutines {
-					th.ExecuteOrSchedule(callback)
+					th.Schedule(callback)
 				}
 			case <-ctx.Done():
 				// Allow any trailing call to execute.
