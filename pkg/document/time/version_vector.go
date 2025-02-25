@@ -130,54 +130,62 @@ func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	return clientLamport >= other.lamport
 }
 
-// Min returns new vv consists of every min value in each column.
-func (v VersionVector) Min(other VersionVector) VersionVector {
-	minVV := NewVersionVector()
+// Min modifies the receiver in-place to contain the minimum values between itself
+// and the given version vector, and returns the modified receiver.
+// Note: This method modifies the receiver for memory efficiency.
+func (v VersionVector) Min(other *VersionVector) VersionVector {
+	if other == nil {
+		return v
+	}
 
 	for key, value := range v {
-		if otherValue, exists := other[key]; exists {
+		if otherValue, exists := (*other)[key]; exists {
 			if value < otherValue {
-				minVV[key] = value
+				v[key] = value
 			} else {
-				minVV[key] = otherValue
+				v[key] = otherValue
 			}
 		} else {
-			minVV[key] = 0
+			v[key] = 0
 		}
 	}
 
-	for key := range other {
+	for key := range *other {
 		if _, exists := v[key]; !exists {
-			minVV[key] = 0
+			v[key] = 0
 		}
 	}
 
-	return minVV
+	return v
 }
 
-// Max returns new vv consists of every max value in each column.
-func (v VersionVector) Max(other VersionVector) VersionVector {
-	maxVV := NewVersionVector()
+// Max modifies the receiver in-place to contain the maximum values between itself
+// and the given version vector, and returns the modified receiver.
+// Note: This method modifies the receiver for memory efficiency.
+func (v VersionVector) Max(other *VersionVector) VersionVector {
+	if other == nil {
+		return v
+	}
 
 	for key, value := range v {
-		if otherValue, exists := other[key]; exists {
+		if otherValue, exists := (*other)[key]; exists {
 			if value > otherValue {
-				maxVV[key] = value
+				v[key] = value
 			} else {
-				maxVV[key] = otherValue
+				v[key] = otherValue
 			}
 		} else {
-			maxVV[key] = value
+			v[key] = value
 		}
 	}
 
-	for key, value := range other {
+	for key, value := range *other {
 		if _, exists := v[key]; !exists {
-			maxVV[key] = value
+			v[key] = value
 		}
 	}
 
-	return maxVV
+	return v
 }
 
 // MaxLamport returns max lamport value in version vector.

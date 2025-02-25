@@ -97,7 +97,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 		status:        StatusDetached,
 		root:          crdt.NewRoot(root),
 		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID,
+		changeID:      change.InitialID(),
 		presences:     innerpresence.NewMap(),
 		onlineClients: &gosync.Map{},
 	}
@@ -116,6 +116,9 @@ func NewInternalDocumentFromSnapshot(
 		return nil, err
 	}
 
+	changeID := change.InitialID()
+	changeID.SetClocks(lamport, vector)
+
 	return &InternalDocument{
 		key:           k,
 		status:        StatusDetached,
@@ -123,7 +126,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:     presences,
 		onlineClients: &gosync.Map{},
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      change.InitialID.SetClocks(lamport, vector),
+		changeID:      changeID,
 	}, nil
 }
 

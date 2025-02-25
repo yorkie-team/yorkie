@@ -25,12 +25,6 @@ const (
 	InitialLamport = 0
 )
 
-var (
-	// InitialID represents the initial state ID. Usually this is used to
-	// represent a state where nothing has been edited.
-	InitialID = NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.InitialVersionVector)
-)
-
 // ID represents the identifier of the change. It is used to identify the
 // change and to order the changes. It is also used to detect the relationship
 // between changes whether they are causally related or concurrent.
@@ -75,6 +69,12 @@ func NewID(
 	}
 }
 
+// InitialID creates an initial state ID. Usually this is used to
+// represent a state where nothing has been edited.
+func InitialID() ID {
+	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.NewVersionVector())
+}
+
 // Next creates a next ID of this ID.
 func (id ID) Next() ID {
 	versionVector := id.versionVector.DeepCopy()
@@ -113,7 +113,7 @@ func (id ID) SyncClocks(other ID) ID {
 		otherVV.Set(other.actorID, other.lamport)
 	}
 
-	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(otherVV))
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector.Max(&otherVV))
 	newID.versionVector.Set(id.actorID, lamport)
 	return newID
 }
@@ -135,7 +135,7 @@ func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 	// problematic. To address this, we remove the InitialActorID from snapshots.
 	vector.Unset(time.InitialActorID)
 
-	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(vector))
+	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector.Max(&vector))
 	newID.versionVector.Set(id.actorID, lamport)
 
 	return newID
