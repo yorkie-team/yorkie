@@ -1260,11 +1260,11 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 
 	// 02. Compute min version vector.
 	minVersionVector := versionVector.DeepCopy()
-	for _, vvi := range versionVectorInfos {
+	for i, vvi := range versionVectorInfos {
 		if vvi.ClientID == clientInfo.ID {
 			continue
 		}
-		minVersionVector.Min(&vvi.VersionVector)
+		minVersionVector.Min(&versionVectorInfos[i].VersionVector)
 	}
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
