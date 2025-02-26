@@ -891,7 +891,9 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, res, updateInfo)
 		assert.Equal(t, newName2, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL2, updateInfo.AuthWebhookURL)
-		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.Equal(t, clientDeactivateThreshold2, updateInfo.ClientDeactivateThreshold)
 		assert.Equal(t, newConnectionCountLimitPerDocument2, updateInfo.ConnectionCountLimitPerDocument)
 
