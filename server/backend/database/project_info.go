@@ -133,6 +133,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
+	if fields.ConnectionCountLimitPerDocument != nil {
+		i.ConnectionCountLimitPerDocument = *fields.ConnectionCountLimitPerDocument
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.

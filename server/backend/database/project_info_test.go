@@ -39,6 +39,7 @@ func TestProjectInfo(t *testing.T) {
 		testMethods := []string{"testMethod"}
 		testEvents := []string{"testEvent"}
 		testClientDeactivateThreshold := "2h"
+		testConnectionCountLimitPerDocument := 10
 
 		// Test updating name field
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
@@ -67,6 +68,12 @@ func TestProjectInfo(t *testing.T) {
 			ClientDeactivateThreshold: &testClientDeactivateThreshold,
 		})
 		assert.Equal(t, testClientDeactivateThreshold, project.ClientDeactivateThreshold)
+
+		// Test updating connection count limit per document field
+		project.UpdateFields(&types.UpdatableProjectFields{
+			ConnectionCountLimitPerDocument: &testConnectionCountLimitPerDocument,
+		})
+		assert.Equal(t, testConnectionCountLimitPerDocument, project.ConnectionCountLimitPerDocument)
 	})
 
 	t.Run("new project info test", func(t *testing.T) {
@@ -101,26 +108,26 @@ func TestProjectInfo(t *testing.T) {
 		project.UpdatedAt = time.Now()
 
 		// Create a deep copy
-		copy := project.DeepCopy()
+		copiedProject := project.DeepCopy()
 
 		// Verify all fields are correctly copied
-		assert.Equal(t, project.ID, copy.ID)
-		assert.Equal(t, project.Name, copy.Name)
-		assert.Equal(t, project.Owner, copy.Owner)
-		assert.Equal(t, project.PublicKey, copy.PublicKey)
-		assert.Equal(t, project.SecretKey, copy.SecretKey)
-		assert.Equal(t, project.AuthWebhookURL, copy.AuthWebhookURL)
-		assert.Equal(t, project.AuthWebhookMethods, copy.AuthWebhookMethods)
-		assert.Equal(t, project.ClientDeactivateThreshold, copy.ClientDeactivateThreshold)
-		assert.Equal(t, project.ConnectionCountLimitPerDocument, copy.ConnectionCountLimitPerDocument)
-		assert.Equal(t, project.CreatedAt, copy.CreatedAt)
-		assert.Equal(t, project.UpdatedAt, copy.UpdatedAt)
+		assert.Equal(t, project.ID, copiedProject.ID)
+		assert.Equal(t, project.Name, copiedProject.Name)
+		assert.Equal(t, project.Owner, copiedProject.Owner)
+		assert.Equal(t, project.PublicKey, copiedProject.PublicKey)
+		assert.Equal(t, project.SecretKey, copiedProject.SecretKey)
+		assert.Equal(t, project.AuthWebhookURL, copiedProject.AuthWebhookURL)
+		assert.Equal(t, project.AuthWebhookMethods, copiedProject.AuthWebhookMethods)
+		assert.Equal(t, project.ClientDeactivateThreshold, copiedProject.ClientDeactivateThreshold)
+		assert.Equal(t, project.ConnectionCountLimitPerDocument, copiedProject.ConnectionCountLimitPerDocument)
+		assert.Equal(t, project.CreatedAt, copiedProject.CreatedAt)
+		assert.Equal(t, project.UpdatedAt, copiedProject.UpdatedAt)
 
 		// Modify copy and verify it doesn't affect original (proving it's a deep copy)
-		copy.Name = "modified-name"
-		copy.ConnectionCountLimitPerDocument = 20
-		assert.NotEqual(t, project.Name, copy.Name)
-		assert.NotEqual(t, project.ConnectionCountLimitPerDocument, copy.ConnectionCountLimitPerDocument)
+		copiedProject.Name = "modified-name"
+		copiedProject.ConnectionCountLimitPerDocument = 20
+		assert.NotEqual(t, project.Name, copiedProject.Name)
+		assert.NotEqual(t, project.ConnectionCountLimitPerDocument, copiedProject.ConnectionCountLimitPerDocument)
 	})
 
 	t.Run("to project test", func(t *testing.T) {

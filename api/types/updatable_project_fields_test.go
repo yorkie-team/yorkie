@@ -39,13 +39,16 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
+		newConnectionCountLimitPerDocument := 10
+
 		fields := &types.UpdatableProjectFields{
-			Name:                      &newName,
-			AuthWebhookURL:            &newAuthWebhookURL,
-			AuthWebhookMethods:        &newAuthWebhookMethods,
-			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookEvents:        &newEventWebhookEvents,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			Name:                            &newName,
+			AuthWebhookURL:                  &newAuthWebhookURL,
+			AuthWebhookMethods:              &newAuthWebhookMethods,
+			EventWebhookURL:                 &newEventWebhookURL,
+			EventWebhookEvents:              &newEventWebhookEvents,
+			ClientDeactivateThreshold:       &newClientDeactivateThreshold,
+			ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -123,6 +126,26 @@ func TestUpdatableProjectFields(t *testing.T) {
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+	})
+
+	t.Run("connection count limit per document test", func(t *testing.T) {
+		validConnectionCountLimitPerDocument := 10
+		fields := &types.UpdatableProjectFields{
+			ConnectionCountLimitPerDocument: &validConnectionCountLimitPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		validConnectionCountLimitPerDocument = 0
+		fields = &types.UpdatableProjectFields{
+			ConnectionCountLimitPerDocument: &validConnectionCountLimitPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidConnectionCountLimitPerDocument := -1
+		fields = &types.UpdatableProjectFields{
+			ConnectionCountLimitPerDocument: &invalidConnectionCountLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
