@@ -48,6 +48,9 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// ConnectionCountLimitPerDocument is limit of connection count for each document. 0 means no limit.
+	ConnectionCountLimitPerDocument int `json:"connection_count_limit_per_document"`
+
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
 
@@ -97,4 +100,14 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	}
 
 	return false
+}
+
+// IsConnectionCountLimitPerDocumentEnabled returns true if the connection count limit per document is enabled.
+func (p *Project) IsConnectionLimitEnabled() bool {
+	return p.ConnectionCountLimitPerDocument > 0
+}
+
+// IsConnectionLimitExceeded returns true if the connection limit is exceeded.
+func (p *Project) IsConnectionLimitExceeded(connectedClientCount int) bool {
+	return p.ConnectionCountLimitPerDocument > 0 && connectedClientCount >= p.ConnectionCountLimitPerDocument
 }

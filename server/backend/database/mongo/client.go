@@ -173,12 +173,13 @@ func (c *Client) ensureDefaultProjectInfo(
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":                        candidate.Name,
-			"owner":                       candidate.Owner,
-			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
-			"public_key":                  candidate.PublicKey,
-			"secret_key":                  candidate.SecretKey,
-			"created_at":                  candidate.CreatedAt,
+			"name":                                candidate.Name,
+			"owner":                               candidate.Owner,
+			"client_deactivate_threshold":         candidate.ClientDeactivateThreshold,
+			"connection_count_limit_per_document": candidate.ConnectionCountLimitPerDocument,
+			"public_key":                          candidate.PublicKey,
+			"secret_key":                          candidate.SecretKey,
+			"created_at":                          candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -850,6 +851,35 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	}
 	if result.Err() != nil {
 		return fmt.Errorf("update document info status to removed: %w", result.Err())
+	}
+
+	return nil
+}
+
+// UpdateDocConnectedClients updates the connected clients of the document.
+func (c *Client) UpdateDocConnectedClients(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+) error {
+	result, err := c.collection(ColDocuments).UpdateOne(
+		ctx,
+		bson.M{
+			"project_id": docInfo.ProjectID,
+			"_id":        docInfo.ID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"connected_clients": docInfo.ConnectedClients,
+				"updated_at":        gotime.Now(),
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("update document connected clients: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 
 	return nil

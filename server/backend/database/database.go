@@ -202,6 +202,12 @@ type Database interface {
 		refKey types.DocRefKey,
 	) error
 
+	// UpdateDocConnectedClients updates the connected clients of the document.
+	UpdateDocConnectedClients(
+		ctx context.Context,
+		docInfo *DocInfo,
+	) error
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

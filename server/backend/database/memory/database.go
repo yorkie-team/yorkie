@@ -885,6 +885,33 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// UpdateDocConnectedClients updates the connected clients of the document.
+func (d *DB) UpdateDocConnectedClients(
+	_ context.Context,
+	docInfo *database.DocInfo,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Commit()
+
+	raw, err := txn.First(tblDocuments, "id", docInfo.ID.String())
+	if err != nil {
+		return fmt.Errorf("find document: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+	}
+
+	existingDoc := raw.(*database.DocInfo)
+	existingDoc.ConnectedClients = docInfo.ConnectedClients
+	existingDoc.UpdatedAt = gotime.Now()
+
+	if err := txn.Insert(tblDocuments, existingDoc); err != nil {
+		return fmt.Errorf("update document connected clients: %w", err)
+	}
+
+	return nil
+}
+
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
