@@ -132,4 +132,8 @@ func TestClient(t *testing.T) {
 	t.Run("IsDocumentAttached test", func(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("UpdateDocConnectedClients test", func(t *testing.T) {
+		testcases.RunUpdateDocConnectedClientsTest(t, cli, dummyProjectID)
+	})
 }

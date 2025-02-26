@@ -1644,6 +1644,68 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunUpdateDocConnectedClientsTest runs the UpdateDocConnectedClients tests for the given db.
+func RunUpdateDocConnectedClientsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("update doc connected clients test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+
+		// 01. Create clients and a document
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+
+		// 02. Update the document connected clients
+		docInfo.ConnectedClients = map[types.ID]*database.ConnectedClientInfo{
+			clientInfo1.ID: {ConnectedAt: gotime.Now()},
+			clientInfo2.ID: {ConnectedAt: gotime.Now()},
+		}
+		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
+
+		// 03. Check if the document connected clients are updated
+		docInfo, err := db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(docInfo.ConnectedClients))
+		assert.Contains(t, docInfo.ConnectedClients, clientInfo1.ID)
+		assert.Contains(t, docInfo.ConnectedClients, clientInfo2.ID)
+	})
+
+	t.Run("remove doc connected clients test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+
+		// 01. Create clients and a document
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+
+		// 02. Update the document connected clients
+		docInfo.ConnectedClients = map[types.ID]*database.ConnectedClientInfo{
+			clientInfo1.ID: {ConnectedAt: gotime.Now()},
+			clientInfo2.ID: {ConnectedAt: gotime.Now()},
+		}
+		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
+
+		// 03. Check if the document connected clients are updated
+		docInfo, err := db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(docInfo.ConnectedClients))
+		assert.Contains(t, docInfo.ConnectedClients, clientInfo1.ID)
+		assert.Contains(t, docInfo.ConnectedClients, clientInfo2.ID)
+
+		// 04. Remove the document connected clients
+		docInfo.RemoveConnectedClient(clientInfo1.ID)
+		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
+
+		// 05. Check if the document connected clients are removed
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(docInfo.ConnectedClients))
+	})
+}
+
 // AssertKeys checks the equivalence between the provided expectedKeys and the keys in the given infos.
 func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo) {
 	var keys []key.Key
