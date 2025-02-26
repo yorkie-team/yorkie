@@ -131,13 +131,9 @@ func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 }
 
 // Min modifies the receiver in-place to contain the minimum values between itself
-// and the given version vector, and returns the modified receiver.
+// and the given version vector.
 // Note: This method modifies the receiver for memory efficiency.
-func (v VersionVector) Min(other *VersionVector) VersionVector {
-	if other == nil {
-		return v
-	}
-
+func (v VersionVector) Min(other *VersionVector) {
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
 			if value > otherValue {
@@ -153,18 +149,12 @@ func (v VersionVector) Min(other *VersionVector) VersionVector {
 			v[key] = 0
 		}
 	}
-
-	return v
 }
 
 // Max modifies the receiver in-place to contain the maximum values between itself
-// and the given version vector, and returns the modified receiver.
+// and the given version vector.
 // Note: This method modifies the receiver for memory efficiency.
-func (v VersionVector) Max(other *VersionVector) VersionVector {
-	if other == nil {
-		return v
-	}
-
+func (v VersionVector) Max(other *VersionVector) {
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
 			if value < otherValue {
@@ -178,8 +168,6 @@ func (v VersionVector) Max(other *VersionVector) VersionVector {
 			v[key] = value
 		}
 	}
-
-	return v
 }
 
 // MaxLamport returns max lamport value in version vector.

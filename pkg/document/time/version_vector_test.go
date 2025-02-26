@@ -101,8 +101,8 @@ func TestVersionVector(t *testing.T) {
 
 	for i, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.v1.Min(&tests[i].v2)
-			assert.Equal(t, tc.expect, result)
+			tc.v1.Min(&tests[i].v2)
+			assert.Equal(t, tc.expect, tc.v1)
 		})
 	}
 }
