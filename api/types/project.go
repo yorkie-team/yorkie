@@ -102,7 +102,7 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	return false
 }
 
-// IsConnectionCountLimitPerDocumentEnabled returns true if the connection count limit per document is enabled.
+// IsConnectionLimitEnabled returns true if the connection count limit per document is enabled.
 func (p *Project) IsConnectionLimitEnabled() bool {
 	return p.ConnectionCountLimitPerDocument > 0
 }

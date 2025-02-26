@@ -118,29 +118,29 @@ func TestDocInfo(t *testing.T) {
 		original.AddConnectedClient(types.ID("client2"))
 
 		// Create a deep copy
-		copy := original.DeepCopy()
+		copiedDocInfo := original.DeepCopy()
 
 		// Verify the copy has the same values
-		assert.Equal(t, original.ID, copy.ID)
-		assert.Equal(t, original.ProjectID, copy.ProjectID)
-		assert.Equal(t, original.Key, copy.Key)
-		assert.Equal(t, original.ServerSeq, copy.ServerSeq)
-		assert.Equal(t, original.Owner, copy.Owner)
-		assert.Equal(t, original.CreatedAt, copy.CreatedAt)
-		assert.Equal(t, original.UpdatedAt, copy.UpdatedAt)
-		assert.Equal(t, original.GetConnectedClientCount(), copy.GetConnectedClientCount())
-		assert.True(t, copy.IsClientConnected(types.ID("client1")))
-		assert.True(t, copy.IsClientConnected(types.ID("client2")))
+		assert.Equal(t, original.ID, copiedDocInfo.ID)
+		assert.Equal(t, original.ProjectID, copiedDocInfo.ProjectID)
+		assert.Equal(t, original.Key, copiedDocInfo.Key)
+		assert.Equal(t, original.ServerSeq, copiedDocInfo.ServerSeq)
+		assert.Equal(t, original.Owner, copiedDocInfo.Owner)
+		assert.Equal(t, original.CreatedAt, copiedDocInfo.CreatedAt)
+		assert.Equal(t, original.UpdatedAt, copiedDocInfo.UpdatedAt)
+		assert.Equal(t, original.GetConnectedClientCount(), copiedDocInfo.GetConnectedClientCount())
+		assert.True(t, copiedDocInfo.IsClientConnected(types.ID("client1")))
+		assert.True(t, copiedDocInfo.IsClientConnected(types.ID("client2")))
 
 		// Modify the copy and verify it doesn't affect the original
-		copy.ServerSeq = 10
-		copy.RemoveConnectedClient(types.ID("client1"))
+		copiedDocInfo.ServerSeq = 10
+		copiedDocInfo.RemoveConnectedClient(types.ID("client1"))
 		assert.Equal(t, int64(5), original.ServerSeq)
-		assert.Equal(t, int64(10), copy.ServerSeq)
+		assert.Equal(t, int64(10), copiedDocInfo.ServerSeq)
 		assert.Equal(t, 2, original.GetConnectedClientCount())
-		assert.Equal(t, 1, copy.GetConnectedClientCount())
+		assert.Equal(t, 1, copiedDocInfo.GetConnectedClientCount())
 		assert.True(t, original.IsClientConnected(types.ID("client1")))
-		assert.False(t, copy.IsClientConnected(types.ID("client1")))
+		assert.False(t, copiedDocInfo.IsClientConnected(types.ID("client1")))
 	})
 
 	t.Run("ref key test", func(t *testing.T) {
