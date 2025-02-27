@@ -116,7 +116,7 @@ func TestDB(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, db, projectID)
 	})
 
-	t.Run("ConnectionLimitPerDocument test", func(t *testing.T) {
-		testcases.RunUpdateDocConnectedClientsTest(t, db, projectID)
+	t.Run("AddAndRemoveDocConnectedClientsTest test", func(t *testing.T) {
+		testcases.RunAddAndRemoveDocConnectedClientsTest(t, db, projectID)
 	})
 }

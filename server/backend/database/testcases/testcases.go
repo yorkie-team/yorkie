@@ -1667,9 +1667,9 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	})
 }
 
-// RunUpdateDocConnectedClientsTest runs the UpdateDocConnectedClients tests for the given db.
-func RunUpdateDocConnectedClientsTest(t *testing.T, db database.Database, projectID types.ID) {
-	t.Run("update doc connected clients test", func(t *testing.T) {
+// RunAddAndRemoveDocConnectedClientsTest runs the RunAddAndRemoveDocConnectedClientsTest tests for the given db.
+func RunAddAndRemoveDocConnectedClientsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("add and remove doc connected clients test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
 
@@ -1679,53 +1679,67 @@ func RunUpdateDocConnectedClientsTest(t *testing.T, db database.Database, projec
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 
-		// 02. Update the document connected clients
-		docInfo.ConnectedClients = map[types.ID]*database.ConnectedClientInfo{
-			clientInfo1.ID: {ConnectedAt: gotime.Now()},
-			clientInfo2.ID: {ConnectedAt: gotime.Now()},
-		}
-		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
+		// 02. Update the document connected client 1
+		assert.NoError(t, db.AddDocConnectedClient(
+			ctx,
+			docRefKey,
+			clientInfo1.ID,
+			docInfo.AddConnectedClient(clientInfo1.ID),
+		))
 
 		// 03. Check if the document connected clients are updated
 		docInfo, err := db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, len(docInfo.ConnectedClients))
+		assert.Equal(t, 1, len(docInfo.ConnectedClients))
 		assert.Contains(t, docInfo.ConnectedClients, clientInfo1.ID)
-		assert.Contains(t, docInfo.ConnectedClients, clientInfo2.ID)
-	})
 
-	t.Run("remove doc connected clients test", func(t *testing.T) {
-		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
+		// 04. Update the document connected client 2
+		assert.NoError(t, db.AddDocConnectedClient(
+			ctx,
+			docRefKey,
+			clientInfo2.ID,
+			docInfo.AddConnectedClient(clientInfo2.ID),
+		))
 
-		// 01. Create clients and a document
-		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
-		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
-		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
-		docRefKey := docInfo.RefKey()
-
-		// 02. Update the document connected clients
-		docInfo.ConnectedClients = map[types.ID]*database.ConnectedClientInfo{
-			clientInfo1.ID: {ConnectedAt: gotime.Now()},
-			clientInfo2.ID: {ConnectedAt: gotime.Now()},
-		}
-		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
-
-		// 03. Check if the document connected clients are updated
-		docInfo, err := db.FindDocInfoByRefKey(ctx, docRefKey)
+		// 05. Check if the document connected clients are updated
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(docInfo.ConnectedClients))
 		assert.Contains(t, docInfo.ConnectedClients, clientInfo1.ID)
 		assert.Contains(t, docInfo.ConnectedClients, clientInfo2.ID)
 
-		// 04. Remove the document connected clients
+		// 06. Remove the document connected client 1
 		docInfo.RemoveConnectedClient(clientInfo1.ID)
-		assert.NoError(t, db.UpdateDocConnectedClients(ctx, docInfo))
+		assert.NoError(t, db.RemoveDocConnectedClient(ctx, docRefKey, clientInfo1.ID))
 
 		// 05. Check if the document connected clients are removed
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
-		assert.Equal(t, 1, len(docInfo.ConnectedClients))
+		assert.NotContains(t, docInfo.ConnectedClients, clientInfo1.ID)
+		assert.Contains(t, docInfo.ConnectedClients, clientInfo2.ID)
+
+		// 07. Remove the document connected client 2
+		docInfo.RemoveConnectedClient(clientInfo2.ID)
+		assert.NoError(t, db.RemoveDocConnectedClient(ctx, docRefKey, clientInfo2.ID))
+
+		// 08. Check if the document connected clients are removed
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(docInfo.ConnectedClients))
+		assert.NotContains(t, docInfo.ConnectedClients, clientInfo1.ID)
+		assert.NotContains(t, docInfo.ConnectedClients, clientInfo2.ID)
+
+		// 09. Remove the document connected client 2 again
+		docInfo.RemoveConnectedClient(clientInfo2.ID)
+		assert.NoError(t, db.RemoveDocConnectedClient(ctx, docRefKey, clientInfo2.ID))
+
+		// 10. Check if the document connected clients are removed
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(docInfo.ConnectedClients))
+		assert.NotContains(t, docInfo.ConnectedClients, clientInfo1.ID)
+		assert.NotContains(t, docInfo.ConnectedClients, clientInfo2.ID)
+
 	})
 }
 
