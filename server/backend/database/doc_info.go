@@ -77,13 +77,14 @@ func (info *DocInfo) IsRemoved() bool {
 }
 
 // AddConnectedClient adds a client to the connected clients map.
-func (info *DocInfo) AddConnectedClient(clientID types.ID) {
+func (info *DocInfo) AddConnectedClient(clientID types.ID) *ConnectedClientInfo {
 	if info.ConnectedClients == nil {
 		info.ConnectedClients = make(ConnectedClientsMap)
 	}
 	info.ConnectedClients[clientID] = &ConnectedClientInfo{
 		ConnectedAt: time.Now(),
 	}
+	return info.ConnectedClients[clientID]
 }
 
 // RemoveConnectedClient removes a client from the connected clients map.

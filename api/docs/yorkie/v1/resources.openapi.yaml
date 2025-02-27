@@ -1329,6 +1329,11 @@ components:
           description: ""
           title: client_deactivate_threshold
           type: string
+        connectionCountLimitPerDocument:
+          additionalProperties: false
+          description: ""
+          title: connection_count_limit_per_document
+          type: integer
         createdAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false

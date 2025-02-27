@@ -885,28 +885,63 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
-// UpdateDocConnectedClients updates the connected clients of the document.
-func (d *DB) UpdateDocConnectedClients(
+// AddDocConnectedClient adds the connected client to the document.
+func (d *DB) AddDocConnectedClient(
 	_ context.Context,
-	docInfo *database.DocInfo,
+	refKey types.DocRefKey,
+	clientID types.ID,
+	ConnectedClientInfo *database.ConnectedClientInfo,
 ) error {
 	txn := d.db.Txn(true)
-	defer txn.Commit()
+	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "id", docInfo.ID.String())
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
 	if err != nil {
 		return fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", refKey.DocID, database.ErrDocumentNotFound)
 	}
 
 	existingDoc := raw.(*database.DocInfo)
-	existingDoc.ConnectedClients = docInfo.ConnectedClients
+	if existingDoc.ConnectedClients == nil {
+		existingDoc.ConnectedClients = make(map[types.ID]*database.ConnectedClientInfo)
+	}
+	existingDoc.ConnectedClients[clientID] = ConnectedClientInfo
 	existingDoc.UpdatedAt = gotime.Now()
 
 	if err := txn.Insert(tblDocuments, existingDoc); err != nil {
-		return fmt.Errorf("update document connected clients: %w", err)
+		return fmt.Errorf("add document connected clients: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveDocConnectedClient removes the connected client from the document.
+func (d *DB) RemoveDocConnectedClient(
+	_ context.Context,
+	refKey types.DocRefKey,
+	clientID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return fmt.Errorf("find document: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	existingDoc := raw.(*database.DocInfo)
+	if existingDoc.ConnectedClients != nil {
+		delete(existingDoc.ConnectedClients, clientID)
+	}
+	existingDoc.UpdatedAt = gotime.Now()
+
+	if err := txn.Insert(tblDocuments, existingDoc); err != nil {
+		return fmt.Errorf("remove document connected clients: %w", err)
 	}
 
 	return nil

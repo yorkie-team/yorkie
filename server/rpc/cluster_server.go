@@ -94,6 +94,20 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	if project.IsConnectionLimitEnabled() {
+		docInfo.RemoveConnectedClient(clientInfo.ID)
+		if err := s.backend.DB.RemoveDocConnectedClient(
+			ctx,
+			types.DocRefKey{
+				ProjectID: project.ID,
+				DocID:     docInfo.ID,
+			},
+			clientInfo.ID,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	// 01. Create changePack with presence clear change
 	cp := clientInfo.Checkpoint(summary.ID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(

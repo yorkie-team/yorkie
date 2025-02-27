@@ -856,33 +856,68 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
-// UpdateDocConnectedClients updates the connected clients of the document.
-func (c *Client) UpdateDocConnectedClients(
+// AddDocConnectedClient add the connected clients of the document.
+func (c *Client) AddDocConnectedClient(
 	ctx context.Context,
-	docInfo *database.DocInfo,
+	refKey types.DocRefKey,
+	clientID types.ID,
+	ConnectedClientInfo *database.ConnectedClientInfo,
 ) error {
 	result, err := c.collection(ColDocuments).UpdateOne(
 		ctx,
 		bson.M{
-			"project_id": docInfo.ProjectID,
-			"_id":        docInfo.ID,
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.DocID,
 		},
 		bson.M{
 			"$set": bson.M{
-				"connected_clients": docInfo.ConnectedClients,
-				"updated_at":        gotime.Now(),
+				"connected_clients." + clientID.String(): bson.M{
+					"connected_at": ConnectedClientInfo.ConnectedAt,
+				},
+				"updated_at": gotime.Now(),
+			},
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("add document connected clients: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+	}
+
+	return err
+}
+
+// RemoveDocConnectedClient remove the connected clients of the document.
+func (c *Client) RemoveDocConnectedClient(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	clientID types.ID,
+) error {
+	result, err := c.collection(ColDocuments).UpdateOne(
+		ctx,
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.DocID,
+		},
+		bson.M{
+			"$unset": bson.M{
+				"connected_clients." + clientID.String(): 1,
+			},
+			"$set": bson.M{
+				"updated_at": gotime.Now(),
 			},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("update document connected clients: %w", err)
+		return fmt.Errorf("remove document connected clients: %w", err)
 	}
-
 	if result.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
-	return nil
+	return err
 }
 
 // CreateChangeInfos stores the given changes and doc info.

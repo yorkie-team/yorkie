@@ -186,8 +186,15 @@ func (s *yorkieServer) AttachDocument(
 				project.ConnectionCountLimitPerDocument)
 		}
 
-		docInfo.AddConnectedClient(clientInfo.ID)
-		if err := s.backend.DB.UpdateDocConnectedClients(ctx, docInfo); err != nil {
+		if err := s.backend.DB.AddDocConnectedClient(
+			ctx,
+			types.DocRefKey{
+				ProjectID: project.ID,
+				DocID:     docInfo.ID,
+			},
+			clientInfo.ID,
+			docInfo.AddConnectedClient(clientInfo.ID),
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -275,7 +282,7 @@ func (s *yorkieServer) DetachDocument(
 
 	if project.IsConnectionLimitEnabled() {
 		docInfo.RemoveConnectedClient(clientInfo.ID)
-		if err := s.backend.DB.UpdateDocConnectedClients(ctx, docInfo); err != nil {
+		if err := s.backend.DB.RemoveDocConnectedClient(ctx, docRefKey, clientInfo.ID); err != nil {
 			return nil, err
 		}
 	}

@@ -202,10 +202,19 @@ type Database interface {
 		refKey types.DocRefKey,
 	) error
 
-	// UpdateDocConnectedClients updates the connected clients of the document.
-	UpdateDocConnectedClients(
+	// AddDocConnectedClient add the connected clients of the document.
+	AddDocConnectedClient(
 		ctx context.Context,
-		docInfo *DocInfo,
+		refKey types.DocRefKey,
+		clientID types.ID,
+		ConnectedClientInfo *ConnectedClientInfo,
+	) error
+
+	// RemoveDocConnectedClient remove the connected clients of the document.
+	RemoveDocConnectedClient(
+		ctx context.Context,
+		refKey types.DocRefKey,
+		clientID types.ID,
 	) error
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
