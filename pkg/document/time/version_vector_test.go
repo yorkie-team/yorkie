@@ -99,10 +99,10 @@ func TestVersionVector(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
+	for i, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := tc.v1.Min(tc.v2)
-			assert.Equal(t, tc.expect, result)
+			tc.v1.Min(&tests[i].v2)
+			assert.Equal(t, tc.expect, tc.v1)
 		})
 	}
 }

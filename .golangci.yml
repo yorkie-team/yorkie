@@ -31,8 +31,6 @@ linters-settings:
   wrapcheck:
     ignoreSigRegexps:
       - github.com/yorkie-team/yorkie # Ignore all methods in internal package
-      - google.golang.org/grpc/status # Ignore all methods in grpc/status package
-      - google.golang.org/grpc/internal/status # Ignore all methods in grpc/internal/status package
       - context.Context # Ignore all methods in context package
 
 issues:
