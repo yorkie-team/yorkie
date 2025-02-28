@@ -18,14 +18,16 @@
 package pubsub
 
 import (
+	"context"
 	"strconv"
 	gosync "sync"
 	"sync/atomic"
-	time "time"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/pkg/limit"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -38,7 +40,7 @@ func (c *loggerID) next() string {
 	return "p" + strconv.Itoa(int(next))
 }
 
-// BatchPublisher is a publisher that publishes events in batch.
+// BatchPublisher is a batchPublisher that publishes events in batch.
 type BatchPublisher struct {
 	logger *zap.SugaredLogger
 	mutex  gosync.Mutex
@@ -68,8 +70,6 @@ func (bp *BatchPublisher) Publish(event events.DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 
-	// TODO(hackerwins): If DocumentChangedEvent is already in the batch, we don't
-	// need to add it again.
 	bp.events = append(bp.events, event)
 }
 
@@ -126,7 +126,51 @@ func (bp *BatchPublisher) publish() {
 	}
 }
 
-// Close stops the batch publisher
+// Close stops the batch batchPublisher
 func (bp *BatchPublisher) Close() {
 	close(bp.closeChan)
+}
+
+// LimitPublisher is a batchPublisher that publishes events with limit.
+type LimitPublisher struct {
+	logger *zap.SugaredLogger
+	limits map[events.DocEventType]*limit.Limiter
+
+	window time.Duration
+	subs   *Subscriptions
+}
+
+// NewLimitPublisher creates a new NewLimitPublisher instance.
+func NewLimitPublisher(subs *Subscriptions, window time.Duration) *LimitPublisher {
+	lp := &LimitPublisher{
+		logger: logging.New(id.next()),
+		limits: map[events.DocEventType]*limit.Limiter{
+			events.DocChangedEvent:   limit.New(window),
+			events.DocWatchedEvent:   limit.New(window),
+			events.DocUnwatchedEvent: limit.New(window),
+		},
+		window: window,
+		subs:   subs,
+	}
+
+	return lp
+}
+
+// Publish adds the given event to the batch. If the batch is full, it publishes
+// the batch.
+func (lp *LimitPublisher) Publish(event events.DocEvent) {
+	_ = lp.limits[event.Type].Execute(context.Background(), func() error {
+		for _, sub := range lp.subs.Values() {
+			if ok := sub.Publish(event); !ok {
+				lp.logger.Infof(
+					"Publish(%s,%s) to %s timeout or closed",
+					event.Type,
+					event.Publisher,
+					sub.Subscriber(),
+				)
+			}
+		}
+
+		return nil
+	})
 }
