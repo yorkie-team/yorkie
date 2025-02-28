@@ -109,24 +109,17 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Check out code
+      - name: Checkout current repository
         uses: actions/checkout@v4
-
-      - name: Stack
-        run: docker compose -f build/docker/docker-compose.yml up --build -d
-
-      - name: Bench
-        id: curr-bench
-        run: |
-          make bench
-          content=$(cat output.txt | jq -R -s .)
-          echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
-
-      - name: Set up cache
-        uses: actions/cache@v3
         with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
+          path: repo
+
+      - name: Checkout benchmark branch
+        uses: actions/checkout@v4
+        with:
+          ref: yorkie-ci-benchmark
+          path: benchmark-repo
+        continue-on-error: true
 
       - name: Read previous benchmark result
         if: github.event_name == 'pull_request'
@@ -135,15 +128,25 @@ jobs:
           echo "PREV_BENCH_RESULT=null" >> $GITHUB_OUTPUT
           echo "PREV_COMMIT=null" >> $GITHUB_OUTPUT
 
-          if [ -f "./cache/bench_result.txt" ]; then
-            content=$(cat ./cache/bench_result.txt | jq -R -s .)
+          if [ -d "benchmark-repo" ] && [ -f "benchmark-repo/bench_result.txt" ]; then
+            content=$(cat benchmark-repo/bench_result.txt | jq -R -s .)
             echo "PREV_BENCH_RESULT=$content" >> $GITHUB_OUTPUT
-            
-            if [ -f "./cache/commit_hash.txt" ]; then
-              prev_commit=$(cat ./cache/commit_hash.txt)
+            if [ -f "benchmark-repo/commit_hash.txt" ]; then
+              prev_commit=$(cat benchmark-repo/commit_hash.txt)
               echo "PREV_COMMIT=$prev_commit" >> $GITHUB_OUTPUT
             fi
           fi
+
+      - name: Stack
+        run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
+
+      - name: Bench
+        id: curr-bench
+        run: |
+          cd repo
+          make bench
+          content=$(cat output.txt | jq -R -s .)
+          echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
 
       - name: Trigger n8n webhook
         if: github.event_name == 'pull_request'
@@ -166,12 +169,30 @@ jobs:
             exit 1
           fi
 
-      - name: Store benchmark result to cache
+      - name: Store benchmark result
         if: github.ref == 'refs/heads/main'
         run: |
-          mkdir -p ./cache
-          cp output.txt ./cache/bench_result.txt
-          echo "${{ github.sha }}" > ./cache/commit_hash.txt
+          mkdir -p benchmark-repo
+          cp repo/output.txt benchmark-repo/bench_result.txt
+          echo "${{ github.sha }}" > benchmark-repo/commit_hash.txt
+
+          cd benchmark-repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          if [ ! -d ".git" ]; then
+            git init
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          fi
+
+          git add bench_result.txt
+          git add commit_hash.txt
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          git diff --staged --quiet || git commit -m "Update benchmark results at $TIMESTAMP"
+          git checkout -B yorkie-ci-benchmark
+          git push -f origin yorkie-ci-benchmark
+
+          echo "Benchmark results have been pushed to yorkie-ci-benchmark branch"
 
   complex-test:
     name: complex-test
