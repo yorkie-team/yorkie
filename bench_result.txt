@@ -1,0 +1,83 @@
+goos: linux
+goarch: amd64
+pkg: github.com/yorkie-team/yorkie/test/bench
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkDocument/constructor_test-4         	  763450	      1472 ns/op	    1433 B/op	      25 allocs/op
+BenchmarkDocument/status_test-4              	 1000000	      1334 ns/op	    1401 B/op	      23 allocs/op
+BenchmarkDocument/equals_test-4              	  144409	      7938 ns/op	    7706 B/op	     132 allocs/op
+BenchmarkDocument/nested_update_test-4       	   64980	     17081 ns/op	   12355 B/op	     259 allocs/op
+BenchmarkDocument/delete_test-4              	   52581	     22790 ns/op	   15836 B/op	     340 allocs/op
+BenchmarkDocument/object_test-4              	  140436	      8539 ns/op	    7081 B/op	     119 allocs/op
+BenchmarkDocument/array_test-4               	   42252	     28405 ns/op	   12187 B/op	     274 allocs/op
+BenchmarkDocument/text_test-4                	   37821	     31656 ns/op	   15236 B/op	     485 allocs/op
+BenchmarkDocument/text_composition_test-4    	   38078	     31389 ns/op	   18749 B/op	     502 allocs/op
+BenchmarkDocument/rich_text_test-4           	   14023	     86962 ns/op	   39405 B/op	    1147 allocs/op
+BenchmarkDocument/counter_test-4             	   66055	     18075 ns/op	   11859 B/op	     254 allocs/op
+BenchmarkDocument/text_edit_gc_100-4         	     862	   1381721 ns/op	  864904 B/op	   17282 allocs/op
+BenchmarkDocument/text_edit_gc_1000-4        	      22	  52505180 ns/op	46838416 B/op	  185593 allocs/op
+BenchmarkDocument/text_split_gc_100-4        	     564	   2093102 ns/op	 1581137 B/op	   15952 allocs/op
+BenchmarkDocument/text_split_gc_1000-4       	       8	 127970476 ns/op	137788344 B/op	  184998 allocs/op
+BenchmarkDocument/text_delete_all_10000-4    	      72	  16810604 ns/op	10576737 B/op	   56138 allocs/op
+BenchmarkDocument/text_delete_all_100000-4   	       4	 290194514 ns/op	105538672 B/op	  566122 allocs/op
+BenchmarkDocument/text_100-4                 	    4995	    228221 ns/op	  120954 B/op	    5182 allocs/op
+BenchmarkDocument/text_1000-4                	     490	   2432798 ns/op	 1156125 B/op	   51085 allocs/op
+BenchmarkDocument/array_1000-4               	     954	   1236309 ns/op	 1088110 B/op	   11880 allocs/op
+BenchmarkDocument/array_10000-4              	      88	  13356109 ns/op	 9889298 B/op	  120736 allocs/op
+BenchmarkDocument/array_gc_100-4             	    9050	    131033 ns/op	   99928 B/op	    1267 allocs/op
+BenchmarkDocument/array_gc_1000-4            	     830	   1408017 ns/op	 1140972 B/op	   12927 allocs/op
+BenchmarkDocument/counter_1000-4             	    5726	    199973 ns/op	  178182 B/op	    5772 allocs/op
+BenchmarkDocument/counter_10000-4            	     550	   2142118 ns/op	 2069002 B/op	   59779 allocs/op
+BenchmarkDocument/object_1000-4              	     861	   1407013 ns/op	 1437355 B/op	    9926 allocs/op
+BenchmarkDocument/object_10000-4             	      68	  14972615 ns/op	12351510 B/op	  101232 allocs/op
+BenchmarkDocument/tree_100-4                 	    1164	   1037333 ns/op	  951076 B/op	    6103 allocs/op
+BenchmarkDocument/tree_1000-4                	      15	  74446524 ns/op	86581553 B/op	   60113 allocs/op
+BenchmarkDocument/tree_10000-4               	       1	9386662221 ns/op	8581197856 B/op	  600205 allocs/op
+BenchmarkDocument/tree_delete_all_1000-4     	      14	  77012082 ns/op	87567701 B/op	   75291 allocs/op
+BenchmarkDocument/tree_edit_gc_100-4         	     312	   3830400 ns/op	 4147819 B/op	   15147 allocs/op
+BenchmarkDocument/tree_edit_gc_1000-4        	       4	 314958655 ns/op	384043954 B/op	  154937 allocs/op
+BenchmarkDocument/tree_split_gc_100-4        	     459	   2594686 ns/op	 2407272 B/op	   11132 allocs/op
+BenchmarkDocument/tree_split_gc_1000-4       	       6	 189143323 ns/op	222496805 B/op	  122064 allocs/op
+BenchmarkRPC/client_to_server-4              	       3	 420531231 ns/op	17869757 B/op	  223725 allocs/op
+BenchmarkRPC/client_to_client_via_server-4   	       2	 771399604 ns/op	39088152 B/op	  470568 allocs/op
+BenchmarkRPC/attach_large_document-4         	       1	1259924751 ns/op	1897375488 B/op	   12439 allocs/op
+BenchmarkRPC/adminCli_to_server-4            	       2	 543018968 ns/op	21304204 B/op	  316652 allocs/op
+BenchmarkLocker-4                            	13967834	        85.81 ns/op	      32 B/op	       1 allocs/op
+BenchmarkLockerParallel-4                    	32992456	        45.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLockerMoreKeys-4                    	 5895531	       187.9 ns/op	      30 B/op	       0 allocs/op
+BenchmarkRWLocker/RWLock_rate_2-4            	24016662	        50.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRWLocker/RWLock_rate_10-4           	26395870	        45.77 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRWLocker/RWLock_rate_100-4          	18364998	        61.23 ns/op	       2 B/op	       0 allocs/op
+BenchmarkRWLocker/RWLock_rate_1000-4         	12727911	        89.26 ns/op	       8 B/op	       0 allocs/op
+BenchmarkChange/Push_10_Changes-4            	     292	   4487249 ns/op	  150941 B/op	    1625 allocs/op
+BenchmarkChange/Push_100_Changes-4           	     100	  16402176 ns/op	  776098 B/op	    8511 allocs/op
+BenchmarkChange/Push_1000_Changes-4          	     100	 131295275 ns/op	 7178778 B/op	   79325 allocs/op
+BenchmarkChange/Pull_10_Changes-4            	     375	   3689865 ns/op	  124601 B/op	    1454 allocs/op
+BenchmarkChange/Pull_100_Changes-4           	     244	   5259434 ns/op	  354655 B/op	    5180 allocs/op
+BenchmarkChange/Pull_1000_Changes-4          	     100	  10494884 ns/op	 2199098 B/op	   44680 allocs/op
+BenchmarkSnapshot/Push_3KB_snapshot-4        	     100	  18527844 ns/op	  901999 B/op	    8514 allocs/op
+BenchmarkSnapshot/Push_30KB_snapshot-4       	     100	 132494755 ns/op	 8008755 B/op	   86458 allocs/op
+BenchmarkSnapshot/Pull_3KB_snapshot-4        	     168	   7361785 ns/op	 1060944 B/op	   19256 allocs/op
+BenchmarkSnapshot/Pull_30KB_snapshot-4       	     100	  19291930 ns/op	 8767394 B/op	  185629 allocs/op
+BenchmarkSplayTree/stress_test_100000-4      	1000000000	         0.1958 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/stress_test_200000-4      	1000000000	         0.3818 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/stress_test_300000-4      	1000000000	         0.6015 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/random_access_100000-4    	1000000000	         0.01263 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/random_access_200000-4    	1000000000	         0.02720 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/random_access_300000-4    	1000000000	         0.04077 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSplayTree/editing_trace_bench-4     	1000000000	         0.001895 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSync/memory_sync_10_test-4          	  171283	      7057 ns/op	    1342 B/op	      35 allocs/op
+BenchmarkSync/memory_sync_100_test-4         	   21751	     54760 ns/op	    9534 B/op	     269 allocs/op
+BenchmarkSync/memory_sync_1000_test-4        	    1938	    617621 ns/op	   75629 B/op	    2103 allocs/op
+BenchmarkSync/memory_sync_10000_test-4       	     156	   7833274 ns/op	  752229 B/op	   20417 allocs/op
+BenchmarkTextEditing-4                       	       1	5200223628 ns/op	3922683512 B/op	20619784 allocs/op
+BenchmarkTree/10000_vertices_to_protobuf-4   	     241	   4291875 ns/op	 6363217 B/op	   70025 allocs/op
+BenchmarkTree/10000_vertices_from_protobuf-4 	       5	 222462732 ns/op	442306052 B/op	  290039 allocs/op
+BenchmarkTree/20000_vertices_to_protobuf-4   	     128	   9137032 ns/op	12890897 B/op	  140028 allocs/op
+BenchmarkTree/20000_vertices_from_protobuf-4 	       2	 877368800 ns/op	1697478956 B/op	  580090 allocs/op
+BenchmarkTree/30000_vertices_to_protobuf-4   	     100	  13146173 ns/op	18976186 B/op	  210029 allocs/op
+BenchmarkTree/30000_vertices_from_protobuf-4 	       1	2019910264 ns/op	3751738312 B/op	  870086 allocs/op
+BenchmarkVersionVector/clients_10-4          	       7	 157848243 ns/op	       745.0 1_changepack(bytes)	       379.0 2_snapshot(bytes)	         7.000 3_pushpull(ms)	         6.000 4_attach(ms)	       805.0 5_changepack_after_detach(bytes)	       136.0 6_snapshot_after_detach(bytes)	         8.000 7_pushpull_after_detach(ms)	20713709 B/op	   83248 allocs/op
+BenchmarkVersionVector/clients_100-4         	       1	1389294787 ns/op	      6145 1_changepack(bytes)	      3079 2_snapshot(bytes)	        11.00 3_pushpull(ms)	         9.000 4_attach(ms)	      6210 5_changepack_after_detach(bytes)	       137.0 6_snapshot_after_detach(bytes)	         9.000 7_pushpull_after_detach(ms)	213575752 B/op	 1481342 allocs/op
+BenchmarkVersionVector/clients_1000-4        	       1	42349230863 ns/op	     60155 1_changepack(bytes)	     30081 2_snapshot(bytes)	       116.0 3_pushpull(ms)	        72.00 4_attach(ms)	     60217 5_changepack_after_detach(bytes)	       139.0 6_snapshot_after_detach(bytes)	        27.00 7_pushpull_after_detach(ms)	6432261544 B/op	93354528 allocs/op
+PASS
+ok  	github.com/yorkie-team/yorkie/test/bench	283.488s
