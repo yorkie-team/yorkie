@@ -61,6 +61,7 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(server.DefaultAuthWebhookMaxRetries))
+		assert.Equal(t, conf.Backend.EventWebhookMaxRetries, uint64(server.DefaultEventWebhookMaxRetries))
 
 		ClientDeactivateThreshold := conf.Backend.ClientDeactivateThreshold
 		assert.NoError(t, err)
@@ -70,16 +71,32 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookMaxWaitInterval, server.DefaultAuthWebhookMaxWaitInterval)
 
-		authWebhookCacheAuthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheAuthTTL)
+		authWebhookMinWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMinWaitInterval)
 		assert.NoError(t, err)
-		assert.Equal(t, authWebhookCacheAuthTTL, server.DefaultAuthWebhookCacheAuthTTL)
+		assert.Equal(t, authWebhookMinWaitInterval, server.DefaultAuthWebhookMinWaitInterval)
 
-		authWebhookCacheUnauthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheUnauthTTL)
+		authWebhookRequestTimeout, err := time.ParseDuration(conf.Backend.AuthWebhookRequestTimeout)
 		assert.NoError(t, err)
-		assert.Equal(t, authWebhookCacheUnauthTTL, server.DefaultAuthWebhookCacheUnauthTTL)
+		assert.Equal(t, authWebhookRequestTimeout, server.DefaultAuthWebhookRequestTimeout)
 
-		projectInfoCacheTTL, err := time.ParseDuration(conf.Backend.ProjectInfoCacheTTL)
+		authWebhookCacheTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheTTL)
 		assert.NoError(t, err)
-		assert.Equal(t, projectInfoCacheTTL, server.DefaultProjectInfoCacheTTL)
+		assert.Equal(t, authWebhookCacheTTL, server.DefaultAuthWebhookCacheTTL)
+
+		eventWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.EventWebhookMaxWaitInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookMaxWaitInterval, server.DefaultEventWebhookMaxWaitInterval)
+
+		eventWebhookMinWaitInterval, err := time.ParseDuration(conf.Backend.EventWebhookMinWaitInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookMinWaitInterval, server.DefaultEventWebhookMinWaitInterval)
+
+		eventWebhookRequestTimeout, err := time.ParseDuration(conf.Backend.EventWebhookRequestTimeout)
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookRequestTimeout, server.DefaultEventWebhookRequestTimeout)
+
+		projectCacheTTL, err := time.ParseDuration(conf.Backend.ProjectCacheTTL)
+		assert.NoError(t, err)
+		assert.Equal(t, projectCacheTTL, server.DefaultProjectCacheTTL)
 	})
 }

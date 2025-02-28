@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 )
 
 func BenchmarkSync(b *testing.B) {
@@ -49,7 +48,7 @@ func BenchmarkSync(b *testing.B) {
 
 func benchmarkMemorySync(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		coordinator := memory.NewCoordinator(nil)
+		locker := sync.New()
 
 		sum := 0
 		var wg gosync.WaitGroup
@@ -59,7 +58,7 @@ func benchmarkMemorySync(cnt int, b *testing.B) {
 				defer wg.Done()
 
 				ctx := context.Background()
-				locker, err := coordinator.NewLocker(ctx, sync.Key(b.Name()))
+				locker, err := locker.NewLocker(ctx, sync.Key(b.Name()))
 				assert.NoError(b, err)
 				assert.NoError(b, locker.Lock(ctx))
 				sum += 1

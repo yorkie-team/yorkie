@@ -23,34 +23,54 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
-
-	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
 
-// Backend manages Yorkie's backend such as Database and Coordinator. And it
-// has the server status such as the information of this Server.
+// Backend manages Yorkie's backend such as Database and Coordinator. It also
+// provides in-memory cache, pubsub, and locker.
 type Backend struct {
-	Config           *Config
-	serverInfo       *sync.ServerInfo
-	AuthWebhookCache *cache.LRUExpireCache[string, *types.AuthWebhookResponse]
+	Config *Config
 
-	Metrics      *prometheus.Metrics
-	DB           database.Database
-	Coordinator  sync.Coordinator
-	Background   *background.Background
+	// AuthWebhookCache is used to cache the response of the auth webhook.
+	AuthWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
+		int,
+		*types.AuthWebhookResponse,
+	]]
+	// AuthWebhookClient is used to send auth webhook.
+	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+
+	// EventWebhookClient is used to send event webhook
+	EventWebhookClient *webhook.Client[types.EventWebhookRequest, int]
+
+	// PubSub is used to publish/subscribe events to/from clients.
+	PubSub *pubsub.PubSub
+	// Locker is used to lock/unlock resources.
+	Locker *sync.LockerManager
+
+	// Metrics is used to expose metrics.
+	Metrics *prometheus.Metrics
+	// DB is the database instance.
+	DB database.Database
+	// MsgBroker is the message producer instance.
+	MsgBroker messagebroker.Broker
+
+	// Background is used to manage background tasks.
+	Background *background.Background
+	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
 }
 
@@ -60,6 +80,7 @@ func New(
 	mongoConf *mongo.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
+	kafkaConf *messagebroker.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
 	// current machine.
@@ -72,26 +93,39 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	serverInfo := &sync.ServerInfo{
-		ID:        xid.New().String(),
-		Hostname:  hostname,
-		UpdatedAt: time.Now(),
-	}
+	// 02. Create the webhook authWebhookCache and client.
+	authWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+		conf.AuthWebhookCacheSize,
+	)
+	authWebhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+		webhook.Options{
+			MaxRetries:      conf.AuthWebhookMaxRetries,
+			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
+			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
+			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
+		},
+	)
 
-	// 02. Create the auth webhook cache. The auth webhook cache is used to
-	// cache the response of the auth webhook.
-	// TODO(hackerwins): Consider to extend the cache for general purpose.
-	webhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
-	if err != nil {
-		return nil, err
-	}
+	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, int](
+		webhook.Options{
+			MaxRetries:      conf.EventWebhookMaxRetries,
+			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
+			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
+			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
+		},
+	)
 
-	// 03. Create the background instance. The background instance is used to
+	// 03. Create pubsub, and locker.
+	locker := sync.New()
+	pubsub := pubsub.New()
+
+	// 04. Create the background instance. The background instance is used to
 	// manage background tasks.
 	bg := background.New(metrics)
 
-	// 04. Create the database instance. If the MongoDB configuration is given,
+	// 05. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
+	var err error
 	var db database.Database
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
@@ -104,13 +138,6 @@ func New(
 			return nil, err
 		}
 	}
-
-	// 05. Create the coordinator instance. The coordinator is used to manage
-	// the synchronization between the Yorkie servers.
-	// TODO(hackerwins): Implement the coordinator for a shard. For now, we
-	//  distribute workloads to all shards per document. In the future, we
-	//  will need to distribute workloads of a document.
-	coordinator := memsync.NewCoordinator(serverInfo)
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage keeping tasks such as deactivating inactive clients.
@@ -133,27 +160,35 @@ func New(
 		}
 	}
 
+	// 08. Create the message broker instance.
+	broker := messagebroker.Ensure(kafkaConf)
+
+	// 09. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
 	}
 
 	logging.DefaultLogger().Infof(
-		"backend created: id: %s, db: %s",
-		serverInfo.ID,
+		"backend created: db: %s",
 		dbInfo,
 	)
 
 	return &Backend{
-		Config:           conf,
-		serverInfo:       serverInfo,
-		AuthWebhookCache: webhookCache,
+		Config: conf,
+
+		AuthWebhookCache:   authWebhookCache,
+		AuthWebhookClient:  authWebhookClient,
+		EventWebhookClient: eventWebhookClient,
+
+		Locker: locker,
+		PubSub: pubsub,
 
 		Metrics:      metrics,
 		DB:           db,
-		Coordinator:  coordinator,
 		Background:   bg,
 		Housekeeping: keeping,
+		MsgBroker:    broker,
 	}, nil
 }
 
@@ -163,7 +198,7 @@ func (b *Backend) Start() error {
 		return err
 	}
 
-	logging.DefaultLogger().Infof("backend started: id: %s", b.serverInfo.ID)
+	logging.DefaultLogger().Infof("backend started")
 	return nil
 }
 
@@ -175,7 +210,7 @@ func (b *Backend) Shutdown() error {
 
 	b.Background.Close()
 
-	if err := b.Coordinator.Close(); err != nil {
+	if err := b.MsgBroker.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}
 
@@ -183,11 +218,6 @@ func (b *Backend) Shutdown() error {
 		logging.DefaultLogger().Error(err)
 	}
 
-	logging.DefaultLogger().Infof("backend stopped: id: %s", b.serverInfo.ID)
+	logging.DefaultLogger().Infof("backend stopped")
 	return nil
-}
-
-// Members returns the members of this cluster.
-func (b *Backend) Members() map[string]*sync.ServerInfo {
-	return b.Coordinator.Members()
 }

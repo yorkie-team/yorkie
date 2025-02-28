@@ -11,19 +11,16 @@ import (
 
 func TestCache(t *testing.T) {
 	t.Run("create lru expire cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache[string, string](1)
-		assert.NoError(t, err)
+		lruCache := cache.NewLRUExpireCache[string, string](1)
 		assert.NotNil(t, lruCache)
 
-		lruCache, err = cache.NewLRUExpireCache[string, string](0)
-		assert.ErrorIs(t, err, cache.ErrInvalidMaxSize)
-		assert.Nil(t, lruCache)
+		assert.PanicsWithError(t, cache.ErrInvalidMaxSize.Error(), func() {
+			cache.NewLRUExpireCache[string, string](0)
+		})
 	})
 
 	t.Run("add test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache[string, string](1)
-		assert.NoError(t, err)
-
+		lruCache := cache.NewLRUExpireCache[string, string](1)
 		lruCache.Add("request1", "response1", time.Second)
 		response1, ok := lruCache.Get("request1")
 		assert.True(t, ok)
@@ -41,9 +38,7 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("get expired cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache[string, string](1)
-		assert.NoError(t, err)
-
+		lruCache := cache.NewLRUExpireCache[string, string](1)
 		ttl := time.Millisecond
 		lruCache.Add("request", "response", ttl)
 
@@ -54,9 +49,7 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("update expired cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache[string, string](1)
-		assert.NoError(t, err)
-
+		lruCache := cache.NewLRUExpireCache[string, string](1)
 		var ttl time.Duration
 		ttl = time.Minute
 

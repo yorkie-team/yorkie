@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.5.0
+  version: v0.6.0
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -287,7 +287,28 @@ components:
           description: ""
           title: client_key
           type: string
+        metadata:
+          additionalProperties: false
+          description: ""
+          title: metadata
+          type: object
       title: ActivateClientRequest
+      type: object
+    yorkie.v1.ActivateClientRequest.MetadataEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: MetadataEntry
       type: object
     yorkie.v1.ActivateClientResponse:
       additionalProperties: false
@@ -426,6 +447,12 @@ components:
           - type: string
           - type: number
           title: server_seq
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangeID
       type: object
     yorkie.v1.ChangePack:
@@ -470,6 +497,12 @@ components:
           format: byte
           title: snapshot
           type: string
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangePack
       type: object
     yorkie.v1.Checkpoint:
@@ -1548,6 +1581,35 @@ components:
         - 13
       title: ValueType
       type: string
+    yorkie.v1.VersionVector:
+      additionalProperties: false
+      description: ""
+      properties:
+        vector:
+          additionalProperties: false
+          description: ""
+          title: vector
+          type: object
+      title: VersionVector
+      type: object
+    yorkie.v1.VersionVector.VectorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: VectorEntry
+      type: object
     yorkie.v1.WatchDocumentRequest:
       additionalProperties: false
       description: ""
@@ -1603,5 +1665,5 @@ components:
 security:
 - ApiKeyAuth: []
 tags:
-- description: Yorkie is a service that provides a API for SDKs.
+- description: Yorkie is a service that provides an API for SDKs.
   name: yorkie.v1.YorkieService

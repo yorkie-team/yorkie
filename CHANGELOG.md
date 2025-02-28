@@ -7,6 +7,130 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-02-17
+
+### Added
+
+- Add HMAC Signing Support for Webhook Client Security by @window9u in https://github.com/yorkie-team/yorkie/pull/1134
+- Add Request Timing Controls for Auth Webhook Client by @window9u in https://github.com/yorkie-team/yorkie/pull/1142
+- Extend RWMutex Interface for locker package by @raararaara in https://github.com/yorkie-team/yorkie/pull/1135
+- Add Kafka Producer for Analytics and User Metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1143
+- Add Benchmarks for VersionVector Performance Analysis by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1150
+- Add Kafka options to yorkie-cluster and missing WriteTimeout by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1149
+- Optimize Minimum VersionVector Computation for Performance by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1153
+
+### Changed
+
+- Extract `pkg/webhook` package from `rpc/auth` package by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1133
+- Simplify Coordinator by Refactoring to Locker and PubSub by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1136
+- Extract DocEvent into events package by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1137
+- Update go.mod to use v1.23 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1141
+- Send UserEvent Message if userID exists by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1154
+
+### Fixed
+
+- Fix invalid yaml file by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1108
+- Modify `--backend-gateway-addr` argument in helm deployment resource by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1115
+- Fix complex complex test failures by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1148
+
+## [0.5.8] - 2024-12-19
+
+### Changed
+
+- Extract db name as an argument to value.yaml by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1107
+
+### Fixed
+
+- Fix panic in pubsub by deleting subs in callback by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1101
+- Fix invalid version vector check logic for backward compatibility by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1105
+
+## [0.5.7] - 2024-12-11
+
+### Changed
+
+- Refactor webhook method configuration and add CLI commands by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1082
+- Replace MaxCreatedAtMapByActor with VersionVector by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1088
+- Add migration script to remove version vector by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1091
+- Simplify unique constraint for documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1098
+
+### Fixed
+
+- Fix Sharding Initialization with Dynamic Replica Set Configuration by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1087
+- Preserve Detached Client's Lamport in Version Vector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1090
+- Improve Version Vector Handling for Legacy SDK and Snapshots by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1096
+- Add missing MongoDB sharding configuration for version vectors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1097
+
+## [0.5.6] - 2024-11-22
+
+### Added
+
+- Add migration script to detach documents from deactivated clients by @raararaara in https://github.com/yorkie-team/yorkie/pull/1062
+
+### Changed
+
+- Upate garbage collection algorithm design by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1061
+- Convert `presence change` from string to binary by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1069
+
+### Fixed
+
+- Add minLamport for proper GC of deactivated clients by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1060
+- Optimize document detachment in Cluster Server by @raararaara in https://github.com/yorkie-team/yorkie/pull/1055
+- Fix version vector cleanup during client deactivation by @raararaara in https://github.com/yorkie-team/yorkie/pull/1068
+- Correct ReverseLowerBound behavior in MemDB by setting unique index by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1074
+- Update presence_change migration for JSON to Protobuf conversion by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1075
+
+## [0.5.5] - 2024-11-07
+
+### Added
+
+- Introduce dedicated event publisher per document by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1052
+
+### Changed
+
+- Update Authorization Webhook Response Format and Handling by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1037
+
+### Fixed
+
+- Fix version vector validation when running migration by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1057
+
+## [0.5.4] - 2024-10-28
+
+### Added
+
+- Introduce cmap for distributing mutexes per documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1051
+- Implement lock striping for cmap by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1053
+
+### Fixed
+
+- Fix transaction in UpdateAndFindMinSyncedVersionVector by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1050
+
+## [0.5.3] - 2024-10-23
+
+## Changed
+
+- Introduce VersionVector by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1047
+
+## [0.5.2] - 2024-10-22
+
+## Changed
+
+- Detach documents when client is deactivated by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1036
+- Remove `jstype=string` from resources.proto by @Aswinr24 in https://github.com/yorkie-team/yorkie/pull/1040
+- Include yorkie-mongodb to yorkie-cluster Helm Chart by @hyun98 in https://github.com/yorkie-team/yorkie/pull/1031
+
+## [0.5.1] - 2024-09-15
+
+### Added
+
+- Add all-in-one Docker Compose and Grafana configuration by @window9u in https://github.com/yorkie-team/yorkie/pull/997
+- Add metrics for WatchDocuments and enhance pushpull metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1008
+- Add nginx-ingress-controller option by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1022
+
+### Changed
+
+- Reduce CI test time by optimizing task execution by @binary-ho in https://github.com/yorkie-team/yorkie/pull/988
+- Use random generated key by @window9u in https://github.com/yorkie-team/yorkie/pull/1010
+
 ## [0.5.0] - 2024-09-05
 
 ### Added

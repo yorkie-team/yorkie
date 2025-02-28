@@ -70,16 +70,22 @@ var (
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
 
-	AdminTokenDuration         = "10s"
-	ClientDeactivateThreshold  = "10s"
-	SnapshotThreshold          = int64(10)
-	SnapshotWithPurgingChanges = false
-	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
-	AuthWebhookSize            = 100
-	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
-	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
-	ProjectInfoCacheSize       = 256
-	ProjectInfoCacheTTL        = 5 * gotime.Second
+	AdminTokenDuration          = "10s"
+	ClientDeactivateThreshold   = "10s"
+	SnapshotThreshold           = int64(10)
+	SnapshotWithPurgingChanges  = false
+	AuthWebhookMaxWaitInterval  = 3 * gotime.Millisecond
+	AuthWebhookMinWaitInterval  = 3 * gotime.Millisecond
+	AuthWebhookRequestTimeout   = 100 * gotime.Millisecond
+	AuthWebhookSize             = 100
+	AuthWebhookCacheTTL         = 10 * gotime.Second
+	EventWebhookMaxWaitInterval = 3 * gotime.Millisecond
+	EventWebhookMinWaitInterval = 3 * gotime.Millisecond
+	EventWebhookRequestTimeout  = 100 * gotime.Millisecond
+	EventWebhookSize            = 100
+	EventWebhookCacheTTL        = 10 * gotime.Second
+	ProjectCacheSize            = 256
+	ProjectCacheTTL             = 5 * gotime.Second
 
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
@@ -116,7 +122,7 @@ func TestRoot() *crdt.Root {
 // TextChangeContext returns the context of test change.
 func TextChangeContext(root *crdt.Root) *change.Context {
 	return change.NewContext(
-		change.InitialID,
+		change.InitialID(),
 		"",
 		root,
 	)
@@ -139,6 +145,29 @@ func PosT(change *change.Context, offset ...int) *crdt.TreeNodeID {
 // TimeT is a helper function that issues a new TimeTicket
 func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
+}
+
+// MaxVersionVector returns the max version vector of the given actors.
+func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
+	if len(actors) == 0 {
+		actors = append(actors, time.InitialActorID)
+	}
+
+	vector := time.NewVersionVector()
+	for i := 0; i < len(actors); i++ {
+		vector.Set(actors[i], time.MaxLamport)
+	}
+
+	return vector
+}
+
+// VersionVectorOf creates a new version vector from the given actors.
+func VersionVectorOf(actors map[*time.ActorID]int64) time.VersionVector {
+	vector := time.NewVersionVector()
+	for actor, lamport := range actors {
+		vector.Set(actor, lamport)
+	}
+	return vector
 }
 
 // TokensEqualBetween is a helper function that checks the tokens between the given
@@ -241,21 +270,26 @@ func TestConfig() *server.Config {
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
-			AdminUser:                  server.DefaultAdminUser,
-			AdminPassword:              server.DefaultAdminPassword,
-			SecretKey:                  server.DefaultSecretKey,
-			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:          true,
-			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold,
-			SnapshotInterval:           10,
-			SnapshotThreshold:          SnapshotThreshold,
-			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
-			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
-			AuthWebhookCacheSize:       AuthWebhookSize,
-			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
-			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
-			ProjectInfoCacheSize:       ProjectInfoCacheSize,
-			ProjectInfoCacheTTL:        ProjectInfoCacheTTL.String(),
+			AdminUser:                   server.DefaultAdminUser,
+			AdminPassword:               server.DefaultAdminPassword,
+			SecretKey:                   server.DefaultSecretKey,
+			AdminTokenDuration:          server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:           true,
+			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
+			SnapshotInterval:            10,
+			SnapshotThreshold:           SnapshotThreshold,
+			SnapshotWithPurgingChanges:  SnapshotWithPurgingChanges,
+			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
+			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
+			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
+			AuthWebhookCacheSize:        AuthWebhookSize,
+			AuthWebhookCacheTTL:         AuthWebhookCacheTTL.String(),
+			EventWebhookMaxWaitInterval: EventWebhookMaxWaitInterval.String(),
+			EventWebhookMinWaitInterval: EventWebhookMinWaitInterval.String(),
+			EventWebhookRequestTimeout:  EventWebhookRequestTimeout.String(),
+			ProjectCacheSize:            ProjectCacheSize,
+			ProjectCacheTTL:             ProjectCacheTTL.String(),
+			GatewayAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,
@@ -535,4 +569,12 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 	}
 
 	return project, docs
+}
+
+// CleanupClients is a helper function to clean up clients.
+func CleanupClients(b *testing.B, clients []*client.Client) {
+	for _, c := range clients {
+		assert.NoError(b, c.Deactivate(context.Background()))
+		assert.NoError(b, c.Close())
+	}
 }

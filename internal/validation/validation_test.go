@@ -61,8 +61,8 @@ func TestValidation(t *testing.T) {
 		user := User{Name: "invalid-key-$-wrong-string-value", Country: "korea"}
 
 		err := ValidateStruct(user)
-		structError := err.(*StructError)
-		assert.Len(t, structError.Violations, 2, "user should be invalid")
+		formErr := err.(*FormError)
+		assert.Len(t, formErr.Violations, 2, "user should be invalid")
 	})
 
 	t.Run("custom rule test", func(t *testing.T) {

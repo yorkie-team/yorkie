@@ -1,6 +1,6 @@
 ---
 title: mongodb-sharding
-target-version: 0.4.14
+target-version: 0.5.7
 ---
 
 # MongoDB Sharding
@@ -29,10 +29,9 @@ This document will only explain the core concepts of the selected sharding strat
 
 1. Cluster-wide: `users`, `projects`
 2. Project-wide: `documents`, `clients`
-3. Document-wide: `changes`, `snapshots`, `syncedseqs` 
+3. Document-wide: `changes`, `snapshots`, `syncedseqs`, `versionvectors`
 
 <img src="media/mongodb-sharding-prev-relation.png">
-
 
 **Sharding Goals**
 
@@ -49,6 +48,7 @@ Shard Project-wide and Document-wide collections due to the large number of data
 3. `Changes`: `(doc_id, server_seq)`
 4. `Snapshots`: `(doc_id, server_seq)`
 5. `Syncedseqs`: `(doc_id, client_id)`
+6. `Versionvectors`: `(doc_id, client_id)`
 
 **Main Query Patterns**
 
@@ -64,6 +64,7 @@ cursor, err := c.collection(ColClients).Find(ctx, bson.M{
     },
 }, options.Find().SetLimit(int64(candidatesLimit)))
 ```
+
 ```go
 // Documents
 filter := bson.M{
@@ -106,6 +107,7 @@ cursor, err := c.collection(colChanges).Find(ctx, bson.M{
     },
 }, options.Find())
 ```
+
 ```go
 // Snapshots
 result := c.collection(colSnapshots).FindOne(ctx, bson.M{
@@ -132,6 +134,7 @@ Every unique constraint can be satisfied because each has the shard key as a pre
 3. `Changes`: `(doc_id, server_seq)`
 4. `Snapshots`: `(doc_id, server_seq)`
 5. `Syncedseqs`: `(doc_id, client_id)`
+6. `Versionvectors`: `(doc_id, client_id)`
 
 **Changes of Reference Keys**
 
@@ -142,6 +145,7 @@ Since the uniqueness of `_id` isn't guaranteed across shards, reference keys to 
 3. `Changes`: `_id` -> `(project_id, doc_id, server_seq)`
 4. `Snapshots`: `_id` -> `(project_id, doc_id, server_seq)`
 5. `Syncedseqs`: `_id` -> `(project_id, doc_id, client_id)`
+6. `Versionvectors`: `_id` -> `(project_id, doc_id, client_id)`
 
 Considering that MongoDB ensures the uniqueness of `_id` per shard, `Documents` and `Clients` can be identified with the combination of `project_id` and `_id`. Note that the reference keys of document-wide collections are also subsequently changed.
 
@@ -155,12 +159,12 @@ Considering that MongoDB ensures the uniqueness of `_id` per shard, `Documents` 
 
 For a production deployment, consider the following to ensure data redundancy and system availability.
 
-* Config Server (3 member replica set): `config1`,`config2`,`config3`
-* 3 Shards (each a 3 member replica set):
-	* `shard1-1`,`shard1-2`, `shard1-3`
-	* `shard2-1`,`shard2-2`, `shard2-3`
-	* `shard3-1`,`shard3-2`, `shard3-3`
-* 2 Mongos: `mongos1`, `mongos2`
+- Config Server (3 member replica set): `config1`,`config2`,`config3`
+- 3 Shards (each a 3 member replica set):
+  - `shard1-1`,`shard1-2`, `shard1-3`
+  - `shard2-1`,`shard2-2`, `shard2-3`
+  - `shard3-1`,`shard3-2`, `shard3-3`
+- 2 Mongos: `mongos1`, `mongos2`
 
 ![Cluster architecture](media/mongodb-sharding-cluster-arch.png)
 
@@ -178,11 +182,12 @@ Using a composite shard key like `(project_id, key)` can resolve this issue. Aft
 However, this change of shard keys can lead to the value duplication of either `actor_id` or `owner`, which uses `client_id` as a value. Now the values of `client_id` can be duplicated, contrary to the current sharding strategy where locating every client in the same project into the same shard prevents this kind of duplications.
 
 The duplication of `client_id` values can devastate the consistency of documents. There are three expected approaches to resolve this issue:
+
 1. Use `client_key + client_id` as a value.
-    * this may increase the size of CRDT metadata and the size of document snapshots.
+   - this may increase the size of CRDT metadata and the size of document snapshots.
 2. Introduce a cluster-level GUID generator.
 3. Depend on the low possibility of duplication of MongoDB ObjectID.
-    * see details in the following contents.
+   - see details in the following contents.
 
 **Duplicate MongoDB ObjectID**
 
@@ -192,6 +197,7 @@ Both `client_id` and `doc_id` are currently using MongoDB ObjectID as a value. W
 
 However, the possibility of duplicate ObjectIDs is **extremely low in practical use cases** due to its mechanism.
 ObjectID uses the following format:
+
 ```
 TimeStamp(4 bytes) + MachineId(3 bytes) + ProcessId(2 bytes) + Counter(3 bytes)
 ```
@@ -199,10 +205,12 @@ TimeStamp(4 bytes) + MachineId(3 bytes) + ProcessId(2 bytes) + Counter(3 bytes)
 The condition for duplicate ObjectIDs is that more than `16,777,216` documents/clients are created every single second in a single machine and process. Considering Google processes over `99,000` searches every single second, it is unlikely to occur.
 
 When we have to meet that amount of traffic in the future, consider the following options:
+
 1. Introduce a cluster-level GUID generator.
 2. Disable auto-balancing chunks of documents and clients.
-   * Just isolate each shard for a single project.
+   - Just isolate each shard for a single project.
 
 ## References
-* [Implementation of ObjectID generator in golang driver](https://github.com/mongodb/mongo-go-driver/blob/v0.0.18/bson/objectid/objectid.go#L40)
-* [Generating globally unique identifiers for use with MongoDB](https://www.mongodb.com/blog/post/generating-globally-unique-identifiers-for-use-with-mongodb)
+
+- [Implementation of ObjectID generator in golang driver](https://github.com/mongodb/mongo-go-driver/blob/v0.0.18/bson/objectid/objectid.go#L40)
+- [Generating globally unique identifiers for use with MongoDB](https://www.mongodb.com/blog/post/generating-globally-unique-identifiers-for-use-with-mongodb)

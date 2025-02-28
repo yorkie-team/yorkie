@@ -17,150 +17,92 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
-	"syscall"
-	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/metaerrors"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
-	// ErrNotAllowed is returned when the given user is not allowed for the access.
-	ErrNotAllowed = errors.New("method is not allowed for this user")
+	// ErrUnauthenticated is returned when the authentication is failed.
+	ErrUnauthenticated = errors.New("unauthenticated")
 
-	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
-	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
-
-	// ErrWebhookTimeout is returned when the webhook does not respond in time.
-	ErrWebhookTimeout = errors.New("webhook timeout")
+	// ErrPermissionDenied is returned when the given user is not allowed for the access.
+	ErrPermissionDenied = errors.New("method is not allowed for this user")
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
-	authWebhookURL string,
+	prj *types.Project,
 	token string,
 	accessInfo *types.AccessInfo,
 ) error {
-	reqBody, err := json.Marshal(types.AuthWebhookRequest{
+	req := types.AuthWebhookRequest{
 		Token:      token,
 		Method:     accessInfo.Method,
 		Attributes: accessInfo.Attributes,
-	})
+	}
+
+	body, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("marshal auth webhook request: %w", err)
+		return fmt.Errorf("marshal webhook request: %w", err)
 	}
 
-	cacheKey := string(reqBody)
+	cacheKey := generateCacheKey(prj.PublicKey, body)
 	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
-		resp := entry
-		if !resp.Allowed {
-			return fmt.Errorf("%s: %w", resp.Reason, ErrNotAllowed)
-		}
-		return nil
+		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
-	var authResp *types.AuthWebhookResponse
-	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
-		resp, err := http.Post(
-			authWebhookURL,
-			"application/json",
-			bytes.NewBuffer(reqBody),
+	res, status, err := be.AuthWebhookClient.Send(
+		ctx,
+		prj.AuthWebhookURL,
+		"",
+		body,
+	)
+	if err != nil {
+		return fmt.Errorf("send to webhook: %w", err)
+	}
+
+	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
+	if status != http.StatusUnauthorized {
+		be.AuthWebhookCache.Add(
+			cacheKey,
+			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
+			be.Config.ParseAuthWebhookCacheTTL(),
 		)
-		if err != nil {
-			return 0, fmt.Errorf("post to webhook: %w", err)
-		}
-
-		defer func() {
-			if err := resp.Body.Close(); err != nil {
-				logging.From(ctx).Error(err)
-			}
-		}()
-
-		if http.StatusOK != resp.StatusCode {
-			return resp.StatusCode, ErrUnexpectedStatusCode
-		}
-
-		authResp, err = types.NewAuthWebhookResponse(resp.Body)
-		if err != nil {
-			return resp.StatusCode, err
-		}
-
-		if !authResp.Allowed {
-			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
-		}
-
-		return resp.StatusCode, nil
-	}); err != nil {
-		if errors.Is(err, ErrNotAllowed) {
-			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())
-		}
-
-		return err
 	}
 
-	be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheAuthTTL())
-
-	return nil
+	return handleWebhookResponse(status, res)
 }
 
-func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn func() (int, error)) error {
-	var retries uint64
-	var statusCode int
-	for retries <= cfg.AuthWebhookMaxRetries {
-		statusCode, err := webhookFn()
-		if !shouldRetry(statusCode, err) {
-			if err == ErrUnexpectedStatusCode {
-				return fmt.Errorf("unexpected status code from webhook: %d", statusCode)
-			}
-
-			return err
-		}
-
-		waitBeforeRetry := waitInterval(retries, cfg.ParseAuthWebhookMaxWaitInterval())
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(waitBeforeRetry):
-		}
-
-		retries++
-	}
-
-	return fmt.Errorf("unexpected status code from webhook %d: %w", statusCode, ErrWebhookTimeout)
+// generateCacheKey creates a unique key for caching webhook responses.
+func generateCacheKey(publicKey string, body []byte) string {
+	return fmt.Sprintf("%s:auth:%s", publicKey, body)
 }
 
-// waitInterval returns the interval of given retries. (2^retries * 100) milliseconds.
-func waitInterval(retries uint64, maxWaitInterval time.Duration) time.Duration {
-	interval := time.Duration(math.Pow(2, float64(retries))) * 100 * time.Millisecond
-	if maxWaitInterval < interval {
-		return maxWaitInterval
+// handleWebhookResponse processes the webhook response and returns an error if necessary.
+func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
+	if res == nil {
+		return fmt.Errorf("nil response for status %d: %w", status, webhook.ErrUnexpectedResponse)
 	}
 
-	return interval
-}
-
-// shouldRetry returns true if the given error should be retried.
-// Refer to https://github.com/kubernetes/kubernetes/search?q=DefaultShouldRetry
-func shouldRetry(statusCode int, err error) bool {
-	// If the connection is reset, we should retry.
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		return errno == syscall.ECONNRESET
+	switch {
+	case status == http.StatusOK && res.Allowed:
+		return nil
+	case status == http.StatusForbidden && !res.Allowed:
+		return metaerrors.New(ErrPermissionDenied, map[string]string{"reason": res.Reason})
+	case status == http.StatusUnauthorized && !res.Allowed:
+		return metaerrors.New(ErrUnauthenticated, map[string]string{"reason": res.Reason})
+	default:
+		return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
 	}
-
-	return statusCode == http.StatusInternalServerError ||
-		statusCode == http.StatusServiceUnavailable ||
-		statusCode == http.StatusGatewayTimeout ||
-		statusCode == http.StatusTooManyRequests
 }

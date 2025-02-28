@@ -73,15 +73,23 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
-		AdminUser:                 helper.AdminUser,
-		AdminPassword:             helper.AdminPassword,
-		UseDefaultProject:         helper.UseDefaultProject,
-		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
-		SnapshotThreshold:         helper.SnapshotThreshold,
-		AuthWebhookCacheSize:      helper.AuthWebhookSize,
-		ProjectInfoCacheSize:      helper.ProjectInfoCacheSize,
-		ProjectInfoCacheTTL:       helper.ProjectInfoCacheTTL.String(),
-		AdminTokenDuration:        helper.AdminTokenDuration,
+		AdminUser:                   helper.AdminUser,
+		AdminPassword:               helper.AdminPassword,
+		UseDefaultProject:           helper.UseDefaultProject,
+		ClientDeactivateThreshold:   helper.ClientDeactivateThreshold,
+		SnapshotThreshold:           helper.SnapshotThreshold,
+		AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
+		AuthWebhookMinWaitInterval:  helper.AuthWebhookMinWaitInterval.String(),
+		AuthWebhookRequestTimeout:   helper.AuthWebhookRequestTimeout.String(),
+		AuthWebhookCacheSize:        helper.AuthWebhookSize,
+		AuthWebhookCacheTTL:         helper.AuthWebhookCacheTTL.String(),
+		EventWebhookMaxWaitInterval: helper.EventWebhookMaxWaitInterval.String(),
+		EventWebhookMinWaitInterval: helper.EventWebhookMinWaitInterval.String(),
+		EventWebhookRequestTimeout:  helper.EventWebhookRequestTimeout.String(),
+		ProjectCacheSize:            helper.ProjectCacheSize,
+		ProjectCacheTTL:             helper.ProjectCacheTTL.String(),
+		AdminTokenDuration:          helper.AdminTokenDuration,
+		GatewayAddr:                 fmt.Sprintf("localhost:%d", helper.RPCPort),
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    shardedDBNameForServer,
@@ -91,7 +99,7 @@ func TestMain(m *testing.M) {
 		Interval:                  helper.HousekeepingInterval.String(),
 		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
 		ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
-	}, met)
+	}, met, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -2,7 +2,7 @@
 
 # Stage 1: build binary
 # Start from the latest golang base image
-FROM golang:1.21 AS builder
+FROM golang:1.23 AS builder
 
 # Add Maintainer Info
 LABEL maintainer="hackerwins <susukang98@gmail.com>"

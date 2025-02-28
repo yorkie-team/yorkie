@@ -47,6 +47,9 @@ var (
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("document not found")
 
+	// ErrChangeNotFound is returned when the change could not be found.
+	ErrChangeNotFound = errors.New("change not found")
+
 	// ErrSnapshotNotFound is returned when the snapshot could not be found.
 	ErrSnapshotNotFound = errors.New("snapshot not found")
 
@@ -137,7 +140,7 @@ type Database interface {
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
 	// ActivateClient activates the client of the given key.
-	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
+	ActivateClient(ctx context.Context, projectID types.ID, key string, metadata map[string]string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given refKey.
 	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
@@ -216,6 +219,14 @@ type Database interface {
 		docRefKey types.DocRefKey,
 	) error
 
+	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
+	FindLatestChangeInfoByActor(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		actorID types.ID,
+		serverSeq int64,
+	) (*ChangeInfo, error)
+
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
@@ -268,12 +279,29 @@ type Database interface {
 		serverSeq int64,
 	) (*time.Ticket, error)
 
+	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+	// and returns the SyncedVersionVector of the document.
+	UpdateAndFindMinSyncedVersionVector(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docRefKey types.DocRefKey,
+		versionVector time.VersionVector,
+	) (time.VersionVector, error)
+
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
 	UpdateSyncedSeq(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		serverSeq int64,
+	) error
+
+	// UpdateVersionVector updates the syncedSeq of the given client.
+	UpdateVersionVector(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docRefKey types.DocRefKey,
+		versionVector time.VersionVector,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

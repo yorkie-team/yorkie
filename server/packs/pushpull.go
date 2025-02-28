@@ -139,7 +139,7 @@ func pullSnapshot(
 	initialServerSeq int64,
 ) (*ServerPack, error) {
 	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
-	doc, err := BuildDocumentForServerSeq(ctx, be, docInfo, initialServerSeq)
+	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +150,7 @@ func pullSnapshot(
 			docInfo.Key,
 			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
 			reqPack.Changes,
+			nil,
 			nil,
 		), be.Config.SnapshotDisableGC); err != nil {
 			return nil, err
@@ -171,7 +172,9 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
+	pack := NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot)
+	pack.VersionVector = doc.VersionVector()
+	return pack, nil
 }
 
 func pullChangeInfos(

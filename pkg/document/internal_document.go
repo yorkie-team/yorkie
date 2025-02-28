@@ -97,7 +97,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 		status:        StatusDetached,
 		root:          crdt.NewRoot(root),
 		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID,
+		changeID:      change.InitialID(),
 		presences:     innerpresence.NewMap(),
 		onlineClients: &gosync.Map{},
 	}
@@ -108,12 +108,16 @@ func NewInternalDocumentFromSnapshot(
 	k key.Key,
 	serverSeq int64,
 	lamport int64,
+	vector time.VersionVector,
 	snapshot []byte,
 ) (*InternalDocument, error) {
 	obj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
+
+	changeID := change.InitialID()
+	changeID.SetClocks(lamport, vector)
 
 	return &InternalDocument{
 		key:           k,
@@ -122,7 +126,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:     presences,
 		onlineClients: &gosync.Map{},
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      change.InitialID.SyncLamport(lamport),
+		changeID:      changeID,
 	}, nil
 }
 
@@ -136,6 +140,19 @@ func (d *InternalDocument) Checkpoint() change.Checkpoint {
 	return d.checkpoint
 }
 
+// SyncCheckpoint syncs the checkpoint and the changeID with the given serverSeq
+// and clientSeq.
+func (d *InternalDocument) SyncCheckpoint(serverSeq int64, clientSeq uint32) {
+	d.changeID = change.NewID(
+		clientSeq,
+		serverSeq,
+		d.changeID.Lamport(),
+		d.changeID.ActorID(),
+		d.VersionVector(),
+	)
+	d.checkpoint = d.checkpoint.SyncClientSeq(clientSeq)
+}
+
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *InternalDocument) HasLocalChanges() bool {
 	return len(d.localChanges) > 0
@@ -143,9 +160,11 @@ func (d *InternalDocument) HasLocalChanges() bool {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
+	hasSnapshot := len(pack.Snapshot) > 0
+
 	// 01. Apply remote changes to both the cloneRoot and the document.
-	if len(pack.Snapshot) > 0 {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
+	if hasSnapshot {
+		if err := d.applySnapshot(pack.Snapshot, pack.VersionVector); err != nil {
 			return err
 		}
 	} else {
@@ -166,8 +185,8 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if !disableGC && pack.MinSyncedTicket != nil {
-		if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
+	if !disableGC && pack.VersionVector != nil && !hasSnapshot {
+		if _, err := d.GarbageCollect(pack.VersionVector); err != nil {
 			return err
 		}
 	}
@@ -176,8 +195,8 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) (int, error) {
-	return d.root.GarbageCollect(ticket)
+func (d *InternalDocument) GarbageCollect(vector time.VersionVector) (int, error) {
+	return d.root.GarbageCollect(vector)
 }
 
 // GarbageLen returns the count of removed elements.
@@ -195,7 +214,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := d.localChanges
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes, nil)
+	return change.NewPack(d.key, cp, changes, d.VersionVector(), nil)
 }
 
 // SetActor sets actor into this document. This is also applied in the local
@@ -205,6 +224,8 @@ func (d *InternalDocument) SetActor(actor *time.ActorID) {
 		c.SetActor(actor)
 	}
 	d.changeID = d.changeID.SetActor(actor)
+
+	// TODO(hackerwins): We need to update the root object as well.
 }
 
 // Lamport returns the Lamport clock of this document.
@@ -215,6 +236,11 @@ func (d *InternalDocument) Lamport() int64 {
 // ActorID returns ID of the actor currently editing the document.
 func (d *InternalDocument) ActorID() *time.ActorID {
 	return d.changeID.ActorID()
+}
+
+// VersionVector returns the version vector of this document.
+func (d *InternalDocument) VersionVector() time.VersionVector {
+	return d.changeID.VersionVector()
 }
 
 // SetStatus sets the status of this document.
@@ -237,7 +263,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
+func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVector) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
@@ -245,7 +271,15 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
-	d.changeID = d.changeID.SyncLamport(serverSeq)
+
+	// NOTE(chacha912): Documents created from snapshots were experiencing edit
+	// restrictions due to low lamport values.
+	// Previously, the code attempted to generate document lamport from ServerSeq.
+	// However, after aligning lamport logic with the original research paper,
+	// ServerSeq could potentially become smaller than the lamport value.
+	// To resolve this, we initialize document's lamport by using the highest
+	// lamport value stored in version vector as the starting point.
+	d.changeID = d.changeID.SetClocks(vector.MaxLamport(), vector)
 
 	return nil
 }
@@ -276,7 +310,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 				case innerpresence.Clear:
 					// NOTE(chacha912): When the user exists in onlineClients, but
 					// PresenceChange(clear) is received, we can consider it as detachment
-					// occurring before unwatching.
+					// occurring before unwatch.
 					// Detached user is no longer participating in the document, we remove
 					// them from the online clients and trigger the 'unwatched' event.
 					event := DocEvent{
@@ -295,7 +329,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			return nil, err
 		}
 
-		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+		d.changeID = d.changeID.SyncClocks(c.ID())
 	}
 
 	return events, nil
@@ -371,4 +405,11 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
+}
+
+// ToDocument converts this document to Document.
+func (d *InternalDocument) ToDocument() *Document {
+	doc := New(d.key)
+	doc.setInternalDoc(d)
+	return doc
 }

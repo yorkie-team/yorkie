@@ -1,0 +1,64 @@
+name: yorkie-analytics
+namespace: analytics
+
+yorkie-analytics:
+  starrocks:
+    enabled: true
+    image:
+      repository: &starrocks-fe-repo starrocks/fe-ubuntu
+      tag: &starrocks-fe-tag "3.3-latest"
+    routine-load:
+      kafka-broker-list: yorkie-analytics-kafka.analytics.svc.cluster.local:9092
+      kafka-topic: user-events
+      property-group-id: user_events_group
+  kafka:
+    enabled: true
+    image:
+      repository: bitnami/kafka
+      tag: latest
+    topic:
+      name: user-events
+      partitions: 1
+      replicationFactor: 1
+
+kube-starrocks:
+  starrocks:
+    starrocksFESpec:
+      replicas: 1
+      image:
+        repository: *starrocks-fe-repo
+        tag: *starrocks-fe-tag
+      resources:
+        requests:
+          cpu: "300m"
+          memory: 1Gi
+      storageSpec:
+        name: fe
+
+    starrocksBeSpec:
+      replicas: 1
+      resources:
+        requests:
+          cpu: "300m"
+          memory: 1Gi
+      storageSpec:
+        name: be
+        storageSize: 15Gi
+
+    starrocksFeProxySpec:
+      enabled: false
+      service:
+        type: LoadBalancer
+
+kafka:
+  kraft:
+    clusterId: yorkie-analytics
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    controller:
+      protocol: PLAINTEXT
+  serviceAccount:
+    create: true
+  rbac:
+    create: true

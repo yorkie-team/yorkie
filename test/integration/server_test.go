@@ -42,7 +42,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 
 		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
 
 		wg := sync.WaitGroup{}
 		wrch, _, err := cli.Subscribe(doc)

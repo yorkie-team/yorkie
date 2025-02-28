@@ -54,7 +54,7 @@ func RunFindDocInfoTest(
 ) {
 	t.Run("find docInfo test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		_, err = db.FindDocInfoByRefKey(context.Background(), types.DocRefKey{
@@ -74,7 +74,7 @@ func RunFindDocInfoTest(
 
 	t.Run("find docInfo by key test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		// 01. Create a document
@@ -101,7 +101,7 @@ func RunFindDocInfosByKeysTest(
 ) {
 	t.Run("find docInfos by keys test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		// 01. Create documents
@@ -129,7 +129,7 @@ func RunFindDocInfosByKeysTest(
 
 	t.Run("find docInfos by empty key slice test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		// 01. Create documents
@@ -150,7 +150,7 @@ func RunFindDocInfosByKeysTest(
 
 	t.Run("find docInfos by keys where some keys are not found test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		// 01. Create documents
@@ -263,7 +263,7 @@ func RunFindDocInfosByQueryTest(
 ) {
 	t.Run("search docInfos test", func(t *testing.T) {
 		ctx := context.Background()
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKeys := []string{
@@ -302,7 +302,7 @@ func RunFindChangesBetweenServerSeqsTest(
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
@@ -354,7 +354,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -384,7 +384,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
@@ -432,6 +432,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			updatedDocInfo.Key,
 			change.InitialCheckpoint.NextServerSeq(updatedDocInfo.ServerSeq),
 			nil,
+			doc.VersionVector(),
 			nil,
 		)
 		assert.NoError(t, doc.ApplyChangePack(pack))
@@ -462,7 +463,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
@@ -522,13 +523,89 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 	})
 }
 
+// RunFindLatestChangeInfoTest runs the FindLatestChangeInfoByActor test for the given db.
+func RunFindLatestChangeInfoTest(t *testing.T,
+	db database.Database,
+	projectID types.ID,
+) {
+	t.Run("store changes and find latest changeInfo test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		// 01. Activate client and find document info.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		assert.NoError(t, err)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, err)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		initialServerSeq := docInfo.ServerSeq
+
+		// 02. Create a document and store changes.
+		bytesID, err := clientInfo.ID.Bytes()
+		assert.NoError(t, err)
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		assert.NoError(t, err)
+
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 5; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for _, c := range pack.Changes {
+			serverSeq := docInfo.IncreaseServerSeq()
+			c.SetServerSeq(serverSeq)
+		}
+
+		assert.NoError(t, db.CreateChangeInfos(
+			ctx,
+			projectID,
+			docInfo,
+			initialServerSeq,
+			pack.Changes,
+			false,
+		))
+
+		// 03. Find all changes and determine the maximum Lamport timestamp.
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docRefKey, 1, 10)
+		assert.NoError(t, err)
+		maxLamport := int64(0)
+		for _, ch := range changes {
+			if maxLamport < ch.ID().Lamport() {
+				maxLamport = ch.ID().Lamport()
+			}
+		}
+
+		// 04. Find the latest change info by actor before the given server sequence.
+		latestChangeInfo, err := db.FindLatestChangeInfoByActor(
+			ctx,
+			docRefKey,
+			types.ID(actorID.String()),
+			10,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, maxLamport, latestChangeInfo.Lamport)
+	})
+}
+
 // RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
 func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
@@ -548,14 +625,14 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
-		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
-		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
@@ -635,7 +712,7 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		})
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		found, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -653,14 +730,14 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		})
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		// try to activate the client twice.
-		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
@@ -676,56 +753,6 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 	})
-
-	t.Run("ensure document detached when deactivate client test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a client
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
-		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientActivated, clientInfo.Status)
-
-		// 02. Create documents and attach them to the client
-		for i := 0; i < 3; i++ {
-			docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
-			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-			clientInfo.Documents[docInfo.ID].ServerSeq = 1
-			clientInfo.Documents[docInfo.ID].ClientSeq = 1
-			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
-
-			result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
-			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-			assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
-			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
-			assert.NoError(t, err)
-		}
-
-		// 03. Remove one document
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
-		assert.NoError(t, err)
-		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
-
-		// 04. Deactivate the client
-		result, err := db.DeactivateClient(ctx, types.ClientRefKey{
-			ProjectID: projectID,
-			ClientID:  clientInfo.ID,
-		})
-		assert.NoError(t, err)
-
-		// 05. Check whether doc.Status is reflected properly.
-		// If it was `DocumentAttached`, it should be changed to `DocumentDetached`.
-		for i := 0; i < 2; i++ {
-			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
-			assert.NoError(t, err)
-			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentDetached)
-		}
-		// If it was `DocumentRemoved`, it should be remained `DocumentRemoved`.
-		docInfo, err = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
-		assert.NoError(t, err)
-		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentRemoved)
-	})
 }
 
 // RunUpdateProjectInfoTest runs the UpdateProjectInfo tests for the given db.
@@ -740,6 +767,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newEventWebhookURL := "http://localhost:4000"
+		newEventWebhookEvents := []string{string(types.DocRootChanged)}
 		newClientDeactivateThreshold := "1h"
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
@@ -754,6 +783,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
+			EventWebhookURL:           &newEventWebhookURL,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -766,6 +797,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
+		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -780,12 +813,16 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.NotEqual(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
+		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 03. Update authWebhookURL test
+		// 03. Update authWebhookURL and eventWebhookURL test
+		newEventWebhookURL2 := newEventWebhookURL + "2"
 		newAuthWebhookURL2 := newAuthWebhookURL + "2"
 		fields = &types.UpdatableProjectFields{
-			AuthWebhookURL: &newAuthWebhookURL2,
+			EventWebhookURL: &newEventWebhookURL2,
+			AuthWebhookURL:  &newAuthWebhookURL2,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -795,10 +832,31 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, res, updateInfo)
 		assert.Equal(t, newName2, updateInfo.Name)
 		assert.NotEqual(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
-		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newAuthWebhookURL2, updateInfo.AuthWebhookURL)
+		assert.NotEqual(t, newEventWebhookURL, updateInfo.EventWebhookURL)
+		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 04. Update clientDeactivateThreshold test
+		// 04. Update EventWebhookEvents test
+		var newEventWebhookEvents2 []string
+		newAuthWebhookMethods2 := []string{
+			string(types.DetachDocument),
+			string(types.PushPull),
+		}
+		fields = &types.UpdatableProjectFields{
+			AuthWebhookMethods: &newAuthWebhookMethods2,
+			EventWebhookEvents: &newEventWebhookEvents2,
+		}
+		assert.NoError(t, fields.Validate())
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		assert.NoError(t, err)
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
+		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
+
+		// 05. Update clientDeactivateThreshold test
 		clientDeactivateThreshold2 := "2h"
 		fields = &types.UpdatableProjectFields{
 			ClientDeactivateThreshold: &clientDeactivateThreshold2,
@@ -811,15 +869,17 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, res, updateInfo)
 		assert.Equal(t, newName2, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL2, updateInfo.AuthWebhookURL)
-		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.NotEqual(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 05. Duplicated name test
+		// 06. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 
-		// 06. OwnerID not match test
+		// 07. OwnerID not match test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)
@@ -833,7 +893,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		pageSize := 5
 		totalSize := 9
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfos := make([]*database.DocInfo, 0, totalSize)
 		for i := 0; i < totalSize; i++ {
 			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("%d", i)), true)
@@ -1052,7 +1112,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		docKey := helper.TestDocKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
@@ -1071,7 +1131,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		docKey := helper.TestDocKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
-		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
 		docRefKey1 := docInfo1.RefKey()
 		assert.NoError(t, clientInfo1.AttachDocument(docRefKey1.DocID, false))
@@ -1095,7 +1155,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		docRefKey := docInfo.RefKey()
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
@@ -1125,7 +1185,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		docKey := helper.TestDocKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.Equal(t, docInfo1.Owner, clientInfo.ID)
 		assert.NotEqual(t, gotime.Date(1, gotime.January, 1, 0, 0, 0, 0, gotime.UTC), docInfo1.UpdatedAt)
@@ -1170,7 +1230,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	ctx := context.Background()
 
 	t.Run("document is not attached in clientInfo test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1184,7 +1244,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	})
 
 	t.Run("document attach test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1202,7 +1262,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	})
 
 	t.Run("update server_seq and client_seq in clientInfo test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1244,7 +1304,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	})
 
 	t.Run("detach document test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1273,7 +1333,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	})
 
 	t.Run("remove document test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1302,7 +1362,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 	})
 
 	t.Run("invalid clientInfo test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -1326,9 +1386,9 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		ctx := context.Background()
 
 		// 00. Create two clients and a document
-		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
 		assert.NoError(t, err)
-		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2")
+		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
 		assert.NoError(t, err)
 		d1, err := db.FindDocInfoByKeyAndOwner(ctx, c1.RefKey(), helper.TestDocKey(t), true)
 		assert.NoError(t, err)
@@ -1381,7 +1441,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		ctx := context.Background()
 
 		// 00. Create a client and two documents
-		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
 		assert.NoError(t, err)
 		d1, err := db.FindDocInfoByKeyAndOwner(ctx, c1.RefKey(), helper.TestDocKey(t)+"1", true)
 		assert.NoError(t, err)
@@ -1425,9 +1485,9 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		ctx := context.Background()
 
 		// 00. Create two clients and a document
-		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
 		assert.NoError(t, err)
-		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2")
+		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
 		assert.NoError(t, err)
 		d1, err := db.FindDocInfoByKeyAndOwner(ctx, c1.RefKey(), helper.TestDocKey(t), true)
 		assert.NoError(t, err)
@@ -1547,10 +1607,10 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 		)
 		assert.NoError(t, err)
 
-		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1", map[string]string{"userID": t.Name() + "1-1"})
 		assert.NoError(t, err)
 
-		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2", map[string]string{"userID": t.Name() + "1-2"})
 		assert.NoError(t, err)
 
 		p2, err := db.CreateProjectInfo(
@@ -1561,10 +1621,10 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 		)
 		assert.NoError(t, err)
 
-		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1")
+		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1", map[string]string{"userID": t.Name() + "2-1"})
 		assert.NoError(t, err)
 
-		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2")
+		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2", map[string]string{"userID": t.Name() + "2-2"})
 		assert.NoError(t, err)
 
 		candidates1, err := db.FindDeactivateCandidatesPerProject(ctx, p1, 10)

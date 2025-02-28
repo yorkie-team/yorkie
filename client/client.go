@@ -37,6 +37,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -99,6 +100,7 @@ type Client struct {
 	client        v1connect.YorkieServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
+	interceptor   *AuthInterceptor
 	logger        *zap.Logger
 
 	id          *time.ActorID
@@ -149,8 +151,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	var clientOptions []connect.ClientOption
-
-	clientOptions = append(clientOptions, connect.WithInterceptors(NewAuthInterceptor(options.APIKey, options.Token)))
+	interceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	clientOptions = append(clientOptions, connect.WithInterceptors(interceptor))
 	if options.MaxCallRecvMsgSize != 0 {
 		clientOptions = append(clientOptions, connect.WithReadMaxBytes(options.MaxCallRecvMsgSize))
 	}
@@ -169,6 +171,7 @@ func New(opts ...Option) (*Client, error) {
 		clientOptions: clientOptions,
 		options:       options,
 		logger:        logger,
+		interceptor:   interceptor,
 
 		key:         k,
 		status:      deactivated,
@@ -193,7 +196,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
 	if !strings.Contains(rpcAddr, "://") {
-		if c.conn.Transport == nil {
+		if c.options.CertFile == "" {
 			rpcAddr = "http://" + rpcAddr
 		} else {
 			rpcAddr = "https://" + rpcAddr
@@ -203,6 +206,11 @@ func (c *Client) Dial(rpcAddr string) error {
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
+}
+
+// SetToken sets the given token of this client.
+func (c *Client) SetToken(token string) {
+	c.interceptor.SetToken(token)
 }
 
 // Close closes all resources of this client.
@@ -337,7 +345,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	c.attachments[doc.Key()].watchCtx = watchCtx
 	c.attachments[doc.Key()].closeWatchStream = cancelFunc
 
-	if !opts.IsManual {
+	if opts.IsRealtime {
 		err = c.runWatchLoop(watchCtx, doc)
 		if err != nil {
 			return err
@@ -612,9 +620,9 @@ func handleResponse(
 		}
 
 		switch eventType {
-		case types.DocumentChangedEvent:
+		case events.DocChangedEvent:
 			return &WatchResponse{Type: DocumentChanged}, nil
-		case types.DocumentWatchedEvent:
+		case events.DocWatchedEvent:
 			doc.AddOnlineClient(cli.String())
 			if doc.Presence(cli.String()) == nil {
 				return nil, nil
@@ -626,7 +634,7 @@ func handleResponse(
 					cli.String(): doc.Presence(cli.String()),
 				},
 			}, nil
-		case types.DocumentUnwatchedEvent:
+		case events.DocUnwatchedEvent:
 			p := doc.Presence(cli.String())
 			doc.RemoveOnlineClient(cli.String())
 			if p == nil {
@@ -639,7 +647,7 @@ func handleResponse(
 					cli.String(): p,
 				},
 			}, nil
-		case types.DocumentBroadcastEvent:
+		case events.DocBroadcastEvent:
 			eventBody := resp.Event.Body
 			// If the handler exists, it means that the broadcast topic has been subscribed to.
 			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {

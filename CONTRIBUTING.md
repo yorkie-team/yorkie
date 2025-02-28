@@ -22,7 +22,8 @@ This is a rough outline of a contributor's workflow:
    - Make sure commit messages are in the proper format (see below).
 7. Push changes in a topic branch to the forked repository.
 8. Submit a pull request to the original repository.
-9. After receiving LGTM from maintainers, the PR will be merged.
+9. Address any review comments from CodeRabbit and maintainers.
+10. After receiving LGTM from maintainers, the PR will be merged.
 
 Thanks for contributing!
 
@@ -102,6 +103,12 @@ We are using [Codecov](https://about.codecov.io) for analyzing PR's code coverag
 ```sh
 make coverage
 ```
+
+### Code Review
+
+We use GitHub's pull request review feature to review code. We also use CodeRabbit to automate code review for reducing the effort of maintainers. CodeRabbit will automatically review your pull request and provide feedback on code quality, test coverage, and more.
+
+We require that all code is reviewed by at least one maintainer before being merged. We may ask for changes to be made to the code before it is merged.
 
 ## Contributor License Agreement (CLA)
 

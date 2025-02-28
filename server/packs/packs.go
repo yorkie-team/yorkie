@@ -27,14 +27,17 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/webhook"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -128,9 +131,26 @@ func PushPull(
 		return nil, err
 	}
 
-	// 05. update and find min synced ticket for garbage collection.
+	// 05. update and find min synced version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
+	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVector(
+		ctx,
+		clientInfo,
+		docRefKey,
+		reqPack.VersionVector,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if respPack.SnapshotLen() == 0 {
+		respPack.VersionVector = minSyncedVersionVector
+	}
+
+	// TODO(hackerwins): This is a previous implementation before the version
+	// vector was introduced. But it is necessary to support the previous
+	// SDKs that do not support the version vector. This code should be removed
+	// after all SDKs are updated.
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
@@ -141,6 +161,7 @@ func PushPull(
 		return nil, err
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
+
 	respPack.ApplyDocInfo(docInfo)
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
@@ -148,12 +169,12 @@ func PushPull(
 		pullLog = units.HumanSize(float64(respPack.SnapshotLen()))
 	}
 	logging.From(ctx).Infof(
-		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, min: %s",
+		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
 		docInfo.Key,
 		clientInfo.Key,
 		len(pushedChanges),
 		pullLog,
-		minSyncedTicket.ToTestString(),
+		gotime.Since(start),
 	)
 
 	// 06. publish document change event then store snapshot asynchronously.
@@ -165,17 +186,33 @@ func PushPull(
 				return
 			}
 
-			be.Coordinator.Publish(
+			// TODO(hackerwins): For now, we are publishing the event to pubsub and
+			// webhook manually. But we need to consider unified event handling system
+			// to handle this with rate-limiter and retry mechanism.
+			be.PubSub.Publish(
 				ctx,
 				publisherID,
-				sync.DocEvent{
-					Type:           types.DocumentChangedEvent,
-					Publisher:      publisherID,
-					DocumentRefKey: docRefKey,
+				events.DocEvent{
+					Type:      events.DocChangedEvent,
+					Publisher: publisherID,
+					DocRefKey: docRefKey,
 				},
 			)
 
-			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
+			if reqPack.OperationsLen() > 0 {
+				if err := webhook.SendEvent(
+					ctx,
+					be,
+					project,
+					docInfo.Key.String(),
+					events.DocRootChangedEvent,
+				); err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
+			}
+
+			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
@@ -198,7 +235,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedTicket,
+				minSyncedVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
@@ -211,8 +248,26 @@ func PushPull(
 	return respPack, nil
 }
 
-// BuildDocumentForServerSeq returns a new document for the given serverSeq.
-func BuildDocumentForServerSeq(
+// BuildDocForCheckpoint returns a new document for the given checkpoint.
+func BuildDocForCheckpoint(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *database.DocInfo,
+	cp change.Checkpoint,
+	actorID *time.ActorID,
+) (*document.Document, error) {
+	internalDoc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, cp.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	internalDoc.SetActor(actorID)
+	internalDoc.SyncCheckpoint(cp.ServerSeq, cp.ClientSeq)
+	return internalDoc.ToDocument(), nil
+}
+
+// BuildInternalDocForServerSeq returns a new document for the given serverSeq.
+func BuildInternalDocForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
@@ -233,6 +288,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
+		snapshotInfo.VersionVector,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
@@ -256,6 +312,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
+		nil,
 		nil,
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err

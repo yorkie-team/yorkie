@@ -54,7 +54,7 @@ func New(id ID, message string, operations []operations.Operation, p *innerprese
 // Execute applies this change to the given JSON root.
 func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
 	for _, op := range c.operations {
-		if err := op.Execute(root); err != nil {
+		if err := op.Execute(root, c.ID().versionVector); err != nil {
 			return err
 		}
 	}
@@ -111,4 +111,9 @@ func (c *Change) SetActor(actor *time.ActorID) {
 // PresenceChange returns the presence change of this change.
 func (c *Change) PresenceChange() *innerpresence.PresenceChange {
 	return c.presenceChange
+}
+
+// AfterOrEqual returns whether this change is after or equal to the given change.
+func (c *Change) AfterOrEqual(other *Change) bool {
+	return c.id.AfterOrEqual(other.id)
 }

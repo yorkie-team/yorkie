@@ -35,11 +35,6 @@ func NewDefaultInterceptor() *DefaultInterceptor {
 	return &DefaultInterceptor{}
 }
 
-const (
-	// SlowThreshold is the threshold for slow RPC.
-	SlowThreshold = 100 * gotime.Millisecond
-)
-
 // WrapUnary creates a unary server interceptor for default.
 func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
@@ -50,12 +45,8 @@ func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 		resp, err := next(ctx, req)
 		reqLogger := logging.From(ctx)
 		if err != nil {
-			reqLogger.Warnf("RPC : %q %s: %q => %q", req.Spec().Procedure, gotime.Since(start), req, err)
+			reqLogger.Warnf("RPC : %q %s => %q", req.Spec().Procedure, gotime.Since(start), err)
 			return nil, connecthelper.ToStatusError(err)
-		}
-
-		if gotime.Since(start) > SlowThreshold {
-			reqLogger.Infof("RPC : %q %s", req.Spec().Procedure, gotime.Since(start))
 		}
 		return resp, nil
 	}

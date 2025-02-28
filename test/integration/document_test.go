@@ -173,11 +173,11 @@ func TestDocument(t *testing.T) {
 		_, _, err := c1.Subscribe(d1)
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 
-		err = c1.Attach(ctx, d1)
+		err = c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		err = c2.Attach(ctx, d2, client.WithRealtimeSync())
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
@@ -431,7 +431,7 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 
 		// 02. c1 attaches d1 and watches it.
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		_, _, err = c1.Subscribe(d1)
 		assert.NoError(t, err)
 
@@ -456,19 +456,19 @@ func TestDocument(t *testing.T) {
 		}
 
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 		d2.SubscribeBroadcastEvent("mention", handler)
 
 		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3))
+		assert.NoError(t, c3.Attach(ctx, d3, client.WithRealtimeSync()))
 		rch3, _, err := c3.Subscribe(d3)
 		assert.NoError(t, err)
 		d3.SubscribeBroadcastEvent("mention", handler)
@@ -518,13 +518,13 @@ func TestDocument(t *testing.T) {
 		}
 
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 		d2.SubscribeBroadcastEvent("mention", handler)
@@ -576,14 +576,14 @@ func TestDocument(t *testing.T) {
 		}
 
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
 		// c2 doesn't subscribe to the "mention" broadcast event.
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 
@@ -622,7 +622,7 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		_, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", nil)
@@ -645,13 +645,13 @@ func TestDocument(t *testing.T) {
 		}
 
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 		d1.SubscribeBroadcastEvent("mention", handler)
 
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 		d2.SubscribeBroadcastEvent("mention", handler)
@@ -729,7 +729,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		wg.Add(1)
 
 		d1 := document.New(helper.TestDocKey(t))
-		err = c1.Attach(ctx, d1)
+		err = c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(t, err)
 		rch, cancel1, err := c1.Subscribe(d1)
 		defer cancel1()
@@ -768,7 +768,7 @@ func TestDocumentWithProjects(t *testing.T) {
 			},
 		})
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		_, cancel2, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 
@@ -781,7 +781,7 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		// d3 is in another project, so c1 and c2 should not receive events.
 		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3))
+		assert.NoError(t, c3.Attach(ctx, d3, client.WithRealtimeSync()))
 		_, cancel3, err := c3.Subscribe(d3)
 		assert.NoError(t, err)
 		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {

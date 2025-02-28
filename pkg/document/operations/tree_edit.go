@@ -69,7 +69,7 @@ func NewTreeEdit(
 }
 
 // Execute executes this operation on the given `CRDTRoot`.
-func (e *TreeEdit) Execute(root *crdt.Root) error {
+func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
@@ -117,6 +117,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 				}
 			}(),
 			e.maxCreatedAtMapByActor,
+			versionVector,
 		)
 		if err != nil {
 			return err

@@ -43,15 +43,15 @@ type LRUExpireCache[K comparable, V any] struct {
 }
 
 // NewLRUExpireCache creates an expiring cache with the given size
-func NewLRUExpireCache[K comparable, V any](maxSize int) (*LRUExpireCache[K, V], error) {
+func NewLRUExpireCache[K comparable, V any](maxSize int) *LRUExpireCache[K, V] {
 	if maxSize <= 0 {
-		return nil, ErrInvalidMaxSize
+		panic(ErrInvalidMaxSize)
 	}
 
 	return &LRUExpireCache[K, V]{
 		maxSize: maxSize,
 		entries: map[K]*list.Element{},
-	}, nil
+	}
 }
 
 type cacheEntry[K comparable, V any] struct {

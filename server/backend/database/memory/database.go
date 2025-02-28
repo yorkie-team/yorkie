@@ -42,6 +42,7 @@ type DB struct {
 // New returns a new in-memory database.
 func New() (*DB, error) {
 	memDB, err := memdb.NewMemDB(schema)
+
 	if err != nil {
 		return nil, fmt.Errorf("new memdb: %w", err)
 	}
@@ -507,6 +508,7 @@ func (d *DB) ActivateClient(
 	_ context.Context,
 	projectID types.ID,
 	key string,
+	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -521,6 +523,7 @@ func (d *DB) ActivateClient(
 	clientInfo := &database.ClientInfo{
 		ProjectID: projectID,
 		Key:       key,
+		Metadata:  metadata,
 		Status:    database.ClientActivated,
 		UpdatedAt: now,
 	}
@@ -569,13 +572,6 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	// the stored objects are returned instead of new objects. This can cause
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
 	clientInfo = clientInfo.DeepCopy()
-	for docID := range clientInfo.Documents {
-		if clientInfo.Documents[docID].Status == database.DocumentAttached {
-			if err := clientInfo.DetachDocument(docID); err != nil {
-				return nil, err
-			}
-		}
-	}
 	clientInfo.Deactivate()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
@@ -907,22 +903,19 @@ func (d *DB) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedPresence, err := database.EncodePresenceChange(cn.PresenceChange())
-		if err != nil {
-			return err
-		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
 			ProjectID:      docInfo.ProjectID,
 			DocID:          docInfo.ID,
 			ServerSeq:      cn.ServerSeq(),
-			ActorID:        types.ID(cn.ID().ActorID().String()),
 			ClientSeq:      cn.ClientSeq(),
 			Lamport:        cn.ID().Lamport(),
+			ActorID:        types.ID(cn.ID().ActorID().String()),
+			VersionVector:  cn.ID().VersionVector(),
 			Message:        cn.Message(),
 			Operations:     encodedOperations,
-			PresenceChange: encodedPresence,
+			PresenceChange: cn.PresenceChange(),
 		}); err != nil {
 			return fmt.Errorf("create change: %w", err)
 		}
@@ -1017,6 +1010,37 @@ func (d *DB) PurgeStaleChanges(
 	return nil
 }
 
+// FindLatestChangeInfoByActor returns the latest change created by given actorID.
+func (d *DB) FindLatestChangeInfoByActor(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	actorID types.ID,
+	serverSeq int64,
+) (*database.ChangeInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iterator, err := txn.ReverseLowerBound(
+		tblChanges,
+		"doc_id_actor_id_server_seq",
+		docRefKey.DocID.String(),
+		actorID.String(),
+		serverSeq,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetch changes of %s: %w", actorID, err)
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.ChangeInfo)
+		if info != nil && info.ActorID == actorID {
+			return info, nil
+		}
+	}
+
+	return nil, database.ErrChangeNotFound
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
@@ -1092,13 +1116,14 @@ func (d *DB) CreateSnapshotInfo(
 	defer txn.Abort()
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
-		ID:        newID(),
-		ProjectID: docRefKey.ProjectID,
-		DocID:     docRefKey.DocID,
-		ServerSeq: doc.Checkpoint().ServerSeq,
-		Lamport:   doc.Lamport(),
-		Snapshot:  snapshot,
-		CreatedAt: gotime.Now(),
+		ID:            newID(),
+		ProjectID:     docRefKey.ProjectID,
+		DocID:         docRefKey.DocID,
+		ServerSeq:     doc.Checkpoint().ServerSeq,
+		Lamport:       doc.Lamport(),
+		VersionVector: doc.VersionVector().DeepCopy(),
+		Snapshot:      snapshot,
+		CreatedAt:     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
@@ -1152,12 +1177,13 @@ func (d *DB) FindClosestSnapshotInfo(
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docRefKey.DocID {
 			snapshotInfo = &database.SnapshotInfo{
-				ID:        info.ID,
-				ProjectID: info.ProjectID,
-				DocID:     info.DocID,
-				ServerSeq: info.ServerSeq,
-				Lamport:   info.Lamport,
-				CreatedAt: info.CreatedAt,
+				ID:            info.ID,
+				ProjectID:     info.ProjectID,
+				DocID:         info.DocID,
+				ServerSeq:     info.ServerSeq,
+				Lamport:       info.Lamport,
+				VersionVector: info.VersionVector,
+				CreatedAt:     info.CreatedAt,
 			}
 			if includeSnapshot {
 				snapshotInfo.Snapshot = info.Snapshot
@@ -1167,7 +1193,9 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	if snapshotInfo == nil {
-		return &database.SnapshotInfo{}, nil
+		return &database.SnapshotInfo{
+			VersionVector: time.NewVersionVector(),
+		}, nil
 	}
 
 	return snapshotInfo, nil
@@ -1210,10 +1238,12 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	docRefKey types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
+	// 01. update synced seq of the given client and document.
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
 		return nil, err
 	}
 
+	// 02. find min synced seq of the given document.
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -1250,6 +1280,108 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.MaxDelimiter,
 		actorID,
 	), nil
+}
+
+// UpdateVersionVector updates the given serverSeq of the given client
+func (d *DB) UpdateVersionVector(
+	_ context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	if !isAttached {
+		if _, err = txn.DeleteAll(
+			tblVersionVectors,
+			"doc_id_client_id",
+			docRefKey.DocID.String(),
+			clientInfo.ID.String(),
+		); err != nil {
+			return fmt.Errorf("delete version vector of %s: %w", docRefKey.DocID, err)
+		}
+
+		txn.Commit()
+		return nil
+	}
+
+	raw, err := txn.First(
+		tblVersionVectors,
+		"doc_id_client_id",
+		docRefKey.DocID.String(),
+		clientInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
+	}
+
+	versionVectorInfo := &database.VersionVectorInfo{
+		DocID:         docRefKey.DocID,
+		ClientID:      clientInfo.ID,
+		VersionVector: versionVector,
+	}
+	if raw == nil {
+		versionVectorInfo.ID = newID()
+	} else {
+		versionVectorInfo.ID = raw.(*database.VersionVectorInfo).ID
+	}
+
+	if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
+		return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
+	}
+
+	txn.Commit()
+
+	return nil
+}
+
+// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+// and returns the SyncedVersionVector of the document.
+func (d *DB) UpdateAndFindMinSyncedVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	versionVector time.VersionVector,
+) (time.VersionVector, error) {
+	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
+	// from min version vector.
+
+	// 01. Find all version vectors of the given document from DB.
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find all version vectors: %w", err)
+	}
+
+	var versionVectorInfos []database.VersionVectorInfo
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		vvi := raw.(*database.VersionVectorInfo)
+		versionVectorInfos = append(versionVectorInfos, *vvi)
+	}
+
+	// 02. Compute min version vector.
+	minVersionVector := versionVector.DeepCopy()
+	for i, vvi := range versionVectorInfos {
+		if vvi.ClientID == clientInfo.ID {
+			continue
+		}
+		minVersionVector.Min(&versionVectorInfos[i].VersionVector)
+	}
+
+	// 03. Update current client's version vector. If the client is detached, remove it.
+	// This is only for the current client and does not affect the version vector of other clients.
+	if err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+		return nil, err
+	}
+
+	return minVersionVector, nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.

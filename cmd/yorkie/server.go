@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -48,9 +49,20 @@ var (
 	mongoPingTimeout       time.Duration
 
 	authWebhookMaxWaitInterval time.Duration
-	authWebhookCacheAuthTTL    time.Duration
-	authWebhookCacheUnauthTTL  time.Duration
-	projectInfoCacheTTL        time.Duration
+	authWebhookMinWaitInterval time.Duration
+	authWebhookRequestTimeout  time.Duration
+	authWebhookCacheTTL        time.Duration
+
+	eventWebhookMaxWaitInterval time.Duration
+	eventWebhookMinWaitInterval time.Duration
+	eventWebhookRequestTimeout  time.Duration
+	eventWebhookCacheTTL        time.Duration
+
+	projectCacheTTL time.Duration
+
+	kafkaAddresses    string
+	kafkaTopic        string
+	kafkaWriteTimeout time.Duration
 
 	conf = server.NewConfig()
 )
@@ -65,9 +77,15 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
-			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
-			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
-			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
+			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
+			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
+			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
+
+			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
+			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
+			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
+
+			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
@@ -77,6 +95,14 @@ func newServerCmd() *cobra.Command {
 					ConnectionTimeout: mongoConnectionTimeout.String(),
 					YorkieDatabase:    mongoYorkieDatabase,
 					PingTimeout:       mongoPingTimeout.String(),
+				}
+			}
+
+			if kafkaAddresses != "" && kafkaTopic != "" {
+				conf.Kafka = &messagebroker.Config{
+					Addresses:    kafkaAddresses,
+					Topic:        kafkaTopic,
+					WriteTimeout: kafkaWriteTimeout.String(),
 				}
 			}
 
@@ -297,17 +323,29 @@ func init() {
 		server.DefaultSnapshotDisableGC,
 		"Whether to disable garbage collection of snapshots.",
 	)
+	cmd.Flags().DurationVar(
+		&authWebhookRequestTimeout,
+		"auth-webhook-request-timeout",
+		server.DefaultAuthWebhookRequestTimeout,
+		"Timeout for each authorization webhook request.",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
 		"auth-webhook-max-retries",
 		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for an authorization webhook.",
+		"Maximum number of retries for authorization webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&authWebhookMinWaitInterval,
+		"auth-webhook-min-wait-interval",
+		server.DefaultAuthWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().DurationVar(
 		&authWebhookMaxWaitInterval,
 		"auth-webhook-max-wait-interval",
 		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval for authorization webhook.",
+		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
@@ -316,27 +354,45 @@ func init() {
 		"The cache size of the authorization webhook.",
 	)
 	cmd.Flags().DurationVar(
-		&authWebhookCacheAuthTTL,
+		&authWebhookCacheTTL,
 		"auth-webhook-cache-auth-ttl",
-		server.DefaultAuthWebhookCacheAuthTTL,
-		"TTL value to set when caching authorized webhook response.",
+		server.DefaultAuthWebhookCacheTTL,
+		"TTL value to set when caching authorization webhook response.",
 	)
 	cmd.Flags().DurationVar(
-		&authWebhookCacheUnauthTTL,
-		"auth-webhook-cache-unauth-ttl",
-		server.DefaultAuthWebhookCacheUnauthTTL,
-		"TTL value to set when caching unauthorized webhook response.",
+		&eventWebhookRequestTimeout,
+		"event-webhook-request-timeout",
+		server.DefaultEventWebhookRequestTimeout,
+		"Timeout for each event webhook request.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.EventWebhookMaxRetries,
+		"event-webhook-max-retries",
+		server.DefaultEventWebhookMaxRetries,
+		"Maximum number of retries for event webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookMinWaitInterval,
+		"event-webhook-min-wait-interval",
+		server.DefaultEventWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&eventWebhookMaxWaitInterval,
+		"event-webhook-max-wait-interval",
+		server.DefaultEventWebhookMaxWaitInterval,
+		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
-		&conf.Backend.ProjectInfoCacheSize,
+		&conf.Backend.ProjectCacheSize,
 		"project-info-cache-size",
-		server.DefaultProjectInfoCacheSize,
+		server.DefaultProjectCacheSize,
 		"The cache size of the project info.",
 	)
 	cmd.Flags().DurationVar(
-		&projectInfoCacheTTL,
+		&projectCacheTTL,
 		"project-info-cache-ttl",
-		server.DefaultProjectInfoCacheTTL,
+		server.DefaultProjectCacheTTL,
 		"TTL value to set when caching project info.",
 	)
 	cmd.Flags().StringVar(
@@ -344,6 +400,30 @@ func init() {
 		"hostname",
 		server.DefaultHostname,
 		"Yorkie Server Hostname",
+	)
+	cmd.Flags().StringVar(
+		&conf.Backend.GatewayAddr,
+		"backend-gateway-addr",
+		server.DefaultGatewayAddr,
+		"Gateway address",
+	)
+	cmd.Flags().StringVar(
+		&kafkaAddresses,
+		"kafka-addresses",
+		"",
+		"Comma-separated list of Kafka addresses (e.g., localhost:9092,localhost:9093)",
+	)
+	cmd.Flags().StringVar(
+		&kafkaTopic,
+		"kafka-topic",
+		server.DefaultKafkaTopic,
+		"Kafka topic name to publish events",
+	)
+	cmd.Flags().DurationVar(
+		&kafkaWriteTimeout,
+		"kafka-write-timeout",
+		server.DefaultKafkaWriteTimeout,
+		"Timeout for writing messages to Kafka",
 	)
 
 	rootCmd.AddCommand(cmd)

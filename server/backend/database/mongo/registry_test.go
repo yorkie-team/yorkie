@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -35,16 +36,56 @@ import (
 func TestRegistry(t *testing.T) {
 	registry := NewRegistryBuilder().Build()
 
-	id := types.ID(primitive.NewObjectID().Hex())
-	data, err := bson.MarshalWithRegistry(registry, bson.M{
-		"_id": id,
+	t.Run("types.ID test", func(t *testing.T) {
+		id := types.ID(primitive.NewObjectID().Hex())
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"_id": id,
+		})
+		assert.NoError(t, err)
+
+		info := database.ClientInfo{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		assert.Equal(t, id, info.ID)
 	})
-	assert.NoError(t, err)
 
-	info := database.ClientInfo{}
-	assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
-	assert.Equal(t, id, info.ID)
+	t.Run("versionVector test", func(t *testing.T) {
+		vector := time.NewVersionVector()
+		actorID, err := time.ActorIDFromHex(primitive.NewObjectID().Hex())
+		assert.NoError(t, err)
+		vector.Set(actorID, 1)
 
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"version_vector": vector,
+		})
+		assert.NoError(t, err)
+
+		info := struct {
+			VersionVector time.VersionVector `bson:"version_vector"`
+		}{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		assert.Equal(t, vector, info.VersionVector)
+	})
+
+	t.Run("presenceChange test", func(t *testing.T) {
+		presence := innerpresence.NewPresence()
+		presence.Set("color", "orange")
+		presenceChange := &innerpresence.PresenceChange{
+			ChangeType: innerpresence.Put,
+			Presence:   presence,
+		}
+
+		data, err := bson.MarshalWithRegistry(registry, bson.M{
+			"presence_change": presenceChange,
+		})
+		assert.NoError(t, err)
+
+		info := struct {
+			PresenceChange *innerpresence.PresenceChange `bson:"presence_change"`
+		}{}
+		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+
+		assert.Equal(t, presenceChange, info.PresenceChange)
+	})
 }
 
 func TestEncoder(t *testing.T) {

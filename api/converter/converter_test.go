@@ -261,8 +261,10 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("empty presence converting test", func(t *testing.T) {
-		change, err := innerpresence.NewChangeFromJSON(`{"ChangeType":"put","Presence":{}}`)
-		assert.NoError(t, err)
+		change := &innerpresence.PresenceChange{
+			ChangeType: innerpresence.Put,
+			Presence:   innerpresence.NewPresence(),
+		}
 
 		pbChange := converter.ToPresenceChange(change)
 		clone := converter.FromPresenceChange(pbChange)

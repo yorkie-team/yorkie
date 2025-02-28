@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.5.0
+  version: v0.6.0
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -218,6 +218,12 @@ components:
           - type: string
           - type: number
           title: server_seq
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangeID
       type: object
     yorkie.v1.ChangePack:
@@ -262,6 +268,12 @@ components:
           format: byte
           title: snapshot
           type: string
+        versionVector:
+          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          additionalProperties: false
+          description: ""
+          title: version_vector
+          type: object
       title: ChangePack
       type: object
     yorkie.v1.Checkpoint:
@@ -1323,6 +1335,18 @@ components:
           description: ""
           title: created_at
           type: object
+        eventWebhookEvents:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: event_webhook_events
+          type: array
+        eventWebhookUrl:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: string
         id:
           additionalProperties: false
           description: ""
@@ -1675,6 +1699,18 @@ components:
           description: ""
           title: client_deactivate_threshold
           type: object
+        eventWebhookEvents:
+          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_events
+          type: object
+        eventWebhookUrl:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_url
+          type: object
         name:
           $ref: '#/components/schemas/google.protobuf.StringValue'
           additionalProperties: false
@@ -1695,6 +1731,19 @@ components:
           title: methods
           type: array
       title: AuthWebhookMethods
+      type: object
+    yorkie.v1.UpdatableProjectFields.EventWebhookEvents:
+      additionalProperties: false
+      description: ""
+      properties:
+        events:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: events
+          type: array
+      title: EventWebhookEvents
       type: object
     yorkie.v1.User:
       additionalProperties: false
@@ -1751,6 +1800,35 @@ components:
         - 13
       title: ValueType
       type: string
+    yorkie.v1.VersionVector:
+      additionalProperties: false
+      description: ""
+      properties:
+        vector:
+          additionalProperties: false
+          description: ""
+          title: vector
+          type: object
+      title: VersionVector
+      type: object
+    yorkie.v1.VersionVector.VectorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: VectorEntry
+      type: object
   securitySchemes:
     ApiKeyAuth:
       in: header

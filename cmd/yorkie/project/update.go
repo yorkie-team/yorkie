@@ -22,10 +22,10 @@ import (
 	"errors"
 	"fmt"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/admin"
@@ -35,9 +35,29 @@ import (
 
 var (
 	flagAuthWebhookURL            string
+	flagAuthWebhookMethodsAdd     []string
+	flagAuthWebhookMethodsRm      []string
+	flagEventWebhookURL           string
+	flagEventWebhookEventsAdd     []string
+	flagEventWebhookEventsRm      []string
 	flagName                      string
 	flagClientDeactivateThreshold string
 )
+
+var allAuthWebhookMethods = []string{
+	string(types.ActivateClient),
+	string(types.DeactivateClient),
+	string(types.AttachDocument),
+	string(types.DetachDocument),
+	string(types.RemoveDocument),
+	string(types.PushPull),
+	string(types.WatchDocuments),
+	string(types.Broadcast),
+}
+
+var allEventWebhookEvents = []string{
+	string(types.DocRootChanged),
+}
 
 func newUpdateCommand() *cobra.Command {
 	return &cobra.Command{
@@ -82,6 +102,25 @@ func newUpdateCommand() *cobra.Command {
 				newAuthWebhookURL = flagAuthWebhookURL
 			}
 
+			newAuthWebhookMethods := updateStringSlice(
+				project.AuthWebhookMethods, // prev
+				flagAuthWebhookMethodsRm,   // removes
+				flagAuthWebhookMethodsAdd,  // adds
+				allAuthWebhookMethods,      // all
+			)
+
+			newEventWebhookURL := project.EventWebhookURL
+			if cmd.Flags().Lookup("event-webhook-url").Changed { // allow empty string
+				newEventWebhookURL = flagEventWebhookURL
+			}
+
+			newEventWebhookEvents := updateStringSlice(
+				project.EventWebhookEvents, // prev
+				flagEventWebhookEventsRm,   // removes
+				flagEventWebhookEventsAdd,  // adds
+				allEventWebhookEvents,      // all
+			)
+
 			newClientDeactivateThreshold := project.ClientDeactivateThreshold
 			if flagClientDeactivateThreshold != "" {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold
@@ -90,18 +129,29 @@ func newUpdateCommand() *cobra.Command {
 			updatableProjectFields := &types.UpdatableProjectFields{
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
+				AuthWebhookMethods:        &newAuthWebhookMethods,
+				EventWebhookURL:           &newEventWebhookURL,
+				EventWebhookEvents:        &newEventWebhookEvents,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
-				// TODO(chacha912): consider creating the error details type to remove the dependency on gRPC.
-				st := status.Convert(err)
-				for _, detail := range st.Details() {
-					switch t := detail.(type) {
-					case *errdetails.BadRequest:
-						for _, violation := range t.GetFieldViolations() {
-							cmd.Printf("Invalid Fields: The %q field was wrong: %s\n", violation.GetField(), violation.GetDescription())
+				var connErr *connect.Error
+				if errors.As(err, &connErr) {
+					for _, detail := range connErr.Details() {
+						value, err := detail.Value()
+						if err != nil {
+							continue
+						}
+
+						badReq, ok := value.(*errdetails.BadRequest)
+						if !ok {
+							continue
+						}
+
+						for _, violation := range badReq.GetFieldViolations() {
+							cmd.Printf("Invalid Field: %q - %s\n", violation.GetField(), violation.GetDescription())
 						}
 					}
 				}
@@ -140,6 +190,45 @@ func printUpdateProjectInfo(cmd *cobra.Command, output string, project *types.Pr
 	return nil
 }
 
+// updateStringSlice updates the string slice with the given items to remove and add.
+// If the item is "ALL", it will be replaced with all items.
+func updateStringSlice(
+	prevItems,
+	itemsToRemove,
+	itemsToAdd,
+	allItems []string,
+) []string {
+	items := make(map[string]struct{})
+
+	for _, p := range prevItems {
+		items[p] = struct{}{}
+	}
+
+	for _, r := range itemsToRemove {
+		if r == "ALL" {
+			items = make(map[string]struct{})
+		} else {
+			delete(items, r)
+		}
+	}
+
+	for _, a := range itemsToAdd {
+		if a == "ALL" {
+			for _, m := range allItems {
+				items[m] = struct{}{}
+			}
+		} else {
+			items[a] = struct{}{}
+		}
+	}
+
+	updated := make([]string, 0, len(items))
+	for s := range items {
+		updated = append(updated, s)
+	}
+	return updated
+}
+
 func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
@@ -153,6 +242,36 @@ func init() {
 		"auth-webhook-url",
 		"",
 		"authorization-webhook update url",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagAuthWebhookMethodsAdd,
+		"auth-webhook-method-add",
+		[]string{},
+		"authorization-webhook methods to add ('ALL' for all methods)",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagAuthWebhookMethodsRm,
+		"auth-webhook-method-rm",
+		[]string{},
+		"authorization-webhook methods to remove ('ALL' for all methods)",
+	)
+	cmd.Flags().StringVar(
+		&flagEventWebhookURL,
+		"event-webhook-url",
+		"",
+		"event-webhook update url",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagEventWebhookEventsAdd,
+		"event-webhook-events-add",
+		[]string{},
+		"event-webhook events to add ('ALL' for all events)",
+	)
+	cmd.Flags().StringArrayVar(
+		&flagEventWebhookEventsRm,
+		"event-webhook-events-rm",
+		[]string{},
+		"event-webhook events to remove ('ALL' for all events)",
 	)
 	cmd.Flags().StringVar(
 		&flagClientDeactivateThreshold,

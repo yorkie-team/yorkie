@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -58,6 +59,8 @@ func ToProject(project *types.Project) *api.Project {
 		Name:                      project.Name,
 		AuthWebhookUrl:            project.AuthWebhookURL,
 		AuthWebhookMethods:        project.AuthWebhookMethods,
+		EventWebhookUrl:           project.EventWebhookURL,
+		EventWebhookEvents:        project.EventWebhookEvents,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
@@ -136,12 +139,18 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 		return nil, err
 	}
 
+	pbVersionVector, err := ToVersionVector(pack.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ChangePack{
 		DocumentKey:     pack.DocumentKey.String(),
 		Checkpoint:      ToCheckpoint(pack.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
+		VersionVector:   pbVersionVector,
 		IsRemoved:       pack.IsRemoved,
 	}, nil
 }
@@ -155,25 +164,47 @@ func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
 }
 
 // ToChangeID converts the given model format to Protobuf format.
-func ToChangeID(id change.ID) *api.ChangeID {
-	return &api.ChangeID{
-		ClientSeq: id.ClientSeq(),
-		ServerSeq: id.ServerSeq(),
-		Lamport:   id.Lamport(),
-		ActorId:   id.ActorID().Bytes(),
+func ToChangeID(id change.ID) (*api.ChangeID, error) {
+	pbVersionVector, err := ToVersionVector(id.VersionVector())
+	if err != nil {
+		return nil, err
 	}
+	return &api.ChangeID{
+		ClientSeq:     id.ClientSeq(),
+		ServerSeq:     id.ServerSeq(),
+		Lamport:       id.Lamport(),
+		ActorId:       id.ActorID().Bytes(),
+		VersionVector: pbVersionVector,
+	}, nil
+}
+
+// ToVersionVector converts the given model format to Protobuf format.
+func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
+	pbVersionVector := make(map[string]int64)
+	for actor, clock := range vector {
+		id, err := time.ActorIDFromBytes(actor[:])
+		if err != nil {
+			return nil, err
+		}
+
+		pbVersionVector[id.String()] = clock
+	}
+
+	return &api.VersionVector{
+		Vector: pbVersionVector,
+	}, nil
 }
 
 // ToDocEventType converts the given model format to Protobuf format.
-func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
+func ToDocEventType(eventType events.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case types.DocumentChangedEvent:
+	case events.DocChangedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED, nil
-	case types.DocumentWatchedEvent:
+	case events.DocWatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, nil
-	case types.DocumentUnwatchedEvent:
+	case events.DocUnwatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED, nil
-	case types.DocumentBroadcastEvent:
+	case events.DocBroadcastEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
@@ -243,8 +274,13 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			return nil, err
 		}
 
+		pbChangeID, err := ToChangeID(c.ID())
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
-			Id:             ToChangeID(c.ID()),
+			Id:             pbChangeID,
 			Message:        c.Message(),
 			Operations:     pbOperations,
 			PresenceChange: ToPresenceChange(c.PresenceChange()),
@@ -527,6 +563,16 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		}
 	} else {
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
+	}
+	if fields.EventWebhookURL != nil {
+		pbUpdatableProjectFields.EventWebhookUrl = &wrapperspb.StringValue{Value: *fields.EventWebhookURL}
+	}
+	if fields.EventWebhookEvents != nil {
+		pbUpdatableProjectFields.EventWebhookEvents = &api.UpdatableProjectFields_EventWebhookEvents{
+			Events: *fields.EventWebhookEvents,
+		}
+	} else {
+		pbUpdatableProjectFields.EventWebhookEvents = nil
 	}
 	if fields.ClientDeactivateThreshold != nil {
 		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{

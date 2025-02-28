@@ -65,6 +65,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Mongo,
 		conf.Housekeeping,
 		metrics,
+		conf.Kafka,
 	)
 	if err != nil {
 		return nil, err
@@ -150,7 +151,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 		return err
 	}
 
-	_, err = clients.Deactivate(ctx, r.backend.DB, types.ClientRefKey{
+	_, err = clients.Deactivate(ctx, r.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
 	})

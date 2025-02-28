@@ -26,7 +26,7 @@ import (
 )
 
 func TestUpdatableProjectFields(t *testing.T) {
-	var structError *validation.StructError
+	var formErr *validation.FormError
 	t.Run("validation test", func(t *testing.T) {
 		newName := "changed-name"
 		newAuthWebhookURL := "http://localhost:3000"
@@ -34,11 +34,17 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newEventWebhookURL := "http://localhost:4000"
+		newEventWebhookEvents := []string{
+			string(types.DocRootChanged),
+		}
 		newClientDeactivateThreshold := "1h"
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
+			EventWebhookURL:           &newEventWebhookURL,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -54,6 +60,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
+			EventWebhookURL:           &newEventWebhookURL,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -62,13 +69,18 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newAuthWebhookMethods = []string{
 			"InvalidMethods",
 		}
+		// invalid EventWebhookEvents
+		newEventWebhookEvents = []string{
+			"DocChanged",
+		}
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
+			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 
 	t.Run("project name format test", func(t *testing.T) {
@@ -82,36 +94,36 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		reservedName := "new"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		reservedName = "default"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidName = "1"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidName = "over_30_chracaters_is_invalid_name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 }

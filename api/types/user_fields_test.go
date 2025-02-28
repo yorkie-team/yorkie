@@ -26,7 +26,7 @@ import (
 )
 
 func TestSignupFields(t *testing.T) {
-	var structError *validation.StructError
+	var formErr *validation.FormError
 
 	t.Run("password validation test", func(t *testing.T) {
 		validUsername := "test"
@@ -42,48 +42,48 @@ func TestSignupFields(t *testing.T) {
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "abcd"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "!@#$"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "abcd1234"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "abcd!@#$"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "1234!@#$"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 
 		invalidPassword = "abcd1234!@abcd1234!@abcd1234!@1"
 		fields = &types.UserFields{
 			Username: &validUsername,
 			Password: &invalidPassword,
 		}
-		assert.ErrorAs(t, fields.Validate(), &structError)
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 }

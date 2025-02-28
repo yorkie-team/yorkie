@@ -25,12 +25,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -316,9 +316,15 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
+	pbVersionVector, err := converter.ToVersionVector(doc.VersionVector())
+	if err != nil {
+		return nil, err
+	}
+
 	return connect.NewResponse(&api.GetSnapshotMetaResponse{
-		Lamport:  doc.Lamport(),
-		Snapshot: snapshot,
+		Lamport:       doc.Lamport(),
+		Snapshot:      snapshot,
+		VersionVector: pbVersionVector,
 	}), nil
 }
 
@@ -398,7 +404,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	}
 
 	// TODO(hackerwins): Rename PushPullKey to something else like DocWriteLockKey?.
-	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, docInfo.Key))
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, docInfo.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -422,13 +428,13 @@ func (s *adminServer) RemoveDocumentByAdmin(
 
 	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
 	publisherID := time.InitialActorID
-	s.backend.Coordinator.Publish(
+	s.backend.PubSub.Publish(
 		ctx,
 		publisherID,
-		sync.DocEvent{
-			Type:           types.DocumentChangedEvent,
-			Publisher:      publisherID,
-			DocumentRefKey: docInfo.RefKey(),
+		events.DocEvent{
+			Type:      events.DocChangedEvent,
+			Publisher: publisherID,
+			DocRefKey: docInfo.RefKey(),
 		},
 	)
 

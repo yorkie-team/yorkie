@@ -24,7 +24,7 @@ option go_package = "github.com/yorkie-team/yorkie/api/yorkie/v1;v1";
 option java_multiple_files = true;
 option java_package = "dev.yorkie.api.v1";
 
-// Yorkie is a service that provides a API for SDKs.
+// Yorkie is a service that provides an API for SDKs.
 service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
   rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
@@ -41,6 +41,7 @@ service YorkieService {
 
 message ActivateClientRequest {
   string client_key = 1;
+  map<string, string> metadata = 2;
 }
 
 message ActivateClientResponse {

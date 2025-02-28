@@ -273,6 +273,7 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
@@ -285,6 +286,7 @@ func (t *Text) Edit(
 		maxCreatedAtMapByActor,
 		val,
 		executedAt,
+		versionVector,
 	)
 }
 
@@ -295,6 +297,7 @@ func (t *Text) Style(
 	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
@@ -309,15 +312,30 @@ func (t *Text) Style(
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
 		actorIDHex := node.id.createdAt.ActorIDHex()
+		actorID := node.id.createdAt.ActorID()
 
 		var maxCreatedAt *time.Ticket
-		if len(maxCreatedAtMapByActor) == 0 {
-			maxCreatedAt = time.MaxTicket
+		var clientLamportAtChange int64
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+			// Case 1: local editing from json package
+			clientLamportAtChange = time.MaxLamport
+		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
+			lamport, ok := versionVector.Get(actorID)
+			if ok {
+				clientLamportAtChange = lamport
+			} else {
+				clientLamportAtChange = 0
+			}
 		} else {
+			// Case 3: from operation without version vector(Before v0.5.6)
 			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
 				maxCreatedAt = createdAt
@@ -326,8 +344,10 @@ func (t *Text) Style(
 			}
 		}
 
-		if node.canStyle(executedAt, maxCreatedAt) {
-			maxCreatedAt = createdAtMapByActor[actorIDHex]
+		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+		// (without version vector) are migrated to new Changes with version vector.
+		if node.canStyle(executedAt, maxCreatedAt, clientLamportAtChange) {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt

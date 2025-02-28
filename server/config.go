@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -49,35 +50,47 @@ const (
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
+	DefaultKafkaTopic        = "user-events"
+	DefaultKafkaWriteTimeout = 5 * time.Second
+
 	DefaultAdminUser                  = "admin"
 	DefaultAdminPassword              = "admin"
 	DefaultSecretKey                  = "yorkie-secret"
 	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
 	DefaultUseDefaultProject          = true
 	DefaultClientDeactivateThreshold  = "24h"
-	DefaultSnapshotThreshold          = 500
-	DefaultSnapshotInterval           = 1000
+	DefaultSnapshotThreshold          = 1000
+	DefaultSnapshotInterval           = 3000
 	DefaultSnapshotWithPurgingChanges = false
 	DefaultSnapshotDisableGC          = false
 
+	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
-	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
-	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
-	DefaultProjectInfoCacheSize       = 256
-	DefaultProjectInfoCacheTTL        = 10 * time.Minute
+	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 
-	DefaultHostname = ""
+	DefaultEventWebhookRequestTimeout  = 3 * time.Second
+	DefaultEventWebhookMaxRetries      = 10
+	DefaultEventWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
+
+	DefaultProjectCacheSize = 256
+	DefaultProjectCacheTTL  = 10 * time.Minute
+
+	DefaultHostname    = ""
+	DefaultGatewayAddr = "localhost:8080"
 )
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC          *rpc.Config          `yaml:"RPC"`
-	Profiling    *profiling.Config    `yaml:"Profiling"`
-	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
-	Backend      *backend.Config      `yaml:"Backend"`
-	Mongo        *mongo.Config        `yaml:"Mongo"`
+	RPC          *rpc.Config           `yaml:"RPC"`
+	Profiling    *profiling.Config     `yaml:"Profiling"`
+	Housekeeping *housekeeping.Config  `yaml:"Housekeeping"`
+	Backend      *backend.Config       `yaml:"Backend"`
+	Mongo        *mongo.Config         `yaml:"Mongo"`
+	Kafka        *messagebroker.Config `yaml:"Kafka"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -127,6 +140,12 @@ func (c *Config) Validate() error {
 
 	if c.Mongo != nil {
 		if err := c.Mongo.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if c.Kafka != nil {
+		if err := c.Kafka.Validate(); err != nil {
 			return err
 		}
 	}
@@ -185,20 +204,40 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
 	}
 
-	if c.Backend.AuthWebhookCacheAuthTTL == "" {
-		c.Backend.AuthWebhookCacheAuthTTL = DefaultAuthWebhookCacheAuthTTL.String()
+	if c.Backend.AuthWebhookMinWaitInterval == "" {
+		c.Backend.AuthWebhookMinWaitInterval = DefaultAuthWebhookMinWaitInterval.String()
 	}
 
-	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
-		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
+	if c.Backend.AuthWebhookRequestTimeout == "" {
+		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
 	}
 
-	if c.Backend.ProjectInfoCacheSize == 0 {
-		c.Backend.ProjectInfoCacheSize = DefaultProjectInfoCacheSize
+	if c.Backend.AuthWebhookCacheTTL == "" {
+		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
 
-	if c.Backend.ProjectInfoCacheTTL == "" {
-		c.Backend.ProjectInfoCacheTTL = DefaultProjectInfoCacheTTL.String()
+	if c.Backend.EventWebhookMaxRetries == 0 {
+		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
+	}
+
+	if c.Backend.EventWebhookMaxWaitInterval == "" {
+		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookMinWaitInterval == "" {
+		c.Backend.EventWebhookMinWaitInterval = DefaultEventWebhookMinWaitInterval.String()
+	}
+
+	if c.Backend.EventWebhookRequestTimeout == "" {
+		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
+	}
+
+	if c.Backend.ProjectCacheSize == 0 {
+		c.Backend.ProjectCacheSize = DefaultProjectCacheSize
+	}
+
+	if c.Backend.ProjectCacheTTL == "" {
+		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}
 
 	if c.Mongo != nil {

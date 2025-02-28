@@ -40,6 +40,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColSyncedSeqs represents the syncedseqs collection in the database.
 	ColSyncedSeqs = "syncedseqs"
+	// ColVersionVectors represents the versionvector collection in the database.
+	ColVersionVectors = "versionvectors"
 )
 
 // Collections represents the list of all collections in the database.
@@ -109,12 +111,9 @@ var collectionInfos = []collectionInfo{
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "key", Value: bsonx.Int32(1)},
+				{Key: "removed_at", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetPartialFilterExpression(
-				bsonx.Doc{
-					{Key: "removed_at", Value: bsonx.Null()},
-				},
-			).SetUnique(true),
+			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: ColChanges,
@@ -122,6 +121,14 @@ var collectionInfos = []collectionInfo{
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "server_seq", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "actor_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
@@ -147,11 +154,28 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "server_seq", Value: bsonx.Int32(1)},
+			},
+		}, {
+			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
 			},
+		}},
+	},
+	{
+		name: ColVersionVectors,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "client_id", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
 		}},
 	},
 }

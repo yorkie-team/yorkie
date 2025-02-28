@@ -381,20 +381,40 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-func (n *TreeNode) canDelete(removedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
-	if !n.id.CreatedAt.After(maxCreatedAt) &&
+// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+// (without version vector) are migrated to new Changes with version vector.
+func (n *TreeNode) canDelete(removedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
+	var nodeExisted bool
+	if maxCreatedAt == nil {
+		nodeExisted = n.id.CreatedAt.Lamport() <= clientLamportAtChange
+	} else {
+		nodeExisted = !n.id.CreatedAt.After(maxCreatedAt)
+	}
+
+	if nodeExisted &&
 		(n.removedAt == nil || n.removedAt.Compare(removedAt) > 0) {
 		return true
 	}
 	return false
 }
 
-func (n *TreeNode) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
+// (without version vector) are migrated to new Changes with version vector.
+func (n *TreeNode) canStyle(editedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
 	if n.IsText() {
 		return false
 	}
 
-	return !n.id.CreatedAt.After(maxCreatedAt) &&
+	var nodeExisted bool
+	if maxCreatedAt == nil {
+		nodeExisted = n.id.CreatedAt.Lamport() <= clientLamportAtChange
+	} else {
+		nodeExisted = !n.id.CreatedAt.After(maxCreatedAt)
+	}
+
+	return nodeExisted &&
 		(n.removedAt == nil || editedAt.After(n.removedAt))
 }
 
@@ -669,7 +689,7 @@ func (t *Tree) EditT(
 		return err
 	}
 
-	_, _, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	_, _, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil, nil)
 	return err
 }
 
@@ -717,6 +737,7 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	maxCreatedAtMapByActor map[string]*time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
@@ -730,7 +751,7 @@ func (t *Tree) Edit(
 
 	toBeRemoveds, toBeMovedToFromParents, maxCreatedAtMap, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
-		maxCreatedAtMapByActor, editedAt,
+		maxCreatedAtMapByActor, editedAt, versionVector,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -816,10 +837,14 @@ func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
 	toParent *TreeNode, toLeft *TreeNode,
 	maxCreatedAtMapByActor map[string]*time.Ticket, editedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) ([]*TreeNode, []*TreeNode, map[string]*time.Ticket, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
@@ -843,11 +868,24 @@ func (t *Tree) collectBetween(
 			}
 
 			actorIDHex := node.id.CreatedAt.ActorIDHex()
+			actorID := node.id.CreatedAt.ActorID()
 
 			var maxCreatedAt *time.Ticket
-			if maxCreatedAtMapByActor == nil {
-				maxCreatedAt = time.MaxTicket
+			var clientLamportAtChange int64
+
+			if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+				// Case 1: local editing from json package
+				clientLamportAtChange = time.MaxLamport
+			} else if !isVersionVectorEmpty {
+				// Case 2: from operation with version vector(After v0.5.7)
+				lamport, ok := versionVector.Get(actorID)
+				if ok {
+					clientLamportAtChange = lamport
+				} else {
+					clientLamportAtChange = 0
+				}
 			} else {
+				// Case 3: from operation without version vector(Before v0.5.6)
 				createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 				if ok {
 					maxCreatedAt = createdAt
@@ -858,8 +896,9 @@ func (t *Tree) collectBetween(
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
-			if node.canDelete(editedAt, maxCreatedAt) || slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
-				maxCreatedAt = createdAtMapByActor[actorIDHex]
+			if node.canDelete(editedAt, maxCreatedAt, clientLamportAtChange) ||
+				slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
+				maxCreatedAt := createdAtMapByActor[actorIDHex]
 				createdAt := node.id.CreatedAt
 				if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 					createdAtMapByActor[actorIDHex] = createdAt
@@ -935,6 +974,7 @@ func (t *Tree) StyleByIndex(
 	attributes map[string]string,
 	editedAt *time.Ticket,
 	maxCreatedAtMapByActor map[string]*time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
@@ -946,7 +986,7 @@ func (t *Tree) StyleByIndex(
 		return nil, nil, err
 	}
 
-	return t.Style(fromPos, toPos, attributes, editedAt, maxCreatedAtMapByActor)
+	return t.Style(fromPos, toPos, attributes, editedAt, maxCreatedAtMapByActor, versionVector)
 }
 
 // Style applies the given attributes of the given range.
@@ -955,6 +995,7 @@ func (t *Tree) Style(
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	maxCreatedAtMapByActor map[string]*time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -965,25 +1006,41 @@ func (t *Tree) Style(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorIDHex := node.id.CreatedAt.ActorIDHex()
+		actorID := node.id.CreatedAt.ActorID()
 
 		var maxCreatedAt *time.Ticket
-		if maxCreatedAtMapByActor == nil {
-			maxCreatedAt = time.MaxTicket
+		var clientLamportAtChange int64
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+			// Case 1: local editing from json package
+			clientLamportAtChange = time.MaxLamport
+		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
+			lamport, ok := versionVector.Get(actorID)
+			if ok {
+				clientLamportAtChange = lamport
+			} else {
+				clientLamportAtChange = 0
+			}
 		} else {
-			if createdAt, ok := maxCreatedAtMapByActor[actorIDHex]; ok {
+			// Case 3: from operation without version vector(Before v0.5.6)
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			if ok {
 				maxCreatedAt = createdAt
 			} else {
 				maxCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.canStyle(editedAt, maxCreatedAt) && len(attrs) > 0 {
-			maxCreatedAt = createdAtMapByActor[actorIDHex]
+		if node.canStyle(editedAt, maxCreatedAt, clientLamportAtChange) && len(attrs) > 0 {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.CreatedAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
@@ -1012,6 +1069,7 @@ func (t *Tree) RemoveStyle(
 	attrs []string,
 	editedAt *time.Ticket,
 	maxCreatedAtMapByActor map[string]*time.Ticket,
+	versionVector time.VersionVector,
 ) (map[string]*time.Ticket, []GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -1022,25 +1080,41 @@ func (t *Tree) RemoveStyle(
 		return nil, nil, err
 	}
 
+	isVersionVectorEmpty := len(versionVector) == 0
+	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
+
 	var pairs []GCPair
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
 		actorIDHex := node.id.CreatedAt.ActorIDHex()
+		actorID := node.id.CreatedAt.ActorID()
 
 		var maxCreatedAt *time.Ticket
-		if maxCreatedAtMapByActor == nil {
-			maxCreatedAt = time.MaxTicket
+		var clientLamportAtChange int64
+		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+			// Case 1: local editing from json package
+			clientLamportAtChange = time.MaxLamport
+		} else if !isVersionVectorEmpty {
+			// Case 2: from operation with version vector(After v0.5.7)
+			lamport, ok := versionVector.Get(actorID)
+			if ok {
+				clientLamportAtChange = lamport
+			} else {
+				clientLamportAtChange = 0
+			}
 		} else {
-			if createdAt, ok := maxCreatedAtMapByActor[actorIDHex]; ok {
+			// Case 3: from operation without version vector(Before v0.5.6)
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			if ok {
 				maxCreatedAt = createdAt
 			} else {
 				maxCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.canStyle(editedAt, maxCreatedAt) && len(attrs) > 0 {
-			maxCreatedAt = createdAtMapByActor[actorIDHex]
+		if node.canStyle(editedAt, maxCreatedAt, clientLamportAtChange) && len(attrs) > 0 {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.CreatedAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt

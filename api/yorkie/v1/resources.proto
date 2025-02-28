@@ -46,6 +46,7 @@ message ChangePack {
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
+  VersionVector version_vector = 7;
 }
 
 message Change {
@@ -57,9 +58,14 @@ message Change {
 
 message ChangeID {
   uint32 client_seq = 1;
-  int64 server_seq = 2 [jstype = JS_STRING];
-  int64 lamport = 3 [jstype = JS_STRING];
+  int64 server_seq = 2; 
+  int64 lamport = 3;
   bytes actor_id = 4;
+  VersionVector version_vector = 5;
+}
+
+message VersionVector {
+  map<string, int64> vector = 1;
 }
 
 message Operation {
@@ -291,9 +297,11 @@ message Project {
   string secret_key = 4;
   string auth_webhook_url = 5;
   repeated string auth_webhook_methods = 6;
-  string client_deactivate_threshold = 7;
-  google.protobuf.Timestamp created_at = 8;
-  google.protobuf.Timestamp updated_at = 9;
+  string event_webhook_url = 7;
+  repeated string event_webhook_events = 8;
+  string client_deactivate_threshold = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
 }
 
 message UpdatableProjectFields {
@@ -301,10 +309,16 @@ message UpdatableProjectFields {
     repeated string methods = 1;
   }
 
+  message EventWebhookEvents {
+    repeated string events = 1;
+  }
+
   google.protobuf.StringValue name = 1;
   google.protobuf.StringValue auth_webhook_url = 2;
   AuthWebhookMethods auth_webhook_methods = 3;
-  google.protobuf.StringValue client_deactivate_threshold = 4;
+  google.protobuf.StringValue event_webhook_url = 4;
+  EventWebhookEvents event_webhook_events = 5;
+  google.protobuf.StringValue client_deactivate_threshold = 6;
 }
 
 message DocumentSummary {
@@ -332,7 +346,7 @@ message Presence {
 }
 
 message Checkpoint {
-  int64 server_seq = 1 [jstype = JS_STRING];
+  int64 server_seq = 1; 
   uint32 client_seq = 2;
 }
 
@@ -343,7 +357,7 @@ message TextNodePos {
 }
 
 message TimeTicket {
-  int64 lamport = 1 [jstype = JS_STRING];
+  int64 lamport = 1;
   uint32 delimiter = 2;
   bytes actor_id = 3;
 }

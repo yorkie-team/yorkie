@@ -45,16 +45,16 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 // VerifyAccess verifies the given access.
 func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.AccessInfo) error {
 	md := metadata.From(ctx)
-	project := projects.From(ctx)
+	prj := projects.From(ctx)
 
-	if !project.RequireAuth(accessInfo.Method) {
+	if !prj.RequireAuth(accessInfo.Method) {
 		return nil
 	}
 
 	return verifyAccess(
 		ctx,
 		be,
-		project.AuthWebhookURL,
+		prj,
 		md.Authorization,
 		accessInfo,
 	)
