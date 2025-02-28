@@ -40,9 +40,10 @@ func (c *loggerID) next() string {
 
 // BatchPublisher is a publisher that publishes events in batch.
 type BatchPublisher struct {
-	logger *zap.SugaredLogger
-	mutex  gosync.Mutex
-	events []events.DocEvent
+	logger       *zap.SugaredLogger
+	mutex        gosync.Mutex
+	events       []events.DocEvent
+	publisherSet map[string]struct{}
 
 	window    time.Duration
 	closeChan chan struct{}
@@ -52,10 +53,11 @@ type BatchPublisher struct {
 // NewBatchPublisher creates a new BatchPublisher instance.
 func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublisher {
 	bp := &BatchPublisher{
-		logger:    logging.New(id.next()),
-		window:    window,
-		closeChan: make(chan struct{}),
-		subs:      subs,
+		logger:       logging.New(id.next()),
+		publisherSet: make(map[string]struct{}),
+		window:       window,
+		closeChan:    make(chan struct{}),
+		subs:         subs,
 	}
 
 	go bp.processLoop()
@@ -68,8 +70,14 @@ func (bp *BatchPublisher) Publish(event events.DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 
-	// TODO(hackerwins): If DocumentChangedEvent is already in the batch, we don't
-	// need to add it again.
+	// If DocChangedEvent is already in the batch, ignore the new one.
+	if event.Type == events.DocChangedEvent {
+		if _, exists := bp.publisherSet[event.Publisher.String()]; exists {
+			return
+		}
+		bp.publisherSet[event.Publisher.String()] = struct{}{}
+	}
+
 	bp.events = append(bp.events, event)
 }
 
@@ -97,6 +105,7 @@ func (bp *BatchPublisher) publish() {
 
 	events := bp.events
 	bp.events = nil
+	bp.publisherSet = make(map[string]struct{})
 
 	bp.mutex.Unlock()
 
