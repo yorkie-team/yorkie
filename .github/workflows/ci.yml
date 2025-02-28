@@ -131,7 +131,6 @@ jobs:
           if [ -d "benchmark-repo" ] && [ -f "benchmark-repo/bench_result.txt" ]; then
             content=$(cat benchmark-repo/bench_result.txt | jq -R -s .)
             echo "PREV_BENCH_RESULT=$content" >> $GITHUB_OUTPUT
-            
             if [ -f "benchmark-repo/commit_hash.txt" ]; then
               prev_commit=$(cat benchmark-repo/commit_hash.txt)
               echo "PREV_COMMIT=$prev_commit" >> $GITHUB_OUTPUT
@@ -178,8 +177,8 @@ jobs:
           echo "${{ github.sha }}" > benchmark-repo/commit_hash.txt
 
           cd benchmark-repo
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
 
           if [ ! -d ".git" ]; then
             git init
