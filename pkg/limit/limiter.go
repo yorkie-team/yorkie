@@ -18,73 +18,25 @@
 package limit
 
 import (
-	"context"
-	"fmt"
-	"sync/atomic"
-	"time"
-
 	"golang.org/x/time/rate"
 )
 
-// Limiter provides a combined throttling and debouncing mechanism
-// that ensures eventual consistency.
-type Limiter struct {
-	lim        *rate.Limiter
-	debouncing int32 // 0 means false, 1 means true
+type Limiter[E any] struct {
+	lim      *rate.Limiter
+	event    E
+	callback func(E) error
 }
 
-// New creates a new instance with the specified throttle intervals.
-func New(window time.Duration) *Limiter {
-	dt := &Limiter{
-		lim:        rate.NewLimiter(rate.Every(window), 1),
-		debouncing: 0,
-	}
-	return dt
-}
-
-// Execute attempts to run the provided callback function immediately if the rate limiter allows it.
-// If the rate limiter does not allow immediate execution, this function blocks until the next token
-// is available and then runs the callback. If there is already a debouncing callback, Execute returns
-// immediately. This mechanism ensures that the final callback is executed after the final event,
-// providing eventual consistency.
-func (l *Limiter) Execute(ctx context.Context, callback func() error) error {
+func (l Limiter[E]) Execute(e E) error {
 	if l.lim.Allow() {
-		return callback()
+		return l.callback(e)
 	}
 
-	if !atomic.CompareAndSwapInt32(&l.debouncing, 0, 1) {
-		return nil
-	}
+	l.event = e
 
-	if err := l.lim.Wait(ctx); err != nil {
-		return fmt.Errorf("wait for limiter: %w", err)
-	}
-
-	if err := callback(); err != nil {
-		atomic.StoreInt32(&l.debouncing, 0)
-		return fmt.Errorf("callback: %w", err)
-	}
-	atomic.StoreInt32(&l.debouncing, 0)
-
-	return callback()
+	return nil
 }
 
-// Schedule is the asynchronous counterpart to Execute. It runs the provided callback
-// immediately if the rate limiter allows it. Otherwise, it schedules the callback to run
-// once the next token becomes available and returns immediately. If there is already a debouncing
-// callback, this function returns without scheduling another one.
-func (l *Limiter) Schedule(callback func()) {
-	if l.lim.Allow() {
-		go callback()
-		return
-	}
-
-	if !atomic.CompareAndSwapInt32(&l.debouncing, 0, 1) {
-		return
-	}
-	delay := l.lim.Reserve().Delay()
-	time.AfterFunc(delay, func() {
-		callback()
-		atomic.StoreInt32(&l.debouncing, 0)
-	})
+func (l Limiter[E]) Flush() error {
+	return l.callback(l.event)
 }
