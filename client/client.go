@@ -510,7 +510,7 @@ func (c *Client) runWatchLoop(
 	if !stream.Receive() {
 		return ErrInitializationNotReceived
 	}
-	if _, err := handleResponse(stream.Msg(), doc, c.id); err != nil {
+	if _, err := handleResponse(stream.Msg(), doc); err != nil {
 		return err
 	}
 	if err = stream.Err(); err != nil {
@@ -523,7 +523,7 @@ func (c *Client) runWatchLoop(
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
-			resp, err := handleResponse(pbResp, doc, c.id)
+			resp, err := handleResponse(pbResp, doc)
 			if err != nil {
 				rch <- WatchResponse{Err: err}
 				ctx.Done()
@@ -594,17 +594,16 @@ func (c *Client) runWatchLoop(
 func handleResponse(
 	pbResp *api.WatchDocumentResponse,
 	doc *document.Document,
-	id *time.ActorID,
 ) (*WatchResponse, error) {
 	switch resp := pbResp.Body.(type) {
 	case *api.WatchDocumentResponse_Initialization_:
 		var clientIDs []string
 		for _, clientID := range resp.Initialization.ClientIds {
-			cli, err := time.ActorIDFromHex(clientID)
+			id, err := time.ActorIDFromHex(clientID)
 			if err != nil {
 				return nil, err
 			}
-			clientIDs = append(clientIDs, cli.String())
+			clientIDs = append(clientIDs, id.String())
 		}
 
 		doc.SetOnlineClients(clientIDs...)
@@ -618,10 +617,6 @@ func handleResponse(
 		cli, err := time.ActorIDFromHex(resp.Event.Publisher)
 		if err != nil {
 			return nil, err
-		}
-
-		if cli.Compare(id) == 0 {
-			return nil, nil
 		}
 
 		switch eventType {

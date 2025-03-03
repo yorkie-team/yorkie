@@ -66,5 +66,25 @@ func (l *Limiter) Execute(ctx context.Context, callback func() error) error {
 	}
 	atomic.StoreInt32(&l.debouncing, 0)
 
-	return nil
+	return callback()
+}
+
+// Schedule is the asynchronous counterpart to Execute. It runs the provided callback
+// immediately if the rate limiter allows it. Otherwise, it schedules the callback to run
+// once the next token becomes available and returns immediately. If there is already a debouncing
+// callback, this function returns without scheduling another one.
+func (l *Limiter) Schedule(callback func()) {
+	if l.lim.Allow() {
+		go callback()
+		return
+	}
+
+	if !atomic.CompareAndSwapInt32(&l.debouncing, 0, 1) {
+		return
+	}
+	delay := l.lim.Reserve().Delay()
+	time.AfterFunc(delay, func() {
+		callback()
+		atomic.StoreInt32(&l.debouncing, 0)
+	})
 }

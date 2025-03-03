@@ -32,16 +32,13 @@ import (
 const (
 	// publishTimeout is the timeout for publishing an event.
 	publishTimeout = 100 * gotime.Millisecond
-	batchWindow    = 100 * gotime.Millisecond
-	limitWindow    = 100 * gotime.Millisecond
 )
 
 // Subscriptions is a map of Subscriptions.
 type Subscriptions struct {
-	docKey         types.DocRefKey
-	internalMap    *cmap.Map[string, *Subscription]
-	batchPublisher *BatchPublisher
-	limitPublisher *LimitPublisher
+	docKey      types.DocRefKey
+	internalMap *cmap.Map[string, *Subscription]
+	publisher   *BatchPublisher
 }
 
 func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
@@ -49,8 +46,7 @@ func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
 		docKey:      docKey,
 		internalMap: cmap.New[string, *Subscription](),
 	}
-	s.batchPublisher = NewBatchPublisher(s, batchWindow)
-	s.limitPublisher = NewLimitPublisher(s, limitWindow)
+	s.publisher = NewBatchPublisher(s, 100*gotime.Millisecond)
 	return s
 }
 
@@ -66,16 +62,7 @@ func (s *Subscriptions) Values() []*Subscription {
 
 // Publish publishes the given event.
 func (s *Subscriptions) Publish(event events.DocEvent) {
-	switch event.Type {
-	case events.DocBroadcastEvent:
-		s.batchPublisher.Publish(event)
-	case events.DocChangedEvent:
-		s.limitPublisher.Publish(event)
-	case events.DocWatchedEvent:
-		s.limitPublisher.Publish(event)
-	case events.DocUnwatchedEvent:
-		s.limitPublisher.Publish(event)
-	}
+	s.publisher.Publish(event)
 }
 
 // Delete deletes the subscription of the given id.
@@ -95,7 +82,7 @@ func (s *Subscriptions) Len() int {
 
 // Close closes the subscriptions.
 func (s *Subscriptions) Close() {
-	s.batchPublisher.Close()
+	s.publisher.Close()
 }
 
 // PubSub is the memory implementation of PubSub, used for single server.
