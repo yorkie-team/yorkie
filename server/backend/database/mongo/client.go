@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
@@ -43,7 +44,8 @@ import (
 
 const (
 	// StatusKey is the key of the status field.
-	StatusKey = "status"
+	StatusKey           = "status"
+	BSONMaxSnapshotSize = 16 * 1024 * 1024 // 16MB
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -1079,16 +1081,52 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id":     docRefKey.ProjectID,
-		"doc_id":         docRefKey.DocID,
-		"server_seq":     doc.Checkpoint().ServerSeq,
-		"lamport":        doc.Lamport(),
-		"version_vector": doc.VersionVector(),
-		"snapshot":       snapshot,
-		"created_at":     gotime.Now(),
-	}); err != nil {
-		return fmt.Errorf("insert snapshot: %w", err)
+	if len(snapshot) > BSONMaxSnapshotSize {
+		db := c.client.Database(c.config.YorkieDatabase)
+
+		// create GridFS bucket
+		bucket, err := gridfs.NewBucket(db)
+		if err != nil {
+			return fmt.Errorf("failed to create GridFS bucket: %w", err)
+		}
+
+		uploadStream, err := bucket.OpenUploadStream(fmt.Sprintf("%s_snapshot", docRefKey.DocID))
+		if err != nil {
+			return fmt.Errorf("failed to open GridFS upload stream: %w", err)
+		}
+		defer uploadStream.Close()
+
+		_, err = uploadStream.Write(snapshot)
+		if err != nil {
+			return fmt.Errorf("failed to write to GridFS: %w", err)
+		}
+
+		fileID := uploadStream.FileID
+
+		if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
+			"project_id":       docRefKey.ProjectID,
+			"doc_id":           docRefKey.DocID,
+			"server_seq":       doc.Checkpoint().ServerSeq,
+			"lamport":          doc.Lamport(),
+			"version_vector":   doc.VersionVector(),
+			"snapshot_file_id": fileID, // GridFS file ID
+			"created_at":       gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("insert snapshot info: %w", err)
+		}
+
+	} else {
+		if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
+			"project_id":     docRefKey.ProjectID,
+			"doc_id":         docRefKey.DocID,
+			"server_seq":     doc.Checkpoint().ServerSeq,
+			"lamport":        doc.Lamport(),
+			"version_vector": doc.VersionVector(),
+			"snapshot":       snapshot,
+			"created_at":     gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("insert snapshot: %w", err)
+		}
 	}
 
 	return nil
