@@ -770,7 +770,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newEventWebhookURL := "http://localhost:4000"
 		newEventWebhookEvents := []string{string(types.DocRootChanged)}
 		newClientDeactivateThreshold := "1h"
-		newConnectionCountLimitPerDocument := 10
+		newAttachCountLimitPerDocument := 10
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
@@ -781,13 +781,13 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 
 		// 01. Update all fields test
 		fields := &types.UpdatableProjectFields{
-			Name:                            &newName,
-			AuthWebhookURL:                  &newAuthWebhookURL,
-			AuthWebhookMethods:              &newAuthWebhookMethods,
-			EventWebhookURL:                 &newEventWebhookURL,
-			EventWebhookEvents:              &newEventWebhookEvents,
-			ClientDeactivateThreshold:       &newClientDeactivateThreshold,
-			ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument,
+			Name:                        &newName,
+			AuthWebhookURL:              &newAuthWebhookURL,
+			AuthWebhookMethods:          &newAuthWebhookMethods,
+			EventWebhookURL:             &newEventWebhookURL,
+			EventWebhookEvents:          &newEventWebhookEvents,
+			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			AttachCountLimitPerDocument: &newAttachCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -801,7 +801,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
-		assert.Equal(t, newConnectionCountLimitPerDocument, updateInfo.ConnectionCountLimitPerDocument)
+		assert.Equal(t, newAttachCountLimitPerDocument, updateInfo.AttachCountLimitPerDocument)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -819,7 +819,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
-		assert.Equal(t, newConnectionCountLimitPerDocument, updateInfo.ConnectionCountLimitPerDocument)
+		assert.Equal(t, newAttachCountLimitPerDocument, updateInfo.AttachCountLimitPerDocument)
 
 		// 03. Update authWebhookURL and eventWebhookURL test
 		newEventWebhookURL2 := newEventWebhookURL + "2"
@@ -840,7 +840,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.NotEqual(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
-		assert.Equal(t, newConnectionCountLimitPerDocument, updateInfo.ConnectionCountLimitPerDocument)
+		assert.Equal(t, newAttachCountLimitPerDocument, updateInfo.AttachCountLimitPerDocument)
 
 		// 04. Update EventWebhookEvents test
 		var newEventWebhookEvents2 []string
@@ -878,11 +878,11 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
 		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.NotEqual(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
-		assert.Equal(t, newConnectionCountLimitPerDocument, updateInfo.ConnectionCountLimitPerDocument)
+		assert.Equal(t, newAttachCountLimitPerDocument, updateInfo.AttachCountLimitPerDocument)
 
-		// 06. ConnectionCountLimitPerDocument test
-		newConnectionCountLimitPerDocument2 := 20
-		fields = &types.UpdatableProjectFields{ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument2}
+		// 06. AttachCountLimitPerDocument test
+		newAttachCountLimitPerDocument2 := 20
+		fields = &types.UpdatableProjectFields{AttachCountLimitPerDocument: &newAttachCountLimitPerDocument2}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
@@ -895,7 +895,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
 		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.Equal(t, clientDeactivateThreshold2, updateInfo.ClientDeactivateThreshold)
-		assert.Equal(t, newConnectionCountLimitPerDocument2, updateInfo.ConnectionCountLimitPerDocument)
+		assert.Equal(t, newAttachCountLimitPerDocument2, updateInfo.AttachCountLimitPerDocument)
 
 		// 07. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}

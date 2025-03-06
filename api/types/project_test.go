@@ -73,29 +73,29 @@ func TestProjectInfo(t *testing.T) {
 		assert.False(t, info3.RequireEventWebhook(types.DocRootChanged))
 	})
 
-	t.Run("connection limit test", func(t *testing.T) {
-		// 1. Connection limit enabled
+	t.Run("attach limit test", func(t *testing.T) {
+		// 1. Attach limit enabled
 		project := &types.Project{
-			ConnectionCountLimitPerDocument: 5,
+			AttachCountLimitPerDocument: 5,
 		}
-		assert.True(t, project.IsConnectionLimitEnabled())
-		assert.False(t, project.IsConnectionLimitExceeded(4))
-		assert.True(t, project.IsConnectionLimitExceeded(5))
-		assert.True(t, project.IsConnectionLimitExceeded(6))
+		assert.True(t, project.IsAttachLimitEnabled())
+		assert.False(t, project.IsAttachLimitExceeded(4))
+		assert.True(t, project.IsAttachLimitExceeded(5))
+		assert.True(t, project.IsAttachLimitExceeded(6))
 
-		// 2. Connection limit disabled (0 means no limit)
+		// 2. Attach limit disabled (0 means no limit)
 		project2 := &types.Project{
-			ConnectionCountLimitPerDocument: 0,
+			AttachCountLimitPerDocument: 0,
 		}
-		assert.False(t, project2.IsConnectionLimitEnabled())
-		assert.False(t, project2.IsConnectionLimitExceeded(10))
-		assert.False(t, project2.IsConnectionLimitExceeded(100))
+		assert.False(t, project2.IsAttachLimitEnabled())
+		assert.False(t, project2.IsAttachLimitExceeded(10))
+		assert.False(t, project2.IsAttachLimitExceeded(100))
 
-		// 3. Negative connection limit (should be treated as disabled)
+		// 3. Negative attach limit (should be treated as disabled)
 		project3 := &types.Project{
-			ConnectionCountLimitPerDocument: -1,
+			AttachCountLimitPerDocument: -1,
 		}
-		assert.False(t, project3.IsConnectionLimitEnabled())
-		assert.False(t, project3.IsConnectionLimitExceeded(5))
+		assert.False(t, project3.IsAttachLimitEnabled())
+		assert.False(t, project3.IsAttachLimitExceeded(5))
 	})
 }

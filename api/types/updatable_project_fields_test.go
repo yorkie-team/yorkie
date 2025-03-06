@@ -39,16 +39,16 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
-		newConnectionCountLimitPerDocument := 10
+		newAttachCountLimitPerDocument := 10
 
 		fields := &types.UpdatableProjectFields{
-			Name:                            &newName,
-			AuthWebhookURL:                  &newAuthWebhookURL,
-			AuthWebhookMethods:              &newAuthWebhookMethods,
-			EventWebhookURL:                 &newEventWebhookURL,
-			EventWebhookEvents:              &newEventWebhookEvents,
-			ClientDeactivateThreshold:       &newClientDeactivateThreshold,
-			ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument,
+			Name:                        &newName,
+			AuthWebhookURL:              &newAuthWebhookURL,
+			AuthWebhookMethods:          &newAuthWebhookMethods,
+			EventWebhookURL:             &newEventWebhookURL,
+			EventWebhookEvents:          &newEventWebhookEvents,
+			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			AttachCountLimitPerDocument: &newAttachCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -85,11 +85,11 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 
-		// invalid ConnectionCountLimitPerDocument
-		newConnectionCountLimitPerDocument = -1
+		// invalid AttachCountLimitPerDocument
+		newAttachCountLimitPerDocument = -1
 		fields = &types.UpdatableProjectFields{
-			Name:                            &newName,
-			ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument,
+			Name:                        &newName,
+			AttachCountLimitPerDocument: &newAttachCountLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -139,21 +139,21 @@ func TestUpdatableProjectFields(t *testing.T) {
 	})
 
 	t.Run("connection count limit per document test", func(t *testing.T) {
-		validConnectionCountLimitPerDocument := 10
+		validAttachCountLimitPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			ConnectionCountLimitPerDocument: &validConnectionCountLimitPerDocument,
+			AttachCountLimitPerDocument: &validAttachCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		validConnectionCountLimitPerDocument = 0
+		validAttachCountLimitPerDocument = 0
 		fields = &types.UpdatableProjectFields{
-			ConnectionCountLimitPerDocument: &validConnectionCountLimitPerDocument,
+			AttachCountLimitPerDocument: &validAttachCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		invalidConnectionCountLimitPerDocument := -1
+		invalidAttachCountLimitPerDocument := -1
 		fields = &types.UpdatableProjectFields{
-			ConnectionCountLimitPerDocument: &invalidConnectionCountLimitPerDocument,
+			AttachCountLimitPerDocument: &invalidAttachCountLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})

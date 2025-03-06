@@ -94,7 +94,7 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	if project.IsConnectionLimitEnabled() {
+	if project.IsAttachLimitEnabled() {
 		docInfo.RemoveConnectedClient(clientInfo.ID)
 		if err := s.backend.DB.RemoveDocConnectedClient(
 			ctx,

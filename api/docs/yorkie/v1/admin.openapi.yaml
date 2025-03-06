@@ -1817,6 +1817,11 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        attachCountLimitPerDocument:
+          additionalProperties: false
+          description: ""
+          title: attach_count_limit_per_document
+          type: integer
         authWebhookMethods:
           additionalProperties: false
           description: ""
@@ -1834,11 +1839,6 @@ components:
           description: ""
           title: client_deactivate_threshold
           type: string
-        connectionCountLimitPerDocument:
-          additionalProperties: false
-          description: ""
-          title: connection_count_limit_per_document
-          type: integer
         createdAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false
@@ -2145,6 +2145,12 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        attachCountLimitPerDocument:
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          additionalProperties: false
+          description: ""
+          title: attach_count_limit_per_document
+          type: object
         authWebhookMethods:
           $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods'
           additionalProperties: false
@@ -2162,12 +2168,6 @@ components:
           additionalProperties: false
           description: ""
           title: client_deactivate_threshold
-          type: object
-        connectionCountLimitPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
-          additionalProperties: false
-          description: ""
-          title: connection_count_limit_per_document
           type: object
         eventWebhookEvents:
           $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents'

@@ -51,18 +51,18 @@ func FromProjects(pbProjects []*api.Project) []*types.Project {
 // FromProject converts the given Protobuf formats to model format.
 func FromProject(pbProject *api.Project) *types.Project {
 	return &types.Project{
-		ID:                              types.ID(pbProject.Id),
-		Name:                            pbProject.Name,
-		AuthWebhookURL:                  pbProject.AuthWebhookUrl,
-		AuthWebhookMethods:              pbProject.AuthWebhookMethods,
-		EventWebhookURL:                 pbProject.EventWebhookUrl,
-		EventWebhookEvents:              pbProject.EventWebhookEvents,
-		ClientDeactivateThreshold:       pbProject.ClientDeactivateThreshold,
-		ConnectionCountLimitPerDocument: int(pbProject.ConnectionCountLimitPerDocument),
-		PublicKey:                       pbProject.PublicKey,
-		SecretKey:                       pbProject.SecretKey,
-		CreatedAt:                       pbProject.CreatedAt.AsTime(),
-		UpdatedAt:                       pbProject.UpdatedAt.AsTime(),
+		ID:                          types.ID(pbProject.Id),
+		Name:                        pbProject.Name,
+		AuthWebhookURL:              pbProject.AuthWebhookUrl,
+		AuthWebhookMethods:          pbProject.AuthWebhookMethods,
+		EventWebhookURL:             pbProject.EventWebhookUrl,
+		EventWebhookEvents:          pbProject.EventWebhookEvents,
+		ClientDeactivateThreshold:   pbProject.ClientDeactivateThreshold,
+		AttachCountLimitPerDocument: int(pbProject.AttachCountLimitPerDocument),
+		PublicKey:                   pbProject.PublicKey,
+		SecretKey:                   pbProject.SecretKey,
+		CreatedAt:                   pbProject.CreatedAt.AsTime(),
+		UpdatedAt:                   pbProject.UpdatedAt.AsTime(),
 	}
 }
 

@@ -39,7 +39,7 @@ func TestProjectInfo(t *testing.T) {
 		testMethods := []string{"testMethod"}
 		testEvents := []string{"testEvent"}
 		testClientDeactivateThreshold := "2h"
-		testConnectionCountLimitPerDocument := 10
+		testAttachCountLimitPerDocument := 10
 
 		// Test updating name field
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
@@ -71,9 +71,9 @@ func TestProjectInfo(t *testing.T) {
 
 		// Test updating connection count limit per document field
 		project.UpdateFields(&types.UpdatableProjectFields{
-			ConnectionCountLimitPerDocument: &testConnectionCountLimitPerDocument,
+			AttachCountLimitPerDocument: &testAttachCountLimitPerDocument,
 		})
-		assert.Equal(t, testConnectionCountLimitPerDocument, project.ConnectionCountLimitPerDocument)
+		assert.Equal(t, testAttachCountLimitPerDocument, project.AttachCountLimitPerDocument)
 	})
 
 	t.Run("new project info test", func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestProjectInfo(t *testing.T) {
 		assert.Equal(t, projectName, project.Name)
 		assert.Equal(t, dummyOwnerID, project.Owner)
 		assert.Equal(t, clientDeactivateThreshold, project.ClientDeactivateThreshold)
-		assert.Equal(t, 0, project.ConnectionCountLimitPerDocument)           // Default should be 0 (no limit)
+		assert.Equal(t, 0, project.AttachCountLimitPerDocument)               // Default should be 0 (no limit)
 		assert.NotEmpty(t, project.PublicKey)                                 // Public key should be auto-generated
 		assert.NotEmpty(t, project.SecretKey)                                 // Secret key should be auto-generated
 		assert.NotZero(t, project.CreatedAt)                                  // Creation time should be set
@@ -104,7 +104,7 @@ func TestProjectInfo(t *testing.T) {
 		project.ID = types.ID("123456789012345678901234")
 		project.AuthWebhookURL = "https://example.com"
 		project.AuthWebhookMethods = []string{"attach", "detach"}
-		project.ConnectionCountLimitPerDocument = 10
+		project.AttachCountLimitPerDocument = 10
 		project.UpdatedAt = time.Now()
 
 		// Create a deep copy
@@ -119,15 +119,15 @@ func TestProjectInfo(t *testing.T) {
 		assert.Equal(t, project.AuthWebhookURL, copiedProject.AuthWebhookURL)
 		assert.Equal(t, project.AuthWebhookMethods, copiedProject.AuthWebhookMethods)
 		assert.Equal(t, project.ClientDeactivateThreshold, copiedProject.ClientDeactivateThreshold)
-		assert.Equal(t, project.ConnectionCountLimitPerDocument, copiedProject.ConnectionCountLimitPerDocument)
+		assert.Equal(t, project.AttachCountLimitPerDocument, copiedProject.AttachCountLimitPerDocument)
 		assert.Equal(t, project.CreatedAt, copiedProject.CreatedAt)
 		assert.Equal(t, project.UpdatedAt, copiedProject.UpdatedAt)
 
 		// Modify copy and verify it doesn't affect original (proving it's a deep copy)
 		copiedProject.Name = "modified-name"
-		copiedProject.ConnectionCountLimitPerDocument = 20
+		copiedProject.AttachCountLimitPerDocument = 20
 		assert.NotEqual(t, project.Name, copiedProject.Name)
-		assert.NotEqual(t, project.ConnectionCountLimitPerDocument, copiedProject.ConnectionCountLimitPerDocument)
+		assert.NotEqual(t, project.AttachCountLimitPerDocument, copiedProject.AttachCountLimitPerDocument)
 	})
 
 	t.Run("to project test", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestProjectInfo(t *testing.T) {
 		projectInfo.ID = types.ID("123456789012345678901234")
 		projectInfo.AuthWebhookURL = "https://example.com"
 		projectInfo.AuthWebhookMethods = []string{"attach", "detach"}
-		projectInfo.ConnectionCountLimitPerDocument = 10
+		projectInfo.AttachCountLimitPerDocument = 10
 		projectInfo.UpdatedAt = time.Now()
 
 		// Convert to types.Project
@@ -153,7 +153,7 @@ func TestProjectInfo(t *testing.T) {
 		assert.Equal(t, projectInfo.AuthWebhookURL, project.AuthWebhookURL)
 		assert.Equal(t, projectInfo.AuthWebhookMethods, project.AuthWebhookMethods)
 		assert.Equal(t, projectInfo.ClientDeactivateThreshold, project.ClientDeactivateThreshold)
-		assert.Equal(t, projectInfo.ConnectionCountLimitPerDocument, project.ConnectionCountLimitPerDocument)
+		assert.Equal(t, projectInfo.AttachCountLimitPerDocument, project.AttachCountLimitPerDocument)
 		assert.Equal(t, projectInfo.CreatedAt, project.CreatedAt)
 		assert.Equal(t, projectInfo.UpdatedAt, project.UpdatedAt)
 	})
