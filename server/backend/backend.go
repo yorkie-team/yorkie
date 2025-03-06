@@ -22,7 +22,6 @@ package backend
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/backend/webhook"
 	"os"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -37,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/backend/webhook"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )

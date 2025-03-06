@@ -53,11 +53,13 @@ func (r SnapshotRefKey) String() string {
 	return fmt.Sprintf("Snapshot (%s.%s.%d)", r.ProjectID, r.DocID, r.ServerSeq)
 }
 
+// EventRefKey represents an identifier used to reference an event.
 type EventRefKey struct {
 	DocRefKey
 	EventWebhookType
 }
 
+// String returns the string representation of the given EventRefKey.
 func (r EventRefKey) String() string {
-	return fmt.Sprintf("DocEvent (%s.%s.%d)", r.ProjectID, r.DocID, r.EventWebhookType)
+	return fmt.Sprintf("DocEvent (%s.%s.%s)", r.ProjectID, r.DocID, r.EventWebhookType)
 }

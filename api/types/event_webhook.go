@@ -22,6 +22,7 @@ import (
 	"time"
 )
 
+// DateFormat defines the standard format used for timestamps.
 const DateFormat = "2006-01-02T15:04:05.000Z"
 
 // EventWebhookType represents event webhook type
@@ -37,19 +38,19 @@ func IsValidEventType(eventType string) bool {
 	return eventType == string(DocRootChanged)
 }
 
-// EventWebhookAttribute represents the attribute of the webhook.
+// EventWebhookAttribute represents metadata associated with a webhook event.
 type EventWebhookAttribute struct {
 	Key      string `json:"key"`
 	IssuedAt string `json:"issuedAt"`
 }
 
-// EventWebhookRequest represents the request of the webhook.
+// EventWebhookRequest represents a webhook event request payload.
 type EventWebhookRequest struct {
 	Type       EventWebhookType      `json:"type"`
 	Attributes EventWebhookAttribute `json:"attributes"`
 }
 
-// NewRequestBody builds the request body for the event webhook.
+// NewRequestBody builds the JSON request body for a webhook event.
 func NewRequestBody(docKey string, event EventWebhookType) ([]byte, error) {
 	req := EventWebhookRequest{
 		Type: event,
@@ -66,11 +67,13 @@ func NewRequestBody(docKey string, event EventWebhookType) ([]byte, error) {
 	return body, nil
 }
 
+// EventWebhookInfo holds the webhook EventRefKey and its associated Attribute.
 type EventWebhookInfo struct {
 	EventRefKey EventRefKey
 	Attribute   WebhookAttribute
 }
 
+// WebhookAttribute defines attributes necessary for webhook handling.
 type WebhookAttribute struct {
 	SigningKey string
 	URL        string
