@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/limit"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 const (
@@ -57,13 +58,15 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // Send dispatches a webhook event for the specified document and event reference key.
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
-	callback := func() error {
-		return sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
+	callback := func() {
+		if err := sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute); err != nil {
+			logging.From(ctx).Error(err)
+		}
 	}
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return callback()
+		return sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
 	}
 	return nil
 }

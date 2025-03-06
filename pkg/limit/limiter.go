@@ -65,13 +65,13 @@ type limiterEntry[K comparable] struct {
 	key                K
 	bucket             Bucket
 	expireTime         time.Time
-	debouncingCallback func() error
+	debouncingCallback func()
 }
 
 // Allow checks if an event is allowed for the given key based on the rate bucket.
 // If allowed, it clears any pending debouncing callback; otherwise, it stores the provided callback.
 // It returns true if the event is allowed immediately.
-func (l *Limiter[K]) Allow(key K, callback func() error) bool {
+func (l *Limiter[K]) Allow(key K, callback func()) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -110,7 +110,7 @@ func (l *Limiter[K]) expirationLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			l.expireEntries()
+			go l.expireEntries()
 		case <-l.closeChan:
 			return
 		}
@@ -144,8 +144,7 @@ func (l *Limiter[K]) expireEntries() {
 	// Process debouncing callbacks for expired entries.
 	for _, entry := range expiredEntries {
 		if entry.debouncingCallback != nil {
-			if err := entry.debouncingCallback(); err != nil {
-			}
+			entry.debouncingCallback()
 		}
 	}
 }
