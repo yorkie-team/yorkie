@@ -84,6 +84,14 @@ func TestUpdatableProjectFields(t *testing.T) {
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
+
+		// invalid ConnectionCountLimitPerDocument
+		newConnectionCountLimitPerDocument = -1
+		fields = &types.UpdatableProjectFields{
+			Name:                            &newName,
+			ConnectionCountLimitPerDocument: &newConnectionCountLimitPerDocument,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 
 	t.Run("project name format test", func(t *testing.T) {
