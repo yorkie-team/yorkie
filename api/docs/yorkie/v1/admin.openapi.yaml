@@ -531,6 +531,20 @@ components:
           type: string
       title: Connect Error
       type: object
+    google.protobuf.Int32Value:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `int32`.
+
+         The JSON representation for `Int32Value` is JSON number.
+      properties:
+        value:
+          additionalProperties: false
+          description: The int32 value.
+          title: value
+          type: integer
+      title: Int32Value
+      type: object
     google.protobuf.StringValue:
       additionalProperties: false
       description: |-
@@ -2168,10 +2182,11 @@ components:
           title: name
           type: object
         streamConnectionLimitPerDocument:
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
           additionalProperties: false
           description: ""
           title: stream_connection_limit_per_document
-          type: integer
+          type: object
       title: UpdatableProjectFields
       type: object
     yorkie.v1.UpdatableProjectFields.AuthWebhookMethods:
