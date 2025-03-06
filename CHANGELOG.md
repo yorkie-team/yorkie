@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.1] - 2025-03-06
+
+### Added
+
+- Add Event Webhook Support with DocRootChanged Event by @window9u in https://github.com/yorkie-team/yorkie/pull/1156
+- Add yorkie-analytics Helm chart with Starrocks and Kafka by @emplam27 https://github.com/yorkie-team/yorkie/pull/1161
+- Enhance Benchmark Results with n8n by @chacha912 https://github.com/yorkie-team/yorkie/pull/1162
+
+### Changed
+
+- Optimize max VersionVector in ApplyChanges to improve memory efficiency by @raararaara in https://github.com/yorkie-team/yorkie/pull/1164
+- Replaced gRPC dependency with ConnectRpc by @hugehoo in https://github.com/yorkie-team/yorkie/pull/1167
+- Update VersionVector Operations for In-Place Comparison by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1170
+- Prevent duplicate DocChangedEvents in batch processing by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1173
+
+### Fixed
+
+- Store Benchmark Results in Dedicated CI Branch by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1172
+
 ## [0.6.0] - 2025-02-17
 
 ### Added
