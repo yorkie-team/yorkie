@@ -18,6 +18,8 @@ package pubsub
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	gotime "time"
 
 	"go.uber.org/zap"
@@ -27,6 +29,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+var (
+	// ErrConnectionLimitExceeded is returned when the the connection limit is exceeded.
+	ErrConnectionLimitExceeded = errors.New("connection limit exceeded")
+
+	// ErrAlreadyConnected is returned when the client is already connected to the document.
+	ErrAlreadyConnected = errors.New("already connected to the document")
 )
 
 const (
@@ -214,4 +224,17 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []*time.ActorID {
 		ids = append(ids, sub.Subscriber())
 	}
 	return ids
+}
+
+// IsConnectionLimitExceeded returns true if the stream connection limit is exceeded.
+func (m *PubSub) IsConnectionLimitExceeded(limit int, dockey types.DocRefKey) error {
+	subs, ok := m.subscriptionsMap.Get(dockey)
+	if !ok {
+		return nil
+	}
+
+	if limit > 0 && subs.Len() >= limit {
+		return fmt.Errorf("%d stream connections allowed per document: %w", limit, ErrConnectionLimitExceeded)
+	}
+	return nil
 }

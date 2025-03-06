@@ -1367,6 +1367,11 @@ components:
           description: ""
           title: secret_key
           type: string
+        streamConnectionLimitPerDocument:
+          additionalProperties: false
+          description: ""
+          title: stream_connection_limit_per_document
+          type: integer
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false
@@ -1717,6 +1722,11 @@ components:
           description: ""
           title: name
           type: object
+        streamConnectionLimitPerDocument:
+          additionalProperties: false
+          description: ""
+          title: stream_connection_limit_per_document
+          type: integer
       title: UpdatableProjectFields
       type: object
     yorkie.v1.UpdatableProjectFields.AuthWebhookMethods:

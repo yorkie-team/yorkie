@@ -72,4 +72,16 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.False(t, info3.RequireEventWebhook(types.DocRootChanged))
 	})
+
+	t.Run("require IsStreamConnectionLimitEnabled test", func(t *testing.T) {
+		info := &types.Project{
+			StreamConnectionLimitPerDocument: 1,
+		}
+		assert.True(t, info.IsStreamConnectionLimitEnabled())
+
+		info2 := &types.Project{
+			StreamConnectionLimitPerDocument: 0,
+		}
+		assert.False(t, info2.IsStreamConnectionLimitEnabled())
+	})
 }

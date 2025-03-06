@@ -445,11 +445,21 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
+	if project.IsStreamConnectionLimitEnabled() {
+		if err := s.backend.PubSub.IsConnectionLimitExceeded(
+			project.StreamConnectionLimitPerDocument,
+			docRefKey,
+		); err != nil {
+			return err
+		}
+	}
+
 	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docRefKey)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return err
 	}
+
 	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
 		if err := s.unwatchDoc(ctx, subscription, docRefKey); err != nil {

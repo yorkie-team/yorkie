@@ -67,4 +67,41 @@ func TestPubSub(t *testing.T) {
 		pubSub.Publish(ctx, idB, docEvent)
 		wg.Wait()
 	})
+
+	t.Run("connection limit exceeded test", func(t *testing.T) {
+		pubSub := pubsub.New()
+		refKey := types.DocRefKey{
+			ProjectID: types.ID("000000000000000000000000"),
+			DocID:     types.ID("000000000000000000000000"),
+		}
+
+		ctx := context.Background()
+
+		// check connection limit exceeded
+		err = pubSub.IsConnectionLimitExceeded(2, refKey)
+		assert.NoError(t, err)
+
+		// subscribe the documents by actorA
+		subA, _, err := pubSub.Subscribe(ctx, idA, refKey)
+		assert.NoError(t, err)
+		defer func() {
+			pubSub.Unsubscribe(ctx, refKey, subA)
+		}()
+
+		// check connection limit exceeded
+		err = pubSub.IsConnectionLimitExceeded(2, refKey)
+		assert.NoError(t, err)
+
+		// subscribe the documents by actorB
+		subB, _, err := pubSub.Subscribe(ctx, idB, refKey)
+		assert.NoError(t, err)
+		defer func() {
+			pubSub.Unsubscribe(ctx, refKey, subB)
+		}()
+
+		// check connection limit exceeded
+		err = pubSub.IsConnectionLimitExceeded(2, refKey)
+		assert.Error(t, err)
+		assert.Equal(t, err.Error(), "2 stream connections allowed per document: connection limit exceeded")
+	})
 }

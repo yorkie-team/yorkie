@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -61,6 +62,7 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrProjectAlreadyExists:     connect.CodeAlreadyExists,
 	database.ErrProjectNameAlreadyExists: connect.CodeAlreadyExists,
 	database.ErrUserAlreadyExists:        connect.CodeAlreadyExists,
+	pubsub.ErrAlreadyConnected:           connect.CodeAlreadyExists,
 
 	// FailedPrecondition means the request is rejected because the state of the
 	// system is not the desired state.
@@ -84,9 +86,10 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
 
 	// Internal means an internal error occurred.
-	webhook.ErrUnexpectedStatusCode: connect.CodeInternal,
-	webhook.ErrUnexpectedResponse:   connect.CodeInternal,
-	webhook.ErrWebhookTimeout:       connect.CodeInternal,
+	webhook.ErrUnexpectedStatusCode:   connect.CodeInternal,
+	webhook.ErrUnexpectedResponse:     connect.CodeInternal,
+	webhook.ErrWebhookTimeout:         connect.CodeInternal,
+	pubsub.ErrConnectionLimitExceeded: connect.CodeInternal,
 
 	// PermissionDenied means the request does not have permission for the operation.
 	auth.ErrPermissionDenied: connect.CodePermissionDenied,
@@ -138,6 +141,9 @@ var errorToCode = map[error]string{
 	webhook.ErrUnexpectedStatusCode: "ErrUnexpectedStatusCode",
 	webhook.ErrWebhookTimeout:       "ErrWebhookTimeout",
 	database.ErrMismatchedPassword:  "ErrMismatchedPassword",
+
+	pubsub.ErrConnectionLimitExceeded: "ErrConnectionLimitExceeded",
+	pubsub.ErrAlreadyConnected:        "ErrAlreadyConnected",
 }
 
 // CodeOf returns the string representation of the given error.

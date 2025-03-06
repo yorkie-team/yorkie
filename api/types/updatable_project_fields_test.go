@@ -39,13 +39,15 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
+		newStreamConnectionLimitPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			Name:                      &newName,
-			AuthWebhookURL:            &newAuthWebhookURL,
-			AuthWebhookMethods:        &newAuthWebhookMethods,
-			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookEvents:        &newEventWebhookEvents,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			Name:                             &newName,
+			AuthWebhookURL:                   &newAuthWebhookURL,
+			AuthWebhookMethods:               &newAuthWebhookMethods,
+			EventWebhookURL:                  &newEventWebhookURL,
+			EventWebhookEvents:               &newEventWebhookEvents,
+			ClientDeactivateThreshold:        &newClientDeactivateThreshold,
+			StreamConnectionLimitPerDocument: &newStreamConnectionLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -79,6 +81,14 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+
+		// invalid StreamConnectionLimitPerDocument
+		newStreamConnectionLimitPerDocument = -1
+		fields = &types.UpdatableProjectFields{
+			Name:                             &newName,
+			StreamConnectionLimitPerDocument: &newStreamConnectionLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -123,6 +133,26 @@ func TestUpdatableProjectFields(t *testing.T) {
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+	})
+
+	t.Run("stream connection count limit per document test", func(t *testing.T) {
+		validStreamConnectionLimitPerDocument := 10
+		fields := &types.UpdatableProjectFields{
+			StreamConnectionLimitPerDocument: &validStreamConnectionLimitPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		validStreamConnectionLimitPerDocument = 0
+		fields = &types.UpdatableProjectFields{
+			StreamConnectionLimitPerDocument: &validStreamConnectionLimitPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidStreamConnectionLimitPerDocument := -1
+		fields = &types.UpdatableProjectFields{
+			StreamConnectionLimitPerDocument: &invalidStreamConnectionLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
