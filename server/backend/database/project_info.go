@@ -67,8 +67,8 @@ type ProjectInfo struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
-	// StreamConnectionLimitPerDocument is limit of watch stream count for each document. 0 means no limit.
-	StreamConnectionLimitPerDocument int `bson:"stream_connection_limit_per_document"`
+	// StreamCountLimitPerDocument is limit of watch stream count for each document. 0 means no limit.
+	StreamCountLimitPerDocument int `bson:"stream_count_limit_per_document"`
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -80,13 +80,13 @@ type ProjectInfo struct {
 // NewProjectInfo creates a new ProjectInfo of the given name.
 func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
 	return &ProjectInfo{
-		Name:                             name,
-		Owner:                            owner,
-		ClientDeactivateThreshold:        clientDeactivateThreshold,
-		StreamConnectionLimitPerDocument: 0,
-		PublicKey:                        shortuuid.New(),
-		SecretKey:                        shortuuid.New(),
-		CreatedAt:                        time.Now(),
+		Name:                        name,
+		Owner:                       owner,
+		ClientDeactivateThreshold:   clientDeactivateThreshold,
+		StreamCountLimitPerDocument: 0,
+		PublicKey:                   shortuuid.New(),
+		SecretKey:                   shortuuid.New(),
+		CreatedAt:                   time.Now(),
 	}
 }
 
@@ -97,19 +97,19 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 	}
 
 	return &ProjectInfo{
-		ID:                               i.ID,
-		Name:                             i.Name,
-		Owner:                            i.Owner,
-		PublicKey:                        i.PublicKey,
-		SecretKey:                        i.SecretKey,
-		AuthWebhookURL:                   i.AuthWebhookURL,
-		AuthWebhookMethods:               i.AuthWebhookMethods,
-		EventWebhookURL:                  i.EventWebhookURL,
-		EventWebhookEvents:               i.EventWebhookEvents,
-		ClientDeactivateThreshold:        i.ClientDeactivateThreshold,
-		StreamConnectionLimitPerDocument: i.StreamConnectionLimitPerDocument,
-		CreatedAt:                        i.CreatedAt,
-		UpdatedAt:                        i.UpdatedAt,
+		ID:                          i.ID,
+		Name:                        i.Name,
+		Owner:                       i.Owner,
+		PublicKey:                   i.PublicKey,
+		SecretKey:                   i.SecretKey,
+		AuthWebhookURL:              i.AuthWebhookURL,
+		AuthWebhookMethods:          i.AuthWebhookMethods,
+		EventWebhookURL:             i.EventWebhookURL,
+		EventWebhookEvents:          i.EventWebhookEvents,
+		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		StreamCountLimitPerDocument: i.StreamCountLimitPerDocument,
+		CreatedAt:                   i.CreatedAt,
+		UpdatedAt:                   i.UpdatedAt,
 	}
 }
 
@@ -133,27 +133,27 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
-	if fields.StreamConnectionLimitPerDocument != nil {
-		i.StreamConnectionLimitPerDocument = *fields.StreamConnectionLimitPerDocument
+	if fields.StreamCountLimitPerDocument != nil {
+		i.StreamCountLimitPerDocument = *fields.StreamCountLimitPerDocument
 	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
 func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
-		ID:                               i.ID,
-		Name:                             i.Name,
-		Owner:                            i.Owner,
-		AuthWebhookURL:                   i.AuthWebhookURL,
-		AuthWebhookMethods:               i.AuthWebhookMethods,
-		EventWebhookURL:                  i.EventWebhookURL,
-		EventWebhookEvents:               i.EventWebhookEvents,
-		ClientDeactivateThreshold:        i.ClientDeactivateThreshold,
-		StreamConnectionLimitPerDocument: i.StreamConnectionLimitPerDocument,
-		PublicKey:                        i.PublicKey,
-		SecretKey:                        i.SecretKey,
-		CreatedAt:                        i.CreatedAt,
-		UpdatedAt:                        i.UpdatedAt,
+		ID:                          i.ID,
+		Name:                        i.Name,
+		Owner:                       i.Owner,
+		AuthWebhookURL:              i.AuthWebhookURL,
+		AuthWebhookMethods:          i.AuthWebhookMethods,
+		EventWebhookURL:             i.EventWebhookURL,
+		EventWebhookEvents:          i.EventWebhookEvents,
+		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		StreamCountLimitPerDocument: i.StreamCountLimitPerDocument,
+		PublicKey:                   i.PublicKey,
+		SecretKey:                   i.SecretKey,
+		CreatedAt:                   i.CreatedAt,
+		UpdatedAt:                   i.UpdatedAt,
 	}
 }
 
