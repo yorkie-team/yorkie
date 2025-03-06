@@ -52,3 +52,12 @@ type SnapshotRefKey struct {
 func (r SnapshotRefKey) String() string {
 	return fmt.Sprintf("Snapshot (%s.%s.%d)", r.ProjectID, r.DocID, r.ServerSeq)
 }
+
+type EventRefKey struct {
+	DocRefKey
+	EventWebhookType
+}
+
+func (r EventRefKey) String() string {
+	return fmt.Sprintf("DocEvent (%s.%s.%d)", r.ProjectID, r.DocID, r.EventWebhookType)
+}

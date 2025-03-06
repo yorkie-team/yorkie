@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package limit provides event timing control components.
+// Package limit provides rate-limiting functionality with debouncing support.
 package limit
 
 import (
@@ -23,128 +23,134 @@ import (
 	"time"
 )
 
-// Limiter is a cache that ensures the most recently accessed keys have a TTL
-// beyond which keys are forcibly expired.
+// Limiter provides rate limiting functionality with a debouncing callback.
+// It maintains a single token bucket.
 type Limiter[K comparable] struct {
 	mu        sync.Mutex
 	closeChan chan struct{}
 
 	expireInterval time.Duration
-	bucketTTL      time.Duration
-	limitWindow    time.Duration
+	rateWindow     time.Duration
+	entryTTL       time.Duration
 
+	// evictionList holds the limiter entries in order of recency.
 	evictionList *list.List
-	limiters     map[K]*list.Element
+	// entries maps keys to their corresponding list element for quick lookup.
+	entries map[K]*list.Element
 }
 
-// New creates a new Limiter with the specified expiration interval, TTL, and rate limit window.
-func New[K comparable](expireInterval, ttl, limitWindow time.Duration) *Limiter[K] {
+// New creates and returns a new Limiter instance.
+// Parameters:
+//
+//	expireInterval: How often to check for expired entries.
+//	rateWindow: The time window for rate limiting.
+//	entryTTL: The time-to-live for each rate bucket entry.
+func New[K comparable](expireInterval, rateWindow, entryTTL time.Duration) *Limiter[K] {
 	lim := &Limiter[K]{
 		closeChan:      make(chan struct{}),
 		expireInterval: expireInterval,
-		bucketTTL:      ttl,
-		limitWindow:    limitWindow,
+		rateWindow:     rateWindow,
+		entryTTL:       entryTTL,
 		evictionList:   list.New(),
-		limiters:       make(map[K]*list.Element),
+		entries:        make(map[K]*list.Element),
 	}
 
-	// Start the expiration process in a separate goroutine.
-	go lim.processLoop()
+	// Start the background expiration process.
+	go lim.expirationLoop()
 	return lim
 }
 
-// limitEntry holds the rate limiter and its expiration time for a given key.
-type limitEntry[K comparable] struct {
+// limiterEntry represents an entry in the Limiter for a specific key.
+type limiterEntry[K comparable] struct {
 	key                K
 	bucket             Bucket
 	expireTime         time.Time
-	debouncingCallback func()
+	debouncingCallback func() error
 }
 
-// Allow checks if an event for the given key is allowed according to the rate limiter.
-// If the event is not allowed, the provided callback is stored for debouncing and later execution upon eviction.
-func (l *Limiter[K]) Allow(key K, callback func()) bool {
+// Allow checks if an event is allowed for the given key based on the rate bucket.
+// If allowed, it clears any pending debouncing callback; otherwise, it stores the provided callback.
+// It returns true if the event is allowed immediately.
+func (l *Limiter[K]) Allow(key K, callback func() error) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := time.Now()
-	if elem, exists := l.limiters[key]; exists {
-		entry := elem.Value.(*limitEntry[K])
+	if elem, exists := l.entries[key]; exists {
+		entry := elem.Value.(*limiterEntry[K])
 		allowed := entry.bucket.Allow(now)
-		// If allowed, clear any pending debouncing callback; if not, store the new callback.
 		if allowed {
 			entry.debouncingCallback = nil
 		} else {
 			entry.debouncingCallback = callback
 		}
-
 		// Update recency and extend TTL.
 		l.evictionList.MoveToFront(elem)
-		entry.expireTime = now.Add(l.bucketTTL)
+		entry.expireTime = now.Add(l.entryTTL)
 		return allowed
 	}
 
-	// Create a new rate bucket for the key.
-	bucket := NewBucket(now, l.limitWindow)
-
-	entry := &limitEntry[K]{
+	// Create a new rate bucket for a new key.
+	bucket := NewBucket(now, l.rateWindow)
+	entry := &limiterEntry[K]{
 		key:        key,
 		bucket:     bucket,
-		expireTime: now.Add(l.bucketTTL),
+		expireTime: now.Add(l.entryTTL),
 	}
 	elem := l.evictionList.PushFront(entry)
-	l.limiters[key] = elem
+	l.entries[key] = elem
 	return true
 }
 
-// processLoop periodically calls expire to remove expired entries.
-func (l *Limiter[K]) processLoop() {
+// expirationLoop runs in a separate goroutine to periodically remove expired entries.
+func (l *Limiter[K]) expirationLoop() {
 	ticker := time.NewTicker(l.expireInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			l.expire()
+			l.expireEntries()
 		case <-l.closeChan:
 			return
 		}
 	}
 }
 
-// expire removes entries from the eviction list that have passed their expiration time
-// and triggers their debouncing callbacks if present.
-func (l *Limiter[K]) expire() {
+// expireEntries checks for and removes expired entries from the limiter.
+// It also triggers any stored debouncing callbacks for expired entries.
+func (l *Limiter[K]) expireEntries() {
 	now := time.Now()
-	expiredEntries := make([]*limitEntry[K], 0, 100)
+	expiredEntries := make([]*limiterEntry[K], 0, 100)
 
 	l.mu.Lock()
-	// Remove all expired entries from the back of the eviction list.
 	for {
 		elem := l.evictionList.Back()
 		if elem == nil {
 			break
 		}
 
-		entry := elem.Value.(*limitEntry[K])
+		entry := elem.Value.(*limiterEntry[K])
 		if now.Before(entry.expireTime) {
 			break
 		}
 
 		expiredEntries = append(expiredEntries, entry)
 		l.evictionList.Remove(elem)
-		delete(l.limiters, entry.key)
+		delete(l.entries, entry.key)
 	}
 	l.mu.Unlock()
 
+	// Process debouncing callbacks for expired entries.
 	for _, entry := range expiredEntries {
 		if entry.debouncingCallback != nil {
-			entry.debouncingCallback()
+			if err := entry.debouncingCallback(); err != nil {
+			}
 		}
 	}
 }
 
-// Close stops the process loop and cleans up resources.
+// Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
 	close(l.closeChan)
 }

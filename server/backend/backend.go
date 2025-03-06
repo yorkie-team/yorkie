@@ -22,12 +22,13 @@ package backend
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/backend/webhook"
 	"os"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
-	"github.com/yorkie-team/yorkie/pkg/webhook"
+	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -51,10 +52,10 @@ type Backend struct {
 		*types.AuthWebhookResponse,
 	]]
 	// AuthWebhookClient is used to send auth webhook.
-	AuthWebhookClient *webhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
-	// EventWebhookClient is used to send event webhook
-	EventWebhookClient *webhook.Client[types.EventWebhookRequest, int]
+	// EventWebhookManager is used to send event webhook
+	EventWebhookManager *webhook.Manager
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
@@ -97,8 +98,8 @@ func New(
 	authWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 	)
-	authWebhookClient := webhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		webhook.Options{
+	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+		pkgwebhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
 			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
 			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
@@ -106,14 +107,14 @@ func New(
 		},
 	)
 
-	eventWebhookClient := webhook.NewClient[types.EventWebhookRequest, int](
-		webhook.Options{
+	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](
+		pkgwebhook.Options{
 			MaxRetries:      conf.EventWebhookMaxRetries,
 			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
 			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
 			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
 		},
-	)
+	))
 
 	// 03. Create pubsub, and locker.
 	locker := sync.New()
@@ -177,9 +178,9 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		AuthWebhookCache:   authWebhookCache,
-		AuthWebhookClient:  authWebhookClient,
-		EventWebhookClient: eventWebhookClient,
+		AuthWebhookCache:    authWebhookCache,
+		AuthWebhookClient:   authWebhookClient,
+		EventWebhookManager: eventWebhookManger,
 
 		Locker: locker,
 		PubSub: pubsub,

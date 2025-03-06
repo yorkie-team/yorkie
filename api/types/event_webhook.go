@@ -16,6 +16,14 @@
 
 package types
 
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+const DateFormat = "2006-01-02T15:04:05.000Z"
+
 // EventWebhookType represents event webhook type
 type EventWebhookType string
 
@@ -39,4 +47,32 @@ type EventWebhookAttribute struct {
 type EventWebhookRequest struct {
 	Type       EventWebhookType      `json:"type"`
 	Attributes EventWebhookAttribute `json:"attributes"`
+}
+
+// NewRequestBody builds the request body for the event webhook.
+func NewRequestBody(docKey string, event EventWebhookType) ([]byte, error) {
+	req := EventWebhookRequest{
+		Type: event,
+		Attributes: EventWebhookAttribute{
+			Key:      docKey,
+			IssuedAt: time.Now().UTC().Format(DateFormat),
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event webhook request: %w", err)
+	}
+	return body, nil
+}
+
+type EventWebhookInfo struct {
+	EventRefKey EventRefKey
+	Attribute   WebhookAttribute
+}
+
+type WebhookAttribute struct {
+	SigningKey string
+	URL        string
+	DocKey     string
 }
