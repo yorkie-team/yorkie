@@ -301,10 +301,10 @@ components:
           description: ""
           title: secret_key
           type: string
-        subscriptionCountLimitPerDocument:
+        subCountLimitPerDocument:
           additionalProperties: false
           description: ""
-          title: subscription_count_limit_per_document
+          title: sub_count_limit_per_document
           type: integer
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'

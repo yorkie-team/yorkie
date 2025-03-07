@@ -49,7 +49,7 @@ type Project struct {
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
 	// SubscriptionCountLimitPerDocument is limit of subscription count for each document. 0 means no limit.
-	SubscriptionCountLimitPerDocument int `bson:"subscription_count_limit_per_document"`
+	SubscriptionCountLimitPerDocument int `bson:"sub_count_limit_per_document"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`

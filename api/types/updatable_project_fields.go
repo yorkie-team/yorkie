@@ -49,7 +49,7 @@ type UpdatableProjectFields struct {
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
 
 	// SubscriptionCountLimitPerDocument is limit of subscription count for each document. 0 means no limit.
-	SubscriptionCountLimitPerDocument *int `bson:"subscription_count_limit_per_document,omitempty" validate:"omitempty,min=0"`
+	SubscriptionCountLimitPerDocument *int `bson:"sub_count_limit_per_document,omitempty" validate:"omitempty,min=0"`
 }
 
 // Validate validates the UpdatableProjectFields.

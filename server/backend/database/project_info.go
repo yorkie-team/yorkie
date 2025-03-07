@@ -68,7 +68,7 @@ type ProjectInfo struct {
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
 	// SubscriptionCountLimitPerDocument is limit of subscription count for each document. 0 means no limit.
-	SubscriptionCountLimitPerDocument int `bson:"subscription_count_limit_per_document"`
+	SubscriptionCountLimitPerDocument int `bson:"sub_count_limit_per_document"`
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
