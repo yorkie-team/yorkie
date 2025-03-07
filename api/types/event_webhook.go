@@ -16,6 +16,15 @@
 
 package types
 
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// DateFormat defines the standard format used for timestamps.
+const DateFormat = "2006-01-02T15:04:05.000Z"
+
 // EventWebhookType represents event webhook type
 type EventWebhookType string
 
@@ -29,14 +38,63 @@ func IsValidEventType(eventType string) bool {
 	return eventType == string(DocRootChanged)
 }
 
-// EventWebhookAttribute represents the attribute of the webhook.
+// EventWebhookAttribute represents metadata associated with a webhook event.
 type EventWebhookAttribute struct {
 	Key      string `json:"key"`
 	IssuedAt string `json:"issuedAt"`
 }
 
-// EventWebhookRequest represents the request of the webhook.
+// EventWebhookRequest represents a webhook event request payload.
 type EventWebhookRequest struct {
 	Type       EventWebhookType      `json:"type"`
 	Attributes EventWebhookAttribute `json:"attributes"`
+}
+
+// NewRequestBody builds the JSON request body for a webhook event.
+func NewRequestBody(docKey string, event EventWebhookType) ([]byte, error) {
+	req := EventWebhookRequest{
+		Type: event,
+		Attributes: EventWebhookAttribute{
+			Key:      docKey,
+			IssuedAt: time.Now().UTC().Format(DateFormat),
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event webhook request: %w", err)
+	}
+	return body, nil
+}
+
+// EventWebhookInfo holds the webhook EventRefKey and its associated Attribute.
+type EventWebhookInfo struct {
+	EventRefKey EventRefKey
+	Attribute   WebhookAttribute
+}
+
+// NewEventWebhookInfo initializes an EventWebhookInfo with the given parameters.
+func NewEventWebhookInfo(
+	docRefKey DocRefKey,
+	event EventWebhookType,
+	signingKey, url, docKey string,
+) EventWebhookInfo {
+	return EventWebhookInfo{
+		EventRefKey: EventRefKey{
+			DocRefKey:        docRefKey,
+			EventWebhookType: event,
+		},
+		Attribute: WebhookAttribute{
+			SigningKey: signingKey,
+			URL:        url,
+			DocKey:     docKey,
+		},
+	}
+}
+
+// WebhookAttribute defines attributes necessary for webhook handling.
+type WebhookAttribute struct {
+	SigningKey string
+	URL        string
+	DocKey     string
 }
