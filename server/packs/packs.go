@@ -199,17 +199,13 @@ func PushPull(
 			)
 
 			if reqPack.OperationsLen() > 0 {
-				info := types.EventWebhookInfo{
-					EventRefKey: types.EventRefKey{
-						DocRefKey:        docRefKey,
-						EventWebhookType: events.DocRootChangedEvent.WebhookType(),
-					},
-					Attribute: types.WebhookAttribute{
-						SigningKey: project.SecretKey,
-						URL:        project.EventWebhookURL,
-						DocKey:     docInfo.Key.String(),
-					},
-				}
+				info := types.NewEventWebhookInfo(
+					docRefKey,
+					events.DocRootChangedEvent.WebhookType(),
+					project.SecretKey,
+					project.EventWebhookURL,
+					docInfo.Key.String(),
+				)
 				if err := be.EventWebhookManager.Send(ctx, info); err != nil {
 					logging.From(ctx).Error(err)
 					return

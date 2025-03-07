@@ -73,6 +73,25 @@ type EventWebhookInfo struct {
 	Attribute   WebhookAttribute
 }
 
+// NewEventWebhookInfo initializes an EventWebhookInfo with the given parameters.
+func NewEventWebhookInfo(
+	docRefKey DocRefKey,
+	event EventWebhookType,
+	signingKey, url, docKey string,
+) EventWebhookInfo {
+	return EventWebhookInfo{
+		EventRefKey: EventRefKey{
+			DocRefKey:        docRefKey,
+			EventWebhookType: event,
+		},
+		Attribute: WebhookAttribute{
+			SigningKey: signingKey,
+			URL:        url,
+			DocKey:     docKey,
+		},
+	}
+}
+
 // WebhookAttribute defines attributes necessary for webhook handling.
 type WebhookAttribute struct {
 	SigningKey string
