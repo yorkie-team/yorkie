@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	expireInterval = 100 * time.Millisecond
-	throttleWindow = 5 * time.Second
-	debouncingTime = 3 * time.Second
-	expireBatch    = 100
+	expireInterval  = 100 * time.Millisecond
+	throttleWindow  = 5 * time.Second
+	debouncingTime  = 3 * time.Second
+	expireBatchSize = 100
 )
 
 var (
@@ -51,7 +51,7 @@ type Manager struct {
 // NewManager creates a new instance of Manager with the provided webhook client.
 func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 	return &Manager{
-		limiter:       limit.New[types.EventRefKey](expireBatch, expireInterval, throttleWindow, debouncingTime),
+		limiter:       limit.NewLimiter[types.EventRefKey](expireBatchSize, expireInterval, throttleWindow, debouncingTime),
 		webhookClient: cli,
 	}
 }
@@ -70,6 +70,11 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 		return sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
 	}
 	return nil
+}
+
+// Close closes the event webhook manager. This will wait for flushing remain debouncing events
+func (m *Manager) Close() {
+	m.limiter.Close()
 }
 
 // sendWebhook sends the webhook event using the provided client.

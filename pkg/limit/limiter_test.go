@@ -28,19 +28,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/limit"
 )
 
-// TestSynchronousExecute verifies the behavior of synchronous calls to the throttler.
-func TestSynchronousExecute(t *testing.T) {
+// TestSynchronousExecution verifies the behavior of synchronous calls to the throttler.
+func TestSynchronousExecution(t *testing.T) {
 	const (
-		expireBatch    = 100
-		expireInterval = 10 * time.Millisecond
-		throttleWindow = 100 * time.Millisecond
-		debouncingTime = 100 * time.Millisecond
-		waitingTime    = expireInterval + throttleWindow + debouncingTime
-		numExecute     = 10000
+		expireBatchSize = 100
+		expireInterval  = 10 * time.Millisecond
+		throttleWindow  = 100 * time.Millisecond
+		debouncingTime  = 100 * time.Millisecond
+		waitingTime     = expireInterval + throttleWindow + debouncingTime
+		numExecute      = 10000
 	)
 
-	t.Run("Single call test", func(t *testing.T) {
-		lim := limit.New[string](expireBatch, expireInterval, throttleWindow, debouncingTime)
+	t.Run("Single Call", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
 		var callCount int32
 		callback := func() {
 			atomic.AddInt32(&callCount, 1)
@@ -55,8 +55,8 @@ func TestSynchronousExecute(t *testing.T) {
 		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
 	})
 
-	t.Run("Many synchronous call with trailing debounced event", func(t *testing.T) {
-		lim := limit.New[string](expireBatch, expireInterval, throttleWindow, debouncingTime)
+	t.Run("Multiple Synchronous Calls with Trailing Debounce", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
 		var callCount int32
 		callback := func() {
 			atomic.AddInt32(&callCount, 1)
@@ -75,19 +75,19 @@ func TestSynchronousExecute(t *testing.T) {
 	})
 }
 
-// TestConcurrentExecute verifies the throttler behavior under concurrent execution scenarios.
-func TestConcurrentExecute(t *testing.T) {
+// TestConcurrentExecution verifies the throttler behavior under concurrent execution scenarios.
+func TestConcurrentExecution(t *testing.T) {
 	const (
-		expireBatch    = 10000
-		expireInterval = 10 * time.Millisecond
-		throttleWindow = 100 * time.Millisecond
-		debouncingTime = 100 * time.Millisecond
-		waitingTime    = expireInterval + throttleWindow + debouncingTime
-		numExecute     = 10000
+		expireBatchSize = 10000
+		expireInterval  = 10 * time.Millisecond
+		throttleWindow  = 100 * time.Millisecond
+		debouncingTime  = 100 * time.Millisecond
+		waitingTime     = expireInterval + throttleWindow + debouncingTime
+		numExecute      = 10000
 	)
 
-	t.Run("Concurrent calls result in one immediate and one trailing execution", func(t *testing.T) {
-		lim := limit.New[string](expireBatch, expireInterval, throttleWindow, debouncingTime)
+	t.Run("Concurrent Calls: Single Immediate and Trailing Execution", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
 
 		var callCount int32
 		callback := func() {
@@ -109,8 +109,8 @@ func TestConcurrentExecute(t *testing.T) {
 		assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
 	})
 
-	t.Run("Concurrent calls with different keys", func(t *testing.T) {
-		lim := limit.New[int](expireBatch, expireInterval, throttleWindow, debouncingTime)
+	t.Run("Concurrent Calls with Different Keys", func(t *testing.T) {
+		lim := limit.NewLimiter[int](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
 		var callCount int32
 		callback := func() {
 			atomic.AddInt32(&callCount, 1)
@@ -132,10 +132,7 @@ func TestConcurrentExecute(t *testing.T) {
 		assert.Equal(t, int32(numExecute), atomic.LoadInt32(&callCount))
 	})
 
-	// This test simulates a continuous stream of events.
-	// It triggers multiple concurrent calls at a regular interval and checks that throttling
-	// limits the total number of callback invocations to one per window plus one trailing call.
-	t.Run("Throttling over continuous event stream", func(t *testing.T) {
+	t.Run("Continuous Event Stream Throttling", func(t *testing.T) {
 		const (
 			numWindows     = 10                                             // Number of throttle windows.
 			eventPerWindow = 1000                                           // Number of events triggered within each window.
@@ -144,7 +141,7 @@ func TestConcurrentExecute(t *testing.T) {
 			eventInterval  = throttleWindow / time.Duration(eventPerWindow) // Interval between events.
 		)
 
-		lim := limit.New[string](expireBatch, expireInterval, throttleWindow, debouncingTime)
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
 
 		var callCount int32
 		callback := func() {
@@ -169,7 +166,7 @@ func TestConcurrentExecute(t *testing.T) {
 					}()
 				}
 			case <-timeCtx.Done():
-				// After the event stream stops, allow time for any trailing callback to execute.
+				// Allow time for any trailing callback to execute.
 				time.Sleep(waitingTime)
 				// Expect one callback per throttle window plus one additional trailing call.
 				assert.Equal(t, int32(numWindows+1), atomic.LoadInt32(&callCount))
@@ -181,40 +178,68 @@ func TestConcurrentExecute(t *testing.T) {
 	})
 }
 
-// TestExpireBatch verifies that the expiration loop processes expired entries in batches.
-func TestExpireBatch(t *testing.T) {
+// TestBatchExpiration verifies that the expiration loop processes expired entries in batches.
+func TestBatchExpiration(t *testing.T) {
 	const (
-		expireBatch    = 10
 		expireInterval = 10 * time.Millisecond
 		throttleWindow = 50 * time.Millisecond
 		debouncingTime = 50 * time.Millisecond
-		waitingTime    = expireInterval + throttleWindow + debouncingTime
-		totalKeys      = expireBatch * 3 // create more keys than one batch
+
+		expireBatchSize       = 100
+		batchNum        int32 = 10
+
+		totalKeys = expireBatchSize * batchNum // create more keys than one batch
 	)
 
-	lim := limit.New[string](expireBatch, expireInterval, throttleWindow, debouncingTime)
-	var callCount int32
-	callback := func() {
-		atomic.AddInt32(&callCount, 1)
-	}
-
-	// Create totalKeys entries, each with one immediate call and one trailing (debounced) callback.
-	// For each key, the first call is allowed (and calls callback immediately),
-	// while the second call queues the callback.
-	for i := 0; i < totalKeys; i++ {
-		key := fmt.Sprintf("key-%d", i)
-		// First call: immediate execution.
-		if lim.Allow(key, callback) {
-			callback()
+	t.Run("Process Expire Batch", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		var callCount int32
+		callback := func() {
+			atomic.AddInt32(&callCount, 1)
 		}
-		// Second call: queues the debounced callback.
-		lim.Allow(key, callback)
-	}
 
-	// Wait for all debounced callbacks to run. The expirationLoop will process them in batches.
-	time.Sleep(waitingTime)
+		// For each key: first call executes immediately, second call schedules a debounced callback.
+		for i := range totalKeys {
+			key := fmt.Sprintf("key-%d", i)
+			// Immediate execution.
+			if lim.Allow(key, callback) {
+				callback()
+			}
+			// Queue the debounced callback.
+			lim.Allow(key, callback)
+		}
 
-	// For each key, we expect one immediate call and one debounced call.
-	expected := int32(totalKeys * 2)
-	assert.Equal(t, expected, atomic.LoadInt32(&callCount))
+		assert.Equal(t, totalKeys, atomic.LoadInt32(&callCount))
+
+		time.Sleep(throttleWindow + debouncingTime + expireInterval/2)
+		for i := int32(1); i <= batchNum; i++ {
+			assert.Equal(t, totalKeys+expireBatchSize*i, atomic.LoadInt32(&callCount))
+			time.Sleep(expireInterval)
+		}
+		assert.Equal(t, totalKeys+expireBatchSize*batchNum, atomic.LoadInt32(&callCount))
+		lim.Close()
+		assert.Equal(t, totalKeys+expireBatchSize*batchNum, atomic.LoadInt32(&callCount))
+	})
+
+	t.Run("Force Close Expired", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		var callCount int32
+		callback := func() {
+			atomic.AddInt32(&callCount, 1)
+		}
+
+		for i := range totalKeys {
+			key := fmt.Sprintf("key-%d", i)
+			// Immediate execution.
+			if lim.Allow(key, callback) {
+				callback()
+			}
+			// Queue the debounced callback.
+			lim.Allow(key, callback)
+		}
+
+		assert.Equal(t, totalKeys, atomic.LoadInt32(&callCount))
+		lim.Close()
+		assert.Equal(t, totalKeys*2, atomic.LoadInt32(&callCount))
+	})
 }

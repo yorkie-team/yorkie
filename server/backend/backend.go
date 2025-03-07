@@ -211,6 +211,8 @@ func (b *Backend) Shutdown() error {
 
 	b.Background.Close()
 
+	b.EventWebhookManager.Close()
+
 	if err := b.MsgBroker.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}

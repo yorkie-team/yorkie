@@ -26,14 +26,14 @@ import (
 // Limiter provides rate limiting functionality with a debouncing callback.
 // It maintains a single token bucket.
 type Limiter[K comparable] struct {
-	mu        sync.Mutex
-	wg        sync.WaitGroup
-	closeChan chan struct{}
+	mu      sync.Mutex
+	wg      sync.WaitGroup
+	closing chan struct{}
 
-	expireInterval time.Duration
-	throttleWindow time.Duration
-	debouncingTime time.Duration
-	expireBatch    int
+	expireInterval  time.Duration
+	throttleWindow  time.Duration
+	debouncingTime  time.Duration
+	expireBatchSize int
 
 	// evictionList holds the limiter entries in order of recency.
 	evictionList *list.List
@@ -41,21 +41,21 @@ type Limiter[K comparable] struct {
 	entries map[K]*list.Element
 }
 
-// New creates and returns a new Limiter instance.
+// NewLimiter creates and returns a new Limiter instance.
 // Parameters:
 //
 //	expireInterval: How often to check for expired entries.
 //	throttleWindow: The time window for rate limiting.
 //	debouncingTime: The time-to-live for each rate bucket entry.
-func New[K comparable](expireNum int, expire, throttle, debouncing time.Duration) *Limiter[K] {
+func NewLimiter[K comparable](expireNum int, expire, throttle, debouncing time.Duration) *Limiter[K] {
 	lim := &Limiter[K]{
-		closeChan:      make(chan struct{}),
-		expireInterval: expire,
-		throttleWindow: throttle,
-		debouncingTime: debouncing,
-		expireBatch:    expireNum,
-		evictionList:   list.New(),
-		entries:        make(map[K]*list.Element),
+		closing:         make(chan struct{}),
+		expireInterval:  expire,
+		throttleWindow:  throttle,
+		debouncingTime:  debouncing,
+		expireBatchSize: expireNum,
+		evictionList:    list.New(),
+		entries:         make(map[K]*list.Element),
 	}
 
 	// Start the background expiration process.
@@ -113,34 +113,36 @@ func (l *Limiter[K]) expirationLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			expiredEntries := l.collectExpired(l.expireBatch)
+			expiredEntries := l.collectEntries(true)
 			l.runDebounce(expiredEntries)
-		case <-l.closeChan:
+		case <-l.closing:
 			return
 		}
 	}
 }
 
-// collectExpired gathers expired entries and removes them from the limiter.
-func (l *Limiter[K]) collectExpired(expireBatch int) []*limiterEntry[K] {
+// collectEntries gathers expired entries and removes them from the limiter.
+func (l *Limiter[K]) collectEntries(onlyExpired bool) []*limiterEntry[K] {
 	now := time.Now()
-	expiredEntries := make([]*limiterEntry[K], 0, expireBatch)
+	expiredEntries := make([]*limiterEntry[K], 0, l.expireBatchSize)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	for range l.expireBatch {
+	for range l.expireBatchSize {
 		elem := l.evictionList.Back()
 		if elem == nil {
 			break
 		}
 
 		entry := elem.Value.(*limiterEntry[K])
-		if now.Before(entry.expireTime) {
+		if onlyExpired && now.Before(entry.expireTime) {
 			break
 		}
 
-		expiredEntries = append(expiredEntries, entry)
+		if entry.debouncingCallback != nil {
+			expiredEntries = append(expiredEntries, entry)
+		}
 		l.evictionList.Remove(elem)
 		delete(l.entries, entry.key)
 	}
@@ -154,17 +156,17 @@ func (l *Limiter[K]) runDebounce(entries []*limiterEntry[K]) {
 	go func() {
 		defer l.wg.Done()
 		for _, entry := range entries {
-			if entry.debouncingCallback != nil {
-				entry.debouncingCallback()
-			}
+			entry.debouncingCallback()
 		}
 	}()
 }
 
 // Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
-	close(l.closeChan)
-	for expiredEntries := l.collectExpired(l.expireBatch / 10); len(expiredEntries) > 0; {
+	close(l.closing)
+
+	for l.evictionList.Len() > 0 {
+		expiredEntries := l.collectEntries(false)
 		l.runDebounce(expiredEntries)
 	}
 
