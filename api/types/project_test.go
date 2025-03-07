@@ -73,15 +73,15 @@ func TestProjectInfo(t *testing.T) {
 		assert.False(t, info3.RequireEventWebhook(types.DocRootChanged))
 	})
 
-	t.Run("require IsSubscriptionCountLimitEnabled test", func(t *testing.T) {
+	t.Run("require IsSubscriptionLimitEnabled test", func(t *testing.T) {
 		info := &types.Project{
-			SubscriptionCountLimitPerDocument: 1,
+			SubscriptionLimitPerDocument: 1,
 		}
-		assert.True(t, info.IsSubscriptionCountLimitEnabled())
+		assert.True(t, info.IsSubscriptionLimitEnabled())
 
 		info2 := &types.Project{
-			SubscriptionCountLimitPerDocument: 0,
+			SubscriptionLimitPerDocument: 0,
 		}
-		assert.False(t, info2.IsSubscriptionCountLimitEnabled())
+		assert.False(t, info2.IsSubscriptionLimitEnabled())
 	})
 }

@@ -445,9 +445,9 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	if project.IsSubscriptionCountLimitEnabled() {
+	if project.IsSubscriptionLimitEnabled() {
 		if err := s.backend.PubSub.IsSubscriptionLimitExceeded(
-			project.SubscriptionCountLimitPerDocument,
+			project.SubscriptionLimitPerDocument,
 			docRefKey,
 		); err != nil {
 			return err

@@ -48,8 +48,8 @@ type UpdatableProjectFields struct {
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
 
-	// SubscriptionCountLimitPerDocument is limit of subscription count for each document. 0 means no limit.
-	SubscriptionCountLimitPerDocument *int `bson:"sub_count_limit_per_document,omitempty" validate:"omitempty,min=0"`
+	// SubscriptionLimitPerDocument is limit of subscription count for each document. 0 means no limit.
+	SubscriptionLimitPerDocument *int `bson:"subscription_limit_per_document,omitempty" validate:"omitempty,min=0"`
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -60,7 +60,7 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.ClientDeactivateThreshold == nil &&
 		i.EventWebhookURL == nil &&
 		i.EventWebhookEvents == nil &&
-		i.SubscriptionCountLimitPerDocument == nil {
+		i.SubscriptionLimitPerDocument == nil {
 		return ErrEmptyProjectFields
 	}
 

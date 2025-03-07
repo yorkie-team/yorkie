@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	// ErrSubscriptionLimitExceeded is returned when the the subscription count limit is exceeded.
-	ErrSubscriptionLimitExceeded = errors.New("subscription count limit exceeded")
+	// ErrSubscriptionLimitExceeded is returned when the the subscription limit is exceeded.
+	ErrSubscriptionLimitExceeded = errors.New("subscription limit exceeded")
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
 	ErrAlreadyConnected = errors.New("already connected to the document")
