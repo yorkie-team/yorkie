@@ -1872,10 +1872,10 @@ components:
           description: ""
           title: secret_key
           type: string
-        streamCountLimitPerDocument:
+        subscriptionCountLimitPerDocument:
           additionalProperties: false
           description: ""
-          title: stream_count_limit_per_document
+          title: subscription_count_limit_per_document
           type: integer
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -2181,11 +2181,11 @@ components:
           description: ""
           title: name
           type: object
-        streamCountLimitPerDocument:
+        subscriptionCountLimitPerDocument:
           $ref: '#/components/schemas/google.protobuf.Int32Value'
           additionalProperties: false
           description: ""
-          title: stream_count_limit_per_document
+          title: subscription_count_limit_per_document
           type: object
       title: UpdatableProjectFields
       type: object

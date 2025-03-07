@@ -48,8 +48,8 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
-	// StreamCountLimitPerDocument is limit of watch stream count for each document. 0 means no limit.
-	StreamCountLimitPerDocument int `bson:"stream_count_limit_per_document"`
+	// SubscriptionCountLimitPerDocument is limit of subscription count for each document. 0 means no limit.
+	SubscriptionCountLimitPerDocument int `bson:"subscription_count_limit_per_document"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
@@ -102,7 +102,7 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	return false
 }
 
-// IsStreamCountLimitEnabled returns whether the stream connection limit is enabled.
-func (p *Project) IsStreamCountLimitEnabled() bool {
-	return p.StreamCountLimitPerDocument > 0
+// IsSubscriptionCountLimitEnabled returns whether the subscription limit is enabled.
+func (p *Project) IsSubscriptionCountLimitEnabled() bool {
+	return p.SubscriptionCountLimitPerDocument > 0
 }

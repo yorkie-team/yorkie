@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	// ErrConnectionLimitExceeded is returned when the the connection limit is exceeded.
-	ErrConnectionLimitExceeded = errors.New("connection limit exceeded")
+	// ErrSubscriptionLimitExceeded is returned when the the subscription count limit is exceeded.
+	ErrSubscriptionLimitExceeded = errors.New("subscription count limit exceeded")
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
 	ErrAlreadyConnected = errors.New("already connected to the document")
@@ -226,15 +226,15 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []*time.ActorID {
 	return ids
 }
 
-// IsConnectionLimitExceeded returns true if the stream connection limit is exceeded.
-func (m *PubSub) IsConnectionLimitExceeded(limit int, dockey types.DocRefKey) error {
+// IsSubscriptionLimitExceeded returns true if the subscription limit is exceeded.
+func (m *PubSub) IsSubscriptionLimitExceeded(limit int, dockey types.DocRefKey) error {
 	subs, ok := m.subscriptionsMap.Get(dockey)
 	if !ok {
 		return nil
 	}
 
 	if limit > 0 && subs.Len() >= limit {
-		return fmt.Errorf("%d stream connections allowed per document: %w", limit, ErrConnectionLimitExceeded)
+		return fmt.Errorf("%d subscriptions allowed per document: %w", limit, ErrSubscriptionLimitExceeded)
 	}
 	return nil
 }

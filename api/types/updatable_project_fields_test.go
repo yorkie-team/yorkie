@@ -39,15 +39,15 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
-		newStreamCountLimitPerDocument := 10
+		newSubscriptionCountLimitPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			Name:                        &newName,
-			AuthWebhookURL:              &newAuthWebhookURL,
-			AuthWebhookMethods:          &newAuthWebhookMethods,
-			EventWebhookURL:             &newEventWebhookURL,
-			EventWebhookEvents:          &newEventWebhookEvents,
-			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
-			StreamCountLimitPerDocument: &newStreamCountLimitPerDocument,
+			Name:                              &newName,
+			AuthWebhookURL:                    &newAuthWebhookURL,
+			AuthWebhookMethods:                &newAuthWebhookMethods,
+			EventWebhookURL:                   &newEventWebhookURL,
+			EventWebhookEvents:                &newEventWebhookEvents,
+			ClientDeactivateThreshold:         &newClientDeactivateThreshold,
+			SubscriptionCountLimitPerDocument: &newSubscriptionCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -84,11 +84,11 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 
-		// invalid StreamCountLimitPerDocument
-		newStreamCountLimitPerDocument = -1
+		// invalid SubscriptionCountLimitPerDocument
+		newSubscriptionCountLimitPerDocument = -1
 		fields = &types.UpdatableProjectFields{
-			Name:                        &newName,
-			StreamCountLimitPerDocument: &newStreamCountLimitPerDocument,
+			Name:                              &newName,
+			SubscriptionCountLimitPerDocument: &newSubscriptionCountLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -137,22 +137,22 @@ func TestUpdatableProjectFields(t *testing.T) {
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 
-	t.Run("stream connection count limit per document test", func(t *testing.T) {
-		validStreamCountLimitPerDocument := 10
+	t.Run("subscription count limit per document test", func(t *testing.T) {
+		validSubscriptionCountLimitPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			StreamCountLimitPerDocument: &validStreamCountLimitPerDocument,
+			SubscriptionCountLimitPerDocument: &validSubscriptionCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		validStreamCountLimitPerDocument = 0
+		validSubscriptionCountLimitPerDocument = 0
 		fields = &types.UpdatableProjectFields{
-			StreamCountLimitPerDocument: &validStreamCountLimitPerDocument,
+			SubscriptionCountLimitPerDocument: &validSubscriptionCountLimitPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		invalidStreamCountLimitPerDocument := -1
+		invalidSubscriptionCountLimitPerDocument := -1
 		fields = &types.UpdatableProjectFields{
-			StreamCountLimitPerDocument: &invalidStreamCountLimitPerDocument,
+			SubscriptionCountLimitPerDocument: &invalidSubscriptionCountLimitPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
