@@ -27,11 +27,13 @@ import (
 // It maintains a single token bucket.
 type Limiter[K comparable] struct {
 	mu        sync.Mutex
+	wg        sync.WaitGroup
 	closeChan chan struct{}
 
 	expireInterval time.Duration
 	throttleWindow time.Duration
 	debouncingTime time.Duration
+	expireBatch    int
 
 	// evictionList holds the limiter entries in order of recency.
 	evictionList *list.List
@@ -45,12 +47,13 @@ type Limiter[K comparable] struct {
 //	expireInterval: How often to check for expired entries.
 //	throttleWindow: The time window for rate limiting.
 //	debouncingTime: The time-to-live for each rate bucket entry.
-func New[K comparable](expire, throttle, debouncing time.Duration) *Limiter[K] {
+func New[K comparable](expireNum int, expire, throttle, debouncing time.Duration) *Limiter[K] {
 	lim := &Limiter[K]{
 		closeChan:      make(chan struct{}),
 		expireInterval: expire,
 		throttleWindow: throttle,
 		debouncingTime: debouncing,
+		expireBatch:    expireNum,
 		evictionList:   list.New(),
 		entries:        make(map[K]*list.Element),
 	}
@@ -110,21 +113,23 @@ func (l *Limiter[K]) expirationLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			go l.expireEntries()
+			expiredEntries := l.collectExpired()
+			l.runDebounce(expiredEntries)
 		case <-l.closeChan:
 			return
 		}
 	}
 }
 
-// expireEntries checks for and removes expired entries from the limiter.
-// It also triggers any stored debouncing callbacks for expired entries.
-func (l *Limiter[K]) expireEntries() {
+// collectExpired gathers expired entries and removes them from the limiter.
+func (l *Limiter[K]) collectExpired() []*limiterEntry[K] {
 	now := time.Now()
-	expiredEntries := make([]*limiterEntry[K], 0, 100)
+	expiredEntries := make([]*limiterEntry[K], 0, l.expireBatch)
 
 	l.mu.Lock()
-	for {
+	defer l.mu.Unlock()
+
+	for range l.expireBatch {
 		elem := l.evictionList.Back()
 		if elem == nil {
 			break
@@ -139,17 +144,29 @@ func (l *Limiter[K]) expireEntries() {
 		l.evictionList.Remove(elem)
 		delete(l.entries, entry.key)
 	}
-	l.mu.Unlock()
 
-	// Process debouncing callbacks for expired entries.
-	for _, entry := range expiredEntries {
-		if entry.debouncingCallback != nil {
-			entry.debouncingCallback()
+	return expiredEntries
+}
+
+// runDebounce runs the debouncing callbacks for expired entries asynchronously.
+func (l *Limiter[K]) runDebounce(entries []*limiterEntry[K]) {
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		for _, entry := range entries {
+			if entry.debouncingCallback != nil {
+				entry.debouncingCallback()
+			}
 		}
-	}
+	}()
 }
 
 // Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
 	close(l.closeChan)
+	for expiredEntries := l.collectExpired(); len(expiredEntries) > 0; {
+		l.runDebounce(expiredEntries)
+	}
+
+	l.wg.Wait()
 }
