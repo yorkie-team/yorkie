@@ -34,6 +34,7 @@ const (
 	expireInterval = 100 * time.Millisecond
 	throttleWindow = 5 * time.Second
 	debouncingTime = 3 * time.Second
+	expireBatch    = 100
 )
 
 var (
@@ -50,7 +51,7 @@ type Manager struct {
 // NewManager creates a new instance of Manager with the provided webhook client.
 func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 	return &Manager{
-		limiter:       limit.New[types.EventRefKey](expireInterval, throttleWindow, debouncingTime),
+		limiter:       limit.New[types.EventRefKey](expireBatch, expireInterval, throttleWindow, debouncingTime),
 		webhookClient: cli,
 	}
 }

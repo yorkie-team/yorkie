@@ -113,7 +113,7 @@ func (l *Limiter[K]) expirationLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			expiredEntries := l.collectExpired()
+			expiredEntries := l.collectExpired(l.expireBatch)
 			l.runDebounce(expiredEntries)
 		case <-l.closeChan:
 			return
@@ -122,9 +122,9 @@ func (l *Limiter[K]) expirationLoop() {
 }
 
 // collectExpired gathers expired entries and removes them from the limiter.
-func (l *Limiter[K]) collectExpired() []*limiterEntry[K] {
+func (l *Limiter[K]) collectExpired(expireBatch int) []*limiterEntry[K] {
 	now := time.Now()
-	expiredEntries := make([]*limiterEntry[K], 0, l.expireBatch)
+	expiredEntries := make([]*limiterEntry[K], 0, expireBatch)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -164,7 +164,7 @@ func (l *Limiter[K]) runDebounce(entries []*limiterEntry[K]) {
 // Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
 	close(l.closeChan)
-	for expiredEntries := l.collectExpired(); len(expiredEntries) > 0; {
+	for expiredEntries := l.collectExpired(l.expireBatch / 10); len(expiredEntries) > 0; {
 		l.runDebounce(expiredEntries)
 	}
 
