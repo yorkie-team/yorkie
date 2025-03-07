@@ -30,8 +30,8 @@ type Limiter[K comparable] struct {
 	closeChan chan struct{}
 
 	expireInterval time.Duration
-	rateWindow     time.Duration
-	entryTTL       time.Duration
+	throttleWindow time.Duration
+	debouncingTime time.Duration
 
 	// evictionList holds the limiter entries in order of recency.
 	evictionList *list.List
@@ -43,14 +43,14 @@ type Limiter[K comparable] struct {
 // Parameters:
 //
 //	expireInterval: How often to check for expired entries.
-//	rateWindow: The time window for rate limiting.
-//	entryTTL: The time-to-live for each rate bucket entry.
-func New[K comparable](expireInterval, rateWindow, entryTTL time.Duration) *Limiter[K] {
+//	throttleWindow: The time window for rate limiting.
+//	debouncingTime: The time-to-live for each rate bucket entry.
+func New[K comparable](expire, throttle, debouncing time.Duration) *Limiter[K] {
 	lim := &Limiter[K]{
 		closeChan:      make(chan struct{}),
-		expireInterval: expireInterval,
-		rateWindow:     rateWindow,
-		entryTTL:       entryTTL,
+		expireInterval: expire,
+		throttleWindow: throttle,
+		debouncingTime: debouncing,
 		evictionList:   list.New(),
 		entries:        make(map[K]*list.Element),
 	}
@@ -86,16 +86,16 @@ func (l *Limiter[K]) Allow(key K, callback func()) bool {
 		}
 		// Update recency and extend TTL.
 		l.evictionList.MoveToFront(elem)
-		entry.expireTime = now.Add(l.entryTTL)
+		entry.expireTime = now.Add(l.throttleWindow + l.debouncingTime)
 		return allowed
 	}
 
 	// Create a new rate bucket for a new key.
-	bucket := NewBucket(now, l.rateWindow)
+	bucket := NewBucket(now, l.throttleWindow)
 	entry := &limiterEntry[K]{
 		key:        key,
 		bucket:     bucket,
-		expireTime: now.Add(l.entryTTL),
+		expireTime: now.Add(l.throttleWindow + l.debouncingTime),
 	}
 	elem := l.evictionList.PushFront(entry)
 	l.entries[key] = elem
