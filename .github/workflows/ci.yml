@@ -122,7 +122,7 @@ jobs:
         continue-on-error: true
 
       - name: Read previous benchmark result
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         id: prev-bench
         run: |
           echo "PREV_BENCH_RESULT=null" >> $GITHUB_OUTPUT
@@ -149,7 +149,7 @@ jobs:
           echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
 
       - name: Trigger n8n webhook
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         run: |
           curr_bench=$(cat output.txt | jq -R -s .)
 
