@@ -1,7 +1,6 @@
 module github.com/yorkie-team/yorkie
 
 go 1.23
-
 require (
 	connectrpc.com/connect v1.12.0
 	connectrpc.com/grpchealth v1.3.0
@@ -77,8 +76,8 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.23.0 // indirect
-	golang.org/x/term v0.23.0
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
