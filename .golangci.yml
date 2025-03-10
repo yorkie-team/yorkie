@@ -1,6 +1,3 @@
-run:
-  deadline: 5m
-
 linters:
   enable:
     - errcheck
@@ -19,7 +16,6 @@ linters:
   disable:
     - gosimple
     - staticcheck
-    - structcheck
     - unused
 
 linters-settings:
@@ -27,7 +23,12 @@ linters-settings:
     local-prefixes: github.com/yorkie-team/yorkie
   gosec:
     excludes:
-      - G107  # Potential HTTP request made with variable url
+      - G107 # Potential HTTP request made with variable url
+      - G115 # Ignore integer overflows
+  revive:
+    rules:
+      - name: unused-parameter
+        disabled: true
   wrapcheck:
     ignoreSigRegexps:
       - github.com/yorkie-team/yorkie # Ignore all methods in internal package
