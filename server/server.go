@@ -104,11 +104,11 @@ func (r *Yorkie) Start() error {
 	}
 
 	if r.profilingServer != nil {
-		err := r.profilingServer.Start()
-		if err != nil {
+		if err := r.profilingServer.Start(); err != nil {
 			return err
 		}
 	}
+
 	return r.rpcServer.Start()
 }
 

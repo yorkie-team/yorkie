@@ -53,6 +53,11 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		be.Config.SecretKey,
 		be.Config.ParseAdminTokenDuration(),
 	)
+	authConf := auth.Config{
+		ClientID:     "Ov23li44HpBkjqLJTKG0",
+		ClientSecret: "e0e31b36a68e4abdaebfbc8c0808cac2e211f930",
+		RedirectURL:  "http://localhost:8080/auth/github/callback",
+	}
 
 	opts := []connect.HandlerOption{
 		connect.WithInterceptors(
@@ -76,6 +81,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be), opts...))
+	mux.Handle(auth.NewAuthHandler(be, tokenManager, authConf))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
 

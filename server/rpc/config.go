@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
 var (
@@ -41,6 +43,9 @@ type Config struct {
 
 	// KeyFile is the path to the key file.
 	KeyFile string `yaml:"KeyFile"`
+
+	// GitHub is the configuration for GitHub OAuth.
+	GitHub auth.Config `yaml:"GitHub"`
 }
 
 // Validate validates the port number and the files for certification.
