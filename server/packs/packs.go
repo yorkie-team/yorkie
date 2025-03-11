@@ -198,7 +198,7 @@ func PushPull(
 				},
 			)
 
-			if reqPack.OperationsLen() > 0 {
+			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChangedEvent.WebhookType()) {
 				info := types.NewEventWebhookInfo(
 					docRefKey,
 					events.DocRootChangedEvent.WebhookType(),
