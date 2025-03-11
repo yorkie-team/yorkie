@@ -70,7 +70,7 @@ func TestPubSub(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("subscription count limit exceeded test with basic subscribe", func(t *testing.T) {
+	t.Run("subscription count limit exceeded test", func(t *testing.T) {
 		pubSub := pubsub.New()
 		refKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),
@@ -109,8 +109,6 @@ func TestPubSub(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		var wg gosync.WaitGroup
-
 		var successCount, failCount atomic.Int32
 		limitCount := 5000
 		concurrency := limitCount * 2
@@ -126,13 +124,16 @@ func TestPubSub(t *testing.T) {
 		}
 
 		// Try to subscribe concurrently with different ActorIDs
+		var wg gosync.WaitGroup
+		subscriptions := make([]*pubsub.Subscription, concurrency)
 		for i := range concurrency {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				_, _, err := pubSub.Subscribe(ctx, actors[idx], refKey, limitCount)
+				subs, _, err := pubSub.Subscribe(ctx, actors[idx], refKey, limitCount)
 				if err == nil {
 					successCount.Add(1)
+					subscriptions[idx] = subs
 				} else {
 					failCount.Add(1)
 					assert.ErrorIs(t, err, pubsub.ErrSubscriptionLimitExceeded)
@@ -140,6 +141,13 @@ func TestPubSub(t *testing.T) {
 			}(i)
 		}
 		wg.Wait()
+		defer func() {
+			for _, sub := range subscriptions {
+				if sub != nil {
+					pubSub.Unsubscribe(ctx, refKey, sub)
+				}
+			}
+		}()
 
 		successLen := int(successCount.Load())
 		failLen := int(failCount.Load())
@@ -151,5 +159,4 @@ func TestPubSub(t *testing.T) {
 		// Total should equal concurrency
 		assert.Equal(t, concurrency, successLen+failLen)
 	})
-
 }
