@@ -31,9 +31,10 @@ import (
 )
 
 const (
+	// TODO(window9u): Consider making this parameter configurable via CLI.
 	expireInterval  = 100 * time.Millisecond
-	throttleWindow  = 5 * time.Second
-	debouncingTime  = 3 * time.Second
+	throttleWindow  = 1 * time.Second
+	debouncingTime  = 1 * time.Second
 	expireBatchSize = 100
 )
 
