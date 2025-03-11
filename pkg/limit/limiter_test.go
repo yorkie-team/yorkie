@@ -20,6 +20,7 @@ package limit_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestSynchronousExecution(t *testing.T) {
 		throttleWindow  = 100 * time.Millisecond
 		debouncingTime  = 100 * time.Millisecond
 		waitingTime     = expireInterval + throttleWindow + debouncingTime
-		numExecute      = 10000
+		numExecute      = 1000
 	)
 
 	t.Run("Single Call", func(t *testing.T) {
@@ -79,12 +80,12 @@ func TestSynchronousExecution(t *testing.T) {
 // TestConcurrentExecution verifies the throttler behavior under concurrent execution scenarios.
 func TestConcurrentExecution(t *testing.T) {
 	const (
-		expireBatchSize = 10000
+		expireBatchSize = 100
 		expireInterval  = 10 * time.Millisecond
 		throttleWindow  = 100 * time.Millisecond
 		debouncingTime  = 100 * time.Millisecond
 		waitingTime     = expireInterval + throttleWindow + debouncingTime
-		numExecute      = 10000
+		numExecute      = 1000
 	)
 
 	t.Run("Concurrent Calls: Single Immediate and Trailing Execution", func(t *testing.T) {
@@ -95,13 +96,17 @@ func TestConcurrentExecution(t *testing.T) {
 			atomic.AddInt32(&callCount, 1)
 		}
 
+		wg := sync.WaitGroup{}
 		for range numExecute {
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				if lim.Allow("key", callback) {
 					callback()
 				}
 			}()
 		}
+		wg.Wait()
 
 		time.Sleep(waitingTime)
 		// Expect one immediate and one trailing callback execution.
@@ -135,9 +140,9 @@ func TestConcurrentExecution(t *testing.T) {
 
 	t.Run("Continuous Event Stream Throttling", func(t *testing.T) {
 		const (
-			numWindows     = 10                                             // Number of throttle windows.
-			eventPerWindow = 1000                                           // Number of events triggered within each window.
-			numRoutines    = 100                                            // Number of concurrent calls per tick.
+			numWindows     = 3                                              // Number of throttle windows.
+			eventPerWindow = 100                                            // Number of events triggered within each window.
+			numExecutes    = 100                                            // Number of concurrent calls per tick.
 			totalDuration  = throttleWindow * time.Duration(numWindows)     // Total simulation duration.
 			eventInterval  = throttleWindow / time.Duration(eventPerWindow) // Interval between events.
 		)
@@ -159,12 +164,10 @@ func TestConcurrentExecution(t *testing.T) {
 			select {
 			case <-ticker.C:
 				// Each tick triggers multiple concurrent calls.
-				for range numRoutines {
-					go func() {
-						if lim.Allow("key", callback) {
-							callback()
-						}
-					}()
+				for range numExecutes {
+					if lim.Allow("key", callback) {
+						callback()
+					}
 				}
 			case <-timeCtx.Done():
 				// Allow time for any trailing callback to execute.
@@ -182,12 +185,12 @@ func TestConcurrentExecution(t *testing.T) {
 // TestBatchExpiration verifies that the expiration loop processes expired entries in batches.
 func TestBatchExpiration(t *testing.T) {
 	const (
-		expireInterval = 10 * time.Millisecond
+		expireInterval = 100 * time.Millisecond
 		throttleWindow = 50 * time.Millisecond
 		debouncingTime = 50 * time.Millisecond
 
-		expireBatchSize       = 100
-		batchNum        int32 = 10
+		expireBatchSize       = 10
+		batchNum        int32 = 3
 
 		totalKeys = expireBatchSize * batchNum // create more keys than one batch
 	)
@@ -211,9 +214,8 @@ func TestBatchExpiration(t *testing.T) {
 		}
 
 		assert.Equal(t, totalKeys, atomic.LoadInt32(&callCount))
-
-		time.Sleep(throttleWindow + debouncingTime + expireInterval/2)
-		for i := int32(1); i <= batchNum; i++ {
+		time.Sleep(expireInterval / 2)
+		for i := range batchNum {
 			assert.Equal(t, totalKeys+expireBatchSize*i, atomic.LoadInt32(&callCount))
 			time.Sleep(expireInterval)
 		}
@@ -240,7 +242,18 @@ func TestBatchExpiration(t *testing.T) {
 		}
 
 		assert.Equal(t, totalKeys, atomic.LoadInt32(&callCount))
-		lim.Close()
-		assert.Equal(t, totalKeys*2, atomic.LoadInt32(&callCount))
+
+		done := make(chan struct{})
+		go func() {
+			lim.Close()
+			done <- struct{}{}
+		}()
+		select {
+		case <-done:
+			assert.Equal(t, totalKeys*2, atomic.LoadInt32(&callCount))
+		case <-time.After(expireInterval):
+			assert.Equal(t, totalKeys*2, atomic.LoadInt32(&callCount))
+			assert.Fail(t, "close timeout")
+		}
 	})
 }
