@@ -89,6 +89,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 			"EVENT WEBHOOK URL",
 			"EVENT WEBHOOK EVENTS",
 			"CLIENT DEACTIVATE THRESHOLD",
+			"SUBSCRIPTION LIMIT PER DOCUMENT",
 			"CREATED AT",
 		})
 		for _, project := range projects {
@@ -101,6 +102,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 				project.EventWebhookURL,
 				project.EventWebhookEvents,
 				project.ClientDeactivateThreshold,
+				project.SubscriptionLimitPerDocument,
 				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
 			})
 		}

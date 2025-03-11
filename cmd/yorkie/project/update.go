@@ -34,14 +34,15 @@ import (
 )
 
 var (
-	flagAuthWebhookURL            string
-	flagAuthWebhookMethodsAdd     []string
-	flagAuthWebhookMethodsRm      []string
-	flagEventWebhookURL           string
-	flagEventWebhookEventsAdd     []string
-	flagEventWebhookEventsRm      []string
-	flagName                      string
-	flagClientDeactivateThreshold string
+	flagAuthWebhookURL               string
+	flagAuthWebhookMethodsAdd        []string
+	flagAuthWebhookMethodsRm         []string
+	flagEventWebhookURL              string
+	flagEventWebhookEventsAdd        []string
+	flagEventWebhookEventsRm         []string
+	flagName                         string
+	flagClientDeactivateThreshold    string
+	flagSubscriptionLimitPerDocument int
 )
 
 var allAuthWebhookMethods = []string{
@@ -126,13 +127,19 @@ func newUpdateCommand() *cobra.Command {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold
 			}
 
+			newSubscriptionLimitPerDocument := project.SubscriptionLimitPerDocument
+			if flagSubscriptionLimitPerDocument != 0 {
+				newSubscriptionLimitPerDocument = flagSubscriptionLimitPerDocument
+			}
+
 			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:                      &newName,
-				AuthWebhookURL:            &newAuthWebhookURL,
-				AuthWebhookMethods:        &newAuthWebhookMethods,
-				EventWebhookURL:           &newEventWebhookURL,
-				EventWebhookEvents:        &newEventWebhookEvents,
-				ClientDeactivateThreshold: &newClientDeactivateThreshold,
+				Name:                         &newName,
+				AuthWebhookURL:               &newAuthWebhookURL,
+				AuthWebhookMethods:           &newAuthWebhookMethods,
+				EventWebhookURL:              &newEventWebhookURL,
+				EventWebhookEvents:           &newEventWebhookEvents,
+				ClientDeactivateThreshold:    &newClientDeactivateThreshold,
+				SubscriptionLimitPerDocument: &newSubscriptionLimitPerDocument,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -278,6 +285,12 @@ func init() {
 		"client-deactivate-threshold",
 		"",
 		"client deactivate threshold for housekeeping",
+	)
+	cmd.Flags().IntVar(
+		&flagSubscriptionLimitPerDocument,
+		"subscription-limit-per-document",
+		0,
+		"subscription limit per document",
 	)
 	SubCmd.AddCommand(cmd)
 }

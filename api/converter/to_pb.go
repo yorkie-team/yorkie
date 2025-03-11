@@ -55,17 +55,18 @@ func ToProjects(projects []*types.Project) []*api.Project {
 // ToProject converts the given model to Protobuf.
 func ToProject(project *types.Project) *api.Project {
 	return &api.Project{
-		Id:                        project.ID.String(),
-		Name:                      project.Name,
-		AuthWebhookUrl:            project.AuthWebhookURL,
-		AuthWebhookMethods:        project.AuthWebhookMethods,
-		EventWebhookUrl:           project.EventWebhookURL,
-		EventWebhookEvents:        project.EventWebhookEvents,
-		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
-		PublicKey:                 project.PublicKey,
-		SecretKey:                 project.SecretKey,
-		CreatedAt:                 timestamppb.New(project.CreatedAt),
-		UpdatedAt:                 timestamppb.New(project.UpdatedAt),
+		Id:                           project.ID.String(),
+		Name:                         project.Name,
+		AuthWebhookUrl:               project.AuthWebhookURL,
+		AuthWebhookMethods:           project.AuthWebhookMethods,
+		EventWebhookUrl:              project.EventWebhookURL,
+		EventWebhookEvents:           project.EventWebhookEvents,
+		ClientDeactivateThreshold:    project.ClientDeactivateThreshold,
+		SubscriptionLimitPerDocument: int32(project.SubscriptionLimitPerDocument),
+		PublicKey:                    project.PublicKey,
+		SecretKey:                    project.SecretKey,
+		CreatedAt:                    timestamppb.New(project.CreatedAt),
+		UpdatedAt:                    timestamppb.New(project.UpdatedAt),
 	}
 }
 
