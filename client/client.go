@@ -624,6 +624,10 @@ func handleResponse(
 			return &WatchResponse{Type: DocumentChanged}, nil
 		case events.DocWatchedEvent:
 			doc.AddOnlineClient(cli.String())
+
+			// NOTE(hackerwins): If the presence does not exist, it means that
+			// PushPull is not received before watching. In that case, the 'watched'
+			// event is ignored here, and it will be triggered by PushPull.
 			if doc.Presence(cli.String()) == nil {
 				return nil, nil
 			}
@@ -637,6 +641,10 @@ func handleResponse(
 		case events.DocUnwatchedEvent:
 			p := doc.Presence(cli.String())
 			doc.RemoveOnlineClient(cli.String())
+
+			// NOTE(hackerwins): If the presence does not exist, it means that
+			// PushPull is already received before unwatching. In that case, the
+			// 'unwatched' event is ignored here, and it was triggered by PushPull.
 			if p == nil {
 				return nil, nil
 			}

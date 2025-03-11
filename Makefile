@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.6.0
+YORKIE_VERSION := 0.6.1
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
@@ -23,7 +23,7 @@ tools: ## install tools for developing yorkie
 	go install github.com/bufbuild/buf/cmd/buf@v1.28.1
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.12.0
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.1
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.6
 	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.5.5
 
 proto: ## generate proto files
