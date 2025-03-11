@@ -89,10 +89,6 @@ func newYorkieServer(t *testing.T, projectCacheTTL string) *server.Yorkie {
 	assert.NoError(t, err)
 	assert.NoError(t, svr.Start())
 
-	t.Cleanup(func() {
-		assert.NoError(t, svr.Shutdown(true))
-	})
-
 	return svr
 }
 
@@ -100,18 +96,18 @@ func newActivatedClient(t *testing.T, ctx context.Context, addr, publicKey strin
 	cli, err := client.Dial(addr, client.WithAPIKey(publicKey))
 	assert.NoError(t, err)
 	assert.NoError(t, cli.Activate(ctx))
-	t.Cleanup(func() {
-		assert.NoError(t, cli.Deactivate(ctx))
-		assert.NoError(t, cli.Close())
-	})
 	return cli
 }
 
 func TestRegisterEventWebhook(t *testing.T) {
+	const (
+		projectCacheTTL     = 1 * time.Millisecond
+		waitWebhookReceived = 10 * time.Millisecond
+	)
+
 	ctx := context.Background()
 
 	// Set up yorkie server
-	projectCacheTTL := 1 * time.Millisecond
 	svr := newYorkieServer(t, projectCacheTTL.String())
 
 	// Set up project
@@ -130,9 +126,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 		"counter": json.NewCounter(0, crdt.LongCnt),
 	})))
 
-	waitWebhookReceived := 10 * time.Millisecond
-
-	t.Run("register event webhook test", func(t *testing.T) {
+	t.Run("register and unregister event webhook test", func(t *testing.T) {
 		// 01. Register event webhook
 		prj, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
 			EventWebhookURL:    &userServer.URL,
@@ -154,11 +148,9 @@ func TestRegisterEventWebhook(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
-	})
 
-	t.Run("unregister event webhook test", func(t *testing.T) {
-		// 01. Unregister event webhook
-		prj, err := adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+		// 04. Unregister event webhook
+		prj, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
 			EventWebhookURL:    &userServer.URL,
 			EventWebhookEvents: &[]string{},
 		})
@@ -166,72 +158,126 @@ func TestRegisterEventWebhook(t *testing.T) {
 		assert.Equal(t, userServer.URL, prj.EventWebhookURL)
 		assert.Equal(t, 0, len(prj.EventWebhookEvents))
 
-		// 02. Wait project cache expired
+		// 05. Wait project cache expired
 		time.Sleep(projectCacheTTL)
 
-		// 03. Check webhook doesn't trigger
-		prev := atomic.LoadInt32(getReqCnt)
+		// 06. Check webhook doesn't trigger
+		prev = atomic.LoadInt32(getReqCnt)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
 
-		// 04. Wait webhook received
-		time.Sleep(waitWebhookReceived)
+		// 07. Wait webhook received
+		assert.NoError(t, svr.Shutdown(true))
 		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
 	})
 }
 
 func TestDocRootChangedEventWebhook(t *testing.T) {
-	ctx := context.Background()
-
-	svr := newYorkieServer(t, "default")
-	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-
-	project, err := adminCli.CreateProject(ctx, "doc-root-changed-event-webhook")
-	assert.NoError(t, err)
-
-	doc := document.New(helper.TestDocKey(t))
-	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
-
-	project.EventWebhookURL = userServer.URL
-	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-		EventWebhookURL:    &project.EventWebhookURL,
-		EventWebhookEvents: &[]string{string(types.DocRootChanged)},
-	})
-	assert.NoError(t, err)
-
-	cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
-
-	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-		"counter": json.NewCounter(0, crdt.LongCnt),
-	})))
-
-	waitWebhookReceived := 10 * time.Millisecond
+	const waitWebhookReceived = 10 * time.Millisecond
 	t.Run("root element changed test", func(t *testing.T) {
+		ctx := context.Background()
+
+		svr := newYorkieServer(t, "default")
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+
+		project, err := adminCli.CreateProject(ctx, "doc-root-changed-event-webhook")
+		assert.NoError(t, err)
+
+		doc := document.New(helper.TestDocKey(t))
+		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
+
+		project.EventWebhookURL = userServer.URL
+		_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			EventWebhookURL:    &project.EventWebhookURL,
+			EventWebhookEvents: &[]string{string(types.DocRootChanged)},
+		})
+		assert.NoError(t, err)
+
+		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
+
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(0, crdt.LongCnt),
+		})))
+		assert.NoError(t, cli.Sync(ctx))
+		time.Sleep(waitWebhookReceived)
+
 		prev := atomic.LoadInt32(getReqCnt)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
-		time.Sleep(waitWebhookReceived)
+		assert.NoError(t, svr.Shutdown(true))
 		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
 	})
 
 	t.Run("presence changed test", func(t *testing.T) {
+		ctx := context.Background()
+
+		svr := newYorkieServer(t, "default")
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+
+		project, err := adminCli.CreateProject(ctx, "presence-changed-event-webhook")
+		assert.NoError(t, err)
+
+		doc := document.New(helper.TestDocKey(t))
+		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
+
+		project.EventWebhookURL = userServer.URL
+		_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			EventWebhookURL:    &project.EventWebhookURL,
+			EventWebhookEvents: &[]string{string(types.DocRootChanged)},
+		})
+		assert.NoError(t, err)
+
+		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
+
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(0, crdt.LongCnt),
+		})))
+		assert.NoError(t, cli.Sync(ctx))
+		time.Sleep(waitWebhookReceived)
+
 		prev := atomic.LoadInt32(getReqCnt)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "2")
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
-		time.Sleep(waitWebhookReceived)
+		assert.NoError(t, svr.Shutdown(true))
 		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
 	})
 
 	t.Run("root element and presence changed test", func(t *testing.T) {
+		ctx := context.Background()
+
+		svr := newYorkieServer(t, "default")
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+
+		project, err := adminCli.CreateProject(ctx, "root-presence-changed-event")
+		assert.NoError(t, err)
+
+		doc := document.New(helper.TestDocKey(t))
+		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
+
+		project.EventWebhookURL = userServer.URL
+		_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+			EventWebhookURL:    &project.EventWebhookURL,
+			EventWebhookEvents: &[]string{string(types.DocRootChanged)},
+		})
+		assert.NoError(t, err)
+
+		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
+
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+			"counter": json.NewCounter(0, crdt.LongCnt),
+		})))
+		assert.NoError(t, cli.Sync(ctx))
+		time.Sleep(waitWebhookReceived)
+
 		prev := atomic.LoadInt32(getReqCnt)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Set("update", "3")
@@ -239,19 +285,31 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, cli.Sync(ctx))
-		time.Sleep(waitWebhookReceived)
+		assert.NoError(t, svr.Shutdown(true))
 		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
 	})
 }
 
-func TestEventWebhookCache(t *testing.T) {
+func TestEventWebhookThrottling(t *testing.T) {
+	const (
+		webhookThrottleWindow = 1 * time.Second
+		debouncingTime        = 1 * time.Second
+		expirationInterval    = 100 * time.Millisecond
+		waitWebhookReceived   = 10 * time.Millisecond
+
+		numWindows     = 2
+		eventPerWindow = 30
+
+		testDuration  = webhookThrottleWindow * time.Duration(numWindows)
+		eventInterval = webhookThrottleWindow / eventPerWindow
+	)
+
 	ctx := context.Background()
 
-	webhookCacheTTL := 10 * time.Millisecond
 	svr := newYorkieServer(t, "default")
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
-	project, err := adminCli.CreateProject(ctx, "event-webhook-cache-webhook")
+	project, err := adminCli.CreateProject(ctx, "event-webhook-throttle-webhook")
 	assert.NoError(t, err)
 
 	doc := document.New(helper.TestDocKey(t))
@@ -267,34 +325,106 @@ func TestEventWebhookCache(t *testing.T) {
 		"counter": json.NewCounter(0, crdt.LongCnt),
 	})))
 
-	waitWebhookReceived := 20 * time.Millisecond
-	t.Run("throttling event test", func(t *testing.T) {
-		t.Skip("remove this after implement advanced event timing control")
-
-		expectedUpdates := 5
-		testDuration := webhookCacheTTL * time.Duration(expectedUpdates)
-		interval := webhookCacheTTL / 10
-
-		ticker := time.NewTicker(interval)
+	t.Run("throttling Event Test", func(t *testing.T) {
+		ticker := time.NewTicker(eventInterval)
 		defer ticker.Stop()
 
 		timeCtx, cancel := context.WithTimeout(ctx, testDuration)
 		defer cancel()
 
-		prevCnt := atomic.LoadInt32(getReqCnt)
+		initialReqCount := atomic.LoadInt32(getReqCnt)
+		// Trigger document updates repeatedly.
 		for {
 			select {
 			case <-ticker.C:
-				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				// Update the document: increase the counter.
+				err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 					root.GetCounter("counter").Increase(1)
 					return nil
-				}))
+				})
+				assert.NoError(t, err)
 				assert.NoError(t, cli.Sync(ctx))
 			case <-timeCtx.Done():
+				// Wait briefly to allow any pending webhook events to be received.
 				time.Sleep(waitWebhookReceived)
-				assert.Equal(t, prevCnt+int32(expectedUpdates), atomic.LoadInt32(getReqCnt))
+				// Expect the request count to have increased by the expected number of updates.
+				assert.Equal(t, initialReqCount+int32(numWindows), atomic.LoadInt32(getReqCnt))
+				// Expect the trailing event webhook for eventual consistency.
+				time.Sleep(webhookThrottleWindow + debouncingTime + expirationInterval)
+				assert.Equal(t, initialReqCount+int32(numWindows+1), atomic.LoadInt32(getReqCnt))
+				assert.NoError(t, svr.Shutdown(true))
+				assert.Equal(t, initialReqCount+int32(numWindows+1), atomic.LoadInt32(getReqCnt))
 				return
 			}
+		}
+	})
+}
+
+func TestCloseEventManager(t *testing.T) {
+	const (
+		webhookThrottleWindow = 1 * time.Second
+		debouncingTime        = 1 * time.Second
+		expirationInterval    = 100 * time.Millisecond
+		waitWebhookReceived   = 10 * time.Millisecond
+	)
+
+	ctx := context.Background()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+
+	project, err := adminCli.CreateProject(ctx, "close-event-webhook-webhook")
+	assert.NoError(t, err)
+
+	doc := document.New(helper.TestDocKey(t))
+	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
+	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+		EventWebhookURL:    &userServer.URL,
+		EventWebhookEvents: &[]string{string(types.DocRootChanged)},
+	})
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(svr.RPCAddr(), client.WithAPIKey(project.PublicKey))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
+		"counter": json.NewCounter(0, crdt.LongCnt),
+	})))
+
+	t.Run("Force flush event when server shutdown Test", func(t *testing.T) {
+		// this triggers webhook directly.
+		prev := atomic.LoadInt32(getReqCnt)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("counter").Increase(1)
+			return nil
+		}))
+		assert.NoError(t, cli.Sync(ctx))
+		time.Sleep(waitWebhookReceived)
+		assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+
+		// this is queued and will be flushed by closing server
+		prev = atomic.LoadInt32(getReqCnt)
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("counter").Increase(1)
+			return nil
+		}))
+		assert.NoError(t, cli.Sync(ctx))
+		assert.Equal(t, prev, atomic.LoadInt32(getReqCnt))
+
+		done := make(chan struct{})
+		go func() {
+			assert.NoError(t, svr.Shutdown(true))
+			done <- struct{}{}
+		}()
+
+		select {
+		case <-done:
+			assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+		case <-time.After(webhookThrottleWindow + debouncingTime + expirationInterval):
+			assert.Equal(t, prev+1, atomic.LoadInt32(getReqCnt))
+			assert.Fail(t, "closing timeout")
 		}
 	})
 }
