@@ -59,6 +59,7 @@ func NewLimiter[K comparable](expireNum int, expire, throttle, debouncing time.D
 	}
 
 	// Start the background expiration process.
+	lim.wg.Add(1)
 	go lim.expirationLoop()
 	return lim
 }
@@ -108,7 +109,10 @@ func (l *Limiter[K]) Allow(key K, callback func()) bool {
 // expirationLoop runs in a separate goroutine to periodically remove expired entries.
 func (l *Limiter[K]) expirationLoop() {
 	ticker := time.NewTicker(l.expireInterval)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		l.wg.Done()
+	}()
 
 	for {
 		select {
@@ -164,6 +168,7 @@ func (l *Limiter[K]) runDebounce(entries []*limiterEntry[K]) {
 // Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
 	close(l.closing)
+	l.wg.Wait()
 
 	for l.evictionList.Len() > 0 {
 		expiredEntries := l.collectEntries(false)
