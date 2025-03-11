@@ -112,6 +112,7 @@ func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	docKey types.DocRefKey,
+	limit int,
 ) (*Subscription, []*time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -121,15 +122,32 @@ func (m *PubSub) Subscribe(
 		)
 	}
 
-	subs := m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
+	// Note(emplam27): This is a workaround to avoid race condition.
+	// The race condition is that the subscription limit is exceeded
+	// and the new subscription is not set. If newSub is nil,
+	// it means the limit was exceeded and the subscription was not created.
+	var newSub *Subscription
+	_ = m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
 		if !exists {
-			return newSubscriptions(docKey)
+			subs = newSubscriptions(docKey)
 		}
+
+		if limit > 0 && subs.Len() >= limit {
+			return subs
+		}
+
+		newSub = NewSubscription(subscriber)
+		subs.Set(newSub)
 		return subs
 	})
 
-	sub := NewSubscription(subscriber)
-	subs.Set(sub)
+	if newSub == nil {
+		return nil, nil, fmt.Errorf(
+			"%d subscriptions allowed per document: %w",
+			limit,
+			ErrSubscriptionLimitExceeded,
+		)
+	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -140,7 +158,7 @@ func (m *PubSub) Subscribe(
 	}
 
 	ids := m.ClientIDs(docKey)
-	return sub, ids, nil
+	return newSub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given docKeys.
@@ -224,17 +242,4 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []*time.ActorID {
 		ids = append(ids, sub.Subscriber())
 	}
 	return ids
-}
-
-// IsSubscriptionLimitExceeded returns true if the subscription limit is exceeded.
-func (m *PubSub) IsSubscriptionLimitExceeded(limit int, dockey types.DocRefKey) error {
-	subs, ok := m.subscriptionsMap.Get(dockey)
-	if !ok {
-		return nil
-	}
-
-	if limit > 0 && subs.Len() >= limit {
-		return fmt.Errorf("%d subscriptions allowed per document: %w", limit, ErrSubscriptionLimitExceeded)
-	}
-	return nil
 }

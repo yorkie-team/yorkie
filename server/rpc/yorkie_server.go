@@ -445,16 +445,12 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	if project.IsSubscriptionLimitEnabled() {
-		if err := s.backend.PubSub.IsSubscriptionLimitExceeded(
-			project.SubscriptionLimitPerDocument,
-			docRefKey,
-		); err != nil {
-			return err
-		}
-	}
-
-	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docRefKey)
+	subscription, clientIDs, err := s.watchDoc(
+		ctx,
+		clientID,
+		docRefKey,
+		project.SubscriptionLimitPerDocument,
+	)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return err
@@ -603,8 +599,9 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
 	docKey types.DocRefKey,
+	limit int,
 ) (*pubsub.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey)
+	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err

@@ -579,5 +579,10 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 			Value: *fields.ClientDeactivateThreshold,
 		}
 	}
+	if fields.SubscriptionLimitPerDocument != nil {
+		pbUpdatableProjectFields.SubscriptionLimitPerDocument = &wrapperspb.Int32Value{
+			Value: int32(*fields.SubscriptionLimitPerDocument),
+		}
+	}
 	return pbUpdatableProjectFields, nil
 }
