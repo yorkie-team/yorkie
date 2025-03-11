@@ -452,7 +452,6 @@ func (s *yorkieServer) WatchDocument(
 		project.SubscriptionLimitPerDocument,
 	)
 	if err != nil {
-		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -603,7 +602,6 @@ func (s *yorkieServer) watchDoc(
 ) (*pubsub.Subscription, []*time.ActorID, error) {
 	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
-		logging.From(ctx).Error(err)
 		return nil, nil, err
 	}
 
