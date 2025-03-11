@@ -122,14 +122,18 @@ func TestConcurrentExecution(t *testing.T) {
 			atomic.AddInt32(&callCount, 1)
 		}
 
+		wg := sync.WaitGroup{}
 		for i := range numExecute {
 			i := i
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				if lim.Allow(i, callback) {
 					callback()
 				}
 			}()
 		}
+		wg.Wait()
 
 		time.Sleep(waitingTime)
 		// For different keys, every call is immediate so expect numExecute callbacks.
