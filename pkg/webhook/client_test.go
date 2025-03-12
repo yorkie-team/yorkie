@@ -2,12 +2,7 @@ package webhook_test
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 // testRequest is a simple request type for demonstration.
@@ -28,18 +24,6 @@ type testRequest struct {
 // testResponse is a simple response type for demonstration.
 type testResponse struct {
 	Greeting string `json:"greeting"`
-}
-
-// verifySignature verifies that the HMAC signature in the header matches the expected value.
-func verifySignature(signatureHeader, secret string, body []byte) error {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	expectedSigHeader := fmt.Sprintf("sha256=%s", expectedSig)
-	if !hmac.Equal([]byte(signatureHeader), []byte(expectedSigHeader)) {
-		return errors.New("signature validation failed")
-	}
-	return nil
 }
 
 // newHMACTestServer creates a new httptest.Server that verifies the HMAC signature.
@@ -58,7 +42,7 @@ func newHMACTestServer(t *testing.T, validSecret string, responseData testRespon
 			return
 		}
 
-		if err := verifySignature(signatureHeader, validSecret, bodyBytes); err != nil {
+		if err := helper.VerifySignature(signatureHeader, validSecret, bodyBytes); err != nil {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
