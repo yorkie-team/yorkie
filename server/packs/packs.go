@@ -37,7 +37,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
-	"github.com/yorkie-team/yorkie/server/webhook"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
@@ -199,14 +198,15 @@ func PushPull(
 				},
 			)
 
-			if reqPack.OperationsLen() > 0 {
-				if err := webhook.SendEvent(
-					ctx,
-					be,
-					project,
+			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChangedEvent.WebhookType()) {
+				info := types.NewEventWebhookInfo(
+					docRefKey,
+					events.DocRootChangedEvent.WebhookType(),
+					project.SecretKey,
+					project.EventWebhookURL,
 					docInfo.Key.String(),
-					events.DocRootChangedEvent,
-				); err != nil {
+				)
+				if err := be.EventWebhookManager.Send(ctx, info); err != nil {
 					logging.From(ctx).Error(err)
 					return
 				}

@@ -19,6 +19,10 @@ package helper
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -577,4 +581,16 @@ func CleanupClients(b *testing.B, clients []*client.Client) {
 		assert.NoError(b, c.Deactivate(context.Background()))
 		assert.NoError(b, c.Close())
 	}
+}
+
+// VerifySignature verifies that the HMAC signature in the header matches the expected value.
+func VerifySignature(signatureHeader, secret string, body []byte) error {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	expectedSigHeader := fmt.Sprintf("sha256=%s", expectedSig)
+	if !hmac.Equal([]byte(signatureHeader), []byte(expectedSigHeader)) {
+		return errors.New("signature validation failed")
+	}
+	return nil
 }
