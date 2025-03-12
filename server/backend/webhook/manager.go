@@ -61,14 +61,14 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 	callback := func() {
-		if err := sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute); err != nil {
+		if err := SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
+		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
 	}
 	return nil
 }
@@ -78,9 +78,9 @@ func (m *Manager) Close() {
 	m.limiter.Close()
 }
 
-// sendWebhook sends the webhook event using the provided client.
+// SendWebhook sends the webhook event using the provided client.
 // It builds the request body and checks for a successful HTTP response.
-func sendWebhook(
+func SendWebhook(
 	ctx context.Context,
 	cli *webhook.Client[types.EventWebhookRequest, int],
 	event types.EventWebhookType,
