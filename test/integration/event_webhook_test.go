@@ -20,12 +20,7 @@ package integration
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	gojson "encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -45,17 +40,6 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func verifySignature(signatureHeader, secret string, body []byte) error {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-	expectedSigHeader := fmt.Sprintf("sha256=%s", expectedSig)
-	if !hmac.Equal([]byte(signatureHeader), []byte(expectedSigHeader)) {
-		return errors.New("signature validation failed")
-	}
-	return nil
-}
-
 func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server, *int32) {
 	var reqCnt int32
 
@@ -65,7 +49,7 @@ func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server,
 		assert.NotZero(t, len(signatureHeader))
 		body, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
-		assert.NoError(t, verifySignature(signatureHeader, secretKey, body))
+		assert.NoError(t, helper.VerifySignature(signatureHeader, secretKey, body))
 
 		req := &types.EventWebhookRequest{}
 		assert.NoError(t, gojson.Unmarshal(body, req))
