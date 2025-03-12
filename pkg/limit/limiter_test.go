@@ -18,7 +18,6 @@
 package limit_test
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -316,11 +315,7 @@ func TestConcurrentExecution(t *testing.T) {
 
 	t.Run("Continuous Event Stream Throttling", func(t *testing.T) {
 		const (
-			numWindows     = 3                                              // Number of throttle windows.
-			eventPerWindow = 100                                            // Number of events triggered within each window.
-			numExecutes    = 100                                            // Number of concurrent calls per tick.
-			totalDuration  = throttleWindow * time.Duration(numWindows)     // Total simulation duration.
-			eventInterval  = throttleWindow / time.Duration(eventPerWindow) // Interval between events.
+			numWindows = 3 // Number of throttle windows.
 		)
 
 		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
@@ -328,33 +323,23 @@ func TestConcurrentExecution(t *testing.T) {
 		o := occurs{
 			array: make([]int, 0, numWindows+1),
 		}
-		callback := func() { o.add(1) }
-
-		ticker := time.NewTicker(eventInterval)
-		defer ticker.Stop()
-		timeCtx, cancel := context.WithTimeout(context.Background(), totalDuration)
-		defer cancel()
 
 		// Continuously trigger events until the simulation ends.
-		for {
-			select {
-			case <-ticker.C:
-				// Each tick triggers multiple concurrent calls.
-				for range numExecutes {
-					if lim.Allow("key", callback) {
-						callback()
-					}
+		for i := range numWindows {
+			callback := func() { o.add(i) }
+			for range numExecute {
+				if lim.Allow("key", callback) {
+					callback()
 				}
-			case <-timeCtx.Done():
-				assert.Equal(t, numWindows, o.len())
-				// Allow time for any trailing callback to execute.
-				time.Sleep(waitingTime)
-				// Expect one callback per throttle window plus one additional trailing call.
-				assert.Equal(t, numWindows+1, o.len())
-				lim.Close()
-				assert.Equal(t, numWindows+1, o.len())
-				return
 			}
+			time.Sleep(throttleWindow)
+		}
+		assert.Equal(t, numWindows, o.len())
+		time.Sleep(waitingTime)
+		assert.Equal(t, numWindows+1, o.len())
+
+		for i := range numWindows {
+			assert.Equal(t, i, o.get(i))
 		}
 	})
 }
