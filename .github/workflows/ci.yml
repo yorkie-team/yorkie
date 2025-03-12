@@ -121,10 +121,11 @@ jobs:
           path: benchmark-repo
         continue-on-error: true
 
-      - name: Read previous benchmark result
+      - name: Read previous benchmark result and prepare cache
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         id: prev-bench
         run: |
+          mkdir -p ./cache
           echo "PREV_BENCH_RESULT=null" >> $GITHUB_OUTPUT
           echo "PREV_COMMIT=null" >> $GITHUB_OUTPUT
 
@@ -136,6 +137,16 @@ jobs:
               echo "PREV_COMMIT=$prev_commit" >> $GITHUB_OUTPUT
             fi
           fi
+
+      - name: Restore cache
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        id: cache-restore
+        uses: actions/cache@v3
+        with:
+          path: ./cache
+          key: comment-id-${{ github.event.pull_request.number }}
+          restore-keys: |
+            comment-id-${{ github.event.pull_request.number }}
 
       - name: Stack
         run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
@@ -153,21 +164,32 @@ jobs:
         run: |
           curr_bench=$(cat output.txt | jq -R -s .)
 
+          # Read comment_id from cache
+          comment_id_file="./cache/comment_id.txt"
+          comment_id=""
+          if [ -f "$comment_id_file" ]; then
+            comment_id=$(cat "$comment_id_file" | jq -r '.comment_id')
+          fi
+
           response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
           -H "Content-Type: application/json" \
-          -d '{
-            "repo": "${{ github.repository }}",
-            "pr_number": "${{ github.event.pull_request.number }}",
-            "commit_id": "${{ github.sha }}",
-            "prev_commit_id": "${{ steps.prev-bench.outputs.PREV_COMMIT }}",
-            "bench_result": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
-            "prev_bench_result": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }}
-          }' || echo "CURL_ERROR")
+          -d "{
+            \"repo\": \"${{ github.repository }}\",
+            \"pr_number\": \"${{ github.event.pull_request.number }}\",
+            \"commit_id\": \"${{ github.sha }}\",
+            \"prev_commit_id\": \"${{ steps.prev-bench.outputs.PREV_COMMIT }}\",
+            \"bench_result\": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
+            \"prev_bench_result\": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }},
+            \"comment_id\": \"${comment_id}\"
+          }" || echo "CURL_ERROR")
 
           if [ "$response" = "CURL_ERROR" ]; then
             echo "::error::Failed to trigger n8n webhook"
             exit 1
           fi
+
+          echo "🚀 Webhook Response: $response"
+          echo "$response" > "$comment_id_file"
 
       - name: Store benchmark result
         if: github.ref == 'refs/heads/main'
