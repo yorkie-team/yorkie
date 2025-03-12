@@ -32,8 +32,8 @@ import (
 )
 
 var (
-	// ErrSubscriptionLimitExceeded is returned when the the subscription limit is exceeded.
-	ErrSubscriptionLimitExceeded = errors.New("subscription limit exceeded")
+	// ErrTooManySubscribers is returned when the the subscription limit is exceeded.
+	ErrTooManySubscribers = errors.New("subscription limit exceeded")
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
 	ErrAlreadyConnected = errors.New("already connected to the document")
@@ -145,7 +145,7 @@ func (m *PubSub) Subscribe(
 		return nil, nil, fmt.Errorf(
 			"%d subscriptions allowed per document: %w",
 			limit,
-			ErrSubscriptionLimitExceeded,
+			ErrTooManySubscribers,
 		)
 	}
 

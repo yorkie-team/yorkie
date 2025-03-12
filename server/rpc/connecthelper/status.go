@@ -86,10 +86,10 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
 
 	// Internal means an internal error occurred.
-	webhook.ErrUnexpectedStatusCode:     connect.CodeInternal,
-	webhook.ErrUnexpectedResponse:       connect.CodeInternal,
-	webhook.ErrWebhookTimeout:           connect.CodeInternal,
-	pubsub.ErrSubscriptionLimitExceeded: connect.CodeInternal,
+	webhook.ErrUnexpectedStatusCode: connect.CodeInternal,
+	webhook.ErrUnexpectedResponse:   connect.CodeInternal,
+	webhook.ErrWebhookTimeout:       connect.CodeInternal,
+	pubsub.ErrTooManySubscribers:    connect.CodeInternal,
 
 	// PermissionDenied means the request does not have permission for the operation.
 	auth.ErrPermissionDenied: connect.CodePermissionDenied,
@@ -142,8 +142,8 @@ var errorToCode = map[error]string{
 	webhook.ErrWebhookTimeout:       "ErrWebhookTimeout",
 	database.ErrMismatchedPassword:  "ErrMismatchedPassword",
 
-	pubsub.ErrSubscriptionLimitExceeded: "ErrSubscriptionLimitExceeded",
-	pubsub.ErrAlreadyConnected:          "ErrAlreadyConnected",
+	pubsub.ErrTooManySubscribers: "ErrTooManySubscribers",
+	pubsub.ErrAlreadyConnected:   "ErrAlreadyConnected",
 }
 
 // CodeOf returns the string representation of the given error.

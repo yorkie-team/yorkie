@@ -1857,6 +1857,11 @@ components:
           description: ""
           title: id
           type: string
+        maxSubscribersPerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_subscribers_per_document
+          type: integer
         name:
           additionalProperties: false
           description: ""
@@ -1872,11 +1877,6 @@ components:
           description: ""
           title: secret_key
           type: string
-        subscriptionLimitPerDocument:
-          additionalProperties: false
-          description: ""
-          title: subscription_limit_per_document
-          type: integer
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false
@@ -2175,17 +2175,17 @@ components:
           description: ""
           title: event_webhook_url
           type: object
+        maxSubscribersPerDocument:
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          additionalProperties: false
+          description: ""
+          title: max_subscribers_per_document
+          type: object
         name:
           $ref: '#/components/schemas/google.protobuf.StringValue'
           additionalProperties: false
           description: ""
           title: name
-          type: object
-        subscriptionLimitPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
-          additionalProperties: false
-          description: ""
-          title: subscription_limit_per_document
           type: object
       title: UpdatableProjectFields
       type: object

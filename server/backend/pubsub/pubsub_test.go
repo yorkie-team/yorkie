@@ -97,7 +97,7 @@ func TestPubSub(t *testing.T) {
 		// third subscription should fail due to limit
 		_, _, err = pubSub.Subscribe(ctx, idB, refKey, limit)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, pubsub.ErrSubscriptionLimitExceeded)
+		assert.ErrorIs(t, err, pubsub.ErrTooManySubscribers)
 		assert.Equal(t, err.Error(), fmt.Sprintf("%d subscriptions allowed per document: subscription limit exceeded", limit))
 	})
 
@@ -136,7 +136,7 @@ func TestPubSub(t *testing.T) {
 					subscriptions[idx] = subs
 				} else {
 					failCount.Add(1)
-					assert.ErrorIs(t, err, pubsub.ErrSubscriptionLimitExceeded)
+					assert.ErrorIs(t, err, pubsub.ErrTooManySubscribers)
 				}
 			}(i)
 		}

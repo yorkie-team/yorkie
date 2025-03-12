@@ -286,6 +286,11 @@ components:
           description: ""
           title: id
           type: string
+        maxSubscribersPerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_subscribers_per_document
+          type: integer
         name:
           additionalProperties: false
           description: ""
@@ -301,11 +306,6 @@ components:
           description: ""
           title: secret_key
           type: string
-        subscriptionLimitPerDocument:
-          additionalProperties: false
-          description: ""
-          title: subscription_limit_per_document
-          type: integer
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false

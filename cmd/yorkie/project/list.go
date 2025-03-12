@@ -102,7 +102,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 				project.EventWebhookURL,
 				project.EventWebhookEvents,
 				project.ClientDeactivateThreshold,
-				project.SubscriptionLimitPerDocument,
+				project.MaxSubscribersPerDocument,
 				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
 			})
 		}

@@ -39,15 +39,15 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
-		newSubscriptionLimitPerDocument := 10
+		newMaxSubscribersPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			Name:                         &newName,
-			AuthWebhookURL:               &newAuthWebhookURL,
-			AuthWebhookMethods:           &newAuthWebhookMethods,
-			EventWebhookURL:              &newEventWebhookURL,
-			EventWebhookEvents:           &newEventWebhookEvents,
-			ClientDeactivateThreshold:    &newClientDeactivateThreshold,
-			SubscriptionLimitPerDocument: &newSubscriptionLimitPerDocument,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			AuthWebhookMethods:        &newAuthWebhookMethods,
+			EventWebhookURL:           &newEventWebhookURL,
+			EventWebhookEvents:        &newEventWebhookEvents,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -84,11 +84,11 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 
-		// invalid SubscriptionLimitPerDocument
-		newSubscriptionLimitPerDocument = -1
+		// invalid MaxSubscribersPerDocument
+		newMaxSubscribersPerDocument = -1
 		fields = &types.UpdatableProjectFields{
-			Name:                         &newName,
-			SubscriptionLimitPerDocument: &newSubscriptionLimitPerDocument,
+			Name:                      &newName,
+			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -138,21 +138,21 @@ func TestUpdatableProjectFields(t *testing.T) {
 	})
 
 	t.Run("subscription count limit per document test", func(t *testing.T) {
-		validSubscriptionLimitPerDocument := 10
+		validMaxSubscribersPerDocument := 10
 		fields := &types.UpdatableProjectFields{
-			SubscriptionLimitPerDocument: &validSubscriptionLimitPerDocument,
+			MaxSubscribersPerDocument: &validMaxSubscribersPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		validSubscriptionLimitPerDocument = 0
+		validMaxSubscribersPerDocument = 0
 		fields = &types.UpdatableProjectFields{
-			SubscriptionLimitPerDocument: &validSubscriptionLimitPerDocument,
+			MaxSubscribersPerDocument: &validMaxSubscribersPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
-		invalidSubscriptionLimitPerDocument := -1
+		invalidMaxSubscribersPerDocument := -1
 		fields = &types.UpdatableProjectFields{
-			SubscriptionLimitPerDocument: &invalidSubscriptionLimitPerDocument,
+			MaxSubscribersPerDocument: &invalidMaxSubscribersPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})

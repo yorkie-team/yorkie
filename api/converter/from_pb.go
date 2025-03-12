@@ -51,18 +51,18 @@ func FromProjects(pbProjects []*api.Project) []*types.Project {
 // FromProject converts the given Protobuf formats to model format.
 func FromProject(pbProject *api.Project) *types.Project {
 	return &types.Project{
-		ID:                           types.ID(pbProject.Id),
-		Name:                         pbProject.Name,
-		AuthWebhookURL:               pbProject.AuthWebhookUrl,
-		AuthWebhookMethods:           pbProject.AuthWebhookMethods,
-		EventWebhookURL:              pbProject.EventWebhookUrl,
-		EventWebhookEvents:           pbProject.EventWebhookEvents,
-		ClientDeactivateThreshold:    pbProject.ClientDeactivateThreshold,
-		SubscriptionLimitPerDocument: int(pbProject.SubscriptionLimitPerDocument),
-		PublicKey:                    pbProject.PublicKey,
-		SecretKey:                    pbProject.SecretKey,
-		CreatedAt:                    pbProject.CreatedAt.AsTime(),
-		UpdatedAt:                    pbProject.UpdatedAt.AsTime(),
+		ID:                        types.ID(pbProject.Id),
+		Name:                      pbProject.Name,
+		AuthWebhookURL:            pbProject.AuthWebhookUrl,
+		AuthWebhookMethods:        pbProject.AuthWebhookMethods,
+		EventWebhookURL:           pbProject.EventWebhookUrl,
+		EventWebhookEvents:        pbProject.EventWebhookEvents,
+		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
+		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
+		PublicKey:                 pbProject.PublicKey,
+		SecretKey:                 pbProject.SecretKey,
+		CreatedAt:                 pbProject.CreatedAt.AsTime(),
+		UpdatedAt:                 pbProject.UpdatedAt.AsTime(),
 	}
 }
 
@@ -934,9 +934,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
 	}
-	if pbProjectFields.SubscriptionLimitPerDocument != nil {
-		value := int(pbProjectFields.SubscriptionLimitPerDocument.Value)
-		updatableProjectFields.SubscriptionLimitPerDocument = &value
+	if pbProjectFields.MaxSubscribersPerDocument != nil {
+		value := int(pbProjectFields.MaxSubscribersPerDocument.Value)
+		updatableProjectFields.MaxSubscribersPerDocument = &value
 	}
 
 	return updatableProjectFields, nil

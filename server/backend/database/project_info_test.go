@@ -36,7 +36,7 @@ func TestProjectInfo(t *testing.T) {
 		testMethods := []string{"testMethod"}
 		testEvents := []string{"testEvent"}
 		testClientDeactivateThreshold := "2h"
-		testSubscriptionLimitPerDocument := 10
+		testMaxSubscribersPerDocument := 10
 
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
 		assert.Equal(t, testName, project.Name)
@@ -61,8 +61,8 @@ func TestProjectInfo(t *testing.T) {
 		assert.Equal(t, testClientDeactivateThreshold, project.ClientDeactivateThreshold)
 
 		project.UpdateFields(&types.UpdatableProjectFields{
-			SubscriptionLimitPerDocument: &testSubscriptionLimitPerDocument,
+			MaxSubscribersPerDocument: &testMaxSubscribersPerDocument,
 		})
-		assert.Equal(t, testSubscriptionLimitPerDocument, project.SubscriptionLimitPerDocument)
+		assert.Equal(t, testMaxSubscribersPerDocument, project.MaxSubscribersPerDocument)
 	})
 }

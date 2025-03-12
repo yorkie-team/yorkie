@@ -48,8 +48,9 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
-	// SubscriptionLimitPerDocument is limit of subscription count for each document. 0 means no limit.
-	SubscriptionLimitPerDocument int `bson:"subscription_limit_per_document"`
+	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
+	// If it is 0, there is no limit.
+	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
@@ -102,7 +103,7 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 	return false
 }
 
-// IsSubscriptionLimitEnabled returns whether the subscription limit is enabled.
-func (p *Project) IsSubscriptionLimitEnabled() bool {
-	return p.SubscriptionLimitPerDocument > 0
+// HasSubscriberLimit returns whether the document has a limit on the number of subscribers.
+func (p *Project) HasSubscriberLimit() bool {
+	return p.MaxSubscribersPerDocument > 0
 }

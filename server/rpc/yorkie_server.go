@@ -449,7 +449,7 @@ func (s *yorkieServer) WatchDocument(
 		ctx,
 		clientID,
 		docRefKey,
-		project.SubscriptionLimitPerDocument,
+		project.MaxSubscribersPerDocument,
 	)
 	if err != nil {
 		return err
