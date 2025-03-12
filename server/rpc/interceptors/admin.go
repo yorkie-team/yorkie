@@ -176,14 +176,24 @@ func (i *AdminServiceInterceptor) authenticate(
 	ctx context.Context,
 	header http.Header,
 ) (*types.User, error) {
-	authorization := header.Get(types.AuthorizationKey)
-	if authorization == "" {
+	// NOTE(hackerwins): The token can be provided by the Authorization header or cookie.
+	token := header.Get(types.AuthorizationKey)
+	if token == "" {
+		cookie, err := (&http.Request{Header: header}).Cookie(types.SessionKey)
+		if err != nil && err != http.ErrNoCookie {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if cookie != nil {
+			token = cookie.Value
+		}
+	}
+	if token == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
 	// NOTE(raararaara): If the token is access token, return the user of the token.
 	// This is used for the case where the user uses dashboard or CLI.
-	claims, err := i.tokenManager.Verify(authorization)
+	claims, err := i.tokenManager.Verify(token)
 	if err == nil {
 		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
 		if err == nil {
@@ -195,7 +205,7 @@ func (i *AdminServiceInterceptor) authenticate(
 	// This is used for the case where the user uses REST API.
 	// TODO(hackerwins): In this case, attacker can hijack the project owner's identity.
 	// We need to separate project-wide API and user-wide API from AdminService.
-	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
+	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, token)
 	if err == nil {
 		user, err := users.GetUserByID(ctx, i.backend, project.Owner)
 		if err == nil {
