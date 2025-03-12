@@ -22,6 +22,10 @@ function main {
     export GOOS=${os}
     TARGET_ARCHS=("amd64")
 
+    if [ "${GOOS}" == "darwin" ]; then
+      TARGET_ARCHS+=("arm64")
+    fi
+
     if [ "${GOOS}" == "windows" ]; then
       ext=".exe"
     fi
