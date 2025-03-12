@@ -20,6 +20,9 @@ package types
 // AuthorizationKey is the key of the authorization header.
 const AuthorizationKey = "authorization"
 
+// SessionKey is the key of the session key from the cookie.
+const SessionKey = "yorkie_session"
+
 // UserAgentKey is the key of the user agent header.
 const UserAgentKey = "x-yorkie-user-agent"
 
