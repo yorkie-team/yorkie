@@ -75,7 +75,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be), opts...))
-	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.GitHub))
+	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.Auth))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
 

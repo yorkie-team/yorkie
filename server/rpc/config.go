@@ -44,8 +44,8 @@ type Config struct {
 	// KeyFile is the path to the key file.
 	KeyFile string `yaml:"KeyFile"`
 
-	// GitHub is the configuration for GitHub OAuth.
-	GitHub auth.Config `yaml:"GitHub"`
+	// Auth is the configuration for authentication.
+	Auth auth.Config `yaml:"Auth"`
 }
 
 // Validate validates the port number and the files for certification.

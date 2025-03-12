@@ -20,11 +20,14 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/lithammer/shortuuid/v4"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -52,7 +55,7 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 		conf:         oauthConf,
 		be:           be,
 		tokenManager: tokenManager,
-		stateString:  "random-state-string",
+		stateStore:   cmap.New[string, time.Time](),
 	}
 
 	return "/auth/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,12 +81,12 @@ type AuthManager struct {
 	conf         *oauth2.Config
 	be           *backend.Backend
 	tokenManager *TokenManager
-	stateString  string
+	stateStore   *cmap.Map[string, time.Time]
 }
 
 func (h *AuthManager) handleMe(_ context.Context, w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(types.SessionKey)
-	if err != nil {
+	if err != nil || cookie.Value == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -106,8 +109,10 @@ func (h *AuthManager) handleMe(_ context.Context, w http.ResponseWriter, r *http
 
 func (h *AuthManager) handleLogout(_ context.Context, w http.ResponseWriter, _ *http.Request) {
 	http.SetCookie(w, &http.Cookie{
-		Name:  types.SessionKey,
-		Value: "",
+		Name:   types.SessionKey,
+		Value:  "",
+		Path:   "/",
+		MaxAge: 0,
 	})
 }
 
@@ -156,12 +161,19 @@ func (h *AuthManager) handleLogin(ctx context.Context, w http.ResponseWriter, r 
 }
 
 func (h *AuthManager) handleGitHubLogin(_ context.Context, w http.ResponseWriter, r *http.Request) {
-	url := h.conf.AuthCodeURL(h.stateString)
+	state := shortuuid.New()
+	h.stateStore.Set(state, time.Now())
+	h.cleanupOldStates()
+
+	url := h.conf.AuthCodeURL(state)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("state") != h.stateString {
+	state := r.URL.Query().Get("state")
+	if ok := h.stateStore.Delete(state, func(value time.Time, exists bool) bool {
+		return exists
+	}); !ok {
 		http.Error(w, "Invalid state", http.StatusBadRequest)
 		return
 	}
@@ -218,4 +230,14 @@ func (h *AuthManager) setCookie(w http.ResponseWriter, token string) {
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   3600 * 24,
 	})
+}
+
+func (h *AuthManager) cleanupOldStates() {
+	threshold := time.Now().Add(-10 * time.Minute)
+
+	for _, state := range h.stateStore.Keys() {
+		h.stateStore.Delete(state, func(value time.Time, exists bool) bool {
+			return exists && value.Before(threshold)
+		})
+	}
 }
