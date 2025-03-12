@@ -30,8 +30,212 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/limit"
 )
 
-// TestSynchronousExecution verifies the behavior of synchronous calls to the throttler.
-func TestSynchronousExecution(t *testing.T) {
+// occurs encapsulates a slice of integers with a mutex for concurrent access.
+type occurs struct {
+	array []int
+	mu    sync.Mutex
+}
+
+// add appends a value to the array.
+func (o *occurs) add(e int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.array = append(o.array, e)
+}
+
+// len returns the length of the array.
+func (o *occurs) len() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return len(o.array)
+}
+
+// get returns the element at the specified index.
+func (o *occurs) get(index int) int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.array[index]
+}
+
+// TestThrottlerBehavior verifies the behavior of synchronous calls to the throttler.
+// You can refer to the visualization in https://github.com/yorkie-team/yorkie/pull/1166.
+func TestThrottlerBehavior(t *testing.T) {
+	const (
+		expireBatchSize = 100
+		expireInterval  = 10 * time.Millisecond
+		throttleWindow  = 100 * time.Millisecond
+		debouncingTime  = 100 * time.Millisecond
+		waitingTime     = expireInterval + throttleWindow + debouncingTime
+	)
+
+	// Test case: "e1" -> e1 occurs
+	t.Run("e1", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		o := &occurs{}
+
+		e1 := func() { o.add(1) }
+		if lim.Allow("key", e1) {
+			e1()
+		}
+		// Immediately after execution, the callback should have been invoked.
+		assert.Equal(t, 1, o.get(0))
+		// After waiting, no additional invocation should occur.
+		time.Sleep(waitingTime)
+		assert.Equal(t, 1, o.len())
+		lim.Close()
+	})
+
+	// Test case: "e1 e2" -> e1 then e2 occurs
+	t.Run("e1 e2", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		o := &occurs{}
+
+		e1 := func() { o.add(1) }
+		if lim.Allow("key", e1) {
+			e1()
+		}
+		// First callback is executed directly.
+		assert.Equal(t, 1, o.get(0))
+
+		e2 := func() { o.add(2) }
+		if lim.Allow("key", e2) {
+			e2()
+		}
+
+		// At this point, only the immediate callback should have occurred.
+		assert.Equal(t, 1, o.len())
+		time.Sleep(waitingTime)
+
+		// After waiting, the deferred callback should be executed.
+		assert.Equal(t, 2, o.len())
+		assert.Equal(t, 2, o.get(1))
+		lim.Close()
+	})
+
+	// Test case: "e1 e2 e3" -> e1 immediately and e3 deferred
+	t.Run("e1 e2 e3", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		o := &occurs{}
+
+		e1 := func() { o.add(1) }
+		if lim.Allow("key", e1) {
+			e1()
+		}
+		// First callback is executed immediately.
+		assert.Equal(t, 1, o.get(0))
+
+		e2 := func() { o.add(2) }
+		if lim.Allow("key", e2) {
+			e2()
+		}
+		e3 := func() { o.add(3) }
+		if lim.Allow("key", e3) {
+			e3()
+		}
+
+		// Only the immediate callback should have been executed so far.
+		assert.Equal(t, 1, o.len())
+		time.Sleep(waitingTime)
+
+		// After waiting, the latest callback (e3) is executed.
+		assert.Equal(t, 2, o.len())
+		assert.Equal(t, 3, o.get(1))
+		lim.Close()
+	})
+
+	// Test case: "/ e1 e2 e3 / e4" -> e1 immediately then e4 immediately when allowed
+	t.Run("/ e1 e2 e3 / e4", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		o := &occurs{}
+
+		e1 := func() { o.add(1) }
+		if lim.Allow("key", e1) {
+			e1()
+		}
+		// Immediate execution for the first callback.
+		assert.Equal(t, 1, o.get(0))
+
+		e2 := func() { o.add(2) }
+		if lim.Allow("key", e2) {
+			e2()
+		}
+		e3 := func() { o.add(3) }
+		if lim.Allow("key", e3) {
+			e3()
+		}
+
+		// Still, only the immediate callback should have been executed.
+		assert.Equal(t, 1, o.len())
+
+		// Wait for part of the throttle window; deferred callbacks are not yet flushed.
+		time.Sleep(throttleWindow + debouncingTime/2)
+		assert.Equal(t, 1, o.len())
+
+		e4 := func() { o.add(4) }
+		if lim.Allow("key", e4) {
+			e4()
+		}
+
+		// The new callback should now be executed immediately.
+		assert.Equal(t, 2, o.len())
+		assert.Equal(t, 4, o.get(1))
+		time.Sleep(waitingTime)
+		// No further callbacks should be executed after waiting.
+		assert.Equal(t, 2, o.len())
+		lim.Close()
+	})
+
+	// Test case: "/ e1 e2 e3 / e4 e5" -> e1, then e4 immediately, then e5 deferred
+	t.Run("/ e1 e2 e3 / e4 e5", func(t *testing.T) {
+		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+		o := &occurs{}
+
+		// e1 occurs directly.
+		e1 := func() { o.add(1) }
+		if lim.Allow("key", e1) {
+			e1()
+		}
+		assert.Equal(t, 1, o.get(0))
+
+		// e2 is saved.
+		e2 := func() { o.add(2) }
+		if lim.Allow("key", e2) {
+			e2()
+		}
+		// e3 replaces e2.
+		e3 := func() { o.add(3) }
+		if lim.Allow("key", e3) {
+			e3()
+		}
+		assert.Equal(t, 1, o.len())
+		time.Sleep(throttleWindow + debouncingTime/2)
+		assert.Equal(t, 1, o.len())
+
+		// Before flushing e3, e4 occurs so e3 is skipped.
+		e4 := func() { o.add(4) }
+		if lim.Allow("key", e4) {
+			e4()
+		}
+		assert.Equal(t, 2, o.len())
+		assert.Equal(t, 4, o.get(1))
+
+		// e5 meets limit so it is saved.
+		e5 := func() { o.add(5) }
+		if lim.Allow("key", e5) {
+			e5()
+		}
+		assert.Equal(t, 2, o.len())
+
+		// And flushed when it expires.
+		time.Sleep(waitingTime)
+		assert.Equal(t, 3, o.len())
+		assert.Equal(t, 5, o.get(2))
+		lim.Close()
+	})
+}
+
+// TestConcurrentExecution verifies the throttler behavior under concurrent execution scenarios.
+func TestConcurrentExecution(t *testing.T) {
 	const (
 		expireBatchSize = 100
 		expireInterval  = 10 * time.Millisecond
@@ -40,22 +244,6 @@ func TestSynchronousExecution(t *testing.T) {
 		waitingTime     = expireInterval + throttleWindow + debouncingTime
 		numExecute      = 1000
 	)
-
-	t.Run("Single Call", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		var callCount int32
-		callback := func() {
-			atomic.AddInt32(&callCount, 1)
-		}
-
-		if lim.Allow("key", callback) {
-			callback()
-		}
-		time.Sleep(waitingTime)
-		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
-		lim.Close()
-		assert.Equal(t, int32(1), atomic.LoadInt32(&callCount))
-	})
 
 	t.Run("Multiple Synchronous Calls with Trailing Debounce", func(t *testing.T) {
 		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
@@ -75,18 +263,6 @@ func TestSynchronousExecution(t *testing.T) {
 		lim.Close()
 		assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
 	})
-}
-
-// TestConcurrentExecution verifies the throttler behavior under concurrent execution scenarios.
-func TestConcurrentExecution(t *testing.T) {
-	const (
-		expireBatchSize = 100
-		expireInterval  = 10 * time.Millisecond
-		throttleWindow  = 100 * time.Millisecond
-		debouncingTime  = 100 * time.Millisecond
-		waitingTime     = expireInterval + throttleWindow + debouncingTime
-		numExecute      = 1000
-	)
 
 	t.Run("Concurrent Calls: Single Immediate and Trailing Execution", func(t *testing.T) {
 		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
