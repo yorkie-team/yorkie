@@ -168,6 +168,8 @@ func (l *Limiter[K]) runDebounce(entries []*limiterEntry[K]) {
 // Close terminates the expiration loop and cleans up resources.
 func (l *Limiter[K]) Close() {
 	close(l.closing)
+
+	// Wait for all previous expiration job done.
 	l.wg.Wait()
 
 	for l.evictionList.Len() > 0 {
