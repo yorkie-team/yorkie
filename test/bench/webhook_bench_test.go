@@ -1,3 +1,5 @@
+//go:build bench
+
 /*
  * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
