@@ -54,6 +54,7 @@ func BenchmarkWebhook(b *testing.B) {
 		{endpointNum: 10, webhookNum: 100},
 		{endpointNum: 100, webhookNum: 10},
 		{endpointNum: 100, webhookNum: 100},
+		{endpointNum: 1000, webhookNum: 10},
 	}
 
 	for _, bench := range benches {
@@ -65,8 +66,23 @@ func BenchmarkWebhook(b *testing.B) {
 		b.Run(tName, func(b *testing.B) {
 			benchmarkSendWebhook(b, bench.webhookNum, bench.endpointNum)
 		})
+	}
+}
 
-		tName = fmt.Sprintf(
+func BenchmarkWebhookWithLimit(b *testing.B) {
+	benches := []struct {
+		endpointNum int
+		webhookNum  int
+	}{
+		{endpointNum: 10, webhookNum: 10},
+		{endpointNum: 10, webhookNum: 100},
+		{endpointNum: 100, webhookNum: 10},
+		{endpointNum: 100, webhookNum: 100},
+		{endpointNum: 1000, webhookNum: 10},
+	}
+
+	for _, bench := range benches {
+		tName := fmt.Sprintf(
 			"Send %d Webhooks to %d Endpoints with limit",
 			bench.webhookNum,
 			bench.endpointNum,
@@ -127,8 +143,8 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 			RequestTimeout:  100 * time.Millisecond,
 		},
 	)
-	manager := webhook.NewManager(cli)
 	for range b.N {
+		manager := webhook.NewManager(cli)
 		for range webhookNum {
 			for i := range endpointNum {
 				err := manager.Send(
@@ -147,5 +163,6 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 				assert.NoError(b, err)
 			}
 		}
+		manager.Close()
 	}
 }
