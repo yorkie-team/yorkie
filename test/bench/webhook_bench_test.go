@@ -49,43 +49,35 @@ func BenchmarkWebhook(b *testing.B) {
 	benches := []struct {
 		endpointNum int
 		webhookNum  int
-		delay       time.Duration
 	}{
-		{endpointNum: 10, webhookNum: 10, delay: 0},
-		{endpointNum: 10, webhookNum: 100, delay: 0},
-		{endpointNum: 100, webhookNum: 10, delay: 0},
-		{endpointNum: 100, webhookNum: 100, delay: 0},
-
-		{endpointNum: 10, webhookNum: 10, delay: 10 * time.Millisecond},
-		{endpointNum: 10, webhookNum: 100, delay: 10 * time.Millisecond},
-		{endpointNum: 100, webhookNum: 10, delay: 10 * time.Millisecond},
-		{endpointNum: 100, webhookNum: 100, delay: 10 * time.Millisecond},
+		{endpointNum: 10, webhookNum: 10},
+		{endpointNum: 10, webhookNum: 100},
+		{endpointNum: 100, webhookNum: 10},
+		{endpointNum: 100, webhookNum: 100},
 	}
 
 	for _, bench := range benches {
 		tName := fmt.Sprintf(
-			"Send %d Webhooks to %d Endpoints with delay %s",
+			"Send %d Webhooks to %d Endpoints",
 			bench.webhookNum,
 			bench.endpointNum,
-			bench.delay.String(),
 		)
 		b.Run(tName, func(b *testing.B) {
-			benchmarkSendWebhook(b, bench.webhookNum, bench.endpointNum, bench.delay)
+			benchmarkSendWebhook(b, bench.webhookNum, bench.endpointNum)
 		})
 
 		tName = fmt.Sprintf(
-			"Send %d Webhooks to %d Endpoints limiter with delay %s",
+			"Send %d Webhooks to %d Endpoints with limit",
 			bench.webhookNum,
 			bench.endpointNum,
-			bench.delay.String(),
 		)
 		b.Run(tName, func(b *testing.B) {
-			benchmarkSendWebhookWithLimits(b, bench.webhookNum, bench.endpointNum, bench.delay)
+			benchmarkSendWebhookWithLimits(b, bench.webhookNum, bench.endpointNum)
 		})
 	}
 }
 
-func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int, delay time.Duration) {
+func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 	b.ReportAllocs()
 	const (
 		docKey     = "doc-key"
@@ -115,23 +107,16 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int, delay time.
 				)
 				assert.NoError(b, err)
 			}
-			if delay > 0 {
-				time.Sleep(delay)
-			}
 		}
 	}
 }
 
-func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int, delay time.Duration) {
+func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 	b.ReportAllocs()
 	const (
 		docKey     = "doc-key"
 		signingKey = "sign-key"
 	)
-	docRefKey := types.DocRefKey{
-		DocID:     "doc-id",
-		ProjectID: "prj-id",
-	}
 
 	endpoints := setupWebhookServer(b, endpointNum)
 	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](
@@ -149,7 +134,10 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int, d
 				err := manager.Send(
 					context.Background(),
 					types.NewEventWebhookInfo(
-						docRefKey,
+						types.DocRefKey{
+							DocID:     types.ID(fmt.Sprintf("doc-id-%d", i)),
+							ProjectID: "prj-id",
+						},
 						types.DocRootChanged,
 						signingKey,
 						endpoints[i].URL,
@@ -157,9 +145,6 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int, d
 					),
 				)
 				assert.NoError(b, err)
-			}
-			if delay > 0 {
-				time.Sleep(delay)
 			}
 		}
 	}
