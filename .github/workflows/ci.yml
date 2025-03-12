@@ -141,7 +141,7 @@ jobs:
       - name: Restore cache
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         id: cache-restore
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ./cache
           key: comment-id-${{ github.event.pull_request.number }}
@@ -162,8 +162,6 @@ jobs:
       - name: Trigger n8n webhook
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         run: |
-          curr_bench=$(cat output.txt | jq -R -s .)
-
           # Read comment_id from cache
           comment_id_file="./cache/comment_id.txt"
           comment_id=""
@@ -173,15 +171,15 @@ jobs:
 
           response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
           -H "Content-Type: application/json" \
-          -d "{
-            \"repo\": \"${{ github.repository }}\",
-            \"pr_number\": \"${{ github.event.pull_request.number }}\",
-            \"commit_id\": \"${{ github.sha }}\",
-            \"prev_commit_id\": \"${{ steps.prev-bench.outputs.PREV_COMMIT }}\",
-            \"bench_result\": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
-            \"prev_bench_result\": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }},
-            \"comment_id\": \"${comment_id}\"
-          }" || echo "CURL_ERROR")
+          -d '{
+            "repo": "${{ github.repository }}",
+            "pr_number": "${{ github.event.pull_request.number }}",
+            "commit_id": "${{ github.sha }}",
+            "prev_commit_id": "${{ steps.prev-bench.outputs.PREV_COMMIT }}",
+            "bench_result": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
+            "prev_bench_result": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }},
+            "comment_id": "'"${comment_id}"'"
+          }' || echo "CURL_ERROR")
 
           if [ "$response" = "CURL_ERROR" ]; then
             echo "::error::Failed to trigger n8n webhook"

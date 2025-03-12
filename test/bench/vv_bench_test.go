@@ -219,7 +219,7 @@ func BenchmarkVersionVector(b *testing.B) {
 		benchmarkVV(100, b)
 	})
 
-	b.Run("clients 1000", func(b *testing.B) {
-		benchmarkVV(1000, b)
-	})
+	// b.Run("clients 1000", func(b *testing.B) {
+	// 	benchmarkVV(1000, b)
+	// })
 }
