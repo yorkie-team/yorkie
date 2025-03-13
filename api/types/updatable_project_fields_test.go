@@ -39,6 +39,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.DocRootChanged),
 		}
 		newClientDeactivateThreshold := "1h"
+		newMaxSubscribersPerDocument := 10
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
@@ -46,6 +47,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			EventWebhookURL:           &newEventWebhookURL,
 			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -79,6 +81,14 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+
+		// invalid MaxSubscribersPerDocument
+		newMaxSubscribersPerDocument = -1
+		fields = &types.UpdatableProjectFields{
+			Name:                      &newName,
+			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -123,6 +133,26 @@ func TestUpdatableProjectFields(t *testing.T) {
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+	})
+
+	t.Run("subscription count limit per document test", func(t *testing.T) {
+		validMaxSubscribersPerDocument := 10
+		fields := &types.UpdatableProjectFields{
+			MaxSubscribersPerDocument: &validMaxSubscribersPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		validMaxSubscribersPerDocument = 0
+		fields = &types.UpdatableProjectFields{
+			MaxSubscribersPerDocument: &validMaxSubscribersPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidMaxSubscribersPerDocument := -1
+		fields = &types.UpdatableProjectFields{
+			MaxSubscribersPerDocument: &invalidMaxSubscribersPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})

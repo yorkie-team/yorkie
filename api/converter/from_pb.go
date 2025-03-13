@@ -58,6 +58,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		EventWebhookURL:           pbProject.EventWebhookUrl,
 		EventWebhookEvents:        pbProject.EventWebhookEvents,
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
+		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
 		CreatedAt:                 pbProject.CreatedAt.AsTime(),
@@ -932,6 +933,10 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
+	}
+	if pbProjectFields.MaxSubscribersPerDocument != nil {
+		value := int(pbProjectFields.MaxSubscribersPerDocument.Value)
+		updatableProjectFields.MaxSubscribersPerDocument = &value
 	}
 
 	return updatableProjectFields, nil

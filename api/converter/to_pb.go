@@ -62,6 +62,7 @@ func ToProject(project *types.Project) *api.Project {
 		EventWebhookUrl:           project.EventWebhookURL,
 		EventWebhookEvents:        project.EventWebhookEvents,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
+		MaxSubscribersPerDocument: int32(project.MaxSubscribersPerDocument),
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
 		CreatedAt:                 timestamppb.New(project.CreatedAt),
@@ -577,6 +578,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.ClientDeactivateThreshold != nil {
 		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{
 			Value: *fields.ClientDeactivateThreshold,
+		}
+	}
+	if fields.MaxSubscribersPerDocument != nil {
+		pbUpdatableProjectFields.MaxSubscribersPerDocument = &wrapperspb.Int32Value{
+			Value: int32(*fields.MaxSubscribersPerDocument),
 		}
 	}
 	return pbUpdatableProjectFields, nil

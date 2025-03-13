@@ -18,6 +18,8 @@ package pubsub
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	gotime "time"
 
 	"go.uber.org/zap"
@@ -27,6 +29,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+var (
+	// ErrTooManySubscribers is returned when the the subscription limit is exceeded.
+	ErrTooManySubscribers = errors.New("subscription limit exceeded")
+
+	// ErrAlreadyConnected is returned when the client is already connected to the document.
+	ErrAlreadyConnected = errors.New("already connected to the document")
 )
 
 const (
@@ -102,6 +112,7 @@ func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	docKey types.DocRefKey,
+	limit int,
 ) (*Subscription, []*time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -111,15 +122,32 @@ func (m *PubSub) Subscribe(
 		)
 	}
 
-	subs := m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
+	// Note(emplam27): This is a workaround to avoid race condition.
+	// The race condition is that the subscription limit is exceeded
+	// and the new subscription is not set. If newSub is nil,
+	// it means the limit was exceeded and the subscription was not created.
+	var newSub *Subscription
+	_ = m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
 		if !exists {
-			return newSubscriptions(docKey)
+			subs = newSubscriptions(docKey)
 		}
+
+		if limit > 0 && subs.Len() >= limit {
+			return subs
+		}
+
+		newSub = NewSubscription(subscriber)
+		subs.Set(newSub)
 		return subs
 	})
 
-	sub := NewSubscription(subscriber)
-	subs.Set(sub)
+	if newSub == nil {
+		return nil, nil, fmt.Errorf(
+			"%d subscriptions allowed per document: %w",
+			limit,
+			ErrTooManySubscribers,
+		)
+	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -130,7 +158,7 @@ func (m *PubSub) Subscribe(
 	}
 
 	ids := m.ClientIDs(docKey)
-	return sub, ids, nil
+	return newSub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given docKeys.

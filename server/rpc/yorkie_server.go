@@ -445,11 +445,16 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docRefKey)
+	subscription, clientIDs, err := s.watchDoc(
+		ctx,
+		clientID,
+		docRefKey,
+		project.MaxSubscribersPerDocument,
+	)
 	if err != nil {
-		logging.From(ctx).Error(err)
 		return err
 	}
+
 	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
 		if err := s.unwatchDoc(ctx, subscription, docRefKey); err != nil {
@@ -593,10 +598,10 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
 	docKey types.DocRefKey,
+	limit int,
 ) (*pubsub.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey)
+	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
-		logging.From(ctx).Error(err)
 		return nil, nil, err
 	}
 

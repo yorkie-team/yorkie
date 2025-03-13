@@ -532,6 +532,20 @@ components:
           type: string
       title: Connect Error
       type: object
+    google.protobuf.Int32Value:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `int32`.
+
+         The JSON representation for `Int32Value` is JSON number.
+      properties:
+        value:
+          additionalProperties: false
+          description: The int32 value.
+          title: value
+          type: integer
+      title: Int32Value
+      type: object
     google.protobuf.StringValue:
       additionalProperties: false
       description: |-
@@ -1844,6 +1858,11 @@ components:
           description: ""
           title: id
           type: string
+        maxSubscribersPerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_subscribers_per_document
+          type: integer
         name:
           additionalProperties: false
           description: ""
@@ -2156,6 +2175,12 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_url
+          type: object
+        maxSubscribersPerDocument:
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          additionalProperties: false
+          description: ""
+          title: max_subscribers_per_document
           type: object
         name:
           $ref: "#/components/schemas/google.protobuf.StringValue"

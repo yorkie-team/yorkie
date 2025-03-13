@@ -42,6 +42,7 @@ var (
 	flagEventWebhookEventsRm      []string
 	flagName                      string
 	flagClientDeactivateThreshold string
+	flagMaxSubscribersPerDocument int
 )
 
 var allAuthWebhookMethods = []string{
@@ -126,6 +127,11 @@ func newUpdateCommand() *cobra.Command {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold
 			}
 
+			newMaxSubscribersPerDocument := project.MaxSubscribersPerDocument
+			if flagMaxSubscribersPerDocument != 0 {
+				newMaxSubscribersPerDocument = flagMaxSubscribersPerDocument
+			}
+
 			updatableProjectFields := &types.UpdatableProjectFields{
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
@@ -133,6 +139,7 @@ func newUpdateCommand() *cobra.Command {
 				EventWebhookURL:           &newEventWebhookURL,
 				EventWebhookEvents:        &newEventWebhookEvents,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
+				MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -278,6 +285,12 @@ func init() {
 		"client-deactivate-threshold",
 		"",
 		"client deactivate threshold for housekeeping",
+	)
+	cmd.Flags().IntVar(
+		&flagMaxSubscribersPerDocument,
+		"subscription-limit-per-document",
+		0,
+		"subscription limit per document",
 	)
 	SubCmd.AddCommand(cmd)
 }
