@@ -21,8 +21,8 @@ import (
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
-// UserFields is a set of fields that use to sign up or change password to yorkie server.
-type UserFields struct {
+// SignupFields is a set of fields that use to sign up to yorkie server.
+type SignupFields struct {
 	// Username is the name of user.
 	Username *string `bson:"username" validate:"required,min=2,max=30,slug"`
 
@@ -31,6 +31,16 @@ type UserFields struct {
 }
 
 // Validate validates the UserFields.
-func (i *UserFields) Validate() error {
+func (i *SignupFields) Validate() error {
+	return validation.ValidateStruct(i)
+}
+
+// PasswordFields is a set of fields that use to change password to yorkie server.
+type PasswordFields struct {
+	Password *string `bson:"new_password" validate:"required,min=8,max=30,alpha_num_special"`
+}
+
+// Validate validates the UserFields.
+func (i *PasswordFields) Validate() error {
 	return validation.ValidateStruct(i)
 }
