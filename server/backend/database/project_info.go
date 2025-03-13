@@ -71,6 +71,10 @@ type ProjectInfo struct {
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`
 
+	// MaxAttachmentsPerDocument is the maximum number of attachments per document.
+	// If it is 0, there is no limit.
+	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
+
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -85,6 +89,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		Owner:                     owner,
 		ClientDeactivateThreshold: clientDeactivateThreshold,
 		MaxSubscribersPerDocument: 0,
+		MaxAttachmentsPerDocument: 0,
 		PublicKey:                 shortuuid.New(),
 		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),
@@ -109,6 +114,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		EventWebhookEvents:        i.EventWebhookEvents,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
+		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
 	}
@@ -137,6 +143,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.MaxSubscribersPerDocument != nil {
 		i.MaxSubscribersPerDocument = *fields.MaxSubscribersPerDocument
 	}
+	if fields.MaxAttachmentsPerDocument != nil {
+		i.MaxAttachmentsPerDocument = *fields.MaxAttachmentsPerDocument
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
@@ -151,6 +160,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		EventWebhookEvents:        i.EventWebhookEvents,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
+		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,
 		CreatedAt:                 i.CreatedAt,

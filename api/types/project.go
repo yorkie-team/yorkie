@@ -52,6 +52,10 @@ type Project struct {
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`
 
+	// MaxAttachmentsPerDocument is the maximum number of attachments per document.
+	// If it is 0, there is no limit.
+	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
+
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
 
@@ -106,4 +110,9 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 // HasSubscriberLimit returns whether the document has a limit on the number of subscribers.
 func (p *Project) HasSubscriberLimit() bool {
 	return p.MaxSubscribersPerDocument > 0
+}
+
+// HasAttachmentLimit returns whether the document has a limit on the number of attachments.
+func (p *Project) HasAttachmentLimit() bool {
+	return p.MaxAttachmentsPerDocument > 0
 }

@@ -59,6 +59,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		EventWebhookEvents:        pbProject.EventWebhookEvents,
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
+		MaxAttachmentsPerDocument: int(pbProject.MaxAttachmentsPerDocument),
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
 		CreatedAt:                 pbProject.CreatedAt.AsTime(),
