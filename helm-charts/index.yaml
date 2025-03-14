@@ -2,6 +2,41 @@ apiVersion: v1
 entries:
   yorkie-analytics:
   - apiVersion: v2
+    appVersion: 0.6.2
+    created: "2025-03-14T00:18:37.905118657Z"
+    dependencies:
+    - condition: yorkie-analytics.kafka.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 31.3.1
+    - condition: yorkie-analytics.starrocks.enabled
+      name: kube-starrocks
+      repository: https://starrocks.github.io/starrocks-kubernetes-operator
+      version: 1.9.10
+    description: yorkie-analytics provides analytics system with kafka and starrocks
+      for analyzing usage of yorkie cluster
+    digest: 67036ccf3ca7a80d445cf84b270d8f1a7109e6d2ca1be275fb371965c27f4edb
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - kafka
+    - starrocks
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-analytics
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-analytics-0.6.2/yorkie-analytics-0.6.2.tgz
+    version: 0.6.2
+  - apiVersion: v2
     appVersion: 0.6.1
     created: "2025-03-06T08:42:25.972958474Z"
     dependencies:
@@ -206,6 +241,37 @@ entries:
     - yorkie-argocd-0.3.3.tgz
     version: 0.3.3
   yorkie-cluster:
+  - apiVersion: v2
+    appVersion: 0.6.2
+    created: "2025-03-14T00:18:37.982400057Z"
+    dependencies:
+    - condition: yorkie-mongodb.enabled
+      name: yorkie-mongodb
+      repository: ""
+      version: 0.4.13
+    description: yorkie-cluster provides cluster mode for Yorkie server to handle
+      large amount of workloads with ensuring high availability, reliability, and
+      scalability.
+    digest: 7ad7d40d9e1caeb28d71300799ae7ff26236ff0bb0a9296163387c8405ed0037
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - istio
+    kubeVersion: '>=1.23.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-cluster
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-cluster-0.6.2/yorkie-cluster-0.6.2.tgz
+    version: 0.6.2
   - apiVersion: v2
     appVersion: 0.6.1
     created: "2025-03-06T08:42:26.068827517Z"
@@ -1606,4 +1672,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2025-03-06T08:42:26.06926304Z"
+generated: "2025-03-14T00:18:37.982724476Z"
