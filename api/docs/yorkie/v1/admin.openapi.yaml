@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.1
+  version: v0.6.2
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -2177,7 +2177,7 @@ components:
           title: event_webhook_url
           type: object
         maxSubscribersPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
           additionalProperties: false
           description: ""
           title: max_subscribers_per_document
