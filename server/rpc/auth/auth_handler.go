@@ -211,7 +211,13 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	token, err := h.tokenManager.Generate(body.Login)
+	user, err := users.GetOrCreateUserByGitHubID(ctx, h.be, body.Login)
+	if err != nil {
+		http.Error(w, "Failed to get or create user by GitHub ID", http.StatusInternalServerError)
+		return
+	}
+
+	token, err := h.tokenManager.Generate(user.Username)
 	if err != nil {
 		http.Error(w, "Failed to create token", http.StatusInternalServerError)
 		return

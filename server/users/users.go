@@ -68,6 +68,20 @@ func IsCorrectPassword(
 	return info.ToUser(), nil
 }
 
+// GetOrCreateUserByGitHubUser returns a user by the given GitHub ID.
+func GetOrCreateUserByGitHubID(
+	ctx context.Context,
+	be *backend.Backend,
+	githubID string,
+) (*types.User, error) {
+	info, err := be.DB.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToUser(), nil
+}
+
 // GetUserByName returns a user by the given username.
 func GetUserByName(
 	ctx context.Context,

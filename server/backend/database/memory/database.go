@@ -403,6 +403,45 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
+// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+func (d *DB) GetOrCreateUserInfoByGitHubID(
+	_ context.Context,
+	githubID string,
+) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", githubID)
+	if err != nil {
+		return nil, fmt.Errorf("find user by github id: %w", err)
+	}
+
+	now := gotime.Now()
+	var info *database.UserInfo
+
+	if raw == nil {
+		info = &database.UserInfo{
+			ID:           newID(),
+			Username:     githubID,
+			AuthProvider: "github",
+			CreatedAt:    now,
+			AccessedAt:   now,
+		}
+		if err := txn.Insert(tblUsers, info); err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+	} else {
+		info = raw.(*database.UserInfo).DeepCopy()
+		info.AccessedAt = now
+		if err := txn.Insert(tblUsers, info); err != nil {
+			return nil, fmt.Errorf("update user: %w", err)
+		}
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
 // DeleteUserInfoByName deletes a user by name.
 func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
 	txn := d.db.Txn(true)
