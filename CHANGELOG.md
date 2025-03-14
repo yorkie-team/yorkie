@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.2] - 2025-03-14
+
+### Added
+
+- Add support for building arm64 binaries on macOS by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1180
+- Introduce AuthHandler for cookie-based session management by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1187
+- Add MaxSubscribersPerDocument to limit subscriptions per document by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1178
+- Introduce EventTimingControl with Throttling and Debouncing by @window9u in https://github.com/yorkie-team/yorkie/pull/1166
+
+### Changed
+
+- Update golangci-lint version to 1.64.6 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1181
+- Improve Benchmark CI Comments Management by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1189
+
 ## [0.6.1] - 2025-03-06
 
 ### Added
