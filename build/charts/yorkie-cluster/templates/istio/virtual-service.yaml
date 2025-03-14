@@ -35,7 +35,6 @@ spec:
           - keep-alive
           - user-agent
           - cache-control
-          - content-type
           - content-transfer-encoding
           - custom-header-1
           - x-accept-content-transfer-encoding
@@ -46,6 +45,8 @@ spec:
           - authorization
           - x-api-key
           - x-shard-key
+          - connect-protocol-version
+          - connect-timeout-ms
         maxAge: 1728s
         exposeHeaders:
           - custom-header-1
