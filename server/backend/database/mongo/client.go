@@ -429,6 +429,43 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
+// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+func (c *Client) GetOrCreateUserInfoByGitHubID(
+	ctx context.Context,
+	githubID string,
+) (*database.UserInfo, error) {
+	now := gotime.Now()
+	result := c.collection(ColUsers).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"username":   githubID,
+			"removed_at": bson.M{"$exists": false},
+		},
+		bson.M{
+			"$set": bson.M{
+				"accessed_at": now,
+			},
+			"$setOnInsert": bson.M{
+				"auth_provider": "github",
+				"created_at":    now,
+			},
+		},
+		options.FindOneAndUpdate().
+			SetUpsert(true).
+			SetReturnDocument(options.After),
+	)
+
+	info := database.UserInfo{}
+	if err := result.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+
+	return &info, nil
+}
+
 // DeleteUserInfoByName deletes a user by name.
 func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) error {
 	deleteResult, err := c.collection(ColUsers).DeleteOne(ctx, bson.M{
