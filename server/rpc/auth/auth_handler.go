@@ -58,6 +58,7 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 		stateStore:   cmap.New[string, time.Time](),
 	}
 
+	// TODO(hackerwins): Consider to use prefix `yorkie.v1.AuthService` for consistency with other handlers.
 	return "/auth/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/auth/me":
