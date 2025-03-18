@@ -173,12 +173,14 @@ func (c *Client) ensureDefaultProjectInfo(
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":                        candidate.Name,
-			"owner":                       candidate.Owner,
-			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
-			"public_key":                  candidate.PublicKey,
-			"secret_key":                  candidate.SecretKey,
-			"created_at":                  candidate.CreatedAt,
+			"name":                         candidate.Name,
+			"owner":                        candidate.Owner,
+			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
+			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
+			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
+			"public_key":                   candidate.PublicKey,
+			"secret_key":                   candidate.SecretKey,
+			"created_at":                   candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {

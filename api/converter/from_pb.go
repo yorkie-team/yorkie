@@ -939,6 +939,10 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 		value := int(pbProjectFields.MaxSubscribersPerDocument.Value)
 		updatableProjectFields.MaxSubscribersPerDocument = &value
 	}
+	if pbProjectFields.MaxAttachmentsPerDocument != nil {
+		value := int(pbProjectFields.MaxAttachmentsPerDocument.Value)
+		updatableProjectFields.MaxAttachmentsPerDocument = &value
+	}
 
 	return updatableProjectFields, nil
 }
