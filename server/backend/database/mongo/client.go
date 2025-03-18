@@ -438,8 +438,7 @@ func (c *Client) GetOrCreateUserInfoByGitHubID(
 	result := c.collection(ColUsers).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"username":   githubID,
-			"removed_at": bson.M{"$exists": false},
+			"username": githubID,
 		},
 		bson.M{
 			"$set": bson.M{

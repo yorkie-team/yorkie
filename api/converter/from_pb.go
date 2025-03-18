@@ -33,9 +33,10 @@ import (
 // FromUser converts the given Protobuf formats to model format.
 func FromUser(pbUser *api.User) *types.User {
 	return &types.User{
-		ID:        types.ID(pbUser.Id),
-		Username:  pbUser.Username,
-		CreatedAt: pbUser.CreatedAt.AsTime(),
+		ID:           types.ID(pbUser.Id),
+		AuthProvider: pbUser.AuthProvider,
+		Username:     pbUser.Username,
+		CreatedAt:    pbUser.CreatedAt.AsTime(),
 	}
 }
 

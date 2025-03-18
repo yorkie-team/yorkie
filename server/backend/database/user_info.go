@@ -70,6 +70,7 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 
 	return &UserInfo{
 		ID:             i.ID,
+		AuthProvider:   i.AuthProvider,
 		Username:       i.Username,
 		HashedPassword: i.HashedPassword,
 		CreatedAt:      i.CreatedAt,
@@ -79,9 +80,10 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 // ToUser converts the UserInfo to a User.
 func (i *UserInfo) ToUser() *types.User {
 	return &types.User{
-		ID:        i.ID,
-		Username:  i.Username,
-		CreatedAt: i.CreatedAt,
+		ID:           i.ID,
+		AuthProvider: i.AuthProvider,
+		Username:     i.Username,
+		CreatedAt:    i.CreatedAt,
 	}
 }
 
