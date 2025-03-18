@@ -18,7 +18,14 @@
 package types
 
 import (
+	"errors"
+	"fmt"
 	"time"
+)
+
+var (
+	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
+	ErrTooManyAttachments = errors.New("attachment limit exceeded")
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -115,4 +122,16 @@ func (p *Project) HasSubscriberLimit() bool {
 // HasAttachmentLimit returns whether the document has a limit on the number of attachments.
 func (p *Project) HasAttachmentLimit() bool {
 	return p.MaxAttachmentsPerDocument > 0
+}
+
+// IsAttachmentLimitExceeded checks whether the attachment limit is exceeded.
+func (p *Project) IsAttachmentLimitExceeded(count int) error {
+	if p.MaxAttachmentsPerDocument > 0 && count >= p.MaxAttachmentsPerDocument {
+		return fmt.Errorf("%d attachments allowed per document: %w",
+			p.MaxAttachmentsPerDocument,
+			ErrTooManyAttachments,
+		)
+	}
+
+	return nil
 }

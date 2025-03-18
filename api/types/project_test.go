@@ -84,4 +84,28 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.False(t, info2.HasSubscriberLimit())
 	})
+
+	t.Run("HasAttachmentLimit test", func(t *testing.T) {
+		info := &types.Project{
+			MaxAttachmentsPerDocument: 1,
+		}
+		assert.True(t, info.HasAttachmentLimit())
+
+		info2 := &types.Project{
+			MaxAttachmentsPerDocument: 0,
+		}
+		assert.False(t, info2.HasAttachmentLimit())
+	})
+
+	t.Run("IsAttachmentLimitExceeded test", func(t *testing.T) {
+		info := &types.Project{
+			MaxAttachmentsPerDocument: 1,
+		}
+		assert.NoError(t, info.IsAttachmentLimitExceeded(0))
+
+		info2 := &types.Project{
+			MaxAttachmentsPerDocument: 1,
+		}
+		assert.Error(t, info2.IsAttachmentLimitExceeded(1))
+	})
 }
