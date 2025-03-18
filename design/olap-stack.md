@@ -1,6 +1,6 @@
 ---
 title: olap-stack
-target-version: 0.6.0
+target-version: 0.6.1
 ---
 
 # OLAP Stack for MAU Tracking
