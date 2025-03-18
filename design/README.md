@@ -15,6 +15,7 @@
 - [Retention](retention.md): Clearing unnecessary changes with `--backend-snapshot-with-purging-changes` flag
 - [Sharded Cluster Mode](sharded-cluster-mode.md): Shard-based server cluster mode with consistent hashing
 - [MongoDB Sharding](mongodb-sharding.md): MongoDB sharding with sharding strategy considerations
+- [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
 
 ## Maintaining the Document
 
