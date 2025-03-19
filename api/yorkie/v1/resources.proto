@@ -286,8 +286,9 @@ message TreePos {
 
 message User {
   string id = 1;
-  string username = 2;
-  google.protobuf.Timestamp created_at = 3;
+  string auth_provider = 2;
+  string username = 3;
+  google.protobuf.Timestamp created_at = 4;
 }
 
 message Project {

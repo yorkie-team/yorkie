@@ -24,6 +24,10 @@ type User struct {
 	// ID is the unique ID of the user.
 	ID ID `json:"id"`
 
+	// AuthProvider is the authentication provider of the user. It can be
+	// "github" or empty string for local authentication.
+	AuthProvider string `json:"auth_provider"`
+
 	// Username is the username of the user.
 	Username string `json:"username"`
 

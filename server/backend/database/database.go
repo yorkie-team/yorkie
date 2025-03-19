@@ -124,6 +124,9 @@ type Database interface {
 		hashedPassword string,
 	) (*UserInfo, error)
 
+	// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+	GetOrCreateUserInfoByGitHubID(ctx context.Context, githubID string) (*UserInfo, error)
+
 	// DeleteUserInfoByName deletes a user by name.
 	DeleteUserInfoByName(ctx context.Context, username string) error
 

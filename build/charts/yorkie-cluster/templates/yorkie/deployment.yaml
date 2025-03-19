@@ -92,6 +92,34 @@ spec:
           "--kafka-write-timeout",
           "{{ .Values.yorkie.args.kafkaWriteTimeout }}",
           {{- end }}
+          {{- if .Values.yorkie.args.GitHubClientID }}
+          "--auth-github-client-id",
+          "{{ .Values.yorkie.args.GitHubClientID }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubClientSecret }}
+          "--auth-github-client-secret",
+          "{{ .Values.yorkie.args.GitHubClientSecret }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubRedirectURL }}
+          "--auth-github-redirect-url",
+          "{{ .Values.yorkie.args.GitHubRedirectURL }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubAuthURL }}
+          "--auth-github-auth-url",
+          "{{ .Values.yorkie.args.GitHubAuthURL }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubTokenURL }}
+          "--auth-github-token-url",
+          "{{ .Values.yorkie.args.GitHubTokenURL }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubDeviceAuthURL }}
+          "--auth-github-device-auth-url",
+          "{{ .Values.yorkie.args.GitHubDeviceAuthURL }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.GitHubUserURL }}
+          "--auth-github-user-url",
+          "{{ .Values.yorkie.args.GitHubUserURL }}",
+          {{- end }}
           {{- end }}
         ]
         ports:
