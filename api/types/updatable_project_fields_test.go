@@ -40,6 +40,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		newClientDeactivateThreshold := "1h"
 		newMaxSubscribersPerDocument := 10
+		newMaxAttachmentsPerDocument := 10
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
@@ -48,6 +49,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			EventWebhookEvents:        &newEventWebhookEvents,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
+			MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -89,6 +91,14 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+
+		// invalid MaxAttachmentsPerDocument
+		newMaxAttachmentsPerDocument = -1
+		fields = &types.UpdatableProjectFields{
+			Name:                      &newName,
+			MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
@@ -137,7 +147,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
 
-	t.Run("subscription count limit per document test", func(t *testing.T) {
+	t.Run("max subscribers per document test", func(t *testing.T) {
 		validMaxSubscribersPerDocument := 10
 		fields := &types.UpdatableProjectFields{
 			MaxSubscribersPerDocument: &validMaxSubscribersPerDocument,
@@ -153,6 +163,26 @@ func TestUpdatableProjectFields(t *testing.T) {
 		invalidMaxSubscribersPerDocument := -1
 		fields = &types.UpdatableProjectFields{
 			MaxSubscribersPerDocument: &invalidMaxSubscribersPerDocument,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+	})
+
+	t.Run("max attachments per document test", func(t *testing.T) {
+		validMaxAttachmentsPerDocument := 10
+		fields := &types.UpdatableProjectFields{
+			MaxAttachmentsPerDocument: &validMaxAttachmentsPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		validMaxAttachmentsPerDocument = 0
+		fields = &types.UpdatableProjectFields{
+			MaxAttachmentsPerDocument: &validMaxAttachmentsPerDocument,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidMaxAttachmentsPerDocument := -1
+		fields = &types.UpdatableProjectFields{
+			MaxAttachmentsPerDocument: &invalidMaxAttachmentsPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})

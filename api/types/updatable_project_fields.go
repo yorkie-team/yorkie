@@ -51,6 +51,10 @@ type UpdatableProjectFields struct {
 	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument *int `bson:"max_subscribers_per_document,omitempty" validate:"omitempty,min=0"`
+
+	// MaxAttachmentsPerDocument is the maximum number of attachments per document.
+	// If it is 0, there is no limit.
+	MaxAttachmentsPerDocument *int `bson:"max_attachments_per_document,omitempty" validate:"omitempty,min=0"`
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -61,7 +65,8 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.ClientDeactivateThreshold == nil &&
 		i.EventWebhookURL == nil &&
 		i.EventWebhookEvents == nil &&
-		i.MaxSubscribersPerDocument == nil {
+		i.MaxSubscribersPerDocument == nil &&
+		i.MaxAttachmentsPerDocument == nil {
 		return ErrEmptyProjectFields
 	}
 

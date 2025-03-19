@@ -60,6 +60,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		EventWebhookEvents:        pbProject.EventWebhookEvents,
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
+		MaxAttachmentsPerDocument: int(pbProject.MaxAttachmentsPerDocument),
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
 		CreatedAt:                 pbProject.CreatedAt.AsTime(),
@@ -938,6 +939,10 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.MaxSubscribersPerDocument != nil {
 		value := int(pbProjectFields.MaxSubscribersPerDocument.Value)
 		updatableProjectFields.MaxSubscribersPerDocument = &value
+	}
+	if pbProjectFields.MaxAttachmentsPerDocument != nil {
+		value := int(pbProjectFields.MaxAttachmentsPerDocument.Value)
+		updatableProjectFields.MaxAttachmentsPerDocument = &value
 	}
 
 	return updatableProjectFields, nil

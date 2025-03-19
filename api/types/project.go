@@ -18,7 +18,14 @@
 package types
 
 import (
+	"errors"
+	"fmt"
 	"time"
+)
+
+var (
+	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
+	ErrTooManyAttachments = errors.New("attachment limit exceeded")
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -51,6 +58,10 @@ type Project struct {
 	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`
+
+	// MaxAttachmentsPerDocument is the maximum number of attachments per document.
+	// If it is 0, there is no limit.
+	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
@@ -106,4 +117,21 @@ func (p *Project) RequireEventWebhook(eventType EventWebhookType) bool {
 // HasSubscriberLimit returns whether the document has a limit on the number of subscribers.
 func (p *Project) HasSubscriberLimit() bool {
 	return p.MaxSubscribersPerDocument > 0
+}
+
+// HasAttachmentLimit returns whether the document has a limit on the number of attachments.
+func (p *Project) HasAttachmentLimit() bool {
+	return p.MaxAttachmentsPerDocument > 0
+}
+
+// IsAttachmentLimitExceeded checks whether the attachment limit is exceeded.
+func (p *Project) IsAttachmentLimitExceeded(count int) error {
+	if p.MaxAttachmentsPerDocument > 0 && count >= p.MaxAttachmentsPerDocument {
+		return fmt.Errorf("%d attachments allowed per document: %w",
+			p.MaxAttachmentsPerDocument,
+			ErrTooManyAttachments,
+		)
+	}
+
+	return nil
 }

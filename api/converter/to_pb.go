@@ -64,6 +64,7 @@ func ToProject(project *types.Project) *api.Project {
 		EventWebhookEvents:        project.EventWebhookEvents,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int32(project.MaxSubscribersPerDocument),
+		MaxAttachmentsPerDocument: int32(project.MaxAttachmentsPerDocument),
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
 		CreatedAt:                 timestamppb.New(project.CreatedAt),
@@ -584,6 +585,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.MaxSubscribersPerDocument != nil {
 		pbUpdatableProjectFields.MaxSubscribersPerDocument = &wrapperspb.Int32Value{
 			Value: int32(*fields.MaxSubscribersPerDocument),
+		}
+	}
+	if fields.MaxAttachmentsPerDocument != nil {
+		pbUpdatableProjectFields.MaxAttachmentsPerDocument = &wrapperspb.Int32Value{
+			Value: int32(*fields.MaxAttachmentsPerDocument),
 		}
 	}
 	return pbUpdatableProjectFields, nil

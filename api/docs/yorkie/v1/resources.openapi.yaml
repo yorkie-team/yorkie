@@ -1366,6 +1366,11 @@ components:
           description: ""
           title: id
           type: string
+        maxAttachmentsPerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_attachments_per_document
+          type: integer
         maxSubscribersPerDocument:
           additionalProperties: false
           description: ""
@@ -1729,6 +1734,12 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_url
+          type: object
+        maxAttachmentsPerDocument:
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          additionalProperties: false
+          description: ""
+          title: max_attachments_per_document
           type: object
         maxSubscribersPerDocument:
           $ref: '#/components/schemas/google.protobuf.Int32Value'

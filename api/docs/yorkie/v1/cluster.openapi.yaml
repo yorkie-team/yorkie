@@ -286,6 +286,11 @@ components:
           description: ""
           title: id
           type: string
+        maxAttachmentsPerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_attachments_per_document
+          type: integer
         maxSubscribersPerDocument:
           additionalProperties: false
           description: ""

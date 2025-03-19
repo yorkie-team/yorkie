@@ -70,7 +70,7 @@ func TestPubSub(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("subscription count limit exceeded test", func(t *testing.T) {
+	t.Run("max subscribers per document limit exceeded test", func(t *testing.T) {
 		pubSub := pubsub.New()
 		refKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),
@@ -98,10 +98,10 @@ func TestPubSub(t *testing.T) {
 		_, _, err = pubSub.Subscribe(ctx, idB, refKey, limit)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, pubsub.ErrTooManySubscribers)
-		assert.Equal(t, err.Error(), fmt.Sprintf("%d subscriptions allowed per document: subscription limit exceeded", limit))
+		assert.Equal(t, err.Error(), fmt.Sprintf("%d subscribers allowed per document: subscription limit exceeded", limit))
 	})
 
-	t.Run("subscription count limit exceeded concurrent test with multiple actors", func(t *testing.T) {
+	t.Run("max subscribers per document limit exceeded concurrent test with multiple actors", func(t *testing.T) {
 		pubSub := pubsub.New()
 		refKey := types.DocRefKey{
 			ProjectID: types.ID("000000000000000000000000"),

@@ -20,7 +20,11 @@ package testcases
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	gotime "time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -640,6 +644,205 @@ func RunWatchDocumentTest(
 	//_ = watchResp.Msg()
 	//assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 	//assert.Contains(t, err.Error(), "EOF")
+}
+
+// RunMaxSubscribersPerDocumentConcurrencyTest runs the MaxSubscribersPerDocument test.
+func RunMaxSubscribersPerDocumentConcurrencyTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	testCount := 100
+
+	// 00. log in to admin
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	// 01. update project to set max subscribers per document
+	maxSubscribersPerDocument := int32(testCount / 2)
+	updateResp, err := testAdminClient.UpdateProject(
+		context.Background(),
+		connect.NewRequest(&api.UpdateProjectRequest{
+			Id: "000000000000000000000000",
+			Fields: &api.UpdatableProjectFields{
+				MaxSubscribersPerDocument: &wrapperspb.Int32Value{Value: maxSubscribersPerDocument},
+			},
+		},
+		))
+	defer func() {
+		resp, err := testAdminClient.UpdateProject(
+			context.Background(),
+			connect.NewRequest(&api.UpdateProjectRequest{
+				Id: "000000000000000000000000",
+				Fields: &api.UpdatableProjectFields{
+					MaxSubscribersPerDocument: &wrapperspb.Int32Value{Value: 0},
+				},
+			},
+			))
+		assert.NoError(t, err)
+		assert.Equal(t, int32(0), resp.Msg.Project.MaxSubscribersPerDocument)
+		// evict project cache
+		gotime.Sleep(gotime.Second * 6)
+
+	}()
+	assert.NoError(t, err)
+	assert.Equal(t, maxSubscribersPerDocument, updateResp.Msg.Project.MaxSubscribersPerDocument)
+
+	// 02. evict project cache
+	gotime.Sleep(gotime.Second * 6)
+
+	// 03. activate clients
+	clientIds := make([]string, testCount)
+	for i := range testCount {
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: fmt.Sprintf("%s-%d", t.Name(), i)}))
+		assert.NoError(t, err)
+		clientIds[i] = activateResp.Msg.ClientId
+	}
+
+	// 04. client attach with document
+	docKey := helper.TestDocKey(t).String()
+	var successCount atomic.Int32
+	var wg sync.WaitGroup
+	for _, id := range clientIds {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resPack, err := testClient.AttachDocument(
+				context.Background(),
+				connect.NewRequest(&api.AttachDocumentRequest{
+					ClientId: id,
+					ChangePack: &api.ChangePack{
+						DocumentKey: docKey,
+						Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					},
+				},
+				))
+			assert.NoError(t, err)
+
+			watchResp, err := testClient.WatchDocument(
+				context.Background(),
+				connect.NewRequest(&api.WatchDocumentRequest{
+					ClientId:   id,
+					DocumentId: resPack.Msg.DocumentId,
+				},
+				))
+			assert.NoError(t, err)
+
+			// check if stream is open
+			for watchResp.Receive() {
+				resp := watchResp.Msg()
+				assert.NotNil(t, resp)
+				successCount.Add(1)
+				break
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(testCount/2), successCount.Load())
+}
+
+// RunMaxAttachmentsPerDocumentConcurrencyTest runs the MaxAttachmentsPerDocument test.
+func RunMaxAttachmentsPerDocumentConcurrencyTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	testCount := 100
+
+	// 00. log in to admin
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	// 01. update project to set max attachments per document
+	maxAttachmentsPerDocument := int32(testCount / 2)
+	updateResp, err := testAdminClient.UpdateProject(
+		context.Background(),
+		connect.NewRequest(&api.UpdateProjectRequest{
+			Id: "000000000000000000000000",
+			Fields: &api.UpdatableProjectFields{
+				MaxAttachmentsPerDocument: &wrapperspb.Int32Value{Value: maxAttachmentsPerDocument},
+			},
+		},
+		))
+	defer func() {
+		resp, err := testAdminClient.UpdateProject(
+			context.Background(),
+			connect.NewRequest(&api.UpdateProjectRequest{
+				Id: "000000000000000000000000",
+				Fields: &api.UpdatableProjectFields{
+					MaxAttachmentsPerDocument: &wrapperspb.Int32Value{Value: 0},
+				},
+			},
+			))
+		assert.NoError(t, err)
+		assert.Equal(t, int32(0), resp.Msg.Project.MaxAttachmentsPerDocument)
+		// evict project cache
+		gotime.Sleep(gotime.Second * 6)
+	}()
+	assert.NoError(t, err)
+	assert.Equal(t, maxAttachmentsPerDocument, updateResp.Msg.Project.MaxAttachmentsPerDocument)
+
+	// 02. evict project cache
+	gotime.Sleep(gotime.Second * 6)
+
+	// 03. activate clients
+	clientIds := make([]string, testCount)
+	for i := range testCount {
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: fmt.Sprintf("%s-%d", t.Name(), i)}))
+		assert.NoError(t, err)
+		clientIds[i] = activateResp.Msg.ClientId
+	}
+
+	// 04. client attach with document
+	docKey := helper.TestDocKey(t).String()
+	var successCount, failCount atomic.Int32
+	var wg sync.WaitGroup
+	for _, id := range clientIds {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := testClient.AttachDocument(
+				context.Background(),
+				connect.NewRequest(&api.AttachDocumentRequest{
+					ClientId: id,
+					ChangePack: &api.ChangePack{
+						DocumentKey: docKey,
+						Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					},
+				},
+				))
+			if err == nil {
+				successCount.Add(1)
+			} else {
+				failCount.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(testCount/2), successCount.Load())
+	assert.Equal(t, int32(testCount/2), failCount.Load())
 }
 
 // RunAdminSignUpTest runs the SignUp test in admin.
