@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.3] - 2025-03-19
+
+### Added
+
+- Add OLAP stack proposal for MAU tracking by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1197
+- Add MaxAttachmentsPerDocument to limit Attachments per document by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1196
+- Add GetOrCreateUserInfoByGitHubID to manage users by GitHub by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1193
+
+### Fixed
+
+- Fix CORS issue in Dashboard by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1192
+
 ## [0.6.2] - 2025-03-14
 
 ### Added
