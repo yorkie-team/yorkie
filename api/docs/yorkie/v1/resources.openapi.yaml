@@ -1743,7 +1743,7 @@ components:
           title: max_attachments_per_document
           type: object
         maxSubscribersPerDocument:
-          $ref: "#/components/schemas/google.protobuf.Int32Value"
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
           additionalProperties: false
           description: ""
           title: max_subscribers_per_document

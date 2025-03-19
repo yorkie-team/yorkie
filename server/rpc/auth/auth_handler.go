@@ -35,22 +35,22 @@ import (
 
 // Config is the configuration for GitHub OAuth.
 type Config struct {
+	GitHubClientID     string `yaml:"GitHubClientID"`
+	GitHubClientSecret string `yaml:"GitHubClientSecret"`
+	GitHubRedirectURL  string `yaml:"GitHubRedirectURL"`
+
 	GitHubAuthURL       string `yaml:"GitHubAuthURL"`
 	GitHubTokenURL      string `yaml:"GitHubTokenURL"`
 	GitHubDeviceAuthURL string `yaml:"GitHubDeviceAuthURL"`
 	GitHubUserURL       string `yaml:"GitHubUserURL"`
-
-	ClientID     string `yaml:"ClientID"`
-	ClientSecret string `yaml:"ClientSecret"`
-	RedirectURL  string `yaml:"RedirectURL"`
 }
 
 // NewAuthHandler creates handlers for cookie-based session.
 func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config) (string, http.Handler) {
 	oauthConf := &oauth2.Config{
-		ClientID:     conf.ClientID,
-		ClientSecret: conf.ClientSecret,
-		RedirectURL:  conf.RedirectURL,
+		ClientID:     conf.GitHubClientID,
+		ClientSecret: conf.GitHubClientSecret,
+		RedirectURL:  conf.GitHubRedirectURL,
 		Scopes:       []string{"user:email"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:       conf.GitHubAuthURL,

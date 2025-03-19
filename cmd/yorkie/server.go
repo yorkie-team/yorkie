@@ -40,9 +40,9 @@ var (
 	flagLogLevel string
 
 	adminTokenDuration      time.Duration
-	authClientID            string
-	authClientSecret        string
-	authRedirectURL         string
+	authGitHubClientID      string
+	authGitHubClientSecret  string
+	authGitHubRedirectURL   string
 	authGitHubUserURL       string
 	authGitHubAuthURL       string
 	authGitHubTokenURL      string
@@ -80,9 +80,9 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf.RPC.Auth.ClientID = authClientID
-			conf.RPC.Auth.ClientSecret = authClientSecret
-			conf.RPC.Auth.RedirectURL = authRedirectURL
+			conf.RPC.Auth.GitHubClientID = authGitHubClientID
+			conf.RPC.Auth.GitHubClientSecret = authGitHubClientSecret
+			conf.RPC.Auth.GitHubRedirectURL = authGitHubRedirectURL
 			conf.RPC.Auth.GitHubUserURL = authGitHubUserURL
 			conf.RPC.Auth.GitHubAuthURL = authGitHubAuthURL
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
@@ -243,22 +243,22 @@ func init() {
 		"The duration of the admin authentication token.",
 	)
 	cmd.Flags().StringVar(
-		&authClientID,
-		"auth-client-id",
+		&authGitHubClientID,
+		"auth-github-client-id",
 		"",
 		"GitHub OAuth Client ID",
 	)
 	cmd.Flags().StringVar(
-		&authClientSecret,
-		"auth-client-secret",
+		&authGitHubClientSecret,
+		"auth-github-client-secret",
 		"",
 		"GitHub OAuth Client Secret",
 	)
 	cmd.Flags().StringVar(
-		&authRedirectURL,
-		"auth-redirect-url",
+		&authGitHubRedirectURL,
+		"auth-github-redirect-url",
 		"http://localhost:8080/auth/github/callback",
-		"OAuth callback URL",
+		"GitHub OAuth callback URL",
 	)
 	cmd.Flags().StringVar(
 		&authGitHubUserURL,
@@ -268,19 +268,19 @@ func init() {
 	)
 	cmd.Flags().StringVar(
 		&authGitHubAuthURL,
-		"auth-oauth2-auth-url",
+		"auth-github-auth-url",
 		server.DefaultGitHubAuthURL,
 		"GitHub OAuth2 authorization URL",
 	)
 	cmd.Flags().StringVar(
 		&authGitHubTokenURL,
-		"auth-oauth2-token-url",
+		"auth-github-token-url",
 		server.DefaultGitHubTokenURL,
 		"GitHub OAuth2 token URL",
 	)
 	cmd.Flags().StringVar(
 		&authGitHubDeviceAuthURL,
-		"auth-device-auth-url",
+		"auth-github-device-auth-url",
 		server.DefaultGitHubDeviceAuthURL,
 		"GitHub OAuth2 device authorization URL",
 	)
