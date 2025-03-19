@@ -289,3 +289,17 @@ func IsDocumentAttached(
 ) (bool, error) {
 	return be.DB.IsDocumentAttached(ctx, docRefKey, excludeClientID)
 }
+
+// FindAttachedClientCount returns the number of attached clients for the given document.
+func FindAttachedClientCount(
+	ctx context.Context,
+	be *backend.Backend,
+	docRefKey types.DocRefKey,
+) (int, error) {
+	infos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(infos), nil
+}

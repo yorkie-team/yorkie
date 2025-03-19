@@ -179,6 +179,14 @@ func TestSDKRPCServerBackend(t *testing.T) {
 	t.Run("watch document test", func(t *testing.T) {
 		testcases.RunWatchDocumentTest(t, testClient)
 	})
+
+	t.Run("max subscribers per document test", func(t *testing.T) {
+		testcases.RunMaxSubscribersPerDocumentConcurrencyTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
+
+	t.Run("max attachments per document test", func(t *testing.T) {
+		testcases.RunMaxAttachmentsPerDocumentConcurrencyTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
 }
 
 func TestAdminRPCServerBackend(t *testing.T) {

@@ -173,12 +173,14 @@ func (c *Client) ensureDefaultProjectInfo(
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":                        candidate.Name,
-			"owner":                       candidate.Owner,
-			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
-			"public_key":                  candidate.PublicKey,
-			"secret_key":                  candidate.SecretKey,
-			"created_at":                  candidate.CreatedAt,
+			"name":                         candidate.Name,
+			"owner":                        candidate.Owner,
+			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
+			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
+			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
+			"public_key":                   candidate.PublicKey,
+			"secret_key":                   candidate.SecretKey,
+			"created_at":                   candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -680,6 +682,30 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 	var clientInfos []*database.ClientInfo
 	if err := cursor.All(ctx, &clientInfos); err != nil {
 		return nil, fmt.Errorf("fetch deactivate candidates: %w", err)
+	}
+
+	return clientInfos, nil
+}
+
+// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
+func (c *Client) FindClientInfosByAttachedDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) ([]*database.ClientInfo, error) {
+	filter := bson.M{
+		"project_id": docRefKey.ProjectID,
+		"status":     database.ClientActivated,
+		clientDocInfoKey(docRefKey.DocID, "status"): database.DocumentAttached,
+	}
+
+	cursor, err := c.collection(ColClients).Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("find client infos: %w", err)
+	}
+
+	var clientInfos []*database.ClientInfo
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return nil, fmt.Errorf("fetch client infos: %w", err)
 	}
 
 	return clientInfos, nil

@@ -713,6 +713,30 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
+// FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
+func (d *DB) FindClientInfosByAttachedDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) ([]*database.ClientInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", docRefKey.ProjectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find client infos by attached doc ref key: %w", err)
+	}
+
+	var infos []*database.ClientInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo)
+
+		if info.Documents[docRefKey.DocID] != nil && info.Documents[docRefKey.DocID].Status == database.DocumentAttached {
+			infos = append(infos, info)
+		}
+	}
+	return infos, nil
+}
+
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.

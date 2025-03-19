@@ -176,6 +176,20 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	if project.HasAttachmentLimit() {
+		count, err := documents.FindAttachedClientCount(ctx, s.backend, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docInfo.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if err := project.IsAttachmentLimitExceeded(count); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}

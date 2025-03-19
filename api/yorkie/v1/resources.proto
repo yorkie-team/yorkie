@@ -301,8 +301,9 @@ message Project {
   repeated string event_webhook_events = 8;
   string client_deactivate_threshold = 9;
   int32 max_subscribers_per_document = 10;
-  google.protobuf.Timestamp created_at = 11;
-  google.protobuf.Timestamp updated_at = 12;
+  int32 max_attachments_per_document = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
 }
 
 message UpdatableProjectFields {
@@ -321,6 +322,7 @@ message UpdatableProjectFields {
   EventWebhookEvents event_webhook_events = 5;
   google.protobuf.StringValue client_deactivate_threshold = 6;
   google.protobuf.Int32Value max_subscribers_per_document = 7;
+  google.protobuf.Int32Value max_attachments_per_document = 8;
 }
 
 message DocumentSummary {

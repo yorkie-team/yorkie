@@ -1644,6 +1644,48 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunFindClientInfosByAttachedDocRefKeyTest runs the FindClientInfosByAttachedDocRefKey tests for the given db.
+func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
+		ctx := context.Background()
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo1.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo1.AttachDocument(docRefKey.DocID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
+
+		clientInfos, err := db.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(clientInfos))
+		assert.Equal(t, clientInfo1.ID, clientInfos[0].ID)
+
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		assert.NoError(t, clientInfo2.AttachDocument(docRefKey.DocID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+		clientInfos, err = db.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(clientInfos))
+		assert.Equal(t, clientInfo1.ID, clientInfos[0].ID)
+		assert.Equal(t, clientInfo2.ID, clientInfos[1].ID)
+
+		assert.NoError(t, clientInfo1.DetachDocument(docRefKey.DocID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
+		clientInfos, err = db.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(clientInfos))
+		assert.Equal(t, clientInfo2.ID, clientInfos[0].ID)
+
+		assert.NoError(t, clientInfo2.DetachDocument(docRefKey.DocID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+		clientInfos, err = db.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(clientInfos))
+	})
+}
+
 // AssertKeys checks the equivalence between the provided expectedKeys and the keys in the given infos.
 func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo) {
 	var keys []key.Key

@@ -143,7 +143,7 @@ func (m *PubSub) Subscribe(
 
 	if newSub == nil {
 		return nil, nil, fmt.Errorf(
-			"%d subscriptions allowed per document: %w",
+			"%d subscribers allowed per document: %w",
 			limit,
 			ErrTooManySubscribers,
 		)
