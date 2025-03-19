@@ -32,10 +32,25 @@ var (
 
 // UserInfo is a structure representing information of a user.
 type UserInfo struct {
-	ID             types.ID  `bson:"_id"`
-	Username       string    `bson:"username"`
-	HashedPassword string    `bson:"hashed_password"`
-	CreatedAt      time.Time `bson:"created_at"`
+	// ID is the unique ID of the user.
+	ID types.ID `bson:"_id"`
+
+	// AuthProvider is the provider of the authentication. Valid values are
+	// "github" and empty string for local authentication.
+	AuthProvider string `bson:"auth_provider"`
+
+	// Username is the username of the user.
+	Username string `bson:"username"`
+
+	// HashedPassword is the hashed password of the user. It is empty if the
+	// user is authenticated by github.
+	HashedPassword string `bson:"hashed_password"`
+
+	// CreatedAt is the time when the user was created.
+	CreatedAt time.Time `bson:"created_at"`
+
+	// AccessedAt is the time when the user was last accessed.
+	AccessedAt time.Time `bson:"accessed_at"`
 }
 
 // NewUserInfo creates a new UserInfo of the given username.
@@ -55,6 +70,7 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 
 	return &UserInfo{
 		ID:             i.ID,
+		AuthProvider:   i.AuthProvider,
 		Username:       i.Username,
 		HashedPassword: i.HashedPassword,
 		CreatedAt:      i.CreatedAt,
@@ -64,9 +80,10 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 // ToUser converts the UserInfo to a User.
 func (i *UserInfo) ToUser() *types.User {
 	return &types.User{
-		ID:        i.ID,
-		Username:  i.Username,
-		CreatedAt: i.CreatedAt,
+		ID:           i.ID,
+		AuthProvider: i.AuthProvider,
+		Username:     i.Username,
+		CreatedAt:    i.CreatedAt,
 	}
 }
 

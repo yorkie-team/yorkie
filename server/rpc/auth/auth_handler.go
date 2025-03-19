@@ -24,7 +24,6 @@ import (
 
 	"github.com/lithammer/shortuuid/v4"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/github"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
@@ -36,6 +35,11 @@ import (
 
 // Config is the configuration for GitHub OAuth.
 type Config struct {
+	GitHubAuthURL       string `yaml:"GitHubAuthURL"`
+	GitHubTokenURL      string `yaml:"GitHubTokenURL"`
+	GitHubDeviceAuthURL string `yaml:"GitHubDeviceAuthURL"`
+	GitHubUserURL       string `yaml:"GitHubUserURL"`
+
 	ClientID     string `yaml:"ClientID"`
 	ClientSecret string `yaml:"ClientSecret"`
 	RedirectURL  string `yaml:"RedirectURL"`
@@ -48,14 +52,19 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 		ClientSecret: conf.ClientSecret,
 		RedirectURL:  conf.RedirectURL,
 		Scopes:       []string{"user:email"},
-		Endpoint:     github.Endpoint,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:       conf.GitHubAuthURL,
+			TokenURL:      conf.GitHubTokenURL,
+			DeviceAuthURL: conf.GitHubDeviceAuthURL,
+		},
 	}
 
 	manager := &AuthManager{
-		conf:         oauthConf,
-		be:           be,
-		tokenManager: tokenManager,
-		stateStore:   cmap.New[string, time.Time](),
+		githubUserAPIURL: conf.GitHubUserURL,
+		oauth2Conf:       oauthConf,
+		be:               be,
+		tokenManager:     tokenManager,
+		stateStore:       cmap.New[string, time.Time](),
 	}
 
 	// TODO(hackerwins): Consider to use prefix `yorkie.v1.AuthService` for consistency with other handlers.
@@ -79,13 +88,14 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 
 // AuthManager provides handlers for login, logout, and me in cookie-based session.
 type AuthManager struct {
-	conf         *oauth2.Config
-	be           *backend.Backend
-	tokenManager *TokenManager
-	stateStore   *cmap.Map[string, time.Time]
+	oauth2Conf       *oauth2.Config
+	githubUserAPIURL string
+	be               *backend.Backend
+	tokenManager     *TokenManager
+	stateStore       *cmap.Map[string, time.Time]
 }
 
-func (h *AuthManager) handleMe(_ context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *AuthManager) handleMe(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(types.SessionKey)
 	if err != nil || cookie.Value == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -98,10 +108,20 @@ func (h *AuthManager) handleMe(_ context.Context, w http.ResponseWriter, r *http
 		return
 	}
 
-	var body struct {
-		Username string `json:"username"`
+	user, err := users.GetUserByName(ctx, h.be, claims.Username)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
 	}
-	body.Username = claims.Username
+
+	var body struct {
+		AuthProvider string `json:"authProvider"`
+		Username     string `json:"username"`
+	}
+
+	body.AuthProvider = user.AuthProvider
+	body.Username = user.Username
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -166,7 +186,7 @@ func (h *AuthManager) handleGitHubLogin(_ context.Context, w http.ResponseWriter
 	h.stateStore.Set(state, time.Now())
 	h.cleanupOldStates()
 
-	url := h.conf.AuthCodeURL(state)
+	url := h.oauth2Conf.AuthCodeURL(state)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
@@ -180,14 +200,14 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 	}
 
 	code := r.URL.Query().Get("code")
-	oauthToken, err := h.conf.Exchange(ctx, code)
+	oauthToken, err := h.oauth2Conf.Exchange(ctx, code)
 	if err != nil {
 		http.Error(w, "Token exchange failed", http.StatusInternalServerError)
 		return
 	}
 
-	client := h.conf.Client(ctx, oauthToken)
-	resp, err := client.Get("https://api.github.com/user")
+	cli := h.oauth2Conf.Client(ctx, oauthToken)
+	resp, err := cli.Get(h.githubUserAPIURL)
 	if err != nil {
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 		return
@@ -211,7 +231,13 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 		return
 	}
 
-	token, err := h.tokenManager.Generate(body.Login)
+	user, err := users.GetOrCreateUserByGitHubID(ctx, h.be, body.Login)
+	if err != nil {
+		http.Error(w, "Failed to get or create user by GitHub ID", http.StatusInternalServerError)
+		return
+	}
+
+	token, err := h.tokenManager.Generate(user.Username)
 	if err != nil {
 		http.Error(w, "Failed to create token", http.StatusInternalServerError)
 		return

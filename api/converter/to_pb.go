@@ -36,9 +36,10 @@ import (
 // ToUser converts the given model format to Protobuf format.
 func ToUser(user *types.User) *api.User {
 	return &api.User{
-		Id:        user.ID.String(),
-		Username:  user.Username,
-		CreatedAt: timestamppb.New(user.CreatedAt),
+		Id:           user.ID.String(),
+		AuthProvider: user.AuthProvider,
+		Username:     user.Username,
+		CreatedAt:    timestamppb.New(user.CreatedAt),
 	}
 }
 

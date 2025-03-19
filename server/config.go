@@ -53,10 +53,16 @@ const (
 	DefaultKafkaTopic        = "user-events"
 	DefaultKafkaWriteTimeout = 5 * time.Second
 
-	DefaultAdminUser                  = "admin"
-	DefaultAdminPassword              = "admin"
-	DefaultSecretKey                  = "yorkie-secret"
-	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
+	DefaultAdminUser     = "admin"
+	DefaultAdminPassword = "admin"
+	DefaultSecretKey     = "yorkie-secret"
+
+	DefaultAdminTokenDuration  = 7 * 24 * time.Hour
+	DefaultGitHubUserURL       = "https://api.github.com/user"
+	DefaultGitHubAuthURL       = "https://github.com/login/oauth/authorize"
+	DefaultGitHubTokenURL      = "https://github.com/login/oauth/access_token" // #nosec G101
+	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
+
 	DefaultUseDefaultProject          = true
 	DefaultClientDeactivateThreshold  = "24h"
 	DefaultSnapshotThreshold          = 1000

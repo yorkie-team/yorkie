@@ -53,6 +53,9 @@ func newLoginCmd() *cobra.Command {
 				cli.Close()
 			}()
 
+			// TODO(hackerwins): For now, the login command only supports the
+			// username/password login. We need to support other login methods
+			// like GitHub.
 			ctx := context.Background()
 			token, err := cli.LogIn(ctx, username, password)
 			if err != nil {

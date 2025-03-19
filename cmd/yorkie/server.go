@@ -39,7 +39,15 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
-	adminTokenDuration        time.Duration
+	adminTokenDuration      time.Duration
+	authClientID            string
+	authClientSecret        string
+	authRedirectURL         string
+	authGitHubUserURL       string
+	authGitHubAuthURL       string
+	authGitHubTokenURL      string
+	authGitHubDeviceAuthURL string
+
 	housekeepingInterval      time.Duration
 	clientDeactivateThreshold string
 
@@ -72,6 +80,14 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conf.RPC.Auth.ClientID = authClientID
+			conf.RPC.Auth.ClientSecret = authClientSecret
+			conf.RPC.Auth.RedirectURL = authRedirectURL
+			conf.RPC.Auth.GitHubUserURL = authGitHubUserURL
+			conf.RPC.Auth.GitHubAuthURL = authGitHubAuthURL
+			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
+			conf.RPC.Auth.GitHubDeviceAuthURL = authGitHubDeviceAuthURL
+
 			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
 
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
@@ -219,6 +235,56 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
+
+	cmd.Flags().DurationVar(
+		&adminTokenDuration,
+		"backend-admin-token-duration",
+		server.DefaultAdminTokenDuration,
+		"The duration of the admin authentication token.",
+	)
+	cmd.Flags().StringVar(
+		&authClientID,
+		"auth-client-id",
+		"",
+		"GitHub OAuth Client ID",
+	)
+	cmd.Flags().StringVar(
+		&authClientSecret,
+		"auth-client-secret",
+		"",
+		"GitHub OAuth Client Secret",
+	)
+	cmd.Flags().StringVar(
+		&authRedirectURL,
+		"auth-redirect-url",
+		"http://localhost:8080/auth/github/callback",
+		"OAuth callback URL",
+	)
+	cmd.Flags().StringVar(
+		&authGitHubUserURL,
+		"auth-github-user-url",
+		server.DefaultGitHubUserURL,
+		"GitHub User API URL",
+	)
+	cmd.Flags().StringVar(
+		&authGitHubAuthURL,
+		"auth-oauth2-auth-url",
+		server.DefaultGitHubAuthURL,
+		"GitHub OAuth2 authorization URL",
+	)
+	cmd.Flags().StringVar(
+		&authGitHubTokenURL,
+		"auth-oauth2-token-url",
+		server.DefaultGitHubTokenURL,
+		"GitHub OAuth2 token URL",
+	)
+	cmd.Flags().StringVar(
+		&authGitHubDeviceAuthURL,
+		"auth-device-auth-url",
+		server.DefaultGitHubDeviceAuthURL,
+		"GitHub OAuth2 device authorization URL",
+	)
+
 	cmd.Flags().DurationVar(
 		&housekeepingInterval,
 		"housekeeping-interval",
@@ -279,12 +345,7 @@ func init() {
 		server.DefaultSecretKey,
 		"The secret key for signing authentication tokens for admin users.",
 	)
-	cmd.Flags().DurationVar(
-		&adminTokenDuration,
-		"backend-admin-token-duration",
-		server.DefaultAdminTokenDuration,
-		"The duration of the admin authentication token.",
-	)
+
 	cmd.Flags().BoolVar(
 		&conf.Backend.UseDefaultProject,
 		"backend-use-default-project",

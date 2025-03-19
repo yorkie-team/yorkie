@@ -2187,7 +2187,7 @@ components:
           title: max_attachments_per_document
           type: object
         maxSubscribersPerDocument:
-          $ref: "#/components/schemas/google.protobuf.Int32Value"
+          $ref: '#/components/schemas/google.protobuf.Int32Value'
           additionalProperties: false
           description: ""
           title: max_subscribers_per_document
@@ -2259,6 +2259,11 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        authProvider:
+          additionalProperties: false
+          description: ""
+          title: auth_provider
+          type: string
         createdAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false
