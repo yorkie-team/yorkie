@@ -39,14 +39,15 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
-	adminTokenDuration      time.Duration
-	authGitHubClientID      string
-	authGitHubClientSecret  string
-	authGitHubRedirectURL   string
-	authGitHubUserURL       string
-	authGitHubAuthURL       string
-	authGitHubTokenURL      string
-	authGitHubDeviceAuthURL string
+	adminTokenDuration            time.Duration
+	authGitHubClientID            string
+	authGitHubClientSecret        string
+	authGitHubRedirectURL         string
+	authGitHubCallbackRedirectURL string
+	authGitHubUserURL             string
+	authGitHubAuthURL             string
+	authGitHubTokenURL            string
+	authGitHubDeviceAuthURL       string
 
 	housekeepingInterval      time.Duration
 	clientDeactivateThreshold string
@@ -83,6 +84,7 @@ func newServerCmd() *cobra.Command {
 			conf.RPC.Auth.GitHubClientID = authGitHubClientID
 			conf.RPC.Auth.GitHubClientSecret = authGitHubClientSecret
 			conf.RPC.Auth.GitHubRedirectURL = authGitHubRedirectURL
+			conf.RPC.Auth.GitHubCallbackRedirectURL = authGitHubCallbackRedirectURL
 			conf.RPC.Auth.GitHubUserURL = authGitHubUserURL
 			conf.RPC.Auth.GitHubAuthURL = authGitHubAuthURL
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
@@ -259,6 +261,12 @@ func init() {
 		"auth-github-redirect-url",
 		"http://localhost:8080/auth/github/callback",
 		"GitHub OAuth callback URL",
+	)
+	cmd.Flags().StringVar(
+		&authGitHubCallbackRedirectURL,
+		"auth-github-callback-redirect-url",
+		"http://localhost:5173/dashboard",
+		"GitHub OAuth callback redirect URL",
 	)
 	cmd.Flags().StringVar(
 		&authGitHubUserURL,

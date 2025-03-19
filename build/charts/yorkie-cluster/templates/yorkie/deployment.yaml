@@ -104,6 +104,10 @@ spec:
           "--auth-github-redirect-url",
           "{{ .Values.yorkie.args.GitHubRedirectURL }}",
           {{- end }}
+          {{- if .Values.yorkie.args.GitHubCallbackRedirectURL }}
+          "--auth-github-callback-redirect-url",
+          "{{ .Values.yorkie.args.GitHubCallbackRedirectURL }}",
+          {{- end }}
           {{- if .Values.yorkie.args.GitHubAuthURL }}
           "--auth-github-auth-url",
           "{{ .Values.yorkie.args.GitHubAuthURL }}",
