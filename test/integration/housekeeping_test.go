@@ -64,6 +64,7 @@ func setupBackend(t *testing.T) *backend.Backend {
 		conf.Housekeeping,
 		metrics,
 		nil,
+		nil,
 	)
 	assert.NoError(t, err)
 

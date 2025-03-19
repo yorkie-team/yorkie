@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -73,6 +74,8 @@ var (
 	kafkaTopic        string
 	kafkaWriteTimeout time.Duration
 
+	starRocksDSN string
+
 	conf = server.NewConfig()
 )
 
@@ -81,6 +84,7 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
 			conf.RPC.Auth.GitHubClientID = authGitHubClientID
 			conf.RPC.Auth.GitHubClientSecret = authGitHubClientSecret
 			conf.RPC.Auth.GitHubRedirectURL = authGitHubRedirectURL
@@ -90,8 +94,7 @@ func newServerCmd() *cobra.Command {
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
 			conf.RPC.Auth.GitHubDeviceAuthURL = authGitHubDeviceAuthURL
 
-			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
-
+			conf.Housekeeping.Interval = housekeepingInterval.String()
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
@@ -104,8 +107,6 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
 
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
-
-			conf.Housekeeping.Interval = housekeepingInterval.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -121,6 +122,12 @@ func newServerCmd() *cobra.Command {
 					Addresses:    kafkaAddresses,
 					Topic:        kafkaTopic,
 					WriteTimeout: kafkaWriteTimeout.String(),
+				}
+			}
+
+			if starRocksDSN != "" {
+				conf.StarRocks = &warehouse.Config{
+					DSN: starRocksDSN,
 				}
 			}
 
@@ -493,6 +500,12 @@ func init() {
 		"kafka-write-timeout",
 		server.DefaultKafkaWriteTimeout,
 		"Timeout for writing messages to Kafka",
+	)
+	cmd.Flags().StringVar(
+		&starRocksDSN,
+		"starrocks-dsn",
+		"",
+		"StarRocks DSN for the analytics",
 	)
 
 	rootCmd.AddCommand(cmd)

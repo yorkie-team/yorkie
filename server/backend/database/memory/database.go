@@ -948,6 +948,27 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// GetDocumentsCount returns the number of documents in the given project.
+func (d *DB) GetDocumentsCount(
+	_ context.Context,
+	projectID types.ID,
+) (int64, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblDocuments, "project_id", projectID.String())
+	if err != nil {
+		return 0, fmt.Errorf("fetch documents: %w", err)
+	}
+
+	count := int64(0)
+	for iter.Next() != nil {
+		count++
+	}
+
+	return count, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(

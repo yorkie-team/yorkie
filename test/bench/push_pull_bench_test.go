@@ -64,6 +64,7 @@ func setUpBackend(
 		conf.Housekeeping,
 		metrics,
 		nil,
+		nil,
 	)
 	assert.NoError(b, err)
 

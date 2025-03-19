@@ -231,6 +231,34 @@ func (s *adminServer) UpdateProject(
 	}), nil
 }
 
+// GetProjectStats gets the project stats.
+func (s *adminServer) GetProjectStats(
+	ctx context.Context,
+	req *connect.Request[api.GetProjectStatsRequest],
+) (*connect.Response[api.GetProjectStatsResponse], error) {
+	from, to, err := converter.FromDateRange(req.Msg.DateRange)
+	if err != nil {
+		return nil, err
+	}
+
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	stats, err := projects.GetProjectStats(ctx, s.backend, project.ID, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetProjectStatsResponse{
+		ActiveUsers:      converter.ToMetricPoints(stats.ActiveUsers),
+		ActiveUsersCount: int32(stats.ActiveUsersCount),
+		DocumentsCount:   stats.DocumentsCount,
+	}), nil
+}
+
 // GetDocument gets the document.
 func (s *adminServer) GetDocument(
 	ctx context.Context,

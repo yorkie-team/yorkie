@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -28,6 +29,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
+
+var (
+	// ErrUnsupportedDateRange is returned when the given date range is unsupported.
+	ErrUnsupportedDateRange = fmt.Errorf("unsupported date range")
 )
 
 // FromUser converts the given Protobuf formats to model format.
@@ -946,4 +952,27 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 
 	return updatableProjectFields, nil
+}
+
+// FromDateRange converts the given Protobuf formats to model format.
+func FromDateRange(pbDateRange api.GetProjectStatsRequest_DateRange) (gotime.Time, gotime.Time, error) {
+	var from, to gotime.Time
+	switch pbDateRange {
+	case api.GetProjectStatsRequest_DATE_RANGE_LAST_1W:
+		from = gotime.Now().AddDate(0, 0, -7)
+		to = gotime.Now().AddDate(0, 0, 1)
+	case api.GetProjectStatsRequest_DATE_RANGE_LAST_4W:
+		from = gotime.Now().AddDate(0, 0, -28)
+		to = gotime.Now().AddDate(0, 0, 1)
+	case api.GetProjectStatsRequest_DATE_RANGE_LAST_3M:
+		from = gotime.Now().AddDate(0, -3, 0)
+		to = gotime.Now().AddDate(0, 0, 1)
+	case api.GetProjectStatsRequest_DATE_RANGE_LAST_12M:
+		from = gotime.Now().AddDate(0, -12, 0)
+		to = gotime.Now().AddDate(0, 0, 1)
+	default:
+		return from, to, fmt.Errorf("%v, %w", pbDateRange, ErrUnsupportedDateRange)
+	}
+
+	return from, to, nil
 }
