@@ -35,9 +35,10 @@ import (
 
 // Config is the configuration for GitHub OAuth.
 type Config struct {
-	GitHubClientID     string `yaml:"GitHubClientID"`
-	GitHubClientSecret string `yaml:"GitHubClientSecret"`
-	GitHubRedirectURL  string `yaml:"GitHubRedirectURL"`
+	GitHubClientID            string `yaml:"GitHubClientID"`
+	GitHubClientSecret        string `yaml:"GitHubClientSecret"`
+	GitHubRedirectURL         string `yaml:"GitHubRedirectURL"`
+	GitHubCallbackRedirectURL string `yaml:"GitHubCallbackRedirectURL"`
 
 	GitHubAuthURL       string `yaml:"GitHubAuthURL"`
 	GitHubTokenURL      string `yaml:"GitHubTokenURL"`
@@ -60,11 +61,12 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 	}
 
 	manager := &AuthManager{
-		githubUserAPIURL: conf.GitHubUserURL,
-		oauth2Conf:       oauthConf,
-		be:               be,
-		tokenManager:     tokenManager,
-		stateStore:       cmap.New[string, time.Time](),
+		githubUserAPIURL:          conf.GitHubUserURL,
+		githubCallbackRedirectURL: conf.GitHubCallbackRedirectURL,
+		oauth2Conf:                oauthConf,
+		be:                        be,
+		tokenManager:              tokenManager,
+		stateStore:                cmap.New[string, time.Time](),
 	}
 
 	// TODO(hackerwins): Consider to use prefix `yorkie.v1.AuthService` for consistency with other handlers.
@@ -88,11 +90,13 @@ func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config
 
 // AuthManager provides handlers for login, logout, and me in cookie-based session.
 type AuthManager struct {
-	oauth2Conf       *oauth2.Config
-	githubUserAPIURL string
-	be               *backend.Backend
-	tokenManager     *TokenManager
-	stateStore       *cmap.Map[string, time.Time]
+	oauth2Conf                *oauth2.Config
+	githubUserAPIURL          string
+	githubCallbackRedirectURL string
+
+	be           *backend.Backend
+	tokenManager *TokenManager
+	stateStore   *cmap.Map[string, time.Time]
 }
 
 func (h *AuthManager) handleMe(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -244,7 +248,7 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 	}
 
 	h.setCookie(w, token)
-	http.Redirect(w, r, "/dashboard", http.StatusTemporaryRedirect)
+	http.Redirect(w, r, h.githubCallbackRedirectURL, http.StatusTemporaryRedirect)
 }
 
 func (h *AuthManager) setCookie(w http.ResponseWriter, token string) {
