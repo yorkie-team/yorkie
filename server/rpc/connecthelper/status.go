@@ -42,15 +42,16 @@ import (
 // errorToConnectCode maps an error to connectRPC status code.
 var errorToConnectCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:       connect.CodeInvalidArgument,
-	converter.ErrCheckpointRequired: connect.CodeInvalidArgument,
-	time.ErrInvalidHexString:        connect.CodeInvalidArgument,
-	time.ErrInvalidActorID:          connect.CodeInvalidArgument,
-	types.ErrInvalidID:              connect.CodeInvalidArgument,
-	clients.ErrInvalidClientID:      connect.CodeInvalidArgument,
-	clients.ErrInvalidClientKey:     connect.CodeInvalidArgument,
-	key.ErrInvalidKey:               connect.CodeInvalidArgument,
-	types.ErrEmptyProjectFields:     connect.CodeInvalidArgument,
+	converter.ErrPackRequired:         connect.CodeInvalidArgument,
+	converter.ErrCheckpointRequired:   connect.CodeInvalidArgument,
+	converter.ErrUnsupportedDateRange: connect.CodeInvalidArgument,
+	time.ErrInvalidHexString:          connect.CodeInvalidArgument,
+	time.ErrInvalidActorID:            connect.CodeInvalidArgument,
+	types.ErrInvalidID:                connect.CodeInvalidArgument,
+	clients.ErrInvalidClientID:        connect.CodeInvalidArgument,
+	clients.ErrInvalidClientKey:       connect.CodeInvalidArgument,
+	key.ErrInvalidKey:                 connect.CodeInvalidArgument,
+	types.ErrEmptyProjectFields:       connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,

@@ -955,23 +955,29 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 }
 
 // FromDateRange converts the given Protobuf formats to model format.
-func FromDateRange(pbDateRange api.GetProjectStatsRequest_DateRange) (gotime.Time, gotime.Time, error) {
+func FromDateRange(
+	pbRange api.GetProjectStatsRequest_DateRange,
+) (gotime.Time, gotime.Time, error) {
+	// NOTE(hackerwins): The end time is exclusive in the query. So, we need to
+	// add 1 day to the end time.
 	var from, to gotime.Time
-	switch pbDateRange {
+	now := gotime.Now()
+
+	switch pbRange {
 	case api.GetProjectStatsRequest_DATE_RANGE_LAST_1W:
-		from = gotime.Now().AddDate(0, 0, -7)
-		to = gotime.Now().AddDate(0, 0, 1)
+		from = now.AddDate(0, 0, -7)
+		to = now.AddDate(0, 0, 1)
 	case api.GetProjectStatsRequest_DATE_RANGE_LAST_4W:
-		from = gotime.Now().AddDate(0, 0, -28)
-		to = gotime.Now().AddDate(0, 0, 1)
+		from = now.AddDate(0, 0, -28)
+		to = now.AddDate(0, 0, 1)
 	case api.GetProjectStatsRequest_DATE_RANGE_LAST_3M:
-		from = gotime.Now().AddDate(0, -3, 0)
-		to = gotime.Now().AddDate(0, 0, 1)
+		from = now.AddDate(0, -3, 0)
+		to = now.AddDate(0, 0, 1)
 	case api.GetProjectStatsRequest_DATE_RANGE_LAST_12M:
-		from = gotime.Now().AddDate(0, -12, 0)
-		to = gotime.Now().AddDate(0, 0, 1)
+		from = now.AddDate(0, -12, 0)
+		to = now.AddDate(0, 0, 1)
 	default:
-		return from, to, fmt.Errorf("%v, %w", pbDateRange, ErrUnsupportedDateRange)
+		return from, to, fmt.Errorf("%v, %w", pbRange, ErrUnsupportedDateRange)
 	}
 
 	return from, to, nil

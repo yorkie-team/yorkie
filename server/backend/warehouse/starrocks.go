@@ -54,6 +54,8 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 		return nil, fmt.Errorf("invalid time range")
 	}
 
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
@@ -109,6 +111,8 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 		return 0, fmt.Errorf("invalid time range")
 	}
 
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
 	//nolint:gosec
 	query := fmt.Sprintf(`
 	SELECT 
@@ -142,5 +146,9 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 
 // Close closes the connection to the StarRocks.
 func (r *StarRocks) Close() error {
-	return fmt.Errorf("close: %w", r.driver.Close())
+	if err := r.driver.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	return nil
 }
