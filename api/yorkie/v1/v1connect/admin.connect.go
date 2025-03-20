@@ -69,6 +69,9 @@ const (
 	// AdminServiceUpdateProjectProcedure is the fully-qualified name of the AdminService's
 	// UpdateProject RPC.
 	AdminServiceUpdateProjectProcedure = "/yorkie.v1.AdminService/UpdateProject"
+	// AdminServiceGetProjectStatsProcedure is the fully-qualified name of the AdminService's
+	// GetProjectStats RPC.
+	AdminServiceGetProjectStatsProcedure = "/yorkie.v1.AdminService/GetProjectStats"
 	// AdminServiceListDocumentsProcedure is the fully-qualified name of the AdminService's
 	// ListDocuments RPC.
 	AdminServiceListDocumentsProcedure = "/yorkie.v1.AdminService/ListDocuments"
@@ -105,6 +108,7 @@ type AdminServiceClient interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
+	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
 	GetDocuments(context.Context, *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error)
@@ -165,6 +169,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceUpdateProjectProcedure,
 			opts...,
 		),
+		getProjectStats: connect.NewClient[v1.GetProjectStatsRequest, v1.GetProjectStatsResponse](
+			httpClient,
+			baseURL+AdminServiceGetProjectStatsProcedure,
+			opts...,
+		),
 		listDocuments: connect.NewClient[v1.ListDocumentsRequest, v1.ListDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceListDocumentsProcedure,
@@ -218,6 +227,7 @@ type adminServiceClient struct {
 	listProjects          *connect.Client[v1.ListProjectsRequest, v1.ListProjectsResponse]
 	getProject            *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
 	updateProject         *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
+	getProjectStats       *connect.Client[v1.GetProjectStatsRequest, v1.GetProjectStatsResponse]
 	listDocuments         *connect.Client[v1.ListDocumentsRequest, v1.ListDocumentsResponse]
 	getDocument           *connect.Client[v1.GetDocumentRequest, v1.GetDocumentResponse]
 	getDocuments          *connect.Client[v1.GetDocumentsRequest, v1.GetDocumentsResponse]
@@ -266,6 +276,11 @@ func (c *adminServiceClient) GetProject(ctx context.Context, req *connect.Reques
 // UpdateProject calls yorkie.v1.AdminService.UpdateProject.
 func (c *adminServiceClient) UpdateProject(ctx context.Context, req *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error) {
 	return c.updateProject.CallUnary(ctx, req)
+}
+
+// GetProjectStats calls yorkie.v1.AdminService.GetProjectStats.
+func (c *adminServiceClient) GetProjectStats(ctx context.Context, req *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error) {
+	return c.getProjectStats.CallUnary(ctx, req)
 }
 
 // ListDocuments calls yorkie.v1.AdminService.ListDocuments.
@@ -318,6 +333,7 @@ type AdminServiceHandler interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
+	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
 	GetDocuments(context.Context, *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error)
@@ -372,6 +388,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 	adminServiceUpdateProjectHandler := connect.NewUnaryHandler(
 		AdminServiceUpdateProjectProcedure,
 		svc.UpdateProject,
+		opts...,
+	)
+	adminServiceGetProjectStatsHandler := connect.NewUnaryHandler(
+		AdminServiceGetProjectStatsProcedure,
+		svc.GetProjectStats,
 		opts...,
 	)
 	adminServiceListDocumentsHandler := connect.NewUnaryHandler(
@@ -432,6 +453,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetProjectHandler.ServeHTTP(w, r)
 		case AdminServiceUpdateProjectProcedure:
 			adminServiceUpdateProjectHandler.ServeHTTP(w, r)
+		case AdminServiceGetProjectStatsProcedure:
+			adminServiceGetProjectStatsHandler.ServeHTTP(w, r)
 		case AdminServiceListDocumentsProcedure:
 			adminServiceListDocumentsHandler.ServeHTTP(w, r)
 		case AdminServiceGetDocumentProcedure:
@@ -487,6 +510,10 @@ func (UnimplementedAdminServiceHandler) GetProject(context.Context, *connect.Req
 
 func (UnimplementedAdminServiceHandler) UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.UpdateProject is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetProjectStats is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error) {

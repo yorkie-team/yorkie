@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/backend/webhook"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
@@ -68,6 +69,8 @@ type Backend struct {
 	DB database.Database
 	// MsgBroker is the message producer instance.
 	MsgBroker messagebroker.Broker
+	// Warehouse is the warehouse instance.
+	Warehouse warehouse.Warehouse
 
 	// Background is used to manage background tasks.
 	Background *background.Background
@@ -82,6 +85,7 @@ func New(
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
 	kafkaConf *messagebroker.Config,
+	rocksConf *warehouse.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
 	// current machine.
@@ -164,7 +168,13 @@ func New(
 	// 08. Create the message broker instance.
 	broker := messagebroker.Ensure(kafkaConf)
 
-	// 09. Return the backend instance.
+	// 09. Ensure the warehouse instance.
+	warehouse, err := warehouse.Ensure(rocksConf)
+	if err != nil {
+		return nil, err
+	}
+
+	// 10. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
@@ -190,6 +200,7 @@ func New(
 		Background:   bg,
 		Housekeeping: keeping,
 		MsgBroker:    broker,
+		Warehouse:    warehouse,
 	}, nil
 }
 

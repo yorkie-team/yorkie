@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -97,6 +98,7 @@ type Config struct {
 	Backend      *backend.Config       `yaml:"Backend"`
 	Mongo        *mongo.Config         `yaml:"Mongo"`
 	Kafka        *messagebroker.Config `yaml:"Kafka"`
+	StarRocks    *warehouse.Config     `yaml:"StarRocks"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults

@@ -19,6 +19,7 @@ package projects
 
 import (
 	"context"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -88,6 +89,36 @@ func UpdateProject(
 	}
 
 	return info.ToProject(), nil
+}
+
+// GetProjectStats returns the project stats.
+func GetProjectStats(
+	ctx context.Context,
+	be *backend.Backend,
+	id types.ID,
+	from time.Time,
+	to time.Time,
+) (*types.ProjectStats, error) {
+	activeUsers, err := be.Warehouse.GetActiveUsers(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	activeUsersCount, err := be.Warehouse.GetActiveUsersCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	documentsCount, err := be.DB.GetDocumentsCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.ProjectStats{
+		ActiveUsersCount: activeUsersCount,
+		ActiveUsers:      activeUsers,
+		DocumentsCount:   documentsCount,
+	}, nil
 }
 
 // GetProjectFromAPIKey returns a project from an API key.

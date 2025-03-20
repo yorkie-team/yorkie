@@ -72,6 +72,18 @@ func ToProject(project *types.Project) *api.Project {
 	}
 }
 
+// ToMetricPoints converts the given model to Protobuf.
+func ToMetricPoints(activeUsers []types.MetricPoint) []*api.MetricPoint {
+	var pbActiveUsers []*api.MetricPoint
+	for _, activeUser := range activeUsers {
+		pbActiveUsers = append(pbActiveUsers, &api.MetricPoint{
+			Timestamp: activeUser.Time,
+			Value:     int32(activeUser.Value),
+		})
+	}
+	return pbActiveUsers
+}
+
 // ToDocumentSummaries converts the given model to Protobuf.
 func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
 	var pbSummaries []*api.DocumentSummary

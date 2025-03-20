@@ -307,6 +307,11 @@ message Project {
   google.protobuf.Timestamp updated_at = 13;
 }
 
+message MetricPoint {
+  int64 timestamp = 1;
+  int32 value = 2;
+}
+
 message UpdatableProjectFields {
   message AuthWebhookMethods {
     repeated string methods = 1;

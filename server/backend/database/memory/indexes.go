@@ -118,6 +118,10 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
+				},
 				"project_id_id": {
 					Name:   "project_id_id",
 					Unique: true,

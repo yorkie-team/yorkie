@@ -208,6 +208,9 @@ type Database interface {
 		refKey types.DocRefKey,
 	) error
 
+	// GetDocumentsCount returns the number of documents in the given project.
+	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
