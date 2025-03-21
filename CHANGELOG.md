@@ -7,6 +7,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.4] - 2025-03-21
+
+### Added
+
+- Add project stats retrieval functionality by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1202
 - Add GitHubCallbackRedirectURL for OAuth authentication by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1200
 
 ## [0.6.3] - 2025-03-19
