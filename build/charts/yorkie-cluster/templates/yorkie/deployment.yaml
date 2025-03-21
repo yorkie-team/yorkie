@@ -92,37 +92,41 @@ spec:
           "--kafka-write-timeout",
           "{{ .Values.yorkie.args.kafkaWriteTimeout }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubClientID }}
+          {{- if .Values.yorkie.args.githubClientID }}
           "--auth-github-client-id",
-          "{{ .Values.yorkie.args.GitHubClientID }}",
+          "{{ .Values.yorkie.args.githubClientID }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubClientSecret }}
+          {{- if .Values.yorkie.args.githubClientSecret }}
           "--auth-github-client-secret",
-          "{{ .Values.yorkie.args.GitHubClientSecret }}",
+          "{{ .Values.yorkie.args.githubClientSecret }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubRedirectURL }}
+          {{- if .Values.yorkie.args.githubRedirectURL }}
           "--auth-github-redirect-url",
-          "{{ .Values.yorkie.args.GitHubRedirectURL }}",
+          "{{ .Values.yorkie.args.githubRedirectURL }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubCallbackRedirectURL }}
+          {{- if .Values.yorkie.args.githubCallbackRedirectURL }}
           "--auth-github-callback-redirect-url",
-          "{{ .Values.yorkie.args.GitHubCallbackRedirectURL }}",
+          "{{ .Values.yorkie.args.githubCallbackRedirectURL }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubAuthURL }}
+          {{- if .Values.yorkie.args.githubAuthURL }}
           "--auth-github-auth-url",
-          "{{ .Values.yorkie.args.GitHubAuthURL }}",
+          "{{ .Values.yorkie.args.githubAuthURL }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubTokenURL }}
+          {{- if .Values.yorkie.args.githubTokenURL }}
           "--auth-github-token-url",
-          "{{ .Values.yorkie.args.GitHubTokenURL }}",
+          "{{ .Values.yorkie.args.githubTokenURL }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubDeviceAuthURL }}
+          {{- if .Values.yorkie.args.githubDeviceAuthURL }}
           "--auth-github-device-auth-url",
-          "{{ .Values.yorkie.args.GitHubDeviceAuthURL }}",
+          "{{ .Values.yorkie.args.githubDeviceAuthURL }}",
           {{- end }}
-          {{- if .Values.yorkie.args.GitHubUserURL }}
+          {{- if .Values.yorkie.args.githubUserURL }}
           "--auth-github-user-url",
-          "{{ .Values.yorkie.args.GitHubUserURL }}",
+          "{{ .Values.yorkie.args.githubUserURL }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.starrocksDSN }}
+          "--starrocks-dsn",
+          "{{ .Values.yorkie.args.starrocksDSN }}",
           {{- end }}
           {{- end }}
         ]
