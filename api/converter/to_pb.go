@@ -65,6 +65,7 @@ func ToProject(project *types.Project) *api.Project {
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int32(project.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument: int32(project.MaxAttachmentsPerDocument),
+		AllowedOrigins:            project.AllowedOrigins,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
 		CreatedAt:                 timestamppb.New(project.CreatedAt),

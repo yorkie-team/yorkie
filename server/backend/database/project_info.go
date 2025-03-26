@@ -75,6 +75,9 @@ type ProjectInfo struct {
 	// If it is 0, there is no limit.
 	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
 
+	// AllowedOrigins is the list of allowed origins.
+	AllowedOrigins []string `bson:"allowed_origins"`
+
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -115,6 +118,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
+		AllowedOrigins:            i.AllowedOrigins,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
 	}
@@ -146,6 +150,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.MaxAttachmentsPerDocument != nil {
 		i.MaxAttachmentsPerDocument = *fields.MaxAttachmentsPerDocument
 	}
+	if fields.AllowedOrigins != nil {
+		i.AllowedOrigins = *fields.AllowedOrigins
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
@@ -161,6 +168,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
+		AllowedOrigins:            i.AllowedOrigins,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,
 		CreatedAt:                 i.CreatedAt,
