@@ -55,6 +55,9 @@ type UpdatableProjectFields struct {
 	// MaxAttachmentsPerDocument is the maximum number of attachments per document.
 	// If it is 0, there is no limit.
 	MaxAttachmentsPerDocument *int `bson:"max_attachments_per_document,omitempty" validate:"omitempty,min=0"`
+
+	// AllowedOrigins is the list of origins that are allowed to access the project.
+	AllowedOrigins *[]string `bson:"allowed_origins,omitempty" validate:"omitempty,dive,valid_origin"`
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -112,6 +115,28 @@ func init() {
 	}
 
 	if err := validation.RegisterTranslation("invalid_webhook_event", "given {0} is invalid event type"); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterValidation(
+		"valid_origin",
+		func(level validation.FieldLevel) bool {
+			origin := level.Field().String()
+			if origin == "*" {
+				return true
+			}
+			if err := validation.Validate(origin, []any{"url"}); err != nil {
+				return false
+			}
+			return true
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterTranslation("valid_origin", "given {0} must be a valid URL or '*'"); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}

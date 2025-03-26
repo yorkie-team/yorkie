@@ -143,7 +143,8 @@ func newCORS() *cors.Cors {
 			http.MethodDelete,
 		},
 		AllowOriginFunc: func(origin string) bool {
-			// TODO(hackerwins): We need to provide a way to configure allow origins in the dashboard.
+			// NOTE(hackerwins): All origins are allowed at this level. Origin restrictions
+			// are enforced per project through middleware.
 			return true
 		},
 		AllowedHeaders: []string{"*"},

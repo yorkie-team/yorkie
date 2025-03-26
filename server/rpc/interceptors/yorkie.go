@@ -20,6 +20,7 @@ package interceptors
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -167,7 +168,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	ctx = metadata.With(ctx, md)
 	cacheKey := md.APIKey
 
-	// 02. building project
+	// 02. Build Project from API Key
 	if _, ok := i.projectCache.Get(cacheKey); !ok {
 		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
@@ -178,8 +179,53 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	project, _ := i.projectCache.Get(cacheKey)
 	ctx = projects.With(ctx, project)
 
-	// 03. building logger
+	// 03. Check CORS after project is loaded
+	if err := i.checkCORS(ctx, header); err != nil {
+		return nil, err
+	}
+
+	// 04. Build Logger with request ID
 	ctx = logging.With(ctx, logging.New(i.requestID.next()))
 
 	return ctx, nil
+}
+
+func (i *YorkieServiceInterceptor) checkCORS(ctx context.Context, header http.Header) error {
+	// NOTE(hackerwins): Check if the request is from a browser
+	userAgent := header.Get("User-Agent")
+	isBrowser := strings.Contains(strings.ToLower(userAgent), "mozilla") ||
+		strings.Contains(strings.ToLower(userAgent), "chrome") ||
+		strings.Contains(strings.ToLower(userAgent), "safari") ||
+		strings.Contains(strings.ToLower(userAgent), "edge") ||
+		strings.Contains(strings.ToLower(userAgent), "firefox")
+	if !isBrowser {
+		return nil
+	}
+
+	origin := header.Get("Origin")
+
+	// Not a CORS request
+	if origin == "" {
+		return nil
+	}
+
+	project := projects.From(ctx)
+	if project == nil {
+		return nil
+	}
+
+	if len(project.AllowedOrigins) == 0 {
+		return nil
+	}
+
+	for _, allowed := range project.AllowedOrigins {
+		if allowed == "*" || allowed == origin {
+			return nil
+		}
+	}
+
+	return connect.NewError(
+		connect.CodePermissionDenied,
+		fmt.Errorf("origin %q not allowed", origin),
+	)
 }
