@@ -59,6 +59,9 @@ You can automatically check the programmatic and stylistic errors of your code.
 make lint
 ```
 
+> [!NOTE]  
+> If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
+
 ## Design Documents
 
 For developers, [design documents](design/README.md) about core features are provided. You can refer to the docs for understanding the overall structure of Yorkie.
