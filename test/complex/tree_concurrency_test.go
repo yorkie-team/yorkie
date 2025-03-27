@@ -36,7 +36,7 @@ import (
  */
 func parseSimpleXML(s string) []string {
 	var res []string
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		current := ""
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {
@@ -203,8 +203,10 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 // rangeArr: ranges to perform operation
 // opArr1: operations to perform by first user
 // opArr2: operations to perform by second user
-func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.TreeNode, initialXML string,
-	rangesArr []twoRangesType, opArr1, opArr2 []operationInterface) {
+func RunTestTreeConcurrency(
+	testDesc string, t *testing.T, initialState json.TreeNode, initialXML string,
+	rangesArr []twoRangesType, opArr1, opArr2 []operationInterface,
+) {
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]

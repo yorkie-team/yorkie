@@ -781,7 +781,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) {
 	leftSiblingsSize := 0
 	children := parent.Children()
-	for i := 0; i < offset; i++ {
+	for i := range offset {
 		if children[i] == nil || children[i].Value.IsRemoved() {
 			continue
 		}
@@ -798,7 +798,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	}
 
 	node := t.root
-	for i := 0; i < len(path)-1; i++ {
+	for i := range len(path) - 1 {
 		pathElement := path[i]
 		node = node.Children()[pathElement]
 
@@ -907,7 +907,7 @@ func (t *Tree[V]) FindCommonAncestor(nodeA, nodeB *Node[V]) V {
 	ancestorsOfB := t.GetAncestors(nodeB)
 
 	var commonAncestor V
-	for i := 0; i < len(ancestorsOfA); i++ {
+	for i := range len(ancestorsOfA) {
 		ancestorOfA := ancestorsOfA[i]
 		ancestorOfB := ancestorsOfB[i]
 

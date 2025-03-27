@@ -85,7 +85,7 @@ func initializeClientsAndDocs(
 ) ([]*client.Client, []*document.Document) {
 	var clients []*client.Client
 	var docs []*document.Document
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c, d := initializeClientAndDoc(ctx, b, docKey)
 		clients = append(clients, c)
 		docs = append(docs, d)
@@ -97,7 +97,7 @@ func benchmarkVV(
 	clientCnt int,
 	b *testing.B,
 ) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := createDocKey(b, i)
 

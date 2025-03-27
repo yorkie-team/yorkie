@@ -485,7 +485,7 @@ func buildArrayElements(
 
 		// NOTE(highcloud100): The structure cannot immediately call Interface()
 		// because it can have an unexposed field. If we call Interface(), panic will occur.
-		for i := 0; i < length; i++ {
+		for i := range length {
 			array[i] = reflect.ValueOf(elements).Index(i)
 		}
 
@@ -494,7 +494,7 @@ func buildArrayElements(
 		length := reflect.ValueOf(elements).Len()
 		array := make([]any, length)
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			array[i] = reflect.ValueOf(elements).Index(i).Interface()
 		}
 		return sliceToElements[any](array, context, stat)

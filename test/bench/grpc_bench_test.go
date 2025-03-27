@@ -56,7 +56,7 @@ func startDefaultServer() {
 
 // activeClient is a helper function to create active clients.
 func activeClients(b *testing.B, n int) (clients []*client.Client) {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c, err := client.Dial(
 			defaultServer.RPCAddr(),
 			client.WithMaxRecvMsgSize(50*1024*1024),
@@ -79,7 +79,7 @@ func benchmarkUpdateAndSync(
 	d *document.Document,
 	key string,
 ) {
-	for i := 0; i < cnt; i++ {
+	for i := range cnt {
 		err := d.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText(key)
 			text.Edit(0, 0, "c")
@@ -91,8 +91,14 @@ func benchmarkUpdateAndSync(
 	}
 }
 
-func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client, project *types.Project) error {
-	for i := 0; i < cnt; i++ {
+func benchmarkUpdateProject(
+	ctx context.Context,
+	b *testing.B,
+	cnt int,
+	adminCli *admin.Client,
+	project *types.Project,
+) error {
+	for i := range cnt {
 		name := fmt.Sprintf("name%d-%d", i, gotime.Now().UnixMilli())
 		authWebhookURL := fmt.Sprintf("http://authWebhookURL%d", i)
 		var authWebhookMethods []string
@@ -178,7 +184,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = cli.Attach(ctx, d1)
 		assert.NoError(b, err)
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			testKey := "testKey"
 			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewText(testKey)
@@ -225,7 +231,7 @@ func BenchmarkRPC(b *testing.B) {
 		done1 := make(chan bool)
 		done2 := make(chan bool)
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 			go func() {
@@ -255,7 +261,7 @@ func BenchmarkRPC(b *testing.B) {
 		for c := 0; c < 10485000; c++ {
 			builder.WriteString("a")
 		}
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			func() {
 				clients := activeClients(b, 2)
 				c1, c2 := clients[0], clients[1]
@@ -303,7 +309,7 @@ func BenchmarkRPC(b *testing.B) {
 		project, err := adminCli.CreateProject(ctx, "admin-cli-test")
 		assert.NoError(b, err)
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli, project))
 		}
 	})

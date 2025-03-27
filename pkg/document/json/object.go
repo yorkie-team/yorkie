@@ -386,7 +386,7 @@ func buildObjectMembersFromValue(
 	stat *buildState,
 ) map[string]crdt.Element {
 	members := make(map[string]crdt.Element)
-	for i := 0; i < value.NumField(); i++ {
+	for i := range value.NumField() {
 		field := value.Field(i)
 		fieldType := value.Type().Field(i)
 		tag := fieldType.Tag.Get("yorkie")
@@ -475,7 +475,7 @@ func isEmptyValue(v reflect.Value) bool {
 	case reflect.Interface, reflect.Pointer:
 		return v.IsNil()
 	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
+		for i := range v.NumField() {
 			if !isEmptyValue(v.Field(i)) {
 				return false
 			}

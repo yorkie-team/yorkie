@@ -258,8 +258,10 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket,
-	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
+func (s *RGATreeSplitNode[V]) Remove(
+	removedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64,
+) bool {
 	justRemoved := s.removedAt == nil
 
 	var nodeExisted bool
@@ -279,8 +281,10 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket,
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket,
-	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
+func (s *RGATreeSplitNode[V]) canStyle(
+	editedAt *time.Ticket,
+	maxCreatedAt *time.Ticket, clientLamportAtChange int64,
+) bool {
 	var nodeExisted bool
 	if maxCreatedAt == nil {
 		nodeExisted = s.createdAt().Lamport() <= clientLamportAtChange
@@ -600,7 +604,7 @@ func (s *RGATreeSplit[V]) findEdgesOfCandidates(
 // deleteIndexNodes clears the index nodes of the given deletion boundaries.
 // The boundaries mean the nodes that will not be deleted in the range.
 func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
-	for i := 0; i < len(boundaries)-1; i++ {
+	for i := range len(boundaries) - 1 {
 		leftBoundary := boundaries[i]
 		rightBoundary := boundaries[i+1]
 		if leftBoundary.next == rightBoundary {

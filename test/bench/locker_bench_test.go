@@ -34,7 +34,7 @@ import (
 
 func BenchmarkLocker(b *testing.B) {
 	l := locker.New()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		l.Lock("test")
 		assert.NoError(b, l.Unlock("test"))
 	}
@@ -54,7 +54,7 @@ func BenchmarkLockerParallel(b *testing.B) {
 func BenchmarkLockerMoreKeys(b *testing.B) {
 	l := locker.New()
 	var keys []string
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		keys = append(keys, strconv.Itoa(i))
 	}
 	b.SetParallelism(128)

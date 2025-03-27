@@ -158,7 +158,7 @@ func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 	}
 
 	vector := time.NewVersionVector()
-	for i := 0; i < len(actors); i++ {
+	for i := range len(actors) {
 		vector.Set(actors[i], time.MaxLamport)
 	}
 
@@ -186,7 +186,7 @@ func TokensEqualBetween(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], fro
 	assert.NoError(t, err)
 
 	var actual []string
-	for i := 0; i < len(nodes); i++ {
+	for i := range len(nodes) {
 		actual = append(actual, fmt.Sprintf("%s:%s", ToDiagnostic(nodes[i]), tokenTypes[i].ToString()))
 	}
 	assert.Equal(t, expected, actual)
@@ -566,7 +566,7 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 	assert.NoError(t, cli.Activate(ctx))
 
 	var docs []*document.Document
-	for i := 0; i < count; i++ {
+	for i := range count {
 		doc := document.New(TestDocKey(t, i))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		docs = append(docs, doc)

@@ -270,7 +270,8 @@ func RunFindDocInfosByQueryTest(
 			"test", "test$3", "test-search", "test$0",
 			"search$test", "abcde", "test abc",
 			"test0", "test1", "test2", "test3", "test10",
-			"test11", "test20", "test21", "test22", "test23"}
+			"test11", "test20", "test21", "test22", "test23",
+		}
 		for _, docKey := range docKeys {
 			_, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), key.Key(docKey), true)
 			assert.NoError(t, err)
@@ -286,7 +287,8 @@ func RunFindDocInfosByQueryTest(
 
 		assert.EqualValues(t, []string{
 			"test", "test abc", "test$0", "test$3", "test-search",
-			"test0", "test1", "test10", "test11", "test2"}, keys)
+			"test0", "test1", "test10", "test11", "test2",
+		}, keys)
 		assert.Equal(t, 15, res.TotalCount)
 	})
 }
@@ -524,7 +526,8 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 }
 
 // RunFindLatestChangeInfoTest runs the FindLatestChangeInfoByActor test for the given db.
-func RunFindLatestChangeInfoTest(t *testing.T,
+func RunFindLatestChangeInfoTest(
+	t *testing.T,
 	db database.Database,
 	projectID types.ID,
 ) {
@@ -895,7 +898,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		totalSize := 9
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		docInfos := make([]*database.DocInfo, 0, totalSize)
-		for i := 0; i < totalSize; i++ {
+		for i := range totalSize {
 			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("%d", i)), true)
 			assert.NoError(t, err)
 			docInfos = append(docInfos, docInfo)
@@ -1064,7 +1067,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		assert.NoError(t, err)
 
 		var docInfos []*database.DocInfo
-		for i := 0; i < testDocCnt; i++ {
+		for i := range testDocCnt {
 			testDocKey := key.Key("key" + strconv.Itoa(i))
 			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, types.ClientRefKey{
 				ProjectID: projectInfo.ID,
@@ -1568,7 +1571,7 @@ func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
 
 		projectCnt := 10
 		projects := make([]*database.ProjectInfo, 0)
-		for i := 0; i < projectCnt; i++ {
+		for i := range projectCnt {
 			p, err := db.CreateProjectInfo(
 				ctx,
 				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
@@ -1582,7 +1585,7 @@ func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
 		lastProjectID := database.DefaultProjectID
 		pageSize := 2
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			projectInfos, err := db.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
 			assert.NoError(t, err)
 

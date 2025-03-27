@@ -148,7 +148,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, 4, root.GetArray("k1").Len())
 			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").ToTestString())
 
-			for i := 0; i < root.GetArray("k1").Len(); i++ {
+			for i := range root.GetArray("k1").Len() {
 				assert.Equal(
 					t,
 					fmt.Sprintf("%d", i+1),

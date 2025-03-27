@@ -324,7 +324,7 @@ func TestGarbageCollection(t *testing.T) {
 			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
 		})
-		//d1.vv = [c1:2]
+		// d1.vv = [c1:2]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
@@ -365,7 +365,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 0}, &json.TreeNode{Type: "text", Value: "g"}, 0)
 			return nil
 		})
-		//d1.vv = [c1:6, c2:4]
+		// d1.vv = [c1:6, c2:4]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)))
 
 		assert.NoError(t, c1.Sync(ctx))
@@ -425,7 +425,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("5").Edit(0, 1, "h", map[string]string{"b": "1"})
 			return nil
 		}, "removes 2 and edit text type elements")
-		//d1.vv = [c1:4, c2:1]
+		// d1.vv = [c1:4, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 6, d1.GarbageLen())
@@ -623,7 +623,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		})
-		//d1.vv = [c1:8, c2:1]
+		// d1.vv = [c1:8, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 8), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
@@ -733,7 +733,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetTree("tree").EditByPath([]int{2}, []int{2}, &json.TreeNode{Type: "text", Value: "c"}, 0)
 			return nil
 		})
-		//d1.vv =[c1:7, c2:1]
+		// d1.vv =[c1:7, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 7), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 
@@ -829,7 +829,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}))
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
-		for i := 0; i < int(conf.Backend.SnapshotInterval); i++ {
+		for i := range int(conf.Backend.SnapshotInterval) {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
 				return nil
@@ -872,7 +872,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
 		}, "sets text")
-		//d1.vv = [c1:2]
+		// d1.vv = [c1:2]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
@@ -888,7 +888,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
-		//d2.vv =[c1:2, c2:4]
+		// d2.vv =[c1:2, c2:4]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
@@ -896,7 +896,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		}, "delete bd")
-		//d1.vv = [c1:4, c2:1]
+		// d1.vv = [c1:4, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())
@@ -916,7 +916,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "1")
 			return nil
 		}, "insert 1")
-		//d2.vv =[c1:4, c2:6]
+		// d2.vv =[c1:4, c2:6]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 6)))
 		assert.NoError(t, err)
 
@@ -969,7 +969,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "d")
 			return nil
 		}, "insert d")
-		//d2.vv = [c1:2, c2:4]
+		// d2.vv = [c1:2, c2:4]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
@@ -985,7 +985,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
-		//d2.vv = [c1:2, c2:5]
+		// d2.vv = [c1:2, c2:5]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 5)))
 		assert.NoError(t, err)
 
@@ -993,7 +993,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		}, "remove ac")
-		//c1.vv = [c1:6, c2:4]
+		// c1.vv = [c1:6, c2:4]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 6), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
@@ -1010,7 +1010,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "1")
 			return nil
 		}, "insert 1 (pushonly)")
-		//d2.vv = [c1:2, c2:6]
+		// d2.vv = [c1:2, c2:6]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 6)))
 		assert.NoError(t, err)
 
@@ -1028,7 +1028,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "2")
 			return nil
 		}, "insert 2 (pushonly)")
-		//c2.vv = [c1:2, c2:7]
+		// c2.vv = [c1:2, c2:7]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 7)))
 		assert.NoError(t, err)
 
@@ -1153,7 +1153,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
 			return nil
 		}, "sets text")
-		//d1.vv = [c1:2]
+		// d1.vv = [c1:2]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 2)))
 		assert.NoError(t, err)
 
@@ -1169,7 +1169,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
-		//d2.vv =[c1:2, c2:4]
+		// d2.vv =[c1:2, c2:4]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
@@ -1177,7 +1177,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		}, "delete bd")
-		//d1.vv = [c1:4, c2:1]
+		// d1.vv = [c1:4, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())
@@ -1340,7 +1340,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(2, 2, "c")
 			return nil
 		}, "insert c")
-		//d2.vv = [c1:2, c2:4]
+		// d2.vv = [c1:2, c2:4]
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 2), versionOf(d2.ActorID(), 4)))
 		assert.NoError(t, err)
 
@@ -1348,7 +1348,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").Edit(1, 3, "")
 			return nil
 		}, "delete bc")
-		//d1.vv = [c1:4, c2:1]
+		// d1.vv = [c1:4, c2:1]
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 4), versionOf(d2.ActorID(), 1)))
 		assert.NoError(t, err)
 		assert.Equal(t, 2, d1.GarbageLen())

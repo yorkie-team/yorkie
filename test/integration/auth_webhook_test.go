@@ -168,7 +168,10 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "no token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{
+			"code":   connecthelper.CodeOf(auth.ErrUnauthenticated),
+			"reason": "no token",
+		}, converter.ErrorMetadataOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -180,7 +183,10 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "invalid token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{
+			"code":   connecthelper.CodeOf(auth.ErrUnauthenticated),
+			"reason": "invalid token",
+		}, converter.ErrorMetadataOf(err))
 	})
 
 	t.Run("permission denied response test", func(t *testing.T) {
@@ -475,7 +481,7 @@ func TestAuthWebhookCache(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 01. multiple requests to update the document.
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewObject("k1")
 				return nil
@@ -485,7 +491,7 @@ func TestAuthWebhookCache(t *testing.T) {
 
 		// 02. multiple requests to update the document after eviction by ttl.
 		time.Sleep(authTTL)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewObject("k1")
 				return nil
@@ -546,14 +552,14 @@ func TestAuthWebhookCache(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 
 		// 01. multiple requests.
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			err = cli.Activate(ctx)
 			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 		}
 
 		// 02. multiple requests after eviction by ttl.
 		time.Sleep(authTTL)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			err = cli.Activate(ctx)
 			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 		}
@@ -610,14 +616,14 @@ func TestAuthWebhookCache(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 
 		// 01. multiple requests.
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			err = cli.Activate(ctx)
 			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		}
 
 		// 02. multiple requests after eviction by ttl.
 		time.Sleep(authTTL)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			err = cli.Activate(ctx)
 			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		}
