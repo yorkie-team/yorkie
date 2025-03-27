@@ -20,7 +20,6 @@ package mongo
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -1266,54 +1265,6 @@ func (c *Client) FindMinSyncedSeqInfo(
 	return &syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-// and returns the min synced ticket.
-func (c *Client) UpdateAndFindMinSyncedTicket(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	// 01. update synced seq of the given client and document.
-	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
-	}
-
-	// 02. find min synced seq of the given document.
-	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}, options.FindOne().SetSort(bson.D{
-		{Key: "lamport", Value: 1},
-		{Key: "actor_id", Value: 1},
-	}))
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return time.InitialTicket, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
-	}
-	syncedSeqInfo := database.SyncedSeqInfo{}
-	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
-	}
-
-	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		syncedSeqInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
-}
-
 // UpdateAndFindMinSyncedVersionVector returns min synced version vector
 func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	ctx context.Context,
@@ -1474,52 +1425,6 @@ func (c *Client) FindDocInfosByQuery(
 	}, nil
 }
 
-// UpdateSyncedSeq updates the syncedSeq of the given client.
-func (c *Client) UpdateSyncedSeq(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) error {
-	// 01. update synced seq of the given client.
-	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
-	if err != nil {
-		return err
-	}
-
-	if !isAttached {
-		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"client_id":  clientInfo.ID,
-		}, options.Delete()); err != nil {
-			return fmt.Errorf("delete synced seq: %w", err)
-		}
-		return nil
-	}
-
-	ticket, err := c.findTicketByServerSeq(ctx, docRefKey, serverSeq)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"client_id":  clientInfo.ID,
-	}, bson.M{
-		"$set": bson.M{
-			"lamport":    ticket.Lamport(),
-			"actor_id":   ticket.ActorID(),
-			"server_seq": serverSeq,
-		},
-	}, options.Update().SetUpsert(true)); err != nil {
-		return fmt.Errorf("upsert synced seq: %w", err)
-	}
-
-	return nil
-}
-
 // IsDocumentAttached returns whether the given document is attached to clients.
 func (c *Client) IsDocumentAttached(
 	ctx context.Context,
@@ -1541,49 +1446,6 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	return true, nil
-}
-
-func (c *Client) findTicketByServerSeq(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": serverSeq,
-	})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf(
-			"change %s serverSeq=%d: %w",
-			docRefKey,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find change: %w", result.Err())
-	}
-
-	changeInfo := database.ChangeInfo{}
-	if err := result.Decode(&changeInfo); err != nil {
-		return nil, fmt.Errorf("decode change: %w", err)
-	}
-
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
 }
 
 func (c *Client) collection(

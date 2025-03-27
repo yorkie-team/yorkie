@@ -115,19 +115,13 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
-	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
-	if err != nil {
-		return nil, err
-	}
-
 	pack := &change.Pack{
-		DocumentKey:     key.Key(pbPack.DocumentKey),
-		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
-		Changes:         changes,
-		Snapshot:        pbPack.Snapshot,
-		IsRemoved:       pbPack.IsRemoved,
-		VersionVector:   versionVector,
-		MinSyncedTicket: minSyncedTicket,
+		DocumentKey:   key.Key(pbPack.DocumentKey),
+		Checkpoint:    fromCheckpoint(pbPack.Checkpoint),
+		Changes:       changes,
+		Snapshot:      pbPack.Snapshot,
+		IsRemoved:     pbPack.IsRemoved,
+		VersionVector: versionVector,
 	}
 
 	return pack, nil

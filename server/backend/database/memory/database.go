@@ -1314,58 +1314,6 @@ func (d *DB) FindMinSyncedSeqInfo(
 	return syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-// and returns the min synced ticket.
-func (d *DB) UpdateAndFindMinSyncedTicket(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	// 01. update synced seq of the given client and document.
-	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
-	}
-
-	// 02. find min synced seq of the given document.
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	iterator, err := txn.LowerBound(
-		tblSyncedSeqs,
-		"doc_id_lamport_actor_id",
-		docRefKey.DocID.String(),
-		int64(0),
-		time.InitialActorID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
-	}
-
-	var syncedSeqInfo *database.SyncedSeqInfo
-	if raw := iterator.Next(); raw != nil {
-		info := raw.(*database.SyncedSeqInfo)
-		if info.DocID == docRefKey.DocID {
-			syncedSeqInfo = info
-		}
-	}
-
-	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		syncedSeqInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
-}
-
 // UpdateVersionVector updates the given serverSeq of the given client
 func (d *DB) UpdateVersionVector(
 	_ context.Context,
@@ -1466,71 +1414,6 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 	}
 
 	return minVersionVector, nil
-}
-
-// UpdateSyncedSeq updates the syncedSeq of the given client.
-func (d *DB) UpdateSyncedSeq(
-	_ context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) error {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
-	if err != nil {
-		return err
-	}
-
-	if !isAttached {
-		if _, err = txn.DeleteAll(
-			tblSyncedSeqs,
-			"doc_id_client_id",
-			docRefKey.DocID.String(),
-			clientInfo.ID.String(),
-		); err != nil {
-			return fmt.Errorf("delete syncedseqs of %s: %w", docRefKey.DocID, err)
-		}
-		txn.Commit()
-		return nil
-	}
-
-	ticket, err := d.findTicketByServerSeq(txn, docRefKey, serverSeq)
-	if err != nil {
-		return err
-	}
-
-	raw, err := txn.First(
-		tblSyncedSeqs,
-		"doc_id_client_id",
-		docRefKey.DocID.String(),
-		clientInfo.ID.String(),
-	)
-	if err != nil {
-		return fmt.Errorf("fetch syncedseqs of %s: %w", docRefKey.DocID, err)
-	}
-
-	syncedSeqInfo := &database.SyncedSeqInfo{
-		ProjectID: docRefKey.ProjectID,
-		DocID:     docRefKey.DocID,
-		ClientID:  clientInfo.ID,
-		Lamport:   ticket.Lamport(),
-		ActorID:   types.ID(ticket.ActorID().String()),
-		ServerSeq: serverSeq,
-	}
-	if raw == nil {
-		syncedSeqInfo.ID = newID()
-	} else {
-		syncedSeqInfo.ID = raw.(*database.SyncedSeqInfo).ID
-	}
-
-	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
-		return fmt.Errorf("insert syncedseqs of %s: %w", docRefKey.DocID, err)
-	}
-
-	txn.Commit()
-	return nil
 }
 
 // FindDocInfosByPaging returns the documentInfos of the given paging.
@@ -1649,46 +1532,6 @@ func (d *DB) IsDocumentAttached(
 	}
 
 	return false, nil
-}
-
-func (d *DB) findTicketByServerSeq(
-	txn *memdb.Txn,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	raw, err := txn.First(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		serverSeq,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf(
-			"docID %s, serverSeq %d: %w",
-			docRefKey.DocID,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
-	}
-
-	changeInfo := raw.(*database.ChangeInfo)
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
 }
 
 func newID() types.ID {

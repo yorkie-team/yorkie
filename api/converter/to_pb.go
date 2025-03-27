@@ -161,13 +161,12 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     pack.DocumentKey.String(),
-		Checkpoint:      ToCheckpoint(pack.Checkpoint),
-		Changes:         pbChanges,
-		Snapshot:        pack.Snapshot,
-		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
-		VersionVector:   pbVersionVector,
-		IsRemoved:       pack.IsRemoved,
+		DocumentKey:   pack.DocumentKey.String(),
+		Checkpoint:    ToCheckpoint(pack.Checkpoint),
+		Changes:       pbChanges,
+		Snapshot:      pack.Snapshot,
+		VersionVector: pbVersionVector,
+		IsRemoved:     pack.IsRemoved,
 	}, nil
 }
 
