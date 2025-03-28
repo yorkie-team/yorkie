@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.5] - 2025-03-28
+
+### Added
+
+- Add AllowedOrigins field to Project for CORS support by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1205
+
+### Changed
+
+- Add a note on keeping tools up to date by @kokodak https://github.com/yorkie-team/yorkie/pull/1206
+
 ## [0.6.4] - 2025-03-21
 
 ### Added
