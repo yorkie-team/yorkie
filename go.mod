@@ -2,6 +2,8 @@ module github.com/yorkie-team/yorkie
 
 go 1.23.0
 
+toolchain go1.24.1
+
 require (
 	connectrpc.com/connect v1.12.0
 	connectrpc.com/grpchealth v1.3.0
@@ -27,7 +29,7 @@ require (
 	golang.org/x/net v0.17.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230920204549-e6e6cdab5c13
 	google.golang.org/grpc v1.58.3
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.36.6
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
