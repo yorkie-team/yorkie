@@ -361,13 +361,12 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			From:                toTextNodePos(e.From()),
-			To:                  toTextNodePos(e.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
-			Content:             e.Content(),
-			Attributes:          e.Attributes(),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTextNodePos(e.From()),
+			To:              toTextNodePos(e.To()),
+			Content:         e.Content(),
+			Attributes:      e.Attributes(),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
@@ -375,12 +374,11 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
-			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
-			From:                toTextNodePos(style.From()),
-			To:                  toTextNodePos(style.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
-			Attributes:          style.Attributes(),
-			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
+			From:            toTextNodePos(style.From()),
+			To:              toTextNodePos(style.To()),
+			Attributes:      style.Attributes(),
+			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }
@@ -403,13 +401,12 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 	return &api.Operation_TreeEdit_{
 		TreeEdit: &api.Operation_TreeEdit{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			From:                toTreePos(e.FromPos()),
-			To:                  toTreePos(e.ToPos()),
-			Contents:            ToTreeNodesWhenEdit(e.Contents()),
-			SplitLevel:          int32(e.SplitLevel()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTreePos(e.FromPos()),
+			To:              toTreePos(e.ToPos()),
+			Contents:        ToTreeNodesWhenEdit(e.Contents()),
+			SplitLevel:      int32(e.SplitLevel()),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
@@ -417,13 +414,12 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
 	return &api.Operation_TreeStyle_{
 		TreeStyle: &api.Operation_TreeStyle{
-			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
-			From:                toTreePos(style.FromPos()),
-			To:                  toTreePos(style.ToPos()),
-			Attributes:          style.Attributes(),
-			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
-			AttributesToRemove:  style.AttributesToRemove(),
-			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
+			ParentCreatedAt:    ToTimeTicket(style.ParentCreatedAt()),
+			From:               toTreePos(style.FromPos()),
+			To:                 toTreePos(style.ToPos()),
+			Attributes:         style.Attributes(),
+			ExecutedAt:         ToTimeTicket(style.ExecutedAt()),
+			AttributesToRemove: style.AttributesToRemove(),
 		},
 	}, nil
 }
@@ -517,16 +513,6 @@ func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
 	}
-}
-
-func toCreatedAtMapByActor(
-	createdAtMapByActor map[string]*time.Ticket,
-) map[string]*api.TimeTicket {
-	pbCreatedAtMapByActor := make(map[string]*api.TimeTicket)
-	for actor, createdAt := range createdAtMapByActor {
-		pbCreatedAtMapByActor[actor] = ToTimeTicket(createdAt)
-	}
-	return pbCreatedAtMapByActor
 }
 
 func toValueType(valueType crdt.ValueType) (api.ValueType, error) {

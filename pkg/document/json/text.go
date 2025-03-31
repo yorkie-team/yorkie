@@ -73,10 +73,9 @@ func (p *Text) Edit(
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, maxCreationMapByActor, pairs, err := p.Text.Edit(
+	_, pairs, err := p.Text.Edit(
 		fromPos,
 		toPos,
-		nil,
 		content,
 		attrs,
 		ticket,
@@ -94,7 +93,6 @@ func (p *Text) Edit(
 		p.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		content,
 		attrs,
 		ticket,
@@ -114,10 +112,9 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := p.Text.Style(
+	pairs, err := p.Text.Style(
 		fromPos,
 		toPos,
-		nil,
 		attributes,
 		ticket,
 		nil,
@@ -134,7 +131,6 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		p.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))

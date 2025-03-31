@@ -180,7 +180,6 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 // FromVersionVector converts the given Protobuf formats to model format.
 func FromVersionVector(pbVersionVector *api.VersionVector) (time.VersionVector, error) {
 	versionVector := make(time.VersionVector)
-	// TODO(hackerwins): Old clients do not send VersionVector. We should remove this later.
 	if pbVersionVector == nil {
 		return versionVector, nil
 	}
@@ -415,12 +414,6 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbEdit.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
 	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
 	if err != nil {
 		return nil, err
@@ -429,7 +422,6 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		parentCreatedAt,
 		from,
 		to,
-		createdAtMapByActor,
 		pbEdit.Content,
 		pbEdit.Attributes,
 		executedAt,
@@ -449,12 +441,6 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	if err != nil {
 		return nil, err
 	}
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbStyle.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
 	executedAt, err := fromTimeTicket(pbStyle.ExecutedAt)
 	if err != nil {
 		return nil, err
@@ -463,7 +449,6 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		parentCreatedAt,
 		from,
 		to,
-		createdAtMapByActor,
 		pbStyle.Attributes,
 		executedAt,
 	), nil
@@ -510,13 +495,6 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, err
 	}
 
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbTreeEdit.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	nodes, err := FromTreeNodesWhenEdit(pbTreeEdit.Contents)
 	if err != nil {
 		return nil, err
@@ -528,7 +506,6 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		to,
 		nodes,
 		int(pbTreeEdit.SplitLevel),
-		createdAtMapByActor,
 		executedAt,
 	), nil
 }
@@ -554,19 +531,11 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, err
 	}
 
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbTreeStyle.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	if len(pbTreeStyle.AttributesToRemove) > 0 {
 		return operations.NewTreeStyleRemove(
 			parentCreatedAt,
 			from,
 			to,
-			createdAtMapByActor,
 			pbTreeStyle.AttributesToRemove,
 			executedAt,
 		), nil
@@ -576,7 +545,6 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		parentCreatedAt,
 		from,
 		to,
-		createdAtMapByActor,
 		pbTreeStyle.Attributes,
 		executedAt,
 	), nil
@@ -605,20 +573,6 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 		elem,
 		executedAt,
 	), nil
-}
-
-func fromCreatedAtMapByActor(
-	pbCreatedAtMapByActor map[string]*api.TimeTicket,
-) (map[string]*time.Ticket, error) {
-	createdAtMapByActor := make(map[string]*time.Ticket)
-	for actor, pbTicket := range pbCreatedAtMapByActor {
-		ticket, err := fromTimeTicket(pbTicket)
-		if err != nil {
-			return nil, err
-		}
-		createdAtMapByActor[actor] = ticket
-	}
-	return createdAtMapByActor, nil
 }
 
 func fromTextNodePos(

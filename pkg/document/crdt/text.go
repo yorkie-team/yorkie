@@ -269,12 +269,11 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
+) (*RGATreeSplitNodePos, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -283,7 +282,6 @@ func (t *Text) Edit(
 	return t.rgaTreeSplit.edit(
 		from,
 		to,
-		maxCreatedAtMapByActor,
 		val,
 		executedAt,
 		versionVector,
@@ -294,36 +292,31 @@ func (t *Text) Edit(
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (map[string]*time.Ticket, []GCPair, error) {
+) ([]GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-	createdAtMapByActor := make(map[string]*time.Ticket)
 	isVersionVectorEmpty := len(versionVector) == 0
-	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
 
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
 	for _, node := range nodes {
-		actorIDHex := node.id.createdAt.ActorIDHex()
 		actorID := node.id.createdAt.ActorID()
 
-		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+		if isVersionVectorEmpty {
 			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
 		} else if !isVersionVectorEmpty {
@@ -334,24 +327,9 @@ func (t *Text) Style(
 			} else {
 				clientLamportAtChange = 0
 			}
-		} else {
-			// Case 3: from operation without version vector(Before v0.5.6)
-			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
-			if ok {
-				maxCreatedAt = createdAt
-			} else {
-				maxCreatedAt = time.InitialTicket
-			}
 		}
 
-		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
-		// (without version vector) are migrated to new Changes with version vector.
-		if node.canStyle(executedAt, maxCreatedAt, clientLamportAtChange) {
-			maxCreatedAt := createdAtMapByActor[actorIDHex]
-			createdAt := node.id.createdAt
-			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
-				createdAtMapByActor[actorIDHex] = createdAt
-			}
+		if node.canStyle(executedAt, clientLamportAtChange) {
 			toBeStyled = append(toBeStyled, node)
 		}
 	}
@@ -369,7 +347,7 @@ func (t *Text) Style(
 		}
 	}
 
-	return createdAtMapByActor, pairs, nil
+	return pairs, nil
 }
 
 // Nodes returns the internal nodes of this Text.

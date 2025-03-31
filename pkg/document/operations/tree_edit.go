@@ -39,10 +39,6 @@ type TreeEdit struct {
 	// splitLevel is the level of the split.
 	splitLevel int
 
-	// maxCreatedAtMapByActor is a map that stores the latest creation time
-	// by actor for the nodes included in the editing range.
-	maxCreatedAtMapByActor map[string]*time.Ticket
-
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
 }
@@ -54,17 +50,15 @@ func NewTreeEdit(
 	to *crdt.TreePos,
 	contents []*crdt.TreeNode,
 	splitLevel int,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
-		parentCreatedAt:        parentCreatedAt,
-		from:                   from,
-		to:                     to,
-		contents:               contents,
-		splitLevel:             splitLevel,
-		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
-		executedAt:             executedAt,
+		parentCreatedAt: parentCreatedAt,
+		from:            from,
+		to:              to,
+		contents:        contents,
+		splitLevel:      splitLevel,
+		executedAt:      executedAt,
 	}
 }
 
@@ -89,7 +83,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			}
 
 		}
-		_, pairs, err := obj.Edit(
+		pairs, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
@@ -116,7 +110,6 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 					)
 				}
 			}(),
-			e.maxCreatedAtMapByActor,
 			versionVector,
 		)
 		if err != nil {
@@ -163,12 +156,6 @@ func (e *TreeEdit) Contents() []*crdt.TreeNode {
 // SplitLevel returns the level of the split.
 func (e *TreeEdit) SplitLevel() int {
 	return e.splitLevel
-}
-
-// MaxCreatedAtMapByActor returns the map that stores the latest creation time
-// by actor for the nodes included in the editing range.
-func (e *TreeEdit) MaxCreatedAtMapByActor() map[string]*time.Ticket {
-	return e.maxCreatedAtMapByActor
 }
 
 // ExecutedAt returns execution time of this operation.
