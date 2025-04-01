@@ -138,6 +138,7 @@ func PushPull(
 		clientInfo,
 		docRefKey,
 		reqPack.VersionVector,
+		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
 		return nil, err

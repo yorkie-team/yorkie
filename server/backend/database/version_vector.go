@@ -28,4 +28,5 @@ type VersionVectorInfo struct {
 	DocID         types.ID           `bson:"doc_id"`
 	ClientID      types.ID           `bson:"client_id"`
 	VersionVector time.VersionVector `bson:"version_vector"`
+	ServerSeq     int64              `bson:"server_seq"`
 }

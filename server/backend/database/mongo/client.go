@@ -1015,15 +1015,15 @@ func (c *Client) CreateChangeInfos(
 	return nil
 }
 
-// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
+// PurgeStaleChanges delete changes before the smallest in `versionvectors` to
 // save storage.
 func (c *Client) PurgeStaleChanges(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) error {
-	// Find the smallest server seq in `syncedseqs`.
+	// Find the smallest server seq in `versionvectors`.
 	// Because offline client can pull changes when it becomes online.
-	result := c.collection(ColSyncedSeqs).FindOne(
+	result := c.collection(ColVersionVectors).FindOne(
 		ctx,
 		bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -1037,7 +1037,7 @@ func (c *Client) PurgeStaleChanges(
 	if result.Err() != nil {
 		return fmt.Errorf("find syncedseqs: %w", result.Err())
 	}
-	minSyncedSeqInfo := database.SyncedSeqInfo{}
+	minSyncedSeqInfo := database.VersionVectorInfo{}
 	if err := result.Decode(&minSyncedSeqInfo); err != nil {
 		return fmt.Errorf("decode syncedseq: %w", err)
 	}
@@ -1242,22 +1242,22 @@ func (c *Client) FindClosestSnapshotInfo(
 func (c *Client) FindMinSyncedSeqInfo(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-) (*database.SyncedSeqInfo, error) {
-	syncedSeqResult := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
+) (*database.VersionVectorInfo, error) {
+	syncedSeqResult := c.collection(ColVersionVectors).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "server_seq", Value: 1},
 	}))
 	if syncedSeqResult.Err() == mongo.ErrNoDocuments {
-		syncedSeqInfo := database.SyncedSeqInfo{}
+		syncedSeqInfo := database.VersionVectorInfo{}
 		return &syncedSeqInfo, nil
 	}
 	if syncedSeqResult.Err() != nil {
 		return nil, fmt.Errorf("find synced seq: %w", syncedSeqResult.Err())
 	}
 
-	syncedSeqInfo := database.SyncedSeqInfo{}
+	syncedSeqInfo := database.VersionVectorInfo{}
 	if err := syncedSeqResult.Decode(&syncedSeqInfo); err != nil {
 		return nil, fmt.Errorf("decode syncedseq: %w", err)
 	}
@@ -1271,6 +1271,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
+	server_seq int64,
 ) (time.VersionVector, error) {
 	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
 	// from min version vector.
@@ -1300,7 +1301,7 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector, server_seq); err != nil {
 		return nil, err
 	}
 
@@ -1313,6 +1314,7 @@ func (c *Client) UpdateVersionVector(
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
+	serverSeq int64,
 ) error {
 	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
 	if err != nil {
@@ -1337,6 +1339,7 @@ func (c *Client) UpdateVersionVector(
 	}, bson.M{
 		"$set": bson.M{
 			"version_vector": versionVector,
+			"server_seq":     serverSeq,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
