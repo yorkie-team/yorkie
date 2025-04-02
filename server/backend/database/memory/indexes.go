@@ -27,6 +27,7 @@ var (
 	tblSnapshots      = "snapshots"
 	tblSyncedSeqs     = "syncedseqs"
 	tblVersionVectors = "versionvectors"
+	tblSchemas        = "schemas"
 )
 
 var schema = &memdb.DBSchema{
@@ -268,6 +269,40 @@ var schema = &memdb.DBSchema{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.StringFieldIndex{Field: "ClientID"},
+						},
+					},
+				},
+			},
+		},
+		tblSchemas: {
+			Name: tblSchemas,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
+				},
+				"project_id_name": {
+					Name: "project_id_name",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Name"},
+						},
+					},
+				},
+				"project_id_name_version": {
+					Name:   "project_id_name_version",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Name"},
+							&memdb.IntFieldIndex{Field: "Version"},
 						},
 					},
 				},
