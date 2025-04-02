@@ -221,7 +221,7 @@ type Database interface {
 		isRemoved bool,
 	) error
 
-	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
+	// PurgeStaleChanges delete changes before the smallest in `versionvectors` to
 	// save storage.
 	PurgeStaleChanges(
 		ctx context.Context,
@@ -273,20 +273,11 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+	// FindMinSyncedSeqInfo finds the minimum synced server sequence info.
 	FindMinSyncedSeqInfo(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) (*SyncedSeqInfo, error)
-
-	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-	// and returns the min synced ticket.
-	UpdateAndFindMinSyncedTicket(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) (*time.Ticket, error)
+	) (*VersionVectorInfo, error)
 
 	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
@@ -295,15 +286,8 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
+		server_seq int64,
 	) (time.VersionVector, error)
-
-	// UpdateSyncedSeq updates the syncedSeq of the given client.
-	UpdateSyncedSeq(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) error
 
 	// UpdateVersionVector updates the syncedSeq of the given client.
 	UpdateVersionVector(
@@ -311,6 +295,7 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
+		server_seq int64,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

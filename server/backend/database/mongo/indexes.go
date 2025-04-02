@@ -38,8 +38,6 @@ const (
 	ColChanges = "changes"
 	// ColSnapshots represents the snapshots collection in the database.
 	ColSnapshots = "snapshots"
-	// ColSyncedSeqs represents the syncedseqs collection in the database.
-	ColSyncedSeqs = "syncedseqs"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
 )
@@ -52,7 +50,6 @@ var Collections = []string{
 	ColDocuments,
 	ColChanges,
 	ColSnapshots,
-	ColSyncedSeqs,
 }
 
 type collectionInfo struct {
@@ -143,8 +140,9 @@ var collectionInfos = []collectionInfo{
 			},
 			Options: options.Index().SetUnique(true),
 		}},
-	}, {
-		name: ColSyncedSeqs,
+	},
+	{
+		name: ColVersionVectors,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
@@ -158,24 +156,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
-		}, {
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)},
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "lamport", Value: bsonx.Int32(1)},
-				{Key: "actor_id", Value: bsonx.Int32(1)},
-			},
-		}},
-	},
-	{
-		name: ColVersionVectors,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "client_id", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
 		}},
 	},
 }

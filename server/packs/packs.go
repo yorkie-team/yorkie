@@ -138,6 +138,7 @@ func PushPull(
 		clientInfo,
 		docRefKey,
 		reqPack.VersionVector,
+		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
 		return nil, err
@@ -145,21 +146,6 @@ func PushPull(
 	if respPack.SnapshotLen() == 0 {
 		respPack.VersionVector = minSyncedVersionVector
 	}
-
-	// TODO(hackerwins): This is a previous implementation before the version
-	// vector was introduced. But it is necessary to support the previous
-	// SDKs that do not support the version vector. This code should be removed
-	// after all SDKs are updated.
-	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
-		ctx,
-		clientInfo,
-		docRefKey,
-		reqPack.Checkpoint.ServerSeq,
-	)
-	if err != nil {
-		return nil, err
-	}
-	respPack.MinSyncedTicket = minSyncedTicket
 
 	respPack.ApplyDocInfo(docInfo)
 
