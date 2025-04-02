@@ -58,6 +58,12 @@ var (
 
 	// ErrProjectNameAlreadyExists is returned when the project name already exists.
 	ErrProjectNameAlreadyExists = errors.New("project name already exists")
+
+	// ErrSchemaNotFound is returned when the schema could not be found.
+	ErrSchemaNotFound = errors.New("schema not found")
+
+	// ErrSchemaAlreadyExists is returned when the schema already exists.
+	ErrSchemaAlreadyExists = errors.New("schema already exists")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -334,4 +340,35 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)
+
+	// CreateSchemaInfo creates a new schema.
+	CreateSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+		body string,
+	) (*SchemaInfo, error)
+
+	// GetSchemaInfo retrieves a schema by its ID.
+	GetSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+	) (*SchemaInfo, error)
+
+	// ListSchemaInfos lists all schemas in the project.
+	ListSchemaInfos(
+		ctx context.Context,
+		projectID types.ID,
+	) ([]*SchemaInfo, error)
+
+	// RemoveSchemaInfo removes a schema by its ID.
+	RemoveSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+	) error
 }

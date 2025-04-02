@@ -412,3 +412,11 @@ message DocEvent {
   string publisher = 2;
   DocEventBody body = 3;
 }
+
+message Schema {
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+  string body = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
