@@ -58,6 +58,7 @@ message DeactivateClientResponse {
 message AttachDocumentRequest {
   string client_id = 1;
   ChangePack change_pack = 2;
+  string schema = 3;
 }
 
 message AttachDocumentResponse {

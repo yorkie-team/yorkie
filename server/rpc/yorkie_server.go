@@ -40,6 +40,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
 type yorkieServer struct {
@@ -129,6 +130,7 @@ func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
 	req *connect.Request[api.AttachDocumentRequest],
 ) (*connect.Response[api.AttachDocumentResponse], error) {
+	// 01. Validate the request
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -142,6 +144,12 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	schemaName, schemaVersion, err := converter.FromSchemaKey(req.Msg.Schema)
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Verify access
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
@@ -149,6 +157,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// 03. Lock the given document
 	project := projects.From(ctx)
 	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
 	if err != nil {
@@ -164,6 +173,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}()
 
+	// 04. Find the client and document info
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -176,8 +186,9 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// 05. Check the attachment limit
 	if project.HasAttachmentLimit() {
-		count, err := documents.FindAttachedClientCount(ctx, s.backend, types.DocRefKey{
+		count, err := documents.GetAttachedClientsCount(ctx, s.backend, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docInfo.ID,
 		})
@@ -185,11 +196,18 @@ func (s *yorkieServer) AttachDocument(
 			return nil, err
 		}
 
-		if err := project.IsAttachmentLimitExceeded(count); err != nil {
+		if err := project.CheckAttachmentLimit(count); err != nil {
 			return nil, err
 		}
 	}
 
+	// 06. Fetch ruleset from the given schema
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	// 07. Attach the document to the client and push/pull the changes
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}
@@ -205,6 +223,9 @@ func (s *yorkieServer) AttachDocument(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
+	}
+	if schema != nil {
+		pbChangePack.Rules = converter.ToRules(schema.Rules)
 	}
 
 	return connect.NewResponse(&api.AttachDocumentResponse{

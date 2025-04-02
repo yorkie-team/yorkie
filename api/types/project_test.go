@@ -101,11 +101,11 @@ func TestProjectInfo(t *testing.T) {
 		info := &types.Project{
 			MaxAttachmentsPerDocument: 1,
 		}
-		assert.NoError(t, info.IsAttachmentLimitExceeded(0))
+		assert.NoError(t, info.CheckAttachmentLimit(0))
 
 		info2 := &types.Project{
 			MaxAttachmentsPerDocument: 1,
 		}
-		assert.Error(t, info2.IsAttachmentLimitExceeded(1))
+		assert.Error(t, info2.CheckAttachmentLimit(1))
 	})
 }
