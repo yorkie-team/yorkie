@@ -842,7 +842,7 @@ func (t *Tree) collectBetween(
 			if isVersionVectorEmpty {
 				// Case 1: local editing from json package
 				clientLamportAtChange = time.MaxLamport
-			} else if !isVersionVectorEmpty {
+			} else {
 				// Case 2: from operation with version vector(After v0.5.7)
 				lamport, ok := versionVector.Get(actorID)
 				if ok {
@@ -968,7 +968,7 @@ func (t *Tree) Style(
 		if isVersionVectorEmpty {
 			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if !isVersionVectorEmpty {
+		} else {
 			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
@@ -1023,7 +1023,7 @@ func (t *Tree) RemoveStyle(
 		if isVersionVectorEmpty {
 			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if !isVersionVectorEmpty {
+		} else {
 			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {

@@ -319,7 +319,7 @@ func (t *Text) Style(
 		if isVersionVectorEmpty {
 			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if !isVersionVectorEmpty {
+		} else {
 			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := versionVector.Get(actorID)
 			if ok {
