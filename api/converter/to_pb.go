@@ -607,3 +607,22 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	}
 	return pbUpdatableProjectFields, nil
 }
+
+// ToSchema converts the given model format to Protobuf format.
+func ToSchema(schema *types.Schema) *api.Schema {
+	return &api.Schema{
+		Name:      schema.Name,
+		Body:      schema.Body,
+		Version:   int32(schema.Version),
+		CreatedAt: timestamppb.New(schema.CreatedAt),
+	}
+}
+
+// ToSchemas converts the given model format to Protobuf format.
+func ToSchemas(schemas []*types.Schema) []*api.Schema {
+	var pbSchemas []*api.Schema
+	for _, schema := range schemas {
+		pbSchemas = append(pbSchemas, ToSchema(schema))
+	}
+	return pbSchemas
+}

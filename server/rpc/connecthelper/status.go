@@ -58,12 +58,14 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrClientNotFound:   connect.CodeNotFound,
 	database.ErrDocumentNotFound: connect.CodeNotFound,
 	database.ErrUserNotFound:     connect.CodeNotFound,
+	database.ErrSchemaNotFound:   connect.CodeNotFound,
 
 	// AlreadyExists means the requested resource already exists.
 	database.ErrProjectAlreadyExists:     connect.CodeAlreadyExists,
 	database.ErrProjectNameAlreadyExists: connect.CodeAlreadyExists,
 	database.ErrUserAlreadyExists:        connect.CodeAlreadyExists,
 	pubsub.ErrAlreadyConnected:           connect.CodeAlreadyExists,
+	database.ErrSchemaAlreadyExists:      connect.CodeAlreadyExists,
 
 	// FailedPrecondition means the request is rejected because the state of the
 	// system is not the desired state.
