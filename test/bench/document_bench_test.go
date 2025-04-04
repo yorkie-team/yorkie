@@ -19,9 +19,11 @@
 package bench
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -29,7 +31,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -423,14 +427,6 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTextSplitGC(1000, b)
 	})
 
-	b.Run("text delete all 10000", func(b *testing.B) {
-		benchmarkTextDeleteAll(10000, b)
-	})
-
-	b.Run("text delete all 100000", func(b *testing.B) {
-		benchmarkTextDeleteAll(100000, b)
-	})
-
 	b.Run("text 100", func(b *testing.B) {
 		benchmarkText(100, b)
 	})
@@ -483,10 +479,6 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTree(10000, b)
 	})
 
-	b.Run("tree delete all 1000", func(b *testing.B) {
-		benchmarkTreeDeleteAll(1000, b)
-	})
-
 	b.Run("tree edit gc 100", func(b *testing.B) {
 		benchmarkTreeEditGC(100, b)
 	})
@@ -502,7 +494,98 @@ func BenchmarkDocument(b *testing.B) {
 	b.Run("tree split gc 1000", func(b *testing.B) {
 		benchmarkTreeSplitGC(1000, b)
 	})
+}
 
+// Benchmark for deletion operations of text and tree types
+func BenchmarkDocumentDeletion(b *testing.B) {
+	// Start test server
+	err := logging.SetLogLevel("error")
+	assert.NoError(b, err)
+	startTestServer(100000, 100000)
+	defer func() {
+		if testServer == nil {
+			return
+		}
+
+		if err := testServer.Shutdown(true); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	// A single client inserts 10,000 characters (text) and deletes everything at once
+	b.Run("single text delete all 10000", func(b *testing.B) {
+		benchmarkTextDeleteAll(10000, b)
+	})
+
+	// A single client inserts 100,000 characters (text) and deletes everything at once
+	b.Run("single text delete all 100000", func(b *testing.B) {
+		benchmarkTextDeleteAll(100000, b)
+	})
+
+	// A single client inserts 1,000 characters (tree) and deletes everything at once
+	b.Run("single tree delete all 1000", func(b *testing.B) {
+		benchmarkTreeDeleteAll(1000, b)
+	})
+
+	// A single client inserts 100 characters (text) and deletes 10 characters at a time
+	b.Run("single text delete range 100", func(b *testing.B) {
+		benchmarkTextDeleteRange(100, b)
+	})
+
+	// A single client inserts 1,000 characters (text) and deletes 10 characters at a time
+	b.Run("single text delete range 1000", func(b *testing.B) {
+		benchmarkTextDeleteRange(1000, b)
+	})
+
+	// A single client inserts 100 characters (tree) and deletes 10 characters at a time
+	b.Run("single tree delete range 100", func(b *testing.B) {
+		benchmarkTreeDeleteRange(100, b)
+	})
+
+	// A single client inserts 1,000 characters (tree) and deletes 10 characters at a time
+	b.Run("single tree delete range 1000", func(b *testing.B) {
+		benchmarkTreeDeleteRange(1000, b)
+	})
+
+	// Multiple clients insert 100 characters (text); one deletes a 10-character range while other inserts single characters concurrently
+	b.Run("concurrent text delete range 100", func(b *testing.B) {
+		benchmarkConcurrentTextDeleteRange(100, 10, b)
+	})
+
+	// Multiple clients insert 1,000 characters (text); one deletes a 10-character range while other inserts single characters concurrently
+	b.Run("concurrent text delete range 1000", func(b *testing.B) {
+		benchmarkConcurrentTextDeleteRange(1000, 10, b)
+	})
+
+	// Multiple clients insert 100 characters (tree); one deletes a 10-character range while other inserts single characters concurrently
+	b.Run("concurrent tree delete range 100", func(b *testing.B) {
+		benchmarkConcurrentTreeDeleteRange(100, 10, b)
+	})
+
+	// Multiple clients insert 1,000 characters (tree); one deletes a 10-character range while other inserts single characters concurrently
+	b.Run("concurrent tree delete range 1000", func(b *testing.B) {
+		benchmarkConcurrentTreeDeleteRange(1000, 10, b)
+	})
+
+	// Multiple clients insert 100 characters (text); one client deletes everything at once
+	b.Run("concurrent text edit delete all 100", func(b *testing.B) {
+		benchmarkConcurrentTextDeleteAll(100, 10, b)
+	})
+
+	// Multiple clients insert 1,000 characters (text); one client deletes everything at once
+	b.Run("concurrent text edit delete all 1000", func(b *testing.B) {
+		benchmarkConcurrentTextDeleteAll(1000, 10, b)
+	})
+
+	// Multiple clients insert 100 characters (tree); one client deletes everything at once
+	b.Run("concurrent tree edit delete all 100", func(b *testing.B) {
+		benchmarkConcurrentTreeDeleteAll(100, 10, b)
+	})
+
+	// Multiple clients insert 1,000 characters (tree); one client deletes everything at once
+	b.Run("concurrent tree edit delete all 1000", func(b *testing.B) {
+		benchmarkConcurrentTreeDeleteAll(1000, 10, b)
+	})
 }
 
 func benchmarkTree(cnt int, b *testing.B) {
@@ -520,34 +603,6 @@ func benchmarkTree(cnt int, b *testing.B) {
 			for c := 1; c <= cnt; c++ {
 				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			}
-			return nil
-		})
-		assert.NoError(b, err)
-	}
-}
-
-func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
-
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
-				Type: "root",
-				Children: []json.TreeNode{{
-					Type:     "p",
-					Children: []json.TreeNode{},
-				}},
-			})
-			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
-			}
-			return nil
-		})
-
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.GetTree("t")
-			tree.Edit(1, cnt+1, nil, 0)
-
 			return nil
 		})
 		assert.NoError(b, err)
@@ -633,32 +688,6 @@ func benchmarkText(cnt int, b *testing.B) {
 			return nil
 		})
 		assert.NoError(b, err)
-	}
-}
-
-func benchmarkTextDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		doc := document.New("d1")
-
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
-				text.Edit(c, c, "a")
-			}
-			return nil
-		}, "Create cnt-length text to test")
-		assert.NoError(b, err)
-
-		b.StartTimer()
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			text := root.GetText("k1")
-			text.Edit(0, cnt, "")
-			return nil
-		}, "Delete all at a time")
-		assert.NoError(b, err)
-
-		assert.Equal(b, `{"k1":[]}`, doc.Marshal())
 	}
 }
 
@@ -787,5 +816,393 @@ func benchmarkObject(cnt int, b *testing.B) {
 			return nil
 		})
 		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTextDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.SetNewText("k1")
+			for c := 0; c < cnt; c++ {
+				text.Edit(c, c, "a")
+			}
+			return nil
+		}, "Create cnt-length text to test")
+		assert.NoError(b, err)
+
+		b.StartTimer()
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			text.Edit(0, cnt, "")
+			return nil
+		}, "Delete all at a time")
+		assert.NoError(b, err)
+
+		assert.Equal(b, `{"k1":[]}`, doc.Marshal())
+	}
+}
+
+func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
+			}
+			return nil
+		})
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			tree.Edit(1, cnt+1, nil, 0)
+
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTextDeleteRange(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		// Create text with cnt number of characters
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.SetNewText("k1")
+			for c := 0; c < cnt; c++ {
+				text.Edit(c, c, "a")
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+
+		// Perform deletion operations
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			for i := 0; i < deleteCount; i++ {
+				text.Edit(0, deleteRangeSize, "")
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		// Create tree with cnt number of nodes
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+
+		// Perform deletion operations
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			for i := 0; i < deleteCount; i++ {
+				tree.Edit(1, deleteRangeSize+1, nil, 0)
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkConcurrentTextDeleteRange(cnt, clientCount int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
+
+		// 1. Activate n clients and attach all clients to the document
+		clients, docs := initializeClientsAndDocs(ctx, b, clientCount, docKey)
+
+		// 2. Initialize the text
+		clients[0].Sync(ctx)
+		err := docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1")
+			return nil
+		})
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, `{"k1":[]}`, docs[0].Marshal())
+		assert.Equal(b, `{"k1":[]}`, docs[clientCount-1].Marshal())
+
+		// 3. Each client performs edits
+		for k := 0; k < cnt; k++ {
+			// Calculate which client's turn it is
+			clientIdx := k % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				text := root.GetText("k1")
+				text.Edit(k, k, "a")
+				return nil
+			})
+			assert.NoError(b, err)
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
+
+		// 4. One client performs deletions and other client performs insertions
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		for k := 0; k < deleteCount; k++ {
+			clientIdx := k % clientCount
+			clientIdx2 := (clientIdx + 1) % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			assert.NoError(b, clients[clientIdx2].Sync(ctx))
+
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				text := root.GetText("k1")
+				text.Edit(k, k+deleteRangeSize, "")
+				return nil
+			})
+			assert.NoError(b, err)
+
+			err = docs[clientIdx2].Update(func(root *json.Object, p *presence.Presence) error {
+				text := root.GetText("k1")
+				text.Edit(k+1, k+1, "b")
+				return nil
+			})
+			assert.NoError(b, err)
+
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			assert.NoError(b, clients[clientIdx2].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
+
+		// 5. Cleanup
+		helper.CleanupClients(b, clients)
+	}
+}
+
+func benchmarkConcurrentTreeDeleteRange(cnt, clientCount int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
+
+		// 1. Activate n clients and attach all clients to the document
+		clients, docs := initializeClientsAndDocs(ctx, b, clientCount, docKey)
+
+		// 2. Initialize the tree
+		clients[0].Sync(ctx)
+		err := docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			return nil
+		})
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+
+		// 3. Each client performs edits
+		for k := 0; k < cnt; k++ {
+			// Calculate which client's turn it is
+			clientIdx := k % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				tree := root.GetTree("t")
+				tree.Edit(k+1, k+1, &json.TreeNode{Type: "text", Value: "a"}, 0)
+				return nil
+			})
+			assert.NoError(b, err)
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
+
+		// 4. One client performs deletions and other client performs insertions
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		for k := 1; k < deleteCount+1; k++ {
+			clientIdx := k % clientCount
+			clientIdx2 := (clientIdx + 1) % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			assert.NoError(b, clients[clientIdx2].Sync(ctx))
+
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				tree := root.GetTree("t")
+				tree.Edit(k, k+deleteRangeSize, nil, 0)
+				return nil
+			})
+			assert.NoError(b, err)
+
+			err = docs[clientIdx2].Update(func(root *json.Object, p *presence.Presence) error {
+				tree := root.GetTree("t")
+				tree.Edit(k+1, k+1, &json.TreeNode{Type: "text", Value: "b"}, 0)
+				return nil
+			})
+			assert.NoError(b, err)
+
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			assert.NoError(b, clients[clientIdx2].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
+
+		// 5. Cleanup
+		helper.CleanupClients(b, clients)
+	}
+}
+
+func benchmarkConcurrentTextDeleteAll(cnt, clientCount int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
+
+		// 1. Activate n clients and attach all clients to the document
+		clients, docs := initializeClientsAndDocs(ctx, b, clientCount, docKey)
+
+		// 2. Initialize the text
+		clients[0].Sync(ctx)
+		err := docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1")
+			return nil
+		})
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, `{"k1":[]}`, docs[0].Marshal())
+		assert.Equal(b, `{"k1":[]}`, docs[clientCount-1].Marshal())
+
+		// 3. Each client performs edits
+		for k := 0; k < cnt; k++ {
+			// Calculate which client's turn it is
+			clientIdx := k % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				text := root.GetText("k1")
+				text.Edit(k, k, "a")
+				return nil
+			})
+			assert.NoError(b, err)
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
+
+		// 4. Client0 deletes all
+		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			text.Edit(0, cnt, "")
+			return nil
+		}, "Delete all at a time")
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, "[]", docs[0].Root().GetText("k1").Marshal())
+		assert.Equal(b, "[]", docs[clientCount-1].Root().GetText("k1").Marshal())
+
+		// 5. Cleanup
+		helper.CleanupClients(b, clients)
+	}
+}
+
+func benchmarkConcurrentTreeDeleteAll(cnt, clientCount int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
+
+		// 1. Activate n clients and attach all clients to the document
+		clients, docs := initializeClientsAndDocs(ctx, b, clientCount, docKey)
+
+		// 2. Initialize the tree
+		clients[0].Sync(ctx)
+		err := docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			return nil
+		})
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+
+		// 3. Each client performs edits
+		for k := 0; k < cnt; k++ {
+			// Calculate which client's turn it is
+			clientIdx := k % clientCount
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+			err := docs[clientIdx].Update(func(root *json.Object, p *presence.Presence) error {
+				tree := root.GetTree("t")
+				tree.Edit(k+1, k+1, &json.TreeNode{Type: "text", Value: "a"}, 0)
+				return nil
+			})
+			assert.NoError(b, err)
+			assert.NoError(b, clients[clientIdx].Sync(ctx))
+		}
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
+
+		// 4. Client0 deletes all
+		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			tree.Edit(1, cnt+1, nil, 0)
+			return nil
+		})
+		assert.NoError(b, err)
+		for j := 0; j < clientCount; j++ {
+			assert.NoError(b, clients[j].Sync(ctx))
+		}
+		assert.Equal(b, `{"type":"root","children":[{"type":"p","children":[]}]}`, docs[0].Root().GetTree("t").Marshal())
+		assert.Equal(b, `{"type":"root","children":[{"type":"p","children":[]}]}`, docs[clientCount-1].Root().GetTree("t").Marshal())
+
+		// 5. Cleanup
+		helper.CleanupClients(b, clients)
 	}
 }
