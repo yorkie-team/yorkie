@@ -97,12 +97,13 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSumm
 // ToDocumentSummary converts the given model to Protobuf format.
 func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 	return &api.DocumentSummary{
-		Id:         summary.ID.String(),
-		Key:        summary.Key.String(),
-		CreatedAt:  timestamppb.New(summary.CreatedAt),
-		AccessedAt: timestamppb.New(summary.AccessedAt),
-		UpdatedAt:  timestamppb.New(summary.UpdatedAt),
-		Snapshot:   summary.Snapshot,
+		Id:              summary.ID.String(),
+		Key:             summary.Key.String(),
+		CreatedAt:       timestamppb.New(summary.CreatedAt),
+		AccessedAt:      timestamppb.New(summary.AccessedAt),
+		UpdatedAt:       timestamppb.New(summary.UpdatedAt),
+		Snapshot:        summary.Snapshot,
+		AttachedClients: int32(summary.AttachedClients),
 	}
 }
 

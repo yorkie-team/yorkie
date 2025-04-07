@@ -25,4 +25,7 @@ type DocumentSummary struct {
 
 	// Snapshot is the string representation of the document.
 	Snapshot string
+
+	// AttachedClients is the count of clients attached to the document.
+	AttachedClients int
 }
