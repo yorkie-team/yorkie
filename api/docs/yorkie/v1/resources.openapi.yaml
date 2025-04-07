@@ -1,14 +1,15 @@
 openapi: 3.1.0
 info:
-  description: Yorkie is an open source document store for building collaborative
+  description:
+    Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.5
+  version: v0.6.6
 servers:
-- description: Production server
-  url: https://api.yorkie.dev
-- description: Local server
-  url: http://localhost:8080
+  - description: Production server
+    url: https://api.yorkie.dev
+  - description: Local server
+    url: http://localhost:8080
 paths: {}
 components:
   responses:
@@ -16,35 +17,35 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
         application/proto:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
       description: ""
   schemas:
     connect.error:
       additionalProperties: false
-      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      description: "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
       properties:
         code:
           enum:
-          - CodeCanceled
-          - CodeUnknown
-          - CodeInvalidArgument
-          - CodeDeadlineExceeded
-          - CodeNotFound
-          - CodeAlreadyExists
-          - CodePermissionDenied
-          - CodeResourceExhausted
-          - CodeFailedPrecondition
-          - CodeAborted
-          - CodeOutOfRange
-          - CodeInternal
-          - CodeUnavailable
-          - CodeDataLoss
-          - CodeUnauthenticated
+            - CodeCanceled
+            - CodeUnknown
+            - CodeInvalidArgument
+            - CodeDeadlineExceeded
+            - CodeNotFound
+            - CodeAlreadyExists
+            - CodePermissionDenied
+            - CodeResourceExhausted
+            - CodeFailedPrecondition
+            - CodeAborted
+            - CodeOutOfRange
+            - CodeInternal
+            - CodeUnavailable
+            - CodeDataLoss
+            - CodeUnauthenticated
           examples:
-          - CodeNotFound
+            - CodeNotFound
           type: string
         message:
           type: string
@@ -177,7 +178,7 @@ components:
       description: ""
       properties:
         id:
-          $ref: '#/components/schemas/yorkie.v1.ChangeID'
+          $ref: "#/components/schemas/yorkie.v1.ChangeID"
           additionalProperties: false
           description: ""
           title: id
@@ -191,12 +192,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Operation'
+            $ref: "#/components/schemas/yorkie.v1.Operation"
             type: object
           title: operations
           type: array
         presenceChange:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange"
           additionalProperties: false
           description: ""
           title: presence_change
@@ -222,18 +223,18 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
         serverSeq:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -250,12 +251,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Change'
+            $ref: "#/components/schemas/yorkie.v1.Change"
             type: object
           title: changes
           type: array
         checkpoint:
-          $ref: '#/components/schemas/yorkie.v1.Checkpoint'
+          $ref: "#/components/schemas/yorkie.v1.Checkpoint"
           additionalProperties: false
           description: ""
           title: checkpoint
@@ -271,7 +272,7 @@ components:
           title: is_removed
           type: boolean
         minSyncedTicket:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: min_synced_ticket
@@ -283,7 +284,7 @@ components:
           title: snapshot
           type: string
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -303,8 +304,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
       title: Checkpoint
       type: object
@@ -313,7 +314,7 @@ components:
       description: ""
       properties:
         body:
-          $ref: '#/components/schemas/yorkie.v1.DocEventBody'
+          $ref: "#/components/schemas/yorkie.v1.DocEventBody"
           additionalProperties: false
           description: ""
           title: body
@@ -324,7 +325,7 @@ components:
           title: publisher
           type: string
         type:
-          $ref: '#/components/schemas/yorkie.v1.DocEventType'
+          $ref: "#/components/schemas/yorkie.v1.DocEventType"
           additionalProperties: false
           description: ""
           title: type
@@ -350,14 +351,14 @@ components:
     yorkie.v1.DocEventType:
       description: ""
       enum:
-      - - DOC_EVENT_TYPE_DOCUMENT_CHANGED
-        - 0
-        - DOC_EVENT_TYPE_DOCUMENT_WATCHED
-        - 1
-        - DOC_EVENT_TYPE_DOCUMENT_UNWATCHED
-        - 2
-        - DOC_EVENT_TYPE_DOCUMENT_BROADCAST
-        - 3
+        - - DOC_EVENT_TYPE_DOCUMENT_CHANGED
+          - 0
+          - DOC_EVENT_TYPE_DOCUMENT_WATCHED
+          - 1
+          - DOC_EVENT_TYPE_DOCUMENT_UNWATCHED
+          - 2
+          - DOC_EVENT_TYPE_DOCUMENT_BROADCAST
+          - 3
       title: DocEventType
       type: string
     yorkie.v1.DocumentSummary:
@@ -365,7 +366,7 @@ components:
       description: ""
       properties:
         accessedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: accessed_at
@@ -376,7 +377,7 @@ components:
           title: attached_clients
           type: integer
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -397,7 +398,7 @@ components:
           title: snapshot
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -409,37 +410,37 @@ components:
       description: ""
       properties:
         counter:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.Counter'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.Counter"
           additionalProperties: false
           description: ""
           title: counter
           type: object
         jsonArray:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.JSONArray'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.JSONArray"
           additionalProperties: false
           description: ""
           title: json_array
           type: object
         jsonObject:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.JSONObject'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.JSONObject"
           additionalProperties: false
           description: ""
           title: json_object
           type: object
         primitive:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.Primitive'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.Primitive"
           additionalProperties: false
           description: ""
           title: primitive
           type: object
         text:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.Text'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.Text"
           additionalProperties: false
           description: ""
           title: text
           type: object
         tree:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement.Tree'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement.Tree"
           additionalProperties: false
           description: ""
           title: tree
@@ -451,25 +452,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.ValueType'
+          $ref: "#/components/schemas/yorkie.v1.ValueType"
           additionalProperties: false
           description: ""
           title: type
@@ -486,13 +487,13 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
@@ -501,12 +502,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.RGANode'
+            $ref: "#/components/schemas/yorkie.v1.RGANode"
             type: object
           title: nodes
           type: array
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -518,13 +519,13 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
@@ -533,12 +534,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.RHTNode'
+            $ref: "#/components/schemas/yorkie.v1.RHTNode"
             type: object
           title: nodes
           type: array
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -550,25 +551,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.ValueType'
+          $ref: "#/components/schemas/yorkie.v1.ValueType"
           additionalProperties: false
           description: ""
           title: type
@@ -585,13 +586,13 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
@@ -600,12 +601,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TextNode'
+            $ref: "#/components/schemas/yorkie.v1.TextNode"
             type: object
           title: nodes
           type: array
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -617,13 +618,13 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
@@ -632,12 +633,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNode'
+            $ref: "#/components/schemas/yorkie.v1.TreeNode"
             type: object
           title: nodes
           type: array
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -649,25 +650,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.ValueType'
+          $ref: "#/components/schemas/yorkie.v1.ValueType"
           additionalProperties: false
           description: ""
           title: type
@@ -687,8 +688,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: timestamp
         value:
           additionalProperties: false
@@ -707,7 +708,7 @@ components:
           title: is_removed
           type: boolean
         updatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -724,67 +725,67 @@ components:
       description: ""
       properties:
         add:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Add'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Add"
           additionalProperties: false
           description: ""
           title: add
           type: object
         arraySet:
-          $ref: '#/components/schemas/yorkie.v1.Operation.ArraySet'
+          $ref: "#/components/schemas/yorkie.v1.Operation.ArraySet"
           additionalProperties: false
           description: ""
           title: array_set
           type: object
         edit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Edit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Edit"
           additionalProperties: false
           description: ""
           title: edit
           type: object
         increase:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Increase'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Increase"
           additionalProperties: false
           description: ""
           title: increase
           type: object
         move:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Move'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Move"
           additionalProperties: false
           description: ""
           title: move
           type: object
         remove:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Remove'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Remove"
           additionalProperties: false
           description: ""
           title: remove
           type: object
         select:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Select'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Select"
           additionalProperties: false
           description: ""
           title: select
           type: object
         set:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Set'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Set"
           additionalProperties: false
           description: ""
           title: set
           type: object
         style:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Style'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Style"
           additionalProperties: false
           description: ""
           title: style
           type: object
         treeEdit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeEdit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeEdit"
           additionalProperties: false
           description: ""
           title: tree_edit
           type: object
         treeStyle:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeStyle'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeStyle"
           additionalProperties: false
           description: ""
           title: tree_style
@@ -796,25 +797,25 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -826,25 +827,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -871,25 +872,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -922,7 +923,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -934,19 +935,19 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -958,25 +959,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
@@ -988,19 +989,19 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -1016,25 +1017,25 @@ components:
          compatibility purposes.
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1046,7 +1047,7 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
@@ -1057,13 +1058,13 @@ components:
           title: key
           type: string
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1085,25 +1086,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1136,7 +1137,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1151,7 +1152,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNodes'
+            $ref: "#/components/schemas/yorkie.v1.TreeNodes"
             type: object
           title: contents
           type: array
@@ -1161,19 +1162,19 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -1184,7 +1185,7 @@ components:
           title: split_level
           type: integer
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1201,7 +1202,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1230,25 +1231,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1281,7 +1282,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1320,13 +1321,13 @@ components:
       description: ""
       properties:
         presence:
-          $ref: '#/components/schemas/yorkie.v1.Presence'
+          $ref: "#/components/schemas/yorkie.v1.Presence"
           additionalProperties: false
           description: ""
           title: presence
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange.ChangeType'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange.ChangeType"
           additionalProperties: false
           description: ""
           title: type
@@ -1335,14 +1336,14 @@ components:
     yorkie.v1.PresenceChange.ChangeType:
       description: ""
       enum:
-      - - CHANGE_TYPE_UNSPECIFIED
-        - 0
-        - CHANGE_TYPE_PUT
-        - 1
-        - CHANGE_TYPE_DELETE
-        - 2
-        - CHANGE_TYPE_CLEAR
-        - 3
+        - - CHANGE_TYPE_UNSPECIFIED
+          - 0
+          - CHANGE_TYPE_PUT
+          - 1
+          - CHANGE_TYPE_DELETE
+          - 2
+          - CHANGE_TYPE_CLEAR
+          - 3
       title: ChangeType
       type: string
     yorkie.v1.Project:
@@ -1374,7 +1375,7 @@ components:
           title: client_deactivate_threshold
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1422,7 +1423,7 @@ components:
           title: secret_key
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -1434,13 +1435,13 @@ components:
       description: ""
       properties:
         element:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement"
           additionalProperties: false
           description: ""
           title: element
           type: object
         next:
-          $ref: '#/components/schemas/yorkie.v1.RGANode'
+          $ref: "#/components/schemas/yorkie.v1.RGANode"
           additionalProperties: false
           description: ""
           title: next
@@ -1452,7 +1453,7 @@ components:
       description: ""
       properties:
         element:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement"
           additionalProperties: false
           description: ""
           title: element
@@ -1477,7 +1478,7 @@ components:
           title: presences
           type: object
         root:
-          $ref: '#/components/schemas/yorkie.v1.JSONElement'
+          $ref: "#/components/schemas/yorkie.v1.JSONElement"
           additionalProperties: false
           description: ""
           title: root
@@ -1494,7 +1495,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.Presence'
+          $ref: "#/components/schemas/yorkie.v1.Presence"
           additionalProperties: false
           description: ""
           title: value
@@ -1511,19 +1512,19 @@ components:
           title: attributes
           type: object
         id:
-          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TextNodeID"
           additionalProperties: false
           description: ""
           title: id
           type: object
         insPrevId:
-          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TextNodeID"
           additionalProperties: false
           description: ""
           title: ins_prev_id
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -1545,7 +1546,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.NodeAttr'
+          $ref: "#/components/schemas/yorkie.v1.NodeAttr"
           additionalProperties: false
           description: ""
           title: value
@@ -1557,7 +1558,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1574,7 +1575,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1610,8 +1611,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
       title: TimeTicket
       type: object
@@ -1630,25 +1631,25 @@ components:
           title: depth
           type: integer
         id:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: id
           type: object
         insNextId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_next_id
           type: object
         insPrevId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_prev_id
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -1675,7 +1676,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.NodeAttr'
+          $ref: "#/components/schemas/yorkie.v1.NodeAttr"
           additionalProperties: false
           description: ""
           title: value
@@ -1687,7 +1688,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1707,7 +1708,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNode'
+            $ref: "#/components/schemas/yorkie.v1.TreeNode"
             type: object
           title: content
           type: array
@@ -1718,13 +1719,13 @@ components:
       description: ""
       properties:
         leftSiblingId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: left_sibling_id
           type: object
         parentId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: parent_id
@@ -1736,55 +1737,55 @@ components:
       description: ""
       properties:
         allowedOrigins:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AllowedOrigins'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.AllowedOrigins"
           additionalProperties: false
           description: ""
           title: allowed_origins
           type: object
         authWebhookMethods:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods"
           additionalProperties: false
           description: ""
           title: auth_webhook_methods
           type: object
         authWebhookUrl:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: auth_webhook_url
           type: object
         clientDeactivateThreshold:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: client_deactivate_threshold
           type: object
         eventWebhookEvents:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents"
           additionalProperties: false
           description: ""
           title: event_webhook_events
           type: object
         eventWebhookUrl:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: event_webhook_url
           type: object
         maxAttachmentsPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
           additionalProperties: false
           description: ""
           title: max_attachments_per_document
           type: object
         maxSubscribersPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
           additionalProperties: false
           description: ""
           title: max_subscribers_per_document
           type: object
         name:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: name
@@ -1840,7 +1841,7 @@ components:
           title: auth_provider
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1860,34 +1861,34 @@ components:
     yorkie.v1.ValueType:
       description: ""
       enum:
-      - - VALUE_TYPE_NULL
-        - 0
-        - VALUE_TYPE_BOOLEAN
-        - 1
-        - VALUE_TYPE_INTEGER
-        - 2
-        - VALUE_TYPE_LONG
-        - 3
-        - VALUE_TYPE_DOUBLE
-        - 4
-        - VALUE_TYPE_STRING
-        - 5
-        - VALUE_TYPE_BYTES
-        - 6
-        - VALUE_TYPE_DATE
-        - 7
-        - VALUE_TYPE_JSON_OBJECT
-        - 8
-        - VALUE_TYPE_JSON_ARRAY
-        - 9
-        - VALUE_TYPE_TEXT
-        - 10
-        - VALUE_TYPE_INTEGER_CNT
-        - 11
-        - VALUE_TYPE_LONG_CNT
-        - 12
-        - VALUE_TYPE_TREE
-        - 13
+        - - VALUE_TYPE_NULL
+          - 0
+          - VALUE_TYPE_BOOLEAN
+          - 1
+          - VALUE_TYPE_INTEGER
+          - 2
+          - VALUE_TYPE_LONG
+          - 3
+          - VALUE_TYPE_DOUBLE
+          - 4
+          - VALUE_TYPE_STRING
+          - 5
+          - VALUE_TYPE_BYTES
+          - 6
+          - VALUE_TYPE_DATE
+          - 7
+          - VALUE_TYPE_JSON_OBJECT
+          - 8
+          - VALUE_TYPE_JSON_ARRAY
+          - 9
+          - VALUE_TYPE_TEXT
+          - 10
+          - VALUE_TYPE_INTEGER_CNT
+          - 11
+          - VALUE_TYPE_LONG_CNT
+          - 12
+          - VALUE_TYPE_TREE
+          - 13
       title: ValueType
       type: string
     yorkie.v1.VersionVector:
@@ -1914,8 +1915,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: value
       title: VectorEntry
       type: object
@@ -1925,4 +1926,4 @@ components:
       name: Authorization
       type: apiKey
 security:
-- ApiKeyAuth: []
+  - ApiKeyAuth: []
