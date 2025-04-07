@@ -55,23 +55,30 @@ func ListDocumentSummaries(
 		paging.PageSize = pageSizeLimit
 	}
 
-	docInfo, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
+	infos, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
 		return nil, err
 	}
 
 	var summaries []*types.DocumentSummary
-	for _, docInfo := range docInfo {
+	for _, info := range infos {
+		// TODO(hackerwins): Resolve the N+1 problem.
+		clientInfos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, info.RefKey())
+		if err != nil {
+			return nil, err
+		}
+
 		summary := &types.DocumentSummary{
-			ID:         docInfo.ID,
-			Key:        docInfo.Key,
-			CreatedAt:  docInfo.CreatedAt,
-			AccessedAt: docInfo.AccessedAt,
-			UpdatedAt:  docInfo.UpdatedAt,
+			ID:              info.ID,
+			Key:             info.Key,
+			AttachedClients: len(clientInfos),
+			CreatedAt:       info.CreatedAt,
+			AccessedAt:      info.AccessedAt,
+			UpdatedAt:       info.UpdatedAt,
 		}
 
 		if includeSnapshot {
-			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
 			if err != nil {
 				return nil, err
 			}
@@ -97,23 +104,29 @@ func GetDocumentSummary(
 	project *types.Project,
 	k key.Key,
 ) (*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, k)
+	info, err := be.DB.FindDocInfoByKey(ctx, project.ID, k)
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	clientInfos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, info.RefKey())
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
 	if err != nil {
 		return nil, err
 	}
 
 	return &types.DocumentSummary{
-		ID:         docInfo.ID,
-		Key:        docInfo.Key,
-		CreatedAt:  docInfo.CreatedAt,
-		AccessedAt: docInfo.AccessedAt,
-		UpdatedAt:  docInfo.UpdatedAt,
-		Snapshot:   doc.Marshal(),
+		ID:              info.ID,
+		Key:             info.Key,
+		AttachedClients: len(clientInfos),
+		CreatedAt:       info.CreatedAt,
+		AccessedAt:      info.AccessedAt,
+		UpdatedAt:       info.UpdatedAt,
+		Snapshot:        doc.Marshal(),
 	}, nil
 }
 
