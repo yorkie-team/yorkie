@@ -102,6 +102,7 @@ func benchmarkVV(
 		docKey := createDocKey(b, i)
 
 		// 1. Activate n clients and attach all clients to the document.
+		initializeClientsAndDocs(ctx, b, 3000, docKey)
 		clients, docs := initializeClientsAndDocs(ctx, b, clientCnt, docKey)
 		c1, cN := clients[0], clients[clientCnt-1]
 		d1, dN := docs[0], docs[clientCnt-1]
@@ -200,7 +201,7 @@ func benchmarkVV(
 func BenchmarkVersionVector(b *testing.B) {
 	err := logging.SetLogLevel("error")
 	assert.NoError(b, err)
-	startTestServer(100000, 100000)
+	startTestServer(1000, 3000) // default config
 	defer func() {
 		if testServer == nil {
 			return
@@ -211,15 +212,18 @@ func BenchmarkVersionVector(b *testing.B) {
 		}
 	}()
 
-	b.Run("clients 10", func(b *testing.B) {
-		benchmarkVV(10, b)
-	})
+	// b.Run("clients 10", func(b *testing.B) {
+	// 	benchmarkVV(10, b)
+	// })
 
-	b.Run("clients 100", func(b *testing.B) {
-		benchmarkVV(100, b)
-	})
+	// b.Run("clients 100", func(b *testing.B) {
+	// 	benchmarkVV(100, b)
+	// })
 
-	b.Run("clients 1000", func(b *testing.B) {
-		benchmarkVV(1000, b)
+	// b.Run("clients 1000", func(b *testing.B) {
+	// 	benchmarkVV(1000, b)
+	// })
+	b.Run("clients 3000-1500", func(b *testing.B) {
+		benchmarkVV(1500, b)
 	})
 }
