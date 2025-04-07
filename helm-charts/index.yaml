@@ -277,6 +277,37 @@ entries:
     version: 0.3.3
   yorkie-cluster:
   - apiVersion: v2
+    appVersion: 0.6.6
+    created: "2025-04-07T10:33:06.155931428Z"
+    dependencies:
+    - condition: yorkie-mongodb.enabled
+      name: yorkie-mongodb
+      repository: ""
+      version: 0.4.13
+    description: yorkie-cluster provides cluster mode for Yorkie server to handle
+      large amount of workloads with ensuring high availability, reliability, and
+      scalability.
+    digest: 9949ab19e545d9b9a7165b46a5d236d5cf155681bc2b0c732dc2e33c5649e006
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - istio
+    kubeVersion: '>=1.23.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-cluster
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-cluster-0.6.6/yorkie-cluster-0.6.6.tgz
+    version: 0.6.6
+  - apiVersion: v2
     appVersion: 0.6.5
     created: "2025-03-28T00:47:01.73105883Z"
     dependencies:
@@ -1831,4 +1862,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2025-03-28T00:47:01.731411182Z"
+generated: "2025-04-07T10:33:06.156547631Z"
