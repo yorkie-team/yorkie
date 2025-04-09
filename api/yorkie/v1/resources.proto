@@ -47,6 +47,7 @@ message ChangePack {
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
   VersionVector version_vector = 7;
+  repeated Rule rules = 8;
 }
 
 message Change {
@@ -412,4 +413,18 @@ message DocEvent {
   DocEventType type = 1;
   string publisher = 2;
   DocEventBody body = 3;
+}
+
+message Schema {
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+  string body = 4;
+  repeated Rule rules = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message Rule {
+  string path = 1;
+  string type = 2;
 }
