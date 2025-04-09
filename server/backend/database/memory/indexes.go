@@ -25,7 +25,6 @@ var (
 	tblDocuments      = "documents"
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
-	tblSyncedSeqs     = "syncedseqs"
 	tblVersionVectors = "versionvectors"
 )
 
@@ -204,46 +203,6 @@ var schema = &memdb.DBSchema{
 				},
 			},
 		},
-		tblSyncedSeqs: {
-			Name: tblSyncedSeqs,
-			Indexes: map[string]*memdb.IndexSchema{
-				"id": {
-					Name:    "id",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "ID"},
-				},
-				"doc_id_client_id": {
-					Name:   "doc_id_client_id",
-					Unique: true,
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.StringFieldIndex{Field: "ClientID"},
-						},
-					},
-				},
-				"doc_id_server_seq": {
-					Name:   "doc_id_server_seq",
-					Unique: true,
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.IntFieldIndex{Field: "ServerSeq"},
-						},
-					},
-				},
-				"doc_id_lamport_actor_id": {
-					Name: "doc_id_lamport_actor_id",
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.IntFieldIndex{Field: "Lamport"},
-							&memdb.StringFieldIndex{Field: "ActorID"},
-						},
-					},
-				},
-			},
-		},
 		tblVersionVectors: {
 			Name: tblVersionVectors,
 			Indexes: map[string]*memdb.IndexSchema{
@@ -268,6 +227,16 @@ var schema = &memdb.DBSchema{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.StringFieldIndex{Field: "ClientID"},
+						},
+					},
+				},
+				"doc_id_server_seq": {
+					Name:   "doc_id_server_seq",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},
