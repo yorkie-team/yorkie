@@ -51,6 +51,8 @@ kube-starrocks:
         type: LoadBalancer
 
 kafka:
+  controller:
+    replicaCount: 1
   kraft:
     clusterId: yorkie-analytics
   listeners:
