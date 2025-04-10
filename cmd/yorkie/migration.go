@@ -32,6 +32,7 @@ import (
 	v053 "github.com/yorkie-team/yorkie/migrations/v0.5.3"
 	v056 "github.com/yorkie-team/yorkie/migrations/v0.5.6"
 	v057 "github.com/yorkie-team/yorkie/migrations/v0.5.7"
+	v067 "github.com/yorkie-team/yorkie/migrations/v0.6.7"
 	yorkiemongo "github.com/yorkie-team/yorkie/server/backend/database/mongo"
 )
 
@@ -47,6 +48,7 @@ var migrationMap = map[string]func(ctx context.Context, db *mongo.Client, dbName
 	"v0.5.3": v053.RunMigration,
 	"v0.5.6": v056.RunMigration,
 	"v0.5.7": v057.RunMigration,
+	"v0.6.7": v067.RunMigration,
 }
 
 // runMigration runs the migration for the given version.
