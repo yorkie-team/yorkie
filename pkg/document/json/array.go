@@ -152,6 +152,34 @@ func (p *Array) AddDate(values ...gotime.Time) *Array {
 	return p
 }
 
+// AddNewCounter adds a new counter at the last.
+func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Array {
+	p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		counter, err := crdt.NewCounter(valueType, value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return counter
+	})
+	return p
+}
+
+// AddNewText adds a new text at the last.
+func (p *Array) AddNewText() *Array {
+	p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
+	})
+	return p
+}
+
+// AddNewObject adds a new object at the last.
+func (p *Array) AddNewObject() *Array {
+	p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+	})
+	return p
+}
+
 // AddNewArray adds a new array at the last.
 func (p *Array) AddNewArray() *Array {
 	elements := crdt.NewRGATreeList()
