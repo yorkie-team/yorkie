@@ -60,7 +60,7 @@ bench: ## runs benchmark tests
 	rm -f pipe output.txt mem.prof cpu.prof bench.test
 	mkfifo pipe
 	tee output.txt < pipe &
-	go test -tags bench -benchmem -bench=BenchmarkSyncOnlyLoadTest --benchtime=1x -timeout=30m ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof > pipe
+	go test -tags bench -benchmem -bench=. ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof > pipe
 	rm -f pipe
 
 docker: ## builds docker images with the current version and latest tag

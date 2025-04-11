@@ -37,9 +37,10 @@ import (
 
 var loadTestServer *server.Yorkie
 
-func startLoadTestServer() {
+func startLoadTestServer(snapshotInterval int64, snapshotThreshold int64) {
 	config := helper.TestConfig()
-	// config.Mongo = nil
+	config.Backend.SnapshotInterval = snapshotInterval
+	config.Backend.SnapshotThreshold = snapshotThreshold
 
 	svr, err := server.New(config)
 	if err != nil {
@@ -108,9 +109,7 @@ func benchmarkSyncOnlyLoadTest(
 	ctx := context.Background()
 	docKey := createDocKeyForSyncOnlyLoadTest(preparedClientCnt, clientCnt)
 	_, _, err := initializeClientsAndDocsForLoadTest(ctx, b, preparedClientCnt, docKey)
-	if err != nil {
-		logging.DefaultLogger().Error(err)
-	}
+	assert.NoError(b, err)
 
 	// 2. Create a document with n clients.
 	var wg sync.WaitGroup
@@ -119,15 +118,11 @@ func benchmarkSyncOnlyLoadTest(
 		go func() {
 			defer wg.Done()
 			client, _, err := initializeClientAndDocForLoadTest(ctx, b, docKey)
-			if err != nil {
-				logging.DefaultLogger().Error(err)
-				return
-			}
+			assert.NoError(b, err)
+
 			for i := 0; i < 30; i++ {
 				err := client.Sync(ctx)
-				if err != nil {
-					logging.DefaultLogger().Error(err)
-				}
+				assert.NoError(b, err)
 				gotime.Sleep(100 * gotime.Millisecond)
 			}
 		}()
@@ -138,7 +133,7 @@ func benchmarkSyncOnlyLoadTest(
 func BenchmarkSyncOnlyLoadTest(b *testing.B) {
 	err := logging.SetLogLevel("error")
 	assert.NoError(b, err)
-	startLoadTestServer() // default config
+	startLoadTestServer(100000, 100000)
 	defer func() {
 		if loadTestServer == nil {
 			return
@@ -149,15 +144,15 @@ func BenchmarkSyncOnlyLoadTest(b *testing.B) {
 		}
 	}()
 
-	b.Run("clients 0-100", func(b *testing.B) {
+	b.Run("clients_0_100", func(b *testing.B) {
 		benchmarkSyncOnlyLoadTest(0, 100, b)
 	})
 
-	b.Run("clients 100-100", func(b *testing.B) {
+	b.Run("clients_100_100", func(b *testing.B) {
 		benchmarkSyncOnlyLoadTest(100, 100, b)
 	})
 
-	b.Run("clients 500-100", func(b *testing.B) {
+	b.Run("clients_500_100", func(b *testing.B) {
 		benchmarkSyncOnlyLoadTest(500, 100, b)
 	})
 
