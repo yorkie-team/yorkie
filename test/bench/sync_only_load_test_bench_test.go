@@ -151,24 +151,4 @@ func BenchmarkSyncOnlyLoadTest(b *testing.B) {
 	b.Run("clients_100_100", func(b *testing.B) {
 		benchmarkSyncOnlyLoadTest(100, 100, b)
 	})
-
-	b.Run("clients_500_100", func(b *testing.B) {
-		benchmarkSyncOnlyLoadTest(500, 100, b)
-	})
-
-	b.Run("clients 1000-100", func(b *testing.B) {
-		benchmarkSyncOnlyLoadTest(1000, 100, b)
-	})
-
-	b.Run("clients 2500-100", func(b *testing.B) {
-		benchmarkSyncOnlyLoadTest(2500, 100, b)
-	})
-
-	b.Run("clients 5000-100", func(b *testing.B) {
-		benchmarkSyncOnlyLoadTest(5000, 100, b)
-	})
-
-	b.Run("clients 10000-100", func(b *testing.B) {
-		benchmarkSyncOnlyLoadTest(10000, 100, b)
-	})
 }
