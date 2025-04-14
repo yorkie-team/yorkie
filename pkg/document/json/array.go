@@ -159,7 +159,7 @@ func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Ar
 		if err != nil {
 			panic(err)
 		}
-		return counter
+		return NewCounter(value, valueType).Initialize(p.context, counter)
 	})
 	return p
 }
@@ -167,7 +167,8 @@ func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Ar
 // AddNewText adds a new text at the last.
 func (p *Array) AddNewText() *Array {
 	p.addInternal(func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
+		text := NewText()
+		return text.Initialize(p.context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
 	})
 	return p
 }

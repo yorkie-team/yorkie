@@ -75,7 +75,6 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 		if err := cursor.Decode(&docInfo); err != nil {
 			return fmt.Errorf("failed to decode document: %w", err)
 		}
-		fmt.Println("====== 🚀 Processing document: =======", docInfo.ID)
 
 		// 2. Build the final state of the current document: latest snapshot + changes
 		// Query the most recent snapshot
@@ -143,9 +142,18 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 			var changes []*change.Change
 		NextDocument:
 			for _, info := range infos {
-				c, err := info.ToChange()
+				c, err := safeToChange(info)
 				if err != nil {
-					fmt.Printf("❌ failed to decode change: %v\n", err)
+					fmt.Printf("🚨 Warning: Document %s failed to decode change: %v\n", docInfo.ID, err)
+					failedDocs = append(failedDocs, struct {
+						ProjectID types.ID
+						DocID     types.ID
+						DocKey    key.Key
+					}{
+						ProjectID: docInfo.ProjectID,
+						DocID:     docInfo.ID,
+						DocKey:    docInfo.Key,
+					})
 					break NextDocument
 				}
 				changes = append(changes, c)
@@ -200,6 +208,7 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 				DocID:     docInfo.ID,
 				DocKey:    docInfo.Key,
 			})
+
 			fmt.Printf("🚨 Warning: Document %s content mismatch after rebuild\n", docInfo.ID)
 			continue
 		}
@@ -208,96 +217,85 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 		changePack := newDoc.CreateChangePack()
 
 		// 6. Save changes and delete previous data
-		session, err := db.StartSession()
-		if err != nil {
-			return fmt.Errorf("failed to start session: %w", err)
-		}
-		defer session.EndSession(ctx)
-
-		_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
-			// 6-1. Delete old changes
-			if _, err := changeCol.DeleteMany(sessCtx, bson.M{
-				"project_id": docInfo.ProjectID,
-				"doc_id":     docInfo.ID,
-			}); err != nil {
-				return nil, fmt.Errorf("failed to delete old changes: %w", err)
-			}
-
-			// 6-2. Delete all snapshots
-			if _, err := snapshotCol.DeleteMany(sessCtx, bson.M{
-				"project_id": docInfo.ProjectID,
-				"doc_id":     docInfo.ID,
-			}); err != nil {
-				return nil, fmt.Errorf("failed to delete snapshots: %w", err)
-			}
-
-			// 6-3. Delete all versionvectors
-			if _, err := versionvectorsCol.DeleteMany(sessCtx, bson.M{
-				"project_id": docInfo.ProjectID,
-				"doc_id":     docInfo.ID,
-			}); err != nil {
-				return nil, fmt.Errorf("failed to delete versionvectors: %w", err)
-			}
-
-			// 6-4. Save new change
-			if changePack.ChangesLen() > 0 {
-				c := changePack.Changes[0]
-				encodedOperations, err := database.EncodeOperations(c.Operations())
-				if err != nil {
-					return nil, fmt.Errorf("failed to encode operations: %w", err)
-				}
-				changeInfo := &database.ChangeInfo{
-					ID:            types.ID(primitive.NewObjectID().Hex()),
-					ProjectID:     docInfo.ProjectID,
-					DocID:         docInfo.ID,
-					ServerSeq:     1, // Reset server sequence
-					ClientSeq:     c.ID().ClientSeq(),
-					Lamport:       c.ID().Lamport(),
-					VersionVector: c.ID().VersionVector(),
-					ActorID:       types.ID(c.ID().ActorID().String()),
-					Operations:    encodedOperations,
-				}
-				if _, err := changeCol.InsertOne(sessCtx, changeInfo); err != nil {
-					return nil, fmt.Errorf("failed to insert new change: %w", err)
-				}
-
-				// 6-5. Reset docInfo serverseq
-				// TODO(): Consider clearing clientInfo as well
-				update := bson.M{
-					"$set": bson.M{
-						"server_seq": 1,
-					},
-				}
-				if _, err := docCol.UpdateOne(sessCtx, bson.M{
-					"project_id": docInfo.ProjectID,
-					"key":        docInfo.Key,
-				}, update); err != nil {
-					return nil, fmt.Errorf("failed to update document: %w", err)
-				}
-			} else {
-				update := bson.M{
-					"$set": bson.M{
-						"server_seq": 0,
-					},
-				}
-				if _, err := docCol.UpdateOne(sessCtx, bson.M{
-					"project_id": docInfo.ProjectID,
-					"key":        docInfo.Key,
-				}, update); err != nil {
-					return nil, fmt.Errorf("failed to update document: %w", err)
-				}
-			}
-			return nil, nil
-		})
-
-		if err != nil {
-			fmt.Printf("❌ failed to migrate document %s: %v\n", docInfo.ID, err)
-			continue // Continue with next document instead of failing entire migration
+		// 6-1. Delete old changes
+		if _, err := changeCol.DeleteMany(ctx, bson.M{
+			"project_id": docInfo.ProjectID,
+			"doc_id":     docInfo.ID,
+		}); err != nil {
+			fmt.Printf("failed to delete old changes: %v", err)
+			continue
 		}
 
-		// Log migration result
-		fmt.Printf("✅ Successfully migrated document %s\n", docInfo.ID)
+		// 6-2. Delete all snapshots
+		if _, err := snapshotCol.DeleteMany(ctx, bson.M{
+			"project_id": docInfo.ProjectID,
+			"doc_id":     docInfo.ID,
+		}); err != nil {
+			fmt.Printf("failed to delete snapshots: %v", err)
+			continue
+		}
 
+		// 6-3. Delete all versionvectors
+		if _, err := versionvectorsCol.DeleteMany(ctx, bson.M{
+			"project_id": docInfo.ProjectID,
+			"doc_id":     docInfo.ID,
+		}); err != nil {
+			fmt.Printf("failed to delete versionvectors: %v", err)
+			continue
+		}
+
+		// 6-4. Save new change
+		if changePack.ChangesLen() > 0 {
+			c := changePack.Changes[0]
+			encodedOperations, err := database.EncodeOperations(c.Operations())
+			if err != nil {
+				fmt.Printf("failed to encode operations: %v", err)
+				continue
+			}
+			changeInfo := &database.ChangeInfo{
+				ID:            types.ID(primitive.NewObjectID().Hex()),
+				ProjectID:     docInfo.ProjectID,
+				DocID:         docInfo.ID,
+				ServerSeq:     1, // Reset server sequence
+				ClientSeq:     c.ID().ClientSeq(),
+				Lamport:       c.ID().Lamport(),
+				VersionVector: c.ID().VersionVector(),
+				ActorID:       types.ID(c.ID().ActorID().String()),
+				Operations:    encodedOperations,
+			}
+			if _, err := changeCol.InsertOne(ctx, changeInfo); err != nil {
+				fmt.Printf("failed to insert new change: %v", err)
+				continue
+			}
+
+			// 6-5. Reset docInfo serverseq
+			// TODO(): Consider clearing clientInfo as well
+			update := bson.M{
+				"$set": bson.M{
+					"server_seq": 1,
+				},
+			}
+			if _, err := docCol.UpdateOne(ctx, bson.M{
+				"project_id": docInfo.ProjectID,
+				"key":        docInfo.Key,
+			}, update); err != nil {
+				fmt.Printf("failed to update document: %v", err)
+				continue
+			}
+		} else {
+			update := bson.M{
+				"$set": bson.M{
+					"server_seq": 0,
+				},
+			}
+			if _, err := docCol.UpdateOne(ctx, bson.M{
+				"project_id": docInfo.ProjectID,
+				"key":        docInfo.Key,
+			}, update); err != nil {
+				fmt.Printf("failed to update document: %v", err)
+				continue
+			}
+		}
 	}
 
 	// TODO(): Process failed documents separately - delete all their changes and reset to 0?
@@ -305,6 +303,16 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 	fmt.Println("mismatch documents: ", len(misMatchDocs))
 
 	return nil
+}
+
+func safeToChange(info *database.ChangeInfo) (c *change.Change, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in ToChange(): %v", r)
+		}
+	}()
+
+	return info.ToChange()
 }
 
 type JSONStruct interface {
@@ -566,8 +574,8 @@ func setObjFromJsonStruct(obj *json.Object, key string, value JSONStruct) error 
 		text := obj.SetNewText(key)
 		editTextFromJSONStruct(*j, text)
 	case *JSONTreeStruct:
-		tree := obj.SetNewTree(key)
-		editTreeFromJSONStruct(*j, tree)
+		treeNode := getTreeRootNodeFromJSONStruct(*j)
+		obj.SetNewTree(key, treeNode)
 	default:
 		return fmt.Errorf("unsupported JSONStruct type: %T", j)
 	}
@@ -604,7 +612,6 @@ func addArrFromJsonStruct(arr *json.Array, value JSONStruct) error {
 			addArrFromJsonStruct(a, *elem)
 		}
 	case *JSONObjectStruct:
-		fmt.Println("object", j)
 		arr.AddNewObject()
 		o := arr.GetObject(arr.Len() - 1)
 		for _, field := range j.value.([]*ObjectStruct) {
@@ -629,30 +636,26 @@ type TreeNodeJSON struct {
 	Attributes map[string]interface{} `json:"attributes,omitempty"`
 }
 
-func editTreeFromJSONStruct(j JSONTreeStruct, tree *json.Tree) *json.Tree {
+func getTreeRootNodeFromJSONStruct(j JSONTreeStruct) *json.TreeNode {
 	var treeJSON TreeNodeJSON
 	if err := ejson.Unmarshal([]byte(j.value.(string)), &treeJSON); err != nil {
 		fmt.Printf("Failed to parse tree JSON: %v\n", err)
-		return tree
+		return nil
 	}
 
+	// Create root node first
+	rootNode := &json.TreeNode{
+		Type:  treeJSON.Type,
+		Value: treeJSON.Value,
+	}
 	if len(treeJSON.Children) > 0 {
-		for _, child := range treeJSON.Children {
-			childNode := &json.TreeNode{
-				Type:  child.Type,
-				Value: child.Value,
-			}
-			if len(child.Children) > 0 {
-				processChildren(childNode, child.Children)
-			}
-			if len(child.Attributes) > 0 {
-				processAttributes(childNode, child.Attributes)
-			}
-			tree.Edit(0, 0, childNode, 0)
-		}
+		processChildren(rootNode, treeJSON.Children)
+	}
+	if len(treeJSON.Attributes) > 0 {
+		processAttributes(rootNode, treeJSON.Attributes)
 	}
 
-	return tree
+	return rootNode
 }
 
 func processChildren(node *json.TreeNode, children []TreeNodeJSON) {
@@ -678,11 +681,10 @@ func processAttributes(node *json.TreeNode, attrs map[string]interface{}) {
 	}
 }
 
-func editTextFromJSONStruct(j JSONTextStruct, text *json.Text) *json.Text {
+func editTextFromJSONStruct(j JSONTextStruct, text *json.Text) {
 	var chunks []interface{}
 	if err := ejson.Unmarshal([]byte(j.value.(string)), &chunks); err != nil {
 		fmt.Printf("Failed to parse text JSON: %v\n", err)
-		return text
 	}
 
 	pos := 0
@@ -702,5 +704,4 @@ func editTextFromJSONStruct(j JSONTextStruct, text *json.Text) *json.Text {
 		}
 		pos += len(utf16.Encode([]rune(value)))
 	}
-	return text
 }
