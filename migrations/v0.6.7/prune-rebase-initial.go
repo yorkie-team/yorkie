@@ -68,7 +68,6 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 	if err != nil {
 		return fmt.Errorf("failed to find documents: %w", err)
 	}
-	defer cursor.Close(ctx)
 
 	for cursor.Next(ctx) {
 		var docInfo database.DocInfo
@@ -191,7 +190,9 @@ func PruneAndRebaseToInitial(ctx context.Context, db *mongo.Client, databaseName
 		newDoc := document.New(docInfo.Key)
 		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
 			for _, field := range jsonStruct.GetValue().([]*ObjectStruct) {
-				setObjFromJsonStruct(root, field.Key, *field.Value)
+				if err := setObjFromJsonStruct(root, field.Key, *field.Value); err != nil {
+					return err
+				}
 			}
 			return nil
 		})
@@ -563,12 +564,16 @@ func setObjFromJsonStruct(obj *json.Object, key string, value JSONStruct) error 
 	case *JSONArrayStruct:
 		arr := obj.SetNewArray(key)
 		for _, elem := range j.value.([]*JSONStruct) {
-			addArrFromJsonStruct(arr, *elem)
+			if err := addArrFromJsonStruct(arr, *elem); err != nil {
+				return err
+			}
 		}
 	case *JSONObjectStruct:
 		o := obj.SetNewObject(key)
 		for _, field := range j.value.([]*ObjectStruct) {
-			setObjFromJsonStruct(o, field.Key, *field.Value)
+			if err := setObjFromJsonStruct(o, field.Key, *field.Value); err != nil {
+				return err
+			}
 		}
 	case *JSONTextStruct:
 		text := obj.SetNewText(key)
@@ -609,13 +614,17 @@ func addArrFromJsonStruct(arr *json.Array, value JSONStruct) error {
 		arr.AddNewArray()
 		a := arr.GetArray(arr.Len() - 1)
 		for _, elem := range j.value.([]*JSONStruct) {
-			addArrFromJsonStruct(a, *elem)
+			if err := addArrFromJsonStruct(a, *elem); err != nil {
+				return err
+			}
 		}
 	case *JSONObjectStruct:
 		arr.AddNewObject()
 		o := arr.GetObject(arr.Len() - 1)
 		for _, field := range j.value.([]*ObjectStruct) {
-			setObjFromJsonStruct(o, field.Key, *field.Value)
+			if err := setObjFromJsonStruct(o, field.Key, *field.Value); err != nil {
+				return err
+			}
 		}
 	case *JSONTextStruct:
 		arr.AddNewText()
