@@ -17,6 +17,7 @@
 package converter_test
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	gotime "time"
@@ -300,5 +301,211 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeLen(), doc.Root().GetTree("t").NodeLen())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).ToXML(), doc.Root().GetTree("t").ToXML())
+	})
+}
+
+func TestJSONStructConversion(t *testing.T) {
+
+	t.Run("json struct conversion", func(t *testing.T) {
+		doc := document.New("jsonstruct")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// an object and primitive types
+			root.SetNewObject("k1").
+				SetNull("k1.0").
+				SetBool("k1.1", true).
+				SetInteger("k1.2", 2147483647).
+				SetLong("k1.3", 9223372036854775807).
+				SetDouble("1.4", 1.79).
+				SetString("k1.5", "4").
+				SetBytes("k1.6", []byte{65, 66}).
+				SetDate("k1.7", gotime.Now()).
+				Delete("k1.5")
+
+			// an array
+			root.SetNewArray("k2").
+				AddNull().
+				AddBool(true).
+				AddInteger(1).
+				AddLong(2).
+				AddDouble(3.0).
+				AddString("4").
+				AddBytes([]byte{65}).
+				AddDate(gotime.Now()).
+				Delete(4)
+
+			// plain text
+			root.SetNewText("k3").
+				Edit(0, 0, "ㅎ").
+				Edit(0, 1, "하").
+				Edit(0, 1, "한").
+				Edit(0, 1, "하").
+				Edit(1, 1, "느").
+				Edit(1, 2, "늘").
+				Edit(2, 2, "구름").
+				Edit(2, 3, "뭉게구")
+
+			// rich text
+			root.SetNewText("k4").
+				Edit(0, 0, "Hello world", nil).
+				Edit(6, 11, "sky", nil).
+				Style(0, 5, map[string]string{"b": "1"})
+
+			// long counter
+			root.SetNewCounter("k5", crdt.LongCnt, 0).
+				Increase(10)
+
+			// integer counter
+			root.SetNewCounter("k6", crdt.IntegerCnt, 0).
+				Increase(10)
+
+			// tree
+			root.SetNewTree("k7").
+				Edit(0, 0, &json.TreeNode{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:  "text",
+						Value: "Hello world",
+					}},
+				}, 0)
+
+			return nil
+		})
+		assert.NoError(t, err)
+
+		jsonStruct, err := converter.ToJSONStruct(doc.RootObject())
+		assert.NoError(t, err)
+
+		newDoc := document.New("jsonstruct")
+		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
+			objStruct, ok := jsonStruct.(*converter.JSONObjectStruct)
+			if !ok {
+				return fmt.Errorf("expected JSONObjectStruct, got %T", jsonStruct)
+			}
+			for k, v := range objStruct.Value {
+				if err := converter.SetObjFromJsonStruct(root, k, *v); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// verify the conversion
+		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
+		newJSONStruct, err := converter.ToJSONStruct(newDoc.RootObject())
+		assert.NoError(t, err)
+		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
+	})
+
+	t.Run("array with nested types test", func(t *testing.T) {
+		doc := document.New("nested-types")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.SetNewArray("nested")
+
+			// Add nested array
+			nestedArr := arr.AddNewArray()
+			nestedArr.AddString("nested1")
+			nestedArr.AddInteger(42)
+
+			// Add nested object
+			obj := arr.AddNewObject()
+			obj.SetString("key", "value")
+			obj.SetNewCounter("counter", crdt.IntegerCnt, 10)
+
+			text := arr.AddNewText()
+			text.Edit(0, 0, "Hello")
+			text.Edit(5, 5, " World")
+			text.Style(0, 5, map[string]string{"bold": "true"})
+
+			// Add nested tree
+			arr.AddNewTree(&json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{
+					{Type: "text", Value: "Tree in array"},
+					{
+						Type: "span",
+						Attributes: map[string]string{
+							"style": "color: red",
+						},
+						Children: []json.TreeNode{
+							{Type: "text", Value: "Styled text"},
+						},
+					},
+				},
+			})
+
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Convert to JSONStruct
+		jsonStruct, err := converter.ToJSONStruct(doc.RootObject())
+		assert.NoError(t, err)
+
+		// Convert back to document
+		newDoc := document.New("nested-types")
+		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
+			objStruct, ok := jsonStruct.(*converter.JSONObjectStruct)
+			if !ok {
+				return fmt.Errorf("expected JSONObjectStruct, got %T", jsonStruct)
+			}
+			for k, v := range objStruct.Value {
+				if err := converter.SetObjFromJsonStruct(root, k, *v); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Verify the conversion
+		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
+		newJSONStruct, err := converter.ToJSONStruct(newDoc.RootObject())
+		assert.NoError(t, err)
+		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
+	})
+
+	t.Run("unsupported JSONStruct type", func(t *testing.T) {
+		obj := json.NewObject(nil, nil)
+		err := converter.SetObjFromJsonStruct(obj, "key", nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported JSONStruct type")
+	})
+
+	t.Run("invalid text JSON", func(t *testing.T) {
+		doc := document.New("invalid-json")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.SetNewText("text")
+			if err := converter.EditTextFromJSONStruct(converter.JSONTextStruct{
+				JSONType: api.ValueType_VALUE_TYPE_TEXT,
+				Value:    "invalid json",
+			}, text); err != nil {
+				return err
+			}
+			return nil
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse text JSON")
+		assert.Equal(t, `{}`, doc.Marshal())
+	})
+
+	t.Run("invalid tree JSON", func(t *testing.T) {
+		doc := document.New("invalid-tree")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			treeNode, err := converter.GetTreeRootNodeFromJSONStruct(converter.JSONTreeStruct{
+				JSONType: api.ValueType_VALUE_TYPE_TREE,
+				Value:    "invalid json",
+			})
+			if err != nil {
+				return err
+			}
+			root.SetNewTree("tree", treeNode)
+			return nil
+		})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse tree JSON")
+		assert.Equal(t, `{}`, doc.Marshal())
 	})
 }

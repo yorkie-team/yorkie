@@ -18,7 +18,15 @@
 // Protobuf, bytes and vice versa.
 package converter
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+)
 
 var (
 	// ErrPackRequired is returned when an empty pack is passed.
@@ -48,3 +56,117 @@ var (
 	// supported yet.
 	ErrUnsupportedCounterType = errors.New("unsupported counter type")
 )
+
+// JSONStruct represents a serializable CRDT value.
+// It includes type information along with values, enabling
+// reconstruction of Document from serialized data.
+type JSONStruct interface {
+	isJSONStruct()
+	ToTestString() string
+}
+
+// JSONPrimitiveStruct represents a primitive CRDT value.
+type JSONPrimitiveStruct struct {
+	JSONType  api.ValueType
+	ValueType crdt.ValueType
+	Value     interface{} // primitive value (nil, bool, int32, int64, float64, string, []byte, time.Time)
+}
+
+// JSONCounterStruct represents a counter CRDT value.
+type JSONCounterStruct struct {
+	JSONType  api.ValueType
+	ValueType crdt.CounterType
+	Value     interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
+}
+
+// JSONArrayStruct represents an array CRDT value.
+type JSONArrayStruct struct {
+	JSONType api.ValueType
+	Value    []*JSONStruct // array of CRDT elements
+}
+
+// JSONObjectStruct represents an object CRDT value.
+type JSONObjectStruct struct {
+	JSONType api.ValueType
+	Value    map[string]*JSONStruct // key-value pairs of CRDT elements
+}
+
+// JSONTreeStruct represents a tree CRDT value.
+type JSONTreeStruct struct {
+	JSONType api.ValueType
+	Value    string // tree marshal string
+}
+
+// JSONTextStruct represents a text CRDT value.
+type JSONTextStruct struct {
+	JSONType api.ValueType
+	Value    string // text marshal string
+}
+
+func (j JSONPrimitiveStruct) isJSONStruct() {}
+func (j JSONCounterStruct) isJSONStruct()   {}
+func (j JSONArrayStruct) isJSONStruct()     {}
+func (j JSONObjectStruct) isJSONStruct()    {}
+func (j JSONTreeStruct) isJSONStruct()      {}
+func (j JSONTextStruct) isJSONStruct()      {}
+
+func (j JSONPrimitiveStruct) ToTestString() string {
+	return fmt.Sprintf(
+		"{JSONType: %s, ValueType: %v, Value: %v}",
+		j.JSONType,
+		j.ValueType,
+		j.Value,
+	)
+}
+func (j JSONCounterStruct) ToTestString() string {
+	return fmt.Sprintf(
+		"{JSONType: %s, ValueType: %v, Value: %v}",
+		j.JSONType,
+		j.ValueType,
+		j.Value,
+	)
+}
+func (j JSONArrayStruct) ToTestString() string {
+	var elements []string
+	for _, elem := range j.Value {
+		elements = append(elements, (*elem).ToTestString())
+	}
+	return fmt.Sprintf(
+		"{JSONType: %s, Value: [%s]}",
+		j.JSONType,
+		strings.Join(elements, ", "),
+	)
+}
+func (j JSONObjectStruct) ToTestString() string {
+	var pairs []string
+	// Get sorted keys
+	keys := make([]string, 0, len(j.Value))
+	for k := range j.Value {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Build pairs in sorted order
+	for _, key := range keys {
+		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (*j.Value[key]).ToTestString()))
+	}
+	return fmt.Sprintf(
+		"{JSONType: %s, Value: {%s}}",
+		j.JSONType,
+		strings.Join(pairs, ", "),
+	)
+}
+func (j JSONTreeStruct) ToTestString() string {
+	return fmt.Sprintf(
+		"{JSONType: %s, Value: %v}",
+		j.JSONType,
+		j.Value,
+	)
+}
+func (j JSONTextStruct) ToTestString() string {
+	return fmt.Sprintf(
+		"{JSONType: %s, Value: %v}",
+		j.JSONType,
+		j.Value,
+	)
+}
