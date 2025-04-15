@@ -36,6 +36,8 @@ import (
 var loadTestServer *server.Yorkie
 
 func benchmarkSyncConcurrency(b *testing.B, seqCnt int, concurrentCnt int, syncCnt int) {
+	b.ResetTimer()
+
 	var mu sync.Mutex
 	var activeClients []*client.Client
 
@@ -69,6 +71,7 @@ func benchmarkSyncConcurrency(b *testing.B, seqCnt int, concurrentCnt int, syncC
 	}
 	wg.Wait()
 
+	b.StopTimer()
 	helper.CleanupClients(b, activeClients)
 }
 
