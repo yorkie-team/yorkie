@@ -37,7 +37,7 @@ import (
 
 var loadTestServer *server.Yorkie
 
-func startLoadTestServer(snapshotInterval int64, snapshotThreshold int64) {
+func startLoadTestServer(snapshotInterval int64, snapshotThreshold int64) error {
 	config := helper.TestConfig()
 	config.Backend.SnapshotInterval = snapshotInterval
 	config.Backend.SnapshotThreshold = snapshotThreshold
@@ -45,11 +45,14 @@ func startLoadTestServer(snapshotInterval int64, snapshotThreshold int64) {
 	svr, err := server.New(config)
 	if err != nil {
 		logging.DefaultLogger().Fatal(err)
+		return err
 	}
 	if err := svr.Start(); err != nil {
 		logging.DefaultLogger().Fatal(err)
+		return err
 	}
 	loadTestServer = svr
+	return nil
 }
 
 func createDocKeyForSyncOnlyLoadTest(preparedClientCnt int, clientCnt int) key.Key {
@@ -85,7 +88,7 @@ func initializeClientsAndDocsForLoadTest(
 	b *testing.B,
 	n int,
 	docKey key.Key,
-) ([]*client.Client, []*document.Document, error) {
+) ([]*client.Client, []*document.Document) {
 	var clients []*client.Client
 	var docs []*document.Document
 	for i := 0; i < n; i++ {
@@ -97,7 +100,7 @@ func initializeClientsAndDocsForLoadTest(
 		clients = append(clients, c)
 		docs = append(docs, d)
 	}
-	return clients, docs, nil
+	return clients, docs
 }
 
 func benchmarkSyncOnlyLoadTest(
@@ -108,8 +111,7 @@ func benchmarkSyncOnlyLoadTest(
 	// 1. Create a document with prepared clients.
 	ctx := context.Background()
 	docKey := createDocKeyForSyncOnlyLoadTest(preparedClientCnt, clientCnt)
-	_, _, err := initializeClientsAndDocsForLoadTest(ctx, b, preparedClientCnt, docKey)
-	assert.NoError(b, err)
+	initializeClientsAndDocsForLoadTest(ctx, b, preparedClientCnt, docKey)
 
 	// 2. Create a document with n clients.
 	var wg sync.WaitGroup
@@ -132,7 +134,8 @@ func benchmarkSyncOnlyLoadTest(
 func BenchmarkSyncOnlyLoadTest(b *testing.B) {
 	err := logging.SetLogLevel("error")
 	assert.NoError(b, err)
-	startLoadTestServer(100000, 100000)
+	err = startLoadTestServer(100000, 100000)
+	assert.NoError(b, err)
 	defer func() {
 		if loadTestServer == nil {
 			return
