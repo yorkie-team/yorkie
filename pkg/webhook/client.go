@@ -122,6 +122,11 @@ func (c *Client[Req, Res]) Send(
 	return &res, status, nil
 }
 
+// Close closes the httpClient.
+func (c *Client[Req, Res]) Close() {
+	c.httpClient.CloseIdleConnections()
+}
+
 // buildRequest creates a new HTTP POST request with the appropriate headers.
 func (c *Client[Req, Res]) buildRequest(
 	ctx context.Context,
