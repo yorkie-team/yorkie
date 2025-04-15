@@ -29,18 +29,18 @@ kube-starrocks:
         repository: *starrocks-fe-repo
         tag: *starrocks-fe-tag
       resources:
-        requests:
-          cpu: "300m"
-          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 2Gi
       storageSpec:
         name: fe
 
     starrocksBeSpec:
       replicas: 1
       resources:
-        requests:
-          cpu: "300m"
-          memory: 1Gi
+        limits:
+          cpu: "1"
+          memory: 2Gi
       storageSpec:
         name: be
         storageSize: 15Gi
@@ -51,6 +51,8 @@ kube-starrocks:
         type: LoadBalancer
 
 kafka:
+  controller:
+    replicaCount: 1
   kraft:
     clusterId: yorkie-analytics
   listeners:

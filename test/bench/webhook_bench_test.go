@@ -1,4 +1,4 @@
-//go:build bench
+//go:build linux && bench
 
 /*
  * Copyright 2025 The Yorkie Authors. All rights reserved.
@@ -31,16 +31,18 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/webhook"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // setupWebhookServer simulates an HTTP server for the benchmark.
 func setupWebhookServer(t *testing.B, count int) []*httptest.Server {
 	servers := make([]*httptest.Server, 0, count)
 	for range count {
-		servers = append(servers, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.NotEmpty(t, r.Header.Get("X-Signature-256"))
 			w.WriteHeader(http.StatusOK)
-		})))
+		}))
+		servers = append(servers, server)
 	}
 	return servers
 }
@@ -100,6 +102,12 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 		signingKey = "sign-key"
 	)
 	endpoints := setupWebhookServer(b, endpointNum)
+	defer func() {
+		for _, server := range endpoints {
+			server.Close()
+		}
+	}()
+
 	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](
 		pkgwebhook.Options{
 			MaxRetries:      0,
@@ -135,6 +143,12 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 	)
 
 	endpoints := setupWebhookServer(b, endpointNum)
+	defer func() {
+		for _, server := range endpoints {
+			server.Close()
+		}
+	}()
+
 	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](
 		pkgwebhook.Options{
 			MaxRetries:      0,
@@ -143,6 +157,9 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 			RequestTimeout:  100 * time.Millisecond,
 		},
 	)
+
+	logging.DefaultLogger()
+
 	for range b.N {
 		manager := webhook.NewManager(cli)
 		for range webhookNum {

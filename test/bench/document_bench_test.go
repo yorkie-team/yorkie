@@ -423,14 +423,6 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTextSplitGC(1000, b)
 	})
 
-	b.Run("text delete all 10000", func(b *testing.B) {
-		benchmarkTextDeleteAll(10000, b)
-	})
-
-	b.Run("text delete all 100000", func(b *testing.B) {
-		benchmarkTextDeleteAll(100000, b)
-	})
-
 	b.Run("text 100", func(b *testing.B) {
 		benchmarkText(100, b)
 	})
@@ -483,10 +475,6 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTree(10000, b)
 	})
 
-	b.Run("tree delete all 1000", func(b *testing.B) {
-		benchmarkTreeDeleteAll(1000, b)
-	})
-
 	b.Run("tree edit gc 100", func(b *testing.B) {
 		benchmarkTreeEditGC(100, b)
 	})
@@ -502,7 +490,44 @@ func BenchmarkDocument(b *testing.B) {
 	b.Run("tree split gc 1000", func(b *testing.B) {
 		benchmarkTreeSplitGC(1000, b)
 	})
+}
 
+// Benchmark for deletion operations of text and tree types
+func BenchmarkDocumentDeletion(b *testing.B) {
+	// A single client inserts 10,000 characters (text) and deletes everything at once
+	b.Run("single text delete all 10000", func(b *testing.B) {
+		benchmarkTextDeleteAll(10000, b)
+	})
+
+	// A single client inserts 100,000 characters (text) and deletes everything at once
+	b.Run("single text delete all 100000", func(b *testing.B) {
+		benchmarkTextDeleteAll(100000, b)
+	})
+
+	// A single client inserts 1,000 characters (tree) and deletes everything at once
+	b.Run("single tree delete all 1000", func(b *testing.B) {
+		benchmarkTreeDeleteAll(1000, b)
+	})
+
+	// A single client inserts 100 characters (text) and deletes 10 characters at a time
+	b.Run("single text delete range 100", func(b *testing.B) {
+		benchmarkTextDeleteRange(100, b)
+	})
+
+	// A single client inserts 1,000 characters (text) and deletes 10 characters at a time
+	b.Run("single text delete range 1000", func(b *testing.B) {
+		benchmarkTextDeleteRange(1000, b)
+	})
+
+	// A single client inserts 100 characters (tree) and deletes 10 characters at a time
+	b.Run("single tree delete range 100", func(b *testing.B) {
+		benchmarkTreeDeleteRange(100, b)
+	})
+
+	// A single client inserts 1,000 characters (tree) and deletes 10 characters at a time
+	b.Run("single tree delete range 1000", func(b *testing.B) {
+		benchmarkTreeDeleteRange(1000, b)
+	})
 }
 
 func benchmarkTree(cnt int, b *testing.B) {
@@ -520,34 +545,6 @@ func benchmarkTree(cnt int, b *testing.B) {
 			for c := 1; c <= cnt; c++ {
 				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			}
-			return nil
-		})
-		assert.NoError(b, err)
-	}
-}
-
-func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
-
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
-				Type: "root",
-				Children: []json.TreeNode{{
-					Type:     "p",
-					Children: []json.TreeNode{},
-				}},
-			})
-			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
-			}
-			return nil
-		})
-
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.GetTree("t")
-			tree.Edit(1, cnt+1, nil, 0)
-
 			return nil
 		})
 		assert.NoError(b, err)
@@ -633,32 +630,6 @@ func benchmarkText(cnt int, b *testing.B) {
 			return nil
 		})
 		assert.NoError(b, err)
-	}
-}
-
-func benchmarkTextDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		doc := document.New("d1")
-
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
-				text.Edit(c, c, "a")
-			}
-			return nil
-		}, "Create cnt-length text to test")
-		assert.NoError(b, err)
-
-		b.StartTimer()
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			text := root.GetText("k1")
-			text.Edit(0, cnt, "")
-			return nil
-		}, "Delete all at a time")
-		assert.NoError(b, err)
-
-		assert.Equal(b, `{"k1":[]}`, doc.Marshal())
 	}
 }
 
@@ -783,6 +754,122 @@ func benchmarkObject(cnt int, b *testing.B) {
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			for c := 0; c < cnt; c++ {
 				root.SetInteger("k1", c)
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTextDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.SetNewText("k1")
+			for c := 0; c < cnt; c++ {
+				text.Edit(c, c, "a")
+			}
+			return nil
+		}, "Create cnt-length text to test")
+		assert.NoError(b, err)
+
+		b.StartTimer()
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			text.Edit(0, cnt, "")
+			return nil
+		}, "Delete all at a time")
+		assert.NoError(b, err)
+
+		assert.Equal(b, `{"k1":[]}`, doc.Marshal())
+	}
+}
+
+func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
+			}
+			return nil
+		})
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			tree.Edit(1, cnt+1, nil, 0)
+
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTextDeleteRange(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		// Create text with cnt number of characters
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.SetNewText("k1")
+			for c := 0; c < cnt; c++ {
+				text.Edit(c, c, "a")
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+
+		// Perform deletion operations
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			for i := 0; i < deleteCount; i++ {
+				text.Edit(0, deleteRangeSize, "")
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		// Create tree with cnt number of nodes
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+
+		// Perform deletion operations
+		deleteRangeSize := 10
+		deleteCount := cnt / deleteRangeSize
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			for i := 0; i < deleteCount; i++ {
+				tree.Edit(1, deleteRangeSize+1, nil, 0)
 			}
 			return nil
 		})

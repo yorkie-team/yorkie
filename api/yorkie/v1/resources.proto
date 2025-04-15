@@ -341,6 +341,7 @@ message DocumentSummary {
   string id = 1;
   string key = 2;
   string snapshot = 3;
+  int32 attached_clients = 7;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp accessed_at = 5;
   google.protobuf.Timestamp updated_at = 6;

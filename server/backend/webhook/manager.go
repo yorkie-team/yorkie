@@ -76,6 +76,10 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 // Close closes the event webhook manager. This will wait for flushing remain debouncing events
 func (m *Manager) Close() {
 	m.limiter.Close()
+
+	// NOTE(hackerwins): It is not good to close the webhook client here
+	// because it is created from outside.
+	m.webhookClient.Close()
 }
 
 // SendWebhook sends the webhook event using the provided client.

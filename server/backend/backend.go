@@ -222,6 +222,7 @@ func (b *Backend) Shutdown() error {
 
 	b.Background.Close()
 
+	b.AuthWebhookClient.Close()
 	b.EventWebhookManager.Close()
 
 	if err := b.MsgBroker.Close(); err != nil {

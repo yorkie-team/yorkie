@@ -87,12 +87,13 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) []*types.Document
 // FromDocumentSummary converts the given Protobuf formats to model format.
 func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary {
 	return &types.DocumentSummary{
-		ID:         types.ID(pbSummary.Id),
-		Key:        key.Key(pbSummary.Key),
-		CreatedAt:  pbSummary.CreatedAt.AsTime(),
-		AccessedAt: pbSummary.AccessedAt.AsTime(),
-		UpdatedAt:  pbSummary.UpdatedAt.AsTime(),
-		Snapshot:   pbSummary.Snapshot,
+		ID:              types.ID(pbSummary.Id),
+		Key:             key.Key(pbSummary.Key),
+		AttachedClients: int(pbSummary.AttachedClients),
+		CreatedAt:       pbSummary.CreatedAt.AsTime(),
+		AccessedAt:      pbSummary.AccessedAt.AsTime(),
+		UpdatedAt:       pbSummary.UpdatedAt.AsTime(),
+		Snapshot:        pbSummary.Snapshot,
 	}
 }
 

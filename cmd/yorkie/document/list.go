@@ -94,6 +94,7 @@ func printDocuments(cmd *cobra.Command, output string, documents []*types.Docume
 		tw.AppendHeader(table.Row{
 			"ID",
 			"KEY",
+			"CLIENTS",
 			"CREATED AT",
 			"ACCESSED AT",
 			"UPDATED AT",
@@ -103,6 +104,7 @@ func printDocuments(cmd *cobra.Command, output string, documents []*types.Docume
 			tw.AppendRow(table.Row{
 				document.ID,
 				document.Key,
+				document.AttachedClients,
 				units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
 				units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
 				units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
