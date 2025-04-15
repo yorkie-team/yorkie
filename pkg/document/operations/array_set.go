@@ -91,7 +91,7 @@ func (o *ArraySet) ExecutedAt() *time.Ticket {
 }
 
 // SetActor sets the given actor to this operation.
-func (o *ArraySet) SetActor(actorID *time.ActorID) {
+func (o *ArraySet) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 

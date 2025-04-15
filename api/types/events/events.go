@@ -74,7 +74,7 @@ type DocEvent struct {
 	Type DocEventType
 
 	// Publisher is the actor who published the event.
-	Publisher *time.ActorID
+	Publisher time.ActorID
 
 	// DocRefKey is the key of the document that the event occurred.
 	DocRefKey types.DocRefKey

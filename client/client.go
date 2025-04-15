@@ -103,7 +103,7 @@ type Client struct {
 	interceptor   *AuthInterceptor
 	logger        *zap.Logger
 
-	id          *time.ActorID
+	id          time.ActorID
 	key         string
 	status      status
 	attachments map[key.Key]*Attachment
@@ -674,7 +674,7 @@ func handleResponse(
 }
 
 // ID returns the ID of this client.
-func (c *Client) ID() *time.ActorID {
+func (c *Client) ID() time.ActorID {
 	return c.id
 }
 

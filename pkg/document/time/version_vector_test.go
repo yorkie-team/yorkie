@@ -44,12 +44,12 @@ func TestVersionVector(t *testing.T) {
 		},
 		{
 			name: "v1 has values, v2 is empty",
-			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
 			v2: time.NewVersionVector(),
-			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 0,
 				actor2: 0,
 			}),
@@ -57,41 +57,41 @@ func TestVersionVector(t *testing.T) {
 		{
 			name: "v2 has values, v1 is empty",
 			v1:   time.NewVersionVector(),
-			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 0,
 				actor2: 0,
 			}),
 		},
 		{
 			name: "both vectors have same keys with different values",
-			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 3,
 				actor2: 4,
 			}),
-			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 3,
 				actor2: 3,
 			}),
 		},
 		{
 			name: "vectors have different keys",
-			v1: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v1: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 5,
 				actor2: 3,
 			}),
-			v2: helper.VersionVectorOf(map[*time.ActorID]int64{
+			v2: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor2: 4,
 				actor3: 6,
 			}),
-			expect: helper.VersionVectorOf(map[*time.ActorID]int64{
+			expect: helper.VersionVectorOf(map[time.ActorID]int64{
 				actor1: 0,
 				actor2: 3,
 				actor3: 0,

@@ -146,7 +146,7 @@ func (e *TreeEdit) ToPos() *crdt.TreePos {
 }
 
 // SetActor sets the given actor to this operation.
-func (e *TreeEdit) SetActor(actorID *time.ActorID) {
+func (e *TreeEdit) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
 

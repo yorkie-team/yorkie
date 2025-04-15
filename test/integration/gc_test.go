@@ -35,7 +35,7 @@ import (
 )
 
 type versionInfo struct {
-	actorID *time.ActorID
+	actorID time.ActorID
 	lamport int64
 }
 
@@ -56,7 +56,7 @@ func checkVV(vector time.VersionVector, versions ...versionInfo) bool {
 	return true
 }
 
-func versionOf(id *time.ActorID, lamport int64) versionInfo {
+func versionOf(id time.ActorID, lamport int64) versionInfo {
 	return versionInfo{
 		actorID: id,
 		lamport: lamport,

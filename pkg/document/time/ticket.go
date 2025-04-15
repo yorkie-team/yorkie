@@ -54,7 +54,7 @@ var (
 type Ticket struct {
 	lamport   int64
 	delimiter uint32
-	actorID   *ActorID
+	actorID   ActorID
 
 	// cachedKey is the cache of the string representation of the ticket.
 	cachedKey string
@@ -64,7 +64,7 @@ type Ticket struct {
 func NewTicket(
 	lamport int64,
 	delimiter uint32,
-	actorID *ActorID,
+	actorID ActorID,
 ) *Ticket {
 	return &Ticket{
 		lamport:   lamport,
@@ -106,7 +106,7 @@ func (t *Ticket) Delimiter() uint32 {
 }
 
 // ActorID returns the actorID value.
-func (t *Ticket) ActorID() *ActorID {
+func (t *Ticket) ActorID() ActorID {
 	return t.actorID
 }
 
@@ -150,7 +150,7 @@ func (t *Ticket) Compare(other *Ticket) int {
 }
 
 // SetActorID creates a new instance of Ticket with the given actorID.
-func (t *Ticket) SetActorID(actorID *ActorID) *Ticket {
+func (t *Ticket) SetActorID(actorID ActorID) *Ticket {
 	return &Ticket{
 		lamport:   t.lamport,
 		delimiter: t.delimiter,
