@@ -44,13 +44,12 @@ func startLoadTestServer(snapshotInterval int64, snapshotThreshold int64) error 
 
 	svr, err := server.New(config)
 	if err != nil {
-		logging.DefaultLogger().Fatal(err)
 		return err
 	}
 	if err := svr.Start(); err != nil {
-		logging.DefaultLogger().Fatal(err)
 		return err
 	}
+
 	loadTestServer = svr
 	return nil
 }
@@ -61,25 +60,19 @@ func createDocKeyForSyncOnlyLoadTest(preparedClientCnt int, clientCnt int) key.K
 
 func initializeClientAndDocForLoadTest(
 	ctx context.Context,
-	b *testing.B,
 	docKey key.Key,
 ) (*client.Client, *document.Document, error) {
-	c, err := client.Dial(
-		loadTestServer.RPCAddr(),
-	)
+	c, err := client.Dial(loadTestServer.RPCAddr())
 	if err != nil {
 		return nil, nil, err
 	}
-	err = c.Activate(ctx)
-	if err != nil {
+	if err := c.Activate(ctx); err != nil {
 		return nil, nil, err
 	}
 	d := document.New(docKey)
-	err = c.Attach(ctx, d)
-	if err != nil {
+	if err := c.Attach(ctx, d); err != nil {
 		return nil, nil, err
 	}
-
 	return c, d, nil
 }
 
@@ -92,11 +85,8 @@ func initializeClientsAndDocsForLoadTest(
 	var clients []*client.Client
 	var docs []*document.Document
 	for i := 0; i < n; i++ {
-		c, d, err := initializeClientAndDocForLoadTest(ctx, b, docKey)
-		if err != nil {
-			logging.DefaultLogger().Error(err)
-			continue
-		}
+		c, d, err := initializeClientAndDocForLoadTest(ctx, docKey)
+		assert.NoError(b, err)
 		clients = append(clients, c)
 		docs = append(docs, d)
 	}
@@ -108,10 +98,15 @@ func benchmarkSyncOnlyLoadTest(
 	clientCnt int,
 	b *testing.B,
 ) {
-	// 1. Create a document with prepared clients.
+	var activeClients []*client.Client
+	var mu sync.Mutex
+
 	ctx := context.Background()
 	docKey := createDocKeyForSyncOnlyLoadTest(preparedClientCnt, clientCnt)
-	initializeClientsAndDocsForLoadTest(ctx, b, preparedClientCnt, docKey)
+
+	// 1. Create a document with prepared clients.
+	clients, _ := initializeClientsAndDocsForLoadTest(ctx, b, preparedClientCnt, docKey)
+	activeClients = append(activeClients, clients...)
 
 	// 2. Create a document with n clients.
 	var wg sync.WaitGroup
@@ -119,8 +114,12 @@ func benchmarkSyncOnlyLoadTest(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			client, _, err := initializeClientAndDocForLoadTest(ctx, b, docKey)
+			client, _, err := initializeClientAndDocForLoadTest(ctx, docKey)
 			assert.NoError(b, err)
+
+			mu.Lock()
+			activeClients = append(activeClients, client)
+			mu.Unlock()
 
 			for i := 0; i < 100; i++ {
 				err := client.Sync(ctx)
@@ -129,13 +128,16 @@ func benchmarkSyncOnlyLoadTest(
 		}()
 	}
 	wg.Wait()
+
+	for _, c := range activeClients {
+		assert.NoError(b, c.Close())
+	}
 }
 
 func BenchmarkSyncOnlyLoadTest(b *testing.B) {
-	err := logging.SetLogLevel("error")
-	assert.NoError(b, err)
-	err = startLoadTestServer(100000, 100000)
-	assert.NoError(b, err)
+	assert.NoError(b, logging.SetLogLevel("error"))
+	assert.NoError(b, startLoadTestServer(100000, 100000))
+
 	defer func() {
 		if loadTestServer == nil {
 			return
