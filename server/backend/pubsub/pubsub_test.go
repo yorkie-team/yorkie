@@ -114,7 +114,7 @@ func TestPubSub(t *testing.T) {
 		concurrency := limitCount * 2
 
 		// Create multiple different ActorIDs
-		actors := make([]*time.ActorID, concurrency)
+		actors := make([]time.ActorID, concurrency)
 		for i := range concurrency {
 			bytes := make([]byte, 12)
 			bytes[11] = byte(i) // Use last byte for uniqueness

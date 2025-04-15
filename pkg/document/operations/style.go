@@ -98,7 +98,7 @@ func (e *Style) ExecutedAt() *time.Ticket {
 }
 
 // SetActor sets the given actor to this operation.
-func (e *Style) SetActor(actorID *time.ActorID) {
+func (e *Style) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
 

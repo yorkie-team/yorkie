@@ -151,7 +151,7 @@ func TimeT(change *change.Context) *time.Ticket {
 }
 
 // MaxVersionVector returns the max version vector of the given actors.
-func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
+func MaxVersionVector(actors ...time.ActorID) time.VersionVector {
 	if len(actors) == 0 {
 		actors = append(actors, time.InitialActorID)
 	}
@@ -165,7 +165,7 @@ func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 }
 
 // VersionVectorOf creates a new version vector from the given actors.
-func VersionVectorOf(actors map[*time.ActorID]int64) time.VersionVector {
+func VersionVectorOf(actors map[time.ActorID]int64) time.VersionVector {
 	vector := time.NewVersionVector()
 	for actor, lamport := range actors {
 		vector.Set(actor, lamport)

@@ -35,7 +35,7 @@ import (
 )
 
 var tID = reflect.TypeOf(types.ID(""))
-var tActorID = reflect.TypeOf(&time.ActorID{})
+var tActorID = reflect.TypeOf(time.ActorID{})
 var tVersionVector = reflect.TypeOf(time.VersionVector{})
 var tPresenceChange = reflect.TypeOf(&innerpresence.PresenceChange{})
 
@@ -82,7 +82,7 @@ func actorIDEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflec
 	if !val.IsValid() || val.Type() != tActorID {
 		return bsoncodec.ValueEncoderError{Name: "actorIDEncoder", Types: []reflect.Type{tActorID}, Received: val}
 	}
-	objectID := encodeActorID(val.Interface().(*time.ActorID))
+	objectID := encodeActorID(val.Interface().(time.ActorID))
 	if err := vw.WriteObjectID(objectID); err != nil {
 		return fmt.Errorf("encode error: %w", err)
 	}
@@ -134,6 +134,8 @@ func versionVectorDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val 
 		}
 
 		val.Set(reflect.ValueOf(vector))
+	default:
+		return fmt.Errorf("unsupported type: %v", vr.Type())
 	}
 
 	return nil
