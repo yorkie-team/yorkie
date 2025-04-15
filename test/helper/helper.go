@@ -313,6 +313,23 @@ func TestServer() *server.Yorkie {
 	return y
 }
 
+// TestServerWithSnapshotCfg returns a new instance of Yorkie for testing with the
+// given snapshot interval and threshold.
+func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) (*server.Yorkie, error) {
+	config := TestConfig()
+	config.Backend.SnapshotInterval = snapshotInterval
+	config.Backend.SnapshotThreshold = snapshotThreshold
+
+	svr, err := server.New(config)
+	if err != nil {
+		return nil, err
+	}
+	if err := svr.Start(); err != nil {
+		return nil, err
+	}
+	return svr, nil
+}
+
 // TestDocKey returns a new instance of document key for testing.
 func TestDocKey(t testing.TB, prefix ...int) key.Key {
 	name := t.Name()
@@ -573,6 +590,48 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 	}
 
 	return project, docs
+}
+
+// ClientAndAttachedDoc creates a new client and attaches it to a new document.
+func ClientAndAttachedDoc(
+	ctx context.Context,
+	rpcAddr string,
+	docKey key.Key,
+) (*client.Client, *document.Document, error) {
+	c, err := client.Dial(rpcAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.Activate(ctx); err != nil {
+		return nil, nil, err
+	}
+	d := document.New(docKey)
+	if err := c.Attach(ctx, d); err != nil {
+		return nil, nil, err
+	}
+	return c, d, nil
+}
+
+// ClientsAndAttachedDocs creates n clients and attaches them to a new document.
+func ClientsAndAttachedDocs(
+	ctx context.Context,
+	rpcAddr string,
+	docKey key.Key,
+	n int,
+) ([]*client.Client, []*document.Document, error) {
+	var clients []*client.Client
+	var docs []*document.Document
+
+	for range n {
+		c, doc, err := ClientAndAttachedDoc(ctx, rpcAddr, docKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		clients = append(clients, c)
+		docs = append(docs, doc)
+	}
+	return clients, docs, nil
 }
 
 // CleanupClients is a helper function to clean up clients.
