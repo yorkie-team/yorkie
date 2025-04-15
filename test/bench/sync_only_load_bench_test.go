@@ -120,10 +120,9 @@ func benchmarkSyncOnlyLoadTest(
 			client, _, err := initializeClientAndDocForLoadTest(ctx, b, docKey)
 			assert.NoError(b, err)
 
-			for i := 0; i < 30; i++ {
+			for i := 0; i < 100; i++ {
 				err := client.Sync(ctx)
 				assert.NoError(b, err)
-				gotime.Sleep(100 * gotime.Millisecond)
 			}
 		}()
 	}
