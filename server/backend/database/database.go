@@ -58,6 +58,9 @@ var (
 
 	// ErrProjectNameAlreadyExists is returned when the project name already exists.
 	ErrProjectNameAlreadyExists = errors.New("project name already exists")
+
+	// ErrVersionVectorNotFound is returned when the version vector could not be found.
+	ErrVersionVectorNotFound = errors.New("version vector not found")
 )
 
 // Database represents database which reads or saves Yorkie data.
