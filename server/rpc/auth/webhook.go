@@ -77,7 +77,6 @@ func verifyAccess(
 		be.AuthWebhookCache.Add(
 			cacheKey,
 			pkgtypes.Pair[int, *types.AuthWebhookResponse]{First: status, Second: res},
-			be.Config.ParseAuthWebhookCacheTTL(),
 		)
 	}
 

@@ -24,8 +24,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
+
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/cache"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
@@ -48,10 +49,7 @@ type Backend struct {
 	Config *Config
 
 	// AuthWebhookCache is used to cache the response of the auth webhook.
-	AuthWebhookCache *cache.LRUExpireCache[string, pkgtypes.Pair[
-		int,
-		*types.AuthWebhookResponse,
-	]]
+	AuthWebhookCache *expirable.LRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
 	// AuthWebhookClient is used to send auth webhook.
 	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
@@ -99,8 +97,10 @@ func New(
 	}
 
 	// 02. Create the webhook authWebhookCache and client.
-	authWebhookCache := cache.NewLRUExpireCache[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	authWebhookCache := expirable.NewLRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
+		nil,
+		conf.ParseAuthWebhookCacheTTL(),
 	)
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		pkgwebhook.Options{
