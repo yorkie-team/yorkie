@@ -224,13 +224,6 @@ type Database interface {
 		isRemoved bool,
 	) error
 
-	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
-	// save storage.
-	PurgeStaleChanges(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) error
-
 	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
 	FindLatestChangeInfoByActor(
 		ctx context.Context,
@@ -276,21 +269,6 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-	FindMinSyncedSeqInfo(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (*SyncedSeqInfo, error)
-
-	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-	// and returns the min synced ticket.
-	UpdateAndFindMinSyncedTicket(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) (*time.Ticket, error)
-
 	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
 	UpdateAndFindMinSyncedVersionVector(
@@ -299,14 +277,6 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
 	) (time.VersionVector, error)
-
-	// UpdateSyncedSeq updates the syncedSeq of the given client.
-	UpdateSyncedSeq(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) error
 
 	// UpdateVersionVector updates the syncedSeq of the given client.
 	UpdateVersionVector(

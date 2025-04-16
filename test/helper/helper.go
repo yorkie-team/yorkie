@@ -77,7 +77,6 @@ var (
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
 	SnapshotThreshold           = int64(10)
-	SnapshotWithPurgingChanges  = false
 	AuthWebhookMaxWaitInterval  = 3 * gotime.Millisecond
 	AuthWebhookMinWaitInterval  = 3 * gotime.Millisecond
 	AuthWebhookRequestTimeout   = 100 * gotime.Millisecond
@@ -282,7 +281,6 @@ func TestConfig() *server.Config {
 			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
 			SnapshotInterval:            10,
 			SnapshotThreshold:           SnapshotThreshold,
-			SnapshotWithPurgingChanges:  SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
 			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
