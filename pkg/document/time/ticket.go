@@ -58,6 +58,9 @@ type Ticket struct {
 
 	// cachedKey is the cache of the string representation of the ticket.
 	cachedKey string
+
+	// cachedActorIDHex is the cache of the hex representation of the actorID.
+	cachedActorIDHex string
 }
 
 // NewTicket creates an instance of Ticket.
@@ -112,7 +115,11 @@ func (t *Ticket) ActorID() ActorID {
 
 // ActorIDHex returns the actorID's hex value.
 func (t *Ticket) ActorIDHex() string {
-	return t.actorID.String()
+	if t.cachedActorIDHex == "" {
+		t.cachedActorIDHex = t.actorID.String()
+	}
+
+	return t.cachedActorIDHex
 }
 
 // ActorIDBytes returns the actorID's bytes value.
