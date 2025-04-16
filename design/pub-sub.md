@@ -57,7 +57,7 @@ The `WatchDocument` API creates a `Subscription` instance and adds it to the `su
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
-	subscriber *time.ActorID
+	subscriber time.ActorID
 	closed     bool
 	events     chan DocEvent
 }
@@ -104,7 +104,7 @@ The `Publish` method sends a `DocEvent` to the event channel of subscriptions th
 ```go
 func (m *PubSub) Publish(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	m.subscriptionsMapMu.RLock()

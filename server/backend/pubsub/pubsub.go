@@ -110,10 +110,10 @@ func New() *PubSub {
 // Subscribe subscribes to the given document keys.
 func (m *PubSub) Subscribe(
 	ctx context.Context,
-	subscriber *time.ActorID,
+	subscriber time.ActorID,
 	docKey types.DocRefKey,
 	limit int,
-) (*Subscription, []*time.ActorID, error) {
+) (*Subscription, []time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
@@ -202,7 +202,7 @@ func (m *PubSub) Unsubscribe(
 // Publish publishes the given event.
 func (m *PubSub) Publish(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event events.DocEvent,
 ) {
 	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
@@ -231,13 +231,13 @@ func (m *PubSub) Publish(
 }
 
 // ClientIDs returns the clients of the given document.
-func (m *PubSub) ClientIDs(docKey types.DocRefKey) []*time.ActorID {
+func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
 	subs, ok := m.subscriptionsMap.Get(docKey)
 	if !ok {
 		return nil
 	}
 
-	var ids []*time.ActorID
+	var ids []time.ActorID
 	for _, sub := range subs.Values() {
 		ids = append(ids, sub.Subscriber())
 	}

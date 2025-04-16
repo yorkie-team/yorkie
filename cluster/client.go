@@ -134,7 +134,7 @@ func (c *Client) Close() {
 func (c *Client) DetachDocument(
 	ctx context.Context,
 	project *types.Project,
-	clientID *time.ActorID,
+	clientID time.ActorID,
 	docID types.ID,
 	apiKey string,
 	docKey key.Key,

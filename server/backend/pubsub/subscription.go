@@ -29,14 +29,14 @@ import (
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
-	subscriber *time.ActorID
+	subscriber time.ActorID
 	mu         sync.Mutex
 	closed     bool
 	events     chan events.DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber *time.ActorID) *Subscription {
+func NewSubscription(subscriber time.ActorID) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
@@ -56,7 +56,7 @@ func (s *Subscription) Events() chan events.DocEvent {
 }
 
 // Subscriber returns the subscriber of this subscription.
-func (s *Subscription) Subscriber() *time.ActorID {
+func (s *Subscription) Subscriber() time.ActorID {
 	return s.subscriber
 }
 

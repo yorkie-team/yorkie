@@ -610,10 +610,10 @@ func (s *yorkieServer) RemoveDocument(
 
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
-	clientID *time.ActorID,
+	clientID time.ActorID,
 	docKey types.DocRefKey,
 	limit int,
-) (*pubsub.Subscription, []*time.ActorID, error) {
+) (*pubsub.Subscription, []time.ActorID, error) {
 	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
 		return nil, nil, err
