@@ -25,6 +25,7 @@ import (
 	"strings"
 	gotime "time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -48,8 +50,9 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config *Config
-	client *mongo.Client
+	config  *Config
+	client  *mongo.Client
+	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -79,11 +82,17 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
+	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize VV cache: %w", err)
+	}
+
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config: conf,
-		client: client,
+		config:  conf,
+		client:  client,
+		vvCache: cache,
 	}, nil
 }
 
@@ -1314,42 +1323,71 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// UpdateAndFindMinSyncedVersionVector returns min synced version vector
+// UpdateAndFindMinSyncedVersionVector returns min synced version vector.
 func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	versionVector time.VersionVector,
+	vector time.VersionVector,
 ) (time.VersionVector, error) {
-	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
-	// from min version vector.
-	var versionVectorInfos []database.VersionVectorInfo
+	// 01. Find all version vectors of the given document.
+	if !c.vvCache.Contains(docRefKey) {
+		var infos []database.VersionVectorInfo
+		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("find all version vectors: %w", err)
+		}
+		if err := cursor.All(ctx, &infos); err != nil {
+			return nil, fmt.Errorf("decode version vectors: %w", err)
+		}
 
-	// 01. Find all version vectors of the given document from DB.
-	cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("find all version vectors: %w", err)
+		infoMap := cmap.New[types.ID, time.VersionVector]()
+		for i := range infos {
+			infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
+		}
+
+		c.vvCache.Add(docRefKey, infoMap)
+	}
+	vvMap, ok := c.vvCache.Get(docRefKey)
+	if !ok {
+		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
 
-	if err := cursor.All(ctx, &versionVectorInfos); err != nil {
-		return nil, fmt.Errorf("decode version vectors: %w", err)
-	}
-
-	// 02. Compute min version vector.
-	minVersionVector := versionVector.DeepCopy()
-	for i, vvi := range versionVectorInfos {
-		if vvi.ClientID == clientInfo.ID {
+	// 02. Compute the minimum version vector with the give version vector.
+	minVersionVector := vector.DeepCopy()
+	for _, id := range vvMap.Keys() {
+		// Exclude the current client from version vectors in DB.
+		if id == clientInfo.ID {
 			continue
 		}
-		minVersionVector.Min(&versionVectorInfos[i].VersionVector)
+
+		vv, _ := vvMap.Get(id)
+		minVersionVector.Min(&vv)
 	}
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if err = c.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return nil, err
+	}
+
+	if attached {
+		vvMap.Upsert(clientInfo.ID, func(value time.VersionVector, exists bool) time.VersionVector {
+			return vector
+		})
+	} else {
+		// NOTE(hackerwins): Considering removing the detached client's lamport
+		// from the other clients' version vectors. For now, we just ignore it.
+		vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
+			return exists
+		})
+	}
+
+	if err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
 
@@ -1361,7 +1399,7 @@ func (c *Client) UpdateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	versionVector time.VersionVector,
+	vector time.VersionVector,
 ) error {
 	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
 	if err != nil {
@@ -1369,6 +1407,7 @@ func (c *Client) UpdateVersionVector(
 	}
 
 	if !isAttached {
+
 		if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
@@ -1385,7 +1424,7 @@ func (c *Client) UpdateVersionVector(
 		"client_id":  clientInfo.ID,
 	}, bson.M{
 		"$set": bson.M{
-			"version_vector": versionVector,
+			"version_vector": vector,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
