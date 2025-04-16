@@ -52,9 +52,6 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval int64 `yaml:"SnapshotInterval"`
 
-	// SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
-	SnapshotWithPurgingChanges bool `yaml:"SnapshotWithPurgingChages"`
-
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
 	SnapshotDisableGC bool
 

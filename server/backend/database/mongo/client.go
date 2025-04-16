@@ -20,7 +20,6 @@ package mongo
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -1027,49 +1026,6 @@ func (c *Client) CreateChangeInfos(
 	return nil
 }
 
-// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
-// save storage.
-func (c *Client) PurgeStaleChanges(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-) error {
-	// Find the smallest server seq in `syncedseqs`.
-	// Because offline client can pull changes when it becomes online.
-	result := c.collection(ColSyncedSeqs).FindOne(
-		ctx,
-		bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-		},
-		options.FindOne().SetSort(bson.M{"server_seq": 1}),
-	)
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil
-	}
-	if result.Err() != nil {
-		return fmt.Errorf("find syncedseqs: %w", result.Err())
-	}
-	minSyncedSeqInfo := database.SyncedSeqInfo{}
-	if err := result.Decode(&minSyncedSeqInfo); err != nil {
-		return fmt.Errorf("decode syncedseq: %w", err)
-	}
-
-	// Delete all changes before the smallest server seq.
-	if _, err := c.collection(ColChanges).DeleteMany(
-		ctx,
-		bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"server_seq": bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
-		},
-		options.Delete(),
-	); err != nil {
-		return fmt.Errorf("delete changes: %w", err)
-	}
-
-	return nil
-}
-
 // FindLatestChangeInfoByActor returns the latest change created by given actorID.
 func (c *Client) FindLatestChangeInfoByActor(
 	ctx context.Context,
@@ -1248,81 +1204,6 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
-}
-
-// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-func (c *Client) FindMinSyncedSeqInfo(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-) (*database.SyncedSeqInfo, error) {
-	syncedSeqResult := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}, options.FindOne().SetSort(bson.D{
-		{Key: "server_seq", Value: 1},
-	}))
-	if syncedSeqResult.Err() == mongo.ErrNoDocuments {
-		syncedSeqInfo := database.SyncedSeqInfo{}
-		return &syncedSeqInfo, nil
-	}
-	if syncedSeqResult.Err() != nil {
-		return nil, fmt.Errorf("find synced seq: %w", syncedSeqResult.Err())
-	}
-
-	syncedSeqInfo := database.SyncedSeqInfo{}
-	if err := syncedSeqResult.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
-	}
-
-	return &syncedSeqInfo, nil
-}
-
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-// and returns the min synced ticket.
-func (c *Client) UpdateAndFindMinSyncedTicket(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	// 01. update synced seq of the given client and document.
-	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
-	}
-
-	// 02. find min synced seq of the given document.
-	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}, options.FindOne().SetSort(bson.D{
-		{Key: "lamport", Value: 1},
-		{Key: "actor_id", Value: 1},
-	}))
-	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return time.InitialTicket, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
-	}
-	syncedSeqInfo := database.SyncedSeqInfo{}
-	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
-	}
-
-	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		syncedSeqInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
 }
 
 // UpdateAndFindMinSyncedVersionVector returns min synced version vector.
@@ -1508,52 +1389,6 @@ func (c *Client) FindDocInfosByQuery(
 		TotalCount: len(infos),
 		Elements:   infos[:limit],
 	}, nil
-}
-
-// UpdateSyncedSeq updates the syncedSeq of the given client.
-func (c *Client) UpdateSyncedSeq(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) error {
-	// 01. update synced seq of the given client.
-	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
-	if err != nil {
-		return err
-	}
-
-	if !isAttached {
-		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"client_id":  clientInfo.ID,
-		}, options.Delete()); err != nil {
-			return fmt.Errorf("delete synced seq: %w", err)
-		}
-		return nil
-	}
-
-	ticket, err := c.findTicketByServerSeq(ctx, docRefKey, serverSeq)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"client_id":  clientInfo.ID,
-	}, bson.M{
-		"$set": bson.M{
-			"lamport":    ticket.Lamport(),
-			"actor_id":   ticket.ActorID(),
-			"server_seq": serverSeq,
-		},
-	}, options.Update().SetUpsert(true)); err != nil {
-		return fmt.Errorf("upsert synced seq: %w", err)
-	}
-
-	return nil
 }
 
 // IsDocumentAttached returns whether the given document is attached to clients.

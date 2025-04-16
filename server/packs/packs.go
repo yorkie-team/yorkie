@@ -150,16 +150,7 @@ func PushPull(
 	// vector was introduced. But it is necessary to support the previous
 	// SDKs that do not support the version vector. This code should be removed
 	// after all SDKs are updated.
-	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
-		ctx,
-		clientInfo,
-		docRefKey,
-		reqPack.Checkpoint.ServerSeq,
-	)
-	if err != nil {
-		return nil, err
-	}
-	respPack.MinSyncedTicket = minSyncedTicket
+	respPack.MinSyncedTicket = time.InitialTicket
 
 	respPack.ApplyDocInfo(docInfo)
 
