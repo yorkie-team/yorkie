@@ -18,6 +18,7 @@ package time
 
 import (
 	"bytes"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,39 @@ type VersionVector map[ActorID]int64
 // NewVersionVector creates a new instance of VersionVector.
 func NewVersionVector() VersionVector {
 	return make(VersionVector)
+}
+
+// MinVersionVector returns the minimum version vector of the given version vectors.
+func MinVersionVector(vectors ...VersionVector) VersionVector {
+	if len(vectors) == 0 {
+		return VersionVector{}
+	}
+
+	keySet := make(map[ActorID]struct{})
+	for _, vec := range vectors {
+		for k := range vec {
+			keySet[k] = struct{}{}
+		}
+	}
+
+	minVec := make(VersionVector)
+	for k := range keySet {
+		minValue := int64(math.MaxInt64)
+		for _, vec := range vectors {
+			if v, ok := vec[k]; ok {
+				if v < minValue {
+					minValue = v
+				}
+			} else {
+				minValue = 0
+				break
+			}
+		}
+
+		minVec[k] = minValue
+	}
+
+	return minVec
 }
 
 // Get gets the version of the given actor.
