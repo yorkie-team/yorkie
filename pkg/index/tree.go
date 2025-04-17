@@ -248,9 +248,15 @@ type Value interface {
 
 // Node is a node of Tree.
 type Node[V Value] struct {
+	// Type is the type of the node.
 	Type string
 
-	Parent   *Node[V]
+	// Parent is the parent of the node.
+	Parent *Node[V]
+
+	// children is the children of the node. It must be used only for
+	// traversing without modifying the tree. For modifying the tree,
+	// use n.Children() instead.
 	children []*Node[V]
 
 	Value  V
@@ -348,7 +354,7 @@ func (n *Node[V]) UpdateAncestorsSize() {
 // the tree is newly created and the size of the descendants is not calculated.
 func (n *Node[V]) UpdateDescendantsSize() int {
 	size := 0
-	for _, child := range n.Children(true) {
+	for _, child := range n.children {
 		childSize := child.UpdateDescendantsSize()
 		if child.Value.IsRemoved() {
 			continue
@@ -379,6 +385,18 @@ func (n *Node[V]) Child(index int) (*Node[V], error) {
 	}
 
 	return n.Children()[index], nil
+}
+
+// FirstChild returns the first child of the given node.
+func (n *Node[V]) FirstChild() *Node[V] {
+	for _, child := range n.children {
+		if child.Value.IsRemoved() {
+			continue
+		}
+		return child
+	}
+
+	return nil
 }
 
 // InsertAfterInternal inserts the given node after the given child.
@@ -430,7 +448,7 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 	// If nodes are removed, the offset of the removed node is the number of
 	// nodes before the node excluding the removed nodes.
 	offset := 0
-	for _, child := range n.Children(true) {
+	for _, child := range n.children {
 		if child == node {
 			return offset, nil
 		}

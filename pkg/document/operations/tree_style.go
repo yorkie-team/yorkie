@@ -132,7 +132,7 @@ func (e *TreeStyle) ExecutedAt() *time.Ticket {
 }
 
 // SetActor sets the given actor to this operation.
-func (e *TreeStyle) SetActor(actorID *time.ActorID) {
+func (e *TreeStyle) SetActor(actorID time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
 

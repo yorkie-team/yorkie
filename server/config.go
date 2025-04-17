@@ -64,12 +64,11 @@ const (
 	DefaultGitHubTokenURL      = "https://github.com/login/oauth/access_token" // #nosec G101
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
-	DefaultUseDefaultProject          = true
-	DefaultClientDeactivateThreshold  = "24h"
-	DefaultSnapshotThreshold          = 1000
-	DefaultSnapshotInterval           = 3000
-	DefaultSnapshotWithPurgingChanges = false
-	DefaultSnapshotDisableGC          = false
+	DefaultUseDefaultProject         = true
+	DefaultClientDeactivateThreshold = "24h"
+	DefaultSnapshotThreshold         = 1000
+	DefaultSnapshotInterval          = 3000
+	DefaultSnapshotDisableGC         = false
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
@@ -281,10 +280,9 @@ func newConfig(port int, profilingPort int) *Config {
 			ProjectFetchSize:          DefaultHousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
-			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,
-			SnapshotThreshold:          DefaultSnapshotThreshold,
-			SnapshotInterval:           DefaultSnapshotInterval,
-			SnapshotWithPurgingChanges: DefaultSnapshotWithPurgingChanges,
+			ClientDeactivateThreshold: DefaultClientDeactivateThreshold,
+			SnapshotThreshold:         DefaultSnapshotThreshold,
+			SnapshotInterval:          DefaultSnapshotInterval,
 		},
 	}
 }

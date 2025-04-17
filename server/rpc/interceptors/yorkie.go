@@ -25,14 +25,13 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
@@ -45,12 +44,12 @@ func isYorkieService(method string) bool {
 type YorkieServiceInterceptor struct {
 	backend      *backend.Backend
 	requestID    *requestID
-	projectCache *cache.LRUExpireCache[string, *types.Project]
+	projectCache *expirable.LRU[string, *types.Project]
 }
 
 // NewYorkieServiceInterceptor creates a new instance of YorkieServiceInterceptor.
 func NewYorkieServiceInterceptor(be *backend.Backend) *YorkieServiceInterceptor {
-	cache := cache.NewLRUExpireCache[string, *types.Project](be.Config.ProjectCacheSize)
+	cache := expirable.NewLRU[string, *types.Project](be.Config.ProjectCacheSize, nil, be.Config.ParseProjectCacheTTL())
 	return &YorkieServiceInterceptor{
 		backend:      be,
 		requestID:    newRequestID("r"),
@@ -174,7 +173,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 		if err != nil {
 			return nil, connecthelper.ToStatusError(err)
 		}
-		i.projectCache.Add(cacheKey, prj, i.backend.Config.ParseProjectCacheTTL())
+		i.projectCache.Add(cacheKey, prj)
 	}
 	project, _ := i.projectCache.Get(cacheKey)
 	ctx = projects.With(ctx, project)

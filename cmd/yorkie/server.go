@@ -388,12 +388,6 @@ func init() {
 		"Interval of changes to create a snapshot.",
 	)
 	cmd.Flags().BoolVar(
-		&conf.Backend.SnapshotWithPurgingChanges,
-		"backend-snapshot-with-purging-changes",
-		server.DefaultSnapshotWithPurgingChanges,
-		"Whether to delete previous changes when the snapshot is created.",
-	)
-	cmd.Flags().BoolVar(
 		&conf.Backend.SnapshotDisableGC,
 		"backend-snapshot-disable-gc",
 		server.DefaultSnapshotDisableGC,

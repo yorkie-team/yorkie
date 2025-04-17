@@ -28,8 +28,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -40,75 +38,20 @@ import (
 
 var testServer *server.Yorkie
 
-func startTestServer(snapshotInterval int64, snapshotThreshold int64) {
-	config := helper.TestConfig()
-	config.Backend.SnapshotInterval = snapshotInterval
-	config.Backend.SnapshotThreshold = snapshotThreshold
-
-	svr, err := server.New(config)
-	if err != nil {
-		logging.DefaultLogger().Fatal(err)
-	}
-	if err := svr.Start(); err != nil {
-		logging.DefaultLogger().Fatal(err)
-	}
-	testServer = svr
-}
-
-func createDocKey(b *testing.B, i int) key.Key {
-	return key.Key(fmt.Sprintf("vv-bench-%d-%d", i, gotime.Now().UnixMilli()))
-}
-
-func initializeClientAndDoc(
-	ctx context.Context,
-	b *testing.B,
-	docKey key.Key,
-) (*client.Client, *document.Document) {
-	c, err := client.Dial(
-		testServer.RPCAddr(),
-	)
-	assert.NoError(b, err)
-	err = c.Activate(ctx)
-	assert.NoError(b, err)
-	d := document.New(docKey)
-	err = c.Attach(ctx, d)
-	assert.NoError(b, err)
-
-	return c, d
-}
-
-func initializeClientsAndDocs(
-	ctx context.Context,
-	b *testing.B,
-	n int,
-	docKey key.Key,
-) ([]*client.Client, []*document.Document) {
-	var clients []*client.Client
-	var docs []*document.Document
-	for i := 0; i < n; i++ {
-		c, d := initializeClientAndDoc(ctx, b, docKey)
-		clients = append(clients, c)
-		docs = append(docs, d)
-	}
-	return clients, docs
-}
-
-func benchmarkVV(
-	clientCnt int,
-	b *testing.B,
-) {
+func benchmarkVV(b *testing.B, clientCnt int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
-		docKey := createDocKey(b, i)
+		docKey := key.Key(fmt.Sprintf("vv-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document.
-		clients, docs := initializeClientsAndDocs(ctx, b, clientCnt, docKey)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, testServer.RPCAddr(), docKey, clientCnt)
+		assert.NoError(b, err)
 		c1, cN := clients[0], clients[clientCnt-1]
 		d1, dN := docs[0], docs[clientCnt-1]
 
 		// 2.Initialize the text.
 		c1.Sync(ctx)
-		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text")
 			return nil
 		})
@@ -157,12 +100,14 @@ func benchmarkVV(
 		// Measurements:
 		//  - Attach time (to load the existing document)
 		start = gotime.Now()
-		cN1, dN1 := initializeClientAndDoc(ctx, b, docKey)
+		cN1, dN1, err := helper.ClientAndAttachedDoc(ctx, testServer.RPCAddr(), docKey)
+		assert.NoError(b, err)
 		duration = gotime.Since(start).Milliseconds()
 		assert.Equal(b, `{"text":[{"val":"a"}]}`, dN1.Marshal())
 		b.ReportMetric(float64(duration), "4_attach(ms)")
 
-		cN2, dN2 := initializeClientAndDoc(ctx, b, docKey)
+		cN2, dN2, err := helper.ClientAndAttachedDoc(ctx, testServer.RPCAddr(), docKey)
+		assert.NoError(b, err)
 		assert.Equal(b, `{"text":[{"val":"a"}]}`, dN2.Marshal())
 
 		// 6. The new client edits the text.
@@ -198,28 +143,31 @@ func benchmarkVV(
 }
 
 func BenchmarkVersionVector(b *testing.B) {
-	err := logging.SetLogLevel("error")
-	assert.NoError(b, err)
-	startTestServer(100000, 100000)
-	defer func() {
-		if testServer == nil {
-			return
-		}
+	assert.NoError(b, logging.SetLogLevel("error"))
 
-		if err := testServer.Shutdown(true); err != nil {
+	// NOTE(hackerwins): To prevent the snapshot from being created, we set
+	// snapshot threshold and snapshot interval to very large values.
+	svr, err := helper.TestServerWithSnapshotCfg(100_000, 100_000)
+	if err != nil {
+		b.Fatal(err)
+	}
+	testServer = svr
+
+	defer func() {
+		if err := svr.Shutdown(true); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
 
 	b.Run("clients 10", func(b *testing.B) {
-		benchmarkVV(10, b)
+		benchmarkVV(b, 10)
 	})
 
 	b.Run("clients 100", func(b *testing.B) {
-		benchmarkVV(100, b)
+		benchmarkVV(b, 100)
 	})
 
 	b.Run("clients 1000", func(b *testing.B) {
-		benchmarkVV(1000, b)
+		benchmarkVV(b, 1000)
 	})
 }

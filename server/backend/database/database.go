@@ -58,6 +58,9 @@ var (
 
 	// ErrProjectNameAlreadyExists is returned when the project name already exists.
 	ErrProjectNameAlreadyExists = errors.New("project name already exists")
+
+	// ErrVersionVectorNotFound is returned when the version vector could not be found.
+	ErrVersionVectorNotFound = errors.New("version vector not found")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -237,13 +240,6 @@ type Database interface {
 		changes []*change.Change,
 	) error
 
-	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
-	// save storage.
-	PurgeStaleChanges(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) error
-
 	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
 	FindLatestChangeInfoByActor(
 		ctx context.Context,
@@ -289,21 +285,6 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-	FindMinSyncedSeqInfo(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (*SyncedSeqInfo, error)
-
-	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-	// and returns the min synced ticket.
-	UpdateAndFindMinSyncedTicket(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) (*time.Ticket, error)
-
 	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
 	UpdateAndFindMinSyncedVersionVector(
@@ -312,14 +293,6 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
 	) (time.VersionVector, error)
-
-	// UpdateSyncedSeq updates the syncedSeq of the given client.
-	UpdateSyncedSeq(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		serverSeq int64,
-	) error
 
 	// UpdateVersionVector updates the syncedSeq of the given client.
 	UpdateVersionVector(

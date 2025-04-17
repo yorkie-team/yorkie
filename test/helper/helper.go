@@ -77,7 +77,6 @@ var (
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
 	SnapshotThreshold           = int64(10)
-	SnapshotWithPurgingChanges  = false
 	AuthWebhookMaxWaitInterval  = 3 * gotime.Millisecond
 	AuthWebhookMinWaitInterval  = 3 * gotime.Millisecond
 	AuthWebhookRequestTimeout   = 100 * gotime.Millisecond
@@ -152,7 +151,7 @@ func TimeT(change *change.Context) *time.Ticket {
 }
 
 // MaxVersionVector returns the max version vector of the given actors.
-func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
+func MaxVersionVector(actors ...time.ActorID) time.VersionVector {
 	if len(actors) == 0 {
 		actors = append(actors, time.InitialActorID)
 	}
@@ -166,7 +165,7 @@ func MaxVersionVector(actors ...*time.ActorID) time.VersionVector {
 }
 
 // VersionVectorOf creates a new version vector from the given actors.
-func VersionVectorOf(actors map[*time.ActorID]int64) time.VersionVector {
+func VersionVectorOf(actors map[time.ActorID]int64) time.VersionVector {
 	vector := time.NewVersionVector()
 	for actor, lamport := range actors {
 		vector.Set(actor, lamport)
@@ -282,7 +281,6 @@ func TestConfig() *server.Config {
 			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
 			SnapshotInterval:            10,
 			SnapshotThreshold:           SnapshotThreshold,
-			SnapshotWithPurgingChanges:  SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
 			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
@@ -311,6 +309,23 @@ func TestServer() *server.Yorkie {
 		log.Fatal(err)
 	}
 	return y
+}
+
+// TestServerWithSnapshotCfg returns a new instance of Yorkie for testing with the
+// given snapshot interval and threshold.
+func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) (*server.Yorkie, error) {
+	config := TestConfig()
+	config.Backend.SnapshotInterval = snapshotInterval
+	config.Backend.SnapshotThreshold = snapshotThreshold
+
+	svr, err := server.New(config)
+	if err != nil {
+		return nil, err
+	}
+	if err := svr.Start(); err != nil {
+		return nil, err
+	}
+	return svr, nil
 }
 
 // TestDocKey returns a new instance of document key for testing.
@@ -573,6 +588,48 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 	}
 
 	return project, docs
+}
+
+// ClientAndAttachedDoc creates a new client and attaches it to a new document.
+func ClientAndAttachedDoc(
+	ctx context.Context,
+	rpcAddr string,
+	docKey key.Key,
+) (*client.Client, *document.Document, error) {
+	c, err := client.Dial(rpcAddr)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.Activate(ctx); err != nil {
+		return nil, nil, err
+	}
+	d := document.New(docKey)
+	if err := c.Attach(ctx, d); err != nil {
+		return nil, nil, err
+	}
+	return c, d, nil
+}
+
+// ClientsAndAttachedDocs creates n clients and attaches them to a new document.
+func ClientsAndAttachedDocs(
+	ctx context.Context,
+	rpcAddr string,
+	docKey key.Key,
+	n int,
+) ([]*client.Client, []*document.Document, error) {
+	var clients []*client.Client
+	var docs []*document.Document
+
+	for range n {
+		c, doc, err := ClientAndAttachedDoc(ctx, rpcAddr, docKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		clients = append(clients, c)
+		docs = append(docs, doc)
+	}
+	return clients, docs, nil
 }
 
 // CleanupClients is a helper function to clean up clients.
