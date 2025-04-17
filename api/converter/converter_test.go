@@ -464,7 +464,7 @@ func TestJSONStructConversion(t *testing.T) {
 		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
 		newJSONStruct, err := converter.ToJSONStruct(newDoc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, "", newJSONStruct.ToTestString())
+		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
 	})
 
 	t.Run("unsupported JSONStruct type", func(t *testing.T) {

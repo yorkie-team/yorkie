@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
-func ToPrimitiveStruct(primitive *crdt.Primitive) (*JSONPrimitiveStruct, error) {
+func toPrimitiveStruct(primitive *crdt.Primitive) (*JSONPrimitiveStruct, error) {
 	pbValueType, err := toValueType(primitive.ValueType())
 	if err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func ToPrimitiveStruct(primitive *crdt.Primitive) (*JSONPrimitiveStruct, error) 
 	}, nil
 }
 
-func ToCounterStruct(counter *crdt.Counter) (*JSONCounterStruct, error) {
+func toCounterStruct(counter *crdt.Counter) (*JSONCounterStruct, error) {
 	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func toArrayStruct(array *crdt.Array) (*JSONArrayStruct, error) {
 	}, nil
 }
 
-func ToObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
+func toObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
 	fields := make(map[string]JSONStruct)
 	for key, elem := range object.Members() {
 		elemStruct, err := ToJSONStruct(elem)
@@ -80,14 +80,14 @@ func ToObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
 	}, nil
 }
 
-func ToTextStruct(text *crdt.Text) *JSONTextStruct {
+func toTextStruct(text *crdt.Text) *JSONTextStruct {
 	return &JSONTextStruct{
 		JSONType: api.ValueType_VALUE_TYPE_TEXT,
 		Value:    text.Marshal(),
 	}
 }
 
-func ToTreeStruct(tree *crdt.Tree) *JSONTreeStruct {
+func toTreeStruct(tree *crdt.Tree) *JSONTreeStruct {
 	return &JSONTreeStruct{
 		JSONType: api.ValueType_VALUE_TYPE_TREE,
 		Value:    tree.Marshal(),
@@ -97,17 +97,17 @@ func ToTreeStruct(tree *crdt.Tree) *JSONTreeStruct {
 func ToJSONStruct(elem crdt.Element) (JSONStruct, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
-		return ToObjectStruct(elem)
+		return toObjectStruct(elem)
 	case *crdt.Array:
 		return toArrayStruct(elem)
 	case *crdt.Primitive:
-		return ToPrimitiveStruct(elem)
+		return toPrimitiveStruct(elem)
 	case *crdt.Counter:
-		return ToCounterStruct(elem)
+		return toCounterStruct(elem)
 	case *crdt.Text:
-		return ToTextStruct(elem), nil
+		return toTextStruct(elem), nil
 	case *crdt.Tree:
-		return ToTreeStruct(elem), nil
+		return toTreeStruct(elem), nil
 	default:
 		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
