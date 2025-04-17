@@ -1,561 +1,562 @@
 openapi: 3.1.0
 info:
-  description: Yorkie is an open source document store for building collaborative
+  description:
+    Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.6
+  version: v0.6.7
 servers:
-- description: Production server
-  url: https://api.yorkie.dev
-- description: Local server
-  url: http://localhost:8080
+  - description: Production server
+    url: https://api.yorkie.dev
+  - description: Local server
+    url: http://localhost:8080
 paths:
   /yorkie.v1.AdminService/ChangePassword:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/CreateProject:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/DeleteAccount:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetDocuments:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetProject:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetProjectStats:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetServerVersion:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetSnapshotMeta:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListChanges:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListDocuments:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListProjects:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/LogIn:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.LogIn.yorkie.v1.LogInRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.LogIn.yorkie.v1.LogInRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.LogIn.yorkie.v1.LogInResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.LogIn.yorkie.v1.LogInResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/RemoveDocumentByAdmin:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/SearchDocuments:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/SignUp:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
   /yorkie.v1.AdminService/UpdateProject:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse'
+          $ref: "#/components/responses/yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.AdminService
+        - yorkie.v1.AdminService
 components:
   requestBodies:
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
+            $ref: "#/components/schemas/yorkie.v1.ChangePasswordRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
+            $ref: "#/components/schemas/yorkie.v1.ChangePasswordRequest"
       required: true
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.CreateProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.CreateProjectRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.CreateProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.CreateProjectRequest"
       required: true
     yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeleteAccountRequest'
+            $ref: "#/components/schemas/yorkie.v1.DeleteAccountRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeleteAccountRequest'
+            $ref: "#/components/schemas/yorkie.v1.DeleteAccountRequest"
       required: true
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentRequest"
       required: true
     yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentsRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentsRequest"
       required: true
     yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectRequest"
       required: true
     yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectStatsRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectStatsRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectStatsRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectStatsRequest"
       required: true
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetServerVersionRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetServerVersionRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetServerVersionRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetServerVersionRequest"
       required: true
     yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetSnapshotMetaRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaRequest'
+            $ref: "#/components/schemas/yorkie.v1.GetSnapshotMetaRequest"
       required: true
     yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListChangesRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListChangesRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListChangesRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListChangesRequest"
       required: true
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListDocumentsRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListDocumentsRequest"
       required: true
     yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListProjectsRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListProjectsRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListProjectsRequest'
+            $ref: "#/components/schemas/yorkie.v1.ListProjectsRequest"
       required: true
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.LogInRequest'
+            $ref: "#/components/schemas/yorkie.v1.LogInRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.LogInRequest'
+            $ref: "#/components/schemas/yorkie.v1.LogInRequest"
       required: true
     yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest"
       required: true
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SearchDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.SearchDocumentsRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SearchDocumentsRequest'
+            $ref: "#/components/schemas/yorkie.v1.SearchDocumentsRequest"
       required: true
     yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SignUpRequest'
+            $ref: "#/components/schemas/yorkie.v1.SignUpRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SignUpRequest'
+            $ref: "#/components/schemas/yorkie.v1.SignUpRequest"
       required: true
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.UpdateProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.UpdateProjectRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.UpdateProjectRequest'
+            $ref: "#/components/schemas/yorkie.v1.UpdateProjectRequest"
       required: true
   responses:
     connect.error:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
         application/proto:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
       description: ""
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+            $ref: "#/components/schemas/yorkie.v1.ChangePasswordResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+            $ref: "#/components/schemas/yorkie.v1.ChangePasswordResponse"
       description: ""
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.CreateProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.CreateProjectResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.CreateProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.CreateProjectResponse"
       description: ""
     yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeleteAccountResponse'
+            $ref: "#/components/schemas/yorkie.v1.DeleteAccountResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeleteAccountResponse'
+            $ref: "#/components/schemas/yorkie.v1.DeleteAccountResponse"
       description: ""
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentResponse"
       description: ""
     yorkie.v1.AdminService.GetDocuments.yorkie.v1.GetDocumentsResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentsResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetDocumentsResponse"
       description: ""
     yorkie.v1.AdminService.GetProject.yorkie.v1.GetProjectResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectResponse"
       description: ""
     yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectStatsResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectStatsResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetProjectStatsResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetProjectStatsResponse"
       description: ""
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetServerVersionResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetServerVersionResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetServerVersionResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetServerVersionResponse"
       description: ""
     yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetSnapshotMetaResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaResponse'
+            $ref: "#/components/schemas/yorkie.v1.GetSnapshotMetaResponse"
       description: ""
     yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListChangesResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListChangesResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListChangesResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListChangesResponse"
       description: ""
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListDocumentsResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListDocumentsResponse"
       description: ""
     yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListProjectsResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListProjectsResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ListProjectsResponse'
+            $ref: "#/components/schemas/yorkie.v1.ListProjectsResponse"
       description: ""
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.LogInResponse'
+            $ref: "#/components/schemas/yorkie.v1.LogInResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.LogInResponse'
+            $ref: "#/components/schemas/yorkie.v1.LogInResponse"
       description: ""
     yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse"
       description: ""
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SearchDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.SearchDocumentsResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SearchDocumentsResponse'
+            $ref: "#/components/schemas/yorkie.v1.SearchDocumentsResponse"
       description: ""
     yorkie.v1.AdminService.SignUp.yorkie.v1.SignUpResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SignUpResponse'
+            $ref: "#/components/schemas/yorkie.v1.SignUpResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.SignUpResponse'
+            $ref: "#/components/schemas/yorkie.v1.SignUpResponse"
       description: ""
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.UpdateProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.UpdateProjectResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.UpdateProjectResponse'
+            $ref: "#/components/schemas/yorkie.v1.UpdateProjectResponse"
       description: ""
   schemas:
     connect.error:
       additionalProperties: false
-      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      description: "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
       properties:
         code:
           enum:
-          - CodeCanceled
-          - CodeUnknown
-          - CodeInvalidArgument
-          - CodeDeadlineExceeded
-          - CodeNotFound
-          - CodeAlreadyExists
-          - CodePermissionDenied
-          - CodeResourceExhausted
-          - CodeFailedPrecondition
-          - CodeAborted
-          - CodeOutOfRange
-          - CodeInternal
-          - CodeUnavailable
-          - CodeDataLoss
-          - CodeUnauthenticated
+            - CodeCanceled
+            - CodeUnknown
+            - CodeInvalidArgument
+            - CodeDeadlineExceeded
+            - CodeNotFound
+            - CodeAlreadyExists
+            - CodePermissionDenied
+            - CodeResourceExhausted
+            - CodeFailedPrecondition
+            - CodeAborted
+            - CodeOutOfRange
+            - CodeInternal
+            - CodeUnavailable
+            - CodeDataLoss
+            - CodeUnauthenticated
           examples:
-          - CodeNotFound
+            - CodeNotFound
           type: string
         message:
           type: string
@@ -688,7 +689,7 @@ components:
       description: ""
       properties:
         id:
-          $ref: '#/components/schemas/yorkie.v1.ChangeID'
+          $ref: "#/components/schemas/yorkie.v1.ChangeID"
           additionalProperties: false
           description: ""
           title: id
@@ -702,12 +703,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Operation'
+            $ref: "#/components/schemas/yorkie.v1.Operation"
             type: object
           title: operations
           type: array
         presenceChange:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange"
           additionalProperties: false
           description: ""
           title: presence_change
@@ -733,18 +734,18 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
         serverSeq:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -793,7 +794,7 @@ components:
       description: ""
       properties:
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
           description: ""
           title: project
@@ -826,7 +827,7 @@ components:
       description: ""
       properties:
         accessedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: accessed_at
@@ -837,7 +838,7 @@ components:
           title: attached_clients
           type: integer
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -858,7 +859,7 @@ components:
           title: snapshot
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -886,7 +887,7 @@ components:
       description: ""
       properties:
         document:
-          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
           additionalProperties: false
           description: ""
           title: document
@@ -924,7 +925,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+            $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
             type: object
           title: documents
           type: array
@@ -946,7 +947,7 @@ components:
       description: ""
       properties:
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
           description: ""
           title: project
@@ -958,7 +959,7 @@ components:
       description: ""
       properties:
         dateRange:
-          $ref: '#/components/schemas/yorkie.v1.GetProjectStatsRequest.DateRange'
+          $ref: "#/components/schemas/yorkie.v1.GetProjectStatsRequest.DateRange"
           additionalProperties: false
           description: ""
           title: date_range
@@ -972,16 +973,16 @@ components:
     yorkie.v1.GetProjectStatsRequest.DateRange:
       description: ""
       enum:
-      - - DATE_RANGE_UNSPECIFIED
-        - 0
-        - DATE_RANGE_LAST_1W
-        - 1
-        - DATE_RANGE_LAST_4W
-        - 2
-        - DATE_RANGE_LAST_3M
-        - 3
-        - DATE_RANGE_LAST_12M
-        - 4
+        - - DATE_RANGE_UNSPECIFIED
+          - 0
+          - DATE_RANGE_LAST_1W
+          - 1
+          - DATE_RANGE_LAST_4W
+          - 2
+          - DATE_RANGE_LAST_3M
+          - 3
+          - DATE_RANGE_LAST_12M
+          - 4
       title: DateRange
       type: string
     yorkie.v1.GetProjectStatsResponse:
@@ -992,7 +993,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.MetricPoint'
+            $ref: "#/components/schemas/yorkie.v1.MetricPoint"
             type: object
           title: active_users
           type: array
@@ -1005,15 +1006,15 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: clients_count
         documentsCount:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: documents_count
       title: GetProjectStatsResponse
       type: object
@@ -1061,8 +1062,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
       title: GetSnapshotMetaRequest
       type: object
@@ -1074,8 +1075,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
         snapshot:
           additionalProperties: false
@@ -1084,7 +1085,7 @@ components:
           title: snapshot
           type: string
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -1096,25 +1097,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.ValueType'
+          $ref: "#/components/schemas/yorkie.v1.ValueType"
           additionalProperties: false
           description: ""
           title: type
@@ -1149,8 +1150,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: previous_seq
         projectName:
           additionalProperties: false
@@ -1167,7 +1168,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Change'
+            $ref: "#/components/schemas/yorkie.v1.Change"
             type: object
           title: changes
           type: array
@@ -1212,7 +1213,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+            $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
             type: object
           title: documents
           type: array
@@ -1231,7 +1232,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Project'
+            $ref: "#/components/schemas/yorkie.v1.Project"
             type: object
           title: projects
           type: array
@@ -1272,8 +1273,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: timestamp
         value:
           additionalProperties: false
@@ -1292,7 +1293,7 @@ components:
           title: is_removed
           type: boolean
         updatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -1309,67 +1310,67 @@ components:
       description: ""
       properties:
         add:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Add'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Add"
           additionalProperties: false
           description: ""
           title: add
           type: object
         arraySet:
-          $ref: '#/components/schemas/yorkie.v1.Operation.ArraySet'
+          $ref: "#/components/schemas/yorkie.v1.Operation.ArraySet"
           additionalProperties: false
           description: ""
           title: array_set
           type: object
         edit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Edit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Edit"
           additionalProperties: false
           description: ""
           title: edit
           type: object
         increase:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Increase'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Increase"
           additionalProperties: false
           description: ""
           title: increase
           type: object
         move:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Move'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Move"
           additionalProperties: false
           description: ""
           title: move
           type: object
         remove:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Remove'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Remove"
           additionalProperties: false
           description: ""
           title: remove
           type: object
         select:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Select'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Select"
           additionalProperties: false
           description: ""
           title: select
           type: object
         set:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Set'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Set"
           additionalProperties: false
           description: ""
           title: set
           type: object
         style:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Style'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Style"
           additionalProperties: false
           description: ""
           title: style
           type: object
         treeEdit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeEdit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeEdit"
           additionalProperties: false
           description: ""
           title: tree_edit
           type: object
         treeStyle:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeStyle'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeStyle"
           additionalProperties: false
           description: ""
           title: tree_style
@@ -1381,25 +1382,25 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1411,25 +1412,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1456,25 +1457,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1507,7 +1508,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1519,19 +1520,19 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1543,25 +1544,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
@@ -1573,19 +1574,19 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -1601,25 +1602,25 @@ components:
          compatibility purposes.
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1631,7 +1632,7 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
@@ -1642,13 +1643,13 @@ components:
           title: key
           type: string
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1670,25 +1671,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1721,7 +1722,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1736,7 +1737,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNodes'
+            $ref: "#/components/schemas/yorkie.v1.TreeNodes"
             type: object
           title: contents
           type: array
@@ -1746,19 +1747,19 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -1769,7 +1770,7 @@ components:
           title: split_level
           type: integer
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1786,7 +1787,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1815,25 +1816,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1866,7 +1867,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1905,13 +1906,13 @@ components:
       description: ""
       properties:
         presence:
-          $ref: '#/components/schemas/yorkie.v1.Presence'
+          $ref: "#/components/schemas/yorkie.v1.Presence"
           additionalProperties: false
           description: ""
           title: presence
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange.ChangeType'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange.ChangeType"
           additionalProperties: false
           description: ""
           title: type
@@ -1920,14 +1921,14 @@ components:
     yorkie.v1.PresenceChange.ChangeType:
       description: ""
       enum:
-      - - CHANGE_TYPE_UNSPECIFIED
-        - 0
-        - CHANGE_TYPE_PUT
-        - 1
-        - CHANGE_TYPE_DELETE
-        - 2
-        - CHANGE_TYPE_CLEAR
-        - 3
+        - - CHANGE_TYPE_UNSPECIFIED
+          - 0
+          - CHANGE_TYPE_PUT
+          - 1
+          - CHANGE_TYPE_DELETE
+          - 2
+          - CHANGE_TYPE_CLEAR
+          - 3
       title: ChangeType
       type: string
     yorkie.v1.Project:
@@ -1959,7 +1960,7 @@ components:
           title: client_deactivate_threshold
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -2007,7 +2008,7 @@ components:
           title: secret_key
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -2069,7 +2070,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+            $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
             type: object
           title: documents
           type: array
@@ -2101,7 +2102,7 @@ components:
       description: ""
       properties:
         user:
-          $ref: '#/components/schemas/yorkie.v1.User'
+          $ref: "#/components/schemas/yorkie.v1.User"
           additionalProperties: false
           description: ""
           title: user
@@ -2113,7 +2114,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -2149,8 +2150,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
       title: TimeTicket
       type: object
@@ -2169,25 +2170,25 @@ components:
           title: depth
           type: integer
         id:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: id
           type: object
         insNextId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_next_id
           type: object
         insPrevId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_prev_id
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -2214,7 +2215,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.NodeAttr'
+          $ref: "#/components/schemas/yorkie.v1.NodeAttr"
           additionalProperties: false
           description: ""
           title: value
@@ -2226,7 +2227,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -2246,7 +2247,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNode'
+            $ref: "#/components/schemas/yorkie.v1.TreeNode"
             type: object
           title: content
           type: array
@@ -2257,13 +2258,13 @@ components:
       description: ""
       properties:
         leftSiblingId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: left_sibling_id
           type: object
         parentId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: parent_id
@@ -2275,55 +2276,55 @@ components:
       description: ""
       properties:
         allowedOrigins:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AllowedOrigins'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.AllowedOrigins"
           additionalProperties: false
           description: ""
           title: allowed_origins
           type: object
         authWebhookMethods:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods"
           additionalProperties: false
           description: ""
           title: auth_webhook_methods
           type: object
         authWebhookUrl:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: auth_webhook_url
           type: object
         clientDeactivateThreshold:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: client_deactivate_threshold
           type: object
         eventWebhookEvents:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields.EventWebhookEvents"
           additionalProperties: false
           description: ""
           title: event_webhook_events
           type: object
         eventWebhookUrl:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: event_webhook_url
           type: object
         maxAttachmentsPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
           additionalProperties: false
           description: ""
           title: max_attachments_per_document
           type: object
         maxSubscribersPerDocument:
-          $ref: '#/components/schemas/google.protobuf.Int32Value'
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
           additionalProperties: false
           description: ""
           title: max_subscribers_per_document
           type: object
         name:
-          $ref: '#/components/schemas/google.protobuf.StringValue'
+          $ref: "#/components/schemas/google.protobuf.StringValue"
           additionalProperties: false
           description: ""
           title: name
@@ -2374,7 +2375,7 @@ components:
       description: ""
       properties:
         fields:
-          $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields'
+          $ref: "#/components/schemas/yorkie.v1.UpdatableProjectFields"
           additionalProperties: false
           description: ""
           title: fields
@@ -2391,7 +2392,7 @@ components:
       description: ""
       properties:
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
           description: ""
           title: project
@@ -2408,7 +2409,7 @@ components:
           title: auth_provider
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -2428,34 +2429,34 @@ components:
     yorkie.v1.ValueType:
       description: ""
       enum:
-      - - VALUE_TYPE_NULL
-        - 0
-        - VALUE_TYPE_BOOLEAN
-        - 1
-        - VALUE_TYPE_INTEGER
-        - 2
-        - VALUE_TYPE_LONG
-        - 3
-        - VALUE_TYPE_DOUBLE
-        - 4
-        - VALUE_TYPE_STRING
-        - 5
-        - VALUE_TYPE_BYTES
-        - 6
-        - VALUE_TYPE_DATE
-        - 7
-        - VALUE_TYPE_JSON_OBJECT
-        - 8
-        - VALUE_TYPE_JSON_ARRAY
-        - 9
-        - VALUE_TYPE_TEXT
-        - 10
-        - VALUE_TYPE_INTEGER_CNT
-        - 11
-        - VALUE_TYPE_LONG_CNT
-        - 12
-        - VALUE_TYPE_TREE
-        - 13
+        - - VALUE_TYPE_NULL
+          - 0
+          - VALUE_TYPE_BOOLEAN
+          - 1
+          - VALUE_TYPE_INTEGER
+          - 2
+          - VALUE_TYPE_LONG
+          - 3
+          - VALUE_TYPE_DOUBLE
+          - 4
+          - VALUE_TYPE_STRING
+          - 5
+          - VALUE_TYPE_BYTES
+          - 6
+          - VALUE_TYPE_DATE
+          - 7
+          - VALUE_TYPE_JSON_OBJECT
+          - 8
+          - VALUE_TYPE_JSON_ARRAY
+          - 9
+          - VALUE_TYPE_TEXT
+          - 10
+          - VALUE_TYPE_INTEGER_CNT
+          - 11
+          - VALUE_TYPE_LONG_CNT
+          - 12
+          - VALUE_TYPE_TREE
+          - 13
       title: ValueType
       type: string
     yorkie.v1.VersionVector:
@@ -2482,8 +2483,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: value
       title: VectorEntry
       type: object
@@ -2493,7 +2494,7 @@ components:
       name: Authorization
       type: apiKey
 security:
-- ApiKeyAuth: []
+  - ApiKeyAuth: []
 tags:
-- description: Admin is a service that provides a API for Admin.
-  name: yorkie.v1.AdminService
+  - description: Admin is a service that provides a API for Admin.
+    name: yorkie.v1.AdminService
