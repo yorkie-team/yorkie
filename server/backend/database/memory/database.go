@@ -1095,7 +1095,7 @@ func (d *DB) CompactChangeInfos(
 	_ context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
-	initialServerSeq int64,
+	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
 	txn := d.db.Txn(true)
@@ -1118,7 +1118,23 @@ func (d *DB) CompactChangeInfos(
 	}
 
 	// 6-4. Store compacted change and update document
-	loadedDocInfo := docInfo.DeepCopy()
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("find document: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+	}
+	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
+	if loadedDocInfo.ServerSeq != lastServerSeq {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+	}
+
 	if len(changes) == 0 {
 		loadedDocInfo.ServerSeq = 0
 	} else if len(changes) == 1 {

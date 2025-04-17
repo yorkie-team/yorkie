@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -185,7 +186,7 @@ func (s *clusterServer) CompactDocument(
 	err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
 		if objStruct, ok := jsonStruct.(*converter.JSONObjectStruct); ok {
 			for key, value := range objStruct.Value {
-				if err := converter.SetObjFromJsonStruct(root, key, *value); err != nil {
+				if err := converter.SetObjFromJsonStruct(root, key, value); err != nil {
 					return err
 				}
 			}
@@ -196,8 +197,8 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 	if newDoc.Marshal() != doc.Marshal() {
-		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild: %v\n", docInfo.ID, err)
-		return nil, err
+		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild\n", docInfo.ID)
+		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
 	changes := newDoc.CreateChangePack().Changes
 

@@ -51,13 +51,13 @@ func ToCounterStruct(counter *crdt.Counter) (*JSONCounterStruct, error) {
 }
 
 func toArrayStruct(array *crdt.Array) (*JSONArrayStruct, error) {
-	var elements []*JSONStruct
+	var elements []JSONStruct
 	for _, elem := range array.Elements() {
 		pbElem, err := ToJSONStruct(elem)
 		if err != nil {
 			return nil, err
 		}
-		elements = append(elements, &pbElem)
+		elements = append(elements, pbElem)
 	}
 	return &JSONArrayStruct{
 		JSONType: api.ValueType_VALUE_TYPE_JSON_ARRAY,
@@ -66,13 +66,13 @@ func toArrayStruct(array *crdt.Array) (*JSONArrayStruct, error) {
 }
 
 func ToObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
-	fields := make(map[string]*JSONStruct)
+	fields := make(map[string]JSONStruct)
 	for key, elem := range object.Members() {
 		elemStruct, err := ToJSONStruct(elem)
 		if err != nil {
 			return nil, err
 		}
-		fields[key] = &elemStruct
+		fields[key] = elemStruct
 	}
 	return &JSONObjectStruct{
 		JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,

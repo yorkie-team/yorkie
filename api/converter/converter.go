@@ -82,13 +82,13 @@ type JSONCounterStruct struct {
 // JSONArrayStruct represents an array CRDT value.
 type JSONArrayStruct struct {
 	JSONType api.ValueType
-	Value    []*JSONStruct // array of CRDT elements
+	Value    []JSONStruct // array of CRDT elements
 }
 
 // JSONObjectStruct represents an object CRDT value.
 type JSONObjectStruct struct {
 	JSONType api.ValueType
-	Value    map[string]*JSONStruct // key-value pairs of CRDT elements
+	Value    map[string]JSONStruct // key-value pairs of CRDT elements
 }
 
 // JSONTreeStruct represents a tree CRDT value.
@@ -112,7 +112,7 @@ func (j JSONTextStruct) isJSONStruct()      {}
 
 func (j JSONPrimitiveStruct) ToTestString() string {
 	return fmt.Sprintf(
-		"{JSONType: %s, ValueType: %v, Value: %v}",
+		"{JSONType: %d, ValueType: %v, Value: %v}",
 		j.JSONType,
 		j.ValueType,
 		j.Value,
@@ -120,7 +120,7 @@ func (j JSONPrimitiveStruct) ToTestString() string {
 }
 func (j JSONCounterStruct) ToTestString() string {
 	return fmt.Sprintf(
-		"{JSONType: %s, ValueType: %v, Value: %v}",
+		"{JSONType: %d, ValueType: %v, Value: %v}",
 		j.JSONType,
 		j.ValueType,
 		j.Value,
@@ -129,10 +129,10 @@ func (j JSONCounterStruct) ToTestString() string {
 func (j JSONArrayStruct) ToTestString() string {
 	var elements []string
 	for _, elem := range j.Value {
-		elements = append(elements, (*elem).ToTestString())
+		elements = append(elements, (elem).ToTestString())
 	}
 	return fmt.Sprintf(
-		"{JSONType: %s, Value: [%s]}",
+		"{JSONType: %d, Value: [%s]}",
 		j.JSONType,
 		strings.Join(elements, ", "),
 	)
@@ -148,24 +148,24 @@ func (j JSONObjectStruct) ToTestString() string {
 
 	// Build pairs in sorted order
 	for _, key := range keys {
-		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (*j.Value[key]).ToTestString()))
+		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (j.Value[key]).ToTestString()))
 	}
 	return fmt.Sprintf(
-		"{JSONType: %s, Value: {%s}}",
+		"{JSONType: %d, Value: {%s}}",
 		j.JSONType,
 		strings.Join(pairs, ", "),
 	)
 }
 func (j JSONTreeStruct) ToTestString() string {
 	return fmt.Sprintf(
-		"{JSONType: %s, Value: %v}",
+		"{JSONType: %d, Value: %v}",
 		j.JSONType,
 		j.Value,
 	)
 }
 func (j JSONTextStruct) ToTestString() string {
 	return fmt.Sprintf(
-		"{JSONType: %s, Value: %v}",
+		"{JSONType: %d, Value: %v}",
 		j.JSONType,
 		j.Value,
 	)

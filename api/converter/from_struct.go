@@ -57,14 +57,14 @@ func SetObjFromJsonStruct(obj *json.Object, key string, value JSONStruct) error 
 	case *JSONArrayStruct:
 		arr := obj.SetNewArray(key)
 		for _, elem := range j.Value {
-			if err := AddArrFromJsonStruct(arr, *elem); err != nil {
+			if err := AddArrFromJsonStruct(arr, elem); err != nil {
 				return err
 			}
 		}
 	case *JSONObjectStruct:
 		o := obj.SetNewObject(key)
 		for key, value := range j.Value {
-			if err := SetObjFromJsonStruct(o, key, *value); err != nil {
+			if err := SetObjFromJsonStruct(o, key, value); err != nil {
 				return err
 			}
 		}
@@ -111,14 +111,14 @@ func AddArrFromJsonStruct(arr *json.Array, value JSONStruct) error {
 	case *JSONArrayStruct:
 		a := arr.AddNewArray()
 		for _, elem := range j.Value {
-			if err := AddArrFromJsonStruct(a, *elem); err != nil {
+			if err := AddArrFromJsonStruct(a, elem); err != nil {
 				return err
 			}
 		}
 	case *JSONObjectStruct:
 		o := arr.AddNewObject()
 		for key, value := range j.Value {
-			if err := SetObjFromJsonStruct(o, key, *value); err != nil {
+			if err := SetObjFromJsonStruct(o, key, value); err != nil {
 				return err
 			}
 		}
@@ -147,8 +147,14 @@ func EditTextFromJSONStruct(j JSONTextStruct, text *json.Text) error {
 
 	pos := 0
 	for _, chunk := range chunks {
-		chunkMap := chunk.(map[string]interface{})
-		value := chunkMap["val"].(string)
+		chunkMap, ok := chunk.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("invalid text JSON: %+v", chunk)
+		}
+		value, ok := chunkMap["val"].(string)
+		if !ok {
+			return fmt.Errorf("invalid 'val' in text JSON: %+v", chunkMap)
+		}
 
 		if attrs, hasAttrs := chunkMap["attrs"]; hasAttrs {
 			attrMap := attrs.(map[string]interface{})

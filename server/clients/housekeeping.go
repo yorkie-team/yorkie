@@ -129,9 +129,10 @@ func CompactDocuments(
 	compactionCount := 0
 	for _, pair := range candidates {
 		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
-			return database.DefaultProjectID, err
+			logging.From(ctx).Warnf("HSKP: compaction of doc %s/%s failed: %v",
+				pair.Project.ID, pair.Document.ID, err)
+			continue
 		}
-
 		compactionCount++
 	}
 

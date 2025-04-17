@@ -236,7 +236,7 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		docInfo *DocInfo,
-		initialServerSeq int64,
+		lastServerSeq int64,
 		changes []*change.Change,
 	) error
 

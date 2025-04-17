@@ -744,10 +744,15 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		"compacted_at": bson.M{
 			"$exists": false,
 		},
-	})
+	}, options.Find().SetLimit(int64(candidatesLimit*2)))
 	if err != nil {
 		return nil, fmt.Errorf("find documents: %w", err)
 	}
+	defer func() {
+		if err := cursor.Close(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
 
 	var infos []*database.DocInfo
 	for cursor.Next(ctx) {
@@ -759,7 +764,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		if candidatesLimit <= len(infos) {
 			break
 		}
-		// Check if the document is attached to any client
+		// TODO(chacha912): Resolve the N+1 problem.
 		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     info.ID,
@@ -1076,7 +1081,7 @@ func (c *Client) CompactChangeInfos(
 	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
-	initialServerSeq int64,
+	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
 	// TODO(chacha912): We need to handle this operation atomically.
@@ -1139,16 +1144,21 @@ func (c *Client) CompactChangeInfos(
 	// 6-5. Update document
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
-	if _, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"_id":        docInfo.ID,
+		"server_seq": lastServerSeq,
 	}, bson.M{
 		"$set": bson.M{
 			"server_seq":   loadedDocInfo.ServerSeq,
 			"compacted_at": now,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("update document: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("%s: %s: %w", projectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
