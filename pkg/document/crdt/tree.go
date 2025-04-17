@@ -107,7 +107,7 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 
 // toIDString returns a string that can be used as an ID for this TreeNodeID.
 func (t *TreeNodeID) toIDString() string {
-	return t.CreatedAt.ToTestString() + ":" + strconv.Itoa(t.Offset)
+	return t.CreatedAt.Key() + ":" + strconv.Itoa(t.Offset)
 }
 
 // Compare compares the given two CRDTTreePos.
@@ -688,7 +688,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	var leftNode *TreeNode
 
 	if node.IsText() {
-		if node.Parent.Children(false)[0] == node && offset == 0 {
+		if node.Parent.FirstChild() == node && offset == 0 {
 			leftNode = node.Parent.Value
 		} else {
 			leftNode = node.Value

@@ -138,7 +138,6 @@ func PushPull(
 		clientInfo,
 		docRefKey,
 		reqPack.VersionVector,
-		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
 		return nil, err
@@ -240,7 +239,7 @@ func BuildDocForCheckpoint(
 	be *backend.Backend,
 	docInfo *database.DocInfo,
 	cp change.Checkpoint,
-	actorID *time.ActorID,
+	actorID time.ActorID,
 ) (*document.Document, error) {
 	internalDoc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, cp.ServerSeq)
 	if err != nil {

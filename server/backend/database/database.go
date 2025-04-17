@@ -58,6 +58,9 @@ var (
 
 	// ErrProjectNameAlreadyExists is returned when the project name already exists.
 	ErrProjectNameAlreadyExists = errors.New("project name already exists")
+
+	// ErrVersionVectorNotFound is returned when the version vector could not be found.
+	ErrVersionVectorNotFound = errors.New("version vector not found")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -211,6 +214,9 @@ type Database interface {
 	// GetDocumentsCount returns the number of documents in the given project.
 	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
 
+	// GetClientsCount returns the number of active clients in the given project.
+	GetClientsCount(ctx context.Context, projectID types.ID) (int64, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
@@ -219,13 +225,6 @@ type Database interface {
 		initialServerSeq int64,
 		changes []*change.Change,
 		isRemoved bool,
-	) error
-
-	// PurgeStaleChanges delete changes before the smallest in `versionvectors` to
-	// save storage.
-	PurgeStaleChanges(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
 	) error
 
 	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
@@ -273,12 +272,6 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// FindMinSyncedSeqInfo finds the minimum synced server sequence info.
-	FindMinSyncedSeqInfo(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (*VersionVectorInfo, error)
-
 	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
 	// and returns the SyncedVersionVector of the document.
 	UpdateAndFindMinSyncedVersionVector(
@@ -286,7 +279,6 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
-		server_seq int64,
 	) (time.VersionVector, error)
 
 	// UpdateVersionVector updates the syncedSeq of the given client.
@@ -295,7 +287,6 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
-		server_seq int64,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

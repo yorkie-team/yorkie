@@ -140,8 +140,7 @@ var collectionInfos = []collectionInfo{
 			},
 			Options: options.Index().SetUnique(true),
 		}},
-	},
-	{
+	}, {
 		name: ColVersionVectors,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
@@ -150,12 +149,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
-		}, {
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
-			},
 		}},
 	},
 }

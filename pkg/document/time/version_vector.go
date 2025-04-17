@@ -28,7 +28,7 @@ var InitialVersionVector = VersionVector{}
 
 // VersionVector is similar to vector clock, but it is synced with Lamport
 // timestamp of the current change.
-type VersionVector map[actorID]int64
+type VersionVector map[ActorID]int64
 
 // NewVersionVector creates a new instance of VersionVector.
 func NewVersionVector() VersionVector {
@@ -37,24 +37,24 @@ func NewVersionVector() VersionVector {
 
 // Get gets the version of the given actor.
 // Returns the version and whether the actor exists in the vector.
-func (v VersionVector) Get(id *ActorID) (int64, bool) {
-	version, exists := v[id.bytes]
+func (v VersionVector) Get(id ActorID) (int64, bool) {
+	version, exists := v[id]
 	return version, exists
 }
 
 // Set sets the given actor's version to the given value.
-func (v VersionVector) Set(id *ActorID, i int64) {
-	v[id.bytes] = i
+func (v VersionVector) Set(id ActorID, i int64) {
+	v[id] = i
 }
 
 // Unset removes the version for the given actor from the VersionVector.
-func (v VersionVector) Unset(id *ActorID) {
-	delete(v, id.bytes)
+func (v VersionVector) Unset(id ActorID) {
+	delete(v, id)
 }
 
 // VersionOf returns the version of the given actor.
-func (v VersionVector) VersionOf(id *ActorID) int64 {
-	return v[id.bytes]
+func (v VersionVector) VersionOf(id ActorID) int64 {
+	return v[id]
 }
 
 // DeepCopy creates a deep copy of this VersionVector.
@@ -72,7 +72,7 @@ func (v VersionVector) Marshal() string {
 
 	builder.WriteRune('{')
 
-	keys := make([]actorID, 0, len(v))
+	keys := make([]ActorID, 0, len(v))
 	for k := range v {
 		keys = append(keys, k)
 	}
@@ -121,7 +121,7 @@ func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 
 // EqualToOrAfter returns whether this VersionVector's every field is equal or after than given ticket.
 func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
-	clientLamport, ok := v[other.actorID.bytes]
+	clientLamport, ok := v[other.actorID]
 
 	if !ok {
 		return false
@@ -184,19 +184,19 @@ func (v VersionVector) MaxLamport() int64 {
 }
 
 // Filter returns filtered version vector which keys are only from filter
-func (v VersionVector) Filter(filter []*ActorID) VersionVector {
+func (v VersionVector) Filter(filter []ActorID) VersionVector {
 	filteredVV := NewVersionVector()
 
 	for _, value := range filter {
-		filteredVV[value.bytes] = v[value.bytes]
+		filteredVV[value] = v[value]
 	}
 
 	return filteredVV
 }
 
 // Keys returns a slice of ActorIDs present in the VersionVector.
-func (v VersionVector) Keys() ([]*ActorID, error) {
-	var actors []*ActorID
+func (v VersionVector) Keys() ([]ActorID, error) {
+	var actors []ActorID
 
 	for id := range v {
 		actorID, err := ActorIDFromBytes(id[:])

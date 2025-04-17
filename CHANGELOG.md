@@ -7,6 +7,28 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.7] - 2025-04-17
+
+## Added
+
+- Add concurrency sync benchmark test by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1224
+- Implement cache for VV in MongoDB client by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1231
+- Add clients count to project stats by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1236
+
+## Changed
+
+- Set replicaCount for standalone controller by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1221
+- Replace cache to use hashicorp/golang-lru/v2 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1230
+- Use ActorID as value by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1234
+
+## Removed
+
+- Remove purging changes feature and MinSyncedTicket by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1233
+
+## Fixed
+
+- Validate userID before processing active users by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1228
+
 ## [0.6.6] - 2025-04-07
 
 ### Added

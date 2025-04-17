@@ -43,7 +43,7 @@ type ID struct {
 
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
-	actorID *time.ActorID
+	actorID time.ActorID
 
 	// versionVector is similar to vector clock, and it is used to detect the
 	// relationship between changes whether they are causally related or concurrent.
@@ -57,7 +57,7 @@ func NewID(
 	clientSeq uint32,
 	serverSeq int64,
 	lamport int64,
-	actorID *time.ActorID,
+	actorID time.ActorID,
 	versionVector time.VersionVector,
 ) ID {
 	return ID{
@@ -141,7 +141,7 @@ func (id ID) SetVersionVector(vector time.VersionVector) ID {
 }
 
 // SetActor sets actorID.
-func (id ID) SetActor(actor *time.ActorID) ID {
+func (id ID) SetActor(actor time.ActorID) ID {
 	// TODO(hackerwins): We need to update version vector as well.
 	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor, id.versionVector)
 }
@@ -167,7 +167,7 @@ func (id ID) Lamport() int64 {
 }
 
 // ActorID returns the actorID of this ID.
-func (id ID) ActorID() *time.ActorID {
+func (id ID) ActorID() time.ActorID {
 	return id.actorID
 }
 

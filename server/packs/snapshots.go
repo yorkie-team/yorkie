@@ -112,16 +112,6 @@ func storeSnapshot(
 		return err
 	}
 
-	// 06. delete changes before the smallest in `versionvectors` to save storage.
-	if be.Config.SnapshotWithPurgingChanges {
-		if err := be.DB.PurgeStaleChanges(
-			ctx,
-			docRefKey,
-		); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}
-
 	logging.From(ctx).Infof(
 		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,

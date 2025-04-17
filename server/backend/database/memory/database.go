@@ -962,7 +962,33 @@ func (d *DB) GetDocumentsCount(
 	}
 
 	count := int64(0)
-	for iter.Next() != nil {
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.DocInfo).DeepCopy()
+		if !info.RemovedAt.IsZero() {
+			continue
+		}
+		count++
+	}
+
+	return count, nil
+}
+
+// GetClientsCount returns the number of active clients in the given project.
+func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return 0, fmt.Errorf("fetch clients: %w", err)
+	}
+
+	count := int64(0)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo).DeepCopy()
+		if info.Status != database.ClientActivated {
+			continue
+		}
 		count++
 	}
 
@@ -1044,53 +1070,6 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
-	return nil
-}
-
-// PurgeStaleChanges delete changes before the smallest in `versionvectors` to
-// save storage.
-func (d *DB) PurgeStaleChanges(
-	_ context.Context,
-	docRefKey types.DocRefKey,
-) error {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	// Find the smallest server seq in `versionvectors`.
-	// Because offline client can pull changes when it becomes online.
-	it, err := txn.Get(tblVersionVectors, "id")
-	if err != nil {
-		return fmt.Errorf("fetch syncedseqs: %w", err)
-	}
-
-	minSyncedServerSeq := change.MaxServerSeq
-	for raw := it.Next(); raw != nil; raw = it.Next() {
-		info := raw.(*database.VersionVectorInfo)
-		if info.DocID == docRefKey.DocID && info.ServerSeq < minSyncedServerSeq {
-			minSyncedServerSeq = info.ServerSeq
-		}
-	}
-	if minSyncedServerSeq == change.MaxServerSeq {
-		return nil
-	}
-
-	// Delete all changes before the smallest server seq.
-	iterator, err := txn.ReverseLowerBound(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		minSyncedServerSeq,
-	)
-	if err != nil {
-		return fmt.Errorf("fetch changes before %d: %w", minSyncedServerSeq, err)
-	}
-
-	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*database.ChangeInfo)
-		if err = txn.Delete(tblChanges, info); err != nil {
-			return fmt.Errorf("delete change %s: %w", info.ID, err)
-		}
-	}
 	return nil
 }
 
@@ -1285,42 +1264,12 @@ func (d *DB) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-func (d *DB) FindMinSyncedSeqInfo(
-	_ context.Context,
-	docRefKey types.DocRefKey,
-) (*database.VersionVectorInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	it, err := txn.Get(tblVersionVectors, "id")
-	if err != nil {
-		return nil, fmt.Errorf("fetch syncedseqs: %w", err)
-	}
-
-	syncedSeqInfo := &database.VersionVectorInfo{}
-	minSyncedServerSeq := change.MaxServerSeq
-	for raw := it.Next(); raw != nil; raw = it.Next() {
-		info := raw.(*database.VersionVectorInfo)
-		if info.DocID == docRefKey.DocID && info.ServerSeq < minSyncedServerSeq {
-			minSyncedServerSeq = info.ServerSeq
-			syncedSeqInfo = info
-		}
-	}
-	if minSyncedServerSeq == change.MaxServerSeq {
-		return nil, nil
-	}
-
-	return syncedSeqInfo, nil
-}
-
 // UpdateVersionVector updates the given serverSeq of the given client
 func (d *DB) UpdateVersionVector(
 	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
-	server_seq int64,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -1358,7 +1307,6 @@ func (d *DB) UpdateVersionVector(
 		DocID:         docRefKey.DocID,
 		ClientID:      clientInfo.ID,
 		VersionVector: versionVector,
-		ServerSeq:     server_seq,
 	}
 	if raw == nil {
 		versionVectorInfo.ID = newID()
@@ -1382,7 +1330,6 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	versionVector time.VersionVector,
-	server_seq int64,
 ) (time.VersionVector, error) {
 	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
 	// from min version vector.
@@ -1412,7 +1359,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector, server_seq); err != nil {
+	if err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
 		return nil, err
 	}
 

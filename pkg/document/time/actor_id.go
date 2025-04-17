@@ -19,7 +19,6 @@ package time
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -29,24 +28,22 @@ const actorIDSize = 12
 
 var (
 	// InitialActorID represents the initial value of ActorID.
-	InitialActorID = &ActorID{}
+	InitialActorID = ActorID{}
 
 	// MaxActorID represents the maximum value of ActorID.
-	MaxActorID = &ActorID{
-		bytes: [actorIDSize]byte{
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-			math.MaxUint8,
-		},
+	MaxActorID = [actorIDSize]byte{
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
 	}
 
 	// ErrInvalidHexString is returned when the given string is not valid hex.
@@ -56,101 +53,58 @@ var (
 	ErrInvalidActorID = errors.New("invalid actor id")
 )
 
-// actorID is the type of ActorID. It is composed of 12 bytes.
-type actorID [actorIDSize]byte
-
-// ActorID represents the unique ID of the client. It is composed of 12 bytes.
-// It caches the string representation of ActorID to reduce the number of calls
-// to hex.EncodeToString. This causes a multi-routine problem, so it is
-// recommended to use it in a single routine or to use it after locking.
-type ActorID struct {
-	bytes        actorID
-	cachedString string
-}
+// ActorID is a unique identifier for an actor in the system.
+type ActorID [actorIDSize]byte
 
 // ActorIDFromHex returns the bytes represented by the hexadecimal string str.
-func ActorIDFromHex(str string) (*ActorID, error) {
-	actorID := &ActorID{}
-
+func ActorIDFromHex(str string) (ActorID, error) {
 	if str == "" {
-		return actorID, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
 
 	decoded, err := hex.DecodeString(str)
 	if err != nil {
-		return actorID, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
 
 	if len(decoded) != actorIDSize {
-		return actorID, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
+		return ActorID{}, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
 	}
 
-	copy(actorID.bytes[:], decoded[:actorIDSize])
+	actorID := ActorID{}
+	copy(actorID[:], decoded[:actorIDSize])
+
 	return actorID, nil
 }
 
 // ActorIDFromBytes returns the bytes represented by the bytes of decoded hexadecimal string itself.
-func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
-	actorID := &ActorID{}
-
+func ActorIDFromBytes(bytes []byte) (ActorID, error) {
 	if len(bytes) == 0 {
-		return actorID, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
+		return ActorID{}, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
 	}
 
 	if len(bytes) != actorIDSize {
-		return actorID, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
+		return ActorID{}, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
 	}
 
-	copy(actorID.bytes[:], bytes)
-	return actorID, nil
+	return ActorID(bytes[:]), nil
 }
 
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
-func (id *ActorID) String() string {
-	if id.cachedString == "" {
-		id.cachedString = hex.EncodeToString(id.bytes[:])
-	}
-
-	return id.cachedString
+func (id ActorID) String() string {
+	return hex.EncodeToString(id[:])
 }
 
 // Bytes returns the bytes of ActorID itself.
 // If the receiver is nil, it would return empty array of byte.
-func (id *ActorID) Bytes() []byte {
-	return id.bytes[:]
+func (id ActorID) Bytes() []byte {
+	return id[:]
 }
 
 // Compare returns an integer comparing two ActorID lexicographically.
 // The result will be 0 if id==other, -1 if id < other, and +1 if id > other.
 // If the receiver or argument is nil, it would panic at runtime.
-func (id *ActorID) Compare(other *ActorID) int {
-	return bytes.Compare(id.bytes[:], other.bytes[:])
-}
-
-// MarshalJSON ensures that when calling json.Marshal(),
-// it is marshaled including private field.
-func (id *ActorID) MarshalJSON() ([]byte, error) {
-	result, err := json.Marshal(&struct{ Bytes [actorIDSize]byte }{
-		Bytes: id.bytes,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal JSON: %w", err)
-	}
-
-	return result, nil
-}
-
-// UnmarshalJSON ensures that when calling json.Unmarshal(),
-// it is unmarshalled including private field.
-func (id *ActorID) UnmarshalJSON(bytes []byte) error {
-	temp := &(struct{ Bytes [actorIDSize]byte }{
-		Bytes: id.bytes,
-	})
-	if err := json.Unmarshal(bytes, temp); err != nil {
-		return fmt.Errorf("unmarshal JSON: %w", err)
-	}
-
-	id.bytes = temp.Bytes
-	return nil
+func (id ActorID) Compare(other ActorID) int {
+	return bytes.Compare(id[:], other[:])
 }

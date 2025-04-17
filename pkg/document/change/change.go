@@ -101,7 +101,7 @@ func (c *Change) SetServerSeq(serverSeq int64) {
 }
 
 // SetActor sets the given actorID.
-func (c *Change) SetActor(actor *time.ActorID) {
+func (c *Change) SetActor(actor time.ActorID) {
 	c.id = c.id.SetActor(actor)
 	for _, op := range c.operations {
 		op.SetActor(actor)
