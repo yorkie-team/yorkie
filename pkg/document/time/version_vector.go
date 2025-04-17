@@ -35,6 +35,15 @@ func NewVersionVector() VersionVector {
 	return make(VersionVector)
 }
 
+// MinVector returns the minimum version vector of the given version vectors.
+func MinVector(vectors ...VersionVector) VersionVector {
+	head, tail := vectors[0], vectors[1:]
+	for _, vector := range tail {
+		head.Min(&vector)
+	}
+	return head
+}
+
 // Get gets the version of the given actor.
 // Returns the version and whether the actor exists in the vector.
 func (v VersionVector) Get(id ActorID) (int64, bool) {

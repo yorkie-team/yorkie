@@ -1273,17 +1273,15 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 
 		c.vvCache.Add(docRefKey, infoMap)
 	}
+
 	vvMap, ok := c.vvCache.Get(docRefKey)
 	if !ok {
 		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
 
-	minVector := vector.DeepCopy()
-	for _, vv := range vvMap.Values() {
-		minVector.Min(&vv)
-	}
-
-	return minVector, nil
+	vectors := vvMap.Values()
+	vectors = append(vectors, vector)
+	return time.MinVector(vectors...), nil
 }
 
 // UpdateVersionVector updates the given version vector of the given client
