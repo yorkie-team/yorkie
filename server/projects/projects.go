@@ -114,10 +114,16 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	clientsCount, err := be.DB.GetClientsCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.ProjectStats{
 		ActiveUsersCount: activeUsersCount,
 		ActiveUsers:      activeUsers,
 		DocumentsCount:   documentsCount,
+		ClientsCount:     clientsCount,
 	}, nil
 }
 

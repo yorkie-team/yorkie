@@ -945,6 +945,19 @@ func (c *Client) GetDocumentsCount(
 	return count, nil
 }
 
+// GetClientsCount returns the number of active clients in the given project.
+func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	count, err := c.collection(ColClients).CountDocuments(ctx, bson.M{
+		"project_id": projectID,
+		StatusKey:    database.ClientActivated,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count clients: %w", err)
+	}
+
+	return count, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,

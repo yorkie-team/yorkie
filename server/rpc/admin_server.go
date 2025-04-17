@@ -256,6 +256,7 @@ func (s *adminServer) GetProjectStats(
 		ActiveUsers:      converter.ToMetricPoints(stats.ActiveUsers),
 		ActiveUsersCount: int32(stats.ActiveUsersCount),
 		DocumentsCount:   stats.DocumentsCount,
+		ClientsCount:     stats.ClientsCount,
 	}), nil
 }
 
