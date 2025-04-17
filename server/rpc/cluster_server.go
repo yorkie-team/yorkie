@@ -143,7 +143,6 @@ func (s *clusterServer) CompactDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
 ) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
-	// 1. Find docInfo
 	docId := types.ID(req.Msg.DocumentId)
 	projectId := types.ID(req.Msg.ProjectId)
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
@@ -154,7 +153,6 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	// TODO(chacha912): Should we use SnapshotKey as well?
 	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
 	if err != nil {
 		return nil, err
@@ -168,6 +166,18 @@ func (s *clusterServer) CompactDocument(
 			logging.DefaultLogger().Error(err)
 		}
 	}()
+
+	// 1. Check if the document is attached
+	isAttached, err := s.backend.DB.IsDocumentAttached(ctx, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	}, "")
+	if err != nil {
+		return nil, err
+	}
+	if isAttached {
+		return nil, fmt.Errorf("document is attached")
+	}
 
 	// 2. Build the final state of the current document
 	doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
