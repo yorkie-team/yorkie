@@ -214,6 +214,9 @@ type Database interface {
 	// GetDocumentsCount returns the number of documents in the given project.
 	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
 
+	// GetClientsCount returns the number of active clients in the given project.
+	GetClientsCount(ctx context.Context, projectID types.ID) (int64, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

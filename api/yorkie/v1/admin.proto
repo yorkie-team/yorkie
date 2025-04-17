@@ -132,6 +132,7 @@ message GetProjectStatsResponse {
   int32 active_users_count = 1;
   repeated MetricPoint active_users = 2;
   int64 documents_count = 3;
+  int64 clients_count = 4;
 }
 
 message ListDocumentsRequest {
