@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"connectrpc.com/connect"
 
@@ -196,7 +197,11 @@ func (s *clusterServer) CompactDocument(
 	if err != nil {
 		return nil, err
 	}
-	if newDoc.Marshal() != doc.Marshal() {
+	newJsonStruct, err := converter.ToJSONStruct(newDoc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+	if !reflect.DeepEqual(jsonStruct, newJsonStruct) {
 		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild\n", docInfo.ID)
 		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
