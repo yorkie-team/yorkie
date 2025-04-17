@@ -49,11 +49,6 @@ type ServerPack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
-
-	// TODO(hackerwins): This field is deprecated.
-	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
-	// It used to collect garbage on the replica on the client.
-	MinSyncedTicket *time.Ticket
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -124,12 +119,11 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	pbPack := &api.ChangePack{
-		DocumentKey:     p.DocumentKey.String(),
-		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
-		Changes:         pbChanges,
-		Snapshot:        p.Snapshot,
-		IsRemoved:       p.IsRemoved,
-		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
+		DocumentKey: p.DocumentKey.String(),
+		Checkpoint:  converter.ToCheckpoint(p.Checkpoint),
+		Changes:     pbChanges,
+		Snapshot:    p.Snapshot,
+		IsRemoved:   p.IsRemoved,
 	}
 
 	pbVersionVector, err := converter.ToVersionVector(p.VersionVector)

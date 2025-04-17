@@ -32,10 +32,6 @@ type Style struct {
 	// to is the end point of the range to apply the style to.
 	to *crdt.RGATreeSplitNodePos
 
-	// maxCreatedAtMapByActor is a map that stores the latest creation time
-	// by actor for the nodes included in the range to apply the style to.
-	maxCreatedAtMapByActor map[string]*time.Ticket
-
 	// attributes represents the text style.
 	attributes map[string]string
 
@@ -48,17 +44,15 @@ func NewStyle(
 	parentCreatedAt *time.Ticket,
 	from *crdt.RGATreeSplitNodePos,
 	to *crdt.RGATreeSplitNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *Style {
 	return &Style{
-		parentCreatedAt:        parentCreatedAt,
-		from:                   from,
-		to:                     to,
-		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
-		attributes:             attributes,
-		executedAt:             executedAt,
+		parentCreatedAt: parentCreatedAt,
+		from:            from,
+		to:              to,
+		attributes:      attributes,
+		executedAt:      executedAt,
 	}
 }
 
@@ -70,7 +64,7 @@ func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error
 		return ErrNotApplicableDataType
 	}
 
-	_, pairs, err := obj.Style(e.from, e.to, e.maxCreatedAtMapByActor, e.attributes, e.executedAt, versionVector)
+	pairs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 	if err != nil {
 		return err
 	}
@@ -110,10 +104,4 @@ func (e *Style) ParentCreatedAt() *time.Ticket {
 // Attributes returns the attributes of this operation.
 func (e *Style) Attributes() map[string]string {
 	return e.attributes
-}
-
-// MaxCreatedAtMapByActor returns the map that stores the latest creation time
-// by actor for the nodes included in the range to apply the style to.
-func (e *Style) MaxCreatedAtMapByActor() map[string]*time.Ticket {
-	return e.maxCreatedAtMapByActor
 }
