@@ -723,6 +723,52 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 	return clientInfos, nil
 }
 
+// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+func (c *Client) FindCompactionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+) ([]*database.DocInfo, error) {
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"project_id": project.ID,
+		"compacted_at": bson.M{
+			"$exists": false,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find documents: %w", err)
+	}
+
+	var infos []*database.DocInfo
+	for cursor.Next(ctx) {
+		var info database.DocInfo
+		if err := cursor.Decode(&info); err != nil {
+			return nil, fmt.Errorf("decode document: %w", err)
+		}
+
+		if candidatesLimit <= len(infos) {
+			break
+		}
+		// Check if the document is attached to any client
+		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     info.ID,
+		}, "")
+		if err != nil {
+			return nil, err
+		}
+		if isAttached {
+			continue
+		}
+		infos = append(infos, &info)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return infos, nil
+}
+
 // FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
 func (c *Client) FindClientInfosByAttachedDocRefKey(
 	ctx context.Context,
@@ -1011,6 +1057,88 @@ func (c *Client) CreateChangeInfos(
 	}
 	if isRemoved {
 		docInfo.RemovedAt = now
+	}
+
+	return nil
+}
+
+func (c *Client) CompactChangeInfos(
+	ctx context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	initialServerSeq int64,
+	changes []*change.Change,
+) error {
+	// TODO(chacha912): We need to handle this operation atomically.
+	// 6-1. Delete old changes
+	if _, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete old changes: %w", err)
+	}
+
+	// 6-2. Delete all snapshots
+	if _, err := c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	// 6-3. Delete all version vectors
+	if _, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete version vectors: %w", err)
+	}
+
+	// 6-4. Store compacted change and update document
+	loadedDocInfo := docInfo.DeepCopy()
+	if len(changes) == 0 {
+		loadedDocInfo.ServerSeq = 0
+	} else if len(changes) == 1 {
+		loadedDocInfo.ServerSeq = 1
+	} else {
+		return fmt.Errorf("invalid number of changes: %d", len(changes))
+	}
+
+	for _, cn := range changes {
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
+		if err != nil {
+			return err
+		}
+
+		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
+			"project_id":      docInfo.ProjectID,
+			"doc_id":          docInfo.ID,
+			"server_seq":      loadedDocInfo.ServerSeq,
+			"client_seq":      cn.ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"actor_id":        types.ID(cn.ID().ActorID().String()),
+			"version_vector":  cn.ID().VersionVector(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": cn.PresenceChange(),
+		}); err != nil {
+			return fmt.Errorf("store change: %w", err)
+		}
+	}
+
+	// 6-5. Update document
+	now := gotime.Now()
+	loadedDocInfo.CompactedAt = now
+	if _, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": projectID,
+		"_id":        docInfo.ID,
+	}, bson.M{
+		"$set": bson.M{
+			"server_seq":   loadedDocInfo.ServerSeq,
+			"compacted_at": now,
+		},
+	}); err != nil {
+		return fmt.Errorf("update document: %w", err)
 	}
 
 	return nil

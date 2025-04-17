@@ -172,6 +172,13 @@ type Database interface {
 		candidatesLimit int,
 	) ([]*ClientInfo, error)
 
+	// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+	FindCompactionCandidatesPerProject(
+		ctx context.Context,
+		project *ProjectInfo,
+		candidatesLimit int,
+	) ([]*DocInfo, error)
+
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(
 		ctx context.Context,
@@ -219,6 +226,15 @@ type Database interface {
 		initialServerSeq int64,
 		changes []*change.Change,
 		isRemoved bool,
+	) error
+
+	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
+	CompactChangeInfos(
+		ctx context.Context,
+		projectID types.ID,
+		docInfo *DocInfo,
+		initialServerSeq int64,
+		changes []*change.Change,
 	) error
 
 	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to

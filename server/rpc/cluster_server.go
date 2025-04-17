@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -133,4 +134,84 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// CompactDocument compacts the given document.
+func (s *clusterServer) CompactDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
+) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
+	// 1. Find docInfo
+	docId := types.ID(req.Msg.DocumentId)
+	projectId := types.ID(req.Msg.ProjectId)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(chacha912): Should we use SnapshotKey as well?
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	// 2. Build the final state of the current document
+	doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		logging.DefaultLogger().Errorf("Document %s failed to apply changes: %v\n", docInfo.ID, err)
+		return nil, err
+	}
+
+	// 3. Convert doc to jsonStruct
+	jsonStruct, err := converter.ToJSONStruct(doc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Build new document with jsonStruct and create changepack
+	newDoc := document.New(docInfo.Key)
+	err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
+		if objStruct, ok := jsonStruct.(*converter.JSONObjectStruct); ok {
+			for key, value := range objStruct.Value {
+				if err := converter.SetObjFromJsonStruct(root, key, *value); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if newDoc.Marshal() != doc.Marshal() {
+		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild: %v\n", docInfo.ID, err)
+		return nil, err
+	}
+	changes := newDoc.CreateChangePack().Changes
+
+	// 5. Store compacted changes and delete previous data
+	err = s.backend.DB.CompactChangeInfos(
+		ctx,
+		projectId,
+		docInfo,
+		docInfo.ServerSeq,
+		changes,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
 }
