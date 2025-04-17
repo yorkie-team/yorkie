@@ -166,48 +166,22 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 		return err
 	}
 
-	lastDeactivateProjectID := database.DefaultProjectID
-	lastCompactionProjectID := database.DefaultProjectID
-
-	err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+	housekeepingLastProjectID := database.DefaultProjectID
+	return be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		lastProjectID, err := clients.DeactivateInactives(
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimitPerProject,
 			be.Housekeeping.Config.ProjectFetchSize,
-			lastDeactivateProjectID,
+			housekeepingLastProjectID,
 		)
 		if err != nil {
 			return err
 		}
 
-		lastDeactivateProjectID = lastProjectID
+		housekeepingLastProjectID = lastProjectID
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
-		lastProjectID, err := clients.CompactDocuments(
-			ctx,
-			be,
-			be.Housekeeping.Config.CandidatesLimitPerProject,
-			be.Housekeeping.Config.ProjectFetchSize,
-			lastCompactionProjectID,
-		)
-		if err != nil {
-			return err
-		}
-
-		lastCompactionProjectID = lastProjectID
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // DefaultProject returns the default project.

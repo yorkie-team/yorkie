@@ -28,7 +28,6 @@ import (
 
 const (
 	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
-	compactDocumentKey      = "housekeeping/compactDocument"
 )
 
 // DeactivateInactives deactivates clients that have not been active for a
@@ -82,65 +81,6 @@ func DeactivateInactives(
 			"HSKP: candidates %d, deactivated %d, %s",
 			len(candidates),
 			deactivatedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastProjectID, nil
-}
-
-// CompactDocuments compacts documents by removing old changes and creating
-// a new initial change.
-func CompactDocuments(
-	ctx context.Context,
-	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastCompactionProjectID types.ID,
-) (types.ID, error) {
-	start := time.Now()
-
-	locker, err := be.Locker.NewLocker(ctx, compactDocumentKey)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
-
-	lastProjectID, candidates, err := FindCompactionCandidates(
-		ctx,
-		be,
-		candidatesLimitPerProject,
-		projectFetchSize,
-		lastCompactionProjectID,
-	)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	compactionCount := 0
-	for _, pair := range candidates {
-		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
-			logging.From(ctx).Warnf("HSKP: compaction of doc %s/%s failed: %v",
-				pair.Project.ID, pair.Document.ID, err)
-			continue
-		}
-		compactionCount++
-	}
-
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, compacted %d, %s",
-			len(candidates),
-			compactionCount,
 			time.Since(start),
 		)
 	}
