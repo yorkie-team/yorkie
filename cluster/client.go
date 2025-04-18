@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // Option configures Options.
@@ -150,6 +151,26 @@ func (c *Client) DetachDocument(
 			}),
 		},
 		), apiKey, docKey.String()))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CompactDocument compacts the given document.
+func (c *Client) CompactDocument(
+	ctx context.Context,
+	document *database.DocInfo,
+	apiKey string,
+) error {
+	_, err := c.client.CompactDocument(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
+			ProjectId:  document.ProjectID.String(),
+			DocumentId: document.ID.String(),
+		},
+		), apiKey, document.Key.String()))
 	if err != nil {
 		return err
 	}

@@ -93,6 +93,26 @@ func Deactivate(
 	return be.DB.DeactivateClient(ctx, refKey)
 }
 
+// CompactDocument compacts the given document.
+func CompactDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	document *database.DocInfo,
+) error {
+	cli, err := cluster.Dial(be.Config.GatewayAddr)
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+
+	if err := cli.CompactDocument(ctx, document, project.PublicKey); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // FindActiveClientInfo find the active client info by the given ref key.
 func FindActiveClientInfo(
 	ctx context.Context,
