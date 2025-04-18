@@ -1424,6 +1424,108 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
+// CreateSchemaInfo stores the schema of the given document.
+func (c *Client) CreateSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+	body string,
+	rules []types.Rule,
+) (*database.SchemaInfo, error) {
+	rst, err := c.collection(ColSchemas).InsertOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+		"body":       body,
+		"rules":      rules,
+		"created_at": gotime.Now(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("insert schema: %w", err)
+	}
+
+	return &database.SchemaInfo{
+		ID:        types.ID(rst.InsertedID.(primitive.ObjectID).Hex()),
+		ProjectID: projectID,
+		Name:      name,
+		Version:   version,
+		Body:      body,
+	}, nil
+}
+
+// GetSchemaInfo returns the schema of the given document.
+func (c *Client) GetSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) (*database.SchemaInfo, error) {
+	result := c.collection(ColSchemas).FindOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+	})
+
+	info := &database.SchemaInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("%s %d: %w", name, version, database.ErrSchemaNotFound)
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find schema: %w", result.Err())
+	}
+
+	if err := result.Decode(info); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	return info, nil
+}
+
+func (c *Client) ListSchemaInfos(
+	ctx context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	result, err := c.collection(ColSchemas).Find(ctx, bson.M{
+		"project_id": projectID,
+	}, options.Find().SetSort(bson.M{
+		"name":    1,
+		"version": 1,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", result.Err())
+	}
+
+	var infos []*database.SchemaInfo
+	if err := result.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	return infos, nil
+}
+
+func (c *Client) RemoveSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) error {
+	rst, err := c.collection(ColSchemas).DeleteOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+	})
+	if err != nil {
+		return fmt.Errorf("delete schema: %w", err)
+	}
+
+	if rst.DeletedCount == 0 {
+		return fmt.Errorf("%s %d: %w", name, version, database.ErrSchemaNotFound)
+	}
+
+	return nil
+}
+
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docRefKey types.DocRefKey,

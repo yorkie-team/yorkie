@@ -34,17 +34,22 @@ service AdminService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
-  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
   rpc GetProjectStats(GetProjectStatsRequest) returns (GetProjectStatsResponse) {}
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
   rpc GetDocuments (GetDocumentsRequest) returns (GetDocumentsResponse) {}
-  rpc RemoveDocumentByAdmin (RemoveDocumentByAdminRequest) returns (RemoveDocumentByAdminResponse) {}
-  rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
+  rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
+  rpc RemoveDocumentByAdmin (RemoveDocumentByAdminRequest) returns (RemoveDocumentByAdminResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
+
+  rpc CreateSchema (CreateSchemaRequest) returns (CreateSchemaResponse) {}
+  rpc ListSchemas (ListSchemasRequest) returns (ListSchemasResponse) {}
+  rpc GetSchema (GetSchemaRequest) returns (GetSchemaResponse) {}
+  rpc RemoveSchema (RemoveSchemaRequest) returns (RemoveSchemaResponse) {}
 
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
@@ -208,6 +213,44 @@ message ListChangesRequest {
 message ListChangesResponse {
   repeated Change changes = 1;
 }
+
+message CreateSchemaRequest {
+  string project_name = 1;
+  string schema_name = 2;
+  int32 schema_version = 3;
+  string schema_body = 4;
+  repeated Rule rules = 5;
+}
+
+message CreateSchemaResponse {
+  Schema schema = 1;
+}
+
+message ListSchemasRequest {
+  string project_name = 1;
+}
+
+message ListSchemasResponse {
+  repeated Schema schemas = 1;
+}
+
+message GetSchemaRequest {
+  string project_name = 1;
+  string schema_name = 2;
+  int32 version = 3;
+}
+
+message GetSchemaResponse {
+  Schema schema = 1;
+}
+
+message RemoveSchemaRequest {
+  string project_name = 1;
+  string schema_name = 2;
+  int32 version = 3;
+}
+
+message RemoveSchemaResponse {}
 
 message GetServerVersionRequest {}
 

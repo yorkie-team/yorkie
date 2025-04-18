@@ -608,3 +608,35 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	}
 	return pbUpdatableProjectFields, nil
 }
+
+// ToRules converts the given model format to Protobuf format.
+func ToRules(rules []types.Rule) []*api.Rule {
+	var pbRules []*api.Rule
+	for _, rule := range rules {
+		pbRules = append(pbRules, &api.Rule{
+			Type: rule.Type,
+			Path: rule.Path,
+		})
+	}
+	return pbRules
+}
+
+// ToSchema converts the given model format to Protobuf format.
+func ToSchema(schema *types.Schema) *api.Schema {
+	return &api.Schema{
+		Name:      schema.Name,
+		Version:   int32(schema.Version),
+		Body:      schema.Body,
+		Rules:     ToRules(schema.Rules),
+		CreatedAt: timestamppb.New(schema.CreatedAt),
+	}
+}
+
+// ToSchemas converts the given model format to Protobuf format.
+func ToSchemas(schemas []*types.Schema) []*api.Schema {
+	var pbSchemas []*api.Schema
+	for _, schema := range schemas {
+		pbSchemas = append(pbSchemas, ToSchema(schema))
+	}
+	return pbSchemas
+}
