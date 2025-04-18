@@ -99,4 +99,12 @@ func BenchmarkSyncConcurrency(b *testing.B) {
 	b.Run("clients_100_100", func(b *testing.B) {
 		benchmarkSyncConcurrency(b, 100, 100, 100)
 	})
+
+	b.Run("clients_300_100", func(b *testing.B) {
+		benchmarkSyncConcurrency(b, 300, 100, 100)
+	})
+
+	b.Run("clients_500_100", func(b *testing.B) {
+		benchmarkSyncConcurrency(b, 500, 100, 100)
+	})
 }
