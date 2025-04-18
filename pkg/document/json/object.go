@@ -23,11 +23,11 @@ import (
 	gotime "time"
 	"unicode"
 
-	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Object represents an object in the document. As a proxy for the CRDT object,
@@ -52,14 +52,15 @@ func (p *Object) SetDynamicValue(k string, v any) {
 	})
 }
 
-// SetFromYSON sets values from the given YSON.
-func (p *Object) SetFromYSON(j yson.YSON) {
-	objStruct, ok := j.(*yson.Object)
+// SetYSON sets values from the given YSON.
+func (p *Object) SetYSON(value yson.Element) {
+	yObj, ok := value.(yson.Object)
 	if !ok {
-		panic(fmt.Errorf("expected JSONObjectStruct, got %T", j))
+		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
 	}
-	for k, v := range objStruct.Value {
-		p.SetObjFromYSON(k, v)
+
+	for k, v := range yObj {
+		p.SetYSONElement(k, v)
 	}
 }
 
@@ -116,11 +117,11 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 }
 
 // SetNewTree sets a new Tree for the given key.
-func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
+func (p *Object) SetNewTree(k string, initialRoot ...TreeNode) *Tree {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		var root *TreeNode
 		if len(initialRoot) > 0 {
-			root = initialRoot[0]
+			root = &initialRoot[0]
 		}
 		tree := NewTree(root)
 		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
@@ -233,11 +234,11 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 	return p
 }
 
-// SetObjFromYSON sets the given YSON for the given key.
-func (p *Object) SetObjFromYSON(k string, v yson.YSON) *Object {
+// SetYSONElement sets the given YSON for the given key.
+func (p *Object) SetYSONElement(k string, v yson.Element) *Object {
 	switch j := v.(type) {
-	case *yson.Primitive:
-		switch j.ValueType {
+	case yson.Primitive:
+		switch j.Type {
 		case crdt.Null:
 			p.SetNull(k)
 		case crdt.Boolean:
@@ -257,27 +258,23 @@ func (p *Object) SetObjFromYSON(k string, v yson.YSON) *Object {
 		default:
 			panic(fmt.Errorf("unsupported primitive type: %T", j))
 		}
-	case *yson.Counter:
-		p.SetNewCounter(k, j.ValueType, j.Value)
-	case *yson.Array:
+	case yson.Counter:
+		p.SetNewCounter(k, j.Type, j.Value)
+	case yson.Array:
 		arr := p.SetNewArray(k)
-		for _, elem := range j.Value {
-			arr.AddArrFromYSON(elem)
+		for _, elem := range j {
+			arr.AddYSON(elem)
 		}
-	case *yson.Object:
+	case yson.Object:
 		o := p.SetNewObject(k)
-		for key, value := range j.Value {
-			o.SetObjFromYSON(key, value)
+		for key, value := range j {
+			o.SetYSONElement(key, value)
 		}
-	case *yson.Text:
+	case yson.Text:
 		text := p.SetNewText(k)
-		text.EditFromYSON(*j)
-	case *yson.Tree:
-		treeNode, err := GetTreeRootNodeFromYSON(*j)
-		if err != nil {
-			panic(err)
-		}
-		p.SetNewTree(k, treeNode)
+		text.EditFromYSON(j)
+	case yson.Tree:
+		p.SetNewTree(k, j.Root)
 	default:
 		panic(fmt.Errorf("unsupported YSON type: %T", j))
 	}

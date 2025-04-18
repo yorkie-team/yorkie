@@ -469,7 +469,7 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			Value:     bytes,
 		}, nil
 	case *crdt.Primitive:
-		pbValueType, err := ToValueType(elem.ValueType())
+		pbValueType, err := toValueType(elem.ValueType())
 		if err != nil {
 			return nil, err
 		}
@@ -484,7 +484,7 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *crdt.Counter:
-		pbCounterType, err := ToCounterType(elem.ValueType())
+		pbCounterType, err := toCounterType(elem.ValueType())
 		if err != nil {
 			return nil, err
 		}
@@ -531,7 +531,7 @@ func toCreatedAtMapByActor(
 	return pbCreatedAtMapByActor
 }
 
-func ToValueType(valueType crdt.ValueType) (api.ValueType, error) {
+func toValueType(valueType crdt.ValueType) (api.ValueType, error) {
 	switch valueType {
 	case crdt.Null:
 		return api.ValueType_VALUE_TYPE_NULL, nil
@@ -554,7 +554,7 @@ func ToValueType(valueType crdt.ValueType) (api.ValueType, error) {
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func ToCounterType(valueType crdt.CounterType) (api.ValueType, error) {
+func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 	switch valueType {
 	case crdt.IntegerCnt:
 		return api.ValueType_VALUE_TYPE_INTEGER_CNT, nil

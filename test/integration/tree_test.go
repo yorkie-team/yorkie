@@ -97,7 +97,7 @@ func TestTree(t *testing.T) {
 	t.Run("created from JSON test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -124,7 +124,7 @@ func TestTree(t *testing.T) {
 	t.Run("created from JSON with attributes test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -144,7 +144,7 @@ func TestTree(t *testing.T) {
 	t.Run("edit its content test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -177,7 +177,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<doc><p>ab</p></doc>", doc.Root().GetTree("t").ToXML())
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -201,7 +201,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<doc><p></p></doc>", doc.Root().GetTree("t").ToXML())
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -230,7 +230,7 @@ func TestTree(t *testing.T) {
 	t.Run("edit content with path test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "tc",
@@ -304,7 +304,7 @@ func TestTree(t *testing.T) {
 	t.Run("edit content with path test 2", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "tc",
@@ -386,7 +386,7 @@ func TestTree(t *testing.T) {
 
 		// 01. Create a tree and insert a paragraph with text.
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "r",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -456,7 +456,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -488,7 +488,7 @@ func TestTree(t *testing.T) {
 	t.Run("insert multiple text nodes test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -514,7 +514,7 @@ func TestTree(t *testing.T) {
 	t.Run("insert multiple element nodes test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -540,7 +540,7 @@ func TestTree(t *testing.T) {
 	t.Run("edit its content with path when multi tree nodes passed", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "tc",
@@ -589,7 +589,7 @@ func TestTree(t *testing.T) {
 	t.Run("detecting error for empty text test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -621,7 +621,7 @@ func TestTree(t *testing.T) {
 	t.Run("detecting error for mixed type insertion test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -653,7 +653,7 @@ func TestTree(t *testing.T) {
 	t.Run("detecting correct error order test 1", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -684,7 +684,7 @@ func TestTree(t *testing.T) {
 	t.Run("detecting correct error order test 2", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -716,7 +716,7 @@ func TestTree(t *testing.T) {
 	t.Run("detecting correct error order test 3", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -748,7 +748,7 @@ func TestTree(t *testing.T) {
 	t.Run("edit its content with attributes test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{Type: "doc"})
+			root.SetNewTree("t", json.TreeNode{Type: "doc"})
 			assert.Equal(t, "<doc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").Edit(0, 0, &json.TreeNode{
@@ -778,7 +778,7 @@ func TestTree(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
@@ -802,7 +802,7 @@ func TestTree(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
@@ -833,7 +833,7 @@ func TestTree(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
@@ -874,7 +874,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -916,7 +916,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -954,7 +954,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -998,7 +998,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1039,7 +1039,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1078,7 +1078,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1117,7 +1117,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1165,7 +1165,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -1204,7 +1204,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -1243,7 +1243,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1279,7 +1279,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1315,7 +1315,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1351,7 +1351,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1389,7 +1389,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1426,7 +1426,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1464,7 +1464,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -1507,7 +1507,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1544,7 +1544,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1581,7 +1581,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1618,7 +1618,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1656,7 +1656,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1693,7 +1693,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -1740,7 +1740,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1784,7 +1784,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1824,7 +1824,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1865,7 +1865,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1905,7 +1905,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1948,7 +1948,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -1988,7 +1988,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -2030,7 +2030,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2066,7 +2066,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2102,7 +2102,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2138,7 +2138,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -2177,7 +2177,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -2216,7 +2216,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -2258,7 +2258,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2294,7 +2294,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2330,7 +2330,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2366,7 +2366,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2402,7 +2402,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2438,7 +2438,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2474,7 +2474,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2510,7 +2510,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2546,7 +2546,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2584,7 +2584,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2625,7 +2625,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2666,7 +2666,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2706,7 +2706,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2752,7 +2752,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2795,7 +2795,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2838,7 +2838,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2880,7 +2880,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2916,7 +2916,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2952,7 +2952,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -2988,7 +2988,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3024,7 +3024,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3060,7 +3060,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3105,7 +3105,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3147,7 +3147,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3189,7 +3189,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3225,7 +3225,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3261,7 +3261,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3386,7 +3386,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3452,7 +3452,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3511,7 +3511,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3558,7 +3558,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "r",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -3643,7 +3643,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -3679,7 +3679,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -3715,7 +3715,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -3755,7 +3755,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -3808,7 +3808,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -3852,7 +3852,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type: "p",

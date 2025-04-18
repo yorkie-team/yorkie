@@ -207,7 +207,7 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("test", node)
+		root.SetNewTree("test", *node)
 
 		return nil
 	})
@@ -222,7 +222,7 @@ func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("test", node)
+		root.SetNewTree("test", *node)
 
 		return nil
 	})

@@ -139,7 +139,7 @@ func toJSONArray(arr *crdt.Array) (*api.JSONElement, error) {
 }
 
 func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
-	pbValueType, err := ToValueType(primitive.ValueType())
+	pbValueType, err := toValueType(primitive.ValueType())
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func toText(text *crdt.Text) *api.JSONElement {
 }
 
 func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
-	pbCounterType, err := ToCounterType(counter.ValueType())
+	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
 		return nil, err
 	}

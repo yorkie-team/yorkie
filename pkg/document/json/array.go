@@ -21,11 +21,11 @@ import (
 	"reflect"
 	gotime "time"
 
-	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Array represents an array in the document. As a proxy for the CRDT array,
@@ -186,14 +186,14 @@ func (p *Array) AddNewText() *Text {
 }
 
 // AddNewTree adds a new tree at the last.
-func (p *Array) AddNewTree(initialRoot ...*TreeNode) *Tree {
+func (p *Array) AddNewTree(initialRoot ...TreeNode) *Tree {
 	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
-		var root *TreeNode
+		var root TreeNode
 		if len(initialRoot) > 0 {
 			root = initialRoot[0]
 		}
-		tree := NewTree(root)
-		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
+		tree := NewTree(&root)
+		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, &root, ticket), ticket))
 	})
 	return v.(*Tree)
 }
@@ -206,53 +206,49 @@ func (p *Array) AddNewObject() *Object {
 	return v.(*Object)
 }
 
-// AddArrFromYSON adds an element from the given YSON at the last.
-func (p *Array) AddArrFromYSON(value yson.YSON) *Array {
-	switch j := value.(type) {
-	case *yson.Primitive:
-		switch j.ValueType {
+// AddYSON adds the given YSON element to the array.
+func (p *Array) AddYSON(value yson.Element) *Array {
+	switch y := value.(type) {
+	case yson.Primitive:
+		switch y.Type {
 		case crdt.Null:
 			p.AddNull()
 		case crdt.Boolean:
-			p.AddBool(j.Value.(bool))
+			p.AddBool(y.Value.(bool))
 		case crdt.Integer:
-			p.AddInteger(int(j.Value.(int32)))
+			p.AddInteger(int(y.Value.(int32)))
 		case crdt.Long:
-			p.AddLong(j.Value.(int64))
+			p.AddLong(y.Value.(int64))
 		case crdt.Double:
-			p.AddDouble(j.Value.(float64))
+			p.AddDouble(y.Value.(float64))
 		case crdt.String:
-			p.AddString(j.Value.(string))
+			p.AddString(y.Value.(string))
 		case crdt.Bytes:
-			p.AddBytes(j.Value.([]byte))
+			p.AddBytes(y.Value.([]byte))
 		case crdt.Date:
-			p.AddDate(j.Value.(gotime.Time))
+			p.AddDate(y.Value.(gotime.Time))
 		default:
-			panic(fmt.Errorf("unsupported primitive type: %T", j))
+			panic(fmt.Errorf("unsupported primitive type: %T", y))
 		}
-	case *yson.Counter:
-		p.AddNewCounter(j.ValueType, j.Value)
-	case *yson.Array:
+	case yson.Counter:
+		p.AddNewCounter(y.Type, y.Value)
+	case yson.Array:
 		a := p.AddNewArray()
-		for _, elem := range j.Value {
-			a.AddArrFromYSON(elem)
+		for _, elem := range y {
+			a.AddYSON(elem)
 		}
-	case *yson.Object:
+	case yson.Object:
 		o := p.AddNewObject()
-		for key, value := range j.Value {
-			o.SetObjFromYSON(key, value)
+		for key, value := range y {
+			o.SetYSONElement(key, value)
 		}
-	case *yson.Text:
+	case yson.Text:
 		t := p.AddNewText()
-		t.EditFromYSON(*j)
-	case *yson.Tree:
-		treeNode, err := GetTreeRootNodeFromYSON(*j)
-		if err != nil {
-			panic(err)
-		}
-		p.AddNewTree(treeNode)
+		t.EditFromYSON(y)
+	case yson.Tree:
+		p.AddNewTree(y.Root)
 	default:
-		panic(fmt.Errorf("unsupported YSON type: %T", j))
+		panic(fmt.Errorf("unsupported YSON type: %T", y))
 	}
 	return p
 }
