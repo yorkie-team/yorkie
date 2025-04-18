@@ -48,12 +48,7 @@ func SetObjFromJsonStruct(obj *json.Object, key string, value JSONStruct) error 
 			obj.SetDate(key, j.Value.(gotime.Time))
 		}
 	case *JSONCounterStruct:
-		switch j.ValueType {
-		case crdt.LongCnt:
-			obj.SetNewCounter(key, crdt.LongCnt, j.Value.(int64))
-		case crdt.IntegerCnt:
-			obj.SetNewCounter(key, crdt.IntegerCnt, int(j.Value.(int32)))
-		}
+		obj.SetNewCounter(key, j.ValueType, j.Value)
 	case *JSONArrayStruct:
 		arr := obj.SetNewArray(key)
 		for _, elem := range j.Value {
