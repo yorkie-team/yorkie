@@ -51,11 +51,15 @@ const (
 	// ClusterServiceDetachDocumentProcedure is the fully-qualified name of the ClusterService's
 	// DetachDocument RPC.
 	ClusterServiceDetachDocumentProcedure = "/yorkie.v1.ClusterService/DetachDocument"
+	// ClusterServiceCompactDocumentProcedure is the fully-qualified name of the ClusterService's
+	// CompactDocument RPC.
+	ClusterServiceCompactDocumentProcedure = "/yorkie.v1.ClusterService/CompactDocument"
 )
 
 // ClusterServiceClient is a client for the yorkie.v1.ClusterService service.
 type ClusterServiceClient interface {
 	DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error)
+	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
 }
 
 // NewClusterServiceClient constructs a client for the yorkie.v1.ClusterService service. By default,
@@ -73,12 +77,18 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			baseURL+ClusterServiceDetachDocumentProcedure,
 			opts...,
 		),
+		compactDocument: connect.NewClient[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse](
+			httpClient,
+			baseURL+ClusterServiceCompactDocumentProcedure,
+			opts...,
+		),
 	}
 }
 
 // clusterServiceClient implements ClusterServiceClient.
 type clusterServiceClient struct {
-	detachDocument *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
+	detachDocument  *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
+	compactDocument *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
 }
 
 // DetachDocument calls yorkie.v1.ClusterService.DetachDocument.
@@ -86,9 +96,15 @@ func (c *clusterServiceClient) DetachDocument(ctx context.Context, req *connect.
 	return c.detachDocument.CallUnary(ctx, req)
 }
 
+// CompactDocument calls yorkie.v1.ClusterService.CompactDocument.
+func (c *clusterServiceClient) CompactDocument(ctx context.Context, req *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error) {
+	return c.compactDocument.CallUnary(ctx, req)
+}
+
 // ClusterServiceHandler is an implementation of the yorkie.v1.ClusterService service.
 type ClusterServiceHandler interface {
 	DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error)
+	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
 }
 
 // NewClusterServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -102,10 +118,17 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		svc.DetachDocument,
 		opts...,
 	)
+	clusterServiceCompactDocumentHandler := connect.NewUnaryHandler(
+		ClusterServiceCompactDocumentProcedure,
+		svc.CompactDocument,
+		opts...,
+	)
 	return "/yorkie.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ClusterServiceDetachDocumentProcedure:
 			clusterServiceDetachDocumentHandler.ServeHTTP(w, r)
+		case ClusterServiceCompactDocumentProcedure:
+			clusterServiceCompactDocumentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -117,4 +140,8 @@ type UnimplementedClusterServiceHandler struct{}
 
 func (UnimplementedClusterServiceHandler) DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.DetachDocument is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.CompactDocument is not implemented"))
 }

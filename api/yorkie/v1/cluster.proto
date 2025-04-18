@@ -27,6 +27,7 @@ option java_package = "dev.yorkie.api.v1";
 // ClusterService is a service that provides an API for Cluster.
 service ClusterService {
   rpc DetachDocument (ClusterServiceDetachDocumentRequest) returns (ClusterServiceDetachDocumentResponse) {}
+  rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
 }
 
 message ClusterServiceDetachDocumentRequest {
@@ -36,3 +37,10 @@ message ClusterServiceDetachDocumentRequest {
 }
 
 message ClusterServiceDetachDocumentResponse {}
+
+message ClusterServiceCompactDocumentRequest {
+  string project_id = 1;
+  string document_id = 2;
+}
+
+message ClusterServiceCompactDocumentResponse {}

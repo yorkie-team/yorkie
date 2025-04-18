@@ -17,12 +17,15 @@
 package json
 
 import (
+	gojson "encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
@@ -428,4 +431,47 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 	}
 
 	return nil
+}
+
+func GetTreeRootNodeFromYSON(j yson.Tree) (*TreeNode, error) {
+	var node TreeNode
+	if err := gojson.Unmarshal([]byte(j.Value), &node); err != nil {
+		return nil, fmt.Errorf("failed to parse tree JSON: %w", err)
+	}
+
+	rootNode := &TreeNode{
+		Type:  node.Type,
+		Value: node.Value,
+	}
+	if len(node.Children) > 0 {
+		processChildren(rootNode, node.Children)
+	}
+	if len(node.Attributes) > 0 {
+		processAttributes(rootNode, node.Attributes)
+	}
+
+	return rootNode, nil
+}
+
+func processChildren(node *TreeNode, children []TreeNode) {
+	node.Children = make([]TreeNode, len(children))
+	for i, child := range children {
+		node.Children[i] = TreeNode{
+			Type:  child.Type,
+			Value: child.Value,
+		}
+		if len(child.Children) > 0 {
+			processChildren(&node.Children[i], child.Children)
+		}
+		if len(child.Attributes) > 0 {
+			processAttributes(&node.Children[i], child.Attributes)
+		}
+	}
+}
+
+func processAttributes(node *TreeNode, attrs map[string]string) {
+	node.Attributes = make(map[string]string)
+	for key, val := range attrs {
+		node.Attributes[key] = fmt.Sprint(val)
+	}
 }

@@ -17,9 +17,14 @@
 package json
 
 import (
+	gojson "encoding/json"
+	"fmt"
+	"unicode/utf16"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Text represents a text in the document. As a proxy for the CRDT
@@ -100,6 +105,34 @@ func (p *Text) Edit(
 		ticket,
 	))
 
+	return p
+}
+
+// EditFromYSON edits the given range with the given YSON.
+func (p *Text) EditFromYSON(j yson.Text) *Text {
+	type chunk struct {
+		Val   string                 `json:"val"`
+		Attrs map[string]interface{} `json:"attrs,omitempty"`
+	}
+
+	var chunks []chunk
+	if err := gojson.Unmarshal([]byte(j.Value), &chunks); err != nil {
+		panic(fmt.Errorf("failed to parse text JSON: %w", err))
+	}
+
+	pos := 0
+	for _, c := range chunks {
+		if c.Attrs != nil {
+			attributes := make(map[string]string)
+			for attrKey, attrValue := range c.Attrs {
+				attributes[attrKey] = attrValue.(string)
+			}
+			p.Edit(pos, pos, c.Val, attributes)
+		} else {
+			p.Edit(pos, pos, c.Val)
+		}
+		pos += len(utf16.Encode([]rune(c.Val)))
+	}
 	return p
 }
 

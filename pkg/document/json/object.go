@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	gotime "time"
@@ -26,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Object represents an object in the document. As a proxy for the CRDT object,
@@ -48,6 +50,18 @@ func (p *Object) SetDynamicValue(k string, v any) {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		return toElement(p.context, buildCRDTElement(p.context, v, ticket, newBuildState()))
 	})
+}
+
+// SetYSON sets values from the given YSON.
+func (p *Object) SetYSON(value yson.Element) {
+	yObj, ok := value.(yson.Object)
+	if !ok {
+		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
+	}
+
+	for k, v := range yObj {
+		p.SetYSONElement(k, v)
+	}
 }
 
 // SetNewObject sets a new Object for the given key.
@@ -217,6 +231,57 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 		return primitive
 	})
 
+	return p
+}
+
+// SetYSONElement sets the given YSON for the given key.
+func (p *Object) SetYSONElement(k string, v yson.Element) *Object {
+	switch j := v.(type) {
+	case yson.Primitive:
+		switch j.Type {
+		case crdt.Null:
+			p.SetNull(k)
+		case crdt.Boolean:
+			p.SetBool(k, j.Value.(bool))
+		case crdt.Integer:
+			p.SetInteger(k, int(j.Value.(int32)))
+		case crdt.Long:
+			p.SetLong(k, j.Value.(int64))
+		case crdt.Double:
+			p.SetDouble(k, j.Value.(float64))
+		case crdt.String:
+			p.SetString(k, j.Value.(string))
+		case crdt.Bytes:
+			p.SetBytes(k, j.Value.([]byte))
+		case crdt.Date:
+			p.SetDate(k, j.Value.(gotime.Time))
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %T", j))
+		}
+	case yson.Counter:
+		p.SetNewCounter(k, j.Type, j.Value)
+	case yson.Array:
+		arr := p.SetNewArray(k)
+		for _, elem := range j {
+			arr.AddYSON(elem)
+		}
+	case yson.Object:
+		o := p.SetNewObject(k)
+		for key, value := range j {
+			o.SetYSONElement(key, value)
+		}
+	case yson.Text:
+		text := p.SetNewText(k)
+		text.EditFromYSON(j)
+	case yson.Tree:
+		treeNode, err := GetTreeRootNodeFromYSON(j)
+		if err != nil {
+			panic(err)
+		}
+		p.SetNewTree(k, treeNode)
+	default:
+		panic(fmt.Errorf("unsupported YSON type: %T", j))
+	}
 	return p
 }
 

@@ -131,3 +131,47 @@ func FindDeactivateCandidates(
 
 	return topProjectID, candidates, nil
 }
+
+// CompactionCandidatePair represents a pair of Project and Document.
+type CompactionCandidatePair struct {
+	Project  *database.ProjectInfo
+	Document *database.DocInfo
+}
+
+// FindCompactionCandidates finds candidates to compact from the database.
+func FindCompactionCandidates(
+	ctx context.Context,
+	be *backend.Backend,
+	candidatesLimitPerProject int,
+	projectFetchSize int,
+	lastProjectID types.ID,
+) (types.ID, []CompactionCandidatePair, error) {
+	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	if err != nil {
+		return database.DefaultProjectID, nil, err
+	}
+
+	var candidates []CompactionCandidatePair
+	for _, projectInfo := range projectInfos {
+		infos, err := be.DB.FindCompactionCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
+		if err != nil {
+			return database.DefaultProjectID, nil, err
+		}
+
+		for _, info := range infos {
+			candidates = append(candidates, CompactionCandidatePair{
+				Project:  projectInfo,
+				Document: info,
+			})
+		}
+	}
+
+	var topProjectID types.ID
+	if len(projectInfos) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projectInfos[len(projectInfos)-1].ID
+	}
+
+	return topProjectID, candidates, nil
+}
