@@ -378,15 +378,7 @@ func TestJSONStructConversion(t *testing.T) {
 
 		newDoc := document.New("jsonstruct")
 		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-			objStruct, ok := jsonStruct.(*converter.JSONObjectStruct)
-			if !ok {
-				return fmt.Errorf("expected JSONObjectStruct, got %T", jsonStruct)
-			}
-			for k, v := range objStruct.Value {
-				if err := converter.SetObjFromJsonStruct(root, k, v); err != nil {
-					return err
-				}
-			}
+			root.SetFromJSONStruct(jsonStruct)
 			return nil
 		})
 		assert.NoError(t, err)
@@ -447,15 +439,7 @@ func TestJSONStructConversion(t *testing.T) {
 		// Convert back to document
 		newDoc := document.New("nested-types")
 		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-			objStruct, ok := jsonStruct.(*converter.JSONObjectStruct)
-			if !ok {
-				return fmt.Errorf("expected JSONObjectStruct, got %T", jsonStruct)
-			}
-			for k, v := range objStruct.Value {
-				if err := converter.SetObjFromJsonStruct(root, k, v); err != nil {
-					return err
-				}
-			}
+			root.SetFromJSONStruct(jsonStruct)
 			return nil
 		})
 		assert.NoError(t, err)
@@ -467,34 +451,118 @@ func TestJSONStructConversion(t *testing.T) {
 		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
 	})
 
+	t.Run("literal JSONStruct conversion test", func(t *testing.T) {
+		jsonStruct := &converter.JSONObjectStruct{
+			JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
+			Value: map[string]converter.JSONStruct{
+				"nested": &converter.JSONArrayStruct{
+					JSONType: api.ValueType_VALUE_TYPE_JSON_ARRAY,
+					Value: []converter.JSONStruct{
+						&converter.JSONArrayStruct{
+							JSONType: api.ValueType_VALUE_TYPE_JSON_ARRAY,
+							Value: []converter.JSONStruct{
+								&converter.JSONPrimitiveStruct{
+									JSONType:  api.ValueType_VALUE_TYPE_STRING,
+									ValueType: crdt.String,
+									Value:     "nested1",
+								},
+								&converter.JSONPrimitiveStruct{
+									JSONType:  api.ValueType_VALUE_TYPE_INTEGER,
+									ValueType: crdt.Integer,
+									Value:     int32(42),
+								},
+							},
+						},
+						&converter.JSONObjectStruct{
+							JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
+							Value: map[string]converter.JSONStruct{
+								"counter": &converter.JSONCounterStruct{
+									JSONType:  api.ValueType_VALUE_TYPE_INTEGER_CNT,
+									ValueType: crdt.IntegerCnt,
+									Value:     int32(10),
+								},
+								"key": &converter.JSONPrimitiveStruct{
+									JSONType:  api.ValueType_VALUE_TYPE_STRING,
+									ValueType: crdt.String,
+									Value:     "value",
+								},
+							},
+						},
+						&converter.JSONTextStruct{
+							JSONType: api.ValueType_VALUE_TYPE_TEXT,
+							Value:    `[{"attrs":{"bold":"true"},"val":"Hello"},{"val":" World"}]`,
+						},
+						&converter.JSONTreeStruct{
+							JSONType: api.ValueType_VALUE_TYPE_TREE,
+							Value:    `{"type":"p","children":[{"type":"text","value":"Tree in array"},{"type":"span","children":[{"type":"text","value":"Styled text"}],"attributes":{"style":"color: red"}}]}`,
+						},
+					},
+				},
+			},
+		}
+
+		doc := document.New("literal-jsonstruct")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetFromJSONStruct(jsonStruct)
+			return nil
+		})
+		assert.NoError(t, err)
+		newJsonStruct, err := converter.ToJSONStruct(doc.RootObject())
+		assert.NoError(t, err)
+		assert.Equal(t, jsonStruct.ToTestString(), newJsonStruct.ToTestString())
+	})
+
 	t.Run("unsupported JSONStruct type", func(t *testing.T) {
-		obj := json.NewObject(nil, nil)
-		err := converter.SetObjFromJsonStruct(obj, "key", nil)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported JSONStruct type")
+		doc := document.New("unsupported-jsonstruct")
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			defer func() {
+				r := recover()
+				assert.NotNil(t, r)
+				errStr := fmt.Sprintf("%v", r)
+				assert.Contains(t, errStr, "unsupported primitive type")
+			}()
+
+			root.SetFromJSONStruct(&converter.JSONObjectStruct{
+				JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
+				Value: map[string]converter.JSONStruct{
+					"key": &converter.JSONPrimitiveStruct{
+						JSONType:  api.ValueType_VALUE_TYPE_STRING,
+						ValueType: 2000000,
+						Value:     "value",
+					},
+				},
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{}`, doc.Marshal())
 	})
 
 	t.Run("invalid text JSON", func(t *testing.T) {
 		doc := document.New("invalid-json")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			defer func() {
+				r := recover()
+				assert.NotNil(t, r)
+				errStr := fmt.Sprintf("%v", r)
+				assert.Contains(t, errStr, "failed to parse text JSON")
+			}()
+
 			text := root.SetNewText("text")
-			if err := converter.EditTextFromJSONStruct(converter.JSONTextStruct{
+			text.EditFromJSONStruct(converter.JSONTextStruct{
 				JSONType: api.ValueType_VALUE_TYPE_TEXT,
 				Value:    "invalid json",
-			}, text); err != nil {
-				return err
-			}
+			})
 			return nil
 		})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse text JSON")
-		assert.Equal(t, `{}`, doc.Marshal())
+		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[]}`, doc.Marshal())
 	})
 
 	t.Run("invalid tree JSON", func(t *testing.T) {
 		doc := document.New("invalid-tree")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			treeNode, err := converter.GetTreeRootNodeFromJSONStruct(converter.JSONTreeStruct{
+			treeNode, err := json.GetTreeRootNodeFromJSONStruct(converter.JSONTreeStruct{
 				JSONType: api.ValueType_VALUE_TYPE_TREE,
 				Value:    "invalid json",
 			})

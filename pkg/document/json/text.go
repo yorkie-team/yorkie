@@ -17,6 +17,11 @@
 package json
 
 import (
+	ejson "encoding/json"
+	"fmt"
+	"unicode/utf16"
+
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -100,6 +105,39 @@ func (p *Text) Edit(
 		ticket,
 	))
 
+	return p
+}
+
+// EditFromJSONStruct edits the given range with the given JSONStruct.
+func (p *Text) EditFromJSONStruct(j converter.JSONTextStruct) *Text {
+	var chunks []interface{}
+	if err := ejson.Unmarshal([]byte(j.Value), &chunks); err != nil {
+		panic(fmt.Errorf("failed to parse text JSON: %w", err))
+	}
+
+	pos := 0
+	for _, chunk := range chunks {
+		chunkMap, ok := chunk.(map[string]interface{})
+		if !ok {
+			panic(fmt.Errorf("invalid text JSON: %+v", chunk))
+		}
+		value, ok := chunkMap["val"].(string)
+		if !ok {
+			panic(fmt.Errorf("invalid 'val' in text JSON: %+v", chunkMap))
+		}
+
+		if attrs, hasAttrs := chunkMap["attrs"]; hasAttrs {
+			attrMap := attrs.(map[string]interface{})
+			attributes := make(map[string]string)
+			for attrKey, attrValue := range attrMap {
+				attributes[attrKey] = attrValue.(string)
+			}
+			p.Edit(pos, pos, value, attributes)
+		} else {
+			p.Edit(pos, pos, value)
+		}
+		pos += len(utf16.Encode([]rune(value)))
+	}
 	return p
 }
 

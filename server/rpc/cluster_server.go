@@ -195,15 +195,7 @@ func (s *clusterServer) CompactDocument(
 	// 4. Build new document with jsonStruct and create changepack
 	newDoc := document.New(docInfo.Key)
 	err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-		objStruct, ok := jsonStruct.(*converter.JSONObjectStruct)
-		if !ok {
-			return fmt.Errorf("expected JSONObjectStruct for root, got %T", jsonStruct)
-		}
-		for k, v := range objStruct.Value {
-			if err := converter.SetObjFromJsonStruct(root, k, v); err != nil {
-				return err
-			}
-		}
+		root.SetFromJSONStruct(jsonStruct)
 		return nil
 	})
 	if err != nil {

@@ -17,11 +17,13 @@
 package json
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	gotime "time"
 	"unicode"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -48,6 +50,19 @@ func (p *Object) SetDynamicValue(k string, v any) {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		return toElement(p.context, buildCRDTElement(p.context, v, ticket, newBuildState()))
 	})
+}
+
+// SetFromJSONStruct sets values from the given JSONStruct.
+func (p *Object) SetFromJSONStruct(j converter.JSONStruct) {
+	objStruct, ok := j.(*converter.JSONObjectStruct)
+	if !ok {
+		panic(fmt.Errorf("expected JSONObjectStruct, got %T", j))
+	}
+	for k, v := range objStruct.Value {
+		if err := p.SetObjFromJsonStruct(k, v); err != nil {
+			panic(err)
+		}
+	}
 }
 
 // SetNewObject sets a new Object for the given key.
@@ -218,6 +233,57 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 	})
 
 	return p
+}
+
+// SetObjFromJsonStruct sets the given JSONStruct for the given key.
+func (p *Object) SetObjFromJsonStruct(k string, v converter.JSONStruct) *Object {
+	switch j := v.(type) {
+	case *converter.JSONPrimitiveStruct:
+		switch j.ValueType {
+		case crdt.Null:
+			p.SetNull(k)
+		case crdt.Boolean:
+			p.SetBool(k, j.Value.(bool))
+		case crdt.Integer:
+			p.SetInteger(k, int(j.Value.(int32)))
+		case crdt.Long:
+			p.SetLong(k, j.Value.(int64))
+		case crdt.Double:
+			p.SetDouble(k, j.Value.(float64))
+		case crdt.String:
+			p.SetString(k, j.Value.(string))
+		case crdt.Bytes:
+			p.SetBytes(k, j.Value.([]byte))
+		case crdt.Date:
+			p.SetDate(k, j.Value.(gotime.Time))
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %T", j))
+		}
+	case *converter.JSONCounterStruct:
+		p.SetNewCounter(k, j.ValueType, j.Value)
+	case *converter.JSONArrayStruct:
+		arr := p.SetNewArray(k)
+		for _, elem := range j.Value {
+			arr.AddArrFromJsonStruct(elem)
+		}
+	case *converter.JSONObjectStruct:
+		o := p.SetNewObject(k)
+		for key, value := range j.Value {
+			o.SetObjFromJsonStruct(key, value)
+		}
+	case *converter.JSONTextStruct:
+		text := p.SetNewText(k)
+		text.EditFromJSONStruct(*j)
+	case *converter.JSONTreeStruct:
+		treeNode, err := GetTreeRootNodeFromJSONStruct(*j)
+		if err != nil {
+			panic(err)
+		}
+		p.SetNewTree(k, treeNode)
+	default:
+		panic(fmt.Errorf("unsupported JSONStruct type: %T", j))
+	}
+	return nil
 }
 
 // Delete deletes the value of the given key.
