@@ -17,14 +17,14 @@
 package json
 
 import (
-	ejson "encoding/json"
+	gojson "encoding/json"
 	"fmt"
 	"unicode/utf16"
 
-	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Text represents a text in the document. As a proxy for the CRDT
@@ -116,7 +116,7 @@ func (p *Text) EditFromYSON(j yson.Text) *Text {
 	}
 
 	var chunks []chunk
-	if err := ejson.Unmarshal([]byte(j.Value), &chunks); err != nil {
+	if err := gojson.Unmarshal([]byte(j.Value), &chunks); err != nil {
 		panic(fmt.Errorf("failed to parse text JSON: %w", err))
 	}
 

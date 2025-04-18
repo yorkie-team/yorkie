@@ -17,15 +17,15 @@
 package json
 
 import (
-	ejson "encoding/json"
+	gojson "encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
@@ -435,7 +435,7 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 
 func GetTreeRootNodeFromYSON(j yson.Tree) (*TreeNode, error) {
 	var node TreeNode
-	if err := ejson.Unmarshal([]byte(j.Value), &node); err != nil {
+	if err := gojson.Unmarshal([]byte(j.Value), &node); err != nil {
 		return nil, fmt.Errorf("failed to parse tree JSON: %w", err)
 	}
 

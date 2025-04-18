@@ -26,13 +26,13 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -187,26 +187,26 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	// 3. Convert doc to ysonStruct
-	ysonStruct, err := yson.ToYSON(doc.RootObject())
+	// 3. Convert doc to root
+	root, err := yson.FromCRDT(doc.RootObject())
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Build new document with ysonStruct and create changepack
+	// 4. Build new document with yson and create changepack
 	newDoc := document.New(docInfo.Key)
-	err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetFromYSON(ysonStruct)
+	err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	newYsonStruct, err := yson.ToYSON(newDoc.RootObject())
+	newRoot, err := yson.FromCRDT(newDoc.RootObject())
 	if err != nil {
 		return nil, err
 	}
-	if !reflect.DeepEqual(ysonStruct, newYsonStruct) {
+	if !reflect.DeepEqual(root, newRoot) {
 		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild\n", docInfo.ID)
 		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
