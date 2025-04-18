@@ -24,7 +24,6 @@ import (
 	"sort"
 	"strings"
 
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
@@ -38,106 +37,104 @@ type YSON interface {
 
 // Primitive represents a primitive CRDT value.
 type Primitive struct {
-	JSONType  api.ValueType
 	ValueType crdt.ValueType
 	Value     interface{} // primitive value (nil, bool, int32, int64, float64, string, []byte, time.Time)
 }
 
 // Counter represents a counter CRDT value.
 type Counter struct {
-	JSONType  api.ValueType
 	ValueType crdt.CounterType
 	Value     interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
 }
 
 // Array represents an array CRDT value.
 type Array struct {
-	JSONType api.ValueType
-	Value    []YSON // array of CRDT elements
+	Value []YSON // array of CRDT elements
 }
 
 // Object represents an object CRDT value.
 type Object struct {
-	JSONType api.ValueType
-	Value    map[string]YSON // key-value pairs of CRDT elements
+	Value map[string]YSON // key-value pairs of CRDT elements
 }
 
 // Tree represents a tree CRDT value.
 type Tree struct {
-	JSONType api.ValueType
-	Value    string // tree marshal string
+	Value string // tree marshal string
 }
 
 // Text represents a text CRDT value.
 type Text struct {
-	JSONType api.ValueType
-	Value    string // text marshal string
+	Value string // text marshal string
 }
 
-func (j Primitive) isYSON() {}
-func (j Counter) isYSON()   {}
-func (j Array) isYSON()     {}
-func (j Object) isYSON()    {}
-func (j Tree) isYSON()      {}
-func (j Text) isYSON()      {}
+func (y Primitive) isYSON() {}
+func (y Counter) isYSON()   {}
+func (y Array) isYSON()     {}
+func (y Object) isYSON()    {}
+func (y Tree) isYSON()      {}
+func (y Text) isYSON()      {}
 
-func (j Primitive) ToTestString() string {
-	return fmt.Sprintf(
-		"{JSONType: %d, ValueType: %v, Value: %v}",
-		j.JSONType,
-		j.ValueType,
-		j.Value,
-	)
+type YSONType int
+
+const (
+	PrimitiveType YSONType = iota
+	CounterType
+	ArrayType
+	ObjectType
+	TreeType
+	TextType
+)
+
+func GetYSONType(y YSON) YSONType {
+	switch y.(type) {
+	case *Primitive:
+		return PrimitiveType
+	case *Counter:
+		return CounterType
+	case *Array:
+		return ArrayType
+	case *Object:
+		return ObjectType
+	case *Tree:
+		return TreeType
+	case *Text:
+		return TextType
+	default:
+		return -1
+	}
 }
-func (j Counter) ToTestString() string {
-	return fmt.Sprintf(
-		"{JSONType: %d, ValueType: %v, Value: %v}",
-		j.JSONType,
-		j.ValueType,
-		j.Value,
-	)
+
+func (y Primitive) ToTestString() string {
+	return fmt.Sprintf("{t: %d, vt: %v, v: %v}", GetYSONType(y), y.ValueType, y.Value)
 }
-func (j Array) ToTestString() string {
+func (y Counter) ToTestString() string {
+	return fmt.Sprintf("{t: %d, vt: %v, v: %v}", GetYSONType(y), y.ValueType, y.Value)
+}
+func (y Array) ToTestString() string {
 	var elements []string
-	for _, elem := range j.Value {
+	for _, elem := range y.Value {
 		elements = append(elements, (elem).ToTestString())
 	}
-	return fmt.Sprintf(
-		"{JSONType: %d, Value: [%s]}",
-		j.JSONType,
-		strings.Join(elements, ", "),
-	)
+	return fmt.Sprintf("{t: %d, v: [%s]}", GetYSONType(y), strings.Join(elements, ", "))
 }
-func (j Object) ToTestString() string {
+func (y Object) ToTestString() string {
 	var pairs []string
 	// Get sorted keys
-	keys := make([]string, 0, len(j.Value))
-	for k := range j.Value {
+	keys := make([]string, 0, len(y.Value))
+	for k := range y.Value {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	// Build pairs in sorted order
 	for _, key := range keys {
-		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (j.Value[key]).ToTestString()))
+		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (y.Value[key]).ToTestString()))
 	}
-	return fmt.Sprintf(
-		"{JSONType: %d, Value: {%s}}",
-		j.JSONType,
-		strings.Join(pairs, ", "),
-	)
+	return fmt.Sprintf("{t: %d, v: {%s}}", GetYSONType(y), strings.Join(pairs, ", "))
 }
-func (j Tree) ToTestString() string {
-	return fmt.Sprintf(
-		"{JSONType: %d, Value: %v}",
-		j.JSONType,
-		j.Value,
-	)
+func (y Tree) ToTestString() string {
+	return fmt.Sprintf("{t: %d, v: %v}", GetYSONType(y), y.Value)
 }
-func (j Text) ToTestString() string {
-	return fmt.Sprintf(
-		"{JSONType: %d, Value: %v}",
-		j.JSONType,
-		j.Value,
-	)
+func (y Text) ToTestString() string {
+	return fmt.Sprintf("{t: %d, v: %v}", GetYSONType(y), y.Value)
 }

@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -241,10 +240,8 @@ func TestJSONStructConversion(t *testing.T) {
 			}()
 
 			root.SetFromJSONStruct(&yson.Object{
-				JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
 				Value: map[string]yson.YSON{
 					"key": &yson.Primitive{
-						JSONType:  api.ValueType_VALUE_TYPE_STRING,
 						ValueType: 2000000,
 						Value:     "value",
 					},
@@ -268,8 +265,7 @@ func TestJSONStructConversion(t *testing.T) {
 
 			text := root.SetNewText("text")
 			text.EditFromJSONStruct(yson.Text{
-				JSONType: api.ValueType_VALUE_TYPE_TEXT,
-				Value:    "invalid json",
+				Value: "invalid json",
 			})
 			return nil
 		})
@@ -281,8 +277,7 @@ func TestJSONStructConversion(t *testing.T) {
 		doc := document.New("invalid-tree")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			treeNode, err := json.GetTreeRootNodeFromJSONStruct(yson.Tree{
-				JSONType: api.ValueType_VALUE_TYPE_TREE,
-				Value:    "invalid json",
+				Value: "invalid json",
 			})
 			if err != nil {
 				return err

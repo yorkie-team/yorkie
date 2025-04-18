@@ -21,31 +21,18 @@ import (
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/converter"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
 func toPrimitiveStruct(primitive *crdt.Primitive) (*Primitive, error) {
-	pbValueType, err := converter.ToValueType(primitive.ValueType())
-	if err != nil {
-		return nil, err
-	}
-
 	return &Primitive{
-		JSONType:  pbValueType,
 		ValueType: primitive.ValueType(),
 		Value:     primitive.Value(),
 	}, nil
 }
 
 func toCounterStruct(counter *crdt.Counter) (*Counter, error) {
-	pbCounterType, err := converter.ToCounterType(counter.ValueType())
-	if err != nil {
-		return nil, err
-	}
-
 	return &Counter{
-		JSONType:  pbCounterType,
 		ValueType: counter.ValueType(),
 		Value:     counter.Value(),
 	}, nil
@@ -61,8 +48,7 @@ func toArrayStruct(array *crdt.Array) (*Array, error) {
 		elements = append(elements, pbElem)
 	}
 	return &Array{
-		JSONType: api.ValueType_VALUE_TYPE_JSON_ARRAY,
-		Value:    elements,
+		Value: elements,
 	}, nil
 }
 
@@ -76,22 +62,19 @@ func toObjectStruct(object *crdt.Object) (*Object, error) {
 		fields[key] = elemStruct
 	}
 	return &Object{
-		JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
-		Value:    fields,
+		Value: fields,
 	}, nil
 }
 
 func toTextStruct(text *crdt.Text) *Text {
 	return &Text{
-		JSONType: api.ValueType_VALUE_TYPE_TEXT,
-		Value:    text.Marshal(),
+		Value: text.Marshal(),
 	}
 }
 
 func toTreeStruct(tree *crdt.Tree) *Tree {
 	return &Tree{
-		JSONType: api.ValueType_VALUE_TYPE_TREE,
-		Value:    tree.Marshal(),
+		Value: tree.Marshal(),
 	}
 }
 
