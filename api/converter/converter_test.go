@@ -494,7 +494,8 @@ func TestJSONStructConversion(t *testing.T) {
 						},
 						&converter.JSONTreeStruct{
 							JSONType: api.ValueType_VALUE_TYPE_TREE,
-							Value:    `{"type":"p","children":[{"type":"text","value":"Tree in array"},{"type":"span","children":[{"type":"text","value":"Styled text"}],"attributes":{"style":"color: red"}}]}`,
+							Value: `{"type":"p","children":[{"type":"text","value":"Tree in array"},` +
+								`{"type":"span","children":[{"type":"text","value":"Styled text"}],"attributes":{"style":"color: red"}}]}`,
 						},
 					},
 				},

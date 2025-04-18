@@ -59,9 +59,7 @@ func (p *Object) SetFromJSONStruct(j converter.JSONStruct) {
 		panic(fmt.Errorf("expected JSONObjectStruct, got %T", j))
 	}
 	for k, v := range objStruct.Value {
-		if err := p.SetObjFromJsonStruct(k, v); err != nil {
-			panic(err)
-		}
+		p.SetObjFromJsonStruct(k, v)
 	}
 }
 
@@ -283,7 +281,7 @@ func (p *Object) SetObjFromJsonStruct(k string, v converter.JSONStruct) *Object 
 	default:
 		panic(fmt.Errorf("unsupported JSONStruct type: %T", j))
 	}
-	return nil
+	return p
 }
 
 // Delete deletes the value of the given key.

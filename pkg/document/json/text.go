@@ -110,33 +110,28 @@ func (p *Text) Edit(
 
 // EditFromJSONStruct edits the given range with the given JSONStruct.
 func (p *Text) EditFromJSONStruct(j converter.JSONTextStruct) *Text {
-	var chunks []interface{}
+	type chunk struct {
+		Val   string                 `json:"val"`
+		Attrs map[string]interface{} `json:"attrs,omitempty"`
+	}
+
+	var chunks []chunk
 	if err := ejson.Unmarshal([]byte(j.Value), &chunks); err != nil {
 		panic(fmt.Errorf("failed to parse text JSON: %w", err))
 	}
 
 	pos := 0
-	for _, chunk := range chunks {
-		chunkMap, ok := chunk.(map[string]interface{})
-		if !ok {
-			panic(fmt.Errorf("invalid text JSON: %+v", chunk))
-		}
-		value, ok := chunkMap["val"].(string)
-		if !ok {
-			panic(fmt.Errorf("invalid 'val' in text JSON: %+v", chunkMap))
-		}
-
-		if attrs, hasAttrs := chunkMap["attrs"]; hasAttrs {
-			attrMap := attrs.(map[string]interface{})
+	for _, c := range chunks {
+		if c.Attrs != nil {
 			attributes := make(map[string]string)
-			for attrKey, attrValue := range attrMap {
+			for attrKey, attrValue := range c.Attrs {
 				attributes[attrKey] = attrValue.(string)
 			}
-			p.Edit(pos, pos, value, attributes)
+			p.Edit(pos, pos, c.Val, attributes)
 		} else {
-			p.Edit(pos, pos, value)
+			p.Edit(pos, pos, c.Val)
 		}
-		pos += len(utf16.Encode([]rune(value)))
+		pos += len(utf16.Encode([]rune(c.Val)))
 	}
 	return p
 }
