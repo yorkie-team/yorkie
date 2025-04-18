@@ -21,7 +21,7 @@ import (
 	"reflect"
 	gotime "time"
 
-	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -207,9 +207,9 @@ func (p *Array) AddNewObject() *Object {
 }
 
 // AddFromJSONStruct adds an element from the given JSONStruct at the last.
-func (p *Array) AddArrFromJsonStruct(value converter.JSONStruct) *Array {
+func (p *Array) AddArrFromJsonStruct(value yson.YSON) *Array {
 	switch j := value.(type) {
-	case *converter.JSONPrimitiveStruct:
+	case *yson.Primitive:
 		switch j.ValueType {
 		case crdt.Null:
 			p.AddNull()
@@ -230,22 +230,22 @@ func (p *Array) AddArrFromJsonStruct(value converter.JSONStruct) *Array {
 		default:
 			panic(fmt.Errorf("unsupported primitive type: %T", j))
 		}
-	case *converter.JSONCounterStruct:
+	case *yson.Counter:
 		p.AddNewCounter(j.ValueType, j.Value)
-	case *converter.JSONArrayStruct:
+	case *yson.Array:
 		a := p.AddNewArray()
 		for _, elem := range j.Value {
 			a.AddArrFromJsonStruct(elem)
 		}
-	case *converter.JSONObjectStruct:
+	case *yson.Object:
 		o := p.AddNewObject()
 		for key, value := range j.Value {
 			o.SetObjFromJsonStruct(key, value)
 		}
-	case *converter.JSONTextStruct:
+	case *yson.Text:
 		t := p.AddNewText()
 		t.EditFromJSONStruct(*j)
-	case *converter.JSONTreeStruct:
+	case *yson.Tree:
 		treeNode, err := GetTreeRootNodeFromJSONStruct(*j)
 		if err != nil {
 			panic(err)

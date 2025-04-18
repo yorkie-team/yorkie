@@ -23,7 +23,7 @@ import (
 	gotime "time"
 	"unicode"
 
-	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -53,8 +53,8 @@ func (p *Object) SetDynamicValue(k string, v any) {
 }
 
 // SetFromJSONStruct sets values from the given JSONStruct.
-func (p *Object) SetFromJSONStruct(j converter.JSONStruct) {
-	objStruct, ok := j.(*converter.JSONObjectStruct)
+func (p *Object) SetFromJSONStruct(j yson.YSON) {
+	objStruct, ok := j.(*yson.Object)
 	if !ok {
 		panic(fmt.Errorf("expected JSONObjectStruct, got %T", j))
 	}
@@ -234,9 +234,9 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 }
 
 // SetObjFromJsonStruct sets the given JSONStruct for the given key.
-func (p *Object) SetObjFromJsonStruct(k string, v converter.JSONStruct) *Object {
+func (p *Object) SetObjFromJsonStruct(k string, v yson.YSON) *Object {
 	switch j := v.(type) {
-	case *converter.JSONPrimitiveStruct:
+	case *yson.Primitive:
 		switch j.ValueType {
 		case crdt.Null:
 			p.SetNull(k)
@@ -257,22 +257,22 @@ func (p *Object) SetObjFromJsonStruct(k string, v converter.JSONStruct) *Object 
 		default:
 			panic(fmt.Errorf("unsupported primitive type: %T", j))
 		}
-	case *converter.JSONCounterStruct:
+	case *yson.Counter:
 		p.SetNewCounter(k, j.ValueType, j.Value)
-	case *converter.JSONArrayStruct:
+	case *yson.Array:
 		arr := p.SetNewArray(k)
 		for _, elem := range j.Value {
 			arr.AddArrFromJsonStruct(elem)
 		}
-	case *converter.JSONObjectStruct:
+	case *yson.Object:
 		o := p.SetNewObject(k)
 		for key, value := range j.Value {
 			o.SetObjFromJsonStruct(key, value)
 		}
-	case *converter.JSONTextStruct:
+	case *yson.Text:
 		text := p.SetNewText(k)
 		text.EditFromJSONStruct(*j)
-	case *converter.JSONTreeStruct:
+	case *yson.Tree:
 		treeNode, err := GetTreeRootNodeFromJSONStruct(*j)
 		if err != nil {
 			panic(err)

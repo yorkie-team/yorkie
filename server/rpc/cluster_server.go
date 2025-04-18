@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -187,7 +188,7 @@ func (s *clusterServer) CompactDocument(
 	}
 
 	// 3. Convert doc to jsonStruct
-	jsonStruct, err := converter.ToJSONStruct(doc.RootObject())
+	jsonStruct, err := yson.ToJSONStruct(doc.RootObject())
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +202,7 @@ func (s *clusterServer) CompactDocument(
 	if err != nil {
 		return nil, err
 	}
-	newJsonStruct, err := converter.ToJSONStruct(newDoc.RootObject())
+	newJsonStruct, err := yson.ToJSONStruct(newDoc.RootObject())
 	if err != nil {
 		return nil, err
 	}

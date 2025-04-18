@@ -14,44 +14,45 @@
  * limitations under the License.
  */
 
-package converter
+package yson
 
 import (
 	"fmt"
 	"reflect"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
-func toPrimitiveStruct(primitive *crdt.Primitive) (*JSONPrimitiveStruct, error) {
-	pbValueType, err := toValueType(primitive.ValueType())
+func toPrimitiveStruct(primitive *crdt.Primitive) (*Primitive, error) {
+	pbValueType, err := converter.ToValueType(primitive.ValueType())
 	if err != nil {
 		return nil, err
 	}
 
-	return &JSONPrimitiveStruct{
+	return &Primitive{
 		JSONType:  pbValueType,
 		ValueType: primitive.ValueType(),
 		Value:     primitive.Value(),
 	}, nil
 }
 
-func toCounterStruct(counter *crdt.Counter) (*JSONCounterStruct, error) {
-	pbCounterType, err := toCounterType(counter.ValueType())
+func toCounterStruct(counter *crdt.Counter) (*Counter, error) {
+	pbCounterType, err := converter.ToCounterType(counter.ValueType())
 	if err != nil {
 		return nil, err
 	}
 
-	return &JSONCounterStruct{
+	return &Counter{
 		JSONType:  pbCounterType,
 		ValueType: counter.ValueType(),
 		Value:     counter.Value(),
 	}, nil
 }
 
-func toArrayStruct(array *crdt.Array) (*JSONArrayStruct, error) {
-	var elements []JSONStruct
+func toArrayStruct(array *crdt.Array) (*Array, error) {
+	var elements []YSON
 	for _, elem := range array.Elements() {
 		pbElem, err := ToJSONStruct(elem)
 		if err != nil {
@@ -59,14 +60,14 @@ func toArrayStruct(array *crdt.Array) (*JSONArrayStruct, error) {
 		}
 		elements = append(elements, pbElem)
 	}
-	return &JSONArrayStruct{
+	return &Array{
 		JSONType: api.ValueType_VALUE_TYPE_JSON_ARRAY,
 		Value:    elements,
 	}, nil
 }
 
-func toObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
-	fields := make(map[string]JSONStruct)
+func toObjectStruct(object *crdt.Object) (*Object, error) {
+	fields := make(map[string]YSON)
 	for key, elem := range object.Members() {
 		elemStruct, err := ToJSONStruct(elem)
 		if err != nil {
@@ -74,27 +75,27 @@ func toObjectStruct(object *crdt.Object) (*JSONObjectStruct, error) {
 		}
 		fields[key] = elemStruct
 	}
-	return &JSONObjectStruct{
+	return &Object{
 		JSONType: api.ValueType_VALUE_TYPE_JSON_OBJECT,
 		Value:    fields,
 	}, nil
 }
 
-func toTextStruct(text *crdt.Text) *JSONTextStruct {
-	return &JSONTextStruct{
+func toTextStruct(text *crdt.Text) *Text {
+	return &Text{
 		JSONType: api.ValueType_VALUE_TYPE_TEXT,
 		Value:    text.Marshal(),
 	}
 }
 
-func toTreeStruct(tree *crdt.Tree) *JSONTreeStruct {
-	return &JSONTreeStruct{
+func toTreeStruct(tree *crdt.Tree) *Tree {
+	return &Tree{
 		JSONType: api.ValueType_VALUE_TYPE_TREE,
 		Value:    tree.Marshal(),
 	}
 }
 
-func ToJSONStruct(elem crdt.Element) (JSONStruct, error) {
+func ToJSONStruct(elem crdt.Element) (YSON, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
 		return toObjectStruct(elem)
@@ -109,6 +110,6 @@ func ToJSONStruct(elem crdt.Element) (JSONStruct, error) {
 	case *crdt.Tree:
 		return toTreeStruct(elem), nil
 	default:
-		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), converter.ErrUnsupportedElement)
 	}
 }

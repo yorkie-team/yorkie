@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"unicode/utf16"
 
-	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -109,7 +109,7 @@ func (p *Text) Edit(
 }
 
 // EditFromJSONStruct edits the given range with the given JSONStruct.
-func (p *Text) EditFromJSONStruct(j converter.JSONTextStruct) *Text {
+func (p *Text) EditFromJSONStruct(j yson.Text) *Text {
 	type chunk struct {
 		Val   string                 `json:"val"`
 		Attrs map[string]interface{} `json:"attrs,omitempty"`

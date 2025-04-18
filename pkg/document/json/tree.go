@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/yson"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -433,7 +433,7 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 	return nil
 }
 
-func GetTreeRootNodeFromJSONStruct(j converter.JSONTreeStruct) (*TreeNode, error) {
+func GetTreeRootNodeFromJSONStruct(j yson.Tree) (*TreeNode, error) {
 	var treeJSON TreeNode
 	if err := ejson.Unmarshal([]byte(j.Value), &treeJSON); err != nil {
 		return nil, fmt.Errorf("failed to parse tree JSON: %w", err)
