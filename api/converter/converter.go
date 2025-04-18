@@ -18,9 +18,7 @@
 // Protobuf, bytes and vice versa.
 package converter
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
 	// ErrPackRequired is returned when an empty pack is passed.

@@ -433,21 +433,21 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 	return nil
 }
 
-func GetTreeRootNodeFromJSONStruct(j yson.Tree) (*TreeNode, error) {
-	var treeJSON TreeNode
-	if err := ejson.Unmarshal([]byte(j.Value), &treeJSON); err != nil {
+func GetTreeRootNodeFromYSON(j yson.Tree) (*TreeNode, error) {
+	var node TreeNode
+	if err := ejson.Unmarshal([]byte(j.Value), &node); err != nil {
 		return nil, fmt.Errorf("failed to parse tree JSON: %w", err)
 	}
 
 	rootNode := &TreeNode{
-		Type:  treeJSON.Type,
-		Value: treeJSON.Value,
+		Type:  node.Type,
+		Value: node.Value,
 	}
-	if len(treeJSON.Children) > 0 {
-		processChildren(rootNode, treeJSON.Children)
+	if len(node.Children) > 0 {
+		processChildren(rootNode, node.Children)
 	}
-	if len(treeJSON.Attributes) > 0 {
-		processAttributes(rootNode, treeJSON.Attributes)
+	if len(node.Attributes) > 0 {
+		processAttributes(rootNode, node.Attributes)
 	}
 
 	return rootNode, nil

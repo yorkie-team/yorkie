@@ -108,8 +108,8 @@ func (p *Text) Edit(
 	return p
 }
 
-// EditFromJSONStruct edits the given range with the given JSONStruct.
-func (p *Text) EditFromJSONStruct(j yson.Text) *Text {
+// EditFromYSON edits the given range with the given YSON.
+func (p *Text) EditFromYSON(j yson.Text) *Text {
 	type chunk struct {
 		Val   string                 `json:"val"`
 		Attrs map[string]interface{} `json:"attrs,omitempty"`

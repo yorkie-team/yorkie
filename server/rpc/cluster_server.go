@@ -187,26 +187,26 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	// 3. Convert doc to jsonStruct
-	jsonStruct, err := yson.ToJSONStruct(doc.RootObject())
+	// 3. Convert doc to ysonStruct
+	ysonStruct, err := yson.ToYSON(doc.RootObject())
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Build new document with jsonStruct and create changepack
+	// 4. Build new document with ysonStruct and create changepack
 	newDoc := document.New(docInfo.Key)
 	err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetFromJSONStruct(jsonStruct)
+		root.SetFromYSON(ysonStruct)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	newJsonStruct, err := yson.ToJSONStruct(newDoc.RootObject())
+	newYsonStruct, err := yson.ToYSON(newDoc.RootObject())
 	if err != nil {
 		return nil, err
 	}
-	if !reflect.DeepEqual(jsonStruct, newJsonStruct) {
+	if !reflect.DeepEqual(ysonStruct, newYsonStruct) {
 		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild\n", docInfo.ID)
 		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}

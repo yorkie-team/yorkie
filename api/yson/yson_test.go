@@ -30,10 +30,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
-func TestJSONStructConversion(t *testing.T) {
+func TestYSONConversion(t *testing.T) {
 
 	t.Run("json struct conversion", func(t *testing.T) {
-		doc := document.New("jsonstruct")
+		doc := document.New("yson")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// an object and primitive types
@@ -99,21 +99,21 @@ func TestJSONStructConversion(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		jsonStruct, err := yson.ToJSONStruct(doc.RootObject())
+		ysonStruct, err := yson.ToYSON(doc.RootObject())
 		assert.NoError(t, err)
 
-		newDoc := document.New("jsonstruct")
+		newDoc := document.New("yson")
 		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetFromJSONStruct(jsonStruct)
+			root.SetFromYSON(ysonStruct)
 			return nil
 		})
 		assert.NoError(t, err)
 
 		// verify the conversion
 		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
-		newJSONStruct, err := yson.ToJSONStruct(newDoc.RootObject())
+		newYsonStruct, err := yson.ToYSON(newDoc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
+		assert.Equal(t, ysonStruct.ToTestString(), newYsonStruct.ToTestString())
 	})
 
 	t.Run("array with nested types test", func(t *testing.T) {
@@ -158,27 +158,27 @@ func TestJSONStructConversion(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		// Convert to JSONStruct
-		jsonStruct, err := yson.ToJSONStruct(doc.RootObject())
+		// Convert to YSON
+		ysonStruct, err := yson.ToYSON(doc.RootObject())
 		assert.NoError(t, err)
 
 		// Convert back to document
 		newDoc := document.New("nested-types")
 		err = newDoc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetFromJSONStruct(jsonStruct)
+			root.SetFromYSON(ysonStruct)
 			return nil
 		})
 		assert.NoError(t, err)
 
 		// Verify the conversion
 		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
-		newJSONStruct, err := yson.ToJSONStruct(newDoc.RootObject())
+		newYsonStruct, err := yson.ToYSON(newDoc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, jsonStruct.ToTestString(), newJSONStruct.ToTestString())
+		assert.Equal(t, ysonStruct.ToTestString(), newYsonStruct.ToTestString())
 	})
 
-	t.Run("literal JSONStruct conversion test", func(t *testing.T) {
-		jsonStruct := &yson.Object{
+	t.Run("literal YSON conversion test", func(t *testing.T) {
+		ysonStruct := &yson.Object{
 			Value: map[string]yson.YSON{
 				"nested": &yson.Array{
 					Value: []yson.YSON{
@@ -218,19 +218,19 @@ func TestJSONStructConversion(t *testing.T) {
 			},
 		}
 
-		doc := document.New("literal-jsonstruct")
+		doc := document.New("literal-ysonstruct")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetFromJSONStruct(jsonStruct)
+			root.SetFromYSON(ysonStruct)
 			return nil
 		})
 		assert.NoError(t, err)
-		newJsonStruct, err := yson.ToJSONStruct(doc.RootObject())
+		newYsonStruct, err := yson.ToYSON(doc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, jsonStruct, newJsonStruct)
+		assert.Equal(t, ysonStruct, newYsonStruct)
 	})
 
-	t.Run("unsupported JSONStruct type", func(t *testing.T) {
-		doc := document.New("unsupported-jsonstruct")
+	t.Run("unsupported primitive type", func(t *testing.T) {
+		doc := document.New("unsupported-primitive")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			defer func() {
 				r := recover()
@@ -239,7 +239,7 @@ func TestJSONStructConversion(t *testing.T) {
 				assert.Contains(t, errStr, "unsupported primitive type")
 			}()
 
-			root.SetFromJSONStruct(&yson.Object{
+			root.SetFromYSON(&yson.Object{
 				Value: map[string]yson.YSON{
 					"key": &yson.Primitive{
 						ValueType: 2000000,
@@ -264,7 +264,7 @@ func TestJSONStructConversion(t *testing.T) {
 			}()
 
 			text := root.SetNewText("text")
-			text.EditFromJSONStruct(yson.Text{
+			text.EditFromYSON(yson.Text{
 				Value: "invalid json",
 			})
 			return nil
@@ -276,7 +276,7 @@ func TestJSONStructConversion(t *testing.T) {
 	t.Run("invalid tree JSON", func(t *testing.T) {
 		doc := document.New("invalid-tree")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			treeNode, err := json.GetTreeRootNodeFromJSONStruct(yson.Tree{
+			treeNode, err := json.GetTreeRootNodeFromYSON(yson.Tree{
 				Value: "invalid json",
 			})
 			if err != nil {

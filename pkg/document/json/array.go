@@ -206,8 +206,8 @@ func (p *Array) AddNewObject() *Object {
 	return v.(*Object)
 }
 
-// AddFromJSONStruct adds an element from the given JSONStruct at the last.
-func (p *Array) AddArrFromJsonStruct(value yson.YSON) *Array {
+// AddArrFromYSON adds an element from the given YSON at the last.
+func (p *Array) AddArrFromYSON(value yson.YSON) *Array {
 	switch j := value.(type) {
 	case *yson.Primitive:
 		switch j.ValueType {
@@ -235,24 +235,24 @@ func (p *Array) AddArrFromJsonStruct(value yson.YSON) *Array {
 	case *yson.Array:
 		a := p.AddNewArray()
 		for _, elem := range j.Value {
-			a.AddArrFromJsonStruct(elem)
+			a.AddArrFromYSON(elem)
 		}
 	case *yson.Object:
 		o := p.AddNewObject()
 		for key, value := range j.Value {
-			o.SetObjFromJsonStruct(key, value)
+			o.SetObjFromYSON(key, value)
 		}
 	case *yson.Text:
 		t := p.AddNewText()
-		t.EditFromJSONStruct(*j)
+		t.EditFromYSON(*j)
 	case *yson.Tree:
-		treeNode, err := GetTreeRootNodeFromJSONStruct(*j)
+		treeNode, err := GetTreeRootNodeFromYSON(*j)
 		if err != nil {
 			panic(err)
 		}
 		p.AddNewTree(treeNode)
 	default:
-		panic(fmt.Errorf("unsupported JSONStruct type: %T", j))
+		panic(fmt.Errorf("unsupported YSON type: %T", j))
 	}
 	return p
 }

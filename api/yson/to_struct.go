@@ -41,7 +41,7 @@ func toCounterStruct(counter *crdt.Counter) (*Counter, error) {
 func toArrayStruct(array *crdt.Array) (*Array, error) {
 	var elements []YSON
 	for _, elem := range array.Elements() {
-		pbElem, err := ToJSONStruct(elem)
+		pbElem, err := ToYSON(elem)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func toArrayStruct(array *crdt.Array) (*Array, error) {
 func toObjectStruct(object *crdt.Object) (*Object, error) {
 	fields := make(map[string]YSON)
 	for key, elem := range object.Members() {
-		elemStruct, err := ToJSONStruct(elem)
+		elemStruct, err := ToYSON(elem)
 		if err != nil {
 			return nil, err
 		}
@@ -78,7 +78,7 @@ func toTreeStruct(tree *crdt.Tree) *Tree {
 	}
 }
 
-func ToJSONStruct(elem crdt.Element) (YSON, error) {
+func ToYSON(elem crdt.Element) (YSON, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
 		return toObjectStruct(elem)

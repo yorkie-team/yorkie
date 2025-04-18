@@ -52,14 +52,14 @@ func (p *Object) SetDynamicValue(k string, v any) {
 	})
 }
 
-// SetFromJSONStruct sets values from the given JSONStruct.
-func (p *Object) SetFromJSONStruct(j yson.YSON) {
+// SetFromYSON sets values from the given YSON.
+func (p *Object) SetFromYSON(j yson.YSON) {
 	objStruct, ok := j.(*yson.Object)
 	if !ok {
 		panic(fmt.Errorf("expected JSONObjectStruct, got %T", j))
 	}
 	for k, v := range objStruct.Value {
-		p.SetObjFromJsonStruct(k, v)
+		p.SetObjFromYSON(k, v)
 	}
 }
 
@@ -233,8 +233,8 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 	return p
 }
 
-// SetObjFromJsonStruct sets the given JSONStruct for the given key.
-func (p *Object) SetObjFromJsonStruct(k string, v yson.YSON) *Object {
+// SetObjFromYSON sets the given YSON for the given key.
+func (p *Object) SetObjFromYSON(k string, v yson.YSON) *Object {
 	switch j := v.(type) {
 	case *yson.Primitive:
 		switch j.ValueType {
@@ -262,24 +262,24 @@ func (p *Object) SetObjFromJsonStruct(k string, v yson.YSON) *Object {
 	case *yson.Array:
 		arr := p.SetNewArray(k)
 		for _, elem := range j.Value {
-			arr.AddArrFromJsonStruct(elem)
+			arr.AddArrFromYSON(elem)
 		}
 	case *yson.Object:
 		o := p.SetNewObject(k)
 		for key, value := range j.Value {
-			o.SetObjFromJsonStruct(key, value)
+			o.SetObjFromYSON(key, value)
 		}
 	case *yson.Text:
 		text := p.SetNewText(k)
-		text.EditFromJSONStruct(*j)
+		text.EditFromYSON(*j)
 	case *yson.Tree:
-		treeNode, err := GetTreeRootNodeFromJSONStruct(*j)
+		treeNode, err := GetTreeRootNodeFromYSON(*j)
 		if err != nil {
 			panic(err)
 		}
 		p.SetNewTree(k, treeNode)
 	default:
-		panic(fmt.Errorf("unsupported JSONStruct type: %T", j))
+		panic(fmt.Errorf("unsupported YSON type: %T", j))
 	}
 	return p
 }
