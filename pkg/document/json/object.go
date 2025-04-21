@@ -53,7 +53,7 @@ func (p *Object) SetDynamicValue(k string, v any) {
 }
 
 // SetYSON sets values from the given YSON.
-func (p *Object) SetYSON(value yson.Element) {
+func (p *Object) SetYSON(value interface{}) {
 	yObj, ok := value.(yson.Object)
 	if !ok {
 		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
@@ -235,48 +235,46 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 }
 
 // SetYSONElement sets the given YSON for the given key.
-func (p *Object) SetYSONElement(k string, v yson.Element) *Object {
-	switch j := v.(type) {
-	case yson.Primitive:
-		switch j.Type {
-		case crdt.Null:
-			p.SetNull(k)
-		case crdt.Boolean:
-			p.SetBool(k, j.Value.(bool))
-		case crdt.Integer:
-			p.SetInteger(k, int(j.Value.(int32)))
-		case crdt.Long:
-			p.SetLong(k, j.Value.(int64))
-		case crdt.Double:
-			p.SetDouble(k, j.Value.(float64))
-		case crdt.String:
-			p.SetString(k, j.Value.(string))
-		case crdt.Bytes:
-			p.SetBytes(k, j.Value.([]byte))
-		case crdt.Date:
-			p.SetDate(k, j.Value.(gotime.Time))
-		default:
-			panic(fmt.Errorf("unsupported primitive type: %T", j))
-		}
+func (p *Object) SetYSONElement(k string, v interface{}) *Object {
+	switch y := v.(type) {
 	case yson.Counter:
-		p.SetNewCounter(k, j.Type, j.Value)
+		p.SetNewCounter(k, y.Type, y.Value)
 	case yson.Array:
 		arr := p.SetNewArray(k)
-		for _, elem := range j {
+		for _, elem := range y {
 			arr.AddYSON(elem)
 		}
 	case yson.Object:
 		o := p.SetNewObject(k)
-		for key, value := range j {
+		for key, value := range y {
 			o.SetYSONElement(key, value)
 		}
 	case yson.Text:
 		text := p.SetNewText(k)
-		text.EditFromYSON(j)
+		text.EditFromYSON(y)
 	case yson.Tree:
-		p.SetNewTree(k, j.Root)
+		p.SetNewTree(k, y.Root)
 	default:
-		panic(fmt.Errorf("unsupported YSON type: %T", j))
+		switch v := v.(type) {
+		case nil:
+			p.SetNull(k)
+		case bool:
+			p.SetBool(k, v)
+		case int32:
+			p.SetInteger(k, int(v))
+		case int64:
+			p.SetLong(k, v)
+		case float64:
+			p.SetDouble(k, v)
+		case string:
+			p.SetString(k, v)
+		case []byte:
+			p.SetBytes(k, v)
+		case gotime.Time:
+			p.SetDate(k, v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
 	}
 	return p
 }

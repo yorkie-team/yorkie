@@ -47,11 +47,8 @@ func toArray(array *crdt.Array) (Array, error) {
 	return elements, nil
 }
 
-func toPrimitive(primitive *crdt.Primitive) (Primitive, error) {
-	return Primitive{
-		Type:  primitive.ValueType(),
-		Value: primitive.Value(),
-	}, nil
+func toPrimitive(primitive *crdt.Primitive) interface{} {
+	return primitive.Value()
 }
 
 func toCounter(counter *crdt.Counter) (Counter, error) {
@@ -110,14 +107,14 @@ func toTree(crdtTree *crdt.Tree) Tree {
 }
 
 // FromCRDT converts a CRDT element to a YSON element.
-func FromCRDT(elem crdt.Element) (Element, error) {
+func FromCRDT(elem crdt.Element) (interface{}, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
 		return toObject(elem)
 	case *crdt.Array:
 		return toArray(elem)
 	case *crdt.Primitive:
-		return toPrimitive(elem)
+		return toPrimitive(elem), nil
 	case *crdt.Counter:
 		return toCounter(elem)
 	case *crdt.Text:

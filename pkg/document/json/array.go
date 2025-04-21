@@ -207,29 +207,8 @@ func (p *Array) AddNewObject() *Object {
 }
 
 // AddYSON adds the given YSON element to the array.
-func (p *Array) AddYSON(value yson.Element) *Array {
+func (p *Array) AddYSON(value interface{}) *Array {
 	switch y := value.(type) {
-	case yson.Primitive:
-		switch y.Type {
-		case crdt.Null:
-			p.AddNull()
-		case crdt.Boolean:
-			p.AddBool(y.Value.(bool))
-		case crdt.Integer:
-			p.AddInteger(int(y.Value.(int32)))
-		case crdt.Long:
-			p.AddLong(y.Value.(int64))
-		case crdt.Double:
-			p.AddDouble(y.Value.(float64))
-		case crdt.String:
-			p.AddString(y.Value.(string))
-		case crdt.Bytes:
-			p.AddBytes(y.Value.([]byte))
-		case crdt.Date:
-			p.AddDate(y.Value.(gotime.Time))
-		default:
-			panic(fmt.Errorf("unsupported primitive type: %T", y))
-		}
 	case yson.Counter:
 		p.AddNewCounter(y.Type, y.Value)
 	case yson.Array:
@@ -248,7 +227,26 @@ func (p *Array) AddYSON(value yson.Element) *Array {
 	case yson.Tree:
 		p.AddNewTree(y.Root)
 	default:
-		panic(fmt.Errorf("unsupported YSON type: %T", y))
+		switch v := y.(type) {
+		case nil:
+			p.AddNull()
+		case bool:
+			p.AddBool(v)
+		case int32:
+			p.AddInteger(int(v))
+		case int64:
+			p.AddLong(v)
+		case float64:
+			p.AddDouble(v)
+		case string:
+			p.AddString(v)
+		case []byte:
+			p.AddBytes(v)
+		case gotime.Time:
+			p.AddDate(v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
 	}
 	return p
 }

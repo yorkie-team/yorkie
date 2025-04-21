@@ -47,13 +47,6 @@ type Element interface {
 	// representation back into the element.
 }
 
-// Primitive represents a primitive CRDT value.
-// TODO(hackerwins): Consider to use native types instead of bson.Primitive.
-type Primitive struct {
-	Type  crdt.ValueType
-	Value interface{} // primitive value (nil, bool, int32, int64, float64, string, []byte, time.Time)
-}
-
 // Counter represents a counter CRDT value.
 type Counter struct {
 	Type  crdt.CounterType
@@ -61,10 +54,10 @@ type Counter struct {
 }
 
 // Array represents an array CRDT value.
-type Array []Element
+type Array []interface{}
 
 // Object represents an object CRDT value.
-type Object map[string]Element
+type Object map[string]interface{}
 
 // Tree represents a tree CRDT value.
 type Tree struct {
@@ -85,12 +78,11 @@ type Text struct {
 	Nodes []TextNode
 }
 
-func (y Primitive) isElement() {}
-func (y Counter) isElement()   {}
-func (y Array) isElement()     {}
-func (y Object) isElement()    {}
-func (y Tree) isElement()      {}
-func (y Text) isElement()      {}
+func (y Counter) isElement() {}
+func (y Array) isElement()   {}
+func (y Object) isElement()  {}
+func (y Tree) isElement()    {}
+func (y Text) isElement()    {}
 
 type YSONType int
 
@@ -103,39 +95,21 @@ const (
 	TextType
 )
 
-func ToType(y Element) YSONType {
-	switch y.(type) {
-	case *Primitive:
-		return PrimitiveType
-	case *Counter:
-		return CounterType
-	case *Array:
-		return ArrayType
-	case *Object:
-		return ObjectType
-	case *Tree:
-		return TreeType
-	case *Text:
-		return TextType
-	default:
-		return -1
-	}
-}
-
-func (y Primitive) Marshal() string {
-	return fmt.Sprintf("{t: %d, vt: %v, v: %v}", ToType(y), y.Type, y.Value)
-}
-
 func (y Counter) Marshal() string {
-	return fmt.Sprintf("{t: %d, vt: %v, v: %v}", ToType(y), y.Type, y.Value)
+	return fmt.Sprintf("{t: %d, vt: %v, v: %v}", CounterType, y.Type, y.Value)
 }
 
 func (y Array) Marshal() string {
 	var elements []string
 	for _, elem := range y {
-		elements = append(elements, (elem).Marshal())
+		switch v := elem.(type) {
+		case Element:
+			elements = append(elements, v.Marshal())
+		default:
+			elements = append(elements, fmt.Sprintf("{t: %d, v: %v}", PrimitiveType, v))
+		}
 	}
-	return fmt.Sprintf("{t: %d, v: [%s]}", ToType(y), strings.Join(elements, ", "))
+	return fmt.Sprintf("{t: %d, v: [%s]}", ArrayType, strings.Join(elements, ", "))
 }
 
 func (y Object) Marshal() string {
@@ -149,13 +123,21 @@ func (y Object) Marshal() string {
 
 	// Build pairs in sorted order
 	for _, key := range keys {
-		pairs = append(pairs, fmt.Sprintf("%s: %s", key, (y[key]).Marshal()))
+		value := y[key]
+		var marshaled string
+		switch v := value.(type) {
+		case Element:
+			marshaled = v.Marshal()
+		default:
+			marshaled = fmt.Sprintf("{t: %d, v: %v}", PrimitiveType, v)
+		}
+		pairs = append(pairs, fmt.Sprintf("%s: %s", key, marshaled))
 	}
-	return fmt.Sprintf("{t: %d, v: {%s}}", ToType(y), strings.Join(pairs, ", "))
+	return fmt.Sprintf("{t: %d, v: {%s}}", ObjectType, strings.Join(pairs, ", "))
 }
 
 func (y Tree) Marshal() string {
-	return fmt.Sprintf("{t: %d, v: %v}", ToType(y), y.Root)
+	return fmt.Sprintf("{t: %d, v: %v}", TreeType, y.Root)
 }
 
 func (y Text) Marshal() string {
@@ -163,7 +145,7 @@ func (y Text) Marshal() string {
 	for _, node := range y.Nodes {
 		nodes = append(nodes, fmt.Sprintf("{value: %v, attrs: %v}", node.Value, node.Attributes))
 	}
-	return fmt.Sprintf("{t: %d, v: [%s]}", ToType(y), strings.Join(nodes, ", "))
+	return fmt.Sprintf("{t: %d, v: [%s]}", TextType, strings.Join(nodes, ", "))
 }
 
 // TreeNode is a node of Tree.

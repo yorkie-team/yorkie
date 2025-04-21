@@ -17,7 +17,6 @@
 package yson_test
 
 import (
-	"fmt"
 	"testing"
 	gotime "time"
 
@@ -113,7 +112,7 @@ func TestYSONConversion(t *testing.T) {
 		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
 		newRoot, err := yson.FromCRDT(newDoc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, root.Marshal(), newRoot.Marshal())
+		assert.Equal(t, root.(yson.Object).Marshal(), newRoot.(yson.Object).Marshal())
 	})
 
 	t.Run("array with nested types test", func(t *testing.T) {
@@ -174,31 +173,19 @@ func TestYSONConversion(t *testing.T) {
 		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
 		newRoot, err := yson.FromCRDT(newDoc.RootObject())
 		assert.NoError(t, err)
-		assert.Equal(t, root.Marshal(), newRoot.Marshal())
+		assert.Equal(t, root.(yson.Object).Marshal(), newRoot.(yson.Object).Marshal())
 	})
 
 	t.Run("yson conversion test", func(t *testing.T) {
 		root := yson.Object{
 			"nested": yson.Array{
-				yson.Array{
-					yson.Primitive{
-						Type:  crdt.String,
-						Value: "nested1",
-					},
-					yson.Primitive{
-						Type:  crdt.Integer,
-						Value: int32(42),
-					},
-				},
+				yson.Array{"nested1", int32(42)},
 				yson.Object{
 					"counter": yson.Counter{
 						Type:  crdt.IntegerCnt,
 						Value: int32(10),
 					},
-					"key": yson.Primitive{
-						Type:  crdt.String,
-						Value: "value",
-					},
+					"key": "value",
 				},
 				yson.Text{
 					Nodes: []yson.TextNode{
@@ -244,27 +231,5 @@ func TestYSONConversion(t *testing.T) {
 		newRoot, err := yson.FromCRDT(doc.RootObject())
 		assert.NoError(t, err)
 		assert.Equal(t, root, newRoot)
-	})
-
-	t.Run("unsupported primitive type", func(t *testing.T) {
-		doc := document.New("unsupported-primitive")
-		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
-			defer func() {
-				r := recover()
-				assert.NotNil(t, r)
-				errStr := fmt.Sprintf("%v", r)
-				assert.Contains(t, errStr, "unsupported primitive type")
-			}()
-
-			r.SetYSON(yson.Object{
-				"key": yson.Primitive{
-					Type:  2000000,
-					Value: "value",
-				},
-			})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `{}`, doc.Marshal())
 	})
 }
