@@ -60,10 +60,24 @@ func toCounter(counter *crdt.Counter) (Counter, error) {
 		Value: counter.Value(),
 	}, nil
 }
+
 func toText(text *crdt.Text) Text {
-	return Text{
-		Value: text.Marshal(),
+	nodes := make([]TextNode, 0)
+	for _, node := range text.Nodes() {
+		if node.RemovedAt() != nil {
+			continue
+		}
+		value := node.Value()
+		attrs := make(map[string]string)
+		if value.Attrs() != nil {
+			attrs = value.Attrs().Elements()
+		}
+		nodes = append(nodes, TextNode{
+			Value:      value.Value(),
+			Attributes: attrs,
+		})
 	}
+	return Text{Nodes: nodes}
 }
 
 func toTree(crdtTree *crdt.Tree) Tree {

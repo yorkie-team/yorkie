@@ -71,10 +71,18 @@ type Tree struct {
 	Root TreeNode
 }
 
-// Text represents a text CRDT value.
-// TODO(hackerwins): Consider to use TextNode instead of string.
-type Text struct {
+// TextNode represents a text node in the tree.
+type TextNode struct {
+	// Value is the text content of this node.
 	Value string
+
+	// Attributes is the attributes of this node.
+	Attributes map[string]string
+}
+
+// Text represents a text CRDT value.
+type Text struct {
+	Nodes []TextNode
 }
 
 func (y Primitive) isElement() {}
@@ -151,7 +159,11 @@ func (y Tree) Marshal() string {
 }
 
 func (y Text) Marshal() string {
-	return fmt.Sprintf("{t: %d, v: %v}", ToType(y), y.Value)
+	var nodes []string
+	for _, node := range y.Nodes {
+		nodes = append(nodes, fmt.Sprintf("{value: %v, attrs: %v}", node.Value, node.Attributes))
+	}
+	return fmt.Sprintf("{t: %d, v: [%s]}", ToType(y), strings.Join(nodes, ", "))
 }
 
 // TreeNode is a node of Tree.

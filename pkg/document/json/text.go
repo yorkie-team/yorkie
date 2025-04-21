@@ -17,8 +17,6 @@
 package json
 
 import (
-	gojson "encoding/json"
-	"fmt"
 	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -110,28 +108,14 @@ func (p *Text) Edit(
 
 // EditFromYSON edits the given range with the given YSON.
 func (p *Text) EditFromYSON(j yson.Text) *Text {
-	type chunk struct {
-		Val   string            `json:"val"`
-		Attrs map[string]string `json:"attrs,omitempty"`
-	}
-
-	var chunks []chunk
-	if err := gojson.Unmarshal([]byte(j.Value), &chunks); err != nil {
-		panic(fmt.Errorf("failed to parse text JSON: %w", err))
-	}
-
 	pos := 0
-	for _, c := range chunks {
-		if c.Attrs != nil {
-			attrs := make(map[string]string)
-			for attrKey, attrValue := range c.Attrs {
-				attrs[attrKey] = attrValue
-			}
-			p.Edit(pos, pos, c.Val, attrs)
+	for _, node := range j.Nodes {
+		if node.Attributes != nil {
+			p.Edit(pos, pos, node.Value, node.Attributes)
 		} else {
-			p.Edit(pos, pos, c.Val)
+			p.Edit(pos, pos, node.Value)
 		}
-		pos += len(utf16.Encode([]rune(c.Val)))
+		pos += len(utf16.Encode([]rune(node.Value)))
 	}
 	return p
 }

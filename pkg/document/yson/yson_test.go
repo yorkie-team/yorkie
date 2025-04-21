@@ -74,8 +74,9 @@ func TestYSONConversion(t *testing.T) {
 			// rich text
 			r.SetNewText("k4").
 				Edit(0, 0, "Hello world", nil).
-				Edit(6, 11, "sky", nil).
-				Style(0, 5, map[string]string{"b": "1"})
+				Edit(6, 11, "sky", map[string]string{"color": "red"}).
+				Style(0, 5, map[string]string{"b": "1"}).
+				Style(6, 9, map[string]string{"color": "blue"})
 
 			// long counter
 			r.SetNewCounter("k5", crdt.LongCnt, 0).
@@ -94,7 +95,6 @@ func TestYSONConversion(t *testing.T) {
 						Value: "Hello world",
 					}},
 				}, 0)
-
 			return nil
 		})
 		assert.NoError(t, err)
@@ -201,7 +201,20 @@ func TestYSONConversion(t *testing.T) {
 					},
 				},
 				yson.Text{
-					Value: `[{"attrs":{"bold":"true"},"val":"Hello"},{"val":" World"}]`,
+					Nodes: []yson.TextNode{
+						{
+							Value: "Hello",
+							Attributes: map[string]string{
+								"style": "color: red",
+							},
+						},
+						{
+							Value: "World",
+							Attributes: map[string]string{
+								"style": "color: blue",
+							},
+						},
+					},
 				},
 				yson.Tree{
 					Root: json.TreeNode{
@@ -253,25 +266,5 @@ func TestYSONConversion(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{}`, doc.Marshal())
-	})
-
-	t.Run("invalid text JSON", func(t *testing.T) {
-		doc := document.New("invalid-json")
-		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
-			defer func() {
-				r := recover()
-				assert.NotNil(t, r)
-				errStr := fmt.Sprintf("%v", r)
-				assert.Contains(t, errStr, "failed to parse text JSON")
-			}()
-
-			text := r.SetNewText("text")
-			text.EditFromYSON(yson.Text{
-				Value: "invalid json",
-			})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `{"text":[]}`, doc.Marshal())
 	})
 }
