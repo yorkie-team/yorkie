@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
@@ -84,6 +85,21 @@ func (t *TextValue) toTestString() string {
 		t.attrs.Marshal(),
 		EscapeString(t.value),
 	)
+}
+
+func (t *TextValue) DataSize() resource.DataSize {
+	dataSize := resource.DataSize{
+		Data: len(t.value) * 2,
+		Meta: 0,
+	}
+
+	for _, node := range t.attrs.Nodes() {
+		size := node.DataSize()
+		dataSize.Data += size.Data
+		dataSize.Meta += size.Meta
+	}
+
+	return dataSize
 }
 
 // Split splits this value by the given offset.
@@ -169,6 +185,40 @@ func (t *Text) String() string {
 	}
 
 	return strings.Join(values, "")
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (t *Text) MetaSize() int {
+	size := 0
+	if t.createdAt != nil {
+		size += time.TicketSize
+	}
+	if t.movedAt != nil {
+		size += time.TicketSize
+	}
+	if t.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+// DataSize returns the data usage of this element.
+func (t *Text) DataSize() resource.DataSize {
+	dataSize := resource.DataSize{
+		Data: 0,
+		Meta: 0,
+	}
+
+	// traverse the nodes and calculate the size
+	for _, node := range t.Nodes() {
+		if node.createdAt().Compare(t.createdAt) != 0 && node.removedAt == nil {
+			size := node.DataSize()
+			dataSize.Data += size.Data
+			dataSize.Meta += size.Meta
+		}
+	}
+
+	return dataSize
 }
 
 // Marshal returns the JSON encoding of this Text.
