@@ -218,7 +218,10 @@ func (t *Text) DataSize() resource.DataSize {
 		}
 	}
 
-	return dataSize
+	return resource.DataSize{
+		Data: dataSize.Data,
+		Meta: dataSize.Meta + t.MetaSize(),
+	}
 }
 
 // Marshal returns the JSON encoding of this Text.

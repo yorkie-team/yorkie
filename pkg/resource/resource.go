@@ -18,8 +18,8 @@ package resource
 
 // DocSize represents the size of a document in bytes.
 type DocSize struct {
-	live DataSize
-	gc   DataSize
+	Live DataSize
+	GC   DataSize
 }
 
 // DataSize represents the size of a resource in bytes.
