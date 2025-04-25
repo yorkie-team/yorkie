@@ -285,30 +285,30 @@ func fromPresence(pbPresence *api.Presence) innerpresence.Presence {
 
 	data := pbPresence.GetData()
 	if data == nil {
-		data = innerpresence.NewPresence()
+		data = innerpresence.New()
 	}
 
 	return data
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.
-func FromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.PresenceChange {
+func FromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.Change {
 	if pbPresenceChange == nil {
 		return nil
 	}
 
-	var p innerpresence.PresenceChange
+	var p innerpresence.Change
 	switch pbPresenceChange.Type {
 	case api.PresenceChange_CHANGE_TYPE_PUT:
-		p = innerpresence.PresenceChange{
+		p = innerpresence.Change{
 			ChangeType: innerpresence.Put,
 			Presence:   pbPresenceChange.Presence.Data,
 		}
 		if p.Presence == nil {
-			p.Presence = innerpresence.NewPresence()
+			p.Presence = innerpresence.New()
 		}
 	case api.PresenceChange_CHANGE_TYPE_CLEAR:
-		p = innerpresence.PresenceChange{
+		p = innerpresence.Change{
 			ChangeType: innerpresence.Clear,
 			Presence:   nil,
 		}

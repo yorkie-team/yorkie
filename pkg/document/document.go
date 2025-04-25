@@ -161,7 +161,7 @@ func (d *Document) Update(
 
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
-		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.NewPresence())),
+		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.New())),
 	); err != nil {
 		// drop cloneRoot because it is contaminated.
 		d.cloneRoot = nil
