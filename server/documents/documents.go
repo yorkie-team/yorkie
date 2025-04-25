@@ -127,6 +127,7 @@ func GetDocumentSummary(
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
 		Snapshot:        doc.Marshal(),
+		DocSize:         doc.Root().DocSize(),
 	}, nil
 }
 

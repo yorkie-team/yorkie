@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // DocumentSummary represents a summary of document.
@@ -28,4 +29,7 @@ type DocumentSummary struct {
 
 	// AttachedClients is the count of clients attached to the document.
 	AttachedClients int
+
+	// DocSize represents the size of a document in bytes.
+	DocSize resource.DocSize
 }
