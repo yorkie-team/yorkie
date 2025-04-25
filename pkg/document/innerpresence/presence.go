@@ -85,28 +85,28 @@ func (m *Map) DeepCopy() *Map {
 	return copied
 }
 
-// PresenceChangeType represents the type of presence change.
-type PresenceChangeType string
+// ChangeType represents the type of presence change.
+type ChangeType string
 
 const (
 	// Put represents the presence is put.
-	Put PresenceChangeType = "put"
+	Put ChangeType = "put"
 
 	// Clear represents the presence is cleared.
-	Clear PresenceChangeType = "clear"
+	Clear ChangeType = "clear"
 )
 
-// PresenceChange represents the change of presence.
-type PresenceChange struct {
-	ChangeType PresenceChangeType
+// Change represents the change of presence.
+type Change struct {
+	ChangeType ChangeType
 	Presence   Presence
 }
 
 // Presence represents custom presence that can be defined by the client.
 type Presence map[string]string
 
-// NewPresence creates a new instance of Presence.
-func NewPresence() Presence {
+// New creates a new instance of Presence.
+func New() Presence {
 	return make(map[string]string)
 }
 

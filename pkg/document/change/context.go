@@ -32,7 +32,7 @@ type Context struct {
 	operations     []operations.Operation
 	delimiter      uint32
 	root           *crdt.Root
-	presenceChange *innerpresence.PresenceChange
+	presenceChange *innerpresence.Change
 }
 
 // NewContext creates a new instance of Context.
@@ -51,7 +51,12 @@ func (c *Context) ID() ID {
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	return New(c.id, c.message, c.operations, c.presenceChange)
+	id := c.id
+	if len(c.operations) == 0 {
+		id = c.id.DeepCopy(true)
+	}
+
+	return New(id, c.message, c.operations, c.presenceChange)
 }
 
 // HasChange returns whether this context has changes.
@@ -91,6 +96,6 @@ func (c *Context) LastTimeTicket() *time.Ticket {
 }
 
 // SetPresenceChange sets the presence change of the user who made the change.
-func (c *Context) SetPresenceChange(presenceChange innerpresence.PresenceChange) {
+func (c *Context) SetPresenceChange(presenceChange innerpresence.Change) {
 	c.presenceChange = &presenceChange
 }

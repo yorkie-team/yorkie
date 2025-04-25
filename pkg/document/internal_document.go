@@ -338,7 +338,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 // MyPresence returns the presence of the actor currently editing the document.
 func (d *InternalDocument) MyPresence() innerpresence.Presence {
 	if d.status != StatusAttached {
-		return innerpresence.NewPresence()
+		return innerpresence.New()
 	}
 	p := d.presences.Load(d.changeID.ActorID().String())
 	return p.DeepCopy()

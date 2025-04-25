@@ -128,7 +128,7 @@ func ToPresence(p innerpresence.Presence) *api.Presence {
 }
 
 // ToPresenceChange converts the given model to Protobuf format.
-func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
+func ToPresenceChange(p *innerpresence.Change) *api.PresenceChange {
 	if p == nil {
 		return nil
 	}
