@@ -33,8 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var deletionTestServer *server.Yorkie
-
 func BenchmarkDeletionConcurrency(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
@@ -44,61 +42,61 @@ func BenchmarkDeletionConcurrency(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	deletionTestServer = svr
 
-	defer func() {
+	b.Cleanup(func() {
 		if err := svr.Shutdown(true); err != nil {
-			logging.DefaultLogger().Error(err)
+			b.Fatal(err)
 		}
-	}()
+	})
+
 	// Multiple clients insert 100 characters (text); one deletes a 10-character range while other inserts single characters concurrently
 	b.Run("concurrent text delete range 100", func(b *testing.B) {
-		benchmarkConcurrentTextDeleteRange(100, 10, b)
+		benchmarkConcurrentTextDeleteRange(b, svr, 100, 10)
 	})
 
 	// Multiple clients insert 1,000 characters (text); one deletes a 10-character range while other inserts single characters concurrently
 	b.Run("concurrent text delete range 1000", func(b *testing.B) {
-		benchmarkConcurrentTextDeleteRange(1000, 10, b)
+		benchmarkConcurrentTextDeleteRange(b, svr, 1000, 10)
 	})
 
 	// Multiple clients insert 100 characters (tree); one deletes a 10-character range while other inserts single characters concurrently
 	b.Run("concurrent tree delete range 100", func(b *testing.B) {
-		benchmarkConcurrentTreeDeleteRange(100, 10, b)
+		benchmarkConcurrentTreeDeleteRange(b, svr, 100, 10)
 	})
 
 	// Multiple clients insert 1,000 characters (tree); one deletes a 10-character range while other inserts single characters concurrently
 	b.Run("concurrent tree delete range 1000", func(b *testing.B) {
-		benchmarkConcurrentTreeDeleteRange(1000, 10, b)
+		benchmarkConcurrentTreeDeleteRange(b, svr, 1000, 10)
 	})
 
 	// Multiple clients insert 100 characters (text); one client deletes everything at once
 	b.Run("concurrent text edit delete all 100", func(b *testing.B) {
-		benchmarkConcurrentTextDeleteAll(100, 10, b)
+		benchmarkConcurrentTextDeleteAll(b, svr, 100, 10)
 	})
 
 	// Multiple clients insert 1,000 characters (text); one client deletes everything at once
 	b.Run("concurrent text edit delete all 1000", func(b *testing.B) {
-		benchmarkConcurrentTextDeleteAll(1000, 10, b)
+		benchmarkConcurrentTextDeleteAll(b, svr, 1000, 10)
 	})
 
 	// Multiple clients insert 100 characters (tree); one client deletes everything at once
 	b.Run("concurrent tree edit delete all 100", func(b *testing.B) {
-		benchmarkConcurrentTreeDeleteAll(100, 10, b)
+		benchmarkConcurrentTreeDeleteAll(b, svr, 100, 10)
 	})
 
 	// Multiple clients insert 1,000 characters (tree); one client deletes everything at once
 	b.Run("concurrent tree edit delete all 1000", func(b *testing.B) {
-		benchmarkConcurrentTreeDeleteAll(1000, 10, b)
+		benchmarkConcurrentTreeDeleteAll(b, svr, 1000, 10)
 	})
 }
 
-func benchmarkConcurrentTextDeleteRange(cnt, clientCount int, b *testing.B) {
+func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
-		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, deletionTestServer.RPCAddr(), docKey, clientCount)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
 		assert.NoError(b, err)
 
 		// 2. Initialize the text
@@ -168,13 +166,13 @@ func benchmarkConcurrentTextDeleteRange(cnt, clientCount int, b *testing.B) {
 	}
 }
 
-func benchmarkConcurrentTreeDeleteRange(cnt, clientCount int, b *testing.B) {
+func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
-		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, deletionTestServer.RPCAddr(), docKey, clientCount)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
 		assert.NoError(b, err)
 
 		// 2. Initialize the tree
@@ -248,13 +246,13 @@ func benchmarkConcurrentTreeDeleteRange(cnt, clientCount int, b *testing.B) {
 	}
 }
 
-func benchmarkConcurrentTextDeleteAll(cnt, clientCount int, b *testing.B) {
+func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
-		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, deletionTestServer.RPCAddr(), docKey, clientCount)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
 		assert.NoError(b, err)
 
 		// 2. Initialize the text
@@ -306,13 +304,13 @@ func benchmarkConcurrentTextDeleteAll(cnt, clientCount int, b *testing.B) {
 	}
 }
 
-func benchmarkConcurrentTreeDeleteAll(cnt, clientCount int, b *testing.B) {
+func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
-		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, deletionTestServer.RPCAddr(), docKey, clientCount)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
 		assert.NoError(b, err)
 
 		// 2. Initialize the tree

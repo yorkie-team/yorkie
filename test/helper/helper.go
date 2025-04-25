@@ -632,6 +632,21 @@ func ClientsAndAttachedDocs(
 	return clients, docs, nil
 }
 
+// ActiveClients is a helper function to create n active clients.
+func ActiveClients(b *testing.B, rpcAddr string, n int) (clients []*client.Client) {
+	for range n {
+		c, err := client.Dial(
+			rpcAddr,
+			client.WithMaxRecvMsgSize(50*1024*1024),
+		)
+		assert.NoError(b, err)
+
+		assert.NoError(b, c.Activate(context.Background()))
+		clients = append(clients, c)
+	}
+	return
+}
+
 // CleanupClients is a helper function to clean up clients.
 func CleanupClients(b *testing.B, clients []*client.Client) {
 	for _, c := range clients {
