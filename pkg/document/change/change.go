@@ -36,18 +36,17 @@ type Change struct {
 	// operations represent a series of user edits.
 	operations []operations.Operation
 
-	// presenceChange represents the presenceChange of the user who made the change.
-	// TODO(hackerwins): Consider using changes instead of entire presenceChange.
+	// presenceChange is the change of presence information.
 	presenceChange *innerpresence.Change
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, p *innerpresence.Change) *Change {
+func New(id ID, message string, operations []operations.Operation, pc *innerpresence.Change) *Change {
 	return &Change{
 		id:             id,
 		message:        message,
 		operations:     operations,
-		presenceChange: p,
+		presenceChange: pc,
 	}
 }
 
@@ -60,11 +59,7 @@ func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
 	}
 
 	if c.presenceChange != nil {
-		if c.presenceChange.ChangeType == innerpresence.Clear {
-			presences.Delete(c.id.actorID.String())
-		} else {
-			presences.Store(c.id.actorID.String(), c.presenceChange.Presence)
-		}
+		c.presenceChange.Execute(c.id.actorID, presences)
 	}
 
 	return nil

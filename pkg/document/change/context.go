@@ -52,6 +52,12 @@ func (c *Context) ID() ID {
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
 	id := c.id
+
+	// NOTE(hackerwins): If this context was created only for presence change,
+	// we can use the ID without VersionVector that is used to detect the
+	// relationship between changes.
+	// TODO(hackerwins): Consider using only checkpoint of the ID for the
+	// presence change. For now, we just exclude only version vector from the ID.
 	if len(c.operations) == 0 {
 		id = c.id.DeepCopy(true)
 	}

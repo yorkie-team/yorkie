@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-// Package presence provides the proxy for the innerpresence.Presence to be manipulated from the outside.
-// TODO(hackerwins): Consider to remove this package. It is used to solve the problem of cyclic dependency
-// between pkg/document/presence and pkg/document/change.
+// Package presence provides the implementation of Presence.
 package presence
 
 import (
@@ -24,7 +22,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 )
 
-// Presence represents a proxy for the Presence to be manipulated from the outside.
+// Presence is a proxy for the innerpresence.Presence to be manipulated from the outside.
 type Presence struct {
 	context  *change.Context
 	presence innerpresence.Presence
