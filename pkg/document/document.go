@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
@@ -325,6 +326,11 @@ func (d *Document) Root() *json.Object {
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
 	return json.NewObject(ctx, d.cloneRoot.Object())
+}
+
+// DocSize returns the size of this document.
+func (d *Document) DocSize() resource.DocSize {
+	return d.doc.root.DocSize()
 }
 
 // GarbageCollect purge elements that were removed before the given time.

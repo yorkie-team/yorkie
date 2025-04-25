@@ -89,6 +89,7 @@ func ListDocumentSummaries(
 			}
 
 			summary.Snapshot = snapshot
+			summary.DocSize = doc.DocSize()
 		}
 
 		summaries = append(summaries, summary)
@@ -127,6 +128,7 @@ func GetDocumentSummary(
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
 		Snapshot:        doc.Marshal(),
+		DocSize:         doc.DocSize(),
 	}, nil
 }
 

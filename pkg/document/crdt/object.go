@@ -18,6 +18,7 @@ package crdt
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Object represents a JSON object, but unlike regular JSON, it has time
@@ -90,6 +91,29 @@ func (o *Object) Descendants(callback func(elem Element, parent Container) bool)
 		case *Array:
 			elem.Descendants(callback)
 		}
+	}
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (o *Object) MetaSize() int {
+	size := 0
+	if o.createdAt != nil {
+		size += time.TicketSize
+	}
+	if o.movedAt != nil {
+		size += time.TicketSize
+	}
+	if o.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+// DataSize returns the data usage of this element.
+func (o *Object) DataSize() resource.DataSize {
+	return resource.DataSize{
+		Data: 0,
+		Meta: o.MetaSize(),
 	}
 }
 

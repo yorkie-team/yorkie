@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ErrUnsupportedType is returned when the given type is not supported.
@@ -99,6 +100,35 @@ func (p *Counter) Bytes() ([]byte, error) {
 		return bytes[:], nil
 	default:
 		return nil, ErrUnsupportedType
+	}
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (p *Counter) MetaSize() int {
+	size := 0
+	if p.createdAt != nil {
+		size += time.TicketSize
+	}
+	if p.movedAt != nil {
+		size += time.TicketSize
+	}
+	if p.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+// DataSize returns the data usage of this element.
+func (p *Counter) DataSize() resource.DataSize {
+	size := 0
+	if p.valueType == IntegerCnt {
+		size = 4
+	} else if p.valueType == LongCnt {
+		size = 8
+	}
+	return resource.DataSize{
+		Data: size,
+		Meta: p.MetaSize(),
 	}
 }
 

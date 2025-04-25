@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // StatusType represents the status of the document.
@@ -256,6 +257,11 @@ func (d *InternalDocument) IsAttached() bool {
 // Root returns the root of this document.
 func (d *InternalDocument) Root() *crdt.Root {
 	return d.root
+}
+
+// DocSize returns the size of the document.
+func (d *InternalDocument) DocSize() resource.DocSize {
+	return d.root.DocSize()
 }
 
 // RootObject returns the root object.
