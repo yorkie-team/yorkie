@@ -198,7 +198,7 @@ func (p *Primitive) valueSize() int {
 	case Null:
 		return 8
 	case Boolean:
-		return 1
+		return 4
 	case Integer:
 		return 4
 	case Long:
