@@ -25,7 +25,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -34,18 +33,13 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func benchmarkSyncConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, concurrentCnt int, syncCnt int) {
+func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, concurrentCnt int, syncCnt int) {
 	ctx := context.Background()
-	docKey := key.Key(fmt.Sprintf("sync-concurrency-bench-%d-%d-%d", initialCnt, concurrentCnt, syncCnt))
+	docKey := key.Key(fmt.Sprintf("presence-concurrency-bench-%d-%d-%d-%d", initialCnt, concurrentCnt, syncCnt, b.N))
 
-	// 01. Create n clients and attach them to the document sequentially.
-	clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, initialCnt)
+	// 01. Prepare n clients and attach them to the document.
+	clients, _, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, initialCnt)
 	assert.NoError(b, err)
-	docs[0].Update(func(r *json.Object, p *presence.Presence) error {
-		r.SetNewObject("field")
-		return nil
-	})
-	assert.NoError(b, clients[0].Sync(ctx))
 	helper.CleanupClients(b, clients)
 
 	// 02. Then create new clients and attach them to the document concurrently.
@@ -56,22 +50,27 @@ func benchmarkSyncConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, 
 			defer wg.Done()
 
 			client, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
-			assert.NoError(b, err)
-
-			for range syncCnt {
-				doc.Update(func(r *json.Object, p *presence.Presence) error {
-					r.GetObject("field").SetBool("key", true)
-					return nil
-				})
-				assert.NoError(b, client.Sync(ctx))
+			if err != nil {
+				b.Logf("client and doc creation: %v", err)
+				return
 			}
+
+			assert.NoError(b, client.Sync(ctx))
+
+			for i := range syncCnt {
+				assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
+					p.Set("key", fmt.Sprintf("%d", i))
+					return nil
+				}))
+			}
+			assert.NoError(b, client.Sync(ctx))
 			assert.NoError(b, client.Close())
 		}()
 	}
 	wg.Wait()
 }
 
-func BenchmarkSyncConcurrency(b *testing.B) {
+func BenchmarkPresenceConcurrency(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
 	// NOTE(hackerwins): To prevent the snapshot from being created, we set
@@ -89,15 +88,15 @@ func BenchmarkSyncConcurrency(b *testing.B) {
 
 	b.ResetTimer()
 
-	b.Run("1-100-10", func(b *testing.B) {
-		benchmarkSyncConcurrency(b, svr, 1, 100, 10)
+	b.Run("0-100-10", func(b *testing.B) {
+		benchmarkPresenceConcurrency(b, svr, 0, 100, 10)
 	})
 
 	b.Run("100-100-10", func(b *testing.B) {
-		benchmarkSyncConcurrency(b, svr, 100, 100, 10)
+		benchmarkPresenceConcurrency(b, svr, 100, 100, 10)
 	})
 
-	b.Run("300_100-10", func(b *testing.B) {
-		benchmarkSyncConcurrency(b, svr, 300, 100, 10)
+	b.Run("300-100-10", func(b *testing.B) {
+		benchmarkPresenceConcurrency(b, svr, 300, 100, 10)
 	})
 }
