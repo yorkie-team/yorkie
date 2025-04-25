@@ -35,56 +35,48 @@ func TestDocumentSize(t *testing.T) {
 		doc := document.New("doc")
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNull("k0")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 8, Meta: 72})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetBool("k1", true)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 12, Meta: 120})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("k2", 2147483647)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 16, Meta: 168})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetLong("k3", math.MaxInt64)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 24, Meta: 216})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetDouble("k4", 1.79)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 32, Meta: 264})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k5", "4")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 34, Meta: 312})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetBytes("k6", []byte{65, 66})
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 36, Meta: 360})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetDate("k7", time.Now())
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 44, Meta: 408})
@@ -95,14 +87,12 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("arr")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 0, Meta: 72})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("arr").AddString("a")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 2, Meta: 96})
@@ -110,7 +100,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("arr").Delete(0)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 0, Meta: 72})
@@ -123,14 +112,12 @@ func TestDocumentSize(t *testing.T) {
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("num", 1)
 			root.SetString("str", "hello")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 14, Meta: 120})
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("num")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 10, Meta: 72})
@@ -142,7 +129,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 4, Meta: 72})
@@ -153,7 +139,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 0, Meta: 72})
@@ -161,7 +146,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(0, 0, "helloworld")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 20, Meta: 96})
@@ -169,7 +153,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(5, 5, " ")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 22, Meta: 144})
@@ -177,7 +160,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(6, 11, "")
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 12, Meta: 120})
@@ -185,7 +167,6 @@ func TestDocumentSize(t *testing.T) {
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Style(0, 5, map[string]string{"bold": "true"})
-
 			return nil
 		}))
 		assert.Equal(t, doc.DocSize().Live, resource.DataSize{Data: 28, Meta: 144})
