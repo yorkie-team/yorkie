@@ -153,7 +153,6 @@ func New(opts ...Option) (*Client, error) {
 	var clientOptions []connect.ClientOption
 	interceptor := NewAuthInterceptor(options.APIKey, options.Token)
 	clientOptions = append(clientOptions, connect.WithInterceptors(interceptor))
-	clientOptions = append(clientOptions, connect.WithSendGzip())
 	if options.MaxCallRecvMsgSize != 0 {
 		clientOptions = append(clientOptions, connect.WithReadMaxBytes(options.MaxCallRecvMsgSize))
 	}
