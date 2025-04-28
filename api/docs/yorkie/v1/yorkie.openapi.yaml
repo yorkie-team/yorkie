@@ -1,175 +1,176 @@
 openapi: 3.1.0
 info:
-  description: Yorkie is an open source document store for building collaborative
+  description:
+    Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.7
+  version: v0.6.8
 servers:
-- description: Production server
-  url: https://api.yorkie.dev
-- description: Local server
-  url: http://localhost:8080
+  - description: Production server
+    url: https://api.yorkie.dev
+  - description: Local server
+    url: http://localhost:8080
 paths:
   /yorkie.v1.YorkieService/ActivateClient:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/AttachDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/Broadcast:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/DeactivateClient:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/DetachDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/PushPullChanges:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/RemoveDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/WatchDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.YorkieService
+        - yorkie.v1.YorkieService
 components:
   requestBodies:
     yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientRequest'
+            $ref: "#/components/schemas/yorkie.v1.ActivateClientRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientRequest'
+            $ref: "#/components/schemas/yorkie.v1.ActivateClientRequest"
       required: true
     yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.AttachDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.AttachDocumentRequest"
       required: true
     yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequest'
+            $ref: "#/components/schemas/yorkie.v1.BroadcastRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequest'
+            $ref: "#/components/schemas/yorkie.v1.BroadcastRequest"
       required: true
     yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientRequest'
+            $ref: "#/components/schemas/yorkie.v1.DeactivateClientRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientRequest'
+            $ref: "#/components/schemas/yorkie.v1.DeactivateClientRequest"
       required: true
     yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.DetachDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.DetachDocumentRequest"
       required: true
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
+            $ref: "#/components/schemas/yorkie.v1.PushPullChangesRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
+            $ref: "#/components/schemas/yorkie.v1.PushPullChangesRequest"
       required: true
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentRequest"
       required: true
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest:
       content: {}
@@ -179,100 +180,100 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
         application/proto:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
       description: ""
     yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientResponse'
+            $ref: "#/components/schemas/yorkie.v1.ActivateClientResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ActivateClientResponse'
+            $ref: "#/components/schemas/yorkie.v1.ActivateClientResponse"
       description: ""
     yorkie.v1.YorkieService.AttachDocument.yorkie.v1.AttachDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.AttachDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.AttachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.AttachDocumentResponse"
       description: ""
     yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponse'
+            $ref: "#/components/schemas/yorkie.v1.BroadcastResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponse'
+            $ref: "#/components/schemas/yorkie.v1.BroadcastResponse"
       description: ""
     yorkie.v1.YorkieService.DeactivateClient.yorkie.v1.DeactivateClientResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientResponse'
+            $ref: "#/components/schemas/yorkie.v1.DeactivateClientResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DeactivateClientResponse'
+            $ref: "#/components/schemas/yorkie.v1.DeactivateClientResponse"
       description: ""
     yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.DetachDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.DetachDocumentResponse"
       description: ""
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
+            $ref: "#/components/schemas/yorkie.v1.PushPullChangesResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
+            $ref: "#/components/schemas/yorkie.v1.PushPullChangesResponse"
       description: ""
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.RemoveDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.RemoveDocumentResponse"
       description: ""
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse:
       description: ""
   schemas:
     connect.error:
       additionalProperties: false
-      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      description: "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
       properties:
         code:
           enum:
-          - CodeCanceled
-          - CodeUnknown
-          - CodeInvalidArgument
-          - CodeDeadlineExceeded
-          - CodeNotFound
-          - CodeAlreadyExists
-          - CodePermissionDenied
-          - CodeResourceExhausted
-          - CodeFailedPrecondition
-          - CodeAborted
-          - CodeOutOfRange
-          - CodeInternal
-          - CodeUnavailable
-          - CodeDataLoss
-          - CodeUnauthenticated
+            - CodeCanceled
+            - CodeUnknown
+            - CodeInvalidArgument
+            - CodeDeadlineExceeded
+            - CodeNotFound
+            - CodeAlreadyExists
+            - CodePermissionDenied
+            - CodeResourceExhausted
+            - CodeFailedPrecondition
+            - CodeAborted
+            - CodeOutOfRange
+            - CodeInternal
+            - CodeUnavailable
+            - CodeDataLoss
+            - CodeUnauthenticated
           examples:
-          - CodeNotFound
+            - CodeNotFound
           type: string
         message:
           type: string
@@ -326,7 +327,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -343,7 +344,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -392,7 +393,7 @@ components:
       description: ""
       properties:
         id:
-          $ref: '#/components/schemas/yorkie.v1.ChangeID'
+          $ref: "#/components/schemas/yorkie.v1.ChangeID"
           additionalProperties: false
           description: ""
           title: id
@@ -406,12 +407,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Operation'
+            $ref: "#/components/schemas/yorkie.v1.Operation"
             type: object
           title: operations
           type: array
         presenceChange:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange"
           additionalProperties: false
           description: ""
           title: presence_change
@@ -437,18 +438,18 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
         serverSeq:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -465,12 +466,12 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.Change'
+            $ref: "#/components/schemas/yorkie.v1.Change"
             type: object
           title: changes
           type: array
         checkpoint:
-          $ref: '#/components/schemas/yorkie.v1.Checkpoint'
+          $ref: "#/components/schemas/yorkie.v1.Checkpoint"
           additionalProperties: false
           description: ""
           title: checkpoint
@@ -486,7 +487,7 @@ components:
           title: is_removed
           type: boolean
         minSyncedTicket:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: min_synced_ticket
@@ -498,7 +499,7 @@ components:
           title: snapshot
           type: string
         versionVector:
-          $ref: '#/components/schemas/yorkie.v1.VersionVector'
+          $ref: "#/components/schemas/yorkie.v1.VersionVector"
           additionalProperties: false
           description: ""
           title: version_vector
@@ -518,8 +519,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: server_seq
       title: Checkpoint
       type: object
@@ -544,7 +545,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -571,7 +572,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -583,7 +584,7 @@ components:
       description: ""
       properties:
         body:
-          $ref: '#/components/schemas/yorkie.v1.DocEventBody'
+          $ref: "#/components/schemas/yorkie.v1.DocEventBody"
           additionalProperties: false
           description: ""
           title: body
@@ -594,7 +595,7 @@ components:
           title: publisher
           type: string
         type:
-          $ref: '#/components/schemas/yorkie.v1.DocEventType'
+          $ref: "#/components/schemas/yorkie.v1.DocEventType"
           additionalProperties: false
           description: ""
           title: type
@@ -620,14 +621,14 @@ components:
     yorkie.v1.DocEventType:
       description: ""
       enum:
-      - - DOC_EVENT_TYPE_DOCUMENT_CHANGED
-        - 0
-        - DOC_EVENT_TYPE_DOCUMENT_WATCHED
-        - 1
-        - DOC_EVENT_TYPE_DOCUMENT_UNWATCHED
-        - 2
-        - DOC_EVENT_TYPE_DOCUMENT_BROADCAST
-        - 3
+        - - DOC_EVENT_TYPE_DOCUMENT_CHANGED
+          - 0
+          - DOC_EVENT_TYPE_DOCUMENT_WATCHED
+          - 1
+          - DOC_EVENT_TYPE_DOCUMENT_UNWATCHED
+          - 2
+          - DOC_EVENT_TYPE_DOCUMENT_BROADCAST
+          - 3
       title: DocEventType
       type: string
     yorkie.v1.JSONElementSimple:
@@ -635,25 +636,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: moved_at
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.ValueType'
+          $ref: "#/components/schemas/yorkie.v1.ValueType"
           additionalProperties: false
           description: ""
           title: type
@@ -675,7 +676,7 @@ components:
           title: is_removed
           type: boolean
         updatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -692,67 +693,67 @@ components:
       description: ""
       properties:
         add:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Add'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Add"
           additionalProperties: false
           description: ""
           title: add
           type: object
         arraySet:
-          $ref: '#/components/schemas/yorkie.v1.Operation.ArraySet'
+          $ref: "#/components/schemas/yorkie.v1.Operation.ArraySet"
           additionalProperties: false
           description: ""
           title: array_set
           type: object
         edit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Edit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Edit"
           additionalProperties: false
           description: ""
           title: edit
           type: object
         increase:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Increase'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Increase"
           additionalProperties: false
           description: ""
           title: increase
           type: object
         move:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Move'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Move"
           additionalProperties: false
           description: ""
           title: move
           type: object
         remove:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Remove'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Remove"
           additionalProperties: false
           description: ""
           title: remove
           type: object
         select:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Select'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Select"
           additionalProperties: false
           description: ""
           title: select
           type: object
         set:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Set'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Set"
           additionalProperties: false
           description: ""
           title: set
           type: object
         style:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Style'
+          $ref: "#/components/schemas/yorkie.v1.Operation.Style"
           additionalProperties: false
           description: ""
           title: style
           type: object
         treeEdit:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeEdit'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeEdit"
           additionalProperties: false
           description: ""
           title: tree_edit
           type: object
         treeStyle:
-          $ref: '#/components/schemas/yorkie.v1.Operation.TreeStyle'
+          $ref: "#/components/schemas/yorkie.v1.Operation.TreeStyle"
           additionalProperties: false
           description: ""
           title: tree_style
@@ -764,25 +765,25 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -794,25 +795,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -839,25 +840,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -890,7 +891,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -902,19 +903,19 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -926,25 +927,25 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         prevCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: prev_created_at
@@ -956,19 +957,19 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -984,25 +985,25 @@ components:
          compatibility purposes.
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1014,7 +1015,7 @@ components:
       description: ""
       properties:
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
@@ -1025,13 +1026,13 @@ components:
           title: key
           type: string
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         value:
-          $ref: '#/components/schemas/yorkie.v1.JSONElementSimple'
+          $ref: "#/components/schemas/yorkie.v1.JSONElementSimple"
           additionalProperties: false
           description: ""
           title: value
@@ -1053,25 +1054,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          $ref: "#/components/schemas/yorkie.v1.TextNodePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1104,7 +1105,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1119,7 +1120,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNodes'
+            $ref: "#/components/schemas/yorkie.v1.TreeNodes"
             type: object
           title: contents
           type: array
@@ -1129,19 +1130,19 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
@@ -1152,7 +1153,7 @@ components:
           title: split_level
           type: integer
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1169,7 +1170,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1198,25 +1199,25 @@ components:
           title: created_at_map_by_actor
           type: object
         executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: executed_at
           type: object
         from:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: from
           type: object
         parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: parent_created_at
           type: object
         to:
-          $ref: '#/components/schemas/yorkie.v1.TreePos'
+          $ref: "#/components/schemas/yorkie.v1.TreePos"
           additionalProperties: false
           description: ""
           title: to
@@ -1249,7 +1250,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: value
@@ -1288,13 +1289,13 @@ components:
       description: ""
       properties:
         presence:
-          $ref: '#/components/schemas/yorkie.v1.Presence'
+          $ref: "#/components/schemas/yorkie.v1.Presence"
           additionalProperties: false
           description: ""
           title: presence
           type: object
         type:
-          $ref: '#/components/schemas/yorkie.v1.PresenceChange.ChangeType'
+          $ref: "#/components/schemas/yorkie.v1.PresenceChange.ChangeType"
           additionalProperties: false
           description: ""
           title: type
@@ -1303,14 +1304,14 @@ components:
     yorkie.v1.PresenceChange.ChangeType:
       description: ""
       enum:
-      - - CHANGE_TYPE_UNSPECIFIED
-        - 0
-        - CHANGE_TYPE_PUT
-        - 1
-        - CHANGE_TYPE_DELETE
-        - 2
-        - CHANGE_TYPE_CLEAR
-        - 3
+        - - CHANGE_TYPE_UNSPECIFIED
+          - 0
+          - CHANGE_TYPE_PUT
+          - 1
+          - CHANGE_TYPE_DELETE
+          - 2
+          - CHANGE_TYPE_CLEAR
+          - 3
       title: ChangeType
       type: string
     yorkie.v1.PushPullChangesRequest:
@@ -1318,7 +1319,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -1345,7 +1346,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -1357,7 +1358,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -1379,7 +1380,7 @@ components:
       description: ""
       properties:
         changePack:
-          $ref: '#/components/schemas/yorkie.v1.ChangePack'
+          $ref: "#/components/schemas/yorkie.v1.ChangePack"
           additionalProperties: false
           description: ""
           title: change_pack
@@ -1391,7 +1392,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1427,8 +1428,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: lamport
       title: TimeTicket
       type: object
@@ -1447,25 +1448,25 @@ components:
           title: depth
           type: integer
         id:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: id
           type: object
         insNextId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_next_id
           type: object
         insPrevId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: ins_prev_id
           type: object
         removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: removed_at
@@ -1492,7 +1493,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.NodeAttr'
+          $ref: "#/components/schemas/yorkie.v1.NodeAttr"
           additionalProperties: false
           description: ""
           title: value
@@ -1504,7 +1505,7 @@ components:
       description: ""
       properties:
         createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
           description: ""
           title: created_at
@@ -1524,7 +1525,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.TreeNode'
+            $ref: "#/components/schemas/yorkie.v1.TreeNode"
             type: object
           title: content
           type: array
@@ -1535,13 +1536,13 @@ components:
       description: ""
       properties:
         leftSiblingId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: left_sibling_id
           type: object
         parentId:
-          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          $ref: "#/components/schemas/yorkie.v1.TreeNodeID"
           additionalProperties: false
           description: ""
           title: parent_id
@@ -1551,34 +1552,34 @@ components:
     yorkie.v1.ValueType:
       description: ""
       enum:
-      - - VALUE_TYPE_NULL
-        - 0
-        - VALUE_TYPE_BOOLEAN
-        - 1
-        - VALUE_TYPE_INTEGER
-        - 2
-        - VALUE_TYPE_LONG
-        - 3
-        - VALUE_TYPE_DOUBLE
-        - 4
-        - VALUE_TYPE_STRING
-        - 5
-        - VALUE_TYPE_BYTES
-        - 6
-        - VALUE_TYPE_DATE
-        - 7
-        - VALUE_TYPE_JSON_OBJECT
-        - 8
-        - VALUE_TYPE_JSON_ARRAY
-        - 9
-        - VALUE_TYPE_TEXT
-        - 10
-        - VALUE_TYPE_INTEGER_CNT
-        - 11
-        - VALUE_TYPE_LONG_CNT
-        - 12
-        - VALUE_TYPE_TREE
-        - 13
+        - - VALUE_TYPE_NULL
+          - 0
+          - VALUE_TYPE_BOOLEAN
+          - 1
+          - VALUE_TYPE_INTEGER
+          - 2
+          - VALUE_TYPE_LONG
+          - 3
+          - VALUE_TYPE_DOUBLE
+          - 4
+          - VALUE_TYPE_STRING
+          - 5
+          - VALUE_TYPE_BYTES
+          - 6
+          - VALUE_TYPE_DATE
+          - 7
+          - VALUE_TYPE_JSON_OBJECT
+          - 8
+          - VALUE_TYPE_JSON_ARRAY
+          - 9
+          - VALUE_TYPE_TEXT
+          - 10
+          - VALUE_TYPE_INTEGER_CNT
+          - 11
+          - VALUE_TYPE_LONG_CNT
+          - 12
+          - VALUE_TYPE_TREE
+          - 13
       title: ValueType
       type: string
     yorkie.v1.VersionVector:
@@ -1605,8 +1606,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: value
       title: VectorEntry
       type: object
@@ -1631,13 +1632,13 @@ components:
       description: ""
       properties:
         event:
-          $ref: '#/components/schemas/yorkie.v1.DocEvent'
+          $ref: "#/components/schemas/yorkie.v1.DocEvent"
           additionalProperties: false
           description: ""
           title: event
           type: object
         initialization:
-          $ref: '#/components/schemas/yorkie.v1.WatchDocumentResponse.Initialization'
+          $ref: "#/components/schemas/yorkie.v1.WatchDocumentResponse.Initialization"
           additionalProperties: false
           description: ""
           title: initialization
@@ -1663,7 +1664,7 @@ components:
       name: Authorization
       type: apiKey
 security:
-- ApiKeyAuth: []
+  - ApiKeyAuth: []
 tags:
-- description: Yorkie is a service that provides an API for SDKs.
-  name: yorkie.v1.YorkieService
+  - description: Yorkie is a service that provides an API for SDKs.
+    name: yorkie.v1.YorkieService

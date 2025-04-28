@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.8] - 2025-04-28
+
+## Added
+
+- Improve MinVersionVector calculation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1240
+- Add presence concurrency benchmark by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1243
+- Add size tracking to CRDT elements Doc size by @raararaara in https://github.com/yorkie-team/yorkie/pull/1244
+
+## Changed
+
+- Revise benchmark code by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1245
+- Remove VersionVector from presence only change by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1246
+
 ## [0.6.7] - 2025-04-17
 
 ## Added
