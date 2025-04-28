@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"connectrpc.com/connect"
 
@@ -183,7 +182,7 @@ func (s *clusterServer) CompactDocument(
 	// 2. Build the final state of the current document
 	doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
 	if err != nil {
-		logging.DefaultLogger().Errorf("Document %s failed to apply changes: %v\n", docInfo.ID, err)
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
 		return nil, err
 	}
 
@@ -206,8 +205,8 @@ func (s *clusterServer) CompactDocument(
 	if err != nil {
 		return nil, err
 	}
-	if !reflect.DeepEqual(root, newRoot) {
-		logging.DefaultLogger().Errorf("Document %s content mismatch after rebuild\n", docInfo.ID)
+	if root.(yson.Object).Marshal() != newRoot.(yson.Object).Marshal() {
+		logging.DefaultLogger().Errorf("[CD] Document %s content mismatch after rebuild\n", docInfo.ID)
 		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
 	changes := newDoc.CreateChangePack().Changes
@@ -220,6 +219,8 @@ func (s *clusterServer) CompactDocument(
 		docInfo.ServerSeq,
 		changes,
 	)
+	logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
+		docInfo.ID, err, root.(yson.Object).Marshal())
 	if err != nil {
 		return nil, err
 	}
