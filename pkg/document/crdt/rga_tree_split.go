@@ -7,6 +7,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
@@ -22,6 +23,7 @@ type RGATreeSplitValue interface {
 	String() string
 	Marshal() string
 	toTestString() string
+	DataSize() resource.DataSize
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
@@ -212,6 +214,21 @@ func (s *RGATreeSplitNode[V]) Marshal() string {
 // String returns the string representation of this node.
 func (s *RGATreeSplitNode[V]) String() string {
 	return s.value.String()
+}
+
+// DataSize returns the data of this node.
+func (s *RGATreeSplitNode[V]) DataSize() resource.DataSize {
+	dataSize := s.value.DataSize()
+
+	if s.id != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	if s.removedAt != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	return dataSize
 }
 
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.

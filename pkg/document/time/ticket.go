@@ -29,6 +29,10 @@ const (
 
 	// MaxDelimiter is the maximum value stored in delimiter.
 	MaxDelimiter = math.MaxUint32
+
+	// TicketSize is the size of Ticket in bytes.
+	// lamport(int64) + delimiter(uint32) + actorID(12 bytes)
+	TicketSize = 8 + 4 + 12
 )
 
 var (

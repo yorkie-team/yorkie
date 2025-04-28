@@ -261,9 +261,9 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("empty presence converting test", func(t *testing.T) {
-		change := &innerpresence.PresenceChange{
+		change := &innerpresence.Change{
 			ChangeType: innerpresence.Put,
-			Presence:   innerpresence.NewPresence(),
+			Presence:   innerpresence.New(),
 		}
 
 		pbChange := converter.ToPresenceChange(change)

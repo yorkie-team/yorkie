@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
@@ -490,6 +491,39 @@ func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) []*RHTNode {
 	return n.Attrs.Remove(k, ticket)
 }
 
+func (n *TreeNode) DataSize() resource.DataSize {
+	dataSize := resource.DataSize{
+		Data: 0,
+		Meta: 0,
+	}
+
+	if n.IsText() {
+		dataSize.Data += n.Length() * 2
+	}
+
+	if n.id != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	if n.removedAt != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	if n.Attrs != nil {
+		for _, node := range n.Attrs.Nodes() {
+			if node.RemovedAt() != nil {
+				continue
+			}
+
+			size := node.DataSize()
+			dataSize.Data += size.Data
+			dataSize.Meta += size.Meta
+		}
+	}
+
+	return dataSize
+}
+
 // GCPairs returns the pairs of GC.
 func (n *TreeNode) GCPairs() []GCPair {
 	if n.Attrs == nil {
@@ -565,6 +599,43 @@ func (t *Tree) Purge(child GCChild) error {
 	node.InsNextID = nil
 
 	return nil
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (t *Tree) MetaSize() int {
+	size := 0
+	if t.createdAt != nil {
+		size += time.TicketSize
+	}
+	if t.movedAt != nil {
+		size += time.TicketSize
+	}
+	if t.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+// DataSize returns the data usage of this element.
+func (t *Tree) DataSize() resource.DataSize {
+	dataSize := resource.DataSize{
+		Data: 0,
+		Meta: 0,
+	}
+	for _, node := range t.Nodes() {
+		if node.IsRemoved() {
+			continue
+		}
+
+		size := node.DataSize()
+		dataSize.Data += size.Data
+		dataSize.Meta += size.Meta
+	}
+
+	return resource.DataSize{
+		Data: dataSize.Data,
+		Meta: dataSize.Meta + t.MetaSize(),
+	}
 }
 
 // marshal returns the JSON encoding of this Tree.

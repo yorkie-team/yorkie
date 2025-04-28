@@ -113,7 +113,7 @@ func (s *clusterServer) DetachDocument(
 		"",
 		nil,
 	)
-	p := presence.New(changeCtx, innerpresence.NewPresence())
+	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
 
 	changes := []*change.Change{changeCtx.ToChange()}

@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-// Package presence provides the proxy for the innerpresence.Presence to be manipulated from the outside.
-// TODO(hackerwins): Consider to remove this package. It is used to solve the problem of cyclic dependency
-// between pkg/document/presence and pkg/document/change.
+// Package presence provides the implementation of Presence.
 package presence
 
 import (
@@ -24,17 +22,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 )
 
-// Presence represents a proxy for the Presence to be manipulated from the outside.
+// Presence is a proxy for the innerpresence.Presence to be manipulated from the outside.
 type Presence struct {
-	presence innerpresence.Presence
 	context  *change.Context
+	presence innerpresence.Presence
 }
 
 // New creates a new instance of Presence.
 func New(ctx *change.Context, presence innerpresence.Presence) *Presence {
 	return &Presence{
-		presence: presence,
 		context:  ctx,
+		presence: presence,
 	}
 }
 
@@ -42,10 +40,10 @@ func New(ctx *change.Context, presence innerpresence.Presence) *Presence {
 func (p *Presence) Initialize(presence innerpresence.Presence) {
 	p.presence = presence
 	if p.presence == nil {
-		p.presence = innerpresence.NewPresence()
+		p.presence = innerpresence.New()
 	}
 
-	p.context.SetPresenceChange(innerpresence.PresenceChange{
+	p.context.SetPresenceChange(innerpresence.Change{
 		ChangeType: innerpresence.Put,
 		Presence:   p.presence,
 	})
@@ -56,7 +54,7 @@ func (p *Presence) Set(key string, value string) {
 	innerPresence := p.presence
 	innerPresence.Set(key, value)
 
-	p.context.SetPresenceChange(innerpresence.PresenceChange{
+	p.context.SetPresenceChange(innerpresence.Change{
 		ChangeType: innerpresence.Put,
 		Presence:   innerPresence,
 	})
@@ -67,7 +65,7 @@ func (p *Presence) Clear() {
 	innerPresence := p.presence
 	innerPresence.Clear()
 
-	p.context.SetPresenceChange(innerpresence.PresenceChange{
+	p.context.SetPresenceChange(innerpresence.Change{
 		ChangeType: innerpresence.Clear,
 	})
 }

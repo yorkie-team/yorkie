@@ -996,6 +996,19 @@ func (c *Client) GetDocumentsCount(
 	return count, nil
 }
 
+// GetClientsCount returns the number of active clients in the given project.
+func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	count, err := c.collection(ColClients).CountDocuments(ctx, bson.M{
+		"project_id": projectID,
+		StatusKey:    database.ClientActivated,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count clients: %w", err)
+	}
+
+	return count, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
@@ -1398,17 +1411,14 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 
 		c.vvCache.Add(docRefKey, infoMap)
 	}
+
 	vvMap, ok := c.vvCache.Get(docRefKey)
 	if !ok {
 		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
 
-	minVector := vector.DeepCopy()
-	for _, vv := range vvMap.Values() {
-		minVector.Min(&vv)
-	}
-
-	return minVector, nil
+	vectors := append(vvMap.Values(), vector)
+	return time.MinVersionVector(vectors...), nil
 }
 
 // UpdateVersionVector updates the given version vector of the given client

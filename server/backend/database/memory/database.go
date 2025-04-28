@@ -1005,7 +1005,33 @@ func (d *DB) GetDocumentsCount(
 	}
 
 	count := int64(0)
-	for iter.Next() != nil {
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.DocInfo).DeepCopy()
+		if !info.RemovedAt.IsZero() {
+			continue
+		}
+		count++
+	}
+
+	return count, nil
+}
+
+// GetClientsCount returns the number of active clients in the given project.
+func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return 0, fmt.Errorf("fetch clients: %w", err)
+	}
+
+	count := int64(0)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo).DeepCopy()
+		if info.Status != database.ClientActivated {
+			continue
+		}
 		count++
 	}
 
