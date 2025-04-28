@@ -276,7 +276,7 @@ func TestYSONMarshalUnmarshal(t *testing.T) {
 			nil,
 			true,
 			[]byte{1, 2, 3},
-			gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.Local),
+			gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC),
 			yson.Counter{
 				Type:  crdt.IntegerCnt,
 				Value: int32(32),
@@ -316,7 +316,7 @@ func TestYSONMarshalUnmarshal(t *testing.T) {
 			`{"t":0,"vt":0,"v":null},`+
 			`{"t":0,"vt":1,"v":true},`+
 			`{"t":0,"vt":6,"v":"AQID"},`+
-			`{"t":0,"vt":7,"v":"2025-01-02T15:04:05.058+09:00"},`+
+			`{"t":0,"vt":7,"v":"2025-01-02T15:04:05.058Z"},`+
 			`{"t":1,"vt":0,"v":32},`+
 			`{"t":1,"vt":1,"v":64},`+
 			`{"t":2,"v":[`+
@@ -345,13 +345,13 @@ func TestYSONMarshalUnmarshal(t *testing.T) {
 			"null":   nil,
 			"bool":   true,
 			"bytes":  []byte{1, 2, 3},
-			"date":   gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.Local),
+			"date":   gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC),
 		}
 		marshaled := obj.Marshal()
 		assert.Equal(t, `{"t":3,"v":{`+
 			`"bool":{"t":0,"vt":1,"v":true},`+
 			`"bytes":{"t":0,"vt":6,"v":"AQID"},`+
-			`"date":{"t":0,"vt":7,"v":"2025-01-02T15:04:05.058+09:00"},`+
+			`"date":{"t":0,"vt":7,"v":"2025-01-02T15:04:05.058Z"},`+
 			`"double":{"t":0,"vt":4,"v":1.23},`+
 			`"int":{"t":0,"vt":2,"v":32},`+
 			`"long":{"t":0,"vt":3,"v":64},`+
