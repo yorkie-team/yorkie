@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.9] - 2025-04-29
+
+## Added
+
+- Introduce Document Compaction by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1241
+
 ## [0.6.8] - 2025-04-28
 
 ## Added
