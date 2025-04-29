@@ -30,8 +30,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -320,4 +323,69 @@ func BuildInternalDocForServerSeq(
 	}
 
 	return doc, nil
+}
+
+// Compact compacts the given document and its metadata and stores them in the
+// database.
+func Compact(
+	ctx context.Context,
+	be *backend.Backend,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+) error {
+	// 1. Check if the document is attached.
+	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
+		ProjectID: projectID,
+		DocID:     docInfo.ID,
+	}, "")
+	if err != nil {
+		return err
+	}
+	if isAttached {
+		return fmt.Errorf("document is attached")
+	}
+
+	// 2. Build compacted changes and check if the content is the same.
+	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
+		return err
+	}
+
+	root, err := yson.FromCRDT(doc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	newDoc := document.New(docInfo.Key)
+	if err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	newRoot, err := yson.FromCRDT(newDoc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	if root.(yson.Object).Marshal() != newRoot.(yson.Object).Marshal() {
+		return fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
+	}
+
+	// 3. Store compacted changes and metadata in the database.
+	if err = be.DB.CompactChangeInfos(
+		ctx,
+		projectID,
+		docInfo,
+		docInfo.ServerSeq,
+		newDoc.CreateChangePack().Changes,
+	); err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
+			docInfo.ID, err, root.(yson.Object).Marshal())
+		return err
+	}
+
+	return nil
 }
