@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -27,8 +28,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -133,4 +136,94 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// CompactDocument compacts the given document.
+func (s *clusterServer) CompactDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
+) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
+	docId := types.ID(req.Msg.DocumentId)
+	projectId := types.ID(req.Msg.ProjectId)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	// 1. Check if the document is attached
+	isAttached, err := s.backend.DB.IsDocumentAttached(ctx, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	}, "")
+	if err != nil {
+		return nil, err
+	}
+	if isAttached {
+		return nil, fmt.Errorf("document is attached")
+	}
+
+	// 2. Build the final state of the current document
+	doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
+		return nil, err
+	}
+
+	// 3. Convert doc to root
+	root, err := yson.FromCRDT(doc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Build new document with yson and create changepack
+	newDoc := document.New(docInfo.Key)
+	err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	newRoot, err := yson.FromCRDT(newDoc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+	if root.(yson.Object).Marshal() != newRoot.(yson.Object).Marshal() {
+		logging.DefaultLogger().Errorf("[CD] Document %s content mismatch after rebuild\n", docInfo.ID)
+		return nil, fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
+	}
+	changes := newDoc.CreateChangePack().Changes
+
+	// 5. Store compacted changes and delete previous data
+	err = s.backend.DB.CompactChangeInfos(
+		ctx,
+		projectId,
+		docInfo,
+		docInfo.ServerSeq,
+		changes,
+	)
+	if err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
+			docInfo.ID, err, root.(yson.Object).Marshal())
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
 }

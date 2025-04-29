@@ -274,7 +274,7 @@ func TestConverter(t *testing.T) {
 	t.Run("properly encode and decode tree test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "r",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "12"}}},

@@ -178,7 +178,7 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 		// 2. Initialize the tree
 		clients[0].Sync(ctx)
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -316,7 +316,7 @@ func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 		// 2. Initialize the tree
 		clients[0].Sync(ctx)
 		err = docs[0].Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",

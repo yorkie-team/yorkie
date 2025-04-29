@@ -23,6 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
@@ -45,22 +46,7 @@ var (
 )
 
 // TreeNode is a node of Tree.
-type TreeNode struct {
-	// Type is the type of this node. It is used to distinguish between text
-	// nodes and element nodes.
-	Type string
-
-	// Children is the children of this node. It is used to represent the
-	// descendants of this node. If this node is a text node, it is nil.
-	Children []TreeNode
-
-	// Value is the value of text node. If this node is an element node, it is
-	// empty string.
-	Value string
-
-	// Attributes is the attributes of this node.
-	Attributes map[string]string
-}
+type TreeNode = yson.TreeNode
 
 // Tree is a CRDT-based tree structure that is used to represent the document
 // tree of text-based editor such as ProseMirror.

@@ -752,6 +752,49 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
+// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+func (d *DB) FindCompactionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	iterator, err := txn.Get(tblDocuments, "project_id", project.ID.String())
+	if err != nil {
+		return nil, fmt.Errorf("fetch documents: %w", err)
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.DocInfo)
+		if candidatesLimit <= len(infos) {
+			break
+		}
+
+		if !info.CompactedAt.IsZero() {
+			continue
+		}
+
+		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     info.ID,
+		}, "")
+		if err != nil {
+			return nil, err
+		}
+		if isAttached {
+			continue
+		}
+
+		if info.ProjectID == project.ID {
+			infos = append(infos, info)
+		}
+	}
+	return infos, nil
+}
+
 // FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
 func (d *DB) FindClientInfosByAttachedDocRefKey(
 	_ context.Context,
@@ -1070,6 +1113,93 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
+	return nil
+}
+
+// CompactChangeInfos stores the given compacted changes then updates the docInfo.
+func (d *DB) CompactChangeInfos(
+	_ context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	lastServerSeq int64,
+	changes []*change.Change,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// 6-1. Delete old changes
+	if _, err := txn.DeleteAll(tblChanges, "doc_id", docInfo.ID.String()); err != nil {
+		return fmt.Errorf("delete old changes: %w", err)
+	}
+
+	// 6-2. Delete all snapshots
+	if _, err := txn.DeleteAll(tblSnapshots, "doc_id", docInfo.ID.String()); err != nil {
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	// 6-3. Delete all version vectors
+	if _, err := txn.DeleteAll(
+		tblVersionVectors, "doc_id", docInfo.ID.String()); err != nil {
+		return fmt.Errorf("delete version vectors: %w", err)
+	}
+
+	// 6-4. Store compacted change and update document
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("find document: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+	}
+	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
+	if loadedDocInfo.ServerSeq != lastServerSeq {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+	}
+
+	if len(changes) == 0 {
+		loadedDocInfo.ServerSeq = 0
+	} else if len(changes) == 1 {
+		loadedDocInfo.ServerSeq = 1
+	} else {
+		return fmt.Errorf("invalid number of changes: %d", len(changes))
+	}
+
+	for _, cn := range changes {
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
+		if err != nil {
+			return err
+		}
+
+		if err := txn.Insert(tblChanges, &database.ChangeInfo{
+			ID:             newID(),
+			ProjectID:      docInfo.ProjectID,
+			DocID:          docInfo.ID,
+			ServerSeq:      loadedDocInfo.ServerSeq,
+			ClientSeq:      cn.ClientSeq(),
+			Lamport:        cn.ID().Lamport(),
+			ActorID:        types.ID(cn.ID().ActorID().String()),
+			VersionVector:  cn.ID().VersionVector(),
+			Message:        cn.Message(),
+			Operations:     encodedOperations,
+			PresenceChange: cn.PresenceChange(),
+		}); err != nil {
+			return fmt.Errorf("store change: %w", err)
+		}
+	}
+
+	// 6-5. Update document
+	now := gotime.Now()
+	loadedDocInfo.CompactedAt = now
+	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
+		return fmt.Errorf("update document: %w", err)
+	}
+
+	txn.Commit()
 	return nil
 }
 

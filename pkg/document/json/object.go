@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	gotime "time"
@@ -26,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Object represents an object in the document. As a proxy for the CRDT object,
@@ -48,6 +50,18 @@ func (p *Object) SetDynamicValue(k string, v any) {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		return toElement(p.context, buildCRDTElement(p.context, v, ticket, newBuildState()))
 	})
+}
+
+// SetYSON sets values from the given YSON.
+func (p *Object) SetYSON(value interface{}) {
+	yObj, ok := value.(yson.Object)
+	if !ok {
+		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
+	}
+
+	for k, v := range yObj {
+		p.SetYSONElement(k, v)
+	}
 }
 
 // SetNewObject sets a new Object for the given key.
@@ -103,11 +117,11 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 }
 
 // SetNewTree sets a new Tree for the given key.
-func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
+func (p *Object) SetNewTree(k string, initialRoot ...TreeNode) *Tree {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		var root *TreeNode
 		if len(initialRoot) > 0 {
-			root = initialRoot[0]
+			root = &initialRoot[0]
 		}
 		tree := NewTree(root)
 		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
@@ -217,6 +231,51 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 		return primitive
 	})
 
+	return p
+}
+
+// SetYSONElement sets the given YSON for the given key.
+func (p *Object) SetYSONElement(k string, v interface{}) *Object {
+	switch y := v.(type) {
+	case yson.Counter:
+		p.SetNewCounter(k, y.Type, y.Value)
+	case yson.Array:
+		arr := p.SetNewArray(k)
+		for _, elem := range y {
+			arr.AddYSON(elem)
+		}
+	case yson.Object:
+		o := p.SetNewObject(k)
+		for key, value := range y {
+			o.SetYSONElement(key, value)
+		}
+	case yson.Text:
+		text := p.SetNewText(k)
+		text.EditFromYSON(y)
+	case yson.Tree:
+		p.SetNewTree(k, y.Root)
+	default:
+		switch v := v.(type) {
+		case nil:
+			p.SetNull(k)
+		case bool:
+			p.SetBool(k, v)
+		case int32:
+			p.SetInteger(k, int(v))
+		case int64:
+			p.SetLong(k, v)
+		case float64:
+			p.SetDouble(k, v)
+		case string:
+			p.SetString(k, v)
+		case []byte:
+			p.SetBytes(k, v)
+		case gotime.Time:
+			p.SetDate(k, v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
+	}
 	return p
 }
 

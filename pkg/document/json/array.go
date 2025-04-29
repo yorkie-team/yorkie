@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"reflect"
 	gotime "time"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Array represents an array in the document. As a proxy for the CRDT array,
@@ -160,6 +162,93 @@ func (p *Array) AddNewArray() *Array {
 	})
 
 	return v.(*Array)
+}
+
+// AddNewCounter adds a new counter at the last.
+func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Counter {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		counter, err := crdt.NewCounter(valueType, value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return NewCounter(value, valueType).Initialize(p.context, counter)
+	})
+	return v.(*Counter)
+}
+
+// AddNewText adds a new text at the last.
+func (p *Array) AddNewText() *Text {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		text := NewText()
+		return text.Initialize(p.context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
+	})
+	return v.(*Text)
+}
+
+// AddNewTree adds a new tree at the last.
+func (p *Array) AddNewTree(initialRoot ...TreeNode) *Tree {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		var root TreeNode
+		if len(initialRoot) > 0 {
+			root = initialRoot[0]
+		}
+		tree := NewTree(&root)
+		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, &root, ticket), ticket))
+	})
+	return v.(*Tree)
+}
+
+// AddNewObject adds a new object at the last.
+func (p *Array) AddNewObject() *Object {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+	})
+	return v.(*Object)
+}
+
+// AddYSON adds the given YSON element to the array.
+func (p *Array) AddYSON(value interface{}) *Array {
+	switch y := value.(type) {
+	case yson.Counter:
+		p.AddNewCounter(y.Type, y.Value)
+	case yson.Array:
+		a := p.AddNewArray()
+		for _, elem := range y {
+			a.AddYSON(elem)
+		}
+	case yson.Object:
+		o := p.AddNewObject()
+		for key, value := range y {
+			o.SetYSONElement(key, value)
+		}
+	case yson.Text:
+		t := p.AddNewText()
+		t.EditFromYSON(y)
+	case yson.Tree:
+		p.AddNewTree(y.Root)
+	default:
+		switch v := y.(type) {
+		case nil:
+			p.AddNull()
+		case bool:
+			p.AddBool(v)
+		case int32:
+			p.AddInteger(int(v))
+		case int64:
+			p.AddLong(v)
+		case float64:
+			p.AddDouble(v)
+		case string:
+			p.AddString(v)
+		case []byte:
+			p.AddBytes(v)
+		case gotime.Time:
+			p.AddDate(v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
+	}
+	return p
 }
 
 // MoveBefore moves the given element to its new position before the given next element.

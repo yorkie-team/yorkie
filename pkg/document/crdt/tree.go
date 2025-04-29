@@ -150,6 +150,16 @@ type TreeNode struct {
 	Attrs *RHT
 }
 
+// Children returns the children of this node.
+func (n *TreeNode) Children() []*TreeNode {
+	children := n.Index.Children()
+	nodes := make([]*TreeNode, len(children))
+	for i, child := range children {
+		nodes[i] = child.Value
+	}
+	return nodes
+}
+
 // Type returns the type of the Node.
 func (n *TreeNode) Type() string {
 	return n.Index.Type

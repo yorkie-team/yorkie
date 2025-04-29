@@ -218,7 +218,7 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 
 	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &initialState)
+			root.SetNewTree("t", initialState)
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))

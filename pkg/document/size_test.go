@@ -177,7 +177,7 @@ func TestDocumentSize(t *testing.T) {
 		doc := document.New("doc")
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("tree", &json.TreeNode{
+			root.SetNewTree("tree", json.TreeNode{
 				Type:     "doc",
 				Children: []json.TreeNode{{Type: "p", Children: []json.TreeNode{}}},
 			})
