@@ -204,10 +204,10 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 }
 
 // BuildIndexTree builds an index tree from the given block node.
-func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
+func BuildIndexTree(node json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("test", *node)
+		root.SetNewTree("test", node)
 
 		return nil
 	})

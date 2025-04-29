@@ -1097,8 +1097,7 @@ func (c *Client) CompactChangeInfos(
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
-	// TODO(chacha912): We need to handle this operation atomically.
-	// 6-1. Delete old changes
+	// 1. Delete old changes
 	if _, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docInfo.ID,
@@ -1106,7 +1105,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("delete old changes: %w", err)
 	}
 
-	// 6-2. Delete all snapshots
+	// 2. Delete all snapshots
 	if _, err := c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docInfo.ID,
@@ -1114,7 +1113,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("delete snapshots: %w", err)
 	}
 
-	// 6-3. Delete all version vectors
+	// 3. Delete all version vectors
 	if _, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docInfo.ID,
@@ -1122,7 +1121,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("delete version vectors: %w", err)
 	}
 
-	// 6-4. Store compacted change and update document
+	// 4. Store compacted change and update document
 	loadedDocInfo := docInfo.DeepCopy()
 	if len(changes) == 0 {
 		loadedDocInfo.ServerSeq = 0
@@ -1154,7 +1153,7 @@ func (c *Client) CompactChangeInfos(
 		}
 	}
 
-	// 6-5. Update document
+	// 5. Update document
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
