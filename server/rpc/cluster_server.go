@@ -219,9 +219,9 @@ func (s *clusterServer) CompactDocument(
 		docInfo.ServerSeq,
 		changes,
 	)
-	logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
-		docInfo.ID, err, root.(yson.Object).Marshal())
 	if err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
+			docInfo.ID, err, root.(yson.Object).Marshal())
 		return nil, err
 	}
 
