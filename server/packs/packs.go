@@ -370,11 +370,20 @@ func Compact(
 		return err
 	}
 
-	if root.(yson.Object).Marshal() != newRoot.(yson.Object).Marshal() {
+	// 3. Check if the content is the same after rebuilding.
+	prevMarshalled, err := root.(yson.Object).Marshal()
+	if err != nil {
+		return err
+	}
+	newMarshalled, err := newRoot.(yson.Object).Marshal()
+	if err != nil {
+		return err
+	}
+	if prevMarshalled != newMarshalled {
 		return fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
 
-	// 3. Store compacted changes and metadata in the database.
+	// 4. Store compacted changes and metadata in the database.
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		projectID,
@@ -382,8 +391,10 @@ func Compact(
 		docInfo.ServerSeq,
 		newDoc.CreateChangePack().Changes,
 	); err != nil {
-		logging.DefaultLogger().Errorf("[CD] Document %s failed to compact: %v\n Root: %s\n",
-			docInfo.ID, err, root.(yson.Object).Marshal())
+		logging.DefaultLogger().Errorf(
+			"[CD] Document %s failed to compact: %v\n Root: %s\n",
+			docInfo.ID, err, prevMarshalled,
+		)
 		return err
 	}
 
