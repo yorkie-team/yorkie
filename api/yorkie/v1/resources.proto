@@ -342,6 +342,7 @@ message DocumentSummary {
   string key = 2;
   string snapshot = 3;
   int32 attached_clients = 7;
+  DocSize document_size = 8;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp accessed_at = 5;
   google.protobuf.Timestamp updated_at = 6;
@@ -412,4 +413,14 @@ message DocEvent {
   DocEventType type = 1;
   string publisher = 2;
   DocEventBody body = 3;
+}
+
+message DataSize {
+  int32 data = 1;
+  int32 meta = 2;
+}
+
+message DocSize {
+  DataSize live = 1;
+  DataSize gc = 2;
 }

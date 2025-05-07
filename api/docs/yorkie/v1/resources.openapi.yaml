@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.7
+  version: v0.6.9
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -309,6 +309,22 @@ components:
           title: server_seq
       title: Checkpoint
       type: object
+    yorkie.v1.DataSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: integer
+        meta:
+          additionalProperties: false
+          description: ""
+          title: meta
+          type: integer
+      title: DataSize
+      type: object
     yorkie.v1.DocEvent:
       additionalProperties: false
       description: ""
@@ -361,6 +377,24 @@ components:
           - 3
       title: DocEventType
       type: string
+    yorkie.v1.DocSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        gc:
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
+          additionalProperties: false
+          description: ""
+          title: gc
+          type: object
+        live:
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
+          additionalProperties: false
+          description: ""
+          title: live
+          type: object
+      title: DocSize
+      type: object
     yorkie.v1.DocumentSummary:
       additionalProperties: false
       description: ""
@@ -381,6 +415,12 @@ components:
           additionalProperties: false
           description: ""
           title: created_at
+          type: object
+        documentSize:
+          $ref: "#/components/schemas/yorkie.v1.DocSize"
+          additionalProperties: false
+          description: ""
+          title: document_size
           type: object
         id:
           additionalProperties: false

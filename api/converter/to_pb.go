@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ToUser converts the given model format to Protobuf format.
@@ -104,6 +105,7 @@ func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 		UpdatedAt:       timestamppb.New(summary.UpdatedAt),
 		Snapshot:        summary.Snapshot,
 		AttachedClients: int32(summary.AttachedClients),
+		DocumentSize:    ToDocSize(summary.DocSize),
 	}
 }
 
@@ -128,7 +130,7 @@ func ToPresence(p innerpresence.Presence) *api.Presence {
 }
 
 // ToPresenceChange converts the given model to Protobuf format.
-func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
+func ToPresenceChange(p *innerpresence.Change) *api.PresenceChange {
 	if p == nil {
 		return nil
 	}
@@ -224,6 +226,20 @@ func ToDocEventType(eventType events.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
+	}
+}
+
+func ToDataSize(dataSize resource.DataSize) *api.DataSize {
+	return &api.DataSize{
+		Data: int32(dataSize.Data),
+		Meta: int32(dataSize.Meta),
+	}
+}
+
+func ToDocSize(docSize resource.DocSize) *api.DocSize {
+	return &api.DocSize{
+		Live: ToDataSize(docSize.Live),
+		Gc:   ToDataSize(docSize.GC),
 	}
 }
 

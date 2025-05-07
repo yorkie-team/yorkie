@@ -228,7 +228,7 @@ func TestGarbageCollection(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p", Children: []json.TreeNode{{
@@ -308,7 +308,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p",
@@ -681,7 +681,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, true, checkVV(d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 2)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("tree", &json.TreeNode{
+			root.SetNewTree("tree", json.TreeNode{
 				Type: "r",
 				Children: []json.TreeNode{{
 					Type: "text", Value: "z",

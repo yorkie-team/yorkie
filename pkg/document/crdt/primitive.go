@@ -23,6 +23,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ValueType represents the type of Primitive value.
@@ -189,6 +190,52 @@ func (p *Primitive) Bytes() []byte {
 		return bytes[:]
 	default:
 		return nil
+	}
+}
+
+func (p *Primitive) valueSize() int {
+	switch p.valueType {
+	case Null:
+		return 8
+	case Boolean:
+		return 4
+	case Integer:
+		return 4
+	case Long:
+		return 8
+	case Double:
+		return 8
+	case String:
+		return len(p.value.(string)) * 2
+	case Bytes:
+		return len(p.value.([]byte))
+	case Date:
+		return 8
+	default:
+		_ = fmt.Errorf("unsupported type: %v", p.valueType)
+	}
+	return 0
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (p *Primitive) MetaSize() int {
+	size := 0
+	if p.createdAt != nil {
+		size += time.TicketSize
+	}
+	if p.movedAt != nil {
+		size += time.TicketSize
+	}
+	if p.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+func (p *Primitive) DataSize() resource.DataSize {
+	return resource.DataSize{
+		Data: p.valueSize(),
+		Meta: p.MetaSize(),
 	}
 }
 

@@ -198,7 +198,7 @@ func TestObject(t *testing.T) {
 			root.GetObject("obj").SetNewObject("obj").SetDouble("key3", 42.2)
 			root.GetObject("obj").SetNewCounter("cnt", crdt.LongCnt, 0)
 			root.GetObject("obj").SetNewText("txt")
-			root.GetObject("obj").SetNewTree("tree", &json.TreeNode{
+			root.GetObject("obj").SetNewTree("tree", json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
 					Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},

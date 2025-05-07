@@ -20,6 +20,7 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ErrChildNotFound is returned when the child is not found in the container.
@@ -61,4 +62,10 @@ type Element interface {
 
 	// Remove removes this element.
 	Remove(*time.Ticket) bool
+
+	// MetaSize returns the size of the metadata of this element.
+	MetaSize() int
+
+	// DataSize returns the data usage of this element.
+	DataSize() resource.DataSize
 }

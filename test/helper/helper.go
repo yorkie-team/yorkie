@@ -204,7 +204,7 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 }
 
 // BuildIndexTree builds an index tree from the given block node.
-func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
+func BuildIndexTree(node json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
@@ -222,7 +222,7 @@ func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("test", node)
+		root.SetNewTree("test", *node)
 
 		return nil
 	})
@@ -630,6 +630,21 @@ func ClientsAndAttachedDocs(
 		docs = append(docs, doc)
 	}
 	return clients, docs, nil
+}
+
+// ActiveClients is a helper function to create n active clients.
+func ActiveClients(b *testing.B, rpcAddr string, n int) (clients []*client.Client) {
+	for range n {
+		c, err := client.Dial(
+			rpcAddr,
+			client.WithMaxRecvMsgSize(50*1024*1024),
+		)
+		assert.NoError(b, err)
+
+		assert.NoError(b, c.Activate(context.Background()))
+		clients = append(clients, c)
+	}
+	return
 }
 
 // CleanupClients is a helper function to clean up clients.

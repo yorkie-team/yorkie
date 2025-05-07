@@ -180,3 +180,12 @@ func (id ID) VersionVector() time.VersionVector {
 func (id ID) AfterOrEqual(other ID) bool {
 	return id.versionVector.AfterOrEqual(other.versionVector)
 }
+
+// DeepCopy creates a deep copy of this ID.
+func (id ID) DeepCopy(excludeVersionVector bool) ID {
+	if excludeVersionVector {
+		return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, time.InitialVersionVector)
+	}
+
+	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, id.versionVector.DeepCopy())
+}

@@ -17,9 +17,12 @@
 package json
 
 import (
+	"unicode/utf16"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Text represents a text in the document. As a proxy for the CRDT
@@ -98,6 +101,20 @@ func (p *Text) Edit(
 		ticket,
 	))
 
+	return p
+}
+
+// EditFromYSON edits the given range with the given YSON.
+func (p *Text) EditFromYSON(j yson.Text) *Text {
+	pos := 0
+	for _, node := range j.Nodes {
+		if node.Attributes != nil {
+			p.Edit(pos, pos, node.Value, node.Attributes)
+		} else {
+			p.Edit(pos, pos, node.Value)
+		}
+		pos += len(utf16.Encode([]rune(node.Value)))
+	}
 	return p
 }
 
