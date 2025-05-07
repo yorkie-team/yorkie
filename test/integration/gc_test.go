@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -527,11 +528,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, true, checkVV(d1.VersionVector(), versionOf(d1.ActorID(), 1)))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"array": []interface{}{'a', 'b', 'c'},
-			}
-
-			root.SetNewObject("obj", json)
+			root.SetNewObject("obj", yson.ParseObject(`{"array":["a","b","c"]}`))
 			root.Delete("obj")
 			return nil
 		})

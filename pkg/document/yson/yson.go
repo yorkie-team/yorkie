@@ -525,16 +525,14 @@ func preprocessTypeValues(data string) (string, error) {
 
 	// Replace custom types with JSON-compatible formats in a specific order
 	replacements := []replacement{
-		// Handle empty constructors
+		// Process empty constructors first
 		{`Text()`, `{"type":"Text","value":[]}`},
 		{`Tree()`, `{"type":"Tree","value":{}}`},
 
-		// Process nested types from outer to inner
+		// Process constructors with values
 		{`Counter(`, `{"type":"Counter","value":`},
 		{`Text(`, `{"type":"Text","value":`},
 		{`Tree(`, `{"type":"Tree","value":`},
-
-		// Then handle inner types
 		{`Int(`, `{"type":"Int","value":`},
 		{`Long(`, `{"type":"Long","value":`},
 		{`BinData("`, `{"type":"BinData","value":"`},
@@ -560,4 +558,14 @@ func ParseArray(data string) Array {
 		panic("parse array" + err.Error())
 	}
 	return arr
+}
+
+// ParseObject parses a string representation of a YSON object into the
+// corresponding Object type.
+func ParseObject(data string) Object {
+	var obj Object
+	if err := Unmarshal(data, &obj); err != nil {
+		panic("parse object" + err.Error())
+	}
+	return obj
 }

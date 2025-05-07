@@ -64,23 +64,25 @@ func (p *Object) SetYSON(value interface{}) {
 	}
 }
 
-// SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string, v ...any) *Object {
+// SetNewObject sets a new Object for the given key. It accepts an optional
+// yson.Object that will be used to initialize the object.
+func (p *Object) SetNewObject(k string, v ...yson.Object) *Object {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		if len(v) == 0 {
-			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
-		}
-
-		if v[0] == nil || isJSONType(v[0]) || !(isStruct(v[0]) || isMapStringInterface(v[0])) {
-			panic("unsupported object type")
-		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 	})
+	obj := value.(*Object)
 
-	return value.(*Object)
+	if len(v) > 0 {
+		for k, v := range v[0] {
+			obj.SetYSONElement(k, v)
+		}
+	}
+
+	return obj
 }
 
-// SetNewArray sets a new Array for the given key.
+// SetNewArray sets a new Array for the given key. It accepts an optional
+// yson.Array that will be used to initialize the array.
 func (p *Object) SetNewArray(k string, v ...yson.Array) *Array {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
