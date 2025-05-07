@@ -1127,23 +1127,23 @@ func (d *DB) CompactChangeInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// 6-1. Delete old changes
+	// 1. Delete old changes
 	if _, err := txn.DeleteAll(tblChanges, "doc_id", docInfo.ID.String()); err != nil {
 		return fmt.Errorf("delete old changes: %w", err)
 	}
 
-	// 6-2. Delete all snapshots
+	// 2. Delete all snapshots
 	if _, err := txn.DeleteAll(tblSnapshots, "doc_id", docInfo.ID.String()); err != nil {
 		return fmt.Errorf("delete snapshots: %w", err)
 	}
 
-	// 6-3. Delete all version vectors
+	// 3. Delete all version vectors
 	if _, err := txn.DeleteAll(
 		tblVersionVectors, "doc_id", docInfo.ID.String()); err != nil {
 		return fmt.Errorf("delete version vectors: %w", err)
 	}
 
-	// 6-4. Store compacted change and update document
+	// 4. Store compacted change and update document
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
@@ -1192,7 +1192,7 @@ func (d *DB) CompactChangeInfos(
 		}
 	}
 
-	// 6-5. Update document
+	// 5. Update document
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {

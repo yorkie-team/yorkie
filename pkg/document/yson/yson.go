@@ -20,16 +20,14 @@
 package yson
 
 import (
-	"encoding/json"
+	"encoding/base64"
+	gojson "encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
-
 	"time"
-
-	"encoding/base64"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
@@ -38,6 +36,14 @@ var (
 	// ErrUnsupportedElement is returned when the given element is not
 	// supported yet.
 	ErrUnsupportedElement = errors.New("unsupported element")
+
+	// ErrInvalidTextNode is returned when the given text node is not
+	// valid.
+	ErrInvalidTextNode = errors.New("invalid text node")
+
+	// ErrInvalidTreeNode is returned when the given tree node is not
+	// valid.
+	ErrInvalidTreeNode = errors.New("invalid tree node")
 )
 
 // Element represents a serializable CRDT value.
@@ -47,10 +53,7 @@ type Element interface {
 	isElement()
 
 	// Marshal marshals the element into a string representation.
-	Marshal() string
-
-	// Unmarshal unmarshals the string representation back into the element.
-	Unmarshal(data string) error
+	Marshal() (string, error)
 }
 
 // Counter represents a counter CRDT value.
@@ -69,18 +72,18 @@ type Object map[string]interface{}
 type TreeNode struct {
 	// Type is the type of this node. It is used to distinguish between text
 	// nodes and element nodes.
-	Type string `json:"type,omitempty"`
+	Type string
 
 	// Children is the children of this node. It is used to represent the
 	// descendants of this node. If this node is a text node, it is nil.
-	Children []TreeNode `json:"children,omitempty"`
+	Children []TreeNode
 
 	// Value is the value of text node. If this node is an element node, it is
 	// empty string.
-	Value string `json:"value,omitempty"`
+	Value string
 
 	// Attributes is the attributes of this node.
-	Attributes map[string]string `json:"attributes,omitempty"`
+	Attributes map[string]string
 }
 
 // Tree represents a tree CRDT value.
@@ -91,10 +94,10 @@ type Tree struct {
 // TextNode represents a text node in the tree.
 type TextNode struct {
 	// Value is the text content of this node.
-	Value string `json:"val"`
+	Value string
 
 	// Attributes is the attributes of this node.
-	Attributes map[string]string `json:"attrs,omitempty"`
+	Attributes map[string]string
 }
 
 // Text represents a text CRDT value.
@@ -102,96 +105,47 @@ type Text struct {
 	Nodes []TextNode
 }
 
-func (y Counter) isElement() {}
-func (y Array) isElement()   {}
 func (y Object) isElement()  {}
-func (y Tree) isElement()    {}
+func (y Array) isElement()   {}
+func (y Counter) isElement() {}
 func (y Text) isElement()    {}
-
-type YSONType int
-
-const (
-	PrimitiveType YSONType = iota
-	CounterType
-	ArrayType
-	ObjectType
-	TreeType
-	TextType
-)
+func (y Tree) isElement()    {}
 
 // marshalElement marshals any element type
-func marshalElement(elem interface{}) string {
+func marshalElement(elem interface{}) (string, error) {
 	switch v := elem.(type) {
-	case Counter:
-		return v.Marshal()
-	case Array:
-		return v.Marshal()
-	case Object:
-		return v.Marshal()
-	case Tree:
-		return v.Marshal()
-	case Text:
+	case Element:
 		return v.Marshal()
 	default:
 		return marshalPrimitive(v)
 	}
 }
 
-func getPrimitiveValueType(v interface{}) crdt.ValueType {
-	switch v.(type) {
-	case nil:
-		return crdt.Null
-	case bool:
-		return crdt.Boolean
-	case int32:
-		return crdt.Integer
-	case int64:
-		return crdt.Long
-	case float64:
-		return crdt.Double
-	case string:
-		return crdt.String
-	case []byte:
-		return crdt.Bytes
-	case time.Time:
-		return crdt.Date
-	default:
-		return -1
-	}
-}
-
-func marshalPrimitive(v interface{}) string {
-	var val string
+func marshalPrimitive(v interface{}) (string, error) {
 	switch v := v.(type) {
 	case nil:
-		val = "null"
-	case bool, int32, int64, float64:
-		val = fmt.Sprintf("%v", v)
+		return "null", nil
+	case bool:
+		return fmt.Sprintf("%v", v), nil
+	case float64:
+		return fmt.Sprintf("%v", v), nil
 	case string:
-		val = strconv.Quote(v)
+		return strconv.Quote(v), nil
+	case int32:
+		return fmt.Sprintf("Int(%d)", v), nil
+	case int64:
+		return fmt.Sprintf("Long(%d)", v), nil
 	case []byte:
-		val = strconv.Quote(base64.StdEncoding.EncodeToString(v))
+		encoded := base64.StdEncoding.EncodeToString(v)
+		return fmt.Sprintf(`BinData("%s")`, encoded), nil
 	case time.Time:
-		val = strconv.Quote(v.Format(time.RFC3339Nano))
+		return fmt.Sprintf(`Date("%s")`, v.Format(time.RFC3339Nano)), nil
 	default:
-		val = strconv.Quote(fmt.Sprintf("%v", v))
+		return "", fmt.Errorf("unsupported type: %T", v)
 	}
-	return fmt.Sprintf(`{"t":%d,"vt":%d,"v":%s}`, PrimitiveType, getPrimitiveValueType(v), val)
 }
 
-func (y Counter) Marshal() string {
-	return fmt.Sprintf(`{"t":%d,"vt":%v,"v":%v}`, CounterType, y.Type, y.Value)
-}
-
-func (y Array) Marshal() string {
-	var elements []string
-	for _, elem := range y {
-		elements = append(elements, marshalElement(elem))
-	}
-	return fmt.Sprintf(`{"t":%d,"v":[%s]}`, ArrayType, strings.Join(elements, ","))
-}
-
-func (y Object) Marshal() string {
+func (y Object) Marshal() (string, error) {
 	var pairs []string
 	keys := make([]string, 0, len(y))
 	for k := range y {
@@ -200,411 +154,377 @@ func (y Object) Marshal() string {
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		pairs = append(pairs, fmt.Sprintf(`"%s":%s`, key, marshalElement(y[key])))
-	}
-	return fmt.Sprintf(`{"t":%d,"v":{%s}}`, ObjectType, strings.Join(pairs, ","))
-}
-
-func (node TreeNode) Marshal() string {
-	var parts []string
-
-	if node.Type != "" {
-		parts = append(parts, fmt.Sprintf(`"type":"%s"`, node.Type))
-	}
-
-	if node.Value != "" {
-		parts = append(parts, fmt.Sprintf(`"value":%s`, strconv.Quote(node.Value)))
-	}
-
-	if len(node.Children) > 0 {
-		var children []string
-		for _, child := range node.Children {
-			children = append(children, child.Marshal())
+		marshalled, err := marshalElement(y[key])
+		if err != nil {
+			return "", err
 		}
-		parts = append(parts, fmt.Sprintf(`"children":[%s]`, strings.Join(children, ",")))
-	}
 
-	if len(node.Attributes) > 0 {
-		attrs := make([]string, 0, len(node.Attributes))
-		for k, v := range node.Attributes {
-			attrs = append(attrs, fmt.Sprintf(`"%s":%s`, k, strconv.Quote(v)))
+		pairs = append(pairs, fmt.Sprintf(`"%s":%s`, key, marshalled))
+	}
+	return fmt.Sprintf("{%s}", strings.Join(pairs, ",")), nil
+}
+
+func (y Array) Marshal() (string, error) {
+	var elements []string
+	for _, elem := range y {
+		marshalled, err := marshalElement(elem)
+		if err != nil {
+			return "", err
 		}
-		sort.Strings(attrs)
-		parts = append(parts, fmt.Sprintf(`"attributes":{%s}`, strings.Join(attrs, ",")))
+
+		elements = append(elements, marshalled)
 	}
-
-	return fmt.Sprintf("{%s}", strings.Join(parts, ","))
+	return fmt.Sprintf("[%s]", strings.Join(elements, ",")), nil
 }
 
-func (y Tree) Marshal() string {
-	return fmt.Sprintf(`{"t":%d,"v":%s}`, TreeType, y.Root.Marshal())
+func (y Counter) Marshal() (string, error) {
+	switch y.Type {
+	case crdt.IntegerCnt:
+		return fmt.Sprintf("Counter(Int(%v))", y.Value), nil
+	case crdt.LongCnt:
+		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
+	default:
+		return "", fmt.Errorf("unsupported counter type: %v", y.Type)
+	}
 }
 
-func (y Text) Marshal() string {
+func (y Text) Marshal() (string, error) {
 	var nodes []string
 	for _, node := range y.Nodes {
-		if len(node.Attributes) > 0 {
-			attrs := make([]string, 0, len(node.Attributes))
-			for k, v := range node.Attributes {
-				attrs = append(attrs, fmt.Sprintf(`"%s":%s`, k, strconv.Quote(v)))
+		if len(node.Attributes) == 0 {
+			nodes = append(nodes, fmt.Sprintf(`{"val":%s}`, strconv.Quote(node.Value)))
+			continue
+		}
+
+		attrs := make([]string, 0, len(node.Attributes))
+		for k, v := range node.Attributes {
+			attrs = append(attrs, fmt.Sprintf(`%s:%s`, strconv.Quote(k), strconv.Quote(v)))
+		}
+		sort.Strings(attrs)
+		nodes = append(nodes, fmt.Sprintf(`{"val":%s,"attrs":{%s}}`, strconv.Quote(node.Value), strings.Join(attrs, ",")))
+	}
+	return fmt.Sprintf("Text([%s])", strings.Join(nodes, ",")), nil
+}
+
+func (y Tree) Marshal() (string, error) {
+	return fmt.Sprintf("Tree(%s)", y.Root.Marshal()), nil
+}
+
+func (n *TreeNode) Marshal() string {
+	if n.Type == "text" {
+		return fmt.Sprintf(`{"type":%s,"value":%s}`, strconv.Quote(n.Type), strconv.Quote(n.Value))
+	}
+
+	var children []string
+	for _, child := range n.Children {
+		children = append(children, child.Marshal())
+	}
+
+	if len(n.Attributes) == 0 {
+		return fmt.Sprintf(`{"type":%s,"children":[%s]}`, strconv.Quote(n.Type), strings.Join(children, ","))
+	}
+
+	var attrs []string
+	for k, v := range n.Attributes {
+		attrs = append(attrs, fmt.Sprintf(`%s:%s`, strconv.Quote(k), strconv.Quote(v)))
+	}
+	sort.Strings(attrs)
+	return fmt.Sprintf(`{"type":%s,"attrs":{%s},"children":[%s]}`,
+		strconv.Quote(n.Type), strings.Join(attrs, ","), strings.Join(children, ","))
+}
+
+// Unmarshal parses a string representation of a YSON element into the
+// corresponding Element type.
+func Unmarshal(data string, elem Element) error {
+	processedData, err := preprocessTypeValues(data)
+	if err != nil {
+		return err
+	}
+
+	// Parse the processed JSON data
+	var raw interface{}
+	if err := gojson.Unmarshal([]byte(processedData), &raw); err != nil {
+		return fmt.Errorf("unmarshal JSON: %w", err)
+	}
+
+	// Convert the raw data into the appropriate Element type
+	switch e := elem.(type) {
+	case *Array:
+		arr, ok := raw.([]interface{})
+		if !ok {
+			return fmt.Errorf("expected array, got %T", raw)
+		}
+		parsed, err := parseArray(arr)
+		if err != nil {
+			return err
+		}
+		*e = parsed
+	case *Object:
+		obj, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("expected object, got %T", raw)
+		}
+		parsed, err := parseObject(obj)
+		if err != nil {
+			return err
+		}
+		*e = parsed
+	case *Tree:
+		tree, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("expected tree, got %T", raw)
+		}
+
+		if v, ok := tree["value"].(map[string]interface{}); ok {
+			parsed, err := parseTree(v)
+			if err != nil {
+				return err
 			}
-			sort.Strings(attrs)
-			nodes = append(nodes, fmt.Sprintf(`{"val":%v,"attrs":{%s}}`, strconv.Quote(node.Value), strings.Join(attrs, ",")))
+			*e = parsed
 		} else {
-			nodes = append(nodes, fmt.Sprintf(`{"val":%v}`, strconv.Quote(node.Value)))
+			return fmt.Errorf("expected tree, got %T", raw)
 		}
-	}
-	return fmt.Sprintf(`{"t":%d,"v":[%s]}`, TextType, strings.Join(nodes, ","))
-}
-
-type jsonElement struct {
-	Type      int         `json:"t"`
-	Value     interface{} `json:"v"`
-	ValueType int         `json:"vt,omitempty"`
-}
-
-// parseJSONElement parses a map[string]interface{} into a jsonElement
-func parseJSONElement(elem map[string]interface{}) (jsonElement, error) {
-	typeVal, ok := elem["t"].(float64)
-	if !ok {
-		return jsonElement{}, fmt.Errorf("invalid Type: %v", elem["t"])
-	}
-	result := jsonElement{
-		Type:  int(typeVal),
-		Value: elem["v"],
-	}
-	if valueTypeVal, ok := elem["vt"]; ok {
-		valueTypeFloat, ok := valueTypeVal.(float64)
+	case *Text:
+		text, ok := raw.(map[string]interface{})
 		if !ok {
-			return jsonElement{}, fmt.Errorf("invalid ValueType: %v", valueTypeVal)
+			return fmt.Errorf("expected text, got %T", raw)
 		}
-		result.ValueType = int(valueTypeFloat)
-	}
-	return result, nil
-}
 
-// unmarshalYSON is a generic function that handles common YSON unmarshal logic
-func unmarshalYSON[T any](data string, expectedType YSONType) (T, error) {
-	var elem jsonElement
-	if err := json.Unmarshal([]byte(data), &elem); err != nil {
-		return *new(T), fmt.Errorf("invalid format: %w", err)
-	}
-	if YSONType(elem.Type) != expectedType {
-		return *new(T), fmt.Errorf("invalid type: expected %v, got %v", expectedType, elem.Type)
-	}
+		if v, ok := text["value"].([]interface{}); ok {
+			parsed, err := parseText(v)
+			if err != nil {
+				return err
+			}
+			*e = parsed
+		} else {
+			return fmt.Errorf("expected text, got %T", raw)
+		}
 
-	result, err := unmarshalYSONElement(elem)
-	if err != nil {
-		return *new(T), fmt.Errorf("failed to unmarshal: %w", err)
-	}
-
-	typedResult, ok := result.(T)
-	if !ok {
-		return *new(T), fmt.Errorf("type assertion failed: expected %T, got %T", *new(T), result)
-	}
-	return typedResult, nil
-}
-
-func (y *Counter) Unmarshal(data string) error {
-	counter, err := unmarshalYSON[Counter](data, CounterType)
-	if err != nil {
-		return err
-	}
-	*y = counter
-	return nil
-}
-
-func (y *Array) Unmarshal(data string) error {
-	arr, err := unmarshalYSON[Array](data, ArrayType)
-	if err != nil {
-		return err
-	}
-	*y = arr
-	return nil
-}
-
-func (y *Object) Unmarshal(data string) error {
-	obj, err := unmarshalYSON[Object](data, ObjectType)
-	if err != nil {
-		return err
-	}
-	*y = obj
-	return nil
-}
-
-func (y *Tree) Unmarshal(data string) error {
-	tree, err := unmarshalYSON[Tree](data, TreeType)
-	if err != nil {
-		return err
-	}
-	*y = tree
-	return nil
-}
-
-func (y *Text) Unmarshal(data string) error {
-	text, err := unmarshalYSON[Text](data, TextType)
-	if err != nil {
-		return err
-	}
-	*y = text
-	return nil
-}
-
-func unmarshalYSONElement(j jsonElement) (interface{}, error) {
-	switch YSONType(j.Type) {
-	case CounterType:
-		return unmarshalCounter(j)
-	case ArrayType:
-		return unmarshalArray(j)
-	case ObjectType:
-		return unmarshalObject(j)
-	case TreeType:
-		return unmarshalTree(j)
-	case TextType:
-		return unmarshalText(j)
-	case PrimitiveType:
-		return unmarshalPrimitive(j)
+	case *Counter:
+		counter, err := parseCounter(raw.(map[string]interface{}))
+		if err != nil {
+			return err
+		}
+		*e = counter
 	default:
-		return nil, fmt.Errorf("unsupported type: %d", j.Type)
+		return ErrUnsupportedElement
 	}
+
+	return nil
 }
 
-func unmarshalPrimitive(j jsonElement) (interface{}, error) {
-	switch crdt.ValueType(j.ValueType) {
-	case crdt.Null:
-		if j.Value != nil {
-			return nil, fmt.Errorf("invalid null value: %T", j.Value)
-		}
-		return nil, nil
-	case crdt.Boolean:
-		val, ok := j.Value.(bool)
-		if !ok {
-			return nil, fmt.Errorf("invalid boolean value: %T", j.Value)
-		}
-		return val, nil
-	case crdt.Integer:
-		val, ok := j.Value.(float64)
-		if !ok {
-			return nil, fmt.Errorf("invalid integer value: %T", j.Value)
-		}
-		return int32(val), nil
-	case crdt.Long:
-		val, ok := j.Value.(float64)
-		if !ok {
-			return nil, fmt.Errorf("invalid long value: %T", j.Value)
-		}
-		return int64(val), nil
-	case crdt.Double:
-		val, ok := j.Value.(float64)
-		if !ok {
-			return nil, fmt.Errorf("invalid double value: %T", j.Value)
-		}
-		return val, nil
-	case crdt.String:
-		val, ok := j.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid string value: %T", j.Value)
-		}
-		return val, nil
-	case crdt.Bytes:
-		val, ok := j.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid bytes value: %T", j.Value)
-		}
-		decoded, err := base64.StdEncoding.DecodeString(val)
-		if err != nil {
-			return nil, fmt.Errorf("invalid bytes value: %w", err)
-		}
-		return decoded, nil
-	case crdt.Date:
-		val, ok := j.Value.(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid date value: %T", j.Value)
-		}
-		t, err := time.Parse(time.RFC3339Nano, val)
-		if err != nil {
-			return nil, fmt.Errorf("invalid date value: %w", err)
-		}
-		return t, nil
-	default:
-		return nil, fmt.Errorf("unsupported primitive type: %v", j.ValueType)
-	}
-}
-
-func unmarshalCounter(j jsonElement) (Counter, error) {
-	counterType := crdt.CounterType(j.ValueType)
-	counterValue, ok := j.Value.(float64)
+func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
+	t, ok := raw["type"].(string)
 	if !ok {
-		return Counter{}, fmt.Errorf("invalid counter value: %T", j.Value)
+		return nil, ErrUnsupportedElement
 	}
-	switch counterType {
-	case crdt.IntegerCnt:
-		return Counter{
-			Type:  counterType,
-			Value: int32(counterValue),
-		}, nil
-	case crdt.LongCnt:
-		return Counter{
-			Type:  counterType,
-			Value: int64(counterValue),
-		}, nil
-	default:
-		return Counter{}, fmt.Errorf("unsupported counter type: %v", j.ValueType)
+
+	switch t {
+	case "Int":
+		return int32(raw["value"].(float64)), nil
+	case "Long":
+		return int64(raw["value"].(float64)), nil
+	case "BinData":
+		val, err := base64.StdEncoding.DecodeString(raw["value"].(string))
+		if err != nil {
+			return nil, fmt.Errorf("decode base64: %w", err)
+		}
+
+		return val, nil
+	case "Date":
+		val, err := time.Parse(time.RFC3339Nano, raw["value"].(string))
+		if err != nil {
+			return nil, fmt.Errorf("parse date: %w", err)
+		}
+
+		return val, nil
+	case "Counter":
+		return parseCounter(raw)
+	case "Tree":
+		if value, ok := raw["value"].(map[string]interface{}); ok {
+			return parseTree(value)
+		}
+
+		return nil, ErrInvalidTreeNode
+	case "Text":
+		if value, ok := raw["value"].([]interface{}); ok {
+			return parseText(value)
+		}
+		return nil, ErrInvalidTextNode
 	}
+
+	return nil, ErrUnsupportedElement
 }
 
-func unmarshalArray(j jsonElement) (Array, error) {
-	arrElem, ok := j.Value.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid array value: %T", j.Value)
-	}
-	arr := make(Array, len(arrElem))
-	for i, elem := range arrElem {
-		elemMap, ok := elem.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("invalid array element: %T", elem)
-		}
-		jsonElem, err := parseJSONElement(elemMap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal array: %w", err)
-		}
-		subVal, err := unmarshalYSONElement(jsonElem)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal array: %w", err)
-		}
-		arr[i] = subVal
-	}
-	return arr, nil
-}
+func parseObject(raw map[string]interface{}) (Object, error) {
+	obj := Object{}
+	for k, v := range raw {
+		switch v := v.(type) {
+		case map[string]interface{}:
+			if _, ok := v["type"].(string); ok {
+				val, err := parseTypedValue(v)
+				if err != nil {
+					return nil, err
+				}
 
-func unmarshalObject(j jsonElement) (Object, error) {
-	mapVal, ok := j.Value.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid object value: %T", j.Value)
-	}
-	obj := make(Object)
-	for k, v := range mapVal {
-		subMap, ok := v.(map[string]interface{})
-		if !ok {
-			return nil, fmt.Errorf("invalid object value for key %s: %T", k, v)
+				obj[k] = val
+			} else {
+				val, err := parseObject(v)
+				if err != nil {
+					return nil, err
+				}
+
+				obj[k] = val
+			}
+		case []interface{}:
+			val, err := parseArray(v)
+			if err != nil {
+				return nil, err
+			}
+
+			obj[k] = val
+		default:
+			obj[k] = v
 		}
-		jsonElem, err := parseJSONElement(subMap)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal object for key %s: %w", k, err)
-		}
-		subVal, err := unmarshalYSONElement(jsonElem)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal object for key %s: %w", k, err)
-		}
-		obj[k] = subVal
 	}
 	return obj, nil
 }
 
-func unmarshalTree(j jsonElement) (Tree, error) {
-	val, ok := j.Value.(map[string]interface{})
-	if !ok {
-		return Tree{}, fmt.Errorf("invalid tree value: %T", j.Value)
+// Helper functions to parse specific types
+func parseArray(raw []interface{}) (Array, error) {
+	var arr Array
+	for _, item := range raw {
+		switch v := item.(type) {
+		case map[string]interface{}:
+			if _, ok := v["type"].(string); ok {
+				val, err := parseTypedValue(v)
+				if err != nil {
+					return nil, err
+				}
+				arr = append(arr, val)
+			} else {
+				val, err := parseObject(v)
+				if err != nil {
+					return nil, err
+				}
+				arr = append(arr, val)
+			}
+		case []interface{}:
+			val, err := parseArray(v)
+			if err != nil {
+				return nil, err
+			}
+			arr = append(arr, val)
+		default:
+			arr = append(arr, v)
+		}
 	}
-	node, err := unmarshalTreeNode(val)
-	if err != nil {
-		return Tree{}, fmt.Errorf("failed to unmarshal tree node: %w", err)
-	}
-	return Tree{Root: node}, nil
+	return arr, nil
 }
 
-func unmarshalText(j jsonElement) (Text, error) {
-	val, ok := j.Value.([]interface{})
-	if !ok {
-		return Text{}, fmt.Errorf("invalid text value: %T", j.Value)
-	}
-	if len(val) == 0 {
-		return Text{}, nil
-	}
-	text := Text{
-		Nodes: make([]TextNode, len(val)),
-	}
-	for i, node := range val {
-		textNode, err := unmarshalTextNode(node)
-		if err != nil {
-			return Text{}, fmt.Errorf("failed to unmarshal text node: %w", err)
+func parseCounter(raw map[string]interface{}) (Counter, error) {
+	counter := Counter{}
+	if value, ok := raw["value"].(map[string]interface{}); ok {
+		if t, ok := value["type"].(string); ok {
+			switch t {
+			case "Int":
+				counter.Type = crdt.IntegerCnt
+				counter.Value = int32(value["value"].(float64))
+			case "Long":
+				counter.Type = crdt.LongCnt
+				counter.Value = int64(value["value"].(float64))
+			default:
+				return Counter{}, fmt.Errorf("unsupported counter type: %s", t)
+			}
+		} else {
+			return Counter{}, fmt.Errorf("missing counter type")
 		}
-		text.Nodes[i] = textNode
+	} else {
+		return Counter{}, fmt.Errorf("missing counter value")
+	}
+	return counter, nil
+}
+
+func parseText(raw []interface{}) (Text, error) {
+	var text Text
+
+	for _, node := range raw {
+		n := node.(map[string]interface{})
+		textNode := TextNode{}
+
+		if _, ok := n["val"].(string); !ok {
+			return text, errors.New("missing val field")
+		}
+
+		if attrs, ok := n["attrs"].(map[string]interface{}); ok {
+			textNode.Attributes = make(map[string]string)
+			for k, v := range attrs {
+				textNode.Attributes[k] = v.(string)
+			}
+		}
+
+		text.Nodes = append(text.Nodes, textNode)
 	}
 	return text, nil
 }
 
-func unmarshalTreeNode(val map[string]interface{}) (TreeNode, error) {
-	var node TreeNode
-
-	if typeStr, ok := val["type"].(string); ok {
-		node.Type = typeStr
+func parseTree(raw map[string]interface{}) (Tree, error) {
+	root, err := parseTreeNode(raw)
+	if err != nil {
+		return Tree{}, err
 	}
-	if value, ok := val["value"].(string); ok {
+
+	return Tree{Root: root}, nil
+}
+
+func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
+	node := TreeNode{
+		Type: raw["type"].(string),
+	}
+
+	if value, ok := raw["value"].(string); ok {
 		node.Value = value
 	}
-	if childrenRaw, ok := val["children"]; ok {
-		children, ok := childrenRaw.([]interface{})
-		if !ok {
-			return TreeNode{}, fmt.Errorf("invalid tree node format")
-		}
-		node.Children = make([]TreeNode, len(children))
-		for i, child := range children {
-			childMap, ok := child.(map[string]interface{})
-			if !ok {
-				return TreeNode{}, fmt.Errorf("invalid tree node format")
-			}
-			childNode, err := unmarshalTreeNode(childMap)
-			if err != nil {
-				return TreeNode{}, fmt.Errorf("failed to unmarshal child node: %w", err)
-			}
-			node.Children[i] = childNode
-		}
-	}
-	if attrsRaw, ok := val["attributes"]; ok {
-		attrs, ok := attrsRaw.(map[string]interface{})
-		if !ok {
-			return TreeNode{}, fmt.Errorf("invalid tree node format")
-		}
+
+	if attrs, ok := raw["attrs"].(map[string]interface{}); ok {
 		node.Attributes = make(map[string]string)
 		for k, v := range attrs {
-			str, ok := v.(string)
-			if !ok {
-				return TreeNode{}, fmt.Errorf("invalid tree node format")
-			}
-			node.Attributes[k] = str
+			node.Attributes[k] = v.(string)
 		}
 	}
+
+	if children, ok := raw["children"].([]interface{}); ok {
+		for _, child := range children {
+			childNode, err := parseTreeNode(child.(map[string]interface{}))
+			if err != nil {
+				return TreeNode{}, err
+			}
+
+			node.Children = append(node.Children, childNode)
+		}
+	}
+
 	return node, nil
 }
 
-func unmarshalTextNode(val interface{}) (TextNode, error) {
-	nodeMap, ok := val.(map[string]interface{})
-	if !ok {
-		return TextNode{}, fmt.Errorf("invalid text node format")
+// preprocessTypeValues replaces custom types in the YSON string with
+// JSON-compatible formats.
+func preprocessTypeValues(data string) (string, error) {
+	replacements := map[string]string{
+		`Int(`:      `{"type":"Int","value":`,
+		`Long(`:     `{"type":"Long","value":`,
+		`BinData("`: `{"type":"BinData","value":"`,
+		`Date("`:    `{"type":"Date","value":"`,
+		`Tree(`:     `{"type":"Tree","value":`,
+		`Text(`:     `{"type":"Text","value":`,
+		`Counter(`:  `{"type":"Counter","value":`,
+		`)`:         `}`,
 	}
 
-	value, ok := nodeMap["val"].(string)
-	if !ok {
-		return TextNode{}, fmt.Errorf("text node requires 'val' field of type string")
+	// Replace custom types with JSON-compatible formats
+	for old, new := range replacements {
+		data = strings.ReplaceAll(data, old, new)
 	}
 
-	node := TextNode{Value: value}
-
-	if attrsRaw, ok := nodeMap["attrs"]; ok {
-		attrs, ok := attrsRaw.(map[string]interface{})
-		if !ok {
-			return TextNode{}, fmt.Errorf("invalid text node format")
-		}
-		node.Attributes = make(map[string]string)
-		for k, v := range attrs {
-			str, ok := v.(string)
-			if !ok {
-				return TextNode{}, fmt.Errorf("invalid text node format")
-			}
-			node.Attributes[k] = str
-		}
-	}
-
-	return node, nil
+	return data, nil
 }

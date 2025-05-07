@@ -23,6 +23,26 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
+// FromCRDT converts a CRDT element to a YSON element.
+func FromCRDT(elem crdt.Element) (interface{}, error) {
+	switch elem := elem.(type) {
+	case *crdt.Object:
+		return toObject(elem)
+	case *crdt.Array:
+		return toArray(elem)
+	case *crdt.Primitive:
+		return toPrimitive(elem), nil
+	case *crdt.Counter:
+		return toCounter(elem)
+	case *crdt.Text:
+		return toText(elem), nil
+	case *crdt.Tree:
+		return toTree(elem), nil
+	default:
+		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+	}
+}
+
 func toObject(object *crdt.Object) (Object, error) {
 	fields := make(Object)
 	for key, elem := range object.Members() {
@@ -103,25 +123,5 @@ func toTree(crdtTree *crdt.Tree) Tree {
 
 	return Tree{
 		Root: root,
-	}
-}
-
-// FromCRDT converts a CRDT element to a YSON element.
-func FromCRDT(elem crdt.Element) (interface{}, error) {
-	switch elem := elem.(type) {
-	case *crdt.Object:
-		return toObject(elem)
-	case *crdt.Array:
-		return toArray(elem)
-	case *crdt.Primitive:
-		return toPrimitive(elem), nil
-	case *crdt.Counter:
-		return toCounter(elem)
-	case *crdt.Text:
-		return toText(elem), nil
-	case *crdt.Tree:
-		return toTree(elem), nil
-	default:
-		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
 }
