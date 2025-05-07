@@ -81,20 +81,19 @@ func (p *Object) SetNewObject(k string, v ...any) *Object {
 }
 
 // SetNewArray sets a new Array for the given key.
-func (p *Object) SetNewArray(k string, v ...any) *Array {
+func (p *Object) SetNewArray(k string, v ...yson.Array) *Array {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		elements := crdt.NewRGATreeList()
-		if len(v) == 0 {
-			return NewArray(p.context, crdt.NewArray(elements, ticket))
-		}
-
-		if v[0] == nil || !isArrayOrSlice(v[0]) {
-			panic("unsupported array type")
-		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
+		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
 	})
+	arr := value.(*Array)
 
-	return value.(*Array)
+	if len(v) > 0 {
+		for _, elem := range v[0] {
+			arr.AddYSON(elem)
+		}
+	}
+
+	return arr
 }
 
 // SetNewText sets a new Text for the given key.
@@ -573,9 +572,4 @@ func isJSONType(v any) bool {
 		reflect.TypeOf(v) != reflect.TypeOf(&Array{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(Object{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Object{}))
-}
-
-func isArrayOrSlice(v any) bool {
-	return reflect.TypeOf(v).Kind() == reflect.Slice ||
-		reflect.TypeOf(v).Kind() == reflect.Array
 }

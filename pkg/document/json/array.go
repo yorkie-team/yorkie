@@ -248,6 +248,7 @@ func (p *Array) AddYSON(value interface{}) *Array {
 			panic(fmt.Errorf("unsupported primitive type: %v", v))
 		}
 	}
+
 	return p
 }
 

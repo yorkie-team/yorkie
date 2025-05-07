@@ -435,5 +435,18 @@ func TestYSONMarshal(t *testing.T) {
 			})
 		}
 	})
+}
 
+func TestYSONParse(t *testing.T) {
+	t.Run("array parse test", func(t *testing.T) {
+		input := `[
+			Text(),
+			Tree()
+		]`
+
+		assert.Equal(t, yson.ParseArray(input), yson.Array{
+			yson.Text{},
+			yson.Tree{Root: yson.TreeNode{Type: yson.DefaultRootNodeType}},
+		})
+	})
 }
