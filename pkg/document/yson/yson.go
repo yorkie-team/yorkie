@@ -46,6 +46,11 @@ var (
 	ErrInvalidTreeNode = errors.New("invalid tree node")
 )
 
+const (
+	// DefaultRootNodeType is the default type of root node.
+	DefaultRootNodeType = "root"
+)
+
 // Element represents a serializable CRDT value.
 // It includes type information along with values, enabling
 // reconstruction of Document from serialized data.
@@ -478,8 +483,11 @@ func parseTree(raw map[string]interface{}) (Tree, error) {
 }
 
 func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
-	node := TreeNode{
-		Type: raw["type"].(string),
+	node := TreeNode{}
+	if value, ok := raw["type"].(string); ok {
+		node.Type = value
+	} else {
+		node.Type = DefaultRootNodeType
 	}
 
 	if value, ok := raw["value"].(string); ok {
@@ -510,21 +518,54 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 // preprocessTypeValues replaces custom types in the YSON string with
 // JSON-compatible formats.
 func preprocessTypeValues(data string) (string, error) {
-	replacements := map[string]string{
-		`Int(`:      `{"type":"Int","value":`,
-		`Long(`:     `{"type":"Long","value":`,
-		`BinData("`: `{"type":"BinData","value":"`,
-		`Date("`:    `{"type":"Date","value":"`,
-		`Tree(`:     `{"type":"Tree","value":`,
-		`Text(`:     `{"type":"Text","value":`,
-		`Counter(`:  `{"type":"Counter","value":`,
-		`)`:         `}`,
+	type replacement struct {
+		oldStr string
+		newStr string
+	}
+
+	// Replace custom types with JSON-compatible formats in a specific order
+	replacements := []replacement{
+		// Process empty constructors first
+		{`Text()`, `{"type":"Text","value":[]}`},
+		{`Tree()`, `{"type":"Tree","value":{}}`},
+
+		// Process constructors with values
+		{`Counter(`, `{"type":"Counter","value":`},
+		{`Text(`, `{"type":"Text","value":`},
+		{`Tree(`, `{"type":"Tree","value":`},
+		{`Int(`, `{"type":"Int","value":`},
+		{`Long(`, `{"type":"Long","value":`},
+		{`BinData("`, `{"type":"BinData","value":"`},
+		{`Date("`, `{"type":"Date","value":"`},
+
+		// Finally, handle closing parentheses
+		{`)`, `}`},
 	}
 
 	// Replace custom types with JSON-compatible formats
-	for old, new := range replacements {
-		data = strings.ReplaceAll(data, old, new)
+	for _, r := range replacements {
+		data = strings.ReplaceAll(data, r.oldStr, r.newStr)
 	}
 
 	return data, nil
+}
+
+// ParseArray parses a string representation of a YSON array into the
+// corresponding Array type.
+func ParseArray(data string) Array {
+	var arr Array
+	if err := Unmarshal(data, &arr); err != nil {
+		panic("parse array" + err.Error())
+	}
+	return arr
+}
+
+// ParseObject parses a string representation of a YSON object into the
+// corresponding Object type.
+func ParseObject(data string) Object {
+	var obj Object
+	if err := Unmarshal(data, &obj); err != nil {
+		panic("parse object" + err.Error())
+	}
+	return obj
 }

@@ -17,6 +17,7 @@
 package crdt
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -255,9 +256,8 @@ func (p *Primitive) Marshal() string {
 	case String:
 		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string)))
 	case Bytes:
-		// TODO: JSON.stringify({a: new Uint8Array([1,2]), b: 2})
-		// {"a":{"0":1,"1":2},"b":2}
-		return fmt.Sprintf(`"%s"`, p.value)
+		encoded := base64.StdEncoding.EncodeToString(p.value.([]byte))
+		return fmt.Sprintf(`"%s"`, encoded)
 	case Date:
 		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
 	default:

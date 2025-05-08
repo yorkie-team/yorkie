@@ -27,11 +27,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
-const (
-	// DefaultRootNodeType is the default type of root node.
-	DefaultRootNodeType = "root"
-)
-
 var (
 	// ErrEmptyTextNode is returned when there's empty string value in text node
 	ErrEmptyTextNode = errors.New("text node cannot have empty value")
@@ -367,7 +362,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 // node is nil, it creates a default root node.
 func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), DefaultRootNodeType, nil)
+		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), yson.DefaultRootNodeType, nil)
 	}
 
 	root := crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), node.Type, nil)
