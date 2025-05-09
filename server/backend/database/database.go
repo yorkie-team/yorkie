@@ -180,6 +180,7 @@ type Database interface {
 		ctx context.Context,
 		project *ProjectInfo,
 		candidatesLimit int,
+		compactionMinChanges int,
 	) ([]*DocInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.

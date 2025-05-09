@@ -30,6 +30,7 @@ func TestConfig(t *testing.T) {
 			Interval:                  "1m",
 			CandidatesLimitPerProject: 100,
 			ProjectFetchSize:          100,
+			CompactionMinChanges:      100,
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -44,5 +45,9 @@ func TestConfig(t *testing.T) {
 		conf3 := validConf
 		conf3.ProjectFetchSize = -1
 		assert.Error(t, conf3.Validate())
+
+		conf4 := validConf
+		conf4.CompactionMinChanges = 0
+		assert.Error(t, conf4.Validate())
 	})
 }

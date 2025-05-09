@@ -738,12 +738,10 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
+	compactMinChanges int,
 ) ([]*database.DocInfo, error) {
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": project.ID,
-		"compacted_at": bson.M{
-			"$exists": false,
-		},
 	}, options.Find().SetLimit(int64(candidatesLimit*2)))
 	if err != nil {
 		return nil, fmt.Errorf("find documents: %w", err)
@@ -764,6 +762,8 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		if candidatesLimit <= len(infos) {
 			break
 		}
+
+		// 1. Check if the document is attached to a client.
 		// TODO(chacha912): Resolve the N+1 problem.
 		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
 			ProjectID: project.ID,
@@ -775,6 +775,19 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		if isAttached {
 			continue
 		}
+
+		// 2. Check if the document has enough changes to compact.
+		count, err := c.collection(ColChanges).CountDocuments(ctx, bson.M{
+			"project_id": project.ID,
+			"doc_id":     info.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if count < int64(compactMinChanges) {
+			continue
+		}
+
 		infos = append(infos, &info)
 	}
 	if err := cursor.Err(); err != nil {

@@ -28,6 +28,7 @@ import (
 
 const (
 	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	compactionCandidatesKey = "housekeeping/compactionCandidates"
 )
 
 // DeactivateInactives deactivates clients that have not been active for a
@@ -88,10 +89,75 @@ func DeactivateInactives(
 	return lastProjectID, nil
 }
 
-// CandidatePair represents a pair of Project and Client.
-type CandidatePair struct {
+// CompactDocuments compacts documents by removing old changes and creating
+// a new initial change.
+func CompactDocuments(
+	ctx context.Context,
+	be *backend.Backend,
+	candidatesLimitPerProject int,
+	projectFetchSize int,
+	compactionMinChanges int,
+	lastCompactionProjectID types.ID,
+) (types.ID, error) {
+	start := time.Now()
+
+	locker, err := be.Locker.NewLocker(ctx, compactionCandidatesKey)
+	if err != nil {
+		return database.DefaultProjectID, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return database.DefaultProjectID, err
+	}
+
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}()
+
+	lastProjectID, candidates, err := FindCompactionCandidates(
+		ctx,
+		be,
+		candidatesLimitPerProject,
+		projectFetchSize,
+		compactionMinChanges,
+		lastCompactionProjectID,
+	)
+	if err != nil {
+		return database.DefaultProjectID, err
+	}
+
+	compactedCount := 0
+	for _, pair := range candidates {
+		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
+			continue
+		}
+		compactedCount++
+	}
+
+	if len(candidates) > 0 {
+		logging.From(ctx).Infof(
+			"HSKP: candidates %d, compacted %d, %s",
+			len(candidates),
+			compactedCount,
+			time.Since(start),
+		)
+	}
+
+	return lastProjectID, nil
+}
+
+// ClientCandidatePair represents a pair of Project and Client.
+type ClientCandidatePair struct {
 	Project *database.ProjectInfo
 	Client  *database.ClientInfo
+}
+
+// DocumentCandidatePair represents a pair of Project and Document.
+type DocumentCandidatePair struct {
+	Project  *database.ProjectInfo
+	Document *database.DocInfo
 }
 
 // FindDeactivateCandidates finds candidates to deactivate from the database.
@@ -101,13 +167,13 @@ func FindDeactivateCandidates(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
-) (types.ID, []CandidatePair, error) {
+) (types.ID, []ClientCandidatePair, error) {
 	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
-	var candidates []CandidatePair
+	var candidates []ClientCandidatePair
 	for _, projectInfo := range projectInfos {
 		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
 		if err != nil {
@@ -115,7 +181,7 @@ func FindDeactivateCandidates(
 		}
 
 		for _, info := range infos {
-			candidates = append(candidates, CandidatePair{
+			candidates = append(candidates, ClientCandidatePair{
 				Project: projectInfo,
 				Client:  info,
 			})
@@ -132,34 +198,29 @@ func FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
-// CompactionCandidatePair represents a pair of Project and Document.
-type CompactionCandidatePair struct {
-	Project  *database.ProjectInfo
-	Document *database.DocInfo
-}
-
 // FindCompactionCandidates finds candidates to compact from the database.
 func FindCompactionCandidates(
 	ctx context.Context,
 	be *backend.Backend,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
+	compactionMinChanges int,
 	lastProjectID types.ID,
-) (types.ID, []CompactionCandidatePair, error) {
+) (types.ID, []DocumentCandidatePair, error) {
 	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
-	var candidates []CompactionCandidatePair
+	var candidates []DocumentCandidatePair
 	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindCompactionCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
+		infos, err := be.DB.FindCompactionCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject, compactionMinChanges)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
 
 		for _, info := range infos {
-			candidates = append(candidates, CompactionCandidatePair{
+			candidates = append(candidates, DocumentCandidatePair{
 				Project:  projectInfo,
 				Document: info,
 			})

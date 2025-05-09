@@ -318,6 +318,12 @@ func init() {
 		server.DefaultHousekeepingProjectFetchSize,
 		"housekeeping project fetch size for a single housekeeping run",
 	)
+	cmd.Flags().IntVar(
+		&conf.Housekeeping.CompactionMinChanges,
+		"housekeeping-compaction-min-changes",
+		server.DefaultHousekeepingCompactionMinChanges,
+		"minimum number of changes to compact a document for housekeeping run",
+	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,
 		"mongo-connection-uri",
