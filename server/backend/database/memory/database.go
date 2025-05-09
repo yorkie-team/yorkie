@@ -1614,46 +1614,6 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-func (d *DB) findTicketByServerSeq(
-	txn *memdb.Txn,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	raw, err := txn.First(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		serverSeq,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf(
-			"docID %s, serverSeq %d: %w",
-			docRefKey.DocID,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
-	}
-
-	changeInfo := raw.(*database.ChangeInfo)
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
-}
-
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }

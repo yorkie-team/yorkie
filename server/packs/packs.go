@@ -149,12 +149,6 @@ func PushPull(
 		respPack.VersionVector = minSyncedVersionVector
 	}
 
-	// TODO(hackerwins): This is a previous implementation before the version
-	// vector was introduced. But it is necessary to support the previous
-	// SDKs that do not support the version vector. This code should be removed
-	// after all SDKs are updated.
-	respPack.MinSyncedTicket = time.InitialTicket
-
 	respPack.ApplyDocInfo(docInfo)
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
