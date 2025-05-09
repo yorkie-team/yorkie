@@ -110,23 +110,3 @@ func FindActiveClientInfo(
 
 	return info, nil
 }
-
-// CompactDocument compacts the given document.
-func CompactDocument(
-	ctx context.Context,
-	be *backend.Backend,
-	project *types.Project,
-	document *database.DocInfo,
-) error {
-	cli, err := cluster.Dial(be.Config.GatewayAddr)
-	if err != nil {
-		return err
-	}
-	defer cli.Close()
-
-	if err := cli.CompactDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
-}
