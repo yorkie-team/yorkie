@@ -738,7 +738,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
-	compactMinChanges int,
+	compactionMinChanges int,
 ) ([]*database.DocInfo, error) {
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": project.ID,
@@ -784,7 +784,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		if err != nil {
 			return nil, err
 		}
-		if count < int64(compactMinChanges) {
+		if count < int64(compactionMinChanges) {
 			continue
 		}
 
@@ -1572,49 +1572,6 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	return true, nil
-}
-
-func (c *Client) findTicketByServerSeq(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": serverSeq,
-	})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf(
-			"change %s serverSeq=%d: %w",
-			docRefKey,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find change: %w", result.Err())
-	}
-
-	changeInfo := database.ChangeInfo{}
-	if err := result.Decode(&changeInfo); err != nil {
-		return nil, fmt.Errorf("decode change: %w", err)
-	}
-
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
 }
 
 func (c *Client) collection(

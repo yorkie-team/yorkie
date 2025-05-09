@@ -27,11 +27,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
-const (
-	// DefaultRootNodeType is the default type of root node.
-	DefaultRootNodeType = "root"
-)
-
 var (
 	// ErrEmptyTextNode is returned when there's empty string value in text node
 	ErrEmptyTextNode = errors.New("text node cannot have empty value")
@@ -207,7 +202,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil, nil)
+	pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -220,7 +215,6 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))
@@ -248,7 +242,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil, nil)
+	pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -261,7 +255,6 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		attributesToRemove,
 		ticket,
 	))
@@ -332,14 +325,13 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.Edit(
+	pairs, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
 		splitLevel,
 		ticket,
 		t.context.IssueTimeTicket,
-		nil,
 		nil,
 	)
 	if err != nil {
@@ -356,7 +348,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		toPos,
 		nodes,
 		splitLevel,
-		maxCreationMapByActor,
 		ticket,
 	))
 
@@ -367,7 +358,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 // node is nil, it creates a default root node.
 func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), DefaultRootNodeType, nil)
+		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), yson.DefaultRootNodeType, nil)
 	}
 
 	root := crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), node.Type, nil)

@@ -22,6 +22,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Option configures Options.
@@ -93,7 +94,7 @@ type AttachOption func(*AttachOptions)
 type AttachOptions struct {
 	// Presence is the presence of the client.
 	Presence    innerpresence.Presence
-	InitialRoot map[string]any
+	InitialRoot yson.Object
 	IsRealtime  bool
 }
 
@@ -105,7 +106,7 @@ func WithPresence(presence innerpresence.Presence) AttachOption {
 // WithInitialRoot sets the initial root of the document. Values in the initial
 // root will be discarded if the key already exists in the document. If some
 // keys are not in the document, they will be added.
-func WithInitialRoot(root map[string]any) AttachOption {
+func WithInitialRoot(root yson.Object) AttachOption {
 	return func(o *AttachOptions) {
 		o.InitialRoot = root
 	}

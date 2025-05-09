@@ -354,9 +354,11 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 
 	if err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 		for k, v := range opts.InitialRoot {
-			if root.Get(k) == nil {
-				root.SetDynamicValue(k, v)
+			if root.Get(k) != nil {
+				continue
 			}
+
+			root.SetYSONElement(k, v)
 		}
 		return nil
 	}); err != nil {

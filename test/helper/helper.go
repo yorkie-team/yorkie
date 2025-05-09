@@ -73,6 +73,7 @@ var (
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
+	HousekeepingCompactionMinChanges      = 1000
 
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
@@ -271,6 +272,7 @@ func TestConfig() *server.Config {
 			Interval:                  HousekeepingInterval.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
+			CompactionMinChanges:      HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
 			AdminUser:                   server.DefaultAdminUser,

@@ -214,7 +214,12 @@ func FindCompactionCandidates(
 
 	var candidates []DocumentCandidatePair
 	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindCompactionCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject, compactionMinChanges)
+		infos, err := be.DB.FindCompactionCandidatesPerProject(
+			ctx,
+			projectInfo,
+			candidatesLimitPerProject,
+			compactionMinChanges,
+		)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}

@@ -18,7 +18,6 @@ package json
 
 import (
 	"fmt"
-	"reflect"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -248,6 +247,7 @@ func (p *Array) AddYSON(value interface{}) *Array {
 			panic(fmt.Errorf("unsupported primitive type: %v", v))
 		}
 	}
+
 	return p
 }
 
@@ -525,81 +525,4 @@ func (p *Array) setByIndexInternal(
 	// because there is no way to distinguish between old and new element with same `createdAt`.
 	p.context.RegisterElement(value)
 	return elem
-}
-
-// buildArrayElements return the element slice of the given array.
-// Because the type of the given array is `any`, it is necessary to type assertion.
-func buildArrayElements(
-	context *change.Context,
-	elements any,
-	stat *buildState,
-) []crdt.Element {
-	// 01. The type of elements of the given array is one of the basic types.
-	switch elements := elements.(type) {
-	case []any:
-		return sliceToElements[any](elements, context, stat)
-	case []int:
-		return sliceToElements[int](elements, context, stat)
-	case []int32:
-		return sliceToElements[int32](elements, context, stat)
-	case []int64:
-		return sliceToElements[int64](elements, context, stat)
-	case []float32:
-		return sliceToElements[float32](elements, context, stat)
-	case []float64:
-		return sliceToElements[float64](elements, context, stat)
-	case []string:
-		return sliceToElements[string](elements, context, stat)
-	case []bool:
-		return sliceToElements[bool](elements, context, stat)
-	case [][]byte:
-		return sliceToElements[[]byte](elements, context, stat)
-	case []gotime.Time:
-		return sliceToElements[gotime.Time](elements, context, stat)
-	case []Counter:
-		return sliceToElements[Counter](elements, context, stat)
-	case []Text:
-		return sliceToElements[Text](elements, context, stat)
-	case []Tree:
-		return sliceToElements[Tree](elements, context, stat)
-	case []map[string]any:
-		return sliceToElements[map[string]any](elements, context, stat)
-	}
-
-	// 02. The type of elements of the given array is user defined struct or array.
-	switch reflect.ValueOf(elements).Type().Elem().Kind() {
-	case reflect.Struct:
-		length := reflect.ValueOf(elements).Len()
-		array := make([]reflect.Value, length)
-
-		// NOTE(highcloud100): The structure cannot immediately call Interface()
-		// because it can have an unexposed field. If we call Interface(), panic will occur.
-		for i := 0; i < length; i++ {
-			array[i] = reflect.ValueOf(elements).Index(i)
-		}
-
-		return sliceToElements[reflect.Value](array, context, stat)
-	case reflect.Slice, reflect.Array, reflect.Ptr:
-		length := reflect.ValueOf(elements).Len()
-		array := make([]any, length)
-
-		for i := 0; i < length; i++ {
-			array[i] = reflect.ValueOf(elements).Index(i).Interface()
-		}
-		return sliceToElements[any](array, context, stat)
-	default:
-		panic("unhandled default case")
-	}
-}
-
-// sliceToElements converts the given specific type array to crdt.Element array
-func sliceToElements[T any](elements []T, context *change.Context, stat *buildState) []crdt.Element {
-	elems := make([]crdt.Element, len(elements))
-
-	for idx, value := range elements {
-		ticket := context.IssueTimeTicket()
-		elems[idx] = buildCRDTElement(context, value, ticket, stat)
-	}
-
-	return elems
 }

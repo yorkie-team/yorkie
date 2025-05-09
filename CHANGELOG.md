@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.10] - 2025-05-09
+
+- Enhance YSON String Representation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1252
+- Fix invalid user agent parsing by @hackerwins in #c3652c5
+- Replace literals-based initialization with YSON by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1253
+- Remove deprecated MinSyncedTicket and MaxCreatedAtMapByActor by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1208
+
 ## [0.6.9] - 2025-04-29
 
 ## Added
