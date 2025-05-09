@@ -35,6 +35,7 @@ import (
 	gomongo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.uber.org/zap"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -59,6 +60,7 @@ import (
 )
 
 var testStartedAt int64
+var logger *zap.Logger
 
 // Below are the values of the Yorkie config used in the test.
 var (
@@ -99,6 +101,12 @@ var (
 func init() {
 	now := gotime.Now()
 	testStartedAt = now.Unix()
+
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // TestDBName returns the name of test database with timestamp.
@@ -598,7 +606,7 @@ func ClientAndAttachedDoc(
 	rpcAddr string,
 	docKey key.Key,
 ) (*client.Client, *document.Document, error) {
-	c, err := client.Dial(rpcAddr)
+	c, err := client.Dial(rpcAddr, client.WithLogger(logger))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,6 +648,7 @@ func ActiveClients(b *testing.B, rpcAddr string, n int) (clients []*client.Clien
 		c, err := client.Dial(
 			rpcAddr,
 			client.WithMaxRecvMsgSize(50*1024*1024),
+			client.WithLogger(logger),
 		)
 		assert.NoError(b, err)
 
