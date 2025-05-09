@@ -154,7 +154,7 @@ func (d *Document) Update(
 	}
 
 	ctx := change.NewContext(
-		d.doc.changeID.Next(),
+		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
 	)
@@ -176,7 +176,7 @@ func (d *Document) Update(
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
-		d.doc.changeID = ctx.ID()
+		d.doc.changeID = ctx.NextID()
 	}
 
 	return nil

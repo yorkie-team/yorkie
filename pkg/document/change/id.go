@@ -76,7 +76,14 @@ func InitialID() ID {
 }
 
 // Next creates a next ID of this ID.
-func (id ID) Next() ID {
+func (id ID) Next(excludeLogicalClock ...bool) ID {
+	if len(excludeLogicalClock) > 0 && excludeLogicalClock[0] {
+		return ID{
+			clientSeq: id.clientSeq + 1,
+			actorID:   id.actorID,
+		}
+	}
+
 	versionVector := id.versionVector.DeepCopy()
 	versionVector.Set(id.actorID, id.lamport+1)
 
@@ -97,8 +104,17 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 	)
 }
 
+// IsEmptyClock returns whether this ID is empty clock or not.
+func (id ID) IsEmptyClock() bool {
+	return id.lamport == InitialLamport && len(id.versionVector) == 0
+}
+
 // SyncClocks syncs logical clocks with the given ID.
 func (id ID) SyncClocks(other ID) ID {
+	if other.IsEmptyClock() {
+		return id
+	}
+
 	lamport := id.lamport + 1
 	if id.lamport < other.lamport {
 		lamport = other.lamport + 1
@@ -179,13 +195,4 @@ func (id ID) VersionVector() time.VersionVector {
 // AfterOrEqual returns whether this ID is causally after or equal the given ID.
 func (id ID) AfterOrEqual(other ID) bool {
 	return id.versionVector.AfterOrEqual(other.versionVector)
-}
-
-// DeepCopy creates a deep copy of this ID.
-func (id ID) DeepCopy(excludeVersionVector bool) ID {
-	if excludeVersionVector {
-		return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, time.InitialVersionVector)
-	}
-
-	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, id.versionVector.DeepCopy())
 }
