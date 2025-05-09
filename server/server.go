@@ -167,9 +167,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 	}
 
 	lastDeactivateProjectID := database.DefaultProjectID
-	lastCompactionProjectID := database.DefaultProjectID
-
-	err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		lastProjectID, err := clients.DeactivateInactives(
 			ctx,
 			be,
@@ -183,12 +181,12 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 
 		lastDeactivateProjectID = lastProjectID
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 
-	err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+	lastCompactionProjectID := database.DefaultProjectID
+	if err := be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		lastProjectID, err := clients.CompactDocuments(
 			ctx,
 			be,
@@ -203,8 +201,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 
 		lastCompactionProjectID = lastProjectID
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 
