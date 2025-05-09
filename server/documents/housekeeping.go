@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package clients
+package documents
 
 import (
 	"context"
@@ -27,21 +27,22 @@ import (
 )
 
 const (
-	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	compactionCandidatesKey = "housekeeping/compactionCandidates"
 )
 
-// DeactivateInactives deactivates clients that have not been active for a
-// long time.
-func DeactivateInactives(
+// CompactDocuments compacts documents by removing old changes and creating
+// a new initial change.
+func CompactDocuments(
 	ctx context.Context,
 	be *backend.Backend,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
-	housekeepingLastProjectID types.ID,
+	compactionMinChanges int,
+	lastCompactionProjectID types.ID,
 ) (types.ID, error) {
 	start := time.Now()
 
-	locker, err := be.Locker.NewLocker(ctx, deactivateCandidatesKey)
+	locker, err := be.Locker.NewLocker(ctx, compactionCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
@@ -56,31 +57,31 @@ func DeactivateInactives(
 		}
 	}()
 
-	lastProjectID, candidates, err := FindDeactivateCandidates(
+	lastProjectID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,
 		candidatesLimitPerProject,
 		projectFetchSize,
-		housekeepingLastProjectID,
+		compactionMinChanges,
+		lastCompactionProjectID,
 	)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
 
-	deactivatedCount := 0
+	compactedCount := 0
 	for _, pair := range candidates {
-		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
-			return database.DefaultProjectID, err
+		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
+			continue
 		}
-
-		deactivatedCount++
+		compactedCount++
 	}
 
 	if len(candidates) > 0 {
 		logging.From(ctx).Infof(
-			"HSKP: candidates %d, deactivated %d, %s",
+			"HSKP: candidates %d, compacted %d, %s",
 			len(candidates),
-			deactivatedCount,
+			compactedCount,
 			time.Since(start),
 		)
 	}
@@ -88,18 +89,19 @@ func DeactivateInactives(
 	return lastProjectID, nil
 }
 
-// CandidatePair represents a pair of Project and Client.
+// CandidatePair represents a pair of Project and Document.
 type CandidatePair struct {
-	Project *database.ProjectInfo
-	Client  *database.ClientInfo
+	Project  *database.ProjectInfo
+	Document *database.DocInfo
 }
 
-// FindDeactivateCandidates finds candidates to deactivate from the database.
-func FindDeactivateCandidates(
+// FindCompactionCandidates finds candidates to compact from the database.
+func FindCompactionCandidates(
 	ctx context.Context,
 	be *backend.Backend,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
+	compactionMinChanges int,
 	lastProjectID types.ID,
 ) (types.ID, []CandidatePair, error) {
 	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
@@ -109,15 +111,20 @@ func FindDeactivateCandidates(
 
 	var candidates []CandidatePair
 	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
+		infos, err := be.DB.FindCompactionCandidatesPerProject(
+			ctx,
+			projectInfo,
+			candidatesLimitPerProject,
+			compactionMinChanges,
+		)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
 
 		for _, info := range infos {
 			candidates = append(candidates, CandidatePair{
-				Project: projectInfo,
-				Client:  info,
+				Project:  projectInfo,
+				Document: info,
 			})
 		}
 	}

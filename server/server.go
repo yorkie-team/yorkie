@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
+	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -166,22 +167,46 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 		return err
 	}
 
-	housekeepingLastProjectID := database.DefaultProjectID
-	return be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+	lastDeactivateProjectID := database.DefaultProjectID
+	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		lastProjectID, err := clients.DeactivateInactives(
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimitPerProject,
 			be.Housekeeping.Config.ProjectFetchSize,
-			housekeepingLastProjectID,
+			lastDeactivateProjectID,
 		)
 		if err != nil {
 			return err
 		}
 
-		housekeepingLastProjectID = lastProjectID
+		lastDeactivateProjectID = lastProjectID
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	lastCompactionProjectID := database.DefaultProjectID
+	if err := be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+		lastProjectID, err := documents.CompactDocuments(
+			ctx,
+			be,
+			be.Housekeeping.Config.CandidatesLimitPerProject,
+			be.Housekeeping.Config.ProjectFetchSize,
+			be.Housekeeping.Config.CompactionMinChanges,
+			lastCompactionProjectID,
+		)
+		if err != nil {
+			return err
+		}
+
+		lastCompactionProjectID = lastProjectID
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // DefaultProject returns the default project.
