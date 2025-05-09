@@ -21,12 +21,10 @@ package cluster
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"connectrpc.com/connect"
-	"go.uber.org/zap"
 	"golang.org/x/net/http2"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -41,11 +39,6 @@ import (
 // Option configures Options.
 type Option func(*Options)
 
-// WithLogger configures the Logger of the client.
-func WithLogger(logger *zap.Logger) Option {
-	return func(o *Options) { o.Logger = logger }
-}
-
 // WithSecure configures secure option of the client.
 func WithSecure(isSecure bool) Option {
 	return func(o *Options) { o.IsSecure = isSecure }
@@ -53,9 +46,6 @@ func WithSecure(isSecure bool) Option {
 
 // Options configures how we set up the client.
 type Options struct {
-	// Logger is the Logger of the client.
-	Logger *zap.Logger
-
 	// IsSecure is whether to enable the TLS connection of the client.
 	IsSecure bool
 }
@@ -64,7 +54,6 @@ type Options struct {
 type Client struct {
 	conn     *http.Client
 	client   v1connect.ClusterServiceClient
-	logger   *zap.Logger
 	isSecure bool
 }
 
@@ -81,18 +70,8 @@ func New(opts ...Option) (*Client, error) {
 		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
 	}
 
-	logger := options.Logger
-	if logger == nil {
-		l, err := zap.NewProduction()
-		if err != nil {
-			return nil, fmt.Errorf("create logger: %w", err)
-		}
-		logger = l
-	}
-
 	return &Client{
 		conn:     conn,
-		logger:   logger,
 		isSecure: options.IsSecure,
 	}, nil
 }

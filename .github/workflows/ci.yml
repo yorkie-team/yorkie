@@ -41,6 +41,7 @@ jobs:
               - 'server/**'
               - 'client/**'
               - 'admin/**'
+              - 'cluster/**'
               - 'api/converter/**'
 
             complex-test:
