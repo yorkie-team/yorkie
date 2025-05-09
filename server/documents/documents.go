@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/cluster"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -327,13 +326,7 @@ func CompactDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	cli, err := cluster.Dial(be.Config.GatewayAddr)
-	if err != nil {
-		return err
-	}
-	defer cli.Close()
-
-	if err := cli.CompactDocument(ctx, document, project.PublicKey); err != nil {
+	if err := be.ClusterClient.CompactDocument(ctx, document, project.PublicKey); err != nil {
 		return err
 	}
 
