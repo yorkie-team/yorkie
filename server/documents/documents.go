@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -332,6 +333,68 @@ func FindDocInfoByKeyAndOwner(
 		docKey,
 		createDocIfNotExist,
 	)
+}
+
+// UpdateDocument updates the given document with the given root.
+// change pack.
+func UpdateDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docInfo *database.DocInfo,
+	root yson.Object,
+) (*types.DocumentSummary, error) {
+	clientInfo := &database.ClientInfo{
+		ID:        types.IDFromActorID(time.InitialActorID),
+		ProjectID: project.ID,
+		Documents: map[types.ID]*database.ClientDocInfo{
+			docInfo.ID: {
+				Status:    database.DocumentAttached,
+				ServerSeq: docInfo.ServerSeq,
+				ClientSeq: 0,
+			},
+		},
+	}
+
+	doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, change.Checkpoint{
+		ServerSeq: docInfo.ServerSeq,
+		ClientSeq: 0,
+	}, time.InitialActorID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if _, err = packs.PushPull(
+		ctx,
+		be,
+		project,
+		clientInfo,
+		docInfo,
+		doc.CreateChangePack(),
+		packs.PushPullOptions{
+			Mode:   types.SyncModePushOnly,
+			Status: document.StatusAttached,
+		}); err != nil {
+		return nil, err
+	}
+
+	return &types.DocumentSummary{
+		ID:              docInfo.ID,
+		Key:             docInfo.Key,
+		AttachedClients: 0,
+		CreatedAt:       docInfo.CreatedAt,
+		AccessedAt:      docInfo.AccessedAt,
+		UpdatedAt:       docInfo.UpdatedAt,
+		Snapshot:        doc.Marshal(),
+		DocSize:         doc.DocSize(),
+	}, nil
 }
 
 // RemoveDocument removes the given document. If force is false, it only removes

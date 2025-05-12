@@ -27,7 +27,7 @@ import (
 const actorIDSize = 12
 
 var (
-	// InitialActorID represents the initial value of ActorID.
+	// InitialActorID represents the initial or server actor ID of the system.
 	InitialActorID = ActorID{}
 
 	// MaxActorID represents the maximum value of ActorID.
