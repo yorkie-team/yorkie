@@ -195,7 +195,7 @@ func (s *clusterServer) PurgeDocument(
 		return nil, fmt.Errorf("document %s is not removed yet", docId)
 	}
 
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
 	if err != nil {
 		return nil, err
 	}
