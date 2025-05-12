@@ -777,14 +777,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		}
 
 		// 2. Check if the document has enough changes to compact.
-		count, err := c.collection(ColChanges).CountDocuments(ctx, bson.M{
-			"project_id": project.ID,
-			"doc_id":     info.ID,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if count < int64(compactionMinChanges) {
+		if info.ServerSeq < int64(compactionMinChanges) {
 			continue
 		}
 
@@ -1135,12 +1128,10 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 4. Store compacted change and update document
-	loadedDocInfo := docInfo.DeepCopy()
+	newServerSeq := 1
 	if len(changes) == 0 {
-		loadedDocInfo.ServerSeq = 0
-	} else if len(changes) == 1 {
-		loadedDocInfo.ServerSeq = 1
-	} else {
+		newServerSeq = 0
+	} else if len(changes) != 1 {
 		return fmt.Errorf("invalid number of changes: %d", len(changes))
 	}
 
@@ -1153,7 +1144,7 @@ func (c *Client) CompactChangeInfos(
 		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
 			"project_id":      docInfo.ProjectID,
 			"doc_id":          docInfo.ID,
-			"server_seq":      loadedDocInfo.ServerSeq,
+			"server_seq":      newServerSeq,
 			"client_seq":      cn.ClientSeq(),
 			"lamport":         cn.ID().Lamport(),
 			"actor_id":        types.ID(cn.ID().ActorID().String()),
@@ -1167,16 +1158,14 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 5. Update document
-	now := gotime.Now()
-	loadedDocInfo.CompactedAt = now
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
 		"$set": bson.M{
-			"server_seq":   loadedDocInfo.ServerSeq,
-			"compacted_at": now,
+			"server_seq":   newServerSeq,
+			"compacted_at": gotime.Now(),
 		},
 	})
 	if err != nil {
