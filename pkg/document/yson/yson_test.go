@@ -355,6 +355,18 @@ func TestYSONMarshal(t *testing.T) {
 		assert.Equal(t, expected, actual)
 	})
 
+	t.Run("text only marshal/unmarshal test", func(t *testing.T) {
+		initialRoot := yson.Object{
+			"text": yson.Text{Nodes: []yson.TextNode{{Value: "Hello"}, {Value: "World"}}},
+		}
+		marshalled, err := initialRoot.Marshal()
+		assert.NoError(t, err)
+
+		actualRoot := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actualRoot))
+		assert.Equal(t, initialRoot, actualRoot)
+	})
+
 	t.Run("tree marshal/unmarshal test", func(t *testing.T) {
 		tree := yson.Tree{
 			Root: yson.TreeNode{
@@ -393,37 +405,37 @@ func TestYSONMarshal(t *testing.T) {
 				name:        "invalid JSON",
 				input:       `{invalid json`,
 				targetType:  &yson.Object{},
-				expectedErr: "invalid character",
+				expectedErr: "invalid YSON",
 			},
 			{
 				name:        "unknown type",
 				input:       `Unknown(123)`,
 				targetType:  &yson.Object{},
-				expectedErr: "invalid character 'U",
+				expectedErr: "invalid YSON",
 			},
 			{
 				name:        "invalid counter type",
 				input:       `Counter(String("invalid"))`,
 				targetType:  &yson.Counter{},
-				expectedErr: "invalid character 'S",
+				expectedErr: "invalid YSON",
 			},
 			{
 				name:        "invalid tree format",
 				input:       `Tree("not an object")`,
 				targetType:  &yson.Tree{},
-				expectedErr: "expected tree, got",
+				expectedErr: "invalid YSON",
 			},
 			{
 				name:        "invalid text format",
 				input:       `Text("not an array")`,
 				targetType:  &yson.Text{},
-				expectedErr: "expected text, got",
+				expectedErr: "invalid YSON",
 			},
 			{
 				name:        "missing required field in text node",
 				input:       `Text([{"attrs":{"bold":"true"}}])`,
 				targetType:  &yson.Text{},
-				expectedErr: "missing val field",
+				expectedErr: "invalid YSON",
 			},
 		}
 

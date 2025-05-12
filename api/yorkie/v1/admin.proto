@@ -37,6 +37,7 @@ service AdminService {
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
   rpc GetProjectStats(GetProjectStatsRequest) returns (GetProjectStatsResponse) {}
 
+  rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse) {}
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
   rpc GetDocuments (GetDocumentsRequest) returns (GetDocumentsResponse) {}
@@ -133,6 +134,16 @@ message GetProjectStatsResponse {
   repeated MetricPoint active_users = 2;
   int64 documents_count = 3;
   int64 clients_count = 4;
+}
+
+message CreateDocumentRequest {
+  string project_name = 1;
+  string document_key = 2;
+  string initial_root = 3;
+}
+
+message CreateDocumentResponse {
+  DocumentSummary document = 1;
 }
 
 message ListDocumentsRequest {

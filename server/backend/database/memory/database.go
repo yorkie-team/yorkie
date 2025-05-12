@@ -1465,9 +1465,9 @@ func (d *DB) UpdateVersionVector(
 	return nil
 }
 
-// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-// and returns the SyncedVersionVector of the document.
-func (d *DB) UpdateAndFindMinSyncedVersionVector(
+// UpdateAndFindMinVersionVector updates the version vector of the given client
+// and returns the minimum version vector of all clients.
+func (d *DB) UpdateAndFindMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,

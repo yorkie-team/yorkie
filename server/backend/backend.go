@@ -62,8 +62,8 @@ type Backend struct {
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
-	// Locker is used to lock/unlock resources.
-	Locker *sync.LockerManager
+	// Lockers is used to lock/unlock resources.
+	Lockers *sync.LockerManager
 
 	// Metrics is used to expose metrics.
 	Metrics *prometheus.Metrics
@@ -204,8 +204,8 @@ func New(
 
 		ClusterClient: clusterClient,
 
-		Locker: locker,
-		PubSub: pubsub,
+		Lockers: locker,
+		PubSub:  pubsub,
 
 		Metrics:      metrics,
 		DB:           db,

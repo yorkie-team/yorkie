@@ -23,8 +23,11 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -41,7 +44,66 @@ var (
 	// ErrDocumentAttached is returned when the document is attached when
 	// deleting the document.
 	ErrDocumentAttached = fmt.Errorf("document is attached")
+
+	// ErrDocumentAlreadyExists is returned when the document already exists.
+	ErrDocumentAlreadyExists = fmt.Errorf("document already exists")
 )
+
+// CreateDocument creates a new document with the given key and server sequence.
+func CreateDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	userID types.ID,
+	docKey key.Key,
+	initialRoot yson.Object,
+) (*types.DocumentSummary, error) {
+	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+		ctx,
+		types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  userID,
+		},
+		docKey,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if docInfo.Owner != userID || docInfo.ServerSeq != 0 {
+		return nil, fmt.Errorf("create document: %w", ErrDocumentAlreadyExists)
+	}
+
+	newDoc := document.New(docInfo.Key)
+	if err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(initialRoot)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err = be.DB.CompactChangeInfos(
+		ctx,
+		project.ID,
+		docInfo,
+		docInfo.ServerSeq,
+		newDoc.CreateChangePack().Changes,
+	); err != nil {
+		return nil, err
+	}
+
+	return &types.DocumentSummary{
+		ID:              docInfo.ID,
+		Key:             docInfo.Key,
+		AttachedClients: 0,
+		CreatedAt:       docInfo.CreatedAt,
+		AccessedAt:      docInfo.AccessedAt,
+		UpdatedAt:       docInfo.UpdatedAt,
+		Snapshot:        newDoc.Marshal(),
+		DocSize:         newDoc.DocSize(),
+	}, nil
+}
 
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(

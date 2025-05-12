@@ -42,9 +42,9 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// PushPullKey creates a new sync.Key of PushPull for the given document.
-func PushPullKey(projectID types.ID, docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s-%s", projectID, docKey))
+// DocEditKey creates a new sync.Key of Document Edit for the given document.
+func DocEditKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("docedit-%s-%s", projectID, docKey))
 }
 
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
@@ -133,10 +133,10 @@ func PushPull(
 		return nil, err
 	}
 
-	// 05. update and find min synced version vector for garbage collection.
+	// 05. update and find min version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVector(
+	minVersionVector, err := be.DB.UpdateAndFindMinVersionVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -146,7 +146,7 @@ func PushPull(
 		return nil, err
 	}
 	if respPack.SnapshotLen() == 0 {
-		respPack.VersionVector = minSyncedVersionVector
+		respPack.VersionVector = minVersionVector
 	}
 
 	respPack.ApplyDocInfo(docInfo)
@@ -200,7 +200,7 @@ func PushPull(
 				}
 			}
 
-			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
+			locker, err := be.Lockers.Locker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
@@ -223,7 +223,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedVersionVector,
+				minVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}

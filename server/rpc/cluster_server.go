@@ -62,7 +62,7 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
 	if err != nil {
 		return nil, err
 	}

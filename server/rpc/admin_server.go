@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -260,6 +261,52 @@ func (s *adminServer) GetProjectStats(
 	}), nil
 }
 
+// CreateDocument creates a new document.
+func (s *adminServer) CreateDocument(
+	ctx context.Context,
+	req *connect.Request[api.CreateDocumentRequest],
+) (*connect.Response[api.CreateDocumentResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	var initialRoot yson.Object
+	if err := yson.Unmarshal(req.Msg.InitialRoot, &initialRoot); err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	if err != nil {
+		return nil, err
+	}
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	doc, err := documents.CreateDocument(
+		ctx,
+		s.backend,
+		project,
+		user.ID,
+		key.Key(req.Msg.DocumentKey),
+		initialRoot,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateDocumentResponse{
+		Document: converter.ToDocumentSummary(doc),
+	}), nil
+}
+
 // GetDocument gets the document.
 func (s *adminServer) GetDocument(
 	ctx context.Context,
@@ -432,8 +479,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, err
 	}
 
-	// TODO(hackerwins): Rename PushPullKey to something else like DocWriteLockKey?.
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, docInfo.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, docInfo.Key))
 	if err != nil {
 		return nil, err
 	}
