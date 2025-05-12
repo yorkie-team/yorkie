@@ -787,18 +787,7 @@ func (d *DB) FindCompactionCandidatesPerProject(
 		}
 
 		// 2. Check if the document has enough changes to compact.
-		iter, err := txn.Get(tblChanges, "doc_id", info.ID.String())
-		if err != nil {
-			return nil, fmt.Errorf("count changes: %w", err)
-		}
-		count := 0
-		for raw := iter.Next(); raw != nil; raw = iter.Next() {
-			count++
-			if count >= compactionMinChanges {
-				break
-			}
-		}
-		if count < compactionMinChanges {
+		if info.ServerSeq < int64(compactionMinChanges) {
 			continue
 		}
 
