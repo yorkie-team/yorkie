@@ -332,13 +332,13 @@ type Database interface {
 	PurgeChangesByDocRefKey(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) error
+	) (int64, error)
 
 	// PurgeSnapshotsByDocRefKey deletes the snapshots of the given refKey.
 	PurgeSnapshotsByDocRefKey(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) error
+	) (int64, error)
 
 	// PurgeDocInfoByDocRefKey deletes the document of the given refKey.
 	PurgeDocInfoByDocRefKey(
@@ -350,17 +350,11 @@ type Database interface {
 	PurgeClientsByDocRefKey(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) error
-
-	// PurgeSyncedSeqsByDocRefKey deletes the syncedSeq of the given refKey.
-	PurgeSyncedSeqsByDocRefKey(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) error
+	) (int64, error)
 
 	// PurgeVersionVectorsByDocRefKey deletes the version vector of the given refKey.
 	PurgeVersionVectorsByDocRefKey(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) error
+	) (int64, error)
 }
