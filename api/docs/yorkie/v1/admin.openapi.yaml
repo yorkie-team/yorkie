@@ -214,6 +214,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/UpdateDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/UpdateProject:
     post:
       description: ""
@@ -380,6 +392,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.SignUpRequest'
+      required: true
+    yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentRequest'
       required: true
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest:
       content:
@@ -552,6 +573,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.SignUpResponse'
+      description: ""
+    yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentResponse'
       description: ""
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse:
       content:
@@ -2471,6 +2501,39 @@ components:
           title: events
           type: array
       title: EventWebhookEvents
+      type: object
+    yorkie.v1.UpdateDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
+      title: UpdateDocumentRequest
+      type: object
+    yorkie.v1.UpdateDocumentResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: UpdateDocumentResponse
       type: object
     yorkie.v1.UpdateProjectRequest:
       additionalProperties: false

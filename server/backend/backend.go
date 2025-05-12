@@ -131,8 +131,8 @@ func New(
 		return nil, err
 	}
 
-	// 04. Create pubsub, and locker.
-	locker := sync.New()
+	// 04. Create pubsub, and lockers.
+	lockers := sync.New()
 	pubsub := pubsub.New()
 
 	// 05. Create the background instance. The background instance is used to
@@ -204,7 +204,7 @@ func New(
 
 		ClusterClient: clusterClient,
 
-		Lockers: locker,
+		Lockers: lockers,
 		PubSub:  pubsub,
 
 		Metrics:      metrics,

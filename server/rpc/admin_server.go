@@ -273,8 +273,10 @@ func (s *adminServer) CreateDocument(
 	}
 
 	var initialRoot yson.Object
-	if err := yson.Unmarshal(req.Msg.InitialRoot, &initialRoot); err != nil {
-		return nil, err
+	if req.Msg.InitialRoot != "" {
+		if err := yson.Unmarshal(req.Msg.InitialRoot, &initialRoot); err != nil {
+			return nil, err
+		}
 	}
 
 	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, key.Key(req.Msg.DocumentKey)))
@@ -460,6 +462,61 @@ func (s *adminServer) SearchDocuments(
 	return connect.NewResponse(&api.SearchDocumentsResponse{
 		TotalCount: int32(result.TotalCount),
 		Documents:  converter.ToDocumentSummaries(result.Elements),
+	}), nil
+}
+
+// UpdateDocument updates the document.
+func (s *adminServer) UpdateDocument(
+	ctx context.Context,
+	req *connect.Request[api.UpdateDocumentRequest],
+) (*connect.Response[api.UpdateDocumentResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	var root yson.Object
+	if err := yson.Unmarshal(req.Msg.Root, &root); err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(
+		ctx,
+		s.backend,
+		project,
+		key.Key(req.Msg.DocumentKey),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	doc, err := documents.UpdateDocument(
+		ctx,
+		s.backend,
+		project,
+		docInfo,
+		root,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.UpdateDocumentResponse{
+		Document: converter.ToDocumentSummary(doc),
 	}), nil
 }
 

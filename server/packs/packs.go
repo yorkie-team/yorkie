@@ -129,8 +129,10 @@ func PushPull(
 		}
 	}
 
-	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-		return nil, err
+	if !clientInfo.IsServerClient() {
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+			return nil, err
+		}
 	}
 
 	// 05. update and find min version vector for garbage collection.
