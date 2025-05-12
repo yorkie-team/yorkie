@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -169,4 +170,73 @@ func (s *clusterServer) CompactDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+}
+
+// PurgeDocument purges the given document.
+func (s *clusterServer) PurgeDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServicePurgeDocumentRequest],
+) (*connect.Response[api.ClusterServicePurgeDocumentResponse], error) {
+	docId := types.ID(req.Msg.DocumentId)
+	projectId := types.ID(req.Msg.ProjectId)
+
+	docRefKey := types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
+	if err != nil {
+		return nil, err
+	}
+	// 01. Check if the document is removed
+	if docInfo.RemovedAt.IsZero() {
+		return nil, fmt.Errorf("document %s is not removed yet", docId)
+	}
+
+	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(projectId, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	// 02. Purge related resources: changes, syncedSeqs, versionVectors, clients, snapshots
+	if err := s.purgeRelatedResources(ctx, docRefKey); err != nil {
+		return nil, err
+	}
+
+	// 03. Delete document
+	if err := s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
+}
+
+// purgeRelatedResources purges the related resources of the given document.
+func (s *clusterServer) purgeRelatedResources(ctx context.Context, docRefKey types.DocRefKey) error {
+	if err := s.backend.DB.PurgeChangesByDocRefKey(ctx, docRefKey); err != nil {
+		return fmt.Errorf("failed to delete changes: %w", err)
+	}
+	if err := s.backend.DB.PurgeSyncedSeqsByDocRefKey(ctx, docRefKey); err != nil {
+		return fmt.Errorf("failed to delete syncedSeqs: %w", err)
+	}
+	if err := s.backend.DB.PurgeVersionVectorsByDocRefKey(ctx, docRefKey); err != nil {
+		return fmt.Errorf("failed to delete versionVectors: %w", err)
+	}
+	if err := s.backend.DB.PurgeClientsByDocRefKey(ctx, docRefKey); err != nil {
+		return fmt.Errorf("failed to delete clients: %w", err)
+	}
+	if err := s.backend.DB.PurgeSnapshotsByDocRefKey(ctx, docRefKey); err != nil {
+		return fmt.Errorf("failed to delete snapshots: %w", err)
+	}
+
+	return nil
 }

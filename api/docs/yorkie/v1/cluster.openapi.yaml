@@ -254,6 +254,27 @@ components:
       description: ""
       title: ClusterServiceDetachDocumentResponse
       type: object
+    yorkie.v1.ClusterServicePurgeDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServicePurgeDocumentRequest
+      type: object
+    yorkie.v1.ClusterServicePurgeDocumentResponse:
+      additionalProperties: false
+      description: ""
+      title: ClusterServicePurgeDocumentResponse
+      type: object
     yorkie.v1.DataSize:
       additionalProperties: false
       description: ""

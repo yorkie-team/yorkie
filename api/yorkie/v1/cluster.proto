@@ -44,3 +44,10 @@ message ClusterServiceCompactDocumentRequest {
 }
 
 message ClusterServiceCompactDocumentResponse {}
+
+message ClusterServicePurgeDocumentRequest {
+  string project_id = 1;
+  string document_id = 2;
+}
+
+message ClusterServicePurgeDocumentResponse {}

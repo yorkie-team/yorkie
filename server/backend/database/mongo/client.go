@@ -1564,6 +1564,100 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
+// PurgeChangesByDocRefKey purges the changes of the given refKey.
+func (c *Client) PurgeChangesByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	if _, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}); err != nil {
+		return fmt.Errorf("delete changes: %w", err)
+	}
+
+	return nil
+}
+
+// PurgeSnapshotsByDocRefKey deletes the snapshots of the given docRefKey.
+func (c *Client) PurgeSnapshotsByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	if _, err := c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}); err != nil {
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	return nil
+}
+
+// PurgeDocInfoByDocRefKey purges the document of the given docRefKey.
+func (c *Client) PurgeDocInfoByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	_, err := c.collection(ColDocuments).DeleteOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete document: %w", err)
+	}
+
+	return nil
+}
+
+// PurgeClientsByDocRefKey purges the client of the given docRefKey.
+func (c *Client) PurgeClientsByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	_, err := c.collection(ColClients).DeleteMany(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
+	})
+	if err != nil {
+		return fmt.Errorf("delete clients: %w", err)
+	}
+
+	return nil
+}
+
+// PurgeSyncedSeqsByDocRefKey purges the syncedSeq of the given docRefKey.
+func (c *Client) PurgeSyncedSeqsByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	_, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete synced seqs: %w", err)
+	}
+
+	return nil
+}
+
+// PurgeVersionVectorsByDocRefKey purges the version vector of the given docRefKey.
+func (c *Client) PurgeVersionVectorsByDocRefKey(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	_, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete version vectors: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) collection(
 	name string,
 	opts ...*options.CollectionOptions,
