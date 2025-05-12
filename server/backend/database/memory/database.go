@@ -1626,6 +1626,94 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
+// PurgeChangesByDocRefKey purges the changes of the given refKey.
+func (d *DB) PurgeChangesByDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblChanges, "doc_id", docRefKey.DocID.String()); err != nil {
+		return fmt.Errorf("delete changes: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// PurgeSnapshotsByDocRefKey purges the snapshots of the given refKey.
+func (d *DB) PurgeSnapshotsByDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblSnapshots, "doc_id", docRefKey.DocID.String()); err != nil {
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// PurgeDocInfoByDocRefKey purges the document of the given docRefKey.
+func (d *DB) PurgeDocInfoByDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if err := txn.Delete(tblDocuments, docRefKey); err != nil {
+		return fmt.Errorf("delete document: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// PurgeClientsByDocRefKey purges the client of the given docRefKey.
+func (d *DB) PurgeClientsByDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblClients, "doc_id", docRefKey.DocID.String()); err != nil {
+		return fmt.Errorf("delete client: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// PurgeSyncedSeqsByDocRefKey purges the syncedSeq of the given docRefKey.
+func (d *DB) PurgeSyncedSeqsByDocRefKey(
+	_ context.Context,
+	_ types.DocRefKey,
+) error {
+	return nil
+}
+
+// PurgeVersionVectorsByDocRefKey purges the version vector of the given docRefKey.
+func (d *DB) PurgeVersionVectorsByDocRefKey(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblVersionVectors, "doc_id", docRefKey.DocID.String()); err != nil {
+		return fmt.Errorf("delete version vector: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }
