@@ -30,25 +30,27 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 var (
-	// ErrUnsupportedElement is returned when the given element is not
-	// supported yet.
-	ErrUnsupportedElement = errors.New("unsupported element")
+	// ErrUnsupported is returned when the given request is not
+	// supported.
+	ErrUnsupported = errors.New("unsupported element")
 
-	// ErrInvalidTextNode is returned when the given text node is not
+	// ErrInvalidYSON is returned when the given YSON is not
 	// valid.
-	ErrInvalidTextNode = errors.New("invalid text node")
-
-	// ErrInvalidTreeNode is returned when the given tree node is not
-	// valid.
-	ErrInvalidTreeNode = errors.New("invalid tree node")
+	ErrInvalidYSON = errors.New("invalid YSON")
 )
 
 const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
+)
+
+var (
+	// TextNodeType is the type of text node.
+	TextNodeType = index.TextNodeType
 )
 
 // Element represents a serializable CRDT value.
@@ -146,7 +148,7 @@ func marshalPrimitive(v interface{}) (string, error) {
 	case time.Time:
 		return fmt.Sprintf(`Date("%s")`, v.Format(time.RFC3339Nano)), nil
 	default:
-		return "", fmt.Errorf("unsupported type: %T", v)
+		return "", fmt.Errorf("marshal primitive: %w", ErrUnsupported)
 	}
 }
 
@@ -189,7 +191,7 @@ func (y Counter) Marshal() (string, error) {
 	case crdt.LongCnt:
 		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
 	default:
-		return "", fmt.Errorf("unsupported counter type: %v", y.Type)
+		return "", fmt.Errorf("marshal counter: %w", ErrUnsupported)
 	}
 }
 
@@ -241,15 +243,12 @@ func (n *TreeNode) Marshal() string {
 // Unmarshal parses a string representation of a YSON element into the
 // corresponding Element type.
 func Unmarshal(data string, elem Element) error {
-	processedData, err := preprocessTypeValues(data)
-	if err != nil {
-		return err
-	}
+	processedData := preprocessTypeValues(data)
 
 	// Parse the processed JSON data
 	var raw interface{}
 	if err := gojson.Unmarshal([]byte(processedData), &raw); err != nil {
-		return fmt.Errorf("unmarshal JSON: %w", err)
+		return fmt.Errorf("unmarshal JSON: %w", ErrInvalidYSON)
 	}
 
 	// Convert the raw data into the appropriate Element type
@@ -257,7 +256,7 @@ func Unmarshal(data string, elem Element) error {
 	case *Array:
 		arr, ok := raw.([]interface{})
 		if !ok {
-			return fmt.Errorf("expected array, got %T", raw)
+			return fmt.Errorf("unmarshal array: %w", ErrInvalidYSON)
 		}
 		parsed, err := parseArray(arr)
 		if err != nil {
@@ -267,7 +266,7 @@ func Unmarshal(data string, elem Element) error {
 	case *Object:
 		obj, ok := raw.(map[string]interface{})
 		if !ok {
-			return fmt.Errorf("expected object, got %T", raw)
+			return fmt.Errorf("unmarshal object: %w", ErrInvalidYSON)
 		}
 		parsed, err := parseObject(obj)
 		if err != nil {
@@ -277,7 +276,7 @@ func Unmarshal(data string, elem Element) error {
 	case *Tree:
 		tree, ok := raw.(map[string]interface{})
 		if !ok {
-			return fmt.Errorf("expected tree, got %T", raw)
+			return fmt.Errorf("unmarshal tree: %w", ErrInvalidYSON)
 		}
 
 		if v, ok := tree["value"].(map[string]interface{}); ok {
@@ -287,12 +286,12 @@ func Unmarshal(data string, elem Element) error {
 			}
 			*e = parsed
 		} else {
-			return fmt.Errorf("expected tree, got %T", raw)
+			return fmt.Errorf("unmarshal tree: %w", ErrInvalidYSON)
 		}
 	case *Text:
 		text, ok := raw.(map[string]interface{})
 		if !ok {
-			return fmt.Errorf("expected text, got %T", raw)
+			return fmt.Errorf("unmarshal text: %w", ErrInvalidYSON)
 		}
 
 		if v, ok := text["value"].([]interface{}); ok {
@@ -302,7 +301,7 @@ func Unmarshal(data string, elem Element) error {
 			}
 			*e = parsed
 		} else {
-			return fmt.Errorf("expected text, got %T", raw)
+			return fmt.Errorf("unmarshal text: %w", ErrInvalidYSON)
 		}
 
 	case *Counter:
@@ -312,7 +311,7 @@ func Unmarshal(data string, elem Element) error {
 		}
 		*e = counter
 	default:
-		return ErrUnsupportedElement
+		return ErrUnsupported
 	}
 
 	return nil
@@ -321,7 +320,7 @@ func Unmarshal(data string, elem Element) error {
 func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	t, ok := raw["type"].(string)
 	if !ok {
-		return nil, ErrUnsupportedElement
+		return nil, ErrUnsupported
 	}
 
 	switch t {
@@ -332,14 +331,14 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	case "BinData":
 		val, err := base64.StdEncoding.DecodeString(raw["value"].(string))
 		if err != nil {
-			return nil, fmt.Errorf("decode base64: %w", err)
+			return nil, fmt.Errorf("parse BinData: %w", ErrInvalidYSON)
 		}
 
 		return val, nil
 	case "Date":
 		val, err := time.Parse(time.RFC3339Nano, raw["value"].(string))
 		if err != nil {
-			return nil, fmt.Errorf("parse date: %w", err)
+			return nil, fmt.Errorf("parse date: %w", ErrInvalidYSON)
 		}
 
 		return val, nil
@@ -350,15 +349,15 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 			return parseTree(value)
 		}
 
-		return nil, ErrInvalidTreeNode
+		return nil, fmt.Errorf("parse counter: %w", ErrInvalidYSON)
 	case "Text":
 		if value, ok := raw["value"].([]interface{}); ok {
 			return parseText(value)
 		}
-		return nil, ErrInvalidTextNode
+		return nil, fmt.Errorf("parse text: %w", ErrInvalidYSON)
 	}
 
-	return nil, ErrUnsupportedElement
+	return nil, ErrUnsupported
 }
 
 func parseObject(raw map[string]interface{}) (Object, error) {
@@ -439,13 +438,13 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 				counter.Type = crdt.LongCnt
 				counter.Value = int64(value["value"].(float64))
 			default:
-				return Counter{}, fmt.Errorf("unsupported counter type: %s", t)
+				return Counter{}, fmt.Errorf("parse counter type: %w", ErrUnsupported)
 			}
 		} else {
-			return Counter{}, fmt.Errorf("missing counter type")
+			return Counter{}, fmt.Errorf("parse counter type: %w", ErrUnsupported)
 		}
 	} else {
-		return Counter{}, fmt.Errorf("missing counter value")
+		return Counter{}, fmt.Errorf("parse counter value: %w", ErrUnsupported)
 	}
 	return counter, nil
 }
@@ -457,8 +456,10 @@ func parseText(raw []interface{}) (Text, error) {
 		n := node.(map[string]interface{})
 		textNode := TextNode{}
 
-		if _, ok := n["val"].(string); !ok {
-			return text, errors.New("missing val field")
+		if val, ok := n["val"].(string); !ok {
+			return text, fmt.Errorf("parse text value: %w", ErrInvalidYSON)
+		} else {
+			textNode.Value = val
 		}
 
 		if attrs, ok := n["attrs"].(map[string]interface{}); ok {
@@ -517,7 +518,7 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 
 // preprocessTypeValues replaces custom types in the YSON string with
 // JSON-compatible formats.
-func preprocessTypeValues(data string) (string, error) {
+func preprocessTypeValues(data string) string {
 	type replacement struct {
 		oldStr string
 		newStr string
@@ -547,17 +548,7 @@ func preprocessTypeValues(data string) (string, error) {
 		data = strings.ReplaceAll(data, r.oldStr, r.newStr)
 	}
 
-	return data, nil
-}
-
-// ParseArray parses a string representation of a YSON array into the
-// corresponding Array type.
-func ParseArray(data string) Array {
-	var arr Array
-	if err := Unmarshal(data, &arr); err != nil {
-		panic("parse array" + err.Error())
-	}
-	return arr
+	return data
 }
 
 // ParseObject parses a string representation of a YSON object into the
@@ -568,4 +559,14 @@ func ParseObject(data string) Object {
 		panic("parse object" + err.Error())
 	}
 	return obj
+}
+
+// ParseArray parses a string representation of a YSON array into the
+// corresponding Array type.
+func ParseArray(data string) Array {
+	var arr Array
+	if err := Unmarshal(data, &arr); err != nil {
+		panic("parse array" + err.Error())
+	}
+	return arr
 }

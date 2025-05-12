@@ -80,9 +80,9 @@ func validateTextNode(treeNode TreeNode) error {
 func validateTreeNodes(treeNodes []*TreeNode) error {
 	firstTreeNodeType := treeNodes[0].Type
 
-	if firstTreeNodeType == index.DefaultTextType {
+	if firstTreeNodeType == index.TextNodeType {
 		for _, treeNode := range treeNodes {
-			if treeNode.Type != index.DefaultTextType {
+			if treeNode.Type != index.TextNodeType {
 				return ErrMixedNodeType
 			}
 
@@ -93,7 +93,7 @@ func validateTreeNodes(treeNodes []*TreeNode) error {
 
 	} else {
 		for _, treeNode := range treeNodes {
-			if treeNode.Type == index.DefaultTextType {
+			if treeNode.Type == index.TextNodeType {
 				return ErrMixedNodeType
 			}
 		}
@@ -278,14 +278,14 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 			panic(err)
 		}
 
-		if contents[0].Type == index.DefaultTextType {
+		if contents[0].Type == index.TextNodeType {
 			value := ""
 
 			for _, content := range contents {
 				value += content.Value
 			}
 
-			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.DefaultTextType, nil, value))
+			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value))
 		} else {
 			for _, content := range contents {
 				var attributes *crdt.RHT
@@ -373,7 +373,7 @@ func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 
 // buildDescendants converts the given node to a CRDT-based tree node.
 func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) error {
-	if n.Type == index.DefaultTextType {
+	if n.Type == index.TextNodeType {
 
 		if err := validateTextNode(n); err != nil {
 			return err

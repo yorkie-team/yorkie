@@ -42,7 +42,7 @@ func CompactDocuments(
 ) (types.ID, error) {
 	start := time.Now()
 
-	locker, err := be.Locker.NewLocker(ctx, compactionCandidatesKey)
+	locker, err := be.Lockers.Locker(ctx, compactionCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}

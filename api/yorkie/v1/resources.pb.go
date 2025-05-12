@@ -292,7 +292,7 @@ type ChangePack struct {
 	Checkpoint      *Checkpoint    `protobuf:"bytes,2,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
 	Snapshot        []byte         `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
 	Changes         []*Change      `protobuf:"bytes,4,rep,name=changes,proto3" json:"changes,omitempty"`
-	MinSyncedTicket *TimeTicket    `protobuf:"bytes,5,opt,name=min_synced_ticket,json=minSyncedTicket,proto3" json:"min_synced_ticket,omitempty"`
+	MinSyncedTicket *TimeTicket    `protobuf:"bytes,5,opt,name=min_synced_ticket,json=minSyncedTicket,proto3" json:"min_synced_ticket,omitempty"` // deprecated
 	IsRemoved       bool           `protobuf:"varint,6,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
 	VersionVector   *VersionVector `protobuf:"bytes,7,opt,name=version_vector,json=versionVector,proto3" json:"version_vector,omitempty"`
 }
@@ -2851,7 +2851,7 @@ type Operation_Edit struct {
 	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
 	From                *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To                  *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // deprecated
 	Content             string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,6,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
 	Attributes          map[string]string      `protobuf:"bytes,7,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
@@ -3023,7 +3023,7 @@ type Operation_Style struct {
 	To                  *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
 	Attributes          map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // deprecated
 }
 
 func (x *Operation_Style) Reset() {
@@ -3171,7 +3171,7 @@ type Operation_TreeEdit struct {
 	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
 	From                *TreePos               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	To                  *TreePos               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // deprecated
 	Contents            []*TreeNodes           `protobuf:"bytes,5,rep,name=contents,proto3" json:"contents,omitempty"`
 	SplitLevel          int32                  `protobuf:"varint,7,opt,name=split_level,json=splitLevel,proto3" json:"split_level,omitempty"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,6,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
@@ -3269,7 +3269,7 @@ type Operation_TreeStyle struct {
 	Attributes          map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
 	AttributesToRemove  []string               `protobuf:"bytes,6,rep,name=attributes_to_remove,json=attributesToRemove,proto3" json:"attributes_to_remove,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,7,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,7,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // deprecated
 }
 
 func (x *Operation_TreeStyle) Reset() {

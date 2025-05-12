@@ -39,7 +39,7 @@ func FromCRDT(elem crdt.Element) (interface{}, error) {
 	case *crdt.Tree:
 		return toTree(elem), nil
 	default:
-		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupported)
 	}
 }
 
@@ -85,10 +85,12 @@ func toText(text *crdt.Text) Text {
 			continue
 		}
 		value := node.Value()
-		attrs := make(map[string]string)
-		if value.Attrs() != nil {
+
+		var attrs map[string]string
+		if value.Attrs() != nil && value.Attrs().Len() > 0 {
 			attrs = value.Attrs().Elements()
 		}
+
 		nodes = append(nodes, TextNode{
 			Value:      value.Value(),
 			Attributes: attrs,
@@ -101,7 +103,7 @@ func toTree(crdtTree *crdt.Tree) Tree {
 	var buildTreeNode func(crdtNode *crdt.TreeNode) TreeNode
 	buildTreeNode = func(crdtNode *crdt.TreeNode) TreeNode {
 		var attrs map[string]string
-		if crdtNode.Attrs != nil {
+		if crdtNode.Attrs != nil && crdtNode.Attrs.Len() > 0 {
 			attrs = crdtNode.Attrs.Elements()
 		}
 

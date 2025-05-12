@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Option configures Options.
@@ -234,6 +235,33 @@ func (c *Client) UpdateProject(
 	}
 
 	return converter.FromProject(response.Msg.Project), nil
+}
+
+// CreateDocument creates a new document.
+func (c *Client) CreateDocument(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+	initialRoot yson.Object,
+) (*types.DocumentSummary, error) {
+	marshalled, err := initialRoot.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := c.client.CreateDocument(
+		ctx,
+		connect.NewRequest(&api.CreateDocumentRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+			InitialRoot: marshalled,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
 // ListDocuments lists documents.
