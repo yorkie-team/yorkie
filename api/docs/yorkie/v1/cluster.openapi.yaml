@@ -34,6 +34,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/PurgeDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
 components:
   requestBodies:
     yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest:
@@ -53,6 +65,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
       required: true
   responses:
     connect.error:
@@ -81,6 +102,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
       description: ""
   schemas:
     connect.error:

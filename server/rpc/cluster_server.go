@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -188,8 +189,9 @@ func (s *clusterServer) PurgeDocument(
 	if err != nil {
 		return nil, err
 	}
+
 	// 01. Check if the document is removed
-	if docInfo.RemovedAt.IsZero() {
+	if !docInfo.IsRemoved() {
 		return nil, fmt.Errorf("document %s is not removed yet", docId)
 	}
 
@@ -208,35 +210,57 @@ func (s *clusterServer) PurgeDocument(
 	}()
 
 	// 02. Purge related resources: changes, syncedSeqs, versionVectors, clients, snapshots
-	if err := s.purgeRelatedResources(ctx, docRefKey); err != nil {
+	log := logging.DefaultLogger().With(
+		zap.String("project_id", docRefKey.ProjectID.String()),
+		zap.String("doc_id", docRefKey.DocID.String()),
+	)
+
+	steps := []struct {
+		name string
+		fn   func() (int64, error)
+	}{
+		{
+			name: "changes",
+			fn: func() (int64, error) {
+				return s.backend.DB.PurgeChangesByDocRefKey(ctx, docRefKey)
+			},
+		},
+		{
+			name: "versionVectors",
+			fn: func() (int64, error) {
+				return s.backend.DB.PurgeVersionVectorsByDocRefKey(ctx, docRefKey)
+			},
+		},
+		{
+			name: "clients",
+			fn: func() (int64, error) {
+				return s.backend.DB.PurgeClientsByDocRefKey(ctx, docRefKey)
+			},
+		},
+		{
+			name: "snapshots",
+			fn: func() (int64, error) {
+				return s.backend.DB.PurgeSnapshotsByDocRefKey(ctx, docRefKey)
+			},
+		},
+	}
+
+	for _, step := range steps {
+		count, err := step.fn()
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to purge %s", step.name), zap.Error(err))
+			return nil, fmt.Errorf("failed to purge %s: %w", step.name, err)
+		}
+		log.Info(fmt.Sprintf("Purged %s(%d)", step.name, count))
+	}
+
+	// 03. Purge document
+	if err = s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey); err != nil {
+		log.Error("Failed to purge document", zap.Error(err))
 		return nil, err
 	}
 
-	// 03. Delete document
-	if err := s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey); err != nil {
-		return nil, err
-	}
+	log.Info("Purge document success")
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
-}
-
-// purgeRelatedResources purges the related resources of the given document.
-func (s *clusterServer) purgeRelatedResources(ctx context.Context, docRefKey types.DocRefKey) error {
-	if err := s.backend.DB.PurgeChangesByDocRefKey(ctx, docRefKey); err != nil {
-		return fmt.Errorf("failed to delete changes: %w", err)
-	}
-	if err := s.backend.DB.PurgeSyncedSeqsByDocRefKey(ctx, docRefKey); err != nil {
-		return fmt.Errorf("failed to delete syncedSeqs: %w", err)
-	}
-	if err := s.backend.DB.PurgeVersionVectorsByDocRefKey(ctx, docRefKey); err != nil {
-		return fmt.Errorf("failed to delete versionVectors: %w", err)
-	}
-	if err := s.backend.DB.PurgeClientsByDocRefKey(ctx, docRefKey); err != nil {
-		return fmt.Errorf("failed to delete clients: %w", err)
-	}
-	if err := s.backend.DB.PurgeSnapshotsByDocRefKey(ctx, docRefKey); err != nil {
-		return fmt.Errorf("failed to delete snapshots: %w", err)
-	}
-
-	return nil
 }

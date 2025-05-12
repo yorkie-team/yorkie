@@ -1686,6 +1686,50 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunPurgeDocumentByRefKeyTest runs the PurgeDocumentByRefKey tests for the given db.
+func RunPurgeDocumentByRefKeyTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("PurgeDocumentByRefKey test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a client and a document then attach the document to the client.
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		// TODO(raararaara): Currently, no changes, snapshots, or versionVectors are created in this test.
+		// To validate their purging behavior, update operations and push/pull logic should be added
+		// so that those resources are actually generated and become valid purge targets.
+
+		// 02. Purge the document and check the document is removed.
+		// 02-1. Purge changes
+		count, err := db.PurgeChangesByDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+
+		// 02-2. Purge versionVectors
+		count, err = db.PurgeVersionVectorsByDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+
+		// 02-3. Purge clients
+		count, err = db.PurgeClientsByDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+
+		// 02-5. Purge snapshots
+		count, err = db.PurgeSnapshotsByDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+
+		err = db.PurgeDocInfoByDocRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
+}
+
 // AssertKeys checks the equivalence between the provided expectedKeys and the keys in the given infos.
 func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo) {
 	var keys []key.Key

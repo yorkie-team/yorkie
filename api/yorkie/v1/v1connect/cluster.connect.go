@@ -54,12 +54,16 @@ const (
 	// ClusterServiceCompactDocumentProcedure is the fully-qualified name of the ClusterService's
 	// CompactDocument RPC.
 	ClusterServiceCompactDocumentProcedure = "/yorkie.v1.ClusterService/CompactDocument"
+	// ClusterServicePurgeDocumentProcedure is the fully-qualified name of the ClusterService's
+	// PurgeDocument RPC.
+	ClusterServicePurgeDocumentProcedure = "/yorkie.v1.ClusterService/PurgeDocument"
 )
 
 // ClusterServiceClient is a client for the yorkie.v1.ClusterService service.
 type ClusterServiceClient interface {
 	DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error)
 	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
+	PurgeDocument(context.Context, *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error)
 }
 
 // NewClusterServiceClient constructs a client for the yorkie.v1.ClusterService service. By default,
@@ -82,6 +86,11 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			baseURL+ClusterServiceCompactDocumentProcedure,
 			opts...,
 		),
+		purgeDocument: connect.NewClient[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse](
+			httpClient,
+			baseURL+ClusterServicePurgeDocumentProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -89,6 +98,7 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type clusterServiceClient struct {
 	detachDocument  *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
 	compactDocument *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
+	purgeDocument   *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
 }
 
 // DetachDocument calls yorkie.v1.ClusterService.DetachDocument.
@@ -101,10 +111,16 @@ func (c *clusterServiceClient) CompactDocument(ctx context.Context, req *connect
 	return c.compactDocument.CallUnary(ctx, req)
 }
 
+// PurgeDocument calls yorkie.v1.ClusterService.PurgeDocument.
+func (c *clusterServiceClient) PurgeDocument(ctx context.Context, req *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error) {
+	return c.purgeDocument.CallUnary(ctx, req)
+}
+
 // ClusterServiceHandler is an implementation of the yorkie.v1.ClusterService service.
 type ClusterServiceHandler interface {
 	DetachDocument(context.Context, *connect.Request[v1.ClusterServiceDetachDocumentRequest]) (*connect.Response[v1.ClusterServiceDetachDocumentResponse], error)
 	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
+	PurgeDocument(context.Context, *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error)
 }
 
 // NewClusterServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -123,12 +139,19 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		svc.CompactDocument,
 		opts...,
 	)
+	clusterServicePurgeDocumentHandler := connect.NewUnaryHandler(
+		ClusterServicePurgeDocumentProcedure,
+		svc.PurgeDocument,
+		opts...,
+	)
 	return "/yorkie.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ClusterServiceDetachDocumentProcedure:
 			clusterServiceDetachDocumentHandler.ServeHTTP(w, r)
 		case ClusterServiceCompactDocumentProcedure:
 			clusterServiceCompactDocumentHandler.ServeHTTP(w, r)
+		case ClusterServicePurgeDocumentProcedure:
+			clusterServicePurgeDocumentHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -144,4 +167,8 @@ func (UnimplementedClusterServiceHandler) DetachDocument(context.Context, *conne
 
 func (UnimplementedClusterServiceHandler) CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.CompactDocument is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) PurgeDocument(context.Context, *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.PurgeDocument is not implemented"))
 }

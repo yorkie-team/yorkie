@@ -332,3 +332,17 @@ func CompactDocument(
 
 	return nil
 }
+
+// PurgeDocument purges the given document.
+func PurgeDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	document *database.DocInfo,
+) error {
+	if err := be.ClusterClient.PurgeDocument(ctx, document, project.PublicKey); err != nil {
+		return err
+	}
+
+	return nil
+}
