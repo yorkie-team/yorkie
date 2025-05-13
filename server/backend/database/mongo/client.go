@@ -1582,7 +1582,11 @@ func (c *Client) CreateSchemaInfo(
 		"created_at": gotime.Now(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("insert schema: %w", err)
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrSchemaAlreadyExists
+		}
+
+		return nil, fmt.Errorf("create schema info: %w", err)
 	}
 
 	return &database.SchemaInfo{
@@ -1628,12 +1632,12 @@ func (c *Client) ListSchemaInfos(
 ) ([]*database.SchemaInfo, error) {
 	result, err := c.collection(ColSchemas).Find(ctx, bson.M{
 		"project_id": projectID,
-	}, options.Find().SetSort(bson.M{
-		"name":    1,
-		"version": 1,
+	}, options.Find().SetSort(bson.D{
+		{Key: "name", Value: 1},
+		{Key: "version", Value: 1},
 	}))
 	if err != nil {
-		return nil, fmt.Errorf("find schema: %w", result.Err())
+		return nil, fmt.Errorf("find schema: %w", err)
 	}
 
 	var infos []*database.SchemaInfo
