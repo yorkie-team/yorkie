@@ -178,8 +178,8 @@ func (s *clusterServer) PurgeDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServicePurgeDocumentRequest],
 ) (*connect.Response[api.ClusterServicePurgeDocumentResponse], error) {
-	docID := types.ID(req.Msg.DocumentId)
 	projectID := types.ID(req.Msg.ProjectId)
+	docID := types.ID(req.Msg.DocumentId)
 
 	docRefKey := types.DocRefKey{
 		ProjectID: projectID,
@@ -191,7 +191,7 @@ func (s *clusterServer) PurgeDocument(
 	}
 
 	if !docInfo.IsRemoved() {
-		return nil, fmt.Errorf("document %s is not removed yet", docID)
+		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
 	}
 
 	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
@@ -208,21 +208,19 @@ func (s *clusterServer) PurgeDocument(
 		}
 	}()
 
-	log := logging.DefaultLogger()
-
-	count, err := s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey)
+	counts, err := s.backend.DB.PurgeDocument(ctx, docRefKey)
 	if err != nil {
-		log.Error("Failed to purge document", zap.Error(err))
+		logging.From(ctx).Error("failed to purge document", zap.Error(err))
 		return nil, err
 	}
 
-	log.Infow(fmt.Sprintf(
-		"Purged document internals [project_id=%s doc_id=%s]",
+	logging.From(ctx).Infow(fmt.Sprintf(
+		"purged document internals [project_id=%s doc_id=%s]",
 		projectID, docID,
 	),
-		"changes", count["changes"],
-		"snapshots", count["snapshots"],
-		"version_vectors", count["versionVectors"],
+		"changes", counts["changes"],
+		"snapshots", counts["snapshots"],
+		"versionvectors", counts["versionvectors"],
 	)
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil

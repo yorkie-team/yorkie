@@ -120,7 +120,7 @@ func TestDB(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, db, projectID)
 	})
 
-	t.Run("RunPurgeDocumentByRefKey test", func(t *testing.T) {
-		testcases.RunPurgeDocumentByRefKeyTest(t, db, projectID)
+	t.Run("RunPurgeDocument test", func(t *testing.T) {
+		testcases.RunPurgeDocument(t, db, projectID)
 	})
 }

@@ -1128,11 +1128,12 @@ func (d *DB) CompactChangeInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	// 1. Purge the resources of the document.
 	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
 		return err
 	}
 
-	// 4. Store compacted change and update document
+	// 2. Store compacted change and update document
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
@@ -1181,7 +1182,7 @@ func (d *DB) CompactChangeInfos(
 		}
 	}
 
-	// 5. Update document
+	// 3. Update document
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
@@ -1603,8 +1604,8 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-// PurgeDocInfoByDocRefKey purges the document of the given docRefKey.
-func (d *DB) PurgeDocInfoByDocRefKey(
+// PurgeDocument purges the given document.
+func (d *DB) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) (map[string]int64, error) {
@@ -1640,25 +1641,27 @@ func (d *DB) purgeDocumentInternals(
 	docID types.ID,
 	txn *memdb.Txn,
 ) (map[string]int64, error) {
-	result := make(map[string]int64)
+	counts := make(map[string]int64)
 
-	DeletedCount, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
+	count, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
 	if err != nil {
-		return nil, fmt.Errorf("delete old changes: %w", err)
+		return nil, fmt.Errorf("purge changes: %w", err)
 	}
-	result["changes"] = int64(DeletedCount)
-	DeletedCount, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
-	if err != nil {
-		return nil, fmt.Errorf("delete snapshots: %w", err)
-	}
-	result["snapshots"] = int64(DeletedCount)
-	DeletedCount, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
-	if err != nil {
-		return nil, fmt.Errorf("delete version vectors: %w", err)
-	}
-	result["versionVectors"] = int64(DeletedCount)
+	counts[tblChanges] = int64(count)
 
-	return result, nil
+	count, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshots: %w", err)
+	}
+	counts[tblSnapshots] = int64(count)
+
+	count, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge version vectors: %w", err)
+	}
+	counts[tblVersionVectors] = int64(count)
+
+	return counts, nil
 }
 
 func newID() types.ID {

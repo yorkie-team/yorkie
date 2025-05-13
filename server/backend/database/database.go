@@ -320,8 +320,8 @@ type Database interface {
 		excludeClientID types.ID,
 	) (bool, error)
 
-	// PurgeDocInfoByDocRefKey purges the document of the given refKey.
-	PurgeDocInfoByDocRefKey(
+	// PurgeDocument purges the given document.
+	PurgeDocument(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 	) (map[string]int64, error)

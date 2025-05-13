@@ -19,6 +19,7 @@ package documents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -44,10 +45,13 @@ const pageSizeLimit = 101
 var (
 	// ErrDocumentAttached is returned when the document is attached when
 	// deleting the document.
-	ErrDocumentAttached = fmt.Errorf("document is attached")
+	ErrDocumentAttached = errors.New("document is attached")
 
 	// ErrDocumentAlreadyExists is returned when the document already exists.
-	ErrDocumentAlreadyExists = fmt.Errorf("document already exists")
+	ErrDocumentAlreadyExists = errors.New("document already exists")
+
+	// ErrDocumentNotRemoved is returned when the document is not removed yet.
+	ErrDocumentNotRemoved = errors.New("document is not removed yet")
 )
 
 // CreateDocument creates a new document with the given key and server sequence.
