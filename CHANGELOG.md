@@ -7,6 +7,10 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- Add PurgeDocument to ClusterService by @raararaara in https://github.com/yorkie-team/yorkie/pull/1266
+
 ## [0.6.11] - 2025-05-13
 
 ### Added
