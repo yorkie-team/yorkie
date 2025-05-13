@@ -298,14 +298,6 @@ type Database interface {
 		versionVector time.VersionVector,
 	) (time.VersionVector, error)
 
-	// UpdateVersionVector updates the syncedSeq of the given client.
-	UpdateVersionVector(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		versionVector time.VersionVector,
-	) error
-
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
 	FindDocInfosByPaging(
 		ctx context.Context,
