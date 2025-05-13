@@ -1383,8 +1383,8 @@ func (d *DB) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateVersionVector updates the given serverSeq of the given client
-func (d *DB) UpdateVersionVector(
+// updateVersionVector updates the given serverSeq of the given client
+func (d *DB) updateVersionVector(
 	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1478,7 +1478,7 @@ func (d *DB) UpdateAndFindMinVersionVector(
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+	if err = d.updateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
 		return nil, err
 	}
 

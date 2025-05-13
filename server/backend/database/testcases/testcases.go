@@ -1699,10 +1699,17 @@ func RunPurgeDocumentByRefKeyTest(t *testing.T, db database.Database, projectID 
 		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		_, err := db.PurgeDocInfoByDocRefKey(ctx, docRefKey)
+		count, err := db.PurgeDocInfoByDocRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+
+		// TODO(raararaara): Currently, no changes, snapshots, or versionVectors are created in this test.
+		// To validate their purging behavior, update operations and push/pull logic should be added
+		// so that those resources are actually generated and become valid purge targets.
+		assert.Equal(t, int64(0), count["changes"])
+		assert.Equal(t, int64(0), count["snapshots"])
+		assert.Equal(t, int64(0), count["versionVectors"])
 	})
 }
 

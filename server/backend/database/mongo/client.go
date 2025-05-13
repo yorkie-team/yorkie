@@ -1347,7 +1347,7 @@ func (c *Client) UpdateAndFindMinVersionVector(
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
-	if err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
 
@@ -1403,8 +1403,8 @@ func (c *Client) UpdateAndFindMinVersionVector(
 	return time.MinVersionVector(vectors...), nil
 }
 
-// UpdateVersionVector updates the given version vector of the given client
-func (c *Client) UpdateVersionVector(
+// updateVersionVector updates the given version vector of the given client
+func (c *Client) updateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,

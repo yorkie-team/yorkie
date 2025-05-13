@@ -178,12 +178,12 @@ func (s *clusterServer) PurgeDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServicePurgeDocumentRequest],
 ) (*connect.Response[api.ClusterServicePurgeDocumentResponse], error) {
-	docId := types.ID(req.Msg.DocumentId)
-	projectId := types.ID(req.Msg.ProjectId)
+	docID := types.ID(req.Msg.DocumentId)
+	projectID := types.ID(req.Msg.ProjectId)
 
 	docRefKey := types.DocRefKey{
-		ProjectID: projectId,
-		DocID:     docId,
+		ProjectID: projectID,
+		DocID:     docID,
 	}
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
 	if err != nil {
@@ -191,10 +191,10 @@ func (s *clusterServer) PurgeDocument(
 	}
 
 	if !docInfo.IsRemoved() {
-		return nil, fmt.Errorf("document %s is not removed yet", docId)
+		return nil, fmt.Errorf("document %s is not removed yet", docID)
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (s *clusterServer) PurgeDocument(
 
 	log.Infow(fmt.Sprintf(
 		"Purged document internals [project_id=%s doc_id=%s]",
-		projectId, docId,
+		projectID, docID,
 	),
 		"changes", count["changes"],
 		"snapshots", count["snapshots"],
