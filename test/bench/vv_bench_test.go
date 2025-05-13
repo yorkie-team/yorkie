@@ -36,15 +36,13 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var testServer *server.Yorkie
-
-func benchmarkVV(b *testing.B, clientCnt int) {
+func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
 	for i := 0; i < b.N; i++ {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("vv-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document.
-		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, testServer.RPCAddr(), docKey, clientCnt)
+		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCnt)
 		assert.NoError(b, err)
 		c1, cN := clients[0], clients[clientCnt-1]
 		d1, dN := docs[0], docs[clientCnt-1]
@@ -100,13 +98,13 @@ func benchmarkVV(b *testing.B, clientCnt int) {
 		// Measurements:
 		//  - Attach time (to load the existing document)
 		start = gotime.Now()
-		cN1, dN1, err := helper.ClientAndAttachedDoc(ctx, testServer.RPCAddr(), docKey)
+		cN1, dN1, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
 		assert.NoError(b, err)
 		duration = gotime.Since(start).Milliseconds()
 		assert.Equal(b, `{"text":[{"val":"a"}]}`, dN1.Marshal())
 		b.ReportMetric(float64(duration), "4_attach(ms)")
 
-		cN2, dN2, err := helper.ClientAndAttachedDoc(ctx, testServer.RPCAddr(), docKey)
+		cN2, dN2, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
 		assert.NoError(b, err)
 		assert.Equal(b, `{"text":[{"val":"a"}]}`, dN2.Marshal())
 
@@ -151,23 +149,22 @@ func BenchmarkVersionVector(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	testServer = svr
 
-	defer func() {
+	b.Cleanup(func() {
 		if err := svr.Shutdown(true); err != nil {
-			logging.DefaultLogger().Error(err)
+			b.Fatal(err)
 		}
-	}()
+	})
 
 	b.Run("clients 10", func(b *testing.B) {
-		benchmarkVV(b, 10)
+		benchmarkVV(b, svr, 10)
 	})
 
 	b.Run("clients 100", func(b *testing.B) {
-		benchmarkVV(b, 100)
+		benchmarkVV(b, svr, 100)
 	})
 
 	b.Run("clients 1000", func(b *testing.B) {
-		benchmarkVV(b, 1000)
+		benchmarkVV(b, svr, 1000)
 	})
 }

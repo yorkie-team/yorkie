@@ -62,7 +62,7 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (s *clusterServer) DetachDocument(
 		"",
 		nil,
 	)
-	p := presence.New(changeCtx, innerpresence.NewPresence())
+	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
 
 	changes := []*change.Change{changeCtx.ToChange()}
@@ -133,4 +133,40 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// CompactDocument compacts the given document.
+func (s *clusterServer) CompactDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
+) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
+	docId := types.ID(req.Msg.DocumentId)
+	projectId := types.ID(req.Msg.ProjectId)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	if err := packs.Compact(ctx, s.backend, projectId, docInfo); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
 }

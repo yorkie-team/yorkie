@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.7
+  version: v0.6.11
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -18,6 +18,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/CreateDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -250,6 +262,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/UpdateDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/UpdateProject:
     post:
       description: ""
@@ -272,6 +296,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
+      required: true
+    yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateDocumentRequest'
       required: true
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectRequest:
       content:
@@ -444,6 +477,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.SignUpRequest'
       required: true
+    yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentRequest'
+      required: true
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest:
       content:
         application/json:
@@ -471,6 +513,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+      description: ""
+    yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateDocumentResponse'
       description: ""
     yorkie.v1.AdminService.CreateProject.yorkie.v1.CreateProjectResponse:
       content:
@@ -642,6 +693,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.SignUpResponse'
+      description: ""
+    yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateDocumentResponse'
       description: ""
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse:
       content:
@@ -897,6 +957,39 @@ components:
       description: ""
       title: ChangePasswordResponse
       type: object
+    yorkie.v1.CreateDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        initialRoot:
+          additionalProperties: false
+          description: ""
+          title: initial_root
+          type: string
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+      title: CreateDocumentRequest
+      type: object
+    yorkie.v1.CreateDocumentResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: CreateDocumentResponse
+      type: object
     yorkie.v1.CreateProjectRequest:
       additionalProperties: false
       description: ""
@@ -966,6 +1059,22 @@ components:
           type: object
       title: CreateSchemaResponse
       type: object
+    yorkie.v1.DataSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: integer
+        meta:
+          additionalProperties: false
+          description: ""
+          title: meta
+          type: integer
+      title: DataSize
+      type: object
     yorkie.v1.DeleteAccountRequest:
       additionalProperties: false
       description: ""
@@ -987,6 +1096,24 @@ components:
       description: ""
       title: DeleteAccountResponse
       type: object
+    yorkie.v1.DocSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        gc:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: gc
+          type: object
+        live:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: live
+          type: object
+      title: DocSize
+      type: object
     yorkie.v1.DocumentSummary:
       additionalProperties: false
       description: ""
@@ -1007,6 +1134,12 @@ components:
           additionalProperties: false
           description: ""
           title: created_at
+          type: object
+        documentSize:
+          $ref: '#/components/schemas/yorkie.v1.DocSize'
+          additionalProperties: false
+          description: ""
+          title: document_size
           type: object
         id:
           additionalProperties: false
@@ -1676,7 +1809,7 @@ components:
           type: string
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1890,7 +2023,7 @@ components:
           type: object
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1966,7 +2099,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -2035,7 +2168,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -2674,6 +2807,39 @@ components:
           title: events
           type: array
       title: EventWebhookEvents
+      type: object
+    yorkie.v1.UpdateDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
+      title: UpdateDocumentRequest
+      type: object
+    yorkie.v1.UpdateDocumentResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: UpdateDocumentResponse
       type: object
     yorkie.v1.UpdateProjectRequest:
       additionalProperties: false

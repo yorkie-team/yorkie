@@ -23,12 +23,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/index"
-)
-
-const (
-	// DefaultRootNodeType is the default type of root node.
-	DefaultRootNodeType = "root"
 )
 
 var (
@@ -45,22 +41,7 @@ var (
 )
 
 // TreeNode is a node of Tree.
-type TreeNode struct {
-	// Type is the type of this node. It is used to distinguish between text
-	// nodes and element nodes.
-	Type string
-
-	// Children is the children of this node. It is used to represent the
-	// descendants of this node. If this node is a text node, it is nil.
-	Children []TreeNode
-
-	// Value is the value of text node. If this node is an element node, it is
-	// empty string.
-	Value string
-
-	// Attributes is the attributes of this node.
-	Attributes map[string]string
-}
+type TreeNode = yson.TreeNode
 
 // Tree is a CRDT-based tree structure that is used to represent the document
 // tree of text-based editor such as ProseMirror.
@@ -99,9 +80,9 @@ func validateTextNode(treeNode TreeNode) error {
 func validateTreeNodes(treeNodes []*TreeNode) error {
 	firstTreeNodeType := treeNodes[0].Type
 
-	if firstTreeNodeType == index.DefaultTextType {
+	if firstTreeNodeType == index.TextNodeType {
 		for _, treeNode := range treeNodes {
-			if treeNode.Type != index.DefaultTextType {
+			if treeNode.Type != index.TextNodeType {
 				return ErrMixedNodeType
 			}
 
@@ -112,7 +93,7 @@ func validateTreeNodes(treeNodes []*TreeNode) error {
 
 	} else {
 		for _, treeNode := range treeNodes {
-			if treeNode.Type == index.DefaultTextType {
+			if treeNode.Type == index.TextNodeType {
 				return ErrMixedNodeType
 			}
 		}
@@ -221,7 +202,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil, nil)
+	pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -234,7 +215,6 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))
@@ -262,7 +242,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil, nil)
+	pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -275,7 +255,6 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		attributesToRemove,
 		ticket,
 	))
@@ -299,14 +278,14 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 			panic(err)
 		}
 
-		if contents[0].Type == index.DefaultTextType {
+		if contents[0].Type == index.TextNodeType {
 			value := ""
 
 			for _, content := range contents {
 				value += content.Value
 			}
 
-			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.DefaultTextType, nil, value))
+			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeID(ticket, 0), index.TextNodeType, nil, value))
 		} else {
 			for _, content := range contents {
 				var attributes *crdt.RHT
@@ -346,14 +325,13 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, pairs, err := t.Tree.Edit(
+	pairs, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
 		splitLevel,
 		ticket,
 		t.context.IssueTimeTicket,
-		nil,
 		nil,
 	)
 	if err != nil {
@@ -370,7 +348,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		toPos,
 		nodes,
 		splitLevel,
-		maxCreationMapByActor,
 		ticket,
 	))
 
@@ -381,7 +358,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 // node is nil, it creates a default root node.
 func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), DefaultRootNodeType, nil)
+		return crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), yson.DefaultRootNodeType, nil)
 	}
 
 	root := crdt.NewTreeNode(crdt.NewTreeNodeID(createdAt, 0), node.Type, nil)
@@ -396,7 +373,7 @@ func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 
 // buildDescendants converts the given node to a CRDT-based tree node.
 func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) error {
-	if n.Type == index.DefaultTextType {
+	if n.Type == index.TextNodeType {
 
 		if err := validateTextNode(n); err != nil {
 			return err

@@ -27,6 +27,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/cluster"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
@@ -53,13 +54,16 @@ type Backend struct {
 	// AuthWebhookClient is used to send auth webhook.
 	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
 
+	// ClusterClient is used to send requests to nodes in the cluster.
+	ClusterClient *cluster.Client
+
 	// EventWebhookManager is used to send event webhook
 	EventWebhookManager *webhook.Manager
 
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
-	// Locker is used to lock/unlock resources.
-	Locker *sync.LockerManager
+	// Lockers is used to lock/unlock resources.
+	Lockers *sync.LockerManager
 
 	// Metrics is used to expose metrics.
 	Metrics *prometheus.Metrics
@@ -120,17 +124,23 @@ func New(
 		},
 	))
 
-	// 03. Create pubsub, and locker.
-	locker := sync.New()
+	// 03. Create the cluster client. The cluster client is used to send
+	// requests to other nodes in the cluster.
+	clusterClient, err := cluster.Dial(conf.GatewayAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	// 04. Create pubsub, and lockers.
+	lockers := sync.New()
 	pubsub := pubsub.New()
 
-	// 04. Create the background instance. The background instance is used to
+	// 05. Create the background instance. The background instance is used to
 	// manage background tasks.
 	bg := background.New(metrics)
 
-	// 05. Create the database instance. If the MongoDB configuration is given,
+	// 06. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
-	var err error
 	var db database.Database
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
@@ -144,14 +154,14 @@ func New(
 		}
 	}
 
-	// 06. Create the housekeeping instance. The housekeeping is used
+	// 07. Create the housekeeping instance. The housekeeping is used
 	// to manage keeping tasks such as deactivating inactive clients.
 	keeping, err := housekeeping.New(housekeepingConf)
 	if err != nil {
 		return nil, err
 	}
 
-	// 07. Ensure the default user and project. If the default user and project
+	// 08. Ensure the default user and project. If the default user and project
 	// do not exist, create them.
 	if conf.UseDefaultProject {
 		_, _, err = db.EnsureDefaultUserAndProject(
@@ -165,16 +175,16 @@ func New(
 		}
 	}
 
-	// 08. Create the message broker instance.
+	// 09. Create the message broker instance.
 	broker := messagebroker.Ensure(kafkaConf)
 
-	// 09. Ensure the warehouse instance.
+	// 10. Ensure the warehouse instance.
 	warehouse, err := warehouse.Ensure(rocksConf)
 	if err != nil {
 		return nil, err
 	}
 
-	// 10. Return the backend instance.
+	// 11. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
@@ -192,8 +202,10 @@ func New(
 		AuthWebhookClient:   authWebhookClient,
 		EventWebhookManager: eventWebhookManger,
 
-		Locker: locker,
-		PubSub: pubsub,
+		ClusterClient: clusterClient,
+
+		Lockers: lockers,
+		PubSub:  pubsub,
 
 		Metrics:      metrics,
 		DB:           db,
@@ -224,6 +236,8 @@ func (b *Backend) Shutdown() error {
 
 	b.AuthWebhookClient.Close()
 	b.EventWebhookManager.Close()
+
+	b.ClusterClient.Close()
 
 	if err := b.MsgBroker.Close(); err != nil {
 		logging.DefaultLogger().Error(err)

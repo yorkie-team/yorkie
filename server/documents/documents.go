@@ -23,8 +23,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -41,7 +45,66 @@ var (
 	// ErrDocumentAttached is returned when the document is attached when
 	// deleting the document.
 	ErrDocumentAttached = fmt.Errorf("document is attached")
+
+	// ErrDocumentAlreadyExists is returned when the document already exists.
+	ErrDocumentAlreadyExists = fmt.Errorf("document already exists")
 )
+
+// CreateDocument creates a new document with the given key and server sequence.
+func CreateDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	userID types.ID,
+	docKey key.Key,
+	initialRoot yson.Object,
+) (*types.DocumentSummary, error) {
+	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+		ctx,
+		types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  userID,
+		},
+		docKey,
+		true,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if docInfo.Owner != userID || docInfo.ServerSeq != 0 {
+		return nil, fmt.Errorf("create document: %w", ErrDocumentAlreadyExists)
+	}
+
+	newDoc := document.New(docInfo.Key)
+	if err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(initialRoot)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if err = be.DB.CompactChangeInfos(
+		ctx,
+		project.ID,
+		docInfo,
+		docInfo.ServerSeq,
+		newDoc.CreateChangePack().Changes,
+	); err != nil {
+		return nil, err
+	}
+
+	return &types.DocumentSummary{
+		ID:              docInfo.ID,
+		Key:             docInfo.Key,
+		AttachedClients: 0,
+		CreatedAt:       docInfo.CreatedAt,
+		AccessedAt:      docInfo.AccessedAt,
+		UpdatedAt:       docInfo.UpdatedAt,
+		Snapshot:        newDoc.Marshal(),
+		DocSize:         newDoc.DocSize(),
+	}, nil
+}
 
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(
@@ -89,6 +152,7 @@ func ListDocumentSummaries(
 			}
 
 			summary.Snapshot = snapshot
+			summary.DocSize = doc.DocSize()
 		}
 
 		summaries = append(summaries, summary)
@@ -127,6 +191,7 @@ func GetDocumentSummary(
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
 		Snapshot:        doc.Marshal(),
+		DocSize:         doc.DocSize(),
 	}, nil
 }
 
@@ -270,6 +335,68 @@ func FindDocInfoByKeyAndOwner(
 	)
 }
 
+// UpdateDocument updates the given document with the given root.
+// change pack.
+func UpdateDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docInfo *database.DocInfo,
+	root yson.Object,
+) (*types.DocumentSummary, error) {
+	clientInfo := &database.ClientInfo{
+		ID:        types.IDFromActorID(time.InitialActorID),
+		ProjectID: project.ID,
+		Documents: map[types.ID]*database.ClientDocInfo{
+			docInfo.ID: {
+				Status:    database.DocumentAttached,
+				ServerSeq: docInfo.ServerSeq,
+				ClientSeq: 0,
+			},
+		},
+	}
+
+	doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, change.Checkpoint{
+		ServerSeq: docInfo.ServerSeq,
+		ClientSeq: 0,
+	}, time.InitialActorID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if _, err = packs.PushPull(
+		ctx,
+		be,
+		project,
+		clientInfo,
+		docInfo,
+		doc.CreateChangePack(),
+		packs.PushPullOptions{
+			Mode:   types.SyncModePushOnly,
+			Status: document.StatusAttached,
+		}); err != nil {
+		return nil, err
+	}
+
+	return &types.DocumentSummary{
+		ID:              docInfo.ID,
+		Key:             docInfo.Key,
+		AttachedClients: 0,
+		CreatedAt:       docInfo.CreatedAt,
+		AccessedAt:      docInfo.AccessedAt,
+		UpdatedAt:       docInfo.UpdatedAt,
+		Snapshot:        doc.Marshal(),
+		DocSize:         doc.DocSize(),
+	}, nil
+}
+
 // RemoveDocument removes the given document. If force is false, it only removes
 // the document if it is not attached to any client.
 func RemoveDocument(
@@ -315,4 +442,18 @@ func GetAttachedClientsCount(
 	}
 
 	return len(infos), nil
+}
+
+// CompactDocument compacts the given document.
+func CompactDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	document *database.DocInfo,
+) error {
+	if err := be.ClusterClient.CompactDocument(ctx, document, project.PublicKey); err != nil {
+		return err
+	}
+
+	return nil
 }

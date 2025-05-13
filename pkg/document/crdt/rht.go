@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // RHTNode is a node of RHT(Replicated Hashtable).
@@ -73,6 +74,13 @@ func (n *RHTNode) RemovedAt() *time.Ticket {
 // IsRemoved returns whether this node is removed or not.
 func (n *RHTNode) IsRemoved() bool {
 	return n.isRemoved
+}
+
+func (n *RHTNode) DataSize() resource.DataSize {
+	return resource.DataSize{
+		Data: (len(n.key) + len(n.val)) * 2,
+		Meta: time.TicketSize,
+	}
 }
 
 // RHT is a hashtable with logical clock(Replicated hashtable).

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,16 @@
  * limitations under the License.
  */
 
-package database
+package resource
 
-import (
-	"github.com/yorkie-team/yorkie/api/types"
-)
+// DocSize represents the size of a document in bytes.
+type DocSize struct {
+	Live DataSize
+	GC   DataSize
+}
 
-// SyncedSeqInfo is a structure representing information about the synchronized
-// sequence for each client.
-type SyncedSeqInfo struct {
-	ID        types.ID `bson:"_id"`
-	ProjectID types.ID `bson:"project_id"`
-	DocID     types.ID `bson:"doc_id"`
-	ClientID  types.ID `bson:"client_id"`
-	Lamport   int64    `bson:"lamport"`
-	ActorID   types.ID `bson:"actor_id"`
-	ServerSeq int64    `bson:"server_seq"`
+// DataSize represents the size of a resource in bytes.
+type DataSize struct {
+	Data int
+	Meta int
 }

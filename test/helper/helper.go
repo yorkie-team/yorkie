@@ -35,6 +35,7 @@ import (
 	gomongo "go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.uber.org/zap"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -59,6 +60,7 @@ import (
 )
 
 var testStartedAt int64
+var logger *zap.Logger
 
 // Below are the values of the Yorkie config used in the test.
 var (
@@ -73,6 +75,7 @@ var (
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
+	HousekeepingCompactionMinChanges      = 1000
 
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
@@ -98,6 +101,12 @@ var (
 func init() {
 	now := gotime.Now()
 	testStartedAt = now.Unix()
+
+	var err error
+	logger, err = zap.NewProduction()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // TestDBName returns the name of test database with timestamp.
@@ -204,7 +213,7 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 }
 
 // BuildIndexTree builds an index tree from the given block node.
-func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
+func BuildIndexTree(node json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
@@ -222,7 +231,7 @@ func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.SetNewTree("test", node)
+		root.SetNewTree("test", *node)
 
 		return nil
 	})
@@ -271,6 +280,7 @@ func TestConfig() *server.Config {
 			Interval:                  HousekeepingInterval.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
+			CompactionMinChanges:      HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
 			AdminUser:                   server.DefaultAdminUser,
@@ -596,7 +606,7 @@ func ClientAndAttachedDoc(
 	rpcAddr string,
 	docKey key.Key,
 ) (*client.Client, *document.Document, error) {
-	c, err := client.Dial(rpcAddr)
+	c, err := client.Dial(rpcAddr, client.WithLogger(logger))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -630,6 +640,22 @@ func ClientsAndAttachedDocs(
 		docs = append(docs, doc)
 	}
 	return clients, docs, nil
+}
+
+// ActiveClients is a helper function to create n active clients.
+func ActiveClients(b *testing.B, rpcAddr string, n int) (clients []*client.Client) {
+	for range n {
+		c, err := client.Dial(
+			rpcAddr,
+			client.WithMaxRecvMsgSize(50*1024*1024),
+			client.WithLogger(logger),
+		)
+		assert.NoError(b, err)
+
+		assert.NoError(b, c.Activate(context.Background()))
+		clients = append(clients, c)
+	}
+	return
 }
 
 // CleanupClients is a helper function to clean up clients.

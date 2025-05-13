@@ -19,10 +19,11 @@ package database
 import (
 	"errors"
 	"fmt"
-	"time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Below are the errors may occur depending on the document and client status.
@@ -80,12 +81,12 @@ type ClientInfo struct {
 	Metadata map[string]string `bson:"metadata"`
 
 	// CreatedAt is the time when the client was created.
-	CreatedAt time.Time `bson:"created_at"`
+	CreatedAt gotime.Time `bson:"created_at"`
 
 	// UpdatedAt is the last time the client was accessed.
 	// NOTE(hackerwins): The field name is "updated_at" but it is used as
 	// "accessed_at".
-	UpdatedAt time.Time `bson:"updated_at"`
+	UpdatedAt gotime.Time `bson:"updated_at"`
 }
 
 // CheckIfInProject checks if the client is in the project.
@@ -105,7 +106,7 @@ func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 // Deactivate sets the status of this client to be deactivated.
 func (i *ClientInfo) Deactivate() {
 	i.Status = ClientDeactivated
-	i.UpdatedAt = time.Now()
+	i.UpdatedAt = gotime.Now()
 }
 
 // AttachDocument attaches the given document to this client.
@@ -134,7 +135,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 		ServerSeq: 0,
 		ClientSeq: 0,
 	}
-	i.UpdatedAt = time.Now()
+	i.UpdatedAt = gotime.Now()
 
 	return nil
 }
@@ -148,7 +149,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
-	i.UpdatedAt = time.Now()
+	i.UpdatedAt = gotime.Now()
 
 	return nil
 }
@@ -162,7 +163,7 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
-	i.UpdatedAt = time.Now()
+	i.UpdatedAt = gotime.Now()
 
 	return nil
 }
@@ -198,7 +199,7 @@ func (i *ClientInfo) UpdateCheckpoint(
 
 	i.Documents[docID].ServerSeq = cp.ServerSeq
 	i.Documents[docID].ClientSeq = cp.ClientSeq
-	i.UpdatedAt = time.Now()
+	i.UpdatedAt = gotime.Now()
 
 	return nil
 }
@@ -296,4 +297,14 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 		ProjectID: i.ProjectID,
 		ClientID:  i.ID,
 	}
+}
+
+// IsServerClient returns true if this client represents a server‐side process.
+func (i *ClientInfo) IsServerClient() bool {
+	actorID, err := i.ID.ToActorID()
+	if err != nil {
+		return false
+	}
+
+	return actorID == time.InitialActorID
 }

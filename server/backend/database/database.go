@@ -181,6 +181,14 @@ type Database interface {
 		candidatesLimit int,
 	) ([]*ClientInfo, error)
 
+	// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+	FindCompactionCandidatesPerProject(
+		ctx context.Context,
+		project *ProjectInfo,
+		candidatesLimit int,
+		compactionMinChanges int,
+	) ([]*DocInfo, error)
+
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(
 		ctx context.Context,
@@ -233,6 +241,15 @@ type Database interface {
 		isRemoved bool,
 	) error
 
+	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
+	CompactChangeInfos(
+		ctx context.Context,
+		projectID types.ID,
+		docInfo *DocInfo,
+		lastServerSeq int64,
+		changes []*change.Change,
+	) error
+
 	// FindLatestChangeInfoByActor returns the latest change created by given actorID.
 	FindLatestChangeInfoByActor(
 		ctx context.Context,
@@ -278,22 +295,14 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-	// and returns the SyncedVersionVector of the document.
-	UpdateAndFindMinSyncedVersionVector(
+	// UpdateAndFindMinVersionVector updates the version vector of the given client
+	// and returns the minimum version vector of all clients.
+	UpdateAndFindMinVersionVector(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		versionVector time.VersionVector,
 	) (time.VersionVector, error)
-
-	// UpdateVersionVector updates the syncedSeq of the given client.
-	UpdateVersionVector(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docRefKey types.DocRefKey,
-		versionVector time.VersionVector,
-	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
 	FindDocInfosByPaging(

@@ -37,7 +37,7 @@ import (
 var tID = reflect.TypeOf(types.ID(""))
 var tActorID = reflect.TypeOf(time.ActorID{})
 var tVersionVector = reflect.TypeOf(time.VersionVector{})
-var tPresenceChange = reflect.TypeOf(&innerpresence.PresenceChange{})
+var tPresenceChange = reflect.TypeOf(&innerpresence.Change{})
 
 // NewRegistryBuilder returns a new registry builder with the default encoder and decoder.
 func NewRegistryBuilder() *bsoncodec.RegistryBuilder {
@@ -147,7 +147,7 @@ func presenceChangeEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val
 			Name: "presenceChangeEncoder", Types: []reflect.Type{tPresenceChange}, Received: val}
 	}
 
-	presenceChange := val.Interface().(*innerpresence.PresenceChange)
+	presenceChange := val.Interface().(*innerpresence.Change)
 	if presenceChange == nil {
 		if err := vw.WriteNull(); err != nil {
 			return fmt.Errorf("encode error: %w", err)

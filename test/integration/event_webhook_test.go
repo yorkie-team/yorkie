@@ -33,9 +33,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -106,9 +106,9 @@ func TestRegisterEventWebhook(t *testing.T) {
 
 	cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
 
-	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-		"counter": json.NewCounter(0, crdt.LongCnt),
-	})))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+		yson.ParseObject(`{"counter": Counter(Long(0))}`),
+	)))
 
 	t.Run("register and unregister event webhook test", func(t *testing.T) {
 		// 01. Register event webhook
@@ -182,9 +182,9 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 
 		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
 
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+			yson.ParseObject(`{"counter": Counter(Long(0))}`),
+		)))
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
@@ -219,9 +219,9 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 
 		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
 
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+			yson.ParseObject(`{"counter": Counter(Long(0))}`),
+		)))
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
@@ -256,9 +256,9 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 
 		cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
 
-		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-			"counter": json.NewCounter(0, crdt.LongCnt),
-		})))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+			yson.ParseObject(`{"counter": Counter(Long(0))}`),
+		)))
 		assert.NoError(t, cli.Sync(ctx))
 		time.Sleep(waitWebhookReceived)
 
@@ -305,9 +305,9 @@ func TestEventWebhookThrottling(t *testing.T) {
 	assert.NoError(t, err)
 
 	cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
-	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-		"counter": json.NewCounter(0, crdt.LongCnt),
-	})))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+		yson.ParseObject(`{"counter": Counter(Long(0))}`),
+	)))
 
 	t.Run("throttling Event Test", func(t *testing.T) {
 		ticker := time.NewTicker(eventInterval)
@@ -373,9 +373,9 @@ func TestCloseEventManager(t *testing.T) {
 	cli, err := client.Dial(svr.RPCAddr(), client.WithAPIKey(project.PublicKey))
 	assert.NoError(t, err)
 	assert.NoError(t, cli.Activate(ctx))
-	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(map[string]any{
-		"counter": json.NewCounter(0, crdt.LongCnt),
-	})))
+	assert.NoError(t, cli.Attach(ctx, doc, client.WithInitialRoot(
+		yson.ParseObject(`{"counter": Counter(Long(0))}`),
+	)))
 
 	t.Run("Force flush event when server shutdown Test", func(t *testing.T) {
 		// this triggers webhook directly.

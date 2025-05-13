@@ -109,6 +109,7 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = newNode
 	if !ok || v.CreatedAt().After(node.elem.CreatedAt()) {
 		rht.nodeMapByKey[k] = newNode
+		v.SetMovedAt(v.CreatedAt())
 	}
 
 	return removed

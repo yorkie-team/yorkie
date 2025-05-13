@@ -30,8 +30,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -39,9 +42,9 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// PushPullKey creates a new sync.Key of PushPull for the given document.
-func PushPullKey(projectID types.ID, docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s-%s", projectID, docKey))
+// DocEditKey creates a new sync.Key of Document Edit for the given document.
+func DocEditKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("docedit-%s-%s", projectID, docKey))
 }
 
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
@@ -126,14 +129,16 @@ func PushPull(
 		}
 	}
 
-	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-		return nil, err
+	if !clientInfo.IsServerClient() {
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+			return nil, err
+		}
 	}
 
-	// 05. update and find min synced version vector for garbage collection.
+	// 05. update and find min version vector for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedVersionVector, err := be.DB.UpdateAndFindMinSyncedVersionVector(
+	minVersionVector, err := be.DB.UpdateAndFindMinVersionVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -143,14 +148,8 @@ func PushPull(
 		return nil, err
 	}
 	if respPack.SnapshotLen() == 0 {
-		respPack.VersionVector = minSyncedVersionVector
+		respPack.VersionVector = minVersionVector
 	}
-
-	// TODO(hackerwins): This is a previous implementation before the version
-	// vector was introduced. But it is necessary to support the previous
-	// SDKs that do not support the version vector. This code should be removed
-	// after all SDKs are updated.
-	respPack.MinSyncedTicket = time.InitialTicket
 
 	respPack.ApplyDocInfo(docInfo)
 
@@ -203,7 +202,7 @@ func PushPull(
 				}
 			}
 
-			locker, err := be.Locker.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
+			locker, err := be.Lockers.Locker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
@@ -226,7 +225,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedVersionVector,
+				minVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
@@ -320,4 +319,80 @@ func BuildInternalDocForServerSeq(
 	}
 
 	return doc, nil
+}
+
+// Compact compacts the given document and its metadata and stores them in the
+// database.
+func Compact(
+	ctx context.Context,
+	be *backend.Backend,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+) error {
+	// 1. Check if the document is attached.
+	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
+		ProjectID: projectID,
+		DocID:     docInfo.ID,
+	}, "")
+	if err != nil {
+		return err
+	}
+	if isAttached {
+		return fmt.Errorf("document is attached")
+	}
+
+	// 2. Build compacted changes and check if the content is the same.
+	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
+		return err
+	}
+
+	root, err := yson.FromCRDT(doc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	newDoc := document.New(docInfo.Key)
+	if err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetYSON(root)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	newRoot, err := yson.FromCRDT(newDoc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	// 3. Check if the content is the same after rebuilding.
+	prevMarshalled, err := root.(yson.Object).Marshal()
+	if err != nil {
+		return err
+	}
+	newMarshalled, err := newRoot.(yson.Object).Marshal()
+	if err != nil {
+		return err
+	}
+	if prevMarshalled != newMarshalled {
+		return fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
+	}
+
+	// 4. Store compacted changes and metadata in the database.
+	if err = be.DB.CompactChangeInfos(
+		ctx,
+		projectID,
+		docInfo,
+		docInfo.ServerSeq,
+		newDoc.CreateChangePack().Changes,
+	); err != nil {
+		logging.DefaultLogger().Errorf(
+			"[CD] Document %s failed to compact: %v\n Root: %s\n",
+			docInfo.ID, err, prevMarshalled,
+		)
+		return err
+	}
+
+	return nil
 }

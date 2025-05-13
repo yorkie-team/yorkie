@@ -35,45 +35,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var defaultServer *server.Yorkie
-
-func startDefaultServer() {
-	config := helper.TestConfig()
-	svr, err := server.New(config)
-	if err != nil {
-		logging.DefaultLogger().Fatal(err)
-	}
-	if err := svr.Start(); err != nil {
-		logging.DefaultLogger().Fatal(err)
-	}
-	defaultServer = svr
-}
-
-// activeClient is a helper function to create active clients.
-func activeClients(b *testing.B, n int) (clients []*client.Client) {
-	for i := 0; i < n; i++ {
-		c, err := client.Dial(
-			defaultServer.RPCAddr(),
-			client.WithMaxRecvMsgSize(50*1024*1024),
-		)
-		assert.NoError(b, err)
-
-		err = c.Activate(context.Background())
-		assert.NoError(b, err)
-
-		clients = append(clients, c)
-	}
-	return
-}
-
 func benchmarkUpdateAndSync(
-	ctx context.Context,
 	b *testing.B,
+	ctx context.Context,
 	cnt int,
 	cli *client.Client,
 	d *document.Document,
@@ -147,51 +115,37 @@ func watchDoc(
 }
 
 func BenchmarkRPC(b *testing.B) {
-	err := logging.SetLogLevel("error")
-	assert.NoError(b, err)
-	startDefaultServer()
-	defer func() {
-		if defaultServer == nil {
-			return
-		}
+	assert.NoError(b, logging.SetLogLevel("error"))
 
-		if err := defaultServer.Shutdown(true); err != nil {
-			logging.DefaultLogger().Error(err)
+	svr := helper.TestServer()
+	assert.NoError(b, svr.Start())
+	b.Cleanup(func() {
+		if err := svr.Shutdown(true); err != nil {
+			b.Fatal(err)
 		}
-	}()
+	})
 
 	b.Run("client to server", func(b *testing.B) {
-		cli, err := client.Dial(
-			defaultServer.RPCAddr(),
-		)
-		assert.NoError(b, err)
-		defer func() {
-			err := cli.Close()
-			assert.NoError(b, err)
-		}()
-
 		ctx := context.Background()
-		err = cli.Activate(ctx)
-		assert.NoError(b, err)
-
-		d1 := document.New("doc1")
-		err = cli.Attach(ctx, d1)
+		cli, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), "doc1")
 		assert.NoError(b, err)
 
 		for i := 0; i < b.N; i++ {
 			testKey := "testKey"
-			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewText(testKey)
+			err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+				r.SetNewText(testKey)
 				return nil
 			})
 			assert.NoError(b, err)
 
-			benchmarkUpdateAndSync(ctx, b, 100, cli, d1, testKey)
+			benchmarkUpdateAndSync(b, ctx, 100, cli, doc, testKey)
 		}
+
+		assert.NoError(b, cli.Close())
 	})
 
 	b.Run("client to client via server", func(b *testing.B) {
-		clients := activeClients(b, 2)
+		clients := helper.ActiveClients(b, svr.RPCAddr(), 2)
 		c1, c2 := clients[0], clients[1]
 		defer helper.CleanupClients(b, clients)
 
@@ -201,8 +155,8 @@ func BenchmarkRPC(b *testing.B) {
 		err := c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewText(testKey1)
+		err = d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText(testKey1)
 			return nil
 		})
 		assert.NoError(b, err)
@@ -211,8 +165,8 @@ func BenchmarkRPC(b *testing.B) {
 		err = c2.Attach(ctx, d2, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewText(testKey2)
+		err = d2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText(testKey2)
 			return nil
 		})
 		assert.NoError(b, err)
@@ -238,11 +192,11 @@ func BenchmarkRPC(b *testing.B) {
 			}()
 
 			go func() {
-				benchmarkUpdateAndSync(ctx, b, 50, c1, d1, testKey1)
+				benchmarkUpdateAndSync(b, ctx, 50, c1, d1, testKey1)
 				done1 <- true
 			}()
 			go func() {
-				benchmarkUpdateAndSync(ctx, b, 50, c2, d2, testKey2)
+				benchmarkUpdateAndSync(b, ctx, 50, c2, d2, testKey2)
 				done2 <- true
 			}()
 
@@ -251,13 +205,11 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("attach large document", func(b *testing.B) {
-		var builder strings.Builder
-		for c := 0; c < 10485000; c++ {
-			builder.WriteString("a")
-		}
+		str := strings.Repeat("a", 10485000)
+
 		for i := 0; i < b.N; i++ {
 			func() {
-				clients := activeClients(b, 2)
+				clients := helper.ActiveClients(b, svr.RPCAddr(), 2)
 				c1, c2 := clients[0], clients[1]
 				defer helper.CleanupClients(b, clients)
 
@@ -265,15 +217,15 @@ func BenchmarkRPC(b *testing.B) {
 				doc1 := document.New(helper.TestDocKey(b))
 				doc2 := document.New(helper.TestDocKey(b))
 
-				err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
-					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
+				err := doc1.Update(func(r *json.Object, p *presence.Presence) error {
+					text := r.SetNewText("k1")
+					text.Edit(0, 0, str)
 					return nil
 				})
 				assert.NoError(b, err)
-				err = doc2.Update(func(root *json.Object, p *presence.Presence) error {
-					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
+				err = doc2.Update(func(r *json.Object, p *presence.Presence) error {
+					text := r.SetNewText("k1")
+					text.Edit(0, 0, str)
 					return nil
 				})
 				assert.NoError(b, err)
@@ -296,7 +248,7 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("adminCli to server", func(b *testing.B) {
-		adminCli := helper.CreateAdminCli(b, defaultServer.RPCAddr())
+		adminCli := helper.CreateAdminCli(b, svr.RPCAddr())
 		defer func() { adminCli.Close() }()
 
 		ctx := context.Background()

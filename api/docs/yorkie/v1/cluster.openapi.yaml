@@ -3,13 +3,25 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.7
+  version: v0.6.11
 servers:
 - description: Production server
   url: https://api.yorkie.dev
 - description: Local server
   url: http://localhost:8080
 paths:
+  /yorkie.v1.ClusterService/CompactDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/DetachDocument:
     post:
       description: ""
@@ -24,6 +36,15 @@ paths:
       - yorkie.v1.ClusterService
 components:
   requestBodies:
+    yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest'
+      required: true
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentRequest:
       content:
         application/json:
@@ -42,6 +63,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/connect.error'
+      description: ""
+    yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse'
       description: ""
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentResponse:
       content:
@@ -175,6 +205,27 @@ components:
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
       type: string
+    yorkie.v1.ClusterServiceCompactDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServiceCompactDocumentRequest
+      type: object
+    yorkie.v1.ClusterServiceCompactDocumentResponse:
+      additionalProperties: false
+      description: ""
+      title: ClusterServiceCompactDocumentResponse
+      type: object
     yorkie.v1.ClusterServiceDetachDocumentRequest:
       additionalProperties: false
       description: ""
@@ -203,6 +254,40 @@ components:
       description: ""
       title: ClusterServiceDetachDocumentResponse
       type: object
+    yorkie.v1.DataSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: integer
+        meta:
+          additionalProperties: false
+          description: ""
+          title: meta
+          type: integer
+      title: DataSize
+      type: object
+    yorkie.v1.DocSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        gc:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: gc
+          type: object
+        live:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: live
+          type: object
+      title: DocSize
+      type: object
     yorkie.v1.DocumentSummary:
       additionalProperties: false
       description: ""
@@ -223,6 +308,12 @@ components:
           additionalProperties: false
           description: ""
           title: created_at
+          type: object
+        documentSize:
+          $ref: '#/components/schemas/yorkie.v1.DocSize'
+          additionalProperties: false
+          description: ""
+          title: document_size
           type: object
         id:
           additionalProperties: false

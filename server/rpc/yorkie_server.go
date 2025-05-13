@@ -159,11 +159,10 @@ func (s *yorkieServer) AttachDocument(
 
 	// 03. Lock the given document
 	project := projects.From(ctx)
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
-
 	if err := locker.Lock(ctx); err != nil {
 		return nil, err
 	}
@@ -261,7 +260,7 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
@@ -357,9 +356,9 @@ func (s *yorkieServer) PushPullChanges(
 	project := projects.From(ctx)
 
 	if pack.HasChanges() {
-		locker, err := s.backend.Locker.NewLocker(
+		locker, err := s.backend.Lockers.Locker(
 			ctx,
-			packs.PushPullKey(project.ID, pack.DocumentKey),
+			packs.DocEditKey(project.ID, pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -464,7 +463,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	locker, err := s.backend.Locker.NewLocker(
+	locker, err := s.backend.Lockers.Locker(
 		ctx,
 		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)),
 	)
@@ -579,7 +578,7 @@ func (s *yorkieServer) RemoveDocument(
 	project := projects.From(ctx)
 
 	if pack.HasChanges() {
-		locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+		locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
 		if err != nil {
 			return nil, err
 		}

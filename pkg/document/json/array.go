@@ -17,13 +17,14 @@
 package json
 
 import (
-	"reflect"
+	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Array represents an array in the document. As a proxy for the CRDT array,
@@ -160,6 +161,94 @@ func (p *Array) AddNewArray() *Array {
 	})
 
 	return v.(*Array)
+}
+
+// AddNewCounter adds a new counter at the last.
+func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Counter {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		counter, err := crdt.NewCounter(valueType, value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return NewCounter(value, valueType).Initialize(p.context, counter)
+	})
+	return v.(*Counter)
+}
+
+// AddNewText adds a new text at the last.
+func (p *Array) AddNewText() *Text {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		text := NewText()
+		return text.Initialize(p.context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
+	})
+	return v.(*Text)
+}
+
+// AddNewTree adds a new tree at the last.
+func (p *Array) AddNewTree(initialRoot ...TreeNode) *Tree {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		var root TreeNode
+		if len(initialRoot) > 0 {
+			root = initialRoot[0]
+		}
+		tree := NewTree(&root)
+		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, &root, ticket), ticket))
+	})
+	return v.(*Tree)
+}
+
+// AddNewObject adds a new object at the last.
+func (p *Array) AddNewObject() *Object {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+	})
+	return v.(*Object)
+}
+
+// AddYSON adds the given YSON element to the array.
+func (p *Array) AddYSON(value interface{}) *Array {
+	switch y := value.(type) {
+	case yson.Counter:
+		p.AddNewCounter(y.Type, y.Value)
+	case yson.Array:
+		a := p.AddNewArray()
+		for _, elem := range y {
+			a.AddYSON(elem)
+		}
+	case yson.Object:
+		o := p.AddNewObject()
+		for key, value := range y {
+			o.SetYSONElement(key, value)
+		}
+	case yson.Text:
+		t := p.AddNewText()
+		t.EditFromYSON(y)
+	case yson.Tree:
+		p.AddNewTree(y.Root)
+	default:
+		switch v := y.(type) {
+		case nil:
+			p.AddNull()
+		case bool:
+			p.AddBool(v)
+		case int32:
+			p.AddInteger(int(v))
+		case int64:
+			p.AddLong(v)
+		case float64:
+			p.AddDouble(v)
+		case string:
+			p.AddString(v)
+		case []byte:
+			p.AddBytes(v)
+		case gotime.Time:
+			p.AddDate(v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
+	}
+
+	return p
 }
 
 // MoveBefore moves the given element to its new position before the given next element.
@@ -436,81 +525,4 @@ func (p *Array) setByIndexInternal(
 	// because there is no way to distinguish between old and new element with same `createdAt`.
 	p.context.RegisterElement(value)
 	return elem
-}
-
-// buildArrayElements return the element slice of the given array.
-// Because the type of the given array is `any`, it is necessary to type assertion.
-func buildArrayElements(
-	context *change.Context,
-	elements any,
-	stat *buildState,
-) []crdt.Element {
-	// 01. The type of elements of the given array is one of the basic types.
-	switch elements := elements.(type) {
-	case []any:
-		return sliceToElements[any](elements, context, stat)
-	case []int:
-		return sliceToElements[int](elements, context, stat)
-	case []int32:
-		return sliceToElements[int32](elements, context, stat)
-	case []int64:
-		return sliceToElements[int64](elements, context, stat)
-	case []float32:
-		return sliceToElements[float32](elements, context, stat)
-	case []float64:
-		return sliceToElements[float64](elements, context, stat)
-	case []string:
-		return sliceToElements[string](elements, context, stat)
-	case []bool:
-		return sliceToElements[bool](elements, context, stat)
-	case [][]byte:
-		return sliceToElements[[]byte](elements, context, stat)
-	case []gotime.Time:
-		return sliceToElements[gotime.Time](elements, context, stat)
-	case []Counter:
-		return sliceToElements[Counter](elements, context, stat)
-	case []Text:
-		return sliceToElements[Text](elements, context, stat)
-	case []Tree:
-		return sliceToElements[Tree](elements, context, stat)
-	case []map[string]any:
-		return sliceToElements[map[string]any](elements, context, stat)
-	}
-
-	// 02. The type of elements of the given array is user defined struct or array.
-	switch reflect.ValueOf(elements).Type().Elem().Kind() {
-	case reflect.Struct:
-		length := reflect.ValueOf(elements).Len()
-		array := make([]reflect.Value, length)
-
-		// NOTE(highcloud100): The structure cannot immediately call Interface()
-		// because it can have an unexposed field. If we call Interface(), panic will occur.
-		for i := 0; i < length; i++ {
-			array[i] = reflect.ValueOf(elements).Index(i)
-		}
-
-		return sliceToElements[reflect.Value](array, context, stat)
-	case reflect.Slice, reflect.Array, reflect.Ptr:
-		length := reflect.ValueOf(elements).Len()
-		array := make([]any, length)
-
-		for i := 0; i < length; i++ {
-			array[i] = reflect.ValueOf(elements).Index(i).Interface()
-		}
-		return sliceToElements[any](array, context, stat)
-	default:
-		panic("unhandled default case")
-	}
-}
-
-// sliceToElements converts the given specific type array to crdt.Element array
-func sliceToElements[T any](elements []T, context *change.Context, stat *buildState) []crdt.Element {
-	elems := make([]crdt.Element, len(elements))
-
-	for idx, value := range elements {
-		ticket := context.IssueTimeTicket()
-		elems[idx] = buildCRDTElement(context, value, ticket, stat)
-	}
-
-	return elems
 }

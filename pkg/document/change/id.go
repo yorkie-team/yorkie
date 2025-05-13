@@ -104,15 +104,7 @@ func (id ID) SyncClocks(other ID) ID {
 		lamport = other.lamport + 1
 	}
 
-	// NOTE(chacha912): For changes created by legacy SDK prior to v0.5.2 that lack version
-	// vectors, document's version vector was not being properly accumlated. To address this,
-	// we generate a version vector using the lamport timestamp when no version vector exists.
-	otherVV := other.versionVector
-	if len(otherVV) == 0 {
-		otherVV = otherVV.DeepCopy()
-		otherVV.Set(other.actorID, other.lamport)
-	}
-	id.versionVector.Max(&otherVV)
+	id.versionVector.Max(&other.versionVector)
 
 	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector)
 	newID.versionVector.Set(id.actorID, lamport)
@@ -187,4 +179,13 @@ func (id ID) VersionVector() time.VersionVector {
 // AfterOrEqual returns whether this ID is causally after or equal the given ID.
 func (id ID) AfterOrEqual(other ID) bool {
 	return id.versionVector.AfterOrEqual(other.versionVector)
+}
+
+// DeepCopy creates a deep copy of this ID.
+func (id ID) DeepCopy(excludeVersionVector bool) ID {
+	if excludeVersionVector {
+		return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, time.InitialVersionVector)
+	}
+
+	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, id.versionVector.DeepCopy())
 }

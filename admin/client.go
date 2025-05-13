@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Option configures Options.
@@ -236,6 +237,33 @@ func (c *Client) UpdateProject(
 	return converter.FromProject(response.Msg.Project), nil
 }
 
+// CreateDocument creates a new document.
+func (c *Client) CreateDocument(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+	initialRoot yson.Object,
+) (*types.DocumentSummary, error) {
+	marshalled, err := initialRoot.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := c.client.CreateDocument(
+		ctx,
+		connect.NewRequest(&api.CreateDocumentRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+			InitialRoot: marshalled,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummary(response.Msg.Document), nil
+}
+
 // ListDocuments lists documents.
 func (c *Client) ListDocuments(
 	ctx context.Context,
@@ -260,6 +288,33 @@ func (c *Client) ListDocuments(
 	}
 
 	return converter.FromDocumentSummaries(response.Msg.Documents), nil
+}
+
+// UpdateDocument updates a document.
+func (c *Client) UpdateDocument(
+	ctx context.Context,
+	projectName string,
+	documentKey key.Key,
+	newRoot yson.Object,
+) (*types.DocumentSummary, error) {
+	marshalled, err := newRoot.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := c.client.UpdateDocument(
+		ctx,
+		connect.NewRequest(&api.UpdateDocumentRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey.String(),
+			Root:        marshalled,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
 // RemoveDocument removes a document of the given key.

@@ -52,8 +52,8 @@ func New() *LockerManager {
 	}
 }
 
-// NewLocker creates locker of the given key.
-func (c *LockerManager) NewLocker(
+// Locker creates locker of the given key.
+func (c *LockerManager) Locker(
 	_ context.Context,
 	key Key,
 ) (Locker, error) {

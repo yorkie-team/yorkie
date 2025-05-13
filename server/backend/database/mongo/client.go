@@ -733,6 +733,63 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 	return clientInfos, nil
 }
 
+// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+func (c *Client) FindCompactionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+	compactionMinChanges int,
+) ([]*database.DocInfo, error) {
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"project_id": project.ID,
+	}, options.Find().SetLimit(int64(candidatesLimit*2)))
+	if err != nil {
+		return nil, fmt.Errorf("find documents: %w", err)
+	}
+	defer func() {
+		if err := cursor.Close(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	var infos []*database.DocInfo
+	for cursor.Next(ctx) {
+		var info database.DocInfo
+		if err := cursor.Decode(&info); err != nil {
+			return nil, fmt.Errorf("decode document: %w", err)
+		}
+
+		if candidatesLimit <= len(infos) {
+			break
+		}
+
+		// 1. Check if the document is attached to a client.
+		// TODO(chacha912): Resolve the N+1 problem.
+		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     info.ID,
+		}, "")
+		if err != nil {
+			return nil, err
+		}
+		if isAttached {
+			continue
+		}
+
+		// 2. Check if the document has enough changes to compact.
+		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		infos = append(infos, &info)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return infos, nil
+}
+
 // FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
 func (c *Client) FindClientInfosByAttachedDocRefKey(
 	ctx context.Context,
@@ -1039,6 +1096,88 @@ func (c *Client) CreateChangeInfos(
 	return nil
 }
 
+func (c *Client) CompactChangeInfos(
+	ctx context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	lastServerSeq int64,
+	changes []*change.Change,
+) error {
+	// 1. Delete old changes
+	if _, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete old changes: %w", err)
+	}
+
+	// 2. Delete all snapshots
+	if _, err := c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	// 3. Delete all version vectors
+	if _, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docInfo.ID,
+	}); err != nil {
+		return fmt.Errorf("delete version vectors: %w", err)
+	}
+
+	// 4. Store compacted change and update document
+	newServerSeq := 1
+	if len(changes) == 0 {
+		newServerSeq = 0
+	} else if len(changes) != 1 {
+		return fmt.Errorf("invalid number of changes: %d", len(changes))
+	}
+
+	for _, cn := range changes {
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
+		if err != nil {
+			return err
+		}
+
+		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
+			"project_id":      docInfo.ProjectID,
+			"doc_id":          docInfo.ID,
+			"server_seq":      newServerSeq,
+			"client_seq":      cn.ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"actor_id":        types.ID(cn.ID().ActorID().String()),
+			"version_vector":  cn.ID().VersionVector(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": cn.PresenceChange(),
+		}); err != nil {
+			return fmt.Errorf("store change: %w", err)
+		}
+	}
+
+	// 5. Update document
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": projectID,
+		"_id":        docInfo.ID,
+		"server_seq": lastServerSeq,
+	}, bson.M{
+		"$set": bson.M{
+			"server_seq":   newServerSeq,
+			"compacted_at": gotime.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("update document: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("%s: %s: %w", projectID, docInfo.ID, database.ErrConflictOnUpdate)
+	}
+
+	return nil
+}
+
 // FindLatestChangeInfoByActor returns the latest change created by given actorID.
 func (c *Client) FindLatestChangeInfoByActor(
 	ctx context.Context,
@@ -1219,15 +1358,16 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateAndFindMinSyncedVersionVector returns min synced version vector.
-func (c *Client) UpdateAndFindMinSyncedVersionVector(
+// UpdateAndFindMinVersionVector updates the version vector of the given client
+// and returns the minimum version vector of all clients.
+func (c *Client) UpdateAndFindMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
-	if err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
 
@@ -1283,8 +1423,8 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 	return time.MinVersionVector(vectors...), nil
 }
 
-// UpdateVersionVector updates the given version vector of the given client
-func (c *Client) UpdateVersionVector(
+// updateVersionVector updates the given version vector of the given client
+func (c *Client) updateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
