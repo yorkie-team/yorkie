@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.11] - 2025-05-13
+
+### Added
+
+- Add compaction to housekeeping process by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1255
+- Add CreateDocument RPC to AdminService by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1259
+- Add UpdateDocument RPC to AdminService by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1265
+
+### Changed
+
+- Introduce connection pooling for inter-node communication by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1258
+- Optimize document compaction by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1260
+
 ## [0.6.10] - 2025-05-09
 
 - Enhance YSON String Representation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1252
@@ -16,42 +29,42 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [0.6.9] - 2025-04-29
 
-## Added
+### Added
 
 - Introduce Document Compaction by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1241
 
 ## [0.6.8] - 2025-04-28
 
-## Added
+### Added
 
 - Improve MinVersionVector calculation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1240
 - Add presence concurrency benchmark by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1243
 - Add size tracking to CRDT elements Doc size by @raararaara in https://github.com/yorkie-team/yorkie/pull/1244
 
-## Changed
+### Changed
 
 - Revise benchmark code by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1245
 - Remove VersionVector from presence only change by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1246
 
 ## [0.6.7] - 2025-04-17
 
-## Added
+### Added
 
 - Add concurrency sync benchmark test by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1224
 - Implement cache for VV in MongoDB client by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1231
 - Add clients count to project stats by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1236
 
-## Changed
+### Changed
 
 - Set replicaCount for standalone controller by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1221
 - Replace cache to use hashicorp/golang-lru/v2 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1230
 - Use ActorID as value by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1234
 
-## Removed
+### Removed
 
 - Remove purging changes feature and MinSyncedTicket by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1233
 
-## Fixed
+### Fixed
 
 - Validate userID before processing active users by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1228
 
