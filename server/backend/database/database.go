@@ -319,4 +319,10 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)
+
+	// PurgeDocument purges the given document.
+	PurgeDocument(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+	) (map[string]int64, error)
 }

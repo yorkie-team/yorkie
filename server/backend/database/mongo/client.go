@@ -1103,31 +1103,12 @@ func (c *Client) CompactChangeInfos(
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
-	// 1. Delete old changes
-	if _, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docInfo.ID,
-	}); err != nil {
-		return fmt.Errorf("delete old changes: %w", err)
+	// 1. Purge the resources of the document.
+	if _, err := c.purgeDocumentInternals(ctx, projectID, docInfo.ID); err != nil {
+		return err
 	}
 
-	// 2. Delete all snapshots
-	if _, err := c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docInfo.ID,
-	}); err != nil {
-		return fmt.Errorf("delete snapshots: %w", err)
-	}
-
-	// 3. Delete all version vectors
-	if _, err := c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docInfo.ID,
-	}); err != nil {
-		return fmt.Errorf("delete version vectors: %w", err)
-	}
-
-	// 4. Store compacted change and update document
+	// 2. Store compacted change and update document
 	newServerSeq := 1
 	if len(changes) == 0 {
 		newServerSeq = 0
@@ -1157,7 +1138,7 @@ func (c *Client) CompactChangeInfos(
 		}
 	}
 
-	// 5. Update document
+	// 3. Update document
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"_id":        docInfo.ID,
@@ -1562,6 +1543,63 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	return true, nil
+}
+
+// PurgeDocument purges the given document.
+func (c *Client) PurgeDocument(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) (map[string]int64, error) {
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err = c.collection(ColDocuments).DeleteOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete document: %w", err)
+	}
+
+	return res, nil
+}
+
+func (c *Client) purgeDocumentInternals(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (map[string]int64, error) {
+	counts := make(map[string]int64)
+
+	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge changes: %w", err)
+	}
+	counts[ColChanges] = res.DeletedCount
+
+	res, err = c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshots: %w", err)
+	}
+	counts[ColSnapshots] = res.DeletedCount
+
+	res, err = c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge version vectors: %w", err)
+	}
+	counts[ColVersionVectors] = res.DeletedCount
+
+	return counts, nil
 }
 
 func (c *Client) collection(

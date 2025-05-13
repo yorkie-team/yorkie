@@ -157,6 +157,26 @@ func (c *Client) CompactDocument(
 	return nil
 }
 
+// PurgeDocument purges the given document.
+func (c *Client) PurgeDocument(
+	ctx context.Context,
+	document *database.DocInfo,
+	apiKey string,
+) error {
+	_, err := c.client.PurgeDocument(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ClusterServicePurgeDocumentRequest{
+			ProjectId:  document.ProjectID.String(),
+			DocumentId: document.ID.String(),
+		},
+		), apiKey, document.Key.String()))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 /**
 * withShardKey returns a context with the given shard key in metadata.
  */

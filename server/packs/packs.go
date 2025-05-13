@@ -338,6 +338,8 @@ func Compact(
 		return err
 	}
 	if isAttached {
+		// TODO(hackerwins): ErrDocumentNotRemoved exists in documents package,
+		// but it can not be here because of the circular dependency.
 		return fmt.Errorf("document is attached")
 	}
 
