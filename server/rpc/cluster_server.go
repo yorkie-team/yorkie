@@ -190,7 +190,6 @@ func (s *clusterServer) PurgeDocument(
 		return nil, err
 	}
 
-	// 01. Check if the document is removed
 	if !docInfo.IsRemoved() {
 		return nil, fmt.Errorf("document %s is not removed yet", docId)
 	}
@@ -209,58 +208,22 @@ func (s *clusterServer) PurgeDocument(
 		}
 	}()
 
-	// 02. Purge related resources: changes, syncedSeqs, versionVectors, clients, snapshots
-	log := logging.DefaultLogger().With(
-		zap.String("project_id", docRefKey.ProjectID.String()),
-		zap.String("doc_id", docRefKey.DocID.String()),
-	)
+	log := logging.DefaultLogger()
 
-	steps := []struct {
-		name string
-		fn   func() (int64, error)
-	}{
-		{
-			name: "changes",
-			fn: func() (int64, error) {
-				return s.backend.DB.PurgeChangesByDocRefKey(ctx, docRefKey)
-			},
-		},
-		{
-			name: "versionVectors",
-			fn: func() (int64, error) {
-				return s.backend.DB.PurgeVersionVectorsByDocRefKey(ctx, docRefKey)
-			},
-		},
-		{
-			name: "clients",
-			fn: func() (int64, error) {
-				return s.backend.DB.PurgeClientsByDocRefKey(ctx, docRefKey)
-			},
-		},
-		{
-			name: "snapshots",
-			fn: func() (int64, error) {
-				return s.backend.DB.PurgeSnapshotsByDocRefKey(ctx, docRefKey)
-			},
-		},
-	}
-
-	for _, step := range steps {
-		count, err := step.fn()
-		if err != nil {
-			log.Error(fmt.Sprintf("Failed to purge %s", step.name), zap.Error(err))
-			return nil, fmt.Errorf("failed to purge %s: %w", step.name, err)
-		}
-		log.Info(fmt.Sprintf("Purged %s(%d)", step.name, count))
-	}
-
-	// 03. Purge document
-	if err = s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey); err != nil {
+	count, err := s.backend.DB.PurgeDocInfoByDocRefKey(ctx, docRefKey)
+	if err != nil {
 		log.Error("Failed to purge document", zap.Error(err))
 		return nil, err
 	}
 
-	log.Info("Purge document success")
+	log.Infow(fmt.Sprintf(
+		"Purged document internals [project_id=%s doc_id=%s]",
+		projectId, docId,
+	),
+		"changes", count["changes"],
+		"snapshots", count["snapshots"],
+		"version_vectors", count["versionVectors"],
+	)
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
 }

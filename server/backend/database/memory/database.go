@@ -1119,7 +1119,7 @@ func (d *DB) CreateChangeInfos(
 
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.
 func (d *DB) CompactChangeInfos(
-	_ context.Context,
+	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
@@ -1128,20 +1128,8 @@ func (d *DB) CompactChangeInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// 1. Delete old changes
-	if _, err := txn.DeleteAll(tblChanges, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete old changes: %w", err)
-	}
-
-	// 2. Delete all snapshots
-	if _, err := txn.DeleteAll(tblSnapshots, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete snapshots: %w", err)
-	}
-
-	// 3. Delete all version vectors
-	if _, err := txn.DeleteAll(
-		tblVersionVectors, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete version vectors: %w", err)
+	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
+		return err
 	}
 
 	// 4. Store compacted change and update document
@@ -1615,106 +1603,62 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-// PurgeChangesByDocRefKey purges the changes of the given refKey.
-func (d *DB) PurgeChangesByDocRefKey(
-	_ context.Context,
-	docRefKey types.DocRefKey,
-) (int64, error) {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	deletedCount, err := txn.DeleteAll(tblChanges, "doc_id", docRefKey.DocID.String())
-	if err != nil {
-		return 0, fmt.Errorf("delete changes: %w", err)
-	}
-
-	txn.Commit()
-	return int64(deletedCount), nil
-}
-
-// PurgeSnapshotsByDocRefKey purges the snapshots of the given refKey.
-func (d *DB) PurgeSnapshotsByDocRefKey(
-	_ context.Context,
-	docRefKey types.DocRefKey,
-) (int64, error) {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	deletedCount, err := txn.DeleteAll(tblSnapshots, "doc_id", docRefKey.DocID.String())
-	if err != nil {
-		return 0, fmt.Errorf("delete snapshots: %w", err)
-	}
-
-	txn.Commit()
-	return int64(deletedCount), nil
-}
-
 // PurgeDocInfoByDocRefKey purges the document of the given docRefKey.
 func (d *DB) PurgeDocInfoByDocRefKey(
-	_ context.Context,
+	ctx context.Context,
 	docRefKey types.DocRefKey,
-) error {
+) (map[string]int64, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	raw, err := txn.First(tblDocuments, "id", docRefKey.DocID.String())
 	if err != nil {
-		return fmt.Errorf("find document by id: %w", err)
+		return nil, fmt.Errorf("find document by id: %w", err)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != docRefKey.ProjectID {
-		return fmt.Errorf("finding doc info by ID(%s): %w", docRefKey.DocID, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", docRefKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	res, err := d.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, txn)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := txn.Delete(tblDocuments, docInfo); err != nil {
-		return fmt.Errorf("delete document: %w", err)
+		return nil, fmt.Errorf("delete document: %w", err)
 	}
 
 	txn.Commit()
-	return nil
+	return res, nil
 }
 
-// PurgeClientsByDocRefKey purges the client of the given docRefKey.
-func (d *DB) PurgeClientsByDocRefKey(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-) (int64, error) {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	infos, err := d.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
-	if err != nil {
-		return 0, fmt.Errorf("find clients: %w", err)
-	}
-
-	var deletedCount int64
-	for _, info := range infos {
-		if err := txn.Delete(tblClients, info); err != nil {
-			return deletedCount, fmt.Errorf("delete client %s: %w", info.ID.String(), err)
-		}
-		deletedCount++
-	}
-
-	txn.Commit()
-	return deletedCount, nil
-}
-
-// PurgeVersionVectorsByDocRefKey purges the version vector of the given docRefKey.
-func (d *DB) PurgeVersionVectorsByDocRefKey(
+func (d *DB) purgeDocumentInternals(
 	_ context.Context,
-	docRefKey types.DocRefKey,
-) (int64, error) {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
+	_ types.ID,
+	docID types.ID,
+	txn *memdb.Txn,
+) (map[string]int64, error) {
+	result := make(map[string]int64)
 
-	deletedCount, err := txn.DeleteAll(tblVersionVectors, "doc_id", docRefKey.DocID.String())
+	DeletedCount, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
 	if err != nil {
-		return 0, fmt.Errorf("delete version vector: %w", err)
+		return nil, fmt.Errorf("delete old changes: %w", err)
 	}
+	result["changes"] = int64(DeletedCount)
+	DeletedCount, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("delete snapshots: %w", err)
+	}
+	result["snapshots"] = int64(DeletedCount)
+	DeletedCount, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("delete version vectors: %w", err)
+	}
+	result["versionVectors"] = int64(DeletedCount)
 
-	txn.Commit()
-	return int64(deletedCount), nil
+	return result, nil
 }
 
 func newID() types.ID {

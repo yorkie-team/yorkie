@@ -328,33 +328,9 @@ type Database interface {
 		excludeClientID types.ID,
 	) (bool, error)
 
-	// PurgeChangesByDocRefKey deletes the changes of the given refKey.
-	PurgeChangesByDocRefKey(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (int64, error)
-
-	// PurgeSnapshotsByDocRefKey deletes the snapshots of the given refKey.
-	PurgeSnapshotsByDocRefKey(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (int64, error)
-
-	// PurgeDocInfoByDocRefKey deletes the document of the given refKey.
+	// PurgeDocInfoByDocRefKey purges the document of the given refKey.
 	PurgeDocInfoByDocRefKey(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-	) error
-
-	// PurgeClientsByDocRefKey deletes the client of the given refKey.
-	PurgeClientsByDocRefKey(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (int64, error)
-
-	// PurgeVersionVectorsByDocRefKey deletes the version vector of the given refKey.
-	PurgeVersionVectorsByDocRefKey(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (int64, error)
+	) (map[string]int64, error)
 }
