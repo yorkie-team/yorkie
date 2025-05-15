@@ -63,7 +63,7 @@ type Project struct {
 	// If it is 0, there is no limit.
 	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
 
-	// MaxSizePerDocument TODO(raara).
+	// MaxSizePerDocument is the maximum size of a document in bytes.
 	MaxSizePerDocument int `bson:"max_size_per_document"`
 
 	// AllowedOrigins is the list of allowed origins.

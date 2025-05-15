@@ -22,8 +22,16 @@ type DocSize struct {
 	GC   DataSize
 }
 
+func (d *DocSize) Total() int {
+	return d.Live.Total() + d.GC.Total()
+}
+
 // DataSize represents the size of a resource in bytes.
 type DataSize struct {
 	Data int
 	Meta int
+}
+
+func (d DataSize) Total() int {
+	return d.Data + d.Meta
 }

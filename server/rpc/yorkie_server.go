@@ -207,8 +207,9 @@ func (s *yorkieServer) AttachDocument(
 	}
 
 	return connect.NewResponse(&api.AttachDocumentResponse{
-		ChangePack: pbChangePack,
-		DocumentId: docInfo.ID.String(),
+		ChangePack:         pbChangePack,
+		DocumentId:         docInfo.ID.String(),
+		MaxSizePerDocument: int32(project.MaxSizePerDocument),
 	}), nil
 }
 

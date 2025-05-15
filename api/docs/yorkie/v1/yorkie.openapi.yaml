@@ -353,6 +353,11 @@ components:
           description: ""
           title: document_id
           type: string
+        maxSizePerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_size_per_document
+          type: integer
       title: AttachDocumentResponse
       type: object
     yorkie.v1.BroadcastRequest:

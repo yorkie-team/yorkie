@@ -22,6 +22,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server"
@@ -57,5 +60,25 @@ func TestDocSize(t *testing.T) {
 
 		projectInfo, err := adminCli.GetProject(ctx, projectName)
 		assert.Equal(t, sizeLimit, projectInfo.MaxSizePerDocument)
+
+		cli, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+			client.WithToken("invalid"),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		err = cli.Activate(ctx)
+		assert.NoError(t, err)
+
+		doc := document.New(helper.TestDocKey(t))
+		err = cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
+	})
+
+	t.Run("", func(t *testing.T) {
+		//ctx := context.Background()
+		//assert.NoError(t, err)
 	})
 }
