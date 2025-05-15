@@ -21,6 +21,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Context is used to record the context of modification when editing a document.
@@ -94,6 +95,11 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 // RegisterGCPair registers the given GC pair to the root.
 func (c *Context) RegisterGCPair(pair crdt.GCPair) {
 	c.root.RegisterGCPair(pair)
+}
+
+// Acc accumulates the given DataSize to total.
+func (c *Context) Acc(diff resource.DataSize) {
+	c.root.Acc(diff)
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.
