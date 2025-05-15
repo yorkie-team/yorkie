@@ -101,9 +101,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
 
-    needs: ci-target-check
-    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.bench == 'true' }}
-
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4
@@ -114,6 +111,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: repo
+          fetch-depth: 0 # Fetch all history for all branches and tags
 
       - name: Checkout benchmark branch
         uses: actions/checkout@v4
@@ -156,12 +154,13 @@ jobs:
         id: curr-bench
         run: |
           cd repo
+          git checkout 2fa676d3010370914477284018fa044f1b193ca0
           make bench
           content=$(cat output.txt | jq -R -s .)
           echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
 
       - name: Trigger n8n webhook
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        if: false
         run: |
           # Read comment_id from cache
           comment_id_file="./cache/comment_id.txt"
@@ -191,7 +190,7 @@ jobs:
           echo "$response" > "$comment_id_file"
 
       - name: Store benchmark result
-        if: github.ref == 'refs/heads/main'
+        if: true
         run: |
           mkdir -p benchmark-repo
           cp repo/output.txt benchmark-repo/bench_result.txt
