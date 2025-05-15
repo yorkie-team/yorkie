@@ -20,15 +20,15 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -42,16 +42,14 @@ func TestDocSize(t *testing.T) {
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 	defer func() { adminCli.Close() }()
 
-	projectName := "doc-size-test"
-	project, err := adminCli.CreateProject(context.Background(), projectName)
-	assert.NoError(t, err)
-
 	t.Run("Assign doc size test", func(t *testing.T) {
 		ctx := context.Background()
-		assert.NoError(t, err)
 
 		sizeLimit := 10 * 1024 * 1024
-		_, err := adminCli.UpdateProject(
+		projectName := "doc-size-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		project, err = adminCli.UpdateProject(
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
@@ -66,25 +64,24 @@ func TestDocSize(t *testing.T) {
 		cli, err := client.Dial(
 			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
-			client.WithToken("invalid"),
 		)
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
-		err = cli.Activate(ctx)
-		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
 
 		doc := document.New(helper.TestDocKey(t))
-		err = cli.Attach(ctx, doc)
-		assert.NoError(t, err)
+		assert.NoError(t, cli.Attach(ctx, doc))
 		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
 	})
 
 	t.Run("Document size limit exceed test", func(t *testing.T) {
 		ctx := context.Background()
-		assert.NoError(t, err)
 
 		sizeLimit := 100
-		_, err := adminCli.UpdateProject(
+		projectName := "size-limit-exceed-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		_, err = adminCli.UpdateProject(
 			ctx,
 			project.ID.String(),
 			&types.UpdatableProjectFields{
@@ -99,17 +96,13 @@ func TestDocSize(t *testing.T) {
 		cli, err := client.Dial(
 			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
-			client.WithToken("invalid"),
 		)
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
-		err = cli.Activate(ctx)
-		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
 
 		doc := document.New(helper.TestDocKey(t))
-		err = cli.Attach(ctx, doc)
-		assert.NoError(t, err)
-		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
+		assert.NoError(t, cli.Attach(ctx, doc))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text")
@@ -122,7 +115,7 @@ func TestDocSize(t *testing.T) {
 			root.GetText("text").Edit(0, 0, "helloworld")
 			return nil
 		})
-		docSize = doc.DocSize()
+		docSize = doc.DocSize() // Data: 20, Meta: 96
 		assert.ErrorIs(t, err, document.ErrDocumentSizeExceedsLimit)
 	})
 }
