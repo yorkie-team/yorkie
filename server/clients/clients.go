@@ -22,7 +22,6 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/cluster"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -58,14 +57,6 @@ func Deactivate(
 		return nil, err
 	}
 
-	// TODO(hackerwins): Introduce cluster client pool.
-	// - https://connectrpc.com/docs/go/deployment/
-	cli, err := cluster.Dial(be.Config.GatewayAddr)
-	if err != nil {
-		return nil, err
-	}
-	defer cli.Close()
-
 	for docID, clientDocInfo := range info.Documents {
 		if clientDocInfo.Status != database.DocumentAttached {
 			continue
@@ -85,7 +76,7 @@ func Deactivate(
 			return nil, err
 		}
 
-		if err := cli.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
+		if err := be.ClusterClient.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
 			return nil, err
 		}
 	}

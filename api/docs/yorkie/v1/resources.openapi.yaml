@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.6
+  version: v0.6.12
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -274,7 +274,7 @@ components:
         minSyncedTicket:
           $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: min_synced_ticket
           type: object
         snapshot:
@@ -308,6 +308,22 @@ components:
             - type: number
           title: server_seq
       title: Checkpoint
+      type: object
+    yorkie.v1.DataSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: integer
+        meta:
+          additionalProperties: false
+          description: ""
+          title: meta
+          type: integer
+      title: DataSize
       type: object
     yorkie.v1.DocEvent:
       additionalProperties: false
@@ -361,6 +377,24 @@ components:
           - 3
       title: DocEventType
       type: string
+    yorkie.v1.DocSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        gc:
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
+          additionalProperties: false
+          description: ""
+          title: gc
+          type: object
+        live:
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
+          additionalProperties: false
+          description: ""
+          title: live
+          type: object
+      title: DocSize
+      type: object
     yorkie.v1.DocumentSummary:
       additionalProperties: false
       description: ""
@@ -381,6 +415,12 @@ components:
           additionalProperties: false
           description: ""
           title: created_at
+          type: object
+        documentSize:
+          $ref: "#/components/schemas/yorkie.v1.DocSize"
+          additionalProperties: false
+          description: ""
+          title: document_size
           type: object
         id:
           additionalProperties: false
@@ -868,7 +908,7 @@ components:
           type: string
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1082,7 +1122,7 @@ components:
           type: object
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1158,7 +1198,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1227,7 +1267,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:

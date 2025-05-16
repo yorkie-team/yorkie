@@ -111,7 +111,7 @@ func TestTreeGC(t *testing.T) {
 			// 01. Initial: <r><p></p></r>
 			doc := document.New("doc")
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewTree("t", &json.TreeNode{
+				root.SetNewTree("t", json.TreeNode{
 					Type:     "r",
 					Children: []json.TreeNode{{Type: "p"}},
 				})

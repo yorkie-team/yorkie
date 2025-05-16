@@ -51,6 +51,9 @@ type DocInfo struct {
 
 	// RemovedAt is the time when the document is removed.
 	RemovedAt time.Time `bson:"removed_at"`
+
+	// CompactedAt is the time when the document is compacted.
+	CompactedAt time.Time `bson:"compacted_at"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
@@ -71,15 +74,16 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 	}
 
 	return &DocInfo{
-		ID:         info.ID,
-		ProjectID:  info.ProjectID,
-		Key:        info.Key,
-		ServerSeq:  info.ServerSeq,
-		Owner:      info.Owner,
-		CreatedAt:  info.CreatedAt,
-		AccessedAt: info.AccessedAt,
-		UpdatedAt:  info.UpdatedAt,
-		RemovedAt:  info.RemovedAt,
+		ID:          info.ID,
+		ProjectID:   info.ProjectID,
+		Key:         info.Key,
+		ServerSeq:   info.ServerSeq,
+		Owner:       info.Owner,
+		CreatedAt:   info.CreatedAt,
+		AccessedAt:  info.AccessedAt,
+		UpdatedAt:   info.UpdatedAt,
+		RemovedAt:   info.RemovedAt,
+		CompactedAt: info.CompactedAt,
 	}
 }
 

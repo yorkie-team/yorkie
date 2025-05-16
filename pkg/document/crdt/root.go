@@ -21,6 +21,7 @@ package crdt
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ElementPair represents pair that has a parent element and child element.
@@ -131,6 +132,38 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 		parent,
 		elem,
 	}
+}
+
+func (r *Root) DocSize() resource.DocSize {
+	docSize := resource.DocSize{
+		Live: resource.DataSize{
+			Data: 0,
+			Meta: 0,
+		},
+		GC: resource.DataSize{
+			Data: 0,
+			Meta: 0,
+		},
+	}
+
+	for createdAt, element := range r.elementMap {
+		elementSize := element.DataSize()
+		if _, exists := r.gcElementPairMap[createdAt]; exists {
+			docSize.GC.Data += elementSize.Data
+			docSize.GC.Meta += elementSize.Meta
+		} else {
+			docSize.Live.Data += elementSize.Data
+			docSize.Live.Meta += elementSize.Meta
+		}
+	}
+
+	for _, pair := range r.gcNodePairMap {
+		size := pair.Child.DataSize()
+		docSize.GC.Data += size.Data
+		docSize.GC.Meta += size.Meta
+	}
+
+	return docSize
 }
 
 // DeepCopy copies itself deeply.

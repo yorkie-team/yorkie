@@ -39,17 +39,17 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID             types.ID                      `bson:"_id"`
-	ProjectID      types.ID                      `bson:"project_id"`
-	DocID          types.ID                      `bson:"doc_id"`
-	ServerSeq      int64                         `bson:"server_seq"`
-	ClientSeq      uint32                        `bson:"client_seq"`
-	Lamport        int64                         `bson:"lamport"`
-	ActorID        types.ID                      `bson:"actor_id"`
-	VersionVector  time.VersionVector            `bson:"version_vector"`
-	Message        string                        `bson:"message"`
-	Operations     [][]byte                      `bson:"operations"`
-	PresenceChange *innerpresence.PresenceChange `bson:"presence_change"`
+	ID             types.ID              `bson:"_id"`
+	ProjectID      types.ID              `bson:"project_id"`
+	DocID          types.ID              `bson:"doc_id"`
+	ServerSeq      int64                 `bson:"server_seq"`
+	ClientSeq      uint32                `bson:"client_seq"`
+	Lamport        int64                 `bson:"lamport"`
+	ActorID        types.ID              `bson:"actor_id"`
+	VersionVector  time.VersionVector    `bson:"version_vector"`
+	Message        string                `bson:"message"`
+	Operations     [][]byte              `bson:"operations"`
+	PresenceChange *innerpresence.Change `bson:"presence_change"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -114,7 +114,7 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 }
 
 // EncodePresenceChange encodes the given PresenceChange into bytes array.
-func EncodePresenceChange(p *innerpresence.PresenceChange) ([]byte, error) {
+func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -128,7 +128,7 @@ func EncodePresenceChange(p *innerpresence.PresenceChange) ([]byte, error) {
 }
 
 // PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
-func PresenceChangeFromBytes(bytes []byte) (*innerpresence.PresenceChange, error) {
+func PresenceChangeFromBytes(bytes []byte) (*innerpresence.Change, error) {
 	if bytes == nil {
 		return nil, nil
 	}

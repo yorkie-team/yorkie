@@ -33,6 +33,9 @@ type Config struct {
 
 	// ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
 	ProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
+
+	// CompactionMinChanges is the minimum number of changes to compact a document.
+	CompactionMinChanges int `yaml:"CompactionMinChanges"`
 }
 
 // Validate validates the configuration.
@@ -59,6 +62,12 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if c.CompactionMinChanges <= 0 {
+		return fmt.Errorf(
+			`invalid argument %d for "--housekeeping-compaction-min-changes" flag`,
+			c.CompactionMinChanges,
+		)
+	}
 	return nil
 }
 

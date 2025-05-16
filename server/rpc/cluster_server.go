@@ -18,8 +18,10 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
+	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -62,7 +64,7 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Locker.NewLocker(ctx, packs.PushPullKey(project.ID, summary.Key))
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +112,7 @@ func (s *clusterServer) DetachDocument(
 		"",
 		nil,
 	)
-	p := presence.New(changeCtx, innerpresence.NewPresence())
+	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
 
 	changes := []*change.Change{changeCtx.ToChange()}
@@ -133,4 +135,93 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// CompactDocument compacts the given document.
+func (s *clusterServer) CompactDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
+) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
+	docId := types.ID(req.Msg.DocumentId)
+	projectId := types.ID(req.Msg.ProjectId)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: projectId,
+		DocID:     docId,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	if err := packs.Compact(ctx, s.backend, projectId, docInfo); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+}
+
+// PurgeDocument purges the given document.
+func (s *clusterServer) PurgeDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServicePurgeDocumentRequest],
+) (*connect.Response[api.ClusterServicePurgeDocumentResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	docID := types.ID(req.Msg.DocumentId)
+
+	docRefKey := types.DocRefKey{
+		ProjectID: projectID,
+		DocID:     docID,
+	}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if !docInfo.IsRemoved() {
+		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
+	}
+
+	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	counts, err := s.backend.DB.PurgeDocument(ctx, docRefKey)
+	if err != nil {
+		logging.From(ctx).Error("failed to purge document", zap.Error(err))
+		return nil, err
+	}
+
+	logging.From(ctx).Infow(fmt.Sprintf(
+		"purged document internals [project_id=%s doc_id=%s]",
+		projectID, docID,
+	),
+		"changes", counts["changes"],
+		"snapshots", counts["snapshots"],
+		"versionvectors", counts["versionvectors"],
+	)
+
+	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
 }

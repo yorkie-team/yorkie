@@ -30,7 +30,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find position from the given offset", func(t *testing.T) {
 		//    0   1 2 3 4 5 6    7   8 9  10 11 12 13    14
 		// <r> <p> h e l l o </p> <p> w  o  r  l  d  </p>  </r>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "r",
 			Children: []json.TreeNode{
 				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
@@ -75,7 +75,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find right node from the given offset in postorder traversal test", func(t *testing.T) {
 		//       0   1 2 3    4   6 7     8
 		// <root> <p> a b </p> <p> c d</p> </root>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{
 				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
@@ -129,7 +129,7 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("find common ancestor of two given nodes test", func(t *testing.T) {
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{{
 				Type: "p",
@@ -154,7 +154,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("traverse tokens between two given positions test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{{
 				Type: "p",
@@ -180,7 +180,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find index of the given node test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{{
 				Type: "p",
@@ -237,7 +237,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find treePos from given path test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{{
 				Type: "rc",
@@ -324,7 +324,7 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find path from given treePos test", func(t *testing.T) {
 		//       0  1  2    3 4 5 6 7     8   9 10 11 12 13  14 15  16
 		// <root><tc><p><tn> A B C D </tn><tn> E  F G  H </tn><p></tc></root>
-		tree := helper.BuildIndexTree(&json.TreeNode{
+		tree := helper.BuildIndexTree(json.TreeNode{
 			Type: "root",
 			Children: []json.TreeNode{{
 				Type: "tc",

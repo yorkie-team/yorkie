@@ -18,6 +18,7 @@ package crdt
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Array represents JSON array data structure including logical clock.
@@ -93,6 +94,29 @@ func (a *Array) Elements() []Element {
 	}
 
 	return elements
+}
+
+// MetaSize returns the size of the metadata of this element.
+func (a *Array) MetaSize() int {
+	size := 0
+	if a.createdAt != nil {
+		size += time.TicketSize
+	}
+	if a.movedAt != nil {
+		size += time.TicketSize
+	}
+	if a.removedAt != nil {
+		size += time.TicketSize
+	}
+	return size
+}
+
+// DataSize returns the size of this array.
+func (a *Array) DataSize() resource.DataSize {
+	return resource.DataSize{
+		Data: 0,
+		Meta: a.MetaSize(),
+	}
 }
 
 // Marshal returns the JSON encoding of this Array.

@@ -67,9 +67,9 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("presenceChange test", func(t *testing.T) {
-		presence := innerpresence.NewPresence()
+		presence := innerpresence.New()
 		presence.Set("color", "orange")
-		presenceChange := &innerpresence.PresenceChange{
+		presenceChange := &innerpresence.Change{
 			ChangeType: innerpresence.Put,
 			Presence:   presence,
 		}
@@ -80,7 +80,7 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, err)
 
 		info := struct {
-			PresenceChange *innerpresence.PresenceChange `bson:"presence_change"`
+			PresenceChange *innerpresence.Change `bson:"presence_change"`
 		}{}
 		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
 

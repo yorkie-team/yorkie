@@ -1686,6 +1686,32 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunPurgeDocument runs the RunPurgeDocument tests for the given db.
+func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("PurgeDocument test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a client and a document then attach the document to the client.
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docRefKey := docInfo.RefKey()
+		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 02. Purge the document and check the document is purged.
+		counts, err := db.PurgeDocument(ctx, docRefKey)
+		assert.NoError(t, err)
+		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+
+		// NOTE(raararaara): This test is only checking the document is purged.
+		assert.Equal(t, int64(0), counts["changes"])
+		assert.Equal(t, int64(0), counts["snapshots"])
+		assert.Equal(t, int64(0), counts["versionVectors"])
+	})
+}
+
 // AssertKeys checks the equivalence between the provided expectedKeys and the keys in the given infos.
 func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo) {
 	var keys []key.Key

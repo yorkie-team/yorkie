@@ -547,7 +547,6 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{000000000000000000000001:2}", docA.VersionVector().Marshal())
 
 		packA := docA.CreateChangePack()
-		packA.MinSyncedTicket = time.InitialTicket
 		assert.True(t, packA.Changes[1].AfterOrEqual(packA.Changes[0]))
 		assert.False(t, packA.Changes[0].AfterOrEqual(packA.Changes[1]))
 
@@ -574,7 +573,6 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, int64(2), docB.VersionVector().VersionOf(actorA))
 		assert.Equal(t, int64(4), docB.VersionVector().VersionOf(actorB))
 		packB := docB.CreateChangePack()
-		packB.MinSyncedTicket = time.InitialTicket
 		assert.True(t, packB.Changes[0].AfterOrEqual(packA.Changes[1]))
 
 		// 03. update docA and docB concurrently and check version vector.

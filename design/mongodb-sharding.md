@@ -29,7 +29,7 @@ This document will only explain the core concepts of the selected sharding strat
 
 1. Cluster-wide: `users`, `projects`
 2. Project-wide: `documents`, `clients`
-3. Document-wide: `changes`, `snapshots`, `syncedseqs`, `versionvectors`
+3. Document-wide: `changes`, `snapshots`, `versionvectors`
 
 <img src="media/mongodb-sharding-prev-relation.png">
 
@@ -47,8 +47,7 @@ Shard Project-wide and Document-wide collections due to the large number of data
 2. `Clients`: `(project_id, key)`
 3. `Changes`: `(doc_id, server_seq)`
 4. `Snapshots`: `(doc_id, server_seq)`
-5. `Syncedseqs`: `(doc_id, client_id)`
-6. `Versionvectors`: `(doc_id, client_id)`
+5. `Versionvectors`: `(doc_id, client_id)`
 
 **Main Query Patterns**
 
@@ -133,8 +132,7 @@ Every unique constraint can be satisfied because each has the shard key as a pre
 2. `Clients`: `(project_id, key)`
 3. `Changes`: `(doc_id, server_seq)`
 4. `Snapshots`: `(doc_id, server_seq)`
-5. `Syncedseqs`: `(doc_id, client_id)`
-6. `Versionvectors`: `(doc_id, client_id)`
+5. `Versionvectors`: `(doc_id, client_id)`
 
 **Changes of Reference Keys**
 
@@ -144,8 +142,7 @@ Since the uniqueness of `_id` isn't guaranteed across shards, reference keys to 
 2. `Clients`: `_id` -> `(project_id, _id)`
 3. `Changes`: `_id` -> `(project_id, doc_id, server_seq)`
 4. `Snapshots`: `_id` -> `(project_id, doc_id, server_seq)`
-5. `Syncedseqs`: `_id` -> `(project_id, doc_id, client_id)`
-6. `Versionvectors`: `_id` -> `(project_id, doc_id, client_id)`
+5. `Versionvectors`: `_id` -> `(project_id, doc_id, client_id)`
 
 Considering that MongoDB ensures the uniqueness of `_id` per shard, `Documents` and `Clients` can be identified with the combination of `project_id` and `_id`. Note that the reference keys of document-wide collections are also subsequently changed.
 

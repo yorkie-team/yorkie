@@ -752,6 +752,50 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
+// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+func (d *DB) FindCompactionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+	compactionMinChanges int,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	iterator, err := txn.Get(tblDocuments, "project_id", project.ID.String())
+	if err != nil {
+		return nil, fmt.Errorf("fetch documents: %w", err)
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.DocInfo)
+		if candidatesLimit <= len(infos) {
+			break
+		}
+
+		// 1. Check if the document is attached to a client.
+		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     info.ID,
+		}, "")
+		if err != nil {
+			return nil, err
+		}
+		if isAttached {
+			continue
+		}
+
+		// 2. Check if the document has enough changes to compact.
+		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		infos = append(infos, info)
+	}
+	return infos, nil
+}
+
 // FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
 func (d *DB) FindClientInfosByAttachedDocRefKey(
 	_ context.Context,
@@ -962,7 +1006,33 @@ func (d *DB) GetDocumentsCount(
 	}
 
 	count := int64(0)
-	for iter.Next() != nil {
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.DocInfo).DeepCopy()
+		if !info.RemovedAt.IsZero() {
+			continue
+		}
+		count++
+	}
+
+	return count, nil
+}
+
+// GetClientsCount returns the number of active clients in the given project.
+func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return 0, fmt.Errorf("fetch clients: %w", err)
+	}
+
+	count := int64(0)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo).DeepCopy()
+		if info.Status != database.ClientActivated {
+			continue
+		}
 		count++
 	}
 
@@ -1044,6 +1114,82 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
+	return nil
+}
+
+// CompactChangeInfos stores the given compacted changes then updates the docInfo.
+func (d *DB) CompactChangeInfos(
+	ctx context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	lastServerSeq int64,
+	changes []*change.Change,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// 1. Purge the resources of the document.
+	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
+		return err
+	}
+
+	// 2. Store compacted change and update document
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docInfo.ID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("find document: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+	}
+	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
+	if loadedDocInfo.ServerSeq != lastServerSeq {
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+	}
+
+	if len(changes) == 0 {
+		loadedDocInfo.ServerSeq = 0
+	} else if len(changes) == 1 {
+		loadedDocInfo.ServerSeq = 1
+	} else {
+		return fmt.Errorf("invalid number of changes: %d", len(changes))
+	}
+
+	for _, cn := range changes {
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
+		if err != nil {
+			return err
+		}
+
+		if err := txn.Insert(tblChanges, &database.ChangeInfo{
+			ID:             newID(),
+			ProjectID:      docInfo.ProjectID,
+			DocID:          docInfo.ID,
+			ServerSeq:      loadedDocInfo.ServerSeq,
+			ClientSeq:      cn.ClientSeq(),
+			Lamport:        cn.ID().Lamport(),
+			ActorID:        types.ID(cn.ID().ActorID().String()),
+			VersionVector:  cn.ID().VersionVector(),
+			Message:        cn.Message(),
+			Operations:     encodedOperations,
+			PresenceChange: cn.PresenceChange(),
+		}); err != nil {
+			return fmt.Errorf("store change: %w", err)
+		}
+	}
+
+	// 3. Update document
+	now := gotime.Now()
+	loadedDocInfo.CompactedAt = now
+	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
+		return fmt.Errorf("update document: %w", err)
+	}
+
+	txn.Commit()
 	return nil
 }
 
@@ -1238,8 +1384,8 @@ func (d *DB) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateVersionVector updates the given serverSeq of the given client
-func (d *DB) UpdateVersionVector(
+// updateVersionVector updates the given serverSeq of the given client
+func (d *DB) updateVersionVector(
 	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1297,9 +1443,9 @@ func (d *DB) UpdateVersionVector(
 	return nil
 }
 
-// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
-// and returns the SyncedVersionVector of the document.
-func (d *DB) UpdateAndFindMinSyncedVersionVector(
+// UpdateAndFindMinVersionVector updates the version vector of the given client
+// and returns the minimum version vector of all clients.
+func (d *DB) UpdateAndFindMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1333,7 +1479,7 @@ func (d *DB) UpdateAndFindMinSyncedVersionVector(
 
 	// 03. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if err = d.UpdateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
+	if err = d.updateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
 		return nil, err
 	}
 
@@ -1458,44 +1604,64 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-func (d *DB) findTicketByServerSeq(
-	txn *memdb.Txn,
+// PurgeDocument purges the given document.
+func (d *DB) PurgeDocument(
+	ctx context.Context,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
+) (map[string]int64, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
 
-	raw, err := txn.First(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		serverSeq,
-	)
+	raw, err := txn.First(tblDocuments, "id", docRefKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf(
-			"docID %s, serverSeq %d: %w",
-			docRefKey.DocID,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
+		return nil, fmt.Errorf("find document by id: %w", err)
 	}
 
-	changeInfo := raw.(*database.ChangeInfo)
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
+	docInfo := raw.(*database.DocInfo)
+	if docInfo.ProjectID != docRefKey.ProjectID {
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", docRefKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	res, err := d.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, txn)
 	if err != nil {
 		return nil, err
 	}
 
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
+	if err := txn.Delete(tblDocuments, docInfo); err != nil {
+		return nil, fmt.Errorf("delete document: %w", err)
+	}
+
+	txn.Commit()
+	return res, nil
+}
+
+func (d *DB) purgeDocumentInternals(
+	_ context.Context,
+	_ types.ID,
+	docID types.ID,
+	txn *memdb.Txn,
+) (map[string]int64, error) {
+	counts := make(map[string]int64)
+
+	count, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge changes: %w", err)
+	}
+	counts[tblChanges] = int64(count)
+
+	count, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshots: %w", err)
+	}
+	counts[tblSnapshots] = int64(count)
+
+	count, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge version vectors: %w", err)
+	}
+	counts[tblVersionVectors] = int64(count)
+
+	return counts, nil
 }
 
 func newID() types.ID {

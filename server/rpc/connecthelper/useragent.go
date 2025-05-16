@@ -32,9 +32,12 @@ func SDKTypeAndVersion(header http.Header) (string, string) {
 	}
 
 	split := strings.Split(yorkieUserAgent, "/")
-	if len(split) != 2 {
+	if len(split) < 2 {
 		return "", ""
 	}
 
-	return split[0], split[1]
+	initial := split[:len(split)-1]
+	last := split[len(split)-1]
+
+	return strings.Join(initial, "/"), last
 }

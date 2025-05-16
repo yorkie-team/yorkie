@@ -35,4 +35,7 @@ type ProjectStats struct {
 
 	// DocumentsCount is the number of documents in the project.
 	DocumentsCount int64 `json:"documents_count"`
+
+	// ClientsCount is the number of active clients in the project.
+	ClientsCount int64 `json:"clients_count"`
 }

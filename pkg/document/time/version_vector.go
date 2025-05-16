@@ -19,6 +19,7 @@ package time
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,6 +64,41 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 	}
 
 	return vv, nil
+}
+
+// MinVersionVector returns the minimum version vector of the given version vectors.
+// It computes the element-wise minimum across all input vectors.
+// If any vector lacks a key, the minimum for that key is set to 0.
+func MinVersionVector(vectors ...VersionVector) VersionVector {
+	if len(vectors) == 0 {
+		return InitialVersionVector
+	}
+
+	keySet := make(map[ActorID]struct{})
+	for _, vec := range vectors {
+		for k := range vec {
+			keySet[k] = struct{}{}
+		}
+	}
+
+	minVec := make(VersionVector)
+	for k := range keySet {
+		minValue := int64(math.MaxInt64)
+		for _, vec := range vectors {
+			if v, ok := vec[k]; ok {
+				if v < minValue {
+					minValue = v
+				}
+			} else {
+				minValue = 0
+				break
+			}
+		}
+
+		minVec[k] = minValue
+	}
+
+	return minVec
 }
 
 // Get gets the version of the given actor.

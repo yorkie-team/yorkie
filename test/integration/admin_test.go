@@ -30,8 +30,10 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -49,6 +51,76 @@ func TestAdmin(t *testing.T) {
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("admin and client document creation sync test", func(t *testing.T) {
+		initialRoot := yson.Object{
+			"text": yson.Text{Nodes: []yson.TextNode{{Value: "hello"}, {Value: "world"}}},
+			"Tree": yson.Tree{
+				Root: yson.TreeNode{
+					Type: yson.DefaultRootNodeType,
+					Children: []yson.TreeNode{
+						{Type: yson.TextNodeType, Value: "hello"},
+						{Type: yson.TextNodeType, Value: "world"},
+					},
+				},
+			},
+		}
+
+		_, err := adminCli.CreateDocument(ctx, "default", helper.TestDocKey(t).String(), initialRoot)
+		if err != nil {
+			assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+			return
+		}
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Deactivate(ctx))
+			assert.NoError(t, cli.Close())
+		}()
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc))
+
+		actualRoot, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+		assert.Equal(t, initialRoot, actualRoot)
+	})
+
+	t.Run("admin and client document update sync test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Deactivate(ctx))
+			assert.NoError(t, cli.Close())
+		}()
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc))
+
+		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(), yson.Object{
+			"counter": yson.Counter{Type: crdt.IntegerCnt, Value: 0},
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Sync(ctx))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetCounter("counter").Increase(1)
+			return nil
+		}))
+		assert.Equal(t, int32(1), doc.Root().GetCounter("counter").Value())
+
+		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(), yson.Object{
+			"counter": yson.Counter{Type: crdt.IntegerCnt, Value: 0},
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Sync(ctx))
+		assert.Equal(t, int32(0), doc.Root().GetCounter("counter").Value())
+	})
 
 	t.Run("admin and client document deletion sync test", func(t *testing.T) {
 		ctx := context.Background()

@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
@@ -52,6 +53,8 @@ var errorToConnectCode = map[error]connect.Code{
 	clients.ErrInvalidClientKey:       connect.CodeInvalidArgument,
 	key.ErrInvalidKey:                 connect.CodeInvalidArgument,
 	types.ErrEmptyProjectFields:       connect.CodeInvalidArgument,
+	yson.ErrInvalidYSON:               connect.CodeInvalidArgument,
+	yson.ErrUnsupported:               connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,
@@ -74,6 +77,7 @@ var errorToConnectCode = map[error]connect.Code{
 	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
 	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
 	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,
+	documents.ErrDocumentNotRemoved:     connect.CodeFailedPrecondition,
 
 	// Unimplemented means the server does not implement the functionality.
 	converter.ErrUnsupportedOperation:   connect.CodeUnimplemented,

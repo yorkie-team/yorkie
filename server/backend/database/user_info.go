@@ -25,6 +25,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
+// ServerActorID is the ID of the server actor.
+var ServerActorID = types.ID("000000000000000000000000")
+
 var (
 	// ErrMismatchedPassword is returned when the password is mismatched.
 	ErrMismatchedPassword = fmt.Errorf("mismatched password")

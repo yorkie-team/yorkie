@@ -16,7 +16,10 @@
 
 package crdt
 
-import "github.com/yorkie-team/yorkie/pkg/document/time"
+import (
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
+)
 
 // GCPair is a structure that represents a pair of parent and child for garbage
 // collection.
@@ -34,4 +37,5 @@ type GCParent interface {
 type GCChild interface {
 	IDString() string
 	RemovedAt() *time.Ticket
+	DataSize() resource.DataSize
 }

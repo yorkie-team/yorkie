@@ -79,7 +79,7 @@ func processMigrationBatchPresence(
 						},
 					})
 				} else {
-					p := &innerpresence.PresenceChange{}
+					p := &innerpresence.Change{}
 					err := json.Unmarshal([]byte(presenceChangeStr), p)
 					if err != nil {
 						return fmt.Errorf("unmarshal presence change: %w", err)

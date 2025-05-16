@@ -187,7 +187,6 @@ func TestConverter(t *testing.T) {
 
 		pack, err := converter.FromChangePack(pbPack)
 		assert.NoError(t, err)
-		pack.MinSyncedTicket = time.MaxTicket
 
 		d2 := document.New("d1")
 		err = d2.ApplyChangePack(pack)
@@ -261,9 +260,9 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("empty presence converting test", func(t *testing.T) {
-		change := &innerpresence.PresenceChange{
+		change := &innerpresence.Change{
 			ChangeType: innerpresence.Put,
-			Presence:   innerpresence.NewPresence(),
+			Presence:   innerpresence.New(),
 		}
 
 		pbChange := converter.ToPresenceChange(change)
@@ -274,7 +273,7 @@ func TestConverter(t *testing.T) {
 	t.Run("properly encode and decode tree test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
+			root.SetNewTree("t", json.TreeNode{
 				Type: "r",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "12"}}},

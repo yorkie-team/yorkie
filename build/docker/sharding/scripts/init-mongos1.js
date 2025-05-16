@@ -22,7 +22,6 @@ sh.shardCollection(mongoClientDB + ".clients", { project_id: 1 });
 sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 });
 sh.shardCollection(mongoClientDB + ".changes", { doc_id: 1 });
 sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: 1 });
-sh.shardCollection(mongoClientDB + ".syncedseqs", { doc_id: 1 });
 sh.shardCollection(mongoClientDB + ".versionvectors", { doc_id: 1 });
 
 // Split the inital range at `splitPoint` to allow doc_ids duplicate in different shards.
@@ -42,5 +41,4 @@ sh.shardCollection(serverDB + ".clients", { project_id: 1 });
 sh.shardCollection(serverDB + ".documents", { project_id: 1 });
 sh.shardCollection(serverDB + ".changes", { doc_id: 1 });
 sh.shardCollection(serverDB + ".snapshots", { doc_id: 1 });
-sh.shardCollection(serverDB + ".syncedseqs", { doc_id: 1 });
 sh.shardCollection(serverDB + ".versionvectors", { doc_id: 1 });

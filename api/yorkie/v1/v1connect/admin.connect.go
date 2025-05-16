@@ -72,6 +72,9 @@ const (
 	// AdminServiceGetProjectStatsProcedure is the fully-qualified name of the AdminService's
 	// GetProjectStats RPC.
 	AdminServiceGetProjectStatsProcedure = "/yorkie.v1.AdminService/GetProjectStats"
+	// AdminServiceCreateDocumentProcedure is the fully-qualified name of the AdminService's
+	// CreateDocument RPC.
+	AdminServiceCreateDocumentProcedure = "/yorkie.v1.AdminService/CreateDocument"
 	// AdminServiceListDocumentsProcedure is the fully-qualified name of the AdminService's
 	// ListDocuments RPC.
 	AdminServiceListDocumentsProcedure = "/yorkie.v1.AdminService/ListDocuments"
@@ -81,6 +84,9 @@ const (
 	// AdminServiceGetDocumentsProcedure is the fully-qualified name of the AdminService's GetDocuments
 	// RPC.
 	AdminServiceGetDocumentsProcedure = "/yorkie.v1.AdminService/GetDocuments"
+	// AdminServiceUpdateDocumentProcedure is the fully-qualified name of the AdminService's
+	// UpdateDocument RPC.
+	AdminServiceUpdateDocumentProcedure = "/yorkie.v1.AdminService/UpdateDocument"
 	// AdminServiceRemoveDocumentByAdminProcedure is the fully-qualified name of the AdminService's
 	// RemoveDocumentByAdmin RPC.
 	AdminServiceRemoveDocumentByAdminProcedure = "/yorkie.v1.AdminService/RemoveDocumentByAdmin"
@@ -109,9 +115,11 @@ type AdminServiceClient interface {
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
+	CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
 	GetDocuments(context.Context, *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error)
+	UpdateDocument(context.Context, *connect.Request[v1.UpdateDocumentRequest]) (*connect.Response[v1.UpdateDocumentResponse], error)
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
@@ -174,6 +182,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetProjectStatsProcedure,
 			opts...,
 		),
+		createDocument: connect.NewClient[v1.CreateDocumentRequest, v1.CreateDocumentResponse](
+			httpClient,
+			baseURL+AdminServiceCreateDocumentProcedure,
+			opts...,
+		),
 		listDocuments: connect.NewClient[v1.ListDocumentsRequest, v1.ListDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceListDocumentsProcedure,
@@ -187,6 +200,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 		getDocuments: connect.NewClient[v1.GetDocumentsRequest, v1.GetDocumentsResponse](
 			httpClient,
 			baseURL+AdminServiceGetDocumentsProcedure,
+			opts...,
+		),
+		updateDocument: connect.NewClient[v1.UpdateDocumentRequest, v1.UpdateDocumentResponse](
+			httpClient,
+			baseURL+AdminServiceUpdateDocumentProcedure,
 			opts...,
 		),
 		removeDocumentByAdmin: connect.NewClient[v1.RemoveDocumentByAdminRequest, v1.RemoveDocumentByAdminResponse](
@@ -228,9 +246,11 @@ type adminServiceClient struct {
 	getProject            *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
 	updateProject         *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
 	getProjectStats       *connect.Client[v1.GetProjectStatsRequest, v1.GetProjectStatsResponse]
+	createDocument        *connect.Client[v1.CreateDocumentRequest, v1.CreateDocumentResponse]
 	listDocuments         *connect.Client[v1.ListDocumentsRequest, v1.ListDocumentsResponse]
 	getDocument           *connect.Client[v1.GetDocumentRequest, v1.GetDocumentResponse]
 	getDocuments          *connect.Client[v1.GetDocumentsRequest, v1.GetDocumentsResponse]
+	updateDocument        *connect.Client[v1.UpdateDocumentRequest, v1.UpdateDocumentResponse]
 	removeDocumentByAdmin *connect.Client[v1.RemoveDocumentByAdminRequest, v1.RemoveDocumentByAdminResponse]
 	getSnapshotMeta       *connect.Client[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse]
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
@@ -283,6 +303,11 @@ func (c *adminServiceClient) GetProjectStats(ctx context.Context, req *connect.R
 	return c.getProjectStats.CallUnary(ctx, req)
 }
 
+// CreateDocument calls yorkie.v1.AdminService.CreateDocument.
+func (c *adminServiceClient) CreateDocument(ctx context.Context, req *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error) {
+	return c.createDocument.CallUnary(ctx, req)
+}
+
 // ListDocuments calls yorkie.v1.AdminService.ListDocuments.
 func (c *adminServiceClient) ListDocuments(ctx context.Context, req *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error) {
 	return c.listDocuments.CallUnary(ctx, req)
@@ -296,6 +321,11 @@ func (c *adminServiceClient) GetDocument(ctx context.Context, req *connect.Reque
 // GetDocuments calls yorkie.v1.AdminService.GetDocuments.
 func (c *adminServiceClient) GetDocuments(ctx context.Context, req *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error) {
 	return c.getDocuments.CallUnary(ctx, req)
+}
+
+// UpdateDocument calls yorkie.v1.AdminService.UpdateDocument.
+func (c *adminServiceClient) UpdateDocument(ctx context.Context, req *connect.Request[v1.UpdateDocumentRequest]) (*connect.Response[v1.UpdateDocumentResponse], error) {
+	return c.updateDocument.CallUnary(ctx, req)
 }
 
 // RemoveDocumentByAdmin calls yorkie.v1.AdminService.RemoveDocumentByAdmin.
@@ -334,9 +364,11 @@ type AdminServiceHandler interface {
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
+	CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
 	GetDocuments(context.Context, *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error)
+	UpdateDocument(context.Context, *connect.Request[v1.UpdateDocumentRequest]) (*connect.Response[v1.UpdateDocumentResponse], error)
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
@@ -395,6 +427,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetProjectStats,
 		opts...,
 	)
+	adminServiceCreateDocumentHandler := connect.NewUnaryHandler(
+		AdminServiceCreateDocumentProcedure,
+		svc.CreateDocument,
+		opts...,
+	)
 	adminServiceListDocumentsHandler := connect.NewUnaryHandler(
 		AdminServiceListDocumentsProcedure,
 		svc.ListDocuments,
@@ -408,6 +445,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 	adminServiceGetDocumentsHandler := connect.NewUnaryHandler(
 		AdminServiceGetDocumentsProcedure,
 		svc.GetDocuments,
+		opts...,
+	)
+	adminServiceUpdateDocumentHandler := connect.NewUnaryHandler(
+		AdminServiceUpdateDocumentProcedure,
+		svc.UpdateDocument,
 		opts...,
 	)
 	adminServiceRemoveDocumentByAdminHandler := connect.NewUnaryHandler(
@@ -455,12 +497,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceUpdateProjectHandler.ServeHTTP(w, r)
 		case AdminServiceGetProjectStatsProcedure:
 			adminServiceGetProjectStatsHandler.ServeHTTP(w, r)
+		case AdminServiceCreateDocumentProcedure:
+			adminServiceCreateDocumentHandler.ServeHTTP(w, r)
 		case AdminServiceListDocumentsProcedure:
 			adminServiceListDocumentsHandler.ServeHTTP(w, r)
 		case AdminServiceGetDocumentProcedure:
 			adminServiceGetDocumentHandler.ServeHTTP(w, r)
 		case AdminServiceGetDocumentsProcedure:
 			adminServiceGetDocumentsHandler.ServeHTTP(w, r)
+		case AdminServiceUpdateDocumentProcedure:
+			adminServiceUpdateDocumentHandler.ServeHTTP(w, r)
 		case AdminServiceRemoveDocumentByAdminProcedure:
 			adminServiceRemoveDocumentByAdminHandler.ServeHTTP(w, r)
 		case AdminServiceGetSnapshotMetaProcedure:
@@ -516,6 +562,10 @@ func (UnimplementedAdminServiceHandler) GetProjectStats(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetProjectStats is not implemented"))
 }
 
+func (UnimplementedAdminServiceHandler) CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.CreateDocument is not implemented"))
+}
+
 func (UnimplementedAdminServiceHandler) ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ListDocuments is not implemented"))
 }
@@ -526,6 +576,10 @@ func (UnimplementedAdminServiceHandler) GetDocument(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) GetDocuments(context.Context, *connect.Request[v1.GetDocumentsRequest]) (*connect.Response[v1.GetDocumentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetDocuments is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) UpdateDocument(context.Context, *connect.Request[v1.UpdateDocumentRequest]) (*connect.Response[v1.UpdateDocumentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.UpdateDocument is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error) {

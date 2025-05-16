@@ -24,11 +24,18 @@ import (
 )
 
 const (
+	// InitialLamport is the initial value of Lamport timestamp.
+	InitialLamport = 0
+
 	// MaxLamport is the maximum value stored in lamport.
 	MaxLamport = math.MaxInt64
 
 	// MaxDelimiter is the maximum value stored in delimiter.
 	MaxDelimiter = math.MaxUint32
+
+	// TicketSize is the size of Ticket in bytes.
+	// lamport(int64) + delimiter(uint32) + actorID(12 bytes)
+	TicketSize = 8 + 4 + 12
 )
 
 var (

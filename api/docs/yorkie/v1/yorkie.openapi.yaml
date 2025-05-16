@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.6
+  version: v0.6.12
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -489,7 +489,7 @@ components:
         minSyncedTicket:
           $ref: "#/components/schemas/yorkie.v1.TimeTicket"
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: min_synced_ticket
           type: object
         snapshot:
@@ -836,7 +836,7 @@ components:
           type: string
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1050,7 +1050,7 @@ components:
           type: object
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1126,7 +1126,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1195,7 +1195,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: ""
+          description: deprecated
           title: created_at_map_by_actor
           type: object
         executedAt:

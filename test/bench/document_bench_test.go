@@ -535,7 +535,7 @@ func benchmarkTree(cnt int, b *testing.B) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
+			tree := root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -556,7 +556,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
+			tree := root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -592,7 +592,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
+			tree := root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -792,7 +792,7 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
+			tree := root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",
@@ -849,7 +849,7 @@ func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
 
 		// Create tree with cnt number of nodes
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			tree := root.SetNewTree("t", &json.TreeNode{
+			tree := root.SetNewTree("t", json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{{
 					Type:     "p",

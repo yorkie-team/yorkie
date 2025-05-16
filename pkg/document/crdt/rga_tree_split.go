@@ -7,6 +7,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
@@ -22,6 +23,7 @@ type RGATreeSplitValue interface {
 	String() string
 	Marshal() string
 	toTestString() string
+	DataSize() resource.DataSize
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
@@ -214,6 +216,21 @@ func (s *RGATreeSplitNode[V]) String() string {
 	return s.value.String()
 }
 
+// DataSize returns the data of this node.
+func (s *RGATreeSplitNode[V]) DataSize() resource.DataSize {
+	dataSize := s.value.DataSize()
+
+	if s.id != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	if s.removedAt != nil {
+		dataSize.Meta += time.TicketSize
+	}
+
+	return dataSize
+}
+
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.
 func (s *RGATreeSplitNode[V]) DeepCopy() *RGATreeSplitNode[V] {
 	node := &RGATreeSplitNode[V]{
@@ -258,16 +275,9 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket,
-	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChange int64) bool {
 	justRemoved := s.removedAt == nil
-
-	var nodeExisted bool
-	if maxCreatedAt == nil {
-		nodeExisted = s.createdAt().Lamport() <= clientLamportAtChange
-	} else {
-		nodeExisted = !s.createdAt().After(maxCreatedAt)
-	}
+	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
 
 	if nodeExisted &&
 		(s.removedAt == nil || removedAt.After(s.removedAt)) {
@@ -279,14 +289,8 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket,
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket,
-	maxCreatedAt *time.Ticket, clientLamportAtChange int64) bool {
-	var nodeExisted bool
-	if maxCreatedAt == nil {
-		nodeExisted = s.createdAt().Lamport() <= clientLamportAtChange
-	} else {
-		nodeExisted = !s.createdAt().After(maxCreatedAt)
-	}
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
+	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
 
 	return nodeExisted &&
 		(s.removedAt == nil || editedAt.After(s.removedAt))
@@ -464,24 +468,23 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
+) (*RGATreeSplitNodePos, []GCPair, error) {
 	// 01. Split nodes with from and to
 	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	maxCreatedAtMap, removedNodes := s.deleteNodes(nodesToDelete, maxCreatedAtMapByActor, editedAt, versionVector)
+	removedNodes := s.deleteNodes(nodesToDelete, editedAt, versionVector)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -506,7 +509,7 @@ func (s *RGATreeSplit[V]) edit(
 		})
 	}
 
-	return caretPos, maxCreatedAtMap, pairs, nil
+	return caretPos, pairs, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -521,17 +524,14 @@ func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeS
 
 func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
-	maxCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
 	vector time.VersionVector,
-) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
-	createdAtMapByActor := make(map[string]*time.Ticket)
+) map[string]*RGATreeSplitNode[V] {
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 	isVersionVectorEmpty := len(vector) == 0
-	isMaxCreatedAtMapByActorEmpty := len(maxCreatedAtMapByActor) == 0
 
 	if len(candidates) == 0 {
-		return createdAtMapByActor, removedNodeMap
+		return removedNodeMap
 	}
 
 	// There are 2 types of nodes in `candidates`: should delete, should not delete.
@@ -542,15 +542,13 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	nodesToKeep = append(nodesToKeep, leftEdge)
 
 	for _, node := range candidates {
-		actorIDHex := node.createdAt().ActorIDHex()
 		actorID := node.createdAt().ActorID()
 
-		var maxCreatedAt *time.Ticket
 		var clientLamportAtChange int64
-		if isVersionVectorEmpty && isMaxCreatedAtMapByActorEmpty {
+		if isVersionVectorEmpty {
 			// Case 1: local editing from json package
 			clientLamportAtChange = time.MaxLamport
-		} else if !isVersionVectorEmpty {
+		} else {
 			// Case 2: from operation with version vector(After v0.5.7)
 			lamport, ok := vector.Get(actorID)
 			if ok {
@@ -558,25 +556,9 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			} else {
 				clientLamportAtChange = 0
 			}
-		} else {
-			// Case 3: from operation without version vector(Before v0.5.6)
-			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
-			if ok {
-				maxCreatedAt = createdAt
-			} else {
-				maxCreatedAt = time.InitialTicket
-			}
 		}
 
-		// TODO(chacha912): maxCreatedAt can be removed after all legacy Changes
-		// (without version vector) are migrated to new Changes with version vector.
-		if node.Remove(editedAt, maxCreatedAt, clientLamportAtChange) {
-			maxCreatedAt := createdAtMapByActor[actorIDHex]
-			createdAt := node.id.createdAt
-			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
-				createdAtMapByActor[actorIDHex] = createdAt
-			}
-
+		if node.Remove(editedAt, clientLamportAtChange) {
 			removedNodeMap[node.id.key()] = node
 		} else {
 			nodesToKeep = append(nodesToKeep, node)
@@ -585,7 +567,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	nodesToKeep = append(nodesToKeep, rightEdge)
 	s.deleteIndexNodes(nodesToKeep)
 
-	return createdAtMapByActor, removedNodeMap
+	return removedNodeMap
 }
 
 // findEdgesOfCandidates finds the edges outside `candidates`,

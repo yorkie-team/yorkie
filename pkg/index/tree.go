@@ -91,9 +91,8 @@ var (
 )
 
 const (
-	// DefaultTextType is the type of default text node.
-	// TODO(hackerwins): Allow users to define the type of text node.
-	DefaultTextType = "text"
+	// TextNodeType is the type of text node.
+	TextNodeType = "text"
 )
 
 const (
@@ -282,7 +281,7 @@ func (n *Node[V]) Len() int {
 
 // IsText returns whether the Node is text or not.
 func (n *Node[V]) IsText() bool {
-	return n.Type == DefaultTextType
+	return n.Type == TextNodeType
 }
 
 // Append appends the given node to the end of the children.

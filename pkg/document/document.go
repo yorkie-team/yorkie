@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
@@ -153,14 +154,14 @@ func (d *Document) Update(
 	}
 
 	ctx := change.NewContext(
-		d.doc.changeID.Next(),
+		d.doc.changeID,
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
 	)
 
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
-		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.NewPresence())),
+		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.New())),
 	); err != nil {
 		// drop cloneRoot because it is contaminated.
 		d.cloneRoot = nil
@@ -175,7 +176,7 @@ func (d *Document) Update(
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
-		d.doc.changeID = ctx.ID()
+		d.doc.changeID = ctx.NextID()
 	}
 
 	return nil
@@ -325,6 +326,11 @@ func (d *Document) Root() *json.Object {
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
 	return json.NewObject(ctx, d.cloneRoot.Object())
+}
+
+// DocSize returns the size of this document.
+func (d *Document) DocSize() resource.DocSize {
+	return d.doc.root.DocSize()
 }
 
 // GarbageCollect purge elements that were removed before the given time.

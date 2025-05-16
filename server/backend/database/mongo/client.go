@@ -733,6 +733,63 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 	return clientInfos, nil
 }
 
+// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
+func (c *Client) FindCompactionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+	compactionMinChanges int,
+) ([]*database.DocInfo, error) {
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"project_id": project.ID,
+	}, options.Find().SetLimit(int64(candidatesLimit*2)))
+	if err != nil {
+		return nil, fmt.Errorf("find documents: %w", err)
+	}
+	defer func() {
+		if err := cursor.Close(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	var infos []*database.DocInfo
+	for cursor.Next(ctx) {
+		var info database.DocInfo
+		if err := cursor.Decode(&info); err != nil {
+			return nil, fmt.Errorf("decode document: %w", err)
+		}
+
+		if candidatesLimit <= len(infos) {
+			break
+		}
+
+		// 1. Check if the document is attached to a client.
+		// TODO(chacha912): Resolve the N+1 problem.
+		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     info.ID,
+		}, "")
+		if err != nil {
+			return nil, err
+		}
+		if isAttached {
+			continue
+		}
+
+		// 2. Check if the document has enough changes to compact.
+		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		infos = append(infos, &info)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return infos, nil
+}
+
 // FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
 func (c *Client) FindClientInfosByAttachedDocRefKey(
 	ctx context.Context,
@@ -945,6 +1002,19 @@ func (c *Client) GetDocumentsCount(
 	return count, nil
 }
 
+// GetClientsCount returns the number of active clients in the given project.
+func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+	count, err := c.collection(ColClients).CountDocuments(ctx, bson.M{
+		"project_id": projectID,
+		StatusKey:    database.ClientActivated,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("count clients: %w", err)
+	}
+
+	return count, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
@@ -1021,6 +1091,69 @@ func (c *Client) CreateChangeInfos(
 	}
 	if isRemoved {
 		docInfo.RemovedAt = now
+	}
+
+	return nil
+}
+
+func (c *Client) CompactChangeInfos(
+	ctx context.Context,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+	lastServerSeq int64,
+	changes []*change.Change,
+) error {
+	// 1. Purge the resources of the document.
+	if _, err := c.purgeDocumentInternals(ctx, projectID, docInfo.ID); err != nil {
+		return err
+	}
+
+	// 2. Store compacted change and update document
+	newServerSeq := 1
+	if len(changes) == 0 {
+		newServerSeq = 0
+	} else if len(changes) != 1 {
+		return fmt.Errorf("invalid number of changes: %d", len(changes))
+	}
+
+	for _, cn := range changes {
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
+		if err != nil {
+			return err
+		}
+
+		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
+			"project_id":      docInfo.ProjectID,
+			"doc_id":          docInfo.ID,
+			"server_seq":      newServerSeq,
+			"client_seq":      cn.ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"actor_id":        types.ID(cn.ID().ActorID().String()),
+			"version_vector":  cn.ID().VersionVector(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": cn.PresenceChange(),
+		}); err != nil {
+			return fmt.Errorf("store change: %w", err)
+		}
+	}
+
+	// 3. Update document
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": projectID,
+		"_id":        docInfo.ID,
+		"server_seq": lastServerSeq,
+	}, bson.M{
+		"$set": bson.M{
+			"server_seq":   newServerSeq,
+			"compacted_at": gotime.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("update document: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("%s: %s: %w", projectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
@@ -1206,15 +1339,16 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateAndFindMinSyncedVersionVector returns min synced version vector.
-func (c *Client) UpdateAndFindMinSyncedVersionVector(
+// UpdateAndFindMinVersionVector updates the version vector of the given client
+// and returns the minimum version vector of all clients.
+func (c *Client) UpdateAndFindMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
-	if err := c.UpdateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
 
@@ -1260,21 +1394,18 @@ func (c *Client) UpdateAndFindMinSyncedVersionVector(
 
 		c.vvCache.Add(docRefKey, infoMap)
 	}
+
 	vvMap, ok := c.vvCache.Get(docRefKey)
 	if !ok {
 		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
 
-	minVector := vector.DeepCopy()
-	for _, vv := range vvMap.Values() {
-		minVector.Min(&vv)
-	}
-
-	return minVector, nil
+	vectors := append(vvMap.Values(), vector)
+	return time.MinVersionVector(vectors...), nil
 }
 
-// UpdateVersionVector updates the given version vector of the given client
-func (c *Client) UpdateVersionVector(
+// updateVersionVector updates the given version vector of the given client
+func (c *Client) updateVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1414,47 +1545,61 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
-func (c *Client) findTicketByServerSeq(
+// PurgeDocument purges the given document.
+func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
-
-	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": serverSeq,
-	})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf(
-			"change %s serverSeq=%d: %w",
-			docRefKey,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find change: %w", result.Err())
-	}
-
-	changeInfo := database.ChangeInfo{}
-	if err := result.Decode(&changeInfo); err != nil {
-		return nil, fmt.Errorf("decode change: %w", err)
-	}
-
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
+) (map[string]int64, error) {
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
 	if err != nil {
 		return nil, err
 	}
 
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
+	if _, err = c.collection(ColDocuments).DeleteOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete document: %w", err)
+	}
+
+	return res, nil
+}
+
+func (c *Client) purgeDocumentInternals(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (map[string]int64, error) {
+	counts := make(map[string]int64)
+
+	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge changes: %w", err)
+	}
+	counts[ColChanges] = res.DeletedCount
+
+	res, err = c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshots: %w", err)
+	}
+	counts[ColSnapshots] = res.DeletedCount
+
+	res, err = c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge version vectors: %w", err)
+	}
+	counts[ColVersionVectors] = res.DeletedCount
+
+	return counts, nil
 }
 
 func (c *Client) collection(

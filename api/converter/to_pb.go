@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ToUser converts the given model format to Protobuf format.
@@ -104,6 +105,7 @@ func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 		UpdatedAt:       timestamppb.New(summary.UpdatedAt),
 		Snapshot:        summary.Snapshot,
 		AttachedClients: int32(summary.AttachedClients),
+		DocumentSize:    ToDocSize(summary.DocSize),
 	}
 }
 
@@ -128,7 +130,7 @@ func ToPresence(p innerpresence.Presence) *api.Presence {
 }
 
 // ToPresenceChange converts the given model to Protobuf format.
-func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
+func ToPresenceChange(p *innerpresence.Change) *api.PresenceChange {
 	if p == nil {
 		return nil
 	}
@@ -162,13 +164,12 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     pack.DocumentKey.String(),
-		Checkpoint:      ToCheckpoint(pack.Checkpoint),
-		Changes:         pbChanges,
-		Snapshot:        pack.Snapshot,
-		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
-		VersionVector:   pbVersionVector,
-		IsRemoved:       pack.IsRemoved,
+		DocumentKey:   pack.DocumentKey.String(),
+		Checkpoint:    ToCheckpoint(pack.Checkpoint),
+		Changes:       pbChanges,
+		Snapshot:      pack.Snapshot,
+		VersionVector: pbVersionVector,
+		IsRemoved:     pack.IsRemoved,
 	}, nil
 }
 
@@ -225,6 +226,20 @@ func ToDocEventType(eventType events.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
+	}
+}
+
+func ToDataSize(dataSize resource.DataSize) *api.DataSize {
+	return &api.DataSize{
+		Data: int32(dataSize.Data),
+		Meta: int32(dataSize.Meta),
+	}
+}
+
+func ToDocSize(docSize resource.DocSize) *api.DocSize {
+	return &api.DocSize{
+		Live: ToDataSize(docSize.Live),
+		Gc:   ToDataSize(docSize.GC),
 	}
 }
 
@@ -363,13 +378,12 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			From:                toTextNodePos(e.From()),
-			To:                  toTextNodePos(e.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
-			Content:             e.Content(),
-			Attributes:          e.Attributes(),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTextNodePos(e.From()),
+			To:              toTextNodePos(e.To()),
+			Content:         e.Content(),
+			Attributes:      e.Attributes(),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
@@ -377,12 +391,11 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
-			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
-			From:                toTextNodePos(style.From()),
-			To:                  toTextNodePos(style.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
-			Attributes:          style.Attributes(),
-			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
+			From:            toTextNodePos(style.From()),
+			To:              toTextNodePos(style.To()),
+			Attributes:      style.Attributes(),
+			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }
@@ -405,13 +418,12 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 	return &api.Operation_TreeEdit_{
 		TreeEdit: &api.Operation_TreeEdit{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			From:                toTreePos(e.FromPos()),
-			To:                  toTreePos(e.ToPos()),
-			Contents:            ToTreeNodesWhenEdit(e.Contents()),
-			SplitLevel:          int32(e.SplitLevel()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTreePos(e.FromPos()),
+			To:              toTreePos(e.ToPos()),
+			Contents:        ToTreeNodesWhenEdit(e.Contents()),
+			SplitLevel:      int32(e.SplitLevel()),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
@@ -419,13 +431,12 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
 	return &api.Operation_TreeStyle_{
 		TreeStyle: &api.Operation_TreeStyle{
-			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
-			From:                toTreePos(style.FromPos()),
-			To:                  toTreePos(style.ToPos()),
-			Attributes:          style.Attributes(),
-			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
-			AttributesToRemove:  style.AttributesToRemove(),
-			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
+			ParentCreatedAt:    ToTimeTicket(style.ParentCreatedAt()),
+			From:               toTreePos(style.FromPos()),
+			To:                 toTreePos(style.ToPos()),
+			Attributes:         style.Attributes(),
+			ExecutedAt:         ToTimeTicket(style.ExecutedAt()),
+			AttributesToRemove: style.AttributesToRemove(),
 		},
 	}, nil
 }
@@ -519,16 +530,6 @@ func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
 	}
-}
-
-func toCreatedAtMapByActor(
-	createdAtMapByActor map[string]*time.Ticket,
-) map[string]*api.TimeTicket {
-	pbCreatedAtMapByActor := make(map[string]*api.TimeTicket)
-	for actor, createdAt := range createdAtMapByActor {
-		pbCreatedAtMapByActor[actor] = ToTimeTicket(createdAt)
-	}
-	return pbCreatedAtMapByActor
 }
 
 func toValueType(valueType crdt.ValueType) (api.ValueType, error) {

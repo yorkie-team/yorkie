@@ -160,6 +160,11 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
+				"doc_id": {
+					Name:    "doc_id",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
+				},
 				"doc_id_server_seq": {
 					Name:   "doc_id_server_seq",
 					Unique: true,
@@ -190,6 +195,11 @@ var schema = &memdb.DBSchema{
 					Name:    "id",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"doc_id": {
+					Name:    "doc_id",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
 				},
 				"doc_id_server_seq": {
 					Name:   "doc_id_server_seq",
@@ -227,6 +237,16 @@ var schema = &memdb.DBSchema{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.StringFieldIndex{Field: "ClientID"},
+						},
+					},
+				},
+				"doc_id_server_seq": {
+					Name:   "doc_id_server_seq",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},

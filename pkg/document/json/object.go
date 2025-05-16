@@ -17,15 +17,14 @@
 package json
 
 import (
-	"reflect"
-	"strings"
+	"fmt"
 	gotime "time"
-	"unicode"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
 // Object represents an object in the document. As a proxy for the CRDT object,
@@ -43,44 +42,50 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 	}
 }
 
-// SetDynamicValue sets a dynamic value for the given key.
-func (p *Object) SetDynamicValue(k string, v any) {
-	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return toElement(p.context, buildCRDTElement(p.context, v, ticket, newBuildState()))
-	})
+// SetYSON sets values from the given YSON.
+func (p *Object) SetYSON(value interface{}) {
+	yObj, ok := value.(yson.Object)
+	if !ok {
+		panic(fmt.Errorf("expected JSONObjectStruct, got %T", value))
+	}
+
+	for k, v := range yObj {
+		p.SetYSONElement(k, v)
+	}
 }
 
-// SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string, v ...any) *Object {
+// SetNewObject sets a new Object for the given key. It accepts an optional
+// yson.Object that will be used to initialize the object.
+func (p *Object) SetNewObject(k string, v ...yson.Object) *Object {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		if len(v) == 0 {
-			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
-		}
-
-		if v[0] == nil || isJSONType(v[0]) || !(isStruct(v[0]) || isMapStringInterface(v[0])) {
-			panic("unsupported object type")
-		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 	})
+	obj := value.(*Object)
 
-	return value.(*Object)
+	if len(v) > 0 {
+		for k, v := range v[0] {
+			obj.SetYSONElement(k, v)
+		}
+	}
+
+	return obj
 }
 
-// SetNewArray sets a new Array for the given key.
-func (p *Object) SetNewArray(k string, v ...any) *Array {
+// SetNewArray sets a new Array for the given key. It accepts an optional
+// yson.Array that will be used to initialize the array.
+func (p *Object) SetNewArray(k string, v ...yson.Array) *Array {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		elements := crdt.NewRGATreeList()
-		if len(v) == 0 {
-			return NewArray(p.context, crdt.NewArray(elements, ticket))
-		}
-
-		if v[0] == nil || !isArrayOrSlice(v[0]) {
-			panic("unsupported array type")
-		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
+		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
 	})
+	arr := value.(*Array)
 
-	return value.(*Array)
+	if len(v) > 0 {
+		for _, elem := range v[0] {
+			arr.AddYSON(elem)
+		}
+	}
+
+	return arr
 }
 
 // SetNewText sets a new Text for the given key.
@@ -96,18 +101,23 @@ func (p *Object) SetNewText(k string) *Text {
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket, newBuildState()))
+		crdtCounter, err := crdt.NewCounter(t, n, ticket)
+		if err != nil {
+			panic(err)
+		}
+
+		return NewCounter(n, t).Initialize(p.context, crdtCounter)
 	})
 
 	return v.(*Counter)
 }
 
 // SetNewTree sets a new Tree for the given key.
-func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
+func (p *Object) SetNewTree(k string, initialRoot ...TreeNode) *Tree {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		var root *TreeNode
 		if len(initialRoot) > 0 {
-			root = initialRoot[0]
+			root = &initialRoot[0]
 		}
 		tree := NewTree(root)
 		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
@@ -217,6 +227,51 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 		return primitive
 	})
 
+	return p
+}
+
+// SetYSONElement sets the given YSON for the given key.
+func (p *Object) SetYSONElement(k string, v interface{}) *Object {
+	switch y := v.(type) {
+	case yson.Counter:
+		p.SetNewCounter(k, y.Type, y.Value)
+	case yson.Array:
+		arr := p.SetNewArray(k)
+		for _, elem := range y {
+			arr.AddYSON(elem)
+		}
+	case yson.Object:
+		o := p.SetNewObject(k)
+		for key, value := range y {
+			o.SetYSONElement(key, value)
+		}
+	case yson.Text:
+		text := p.SetNewText(k)
+		text.EditFromYSON(y)
+	case yson.Tree:
+		p.SetNewTree(k, y.Root)
+	default:
+		switch v := v.(type) {
+		case nil:
+			p.SetNull(k)
+		case bool:
+			p.SetBool(k, v)
+		case int32:
+			p.SetInteger(k, int(v))
+		case int64:
+			p.SetLong(k, v)
+		case float64:
+			p.SetDouble(k, v)
+		case string:
+			p.SetString(k, v)
+		case []byte:
+			p.SetBytes(k, v)
+		case gotime.Time:
+			p.SetDate(k, v)
+		default:
+			panic(fmt.Errorf("unsupported primitive type: %v", v))
+		}
+	}
 	return p
 }
 
@@ -352,171 +407,4 @@ func (p *Object) setInternal(
 	))
 
 	return elem
-}
-
-// buildObjectMembersFromMap constructs an object where all values from the
-// user-provided object are transformed into CRDTElements.
-// This function takes an object and iterates through its values,
-// converting each value into a corresponding CRDTElement.
-func buildObjectMembersFromMap(
-	context *change.Context,
-	json map[string]any,
-	stat *buildState,
-) map[string]crdt.Element {
-	members := make(map[string]crdt.Element)
-
-	for key, value := range json {
-		if strings.Contains(key, ".") {
-			panic("key must not contain the '.'.")
-		}
-		ticket := context.IssueTimeTicket()
-		members[key] = buildCRDTElement(context, value, ticket, stat)
-	}
-
-	return members
-}
-
-// buildObjectMembersFromValue converts reflect.Value(struct) to map[string]crdt.Element{}
-// except the field that has the tag "yorkie:-" or omitEmpty option and the
-// field that is unexported.
-// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
-func buildObjectMembersFromValue(
-	context *change.Context,
-	value reflect.Value,
-	stat *buildState,
-) map[string]crdt.Element {
-	members := make(map[string]crdt.Element)
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
-		fieldType := value.Type().Field(i)
-		tag := fieldType.Tag.Get("yorkie")
-
-		if !field.CanInterface() || tag == "-" {
-			continue
-		}
-
-		name, options := parseTag(tag)
-		if !isValidTag(name) {
-			name = ""
-		}
-
-		if options.Contains("omitEmpty") && isEmptyValue(field) {
-			continue
-		}
-
-		if name == "" {
-			name = fieldType.Name
-		}
-
-		ticket := context.IssueTimeTicket()
-		members[name] = buildCRDTElement(context, value.Field(i).Interface(), ticket, stat)
-	}
-	return members
-}
-
-// parseTag parses the given tag to (name, option).
-// NOTE(highcloud100): This code referred to the "encoding/json/tags.go" implementation.
-func parseTag(tag string) (string, tagOptions) {
-	tag, opt, _ := strings.Cut(tag, ",")
-	return tag, tagOptions(opt)
-}
-
-// isValidTag returns whether the given tag is valid.
-// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
-func isValidTag(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		switch {
-		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
-		// Backslash and quote chars are reserved, but
-		// otherwise any punctuation chars are allowed
-		// in a tag name.
-		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
-			return false
-		}
-	}
-	return true
-}
-
-// Contains reports whether the given option is contained in the tag options.
-// Blank spaces in options are ignored by Trim.
-// NOTE(highcloud100): This code referred to the "encoding/json/tags.go" implementation.
-func (o tagOptions) Contains(optionName string) bool {
-	if len(o) == 0 {
-		return false
-	}
-	s := string(o)
-	for s != "" {
-		var name string
-		name, s, _ = strings.Cut(s, ",")
-		if strings.Trim(name, " ") == optionName {
-			return true
-		}
-	}
-	return false
-}
-
-// isEmptyValue reports whether the given value is empty.
-// NOTE(highcloud100): This code referred to the "encoding/json/encode.go" implementation.
-func isEmptyValue(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
-		return v.Len() == 0
-	case reflect.Bool:
-		return v.Bool() == false
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() == 0
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return v.Uint() == 0
-	case reflect.Float32, reflect.Float64:
-		return v.Float() == 0
-	case reflect.Interface, reflect.Pointer:
-		return v.IsNil()
-	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if !isEmptyValue(v.Field(i)) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
-// isStruct returns whether the given value is struct or not.
-// it also returns true if the given value is a pointer to struct.
-func isStruct(v any) bool {
-	return (reflect.TypeOf(v).Kind() == reflect.Ptr &&
-		reflect.TypeOf(v).Elem().Kind() == reflect.Struct) ||
-		reflect.TypeOf(v).Kind() == reflect.Struct
-}
-
-// isMapStringInterface returns whether the given value is map[string]any or not.
-// it also returns true if the given value is a pointer to map[string]any.
-func isMapStringInterface(v any) bool {
-	return reflect.TypeOf(v) == reflect.TypeOf(map[string]any{}) ||
-		reflect.TypeOf(v) == reflect.TypeOf(&map[string]any{})
-}
-
-// isJSONType returns whether the given value is a JSON type or not.
-// The json struct types should be treated differently from other structures.
-// Because buildCRDTElement processes JSON struct types and other structures separately.
-func isJSONType(v any) bool {
-	return !(reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Counter{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(Text{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Text{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(Tree{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Tree{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(Array{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Array{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(Object{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Object{}))
-}
-
-func isArrayOrSlice(v any) bool {
-	return reflect.TypeOf(v).Kind() == reflect.Slice ||
-		reflect.TypeOf(v).Kind() == reflect.Array
 }
