@@ -232,7 +232,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check Docker Compose Version
-        run: docker compose --version
+        run: docker compose version
 
       - name: Run the Config server, Shard 1 and Shard 2
         run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait config1 shard1-1 shard2-1
