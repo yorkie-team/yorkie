@@ -24,6 +24,9 @@ import (
 )
 
 const (
+	// InitialLamport is the initial value of Lamport timestamp.
+	InitialLamport = 0
+
 	// MaxLamport is the maximum value stored in lamport.
 	MaxLamport = math.MaxInt64
 
