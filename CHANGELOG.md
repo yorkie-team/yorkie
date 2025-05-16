@@ -7,9 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.12] - 2025-05-16
+
 ### Added
 
 - Add PurgeDocument to ClusterService by @raararaara in https://github.com/yorkie-team/yorkie/pull/1266
+- Remove logical clock from presence only changes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1257
+
+### Changed
+
+- Refactor UpdateVersionVector method to be unexported by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1268
 
 ## [0.6.11] - 2025-05-13
 
