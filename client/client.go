@@ -320,6 +320,8 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		return err
 	}
 
+	doc.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
 	}
