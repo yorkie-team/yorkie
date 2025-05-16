@@ -38,12 +38,12 @@ type ID struct {
 	// stored on the server, serverSeq is 0.
 	serverSeq int64
 
-	// lamport is lamport timestamp.
-	lamport int64
-
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
 	actorID time.ActorID
+
+	// lamport is lamport timestamp.
+	lamport int64
 
 	// versionVector is similar to vector clock, and it is used to detect the
 	// relationship between changes whether they are causally related or concurrent.
@@ -76,8 +76,8 @@ func InitialID() ID {
 }
 
 // Next creates a next ID of this ID.
-func (id ID) Next(excludeLogicalClock ...bool) ID {
-	if len(excludeLogicalClock) > 0 && excludeLogicalClock[0] {
+func (id ID) Next(excludeClocks ...bool) ID {
+	if len(excludeClocks) > 0 && excludeClocks[0] {
 		return ID{
 			clientSeq: id.clientSeq + 1,
 			actorID:   id.actorID,
@@ -104,14 +104,15 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 	)
 }
 
-// IsEmptyClock returns whether this ID is empty clock or not.
-func (id ID) IsEmptyClock() bool {
-	return id.lamport == InitialLamport && len(id.versionVector) == 0
+// HasClocks returns whether this ID has clocks or not.
+func (id ID) HasClocks() bool {
+	return len(id.versionVector) > 0 && id.lamport != InitialLamport
 }
 
-// SyncClocks syncs logical clocks with the given ID.
+// SyncClocks syncs logical clocks with the given ID. If the given ID
+// doesn't have logical clocks, this ID is returned.
 func (id ID) SyncClocks(other ID) ID {
-	if other.IsEmptyClock() {
+	if !other.HasClocks() {
 		return id
 	}
 

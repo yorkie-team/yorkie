@@ -50,8 +50,8 @@ func NewContext(prevID ID, message string, root *crdt.Root) *Context {
 // document for the next change.
 func (c *Context) NextID() ID {
 	if len(c.operations) == 0 {
-		// NOTE(hackerwins): If this context was created only for presence change,
-		// we only increase the checkpoint and use previous logical clock.
+		// Even if the change has only presence change, the next ID for the document
+		// shoule have clocks. For this, we pass the clocks of the previous ID.
 		id := c.prevID.Next(true)
 		id.lamport = c.prevID.lamport
 		id.versionVector = c.prevID.versionVector
