@@ -20,11 +20,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-const (
-	// InitialLamport is the initial value of Lamport timestamp.
-	InitialLamport = 0
-)
-
 // ID represents the identifier of the change. It is used to identify the
 // change and to order the changes. It is also used to detect the relationship
 // between changes whether they are causally related or concurrent.
@@ -72,7 +67,7 @@ func NewID(
 // InitialID creates an initial state ID. Usually this is used to
 // represent a state where nothing has been edited.
 func InitialID() ID {
-	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.NewVersionVector())
+	return NewID(InitialClientSeq, InitialServerSeq, time.InitialLamport, time.InitialActorID, time.NewVersionVector())
 }
 
 // Next creates a next ID of this ID.
@@ -106,7 +101,7 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 
 // HasClocks returns whether this ID has clocks or not.
 func (id ID) HasClocks() bool {
-	return len(id.versionVector) > 0 && id.lamport != InitialLamport
+	return len(id.versionVector) > 0 && id.lamport != time.InitialLamport
 }
 
 // SyncClocks syncs logical clocks with the given ID. If the given ID

@@ -66,8 +66,8 @@ func (c *Context) ToChange() *Change {
 	id := c.nextID
 
 	// NOTE(hackerwins): If this context was created only for presence change,
-	// we can use the ID without VersionVector that is used to detect the
-	// relationship between changes.
+	// we can use the ID without clocks that are used to resolve the
+	// conflict.
 	if len(c.operations) == 0 {
 		id = c.prevID.Next(true)
 	}
