@@ -238,14 +238,21 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	// child should be removed from the cache.
 	if _, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
 		size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
-		r.docSize.GC.Data += size.Data
-		r.docSize.GC.Meta += size.Meta
+		r.docSize.GC.Data -= size.Data
+		r.docSize.GC.Meta -= size.Meta
 
 		delete(r.gcNodePairMap, pair.Child.IDString())
 		return
 	}
 
 	r.gcNodePairMap[pair.Child.IDString()] = pair
+
+	size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
+	r.docSize.GC.Data += size.Data
+	r.docSize.GC.Meta += size.Meta
+	r.docSize.Live.Data -= size.Data
+	r.docSize.Live.Meta -= size.Meta
+	r.docSize.Live.Meta += 24 // removedAt
 }
 
 // Acc accumulates the given DataSize to total.

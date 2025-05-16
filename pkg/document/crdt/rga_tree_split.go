@@ -356,25 +356,25 @@ func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
 func (s *RGATreeSplit[V]) findNodeWithSplit(
 	pos *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
-) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], error) {
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], resource.DataSize, error) {
 	absoluteID := pos.getAbsoluteID()
 	node, err := s.findFloorNodePreferToLeft(absoluteID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, resource.DataSize{}, err
 	}
 
 	relativeOffset := absoluteID.offset - node.id.offset
 
-	_, err = s.splitNode(node, relativeOffset)
+	_, diff, err := s.splitNode(node, relativeOffset)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, resource.DataSize{}, err
 	}
 
 	for node.next != nil && node.next.createdAt().After(updatedAt) {
 		node = node.next
 	}
 
-	return node, node.next, nil
+	return node, node.next, diff, nil
 }
 
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
@@ -394,16 +394,23 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 	return node, nil
 }
 
-func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGATreeSplitNode[V], error) {
+func (s *RGATreeSplit[V]) splitNode(
+	node *RGATreeSplitNode[V],
+	offset int,
+) (*RGATreeSplitNode[V], resource.DataSize, error) {
+	var diff resource.DataSize
+
 	if offset > node.contentLen() {
-		return nil, fmt.Errorf("offset should be less than or equal to length: " + s.ToTestString())
+		return nil, diff, fmt.Errorf("offset should be less than or equal to length: " + s.ToTestString())
 	}
 
 	if offset == 0 {
-		return node, nil
+		return node, diff, nil
 	} else if offset == node.contentLen() {
-		return node.next, nil
+		return node.next, diff, nil
 	}
+
+	prvSize := node.DataSize()
 
 	splitNode := node.split(offset)
 	s.treeByIndex.UpdateWeight(splitNode.indexNode)
@@ -415,7 +422,14 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGA
 	}
 	splitNode.SetInsPrev(node)
 
-	return splitNode, nil
+	leftSize := node.DataSize()
+	rightSize := splitNode.DataSize()
+
+	// (left + right) − prv
+	diff.Data = (leftSize.Data + rightSize.Data) - prvSize.Data
+	diff.Meta = (leftSize.Meta + rightSize.Meta) - prvSize.Meta
+
+	return splitNode, diff, nil
 }
 
 // InsertAfter inserts the given node after the given previous node.
@@ -471,16 +485,24 @@ func (s *RGATreeSplit[V]) edit(
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, []GCPair, error) {
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
 	// 01. Split nodes with from and to
-	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
+	toLeft, toRight, diffTo, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, diff, err
 	}
-	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
+
+	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, diff, err
 	}
+
+	diff.Data += diffTo.Data
+	diff.Meta += diffTo.Meta
+	diff.Data += diffFrom.Data
+	diff.Meta += diffFrom.Meta
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
@@ -497,7 +519,13 @@ func (s *RGATreeSplit[V]) edit(
 	// 03. insert a new node
 	if content.Len() > 0 {
 		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
-		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
+		if inserted != nil {
+			size := inserted.DataSize()
+			diff.Data += size.Data
+			diff.Meta += size.Meta
+
+			caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
+		}
 	}
 
 	// 04. add removed node
@@ -509,7 +537,7 @@ func (s *RGATreeSplit[V]) edit(
 		})
 	}
 
-	return caretPos, pairs, nil
+	return caretPos, pairs, diff, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {

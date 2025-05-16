@@ -116,6 +116,6 @@ func TestDocSize(t *testing.T) {
 			return nil
 		})
 		docSize = doc.DocSize() // Data: 20, Meta: 96
-		assert.ErrorIs(t, err, document.ErrDocumentSizeExceedsLimit)
+		assert.ErrorIs(t, document.ErrDocumentSizeExceedsLimit, err)
 	})
 }

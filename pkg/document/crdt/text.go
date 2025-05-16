@@ -326,7 +326,7 @@ func (t *Text) Edit(
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) (*RGATreeSplitNodePos, []GCPair, error) {
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -348,16 +348,23 @@ func (t *Text) Style(
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, error) {
+) ([]GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
 	// 01. Split nodes with from and to
-	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
-	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
+
+	diff.Data += diffTo.Data
+	diff.Meta += diffTo.Meta
+	diff.Data += diffFrom.Data
+	diff.Meta += diffFrom.Meta
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
@@ -397,10 +404,15 @@ func (t *Text) Style(
 					Child:  rhtNode,
 				})
 			}
+			if newNode, ok := val.attrs.nodeMapByKey[key]; ok {
+				size := newNode.DataSize()
+				diff.Data += size.Data
+				diff.Meta += size.Meta
+			}
 		}
 	}
 
-	return pairs, nil
+	return pairs, diff, nil
 }
 
 // Nodes returns the internal nodes of this Text.

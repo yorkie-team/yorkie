@@ -69,10 +69,12 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, pairs, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+		_, pairs, diff, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
 		if err != nil {
 			return err
 		}
+
+		root.Acc(diff)
 
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
