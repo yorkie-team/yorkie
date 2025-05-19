@@ -632,6 +632,11 @@ func (s *adminServer) CreateSchema(
 	ctx context.Context,
 	req *connect.Request[api.CreateSchemaRequest],
 ) (*connect.Response[api.CreateSchemaResponse], error) {
+	fields := &types.CreateSchemaFields{Name: &req.Msg.SchemaName}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
 	user := users.From(ctx)
 	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
@@ -647,7 +652,6 @@ func (s *adminServer) CreateSchema(
 		req.Msg.SchemaBody,
 		converter.FromRules(req.Msg.Rules),
 	)
-
 	if err != nil {
 		return nil, err
 	}
