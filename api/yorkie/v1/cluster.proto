@@ -28,6 +28,7 @@ option java_package = "dev.yorkie.api.v1";
 service ClusterService {
   rpc DetachDocument (ClusterServiceDetachDocumentRequest) returns (ClusterServiceDetachDocumentResponse) {}
   rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
+  rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
 }
 
 message ClusterServiceDetachDocumentRequest {
@@ -44,3 +45,10 @@ message ClusterServiceCompactDocumentRequest {
 }
 
 message ClusterServiceCompactDocumentResponse {}
+
+message ClusterServicePurgeDocumentRequest {
+  string project_id = 1;
+  string document_id = 2;
+}
+
+message ClusterServicePurgeDocumentResponse {}

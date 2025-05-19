@@ -1120,7 +1120,7 @@ func (d *DB) CreateChangeInfos(
 
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.
 func (d *DB) CompactChangeInfos(
-	_ context.Context,
+	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
@@ -1129,23 +1129,12 @@ func (d *DB) CompactChangeInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// 1. Delete old changes
-	if _, err := txn.DeleteAll(tblChanges, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete old changes: %w", err)
+	// 1. Purge the resources of the document.
+	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
+		return err
 	}
 
-	// 2. Delete all snapshots
-	if _, err := txn.DeleteAll(tblSnapshots, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete snapshots: %w", err)
-	}
-
-	// 3. Delete all version vectors
-	if _, err := txn.DeleteAll(
-		tblVersionVectors, "doc_id", docInfo.ID.String()); err != nil {
-		return fmt.Errorf("delete version vectors: %w", err)
-	}
-
-	// 4. Store compacted change and update document
+	// 2. Store compacted change and update document
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
@@ -1194,7 +1183,7 @@ func (d *DB) CompactChangeInfos(
 		}
 	}
 
-	// 5. Update document
+	// 3. Update document
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
@@ -1773,44 +1762,64 @@ func (d DB) RemoveSchemaInfo(
 	return nil
 }
 
-func (d *DB) findTicketByServerSeq(
-	txn *memdb.Txn,
+// PurgeDocument purges the given document.
+func (d *DB) PurgeDocument(
+	ctx context.Context,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
-) (*time.Ticket, error) {
-	if serverSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
+) (map[string]int64, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
 
-	raw, err := txn.First(
-		tblChanges,
-		"doc_id_server_seq",
-		docRefKey.DocID.String(),
-		serverSeq,
-	)
+	raw, err := txn.First(tblDocuments, "id", docRefKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf(
-			"docID %s, serverSeq %d: %w",
-			docRefKey.DocID,
-			serverSeq,
-			database.ErrDocumentNotFound,
-		)
+		return nil, fmt.Errorf("find document by id: %w", err)
 	}
 
-	changeInfo := raw.(*database.ChangeInfo)
-	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
+	docInfo := raw.(*database.DocInfo)
+	if docInfo.ProjectID != docRefKey.ProjectID {
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", docRefKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	res, err := d.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, txn)
 	if err != nil {
 		return nil, err
 	}
 
-	return time.NewTicket(
-		changeInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
+	if err := txn.Delete(tblDocuments, docInfo); err != nil {
+		return nil, fmt.Errorf("delete document: %w", err)
+	}
+
+	txn.Commit()
+	return res, nil
+}
+
+func (d *DB) purgeDocumentInternals(
+	_ context.Context,
+	_ types.ID,
+	docID types.ID,
+	txn *memdb.Txn,
+) (map[string]int64, error) {
+	counts := make(map[string]int64)
+
+	count, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge changes: %w", err)
+	}
+	counts[tblChanges] = int64(count)
+
+	count, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshots: %w", err)
+	}
+	counts[tblSnapshots] = int64(count)
+
+	count, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge version vectors: %w", err)
+	}
+	counts[tblVersionVectors] = int64(count)
+
+	return counts, nil
 }
 
 func newID() types.ID {

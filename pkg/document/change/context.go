@@ -27,7 +27,8 @@ import (
 // Each time we add an operation, a new time ticket is issued.
 // Finally, returns a Change after the modification has been completed.
 type Context struct {
-	id             ID
+	prevID         ID
+	nextID         ID
 	message        string
 	operations     []operations.Operation
 	delimiter      uint32
@@ -36,30 +37,39 @@ type Context struct {
 }
 
 // NewContext creates a new instance of Context.
-func NewContext(id ID, message string, root *crdt.Root) *Context {
+func NewContext(prevID ID, message string, root *crdt.Root) *Context {
 	return &Context{
-		id:      id,
+		prevID:  prevID,
+		nextID:  prevID.Next(),
 		message: message,
 		root:    root,
 	}
 }
 
-// ID returns ID for new change.
-func (c *Context) ID() ID {
-	return c.id
+// NextID returns the next ID of this context. It will be set to the
+// document for the next change.
+func (c *Context) NextID() ID {
+	if len(c.operations) == 0 {
+		// Even if the change has only presence change, the next ID for the document
+		// shoule have clocks. For this, we pass the clocks of the previous ID.
+		id := c.prevID.Next(true)
+		id.lamport = c.prevID.lamport
+		id.versionVector = c.prevID.versionVector
+		return id
+	}
+
+	return c.nextID
 }
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	id := c.id
+	id := c.nextID
 
 	// NOTE(hackerwins): If this context was created only for presence change,
-	// we can use the ID without VersionVector that is used to detect the
-	// relationship between changes.
-	// TODO(hackerwins): Consider using only checkpoint of the ID for the
-	// presence change. For now, we just exclude only version vector from the ID.
+	// we can use the ID without clocks that are used to resolve the
+	// conflict.
 	if len(c.operations) == 0 {
-		id = c.id.DeepCopy(true)
+		id = c.prevID.Next(true)
 	}
 
 	return New(id, c.message, c.operations, c.presenceChange)
@@ -73,7 +83,7 @@ func (c *Context) HasChange() bool {
 // IssueTimeTicket creates a time ticket to be used to create a new operation.
 func (c *Context) IssueTimeTicket() *time.Ticket {
 	c.delimiter++
-	return c.id.NewTimeTicket(c.delimiter)
+	return c.nextID.NewTimeTicket(c.delimiter)
 }
 
 // Push pushes a new operations into context queue.
@@ -98,7 +108,7 @@ func (c *Context) RegisterGCPair(pair crdt.GCPair) {
 
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
-	return c.id.NewTimeTicket(c.delimiter)
+	return c.nextID.NewTimeTicket(c.delimiter)
 }
 
 // SetPresenceChange sets the presence change of the user who made the change.

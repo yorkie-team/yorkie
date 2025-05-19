@@ -364,4 +364,10 @@ type Database interface {
 		name string,
 		version int,
 	) error
+
+	// PurgeDocument purges the given document.
+	PurgeDocument(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+	) (map[string]int64, error)
 }

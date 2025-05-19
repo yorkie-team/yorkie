@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.11
+  version: v0.6.12
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -34,6 +34,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/PurgeDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
 components:
   requestBodies:
     yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest:
@@ -53,6 +65,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
       required: true
   responses:
     connect.error:
@@ -81,6 +102,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
       description: ""
   schemas:
     connect.error:
@@ -253,6 +283,27 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServiceDetachDocumentResponse
+      type: object
+    yorkie.v1.ClusterServicePurgeDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServicePurgeDocumentRequest
+      type: object
+    yorkie.v1.ClusterServicePurgeDocumentResponse:
+      additionalProperties: false
+      description: ""
+      title: ClusterServicePurgeDocumentResponse
       type: object
     yorkie.v1.DataSize:
       additionalProperties: false
