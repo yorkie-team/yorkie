@@ -52,25 +52,23 @@ function getDocKey() {
 }
 
 // Custom metrics
-const attachSuccessRate = new Rate("connect_success_rate");
-const connectTime = new Trend("connect_time");
 const activeClients = new Counter("active_clients");
+const attachSuccessRate = new Rate("attach_success_rate");
+const attachTime = new Trend("attach_time");
 const attachDocuments = new Counter("attach_documents");
-const failedAttachments = new Counter("failed_attachments");
-// Metrics for measuring interference
-const controlDocLatency = new Trend("control_doc_latency");
+const attachFaileds = new Counter("attach_faileds");
+const controlDocLatency = new Trend("control_doc_latency"); // Metrics for measuring interference
 
 // k6 options for load testing
 export const options = {
   stages: [
-    { duration: "20s", target: 300 }, // Ramp up to 300 users in 10 seconds
-    { duration: "20s", target: 600 }, // Increase to 600 users in 20 seconds
-    { duration: "20s", target: 1000 }, // Increase to 1000 users in 20 seconds
+    { duration: "30s", target: 500 }, // Ramp up to 500 users in 30 seconds
+    { duration: "30s", target: 1000 }, // Increase to 1000 users in 30 seconds
     { duration: "1m", target: 1000 }, // Maintain 1000 users for 1 minute
     { duration: "30s", target: 0 }, // Ramp down to 0 users in 30 seconds
   ],
   thresholds: {
-    connect_success_rate: ["rate>0.9"], // Maintain 90% success rate
+    attach_success_rate: ["rate>0.9"], // Maintain 90% success rate
     http_req_duration: ["p(95)<1000"], // 95% of requests complete within 1 second
     control_doc_latency: ["p(95)<500"], // Control document response time(Threshold for interference testing)
   },
@@ -89,13 +87,27 @@ export default function () {
       const clientID = activateClient();
       activeClients.add(1);
 
-      const docID = attachDocument(clientID, hexToBase64(clientID), docKey);
+      const [docID, serverSeq] = attachDocument(
+        clientID,
+        hexToBase64(clientID),
+        docKey
+      );
       success = docID !== "";
       if (success) {
         attachDocuments.add(1);
       }
 
-      sleep(Math.random() * 3 + 2); // Random sleep between 2-5 seconds
+      let lastServerSeq = serverSeq;
+      // Randomly push and pull changes to the document to emulate presence updates
+      for (let i = 0; i < Math.random() * 3 + 2; i++) {
+        [, lastServerSeq] = pushpullChanges(
+          clientID,
+          docID,
+          docKey,
+          lastServerSeq
+        );
+        sleep(1); // Sleep for 1 second between changes
+      }
 
       // Skew interference test: measuring control document response time under load
       if (USE_CONTROL_DOC && __VU % 10 === 0) {
@@ -113,11 +125,11 @@ export default function () {
       deactivateClient(clientID);
     } catch (error: any) {
       console.error(`Error in main function: ${error.message}`);
-      failedAttachments.add(1);
+      attachFaileds.add(1);
     } finally {
       attachSuccessRate.add(success);
       const endTime = new Date().getTime();
-      connectTime.add(endTime - startTime);
+      attachTime.add(endTime - startTime);
     }
   });
 }
@@ -242,7 +254,7 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
             type: "CHANGE_TYPE_PUT",
             presence: {
               data: {
-                color: `"${randomColor}"`,
+                color: randomColor,
               },
             },
           },
@@ -252,9 +264,41 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
     },
   };
 
-  const result = makeRequest(url, payload, {
+  const resp = makeRequest(url, payload, {
     "x-shard-key": `${API_KEY}/${docKey}`,
   });
 
-  return result!.documentId;
+  const documentId = resp!.documentId;
+  const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+  return [documentId, serverSeq];
+}
+
+function pushpullChanges(
+  clientID: string,
+  docID: string,
+  docKey: string,
+  lastServerSeq: number
+) {
+  const url = `${API_URL}/yorkie.v1.YorkieService/PushPullChanges`;
+
+  const payload = {
+    clientId: clientID,
+    documentId: docID,
+    changePack: {
+      documentKey: docKey,
+      checkpoint: {
+        clientSeq: 1,
+        serverSeq: lastServerSeq,
+      },
+      versionVector: {},
+    },
+  };
+
+  const resp = makeRequest(url, payload, {
+    "x-shard-key": `${API_KEY}/${docKey}`,
+  });
+
+  const documentId = resp!.documentId;
+  const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+  return [documentId, serverSeq];
 }
