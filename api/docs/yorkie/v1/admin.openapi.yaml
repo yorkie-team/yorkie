@@ -130,6 +130,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/GetSchemas:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetServerVersion:
     post:
       description: ""
@@ -378,6 +390,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetSchemaRequest'
       required: true
+    yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasRequest'
+      required: true
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionRequest:
       content:
         application/json:
@@ -594,6 +615,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetSchemaResponse'
+      description: ""
+    yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasResponse'
       description: ""
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse:
       content:
@@ -1348,6 +1378,36 @@ components:
           title: schema
           type: object
       title: GetSchemaResponse
+      type: object
+    yorkie.v1.GetSchemasRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        schemaName:
+          additionalProperties: false
+          description: ""
+          title: schema_name
+          type: string
+      title: GetSchemasRequest
+      type: object
+    yorkie.v1.GetSchemasResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        schemas:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Schema'
+            type: object
+          title: schemas
+          type: array
+      title: GetSchemasResponse
       type: object
     yorkie.v1.GetServerVersionRequest:
       additionalProperties: false

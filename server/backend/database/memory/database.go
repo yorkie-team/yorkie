@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -1685,6 +1686,34 @@ func (d *DB) GetSchemaInfo(
 	return raw.(*database.SchemaInfo), nil
 }
 
+func (d *DB) GetSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblSchemas,
+		"project_id_name",
+		projectID.String(),
+		name,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	var infos []*database.SchemaInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		infos = append(infos, raw.(*database.SchemaInfo))
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Version > infos[j].Version
+	})
+
+	return infos, nil
+}
+
 func (d *DB) ListSchemaInfos(
 	_ context.Context,
 	projectID types.ID,
@@ -1697,9 +1726,17 @@ func (d *DB) ListSchemaInfos(
 		return nil, fmt.Errorf("find schema: %w", err)
 	}
 
-	var infos []*database.SchemaInfo
+	schemaMap := make(map[string]*database.SchemaInfo)
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		infos = append(infos, raw.(*database.SchemaInfo))
+		schema := raw.(*database.SchemaInfo)
+		if existing, ok := schemaMap[schema.Name]; !ok || schema.Version > existing.Version {
+			schemaMap[schema.Name] = schema
+		}
+	}
+
+	var infos []*database.SchemaInfo
+	for _, schema := range schemaMap {
+		infos = append(infos, schema)
 	}
 
 	return infos, nil

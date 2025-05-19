@@ -1626,23 +1626,59 @@ func (c *Client) GetSchemaInfo(
 	return info, nil
 }
 
-func (c *Client) ListSchemaInfos(
+// GetSchemaInfos returns all versions of the schema.
+func (c *Client) GetSchemaInfos(
 	ctx context.Context,
 	projectID types.ID,
+	name string,
 ) ([]*database.SchemaInfo, error) {
-	result, err := c.collection(ColSchemas).Find(ctx, bson.M{
+	cursor, err := c.collection(ColSchemas).Find(ctx, bson.M{
 		"project_id": projectID,
-	}, options.Find().SetSort(bson.D{
-		{Key: "name", Value: 1},
-		{Key: "version", Value: 1},
-	}))
+		"name":       name,
+	}, options.Find().SetSort(bson.D{{Key: "version", Value: -1}}))
 	if err != nil {
 		return nil, fmt.Errorf("find schema: %w", err)
 	}
 
 	var infos []*database.SchemaInfo
-	if err := result.All(ctx, &infos); err != nil {
+	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+	return infos, nil
+}
+
+func (c *Client) ListSchemaInfos(
+	ctx context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	result, err := c.collection(ColSchemas).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"project_id": projectID}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "name", Value: 1},
+			{Key: "version", Value: -1},
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":          "$name",
+			"latestSchema": bson.M{"$first": "$$ROOT"},
+		}}}})
+	if err != nil {
+		return nil, fmt.Errorf("aggregate schema: %w", err)
+	}
+
+	var results []struct {
+		LatestSchema *database.SchemaInfo `bson:"latestSchema"`
+	}
+	if err := result.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	var infos []*database.SchemaInfo
+	for _, result := range results {
+		infos = append(infos, result.LatestSchema)
 	}
 
 	return infos, nil

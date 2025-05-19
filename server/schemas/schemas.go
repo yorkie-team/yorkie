@@ -61,6 +61,30 @@ func GetSchema(
 	return info.ToSchema(), nil
 }
 
+// GetSchemas retrieves all versions of a schema by its name.
+func GetSchemas(
+	ctx context.Context,
+	be *backend.Backend,
+	projectID types.ID,
+	name string,
+) ([]*types.Schema, error) {
+	if name == "" {
+		return nil, nil
+	}
+
+	infos, err := be.DB.GetSchemaInfos(ctx, projectID, name)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas := make([]*types.Schema, 0, len(infos))
+	for _, info := range infos {
+		schemas = append(schemas, info.ToSchema())
+	}
+
+	return schemas, nil
+}
+
 // ListSchemas lists all schemas in the project.
 func ListSchemas(
 	ctx context.Context,

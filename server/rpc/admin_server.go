@@ -684,6 +684,32 @@ func (s *adminServer) GetSchema(
 	}), nil
 }
 
+// GetSchemas gets the schemas.
+func (s *adminServer) GetSchemas(
+	ctx context.Context,
+	req *connect.Request[api.GetSchemasRequest],
+) (*connect.Response[api.GetSchemasResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := schemas.GetSchemas(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetSchemasResponse{
+		Schemas: converter.ToSchemas(schemas),
+	}), nil
+}
+
 // ListSchemas lists the schemas.
 func (s *adminServer) ListSchemas(
 	ctx context.Context,

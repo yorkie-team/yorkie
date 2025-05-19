@@ -51,6 +51,7 @@ service AdminService {
   rpc CreateSchema (CreateSchemaRequest) returns (CreateSchemaResponse) {}
   rpc ListSchemas (ListSchemasRequest) returns (ListSchemasResponse) {}
   rpc GetSchema (GetSchemaRequest) returns (GetSchemaResponse) {}
+  rpc GetSchemas (GetSchemasRequest) returns (GetSchemasResponse) {}
   rpc RemoveSchema (RemoveSchemaRequest) returns (RemoveSchemaResponse) {}
 
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
@@ -264,6 +265,15 @@ message GetSchemaRequest {
 
 message GetSchemaResponse {
   Schema schema = 1;
+}
+
+message GetSchemasRequest {
+  string project_name = 1;
+  string schema_name = 2;
+}
+
+message GetSchemasResponse {
+  repeated Schema schemas = 1;
 }
 
 message RemoveSchemaRequest {

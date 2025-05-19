@@ -344,6 +344,13 @@ type Database interface {
 		version int,
 	) (*SchemaInfo, error)
 
+	// GetSchemaInfos retrieves all versions of a schema by its name.
+	GetSchemaInfos(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+	) ([]*SchemaInfo, error)
+
 	// ListSchemaInfos lists all schemas in the project.
 	ListSchemaInfos(
 		ctx context.Context,

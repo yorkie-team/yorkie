@@ -107,6 +107,8 @@ const (
 	AdminServiceListSchemasProcedure = "/yorkie.v1.AdminService/ListSchemas"
 	// AdminServiceGetSchemaProcedure is the fully-qualified name of the AdminService's GetSchema RPC.
 	AdminServiceGetSchemaProcedure = "/yorkie.v1.AdminService/GetSchema"
+	// AdminServiceGetSchemasProcedure is the fully-qualified name of the AdminService's GetSchemas RPC.
+	AdminServiceGetSchemasProcedure = "/yorkie.v1.AdminService/GetSchemas"
 	// AdminServiceRemoveSchemaProcedure is the fully-qualified name of the AdminService's RemoveSchema
 	// RPC.
 	AdminServiceRemoveSchemaProcedure = "/yorkie.v1.AdminService/RemoveSchema"
@@ -138,6 +140,7 @@ type AdminServiceClient interface {
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
 	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.GetSchemaResponse], error)
+	GetSchemas(context.Context, *connect.Request[v1.GetSchemasRequest]) (*connect.Response[v1.GetSchemasResponse], error)
 	RemoveSchema(context.Context, *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
@@ -257,6 +260,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetSchemaProcedure,
 			opts...,
 		),
+		getSchemas: connect.NewClient[v1.GetSchemasRequest, v1.GetSchemasResponse](
+			httpClient,
+			baseURL+AdminServiceGetSchemasProcedure,
+			opts...,
+		),
 		removeSchema: connect.NewClient[v1.RemoveSchemaRequest, v1.RemoveSchemaResponse](
 			httpClient,
 			baseURL+AdminServiceRemoveSchemaProcedure,
@@ -293,6 +301,7 @@ type adminServiceClient struct {
 	createSchema          *connect.Client[v1.CreateSchemaRequest, v1.CreateSchemaResponse]
 	listSchemas           *connect.Client[v1.ListSchemasRequest, v1.ListSchemasResponse]
 	getSchema             *connect.Client[v1.GetSchemaRequest, v1.GetSchemaResponse]
+	getSchemas            *connect.Client[v1.GetSchemasRequest, v1.GetSchemasResponse]
 	removeSchema          *connect.Client[v1.RemoveSchemaRequest, v1.RemoveSchemaResponse]
 	getServerVersion      *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 }
@@ -402,6 +411,11 @@ func (c *adminServiceClient) GetSchema(ctx context.Context, req *connect.Request
 	return c.getSchema.CallUnary(ctx, req)
 }
 
+// GetSchemas calls yorkie.v1.AdminService.GetSchemas.
+func (c *adminServiceClient) GetSchemas(ctx context.Context, req *connect.Request[v1.GetSchemasRequest]) (*connect.Response[v1.GetSchemasResponse], error) {
+	return c.getSchemas.CallUnary(ctx, req)
+}
+
 // RemoveSchema calls yorkie.v1.AdminService.RemoveSchema.
 func (c *adminServiceClient) RemoveSchema(ctx context.Context, req *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error) {
 	return c.removeSchema.CallUnary(ctx, req)
@@ -435,6 +449,7 @@ type AdminServiceHandler interface {
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
 	GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.GetSchemaResponse], error)
+	GetSchemas(context.Context, *connect.Request[v1.GetSchemasRequest]) (*connect.Response[v1.GetSchemasResponse], error)
 	RemoveSchema(context.Context, *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
@@ -550,6 +565,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetSchema,
 		opts...,
 	)
+	adminServiceGetSchemasHandler := connect.NewUnaryHandler(
+		AdminServiceGetSchemasProcedure,
+		svc.GetSchemas,
+		opts...,
+	)
 	adminServiceRemoveSchemaHandler := connect.NewUnaryHandler(
 		AdminServiceRemoveSchemaProcedure,
 		svc.RemoveSchema,
@@ -604,6 +624,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceListSchemasHandler.ServeHTTP(w, r)
 		case AdminServiceGetSchemaProcedure:
 			adminServiceGetSchemaHandler.ServeHTTP(w, r)
+		case AdminServiceGetSchemasProcedure:
+			adminServiceGetSchemasHandler.ServeHTTP(w, r)
 		case AdminServiceRemoveSchemaProcedure:
 			adminServiceRemoveSchemaHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
@@ -699,6 +721,10 @@ func (UnimplementedAdminServiceHandler) ListSchemas(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) GetSchema(context.Context, *connect.Request[v1.GetSchemaRequest]) (*connect.Response[v1.GetSchemaResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetSchema is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) GetSchemas(context.Context, *connect.Request[v1.GetSchemasRequest]) (*connect.Response[v1.GetSchemasResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetSchemas is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) RemoveSchema(context.Context, *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error) {
