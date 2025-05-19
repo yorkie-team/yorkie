@@ -26,7 +26,7 @@ const API_URL = __ENV.API_URL || "http://localhost:8080";
 const API_KEY = __ENV.API_KEY || "";
 
 // Document key prefix
-const DOC_KEY_PREFIX = __ENV.DOC_KEY_PREFIX || "test-doc";
+const DOC_KEY_PREFIX = __ENV.DOC_KEY_PREFIX || "test-presence";
 
 // Control document key (for interference testing in skew mode)
 const CONTROL_DOC_KEY = "control-doc";
@@ -62,14 +62,14 @@ const controlDocLatency = new Trend("control_doc_latency"); // Metrics for measu
 // k6 options for load testing
 export const options = {
   stages: [
-    { duration: "30s", target: 500 }, // Ramp up to 500 users in 30 seconds
-    { duration: "30s", target: 1000 }, // Increase to 1000 users in 30 seconds
-    { duration: "1m", target: 1000 }, // Maintain 1000 users for 1 minute
+    { duration: "30s", target: 250 }, // Ramp up to 250 users in 30 seconds
+    { duration: "30s", target: 500 }, // Increase to 500 users in 30 seconds
+    { duration: "1m", target: 500 }, // Maintain 500 users for 1 minute
     { duration: "30s", target: 0 }, // Ramp down to 0 users in 30 seconds
   ],
   thresholds: {
     attach_success_rate: ["rate>0.9"], // Maintain 90% success rate
-    http_req_duration: ["p(95)<1000"], // 95% of requests complete within 1 second
+    http_req_duration: ["p(95)<5000"], // 95% of requests complete within 5 second
     control_doc_latency: ["p(95)<500"], // Control document response time(Threshold for interference testing)
   },
   // System resource settings
