@@ -361,10 +361,8 @@ func (t *Text) Style(
 		return nil, diff, err
 	}
 
-	diff.Data += diffTo.Data
-	diff.Meta += diffTo.Meta
-	diff.Data += diffFrom.Data
-	diff.Meta += diffFrom.Meta
+	diff.Add(diffTo)
+	diff.Add(diffFrom)
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
@@ -405,9 +403,7 @@ func (t *Text) Style(
 				})
 			}
 			if newNode, ok := val.attrs.nodeMapByKey[key]; ok {
-				size := newNode.DataSize()
-				diff.Data += size.Data
-				diff.Meta += size.Meta
+				diff.Add(newNode.DataSize())
 			}
 		}
 	}

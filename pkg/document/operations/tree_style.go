@@ -106,11 +106,6 @@ func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) e
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
-
-		// TODO(raararaara): Should consider the status of RHTNode is flipped.
-		var minus resource.DataSize
-		minus.Meta = -24
-		root.Acc(minus)
 	}
 
 	return nil

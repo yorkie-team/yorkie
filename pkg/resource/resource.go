@@ -32,6 +32,19 @@ type DataSize struct {
 	Meta int
 }
 
-func (d DataSize) Total() int {
+// Total returns the total size of the resource in bytes.
+func (d *DataSize) Total() int {
 	return d.Data + d.Meta
+}
+
+// Add adds the size of another resource to this one.
+func (d *DataSize) Add(diff DataSize) {
+	d.Data += diff.Data
+	d.Meta += diff.Meta
+}
+
+// Sub subtracts the size of another resource from this one.
+func (d *DataSize) Sub(diff DataSize) {
+	d.Data -= diff.Data
+	d.Meta -= diff.Meta
 }

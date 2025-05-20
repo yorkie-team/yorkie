@@ -422,12 +422,10 @@ func (s *RGATreeSplit[V]) splitNode(
 	}
 	splitNode.SetInsPrev(node)
 
-	leftSize := node.DataSize()
-	rightSize := splitNode.DataSize()
-
-	// (left + right) − prv
-	diff.Data = (leftSize.Data + rightSize.Data) - prvSize.Data
-	diff.Meta = (leftSize.Meta + rightSize.Meta) - prvSize.Meta
+	// split(left + right) − prv
+	diff.Add(node.DataSize())
+	diff.Add(splitNode.DataSize())
+	diff.Sub(prvSize)
 
 	return splitNode, diff, nil
 }
@@ -499,10 +497,8 @@ func (s *RGATreeSplit[V]) edit(
 		return nil, nil, diff, err
 	}
 
-	diff.Data += diffTo.Data
-	diff.Meta += diffTo.Meta
-	diff.Data += diffFrom.Data
-	diff.Meta += diffFrom.Meta
+	diff.Add(diffTo)
+	diff.Add(diffFrom)
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
@@ -520,9 +516,7 @@ func (s *RGATreeSplit[V]) edit(
 	if content.Len() > 0 {
 		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
 		if inserted != nil {
-			size := inserted.DataSize()
-			diff.Data += size.Data
-			diff.Meta += size.Meta
+			diff.Add(inserted.DataSize())
 
 			caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 		}

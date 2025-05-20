@@ -99,18 +99,14 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(element Element) {
 	r.elementMap[element.CreatedAt().Key()] = element
-	elementSize := element.DataSize()
-	r.docSize.Live.Data += elementSize.Data
-	r.docSize.Live.Meta += elementSize.Meta
+	r.docSize.Live.Add(element.DataSize())
 
 	switch element := element.(type) {
 	case Container:
 		{
 			element.Descendants(func(elem Element, parent Container) bool {
 				r.elementMap[elem.CreatedAt().Key()] = elem
-				elementSize = elem.DataSize()
-				r.docSize.Live.Data += elementSize.Data
-				r.docSize.Live.Meta += elementSize.Meta
+				r.docSize.Live.Add(elem.DataSize())
 				return false
 			})
 		}
@@ -123,9 +119,7 @@ func (r *Root) deregisterElement(element Element) int {
 
 	deregisterElementInternal := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
-		elementSize := elem.DataSize()
-		r.docSize.GC.Data -= elementSize.Data
-		r.docSize.GC.Meta -= elementSize.Meta
+		r.docSize.GC.Sub(elem.DataSize())
 
 		delete(r.elementMap, createdAt)
 		delete(r.gcElementPairMap, createdAt)
@@ -149,12 +143,9 @@ func (r *Root) deregisterElement(element Element) int {
 
 // RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
-	elementSize := elem.DataSize()
-	r.docSize.GC.Data += elementSize.Data
-	r.docSize.GC.Meta += elementSize.Meta
-	r.docSize.Live.Data -= elementSize.Data
-	r.docSize.Live.Meta -= elementSize.Meta
-	r.docSize.Live.Meta += 24 // removedAt
+	r.docSize.GC.Add(elem.DataSize())
+	r.docSize.Live.Sub(elem.DataSize())
+	r.docSize.Live.Meta += time.TicketSize // removedAt
 
 	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{
 		parent,
@@ -238,8 +229,7 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	// child should be removed from the cache.
 	if _, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
 		size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
-		r.docSize.GC.Data -= size.Data
-		r.docSize.GC.Meta -= size.Meta
+		r.docSize.GC.Sub(size)
 
 		delete(r.gcNodePairMap, pair.Child.IDString())
 		return
@@ -248,15 +238,17 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	r.gcNodePairMap[pair.Child.IDString()] = pair
 
 	size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
-	r.docSize.GC.Data += size.Data
-	r.docSize.GC.Meta += size.Meta
-	r.docSize.Live.Data -= size.Data
-	r.docSize.Live.Meta -= size.Meta
-	r.docSize.Live.Meta += 24 // removedAt
+	r.docSize.GC.Add(size)
+	r.docSize.Live.Sub(size)
+
+	switch pair.Child.(type) {
+	case *RHTNode:
+	default:
+		r.docSize.Live.Meta += time.TicketSize // removedAt
+	}
 }
 
-// Acc accumulates the given DataSize to total.
+// Acc accumulates the given DataSize to Live.
 func (r *Root) Acc(diff resource.DataSize) {
-	r.docSize.Live.Data += diff.Data
-	r.docSize.Live.Meta += diff.Meta
+	r.docSize.Live.Add(diff)
 }

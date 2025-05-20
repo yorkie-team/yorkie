@@ -348,11 +348,10 @@ func (n *TreeNode) SplitText(
 		return nil, diff, err
 	}
 
-	leftSize := n.DataSize()
-	rightSize := rightNode.DataSize()
-
-	diff.Data = (leftSize.Data + rightSize.Data) - prvSize.Data
-	diff.Meta = (leftSize.Meta + rightSize.Meta) - prvSize.Meta
+	// split(left + right) − prv
+	diff.Add(n.DataSize())
+	diff.Add(rightNode.DataSize())
+	diff.Sub(prvSize)
 
 	return rightNode, diff, nil
 }
@@ -400,11 +399,10 @@ func (n *TreeNode) SplitElement(
 	}
 	split.Index.Length = splitLength
 
-	leftSize := n.DataSize()
-	rightSize := split.DataSize()
-
-	diff.Data = (leftSize.Data + rightSize.Data) - prvSize.Data // 일반적으로 0
-	diff.Meta = (leftSize.Meta + rightSize.Meta) - prvSize.Meta // >0: 새 노드 헤더
+	// split(left + right) − prv
+	diff.Add(n.DataSize())
+	diff.Add(split.DataSize())
+	diff.Sub(prvSize)
 
 	return split, diff, nil
 }
@@ -846,10 +844,8 @@ func (t *Tree) Edit(
 		return nil, diff, err
 	}
 
-	diff.Data += diffTo.Data
-	diff.Meta += diffTo.Meta
-	diff.Data += diffFrom.Data
-	diff.Meta += diffFrom.Meta
+	diff.Add(diffTo)
+	diff.Add(diffFrom)
 
 	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
@@ -904,10 +900,6 @@ func (t *Tree) Edit(
 				}
 			}
 
-			//size := content.DataSize()
-			//diff.Data += size.Data
-			//diff.Meta += size.Meta
-
 			leftInChildren = content
 			index.TraverseNode(content.Index, func(node *index.Node[*TreeNode], depth int) {
 				// if insertion happens during concurrent editing and parent node has been removed,
@@ -919,9 +911,7 @@ func (t *Tree) Edit(
 						Child:  node.Value,
 					})
 				} else {
-					size := node.Value.DataSize()
-					diff.Data += size.Data
-					diff.Meta += size.Meta
+					diff.Add(node.Value.DataSize())
 				}
 
 				t.NodeMapByID.Put(node.Value.id, node.Value)
@@ -1087,10 +1077,8 @@ func (t *Tree) Style(
 		return nil, diff, err
 	}
 
-	diff.Data += diffTo.Data
-	diff.Meta += diffTo.Meta
-	diff.Data += diffFrom.Data
-	diff.Meta += diffFrom.Meta
+	diff.Add(diffTo)
+	diff.Add(diffFrom)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 
@@ -1122,9 +1110,7 @@ func (t *Tree) Style(
 					})
 				}
 				if newNode, ok := node.Attrs.nodeMapByKey[key]; ok && token.TokenType != index.End {
-					size := newNode.DataSize()
-					diff.Data += size.Data
-					diff.Meta += size.Meta
+					diff.Add(newNode.DataSize())
 				}
 			}
 		}
@@ -1154,10 +1140,8 @@ func (t *Tree) RemoveStyle(
 		return nil, diff, err
 	}
 
-	diff.Data += diffTo.Data
-	diff.Meta += diffTo.Meta
-	diff.Data += diffFrom.Data
-	diff.Meta += diffFrom.Meta
+	diff.Add(diffTo)
+	diff.Add(diffFrom)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 
