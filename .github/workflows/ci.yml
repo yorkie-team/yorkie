@@ -24,6 +24,7 @@ jobs:
       build: ${{ steps.ci-target-check.outputs.build }}
       bench: ${{ steps.ci-target-check.outputs.bench }}
       complex-test: ${{ steps.ci-target-check.outputs.complex-test }}
+      load-test: ${{ steps.ci-target-check.outputs.load-test }}
 
     steps:
       - name: Checkout code
@@ -43,12 +44,19 @@ jobs:
               - 'admin/**'
               - 'cluster/**'
               - 'api/converter/**'
-
             complex-test:
               - 'test/complex/**'
               - 'server/backend/database/**'
               - 'pkg/document/**'
               - 'client/**'
+            load-test:
+              - 'test/k6/**'
+              - 'pkg/**'
+              - 'server/**'
+              - 'client/**'
+              - 'admin/**'
+              - 'cluster/**'
+              - 'api/converter/**'
 
   build:
     name: build
@@ -254,3 +262,31 @@ jobs:
 
       - name: Run the tests with complex tag
         run: go test -tags complex -race -v ./test/complex/...
+
+  load-test:
+    name: load-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+      - name: Stack
+        run: docker compose -f build/docker/docker-compose.yml up --build -d
+
+      - name: Setup K6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Start the server
+        run: make start
+
+      - name: Run local k6 test
+        uses: grafana/run-k6-action@v1
+        with:
+          path: test/k6/presence.ts
+
+      - name: Stop the server
+        run: make stop
