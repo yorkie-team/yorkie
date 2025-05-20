@@ -34,8 +34,11 @@ const CONTROL_DOC_KEY = "control-doc";
 // Test mode: 'skew' or 'even'
 const TEST_MODE = __ENV.TEST_MODE || "skew";
 
-// Document count (used only in 'even' mode)
-const DOC_COUNT = parseInt(__ENV.DOC_COUNT || "10");
+// Virtual users(VUs) concurrency for the test
+const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500");
+
+// Virtual users per document (for even distribution)
+const VU_PER_DOCS = parseInt(__ENV.DOC_COUNT || "10");
 
 // Whether to use control document (for interference testing in skew mode)
 const USE_CONTROL_DOC = __ENV.USE_CONTROL_DOC === "true";
@@ -46,30 +49,32 @@ function getDocKey() {
     return DOC_KEY_PREFIX;
   } else {
     // 'even' mode
+    const documentCount = CONCURRENCY / VU_PER_DOCS;
     // Distribute documents evenly based on virtual user ID
-    return `${DOC_KEY_PREFIX}-${__VU % DOC_COUNT}`;
+    return `${DOC_KEY_PREFIX}-${__VU % documentCount}`;
   }
 }
 
 // Custom metrics
 const activeClients = new Counter("active_clients");
-const attachSuccessRate = new Rate("attach_success_rate");
-const attachTime = new Trend("attach_time");
 const attachDocuments = new Counter("attach_documents");
-const attachFaileds = new Counter("attach_faileds");
+const pushpulls = new Counter("pushpulls");
+
+const transactionFaileds = new Counter("transaction_faileds");
+const transactionSuccessRate = new Rate("transaction_success_rate");
+const transactionTime = new Trend("transaction_time");
 const controlDocLatency = new Trend("control_doc_latency"); // Metrics for measuring interference
 
 // k6 options for load testing
 export const options = {
   stages: [
-    { duration: "30s", target: 250 }, // Ramp up to 250 users in 30 seconds
-    { duration: "30s", target: 500 }, // Increase to 500 users in 30 seconds
-    { duration: "1m", target: 500 }, // Maintain 500 users for 1 minute
+    { duration: "1m", target: CONCURRENCY }, // Ramp up to concurrenct(default: 500) users in 1 minute
+    { duration: "1m", target: CONCURRENCY }, // Maintain concurrent users(default: 500) for 1 minute
     { duration: "30s", target: 0 }, // Ramp down to 0 users in 30 seconds
   ],
   thresholds: {
-    attach_success_rate: ["rate>0.9"], // Maintain 90% success rate
-    http_req_duration: ["p(95)<5000"], // 95% of requests complete within 5 second
+    transaction_success_rate: ["rate>0.99"], // Maintain 99% success rate
+    http_req_duration: ["p(95)<10000"], // 95% of requests complete within 10 seconds
     control_doc_latency: ["p(95)<500"], // Control document response time(Threshold for interference testing)
   },
   // System resource settings
@@ -106,6 +111,7 @@ export default function () {
           docKey,
           lastServerSeq
         );
+        pushpulls.add(1);
         sleep(1); // Sleep for 1 second between changes
       }
 
@@ -125,11 +131,11 @@ export default function () {
       deactivateClient(clientID);
     } catch (error: any) {
       console.error(`Error in main function: ${error.message}`);
-      attachFaileds.add(1);
+      transactionFaileds.add(1);
     } finally {
-      attachSuccessRate.add(success);
+      transactionSuccessRate.add(success);
       const endTime = new Date().getTime();
-      attachTime.add(endTime - startTime);
+      transactionTime.add(endTime - startTime);
     }
   });
 }
