@@ -1410,7 +1410,45 @@ func (c *Client) UpdateAndFindMinVersionVector(
 	}
 
 	vectors := append(vvMap.Values(), vector)
-	return time.MinVersionVector(vectors...), nil
+	minVersionVector := time.MinVersionVector(vectors...)
+
+	// 04. Filter detached client's information from min version vector
+	if detachedClientsMap, ok := c.detachedClientsCache.Get(docRefKey); ok {
+		currentActorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		keys := detachedClientsMap.Keys()
+
+		for i := range keys {
+			actorID, err := keys[i].ToActorID()
+
+			if actorID == currentActorID {
+				continue
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			if lamport, exists := minVersionVector.Get(actorID); exists {
+				value, exists := detachedClientsMap.Get(keys[i])
+
+				if exists {
+					if value == lamport {
+						minVersionVector.Unset(actorID)
+					}
+				}
+			} else {
+				// every client recognizes the actor has been detached, so now it's safe to remove actor's info from detachedClientsCache
+				detachedClientsMap.Delete(keys[i], func(value int64, exists bool) bool {
+					return true
+				})
+			}
+		}
+	}
+
+	return minVersionVector, nil
 }
 
 // updateVersionVector updates the given version vector of the given client
