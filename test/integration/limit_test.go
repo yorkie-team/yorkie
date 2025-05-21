@@ -74,6 +74,56 @@ func TestDocSize(t *testing.T) {
 		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
 	})
 
+	t.Run("Update doc size test", func(t *testing.T) {
+		ctx := context.Background()
+
+		sizeLimit := 100
+		projectName := "doc-size-update-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		project, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				MaxSizePerDocument: &sizeLimit,
+			},
+		)
+		assert.NoError(t, err)
+
+		c1, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c1.Close()) }()
+		assert.NoError(t, c1.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
+
+		newSizeLimit := 200
+		project, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				MaxSizePerDocument: &newSizeLimit,
+			},
+		)
+
+		c2, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Close()) }()
+		assert.NoError(t, c2.Activate(ctx))
+
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2))
+		assert.Equal(t, newSizeLimit, doc2.MaxSizeLimit)
+	})
+
 	t.Run("Document size limit exceed test", func(t *testing.T) {
 		ctx := context.Background()
 
