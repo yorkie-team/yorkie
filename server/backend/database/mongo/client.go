@@ -49,9 +49,10 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config  *Config
-	client  *mongo.Client
-	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	config               *Config
+	client               *mongo.Client
+	vvCache              *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	detachedClientsCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, int64]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -81,17 +82,20 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	vvCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize VV cache: %w", err)
 	}
 
+	clientsCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, int64]](1000)
+
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		vvCache: cache,
+		config:               conf,
+		client:               client,
+		vvCache:              vvCache,
+		detachedClientsCache: clientsCache,
 	}, nil
 }
 
@@ -102,6 +106,7 @@ func (c *Client) Close() error {
 	}
 
 	c.vvCache.Purge()
+	c.detachedClientsCache.Purge()
 
 	return nil
 }
