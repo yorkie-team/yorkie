@@ -19,7 +19,7 @@ package document_test
 import (
 	"math"
 	"testing"
-	"time"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,8 +27,43 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/resource"
 )
+
+var (
+	dummyTreeNodeID = &crdt.TreeNodeID{
+		CreatedAt: time.InitialTicket,
+		Offset:    0,
+	}
+)
+
+func TestTreeNodeSize(t *testing.T) {
+	t.Run("split tree node test", func(t *testing.T) {
+		root := crdt.NewTreeNode(dummyTreeNodeID, "r", nil)
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, root.Append(para))
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "helloworld")))
+
+		// split text node
+		left, err := para.Child(0)
+		assert.NoError(t, err)
+		right, diff, err := left.SplitText(5, 0)
+		assert.NoError(t, err)
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff)
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 24}, left.DataSize())
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 24}, right.DataSize())
+
+		// split element node
+		right, diff, err = para.SplitElement(1, func() *time.Ticket {
+			return time.InitialTicket
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "<p>hello</p>", crdt.ToXML(para))
+		assert.Equal(t, "<p>world</p>", crdt.ToXML(right))
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff)
+	})
+}
 
 func TestDocumentSize(t *testing.T) {
 	t.Run("primitive and object test", func(t *testing.T) {
@@ -76,7 +111,7 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 36, Meta: 360}, doc.DocSize().Live)
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetDate("k7", time.Now())
+			root.SetDate("k7", gotime.Now())
 			return nil
 		}))
 		assert.Equal(t, resource.DataSize{Data: 44, Meta: 408}, doc.DocSize().Live)
@@ -238,5 +273,4 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 168}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 36, Meta: 168}, doc.DocSize().GC)
 	})
-
 }
