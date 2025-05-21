@@ -46,9 +46,6 @@ func assertVectorEquality(t *testing.T, actual time.VersionVector, versions ...v
 		expected.Set(version.actorID, version.lamport)
 	}
 
-	// NOTE(hackerwins): After remove logical clocks from presence only changes,
-	// the version vector is not equal to the expected version vector.
-	// So we need to update the expected version vector to match the actual version vector.
 	assert.Equal(t, expected.Marshal(), actual.Marshal())
 }
 
