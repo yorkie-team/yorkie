@@ -145,7 +145,9 @@ func (r *Root) deregisterElement(element Element) int {
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	r.docSize.GC.Add(elem.DataSize())
 	r.docSize.Live.Sub(elem.DataSize())
-	r.docSize.Live.Meta += time.TicketSize // removedAt
+	// NOTE(hackerwins): When an element is removed, parent sets the removedAt
+	// to mark the child as removed.
+	r.docSize.Live.Meta += time.TicketSize
 
 	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{
 		parent,
@@ -153,6 +155,7 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
+// DocSize returns the size of the document.
 func (r *Root) DocSize() resource.DocSize {
 	return r.docSize
 }
@@ -227,24 +230,25 @@ func (r *Root) GarbageLen() int {
 func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
-	if _, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
-		size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
+	if p, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
+		size := p.Child.DataSize()
 		r.docSize.GC.Sub(size)
 
-		delete(r.gcNodePairMap, pair.Child.IDString())
+		delete(r.gcNodePairMap, p.Child.IDString())
 		return
 	}
 
 	r.gcNodePairMap[pair.Child.IDString()] = pair
 
-	size := r.gcNodePairMap[pair.Child.IDString()].Child.DataSize()
+	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
 	r.docSize.Live.Sub(size)
 
-	switch pair.Child.(type) {
-	case *RHTNode:
-	default:
-		r.docSize.Live.Meta += time.TicketSize // removedAt
+	// For non-RHTNode types, we need to account for the used by the removedAt
+	// field that tracks when the node was deleted. This metadata remains part
+	// of the live document's footprint.
+	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
+		r.docSize.Live.Meta += time.TicketSize
 	}
 }
 

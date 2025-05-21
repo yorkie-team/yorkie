@@ -22,6 +22,7 @@ type DocSize struct {
 	GC   DataSize
 }
 
+// Total returns the total size of the document in bytes.
 func (d *DocSize) Total() int {
 	return d.Live.Total() + d.GC.Total()
 }
@@ -37,14 +38,16 @@ func (d *DataSize) Total() int {
 	return d.Data + d.Meta
 }
 
-// Add adds the size of another resource to this one.
-func (d *DataSize) Add(diff DataSize) {
-	d.Data += diff.Data
-	d.Meta += diff.Meta
+// Add adds the sizes of other resources.
+func (d *DataSize) Add(others ...DataSize) {
+	for _, diff := range others {
+		d.Data += diff.Data
+		d.Meta += diff.Meta
+	}
 }
 
-// Sub subtracts the size of another resource from this one.
-func (d *DataSize) Sub(diff DataSize) {
-	d.Data -= diff.Data
-	d.Meta -= diff.Meta
+// Sub subtracts the size of other resource from this one.
+func (d *DataSize) Sub(other DataSize) {
+	d.Data -= other.Data
+	d.Meta -= other.Meta
 }

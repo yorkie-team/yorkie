@@ -361,8 +361,7 @@ func (t *Text) Style(
 		return nil, diff, err
 	}
 
-	diff.Add(diffTo)
-	diff.Add(diffFrom)
+	diff.Add(diffTo, diffFrom)
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)

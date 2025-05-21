@@ -169,7 +169,8 @@ func (d *Document) Update(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.New())),
 	); err != nil {
-		// drop cloneRoot because it is contaminated.
+		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
+		// clonePresences to prevent the user from accessing the invalid state.
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		return err
@@ -177,6 +178,10 @@ func (d *Document) Update(
 
 	cloneSize := d.cloneRoot.DocSize()
 	if d.MaxSizeLimit > 0 && d.MaxSizeLimit < cloneSize.Total() {
+		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
+		// clonePresences to prevent the user from accessing the invalid state.
+		d.cloneRoot = nil
+		d.clonePresences = nil
 		return ErrDocumentSizeExceedsLimit
 	}
 

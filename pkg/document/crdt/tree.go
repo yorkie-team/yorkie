@@ -330,7 +330,7 @@ func (n *TreeNode) SplitText(
 		return nil, diff, nil
 	}
 
-	prvSize := n.DataSize()
+	prevSize := n.DataSize()
 
 	n.Value = string(leftRune)
 	n.Index.Length = len(leftRune)
@@ -348,10 +348,12 @@ func (n *TreeNode) SplitText(
 		return nil, diff, err
 	}
 
-	// split(left + right) − prv
-	diff.Add(n.DataSize())
-	diff.Add(rightNode.DataSize())
-	diff.Sub(prvSize)
+	// NOTE(hackerwins): Calculate data size after node splitting:
+	// Take the sum of the two split nodes(left and right) minus the size of
+	// the original node. This calculates the net metadata overhead added by
+	// the split operation.
+	diff.Add(n.DataSize(), rightNode.DataSize())
+	diff.Sub(prevSize)
 
 	return rightNode, diff, nil
 }
@@ -399,9 +401,11 @@ func (n *TreeNode) SplitElement(
 	}
 	split.Index.Length = splitLength
 
-	// split(left + right) − prv
-	diff.Add(n.DataSize())
-	diff.Add(split.DataSize())
+	// NOTE(hackerwins): Calculate data size after node splitting:
+	// Take the sum of the two split nodes(left and right) minus the size of
+	// the original node. This calculates the net metadata overhead added by
+	// the split operation.
+	diff.Add(n.DataSize(), split.DataSize())
 	diff.Sub(prvSize)
 
 	return split, diff, nil
@@ -844,8 +848,7 @@ func (t *Tree) Edit(
 		return nil, diff, err
 	}
 
-	diff.Add(diffTo)
-	diff.Add(diffFrom)
+	diff.Add(diffFrom, diffTo)
 
 	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
@@ -1077,8 +1080,7 @@ func (t *Tree) Style(
 		return nil, diff, err
 	}
 
-	diff.Add(diffTo)
-	diff.Add(diffFrom)
+	diff.Add(diffFrom, diffTo)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 
@@ -1140,8 +1142,7 @@ func (t *Tree) RemoveStyle(
 		return nil, diff, err
 	}
 
-	diff.Add(diffTo)
-	diff.Add(diffFrom)
+	diff.Add(diffFrom, diffTo)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 

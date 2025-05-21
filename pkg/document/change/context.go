@@ -97,7 +97,7 @@ func (c *Context) RegisterGCPair(pair crdt.GCPair) {
 	c.root.RegisterGCPair(pair)
 }
 
-// Acc accumulates the given DataSize to total.
+// Acc accumulates the given DataSize to Live size of the root.
 func (c *Context) Acc(diff resource.DataSize) {
 	c.root.Acc(diff)
 }

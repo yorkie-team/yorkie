@@ -410,7 +410,7 @@ func (s *RGATreeSplit[V]) splitNode(
 		return node.next, diff, nil
 	}
 
-	prvSize := node.DataSize()
+	prevSize := node.DataSize()
 
 	splitNode := node.split(offset)
 	s.treeByIndex.UpdateWeight(splitNode.indexNode)
@@ -422,10 +422,12 @@ func (s *RGATreeSplit[V]) splitNode(
 	}
 	splitNode.SetInsPrev(node)
 
-	// split(left + right) − prv
-	diff.Add(node.DataSize())
-	diff.Add(splitNode.DataSize())
-	diff.Sub(prvSize)
+	// NOTE(hackerwins): Calculate data size after node splitting:
+	// Take the sum of the two split nodes(left and right) minus the size of
+	// the original node. This calculates the net metadata overhead added by
+	// the split operation.
+	diff.Add(node.DataSize(), splitNode.DataSize())
+	diff.Sub(prevSize)
 
 	return splitNode, diff, nil
 }
@@ -497,8 +499,7 @@ func (s *RGATreeSplit[V]) edit(
 		return nil, nil, diff, err
 	}
 
-	diff.Add(diffTo)
-	diff.Add(diffFrom)
+	diff.Add(diffTo, diffFrom)
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
