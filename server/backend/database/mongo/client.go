@@ -1370,11 +1370,15 @@ func (c *Client) UpdateAndFindMinVersionVector(
 				return vector
 			})
 		} else {
-			// NOTE(hackerwins): Considering removing the detached client's lamport
-			// from the other clients' version vectors. For now, we just ignore it.
-			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
-				return exists
-			})
+			infoMap := cmap.New[types.ID, int64]()
+			actorID, err := clientInfo.ID.ToActorID()
+
+			if err != nil {
+				return nil, err
+			}
+
+			infoMap.Set(clientInfo.ID, vector[actorID])
+			c.detachedClientsCache.Add(docRefKey, infoMap)
 		}
 	}
 
