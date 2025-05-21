@@ -516,11 +516,9 @@ func (s *RGATreeSplit[V]) edit(
 	// 03. insert a new node
 	if content.Len() > 0 {
 		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
-		if inserted != nil {
-			diff.Add(inserted.DataSize())
+		diff.Add(inserted.DataSize())
 
-			caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
-		}
+		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 	}
 
 	// 04. add removed node
