@@ -289,9 +289,9 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// UpdateAndFindMinVersionVector updates the version vector of the given client
+	// UpdateMinVersionVector updates the version vector of the given client
 	// and returns the minimum version vector of all clients.
-	UpdateAndFindMinVersionVector(
+	UpdateMinVersionVector(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
