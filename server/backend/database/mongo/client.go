@@ -1339,9 +1339,9 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateAndFindMinVersionVector updates the version vector of the given client
+// UpdateMinVersionVector updates the version vector of the given client
 // and returns the minimum version vector of all clients.
-func (c *Client) UpdateAndFindMinVersionVector(
+func (c *Client) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,

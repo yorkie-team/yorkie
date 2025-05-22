@@ -135,10 +135,8 @@ func PushPull(
 		}
 	}
 
-	// 05. update and find min version vector for garbage collection.
-	// NOTE(hackerwins): Since the client could not receive the response, the
-	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minVersionVector, err := be.DB.UpdateAndFindMinVersionVector(
+	// 05. update min version vector of the document.
+	minVersionVector, err := be.DB.UpdateMinVersionVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -225,7 +223,6 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minVersionVector,
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}

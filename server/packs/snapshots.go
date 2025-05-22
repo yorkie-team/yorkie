@@ -21,32 +21,32 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+// storeSnapshot stores the snapshot of the document in the database.
 func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	minSyncedVersionVector time.VersionVector,
 ) error {
 	// 01. get the closest snapshot's metadata of this docInfo
 	docRefKey := docInfo.RefKey()
-	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
 		ctx,
 		docRefKey,
 		docInfo.ServerSeq,
-		false)
+		false,
+	)
 	if err != nil {
 		return err
 	}
-	if snapshotMetadata.ServerSeq == docInfo.ServerSeq {
+	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
 		return nil
 	}
-	if docInfo.ServerSeq-snapshotMetadata.ServerSeq < be.Config.SnapshotInterval {
+	if docInfo.ServerSeq-snapshotInfo.ServerSeq < be.Config.SnapshotInterval {
 		return nil
 	}
 
@@ -54,20 +54,16 @@ func storeSnapshot(
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docRefKey,
-		snapshotMetadata.ServerSeq+1,
+		snapshotInfo.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
 	if err != nil {
 		return err
 	}
 
-	// 03. create document instance of the docInfo
-	snapshotInfo := snapshotMetadata
-	if snapshotMetadata.ID != "" {
-		snapshotInfo, err = be.DB.FindSnapshotInfoByRefKey(
-			ctx,
-			snapshotInfo.RefKey(),
-		)
+	// 03. Fetch the snapshot info including its snapshot.
+	if snapshotInfo.ID != "" {
+		snapshotInfo, err = be.DB.FindSnapshotInfoByRefKey(ctx, snapshotInfo.RefKey())
 		if err != nil {
 			return err
 		}
@@ -96,13 +92,6 @@ func storeSnapshot(
 		return err
 	}
 
-	// 04. perform garbage collect to remove tombstones
-	if !be.Config.SnapshotDisableGC {
-		if _, err := doc.GarbageCollect(minSyncedVersionVector); err != nil {
-			return err
-		}
-	}
-
 	// 05. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(
 		ctx,
@@ -117,5 +106,6 @@ func storeSnapshot(
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,
 	)
+
 	return nil
 }

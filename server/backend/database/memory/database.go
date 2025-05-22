@@ -1443,9 +1443,9 @@ func (d *DB) updateVersionVector(
 	return nil
 }
 
-// UpdateAndFindMinVersionVector updates the version vector of the given client
+// UpdateMinVersionVector updates the version vector of the given client
 // and returns the minimum version vector of all clients.
-func (d *DB) UpdateAndFindMinVersionVector(
+func (d *DB) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,

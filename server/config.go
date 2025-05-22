@@ -67,8 +67,8 @@ const (
 
 	DefaultUseDefaultProject         = true
 	DefaultClientDeactivateThreshold = "24h"
-	DefaultSnapshotThreshold         = 1000
-	DefaultSnapshotInterval          = 3000
+	DefaultSnapshotThreshold         = 500
+	DefaultSnapshotInterval          = 500
 	DefaultSnapshotDisableGC         = false
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
