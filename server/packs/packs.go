@@ -261,34 +261,40 @@ func BuildInternalDocForServerSeq(
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
 	docRefKey := docInfo.RefKey()
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
-		ctx,
-		docRefKey,
-		serverSeq,
-		true,
-	)
-	if err != nil {
-		return nil, err
+
+	// NOTE(hackerwins): If the document is already in the cache, we can skip
+	// the database query and use the cached document. If the document's server
+	// sequence in the cache is greater than the given server sequence, we can't
+	// build the document from the document. In this case, we need to
+	// query the database to get the closest snapshot information.
+	doc, ok := be.SnapshotCache.Get(docRefKey)
+	if !ok || serverSeq < doc.Checkpoint().ServerSeq {
+		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
+			ctx,
+			docRefKey,
+			serverSeq,
+			true,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err = document.NewInternalDocumentFromSnapshot(
+			docInfo.Key,
+			snapshotInfo.ServerSeq,
+			snapshotInfo.Lamport,
+			snapshotInfo.VersionVector,
+			snapshotInfo.Snapshot,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	doc, err := document.NewInternalDocumentFromSnapshot(
-		docInfo.Key,
-		snapshotInfo.ServerSeq,
-		snapshotInfo.Lamport,
-		snapshotInfo.VersionVector,
-		snapshotInfo.Snapshot,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
-	// number of changes to read at once here. We need to split changes by a
-	// certain size (e.g. 100) and read and gradually reflect it into the document.
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docRefKey,
-		snapshotInfo.ServerSeq+1,
+		doc.Checkpoint().ServerSeq+1,
 		serverSeq,
 	)
 	if err != nil {
@@ -304,6 +310,13 @@ func BuildInternalDocForServerSeq(
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err
 	}
+
+	// NOTE(hackerwins): Store the latest document in the cache.
+	clone, err := doc.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+	be.SnapshotCache.Add(docRefKey, clone)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
