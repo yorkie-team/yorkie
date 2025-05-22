@@ -311,6 +311,20 @@ func BuildInternalDocForServerSeq(
 		return nil, err
 	}
 
+	if !be.Config.SnapshotDisableGC {
+		vector, err := be.DB.GetMinVersionVector(
+			ctx,
+			docRefKey,
+			doc.VersionVector(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := doc.GarbageCollect(vector); err != nil {
+			return nil, err
+		}
+	}
+
 	// NOTE(hackerwins): Store the latest document in the cache.
 	clone, err := doc.DeepCopy()
 	if err != nil {
