@@ -78,9 +78,6 @@ type Backend struct {
 	Background *background.Background
 	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
-
-	// ProjectCache is used to cache the project info.
-	ProjectCache *expirable.LRU[string, *types.Project]
 }
 
 // New creates a new instance of Backend.
@@ -198,9 +195,6 @@ func New(
 		dbInfo,
 	)
 
-	// 12. Create the projectCache.
-	projectCache := expirable.NewLRU[string, *types.Project](conf.ProjectCacheSize, nil, conf.ParseProjectCacheTTL())
-
 	return &Backend{
 		Config: conf,
 
@@ -219,8 +213,6 @@ func New(
 		Housekeeping: keeping,
 		MsgBroker:    broker,
 		Warehouse:    warehouse,
-
-		ProjectCache: projectCache,
 	}, nil
 }
 

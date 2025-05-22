@@ -88,11 +88,6 @@ func UpdateProject(
 		return nil, err
 	}
 
-	cacheKey := info.PublicKey
-	if _, ok := be.ProjectCache.Get(cacheKey); ok {
-		be.ProjectCache.Remove(cacheKey)
-	}
-
 	return info.ToProject(), nil
 }
 
