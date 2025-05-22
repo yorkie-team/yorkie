@@ -49,9 +49,10 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config  *Config
-	client  *mongo.Client
-	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	config               *Config
+	client               *mongo.Client
+	vvCache              *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	detachedClientsCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, int64]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -81,17 +82,20 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	vvCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize VV cache: %w", err)
 	}
 
+	clientsCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, int64]](1000)
+
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		vvCache: cache,
+		config:               conf,
+		client:               client,
+		vvCache:              vvCache,
+		detachedClientsCache: clientsCache,
 	}, nil
 }
 
@@ -102,6 +106,7 @@ func (c *Client) Close() error {
 	}
 
 	c.vvCache.Purge()
+	c.detachedClientsCache.Purge()
 
 	return nil
 }
@@ -1365,11 +1370,15 @@ func (c *Client) UpdateMinVersionVector(
 				return vector
 			})
 		} else {
-			// NOTE(hackerwins): Considering removing the detached client's lamport
-			// from the other clients' version vectors. For now, we just ignore it.
-			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
-				return exists
-			})
+			infoMap := cmap.New[types.ID, int64]()
+			actorID, err := clientInfo.ID.ToActorID()
+
+			if err != nil {
+				return nil, err
+			}
+
+			infoMap.Set(clientInfo.ID, vector[actorID])
+			c.detachedClientsCache.Add(docRefKey, infoMap)
 		}
 	}
 
@@ -1401,7 +1410,45 @@ func (c *Client) UpdateMinVersionVector(
 	}
 
 	vectors := append(vvMap.Values(), vector)
-	return time.MinVersionVector(vectors...), nil
+	minVersionVector := time.MinVersionVector(vectors...)
+
+	// 04. Filter detached client's information from min version vector
+	if detachedClientsMap, ok := c.detachedClientsCache.Get(docRefKey); ok {
+		currentActorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		keys := detachedClientsMap.Keys()
+
+		for i := range keys {
+			actorID, err := keys[i].ToActorID()
+
+			if actorID == currentActorID {
+				continue
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			if lamport, exists := minVersionVector.Get(actorID); exists {
+				value, exists := detachedClientsMap.Get(keys[i])
+
+				if exists {
+					if value == lamport {
+						minVersionVector.Unset(actorID)
+					}
+				}
+			} else {
+				// every client recognizes the actor has been detached, so now it's safe to remove actor's info from detachedClientsCache
+				detachedClientsMap.Delete(keys[i], func(value int64, exists bool) bool {
+					return true
+				})
+			}
+		}
+	}
+
+	return minVersionVector, nil
 }
 
 // updateVersionVector updates the given version vector of the given client
