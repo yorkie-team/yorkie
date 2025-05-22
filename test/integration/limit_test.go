@@ -154,18 +154,23 @@ func TestDocSize(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewText("text")
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("text")
 			return nil
 		}))
 		docSize := doc.DocSize()
 		assert.Equal(t, 72, docSize.Total())
 
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetText("text").Edit(0, 0, "helloworld")
+		err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "helloworld")
 			return nil
 		})
-		docSize = doc.DocSize() // Data: 20, Meta: 96
 		assert.ErrorIs(t, document.ErrDocumentSizeExceedsLimit, err)
+		docSize = doc.DocSize() // Data: 20, Meta: 96
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			assert.Equal(t, `{"text":[]}`, r.Marshal())
+			return nil
+		}))
+		assert.Equal(t, 72, docSize.Total())
 	})
 }

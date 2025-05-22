@@ -244,9 +244,10 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	r.docSize.GC.Add(size)
 	r.docSize.Live.Sub(size)
 
-	// For non-RHTNode types, we need to account for the used by the removedAt
-	// field that tracks when the node was deleted. This metadata remains part
-	// of the live document's footprint.
+	// NOTE(hackerwins): In general cases, when removing a node, its size
+	// includes removedAt, so when subtracting the node size from docSize.Live,
+	// we need to subtract the removedAt size. However, RHTNode doesn't have
+	// removedAt, so we don't need to subtract it from the Live size.
 	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
 		r.docSize.Live.Meta += time.TicketSize
 	}
