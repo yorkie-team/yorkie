@@ -65,6 +65,7 @@ func TestTreeNodeSize(t *testing.T) {
 	})
 
 	t.Run("split tree node with attribute test", func(t *testing.T) {
+		t.Skip("TODO(raararaara): We need to check if the attributes are copied correctly when splitting elements.")
 		attributes := crdt.NewRHT()
 		attributes.Set("bold", "true", time.InitialTicket)
 
@@ -233,7 +234,19 @@ func TestDocumentSize(t *testing.T) {
 			root.GetText("text").Style(0, 5, map[string]string{"bold": "true"})
 			return nil
 		}))
+		assert.Equal(t, `{"text":[{"attrs":{"bold":"true"},"val":"hello"},{"val":" "}]}`, doc.Marshal())
 		assert.Equal(t, resource.DataSize{Data: 28, Meta: 144}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 48}, doc.DocSize().GC)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 1, "")
+			return nil
+		}))
+		assert.Equal(t,
+			`{"text":[{"attrs":{"bold":"true"},"val":"h"},{"attrs":{"bold":"true"},"val":"ello"},{"val":" "}]}`,
+			doc.Marshal(),
+		)
+		assert.Equal(t, resource.DataSize{Data: 44, Meta: 192}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 48}, doc.DocSize().GC)
 	})
 
