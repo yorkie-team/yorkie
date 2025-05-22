@@ -295,7 +295,14 @@ type Database interface {
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
-		versionVector time.VersionVector,
+		vector time.VersionVector,
+	) (time.VersionVector, error)
+
+	// GetMinVersionVector returns the minimum version vector of all clients.
+	GetMinVersionVector(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		vector time.VersionVector,
 	) (time.VersionVector, error)
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

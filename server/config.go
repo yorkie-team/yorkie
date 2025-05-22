@@ -70,6 +70,7 @@ const (
 	DefaultSnapshotThreshold         = 500
 	DefaultSnapshotInterval          = 500
 	DefaultSnapshotDisableGC         = false
+	DefaultSnapshotCacheSize         = 1000
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
@@ -167,7 +168,6 @@ func (c *Config) ensureDefaultValue() {
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
 	}
-
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
 	}
@@ -175,15 +175,12 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser
 	}
-
 	if c.Backend.AdminPassword == "" {
 		c.Backend.AdminPassword = DefaultAdminPassword
 	}
-
 	if c.Backend.SecretKey == "" {
 		c.Backend.SecretKey = DefaultSecretKey
 	}
-
 	if c.Backend.AdminTokenDuration == "" {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
@@ -195,31 +192,28 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.SnapshotThreshold == 0 {
 		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
 	}
-
 	if c.Backend.SnapshotInterval == 0 {
 		c.Backend.SnapshotInterval = DefaultSnapshotInterval
+	}
+	if c.Backend.SnapshotCacheSize == 0 {
+		c.Backend.SnapshotCacheSize = DefaultSnapshotCacheSize
 	}
 
 	if c.Backend.AuthWebhookCacheSize == 0 {
 		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
 	}
-
 	if c.Backend.AuthWebhookMaxRetries == 0 {
 		c.Backend.AuthWebhookMaxRetries = DefaultAuthWebhookMaxRetries
 	}
-
 	if c.Backend.AuthWebhookMaxWaitInterval == "" {
 		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
 	}
-
 	if c.Backend.AuthWebhookMinWaitInterval == "" {
 		c.Backend.AuthWebhookMinWaitInterval = DefaultAuthWebhookMinWaitInterval.String()
 	}
-
 	if c.Backend.AuthWebhookRequestTimeout == "" {
 		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
 	}
-
 	if c.Backend.AuthWebhookCacheTTL == "" {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
@@ -227,15 +221,12 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.EventWebhookMaxRetries == 0 {
 		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
 	}
-
 	if c.Backend.EventWebhookMaxWaitInterval == "" {
 		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
 	}
-
 	if c.Backend.EventWebhookMinWaitInterval == "" {
 		c.Backend.EventWebhookMinWaitInterval = DefaultEventWebhookMinWaitInterval.String()
 	}
-
 	if c.Backend.EventWebhookRequestTimeout == "" {
 		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
 	}
@@ -243,7 +234,6 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.ProjectCacheSize == 0 {
 		c.Backend.ProjectCacheSize = DefaultProjectCacheSize
 	}
-
 	if c.Backend.ProjectCacheTTL == "" {
 		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}

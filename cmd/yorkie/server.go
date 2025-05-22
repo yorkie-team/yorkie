@@ -399,6 +399,12 @@ func init() {
 		server.DefaultSnapshotDisableGC,
 		"Whether to disable garbage collection of snapshots.",
 	)
+	cmd.Flags().IntVar(
+		&conf.Backend.SnapshotCacheSize,
+		"snapshot-cache-size",
+		server.DefaultSnapshotCacheSize,
+		"The cache size of the snapshots.",
+	)
 	cmd.Flags().DurationVar(
 		&authWebhookRequestTimeout,
 		"auth-webhook-request-timeout",

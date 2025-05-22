@@ -1449,12 +1449,25 @@ func (d *DB) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	versionVector time.VersionVector,
+	vector time.VersionVector,
 ) (time.VersionVector, error) {
+	// 01. Update synced version vector of the given client and document.
 	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
 	// from min version vector.
+	if err := d.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+		return nil, err
+	}
 
-	// 01. Find all version vectors of the given document from DB.
+	// 02. Compute min version vector.
+	return d.GetMinVersionVector(ctx, docRefKey, vector)
+}
+
+// GetMinVersionVector returns the minimum version vector of the given document.
+func (d *DB) GetMinVersionVector(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	vector time.VersionVector,
+) (time.VersionVector, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
@@ -1462,28 +1475,19 @@ func (d *DB) UpdateMinVersionVector(
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
 
-	var versionVectorInfos []database.VersionVectorInfo
+	var infos []database.VersionVectorInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		vvi := raw.(*database.VersionVectorInfo)
-		versionVectorInfos = append(versionVectorInfos, *vvi)
+		infos = append(infos, *vvi)
 	}
 
-	// 02. Compute min version vector.
-	minVersionVector := versionVector.DeepCopy()
-	for i, vvi := range versionVectorInfos {
-		if vvi.ClientID == clientInfo.ID {
-			continue
-		}
-		minVersionVector.Min(&versionVectorInfos[i].VersionVector)
+	var vectors []time.VersionVector
+	vectors = append(vectors, vector)
+	for _, vv := range infos {
+		vectors = append(vectors, vv.VersionVector)
 	}
 
-	// 03. Update current client's version vector. If the client is detached, remove it.
-	// This is only for the current client and does not affect the version vector of other clients.
-	if err = d.updateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
-		return nil, err
-	}
-
-	return minVersionVector, nil
+	return time.MinVersionVector(vectors...), nil
 }
 
 // FindDocInfosByPaging returns the documentInfos of the given paging.

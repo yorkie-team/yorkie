@@ -78,6 +78,7 @@ func TestMain(m *testing.M) {
 		UseDefaultProject:           helper.UseDefaultProject,
 		ClientDeactivateThreshold:   helper.ClientDeactivateThreshold,
 		SnapshotThreshold:           helper.SnapshotThreshold,
+		SnapshotCacheSize:           helper.SnapshotCacheSize,
 		AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
 		AuthWebhookMinWaitInterval:  helper.AuthWebhookMinWaitInterval.String(),
 		AuthWebhookRequestTimeout:   helper.AuthWebhookRequestTimeout.String(),

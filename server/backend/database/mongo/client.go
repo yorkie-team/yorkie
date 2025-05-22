@@ -1348,6 +1348,8 @@ func (c *Client) UpdateMinVersionVector(
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
+	// NOTE(hackerwins): Considering removing the detached client's lamport
+	// from the other clients' version vectors. For now, we just ignore it.
 	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
@@ -1365,8 +1367,6 @@ func (c *Client) UpdateMinVersionVector(
 				return vector
 			})
 		} else {
-			// NOTE(hackerwins): Considering removing the detached client's lamport
-			// from the other clients' version vectors. For now, we just ignore it.
 			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
 				return exists
 			})
@@ -1374,6 +1374,15 @@ func (c *Client) UpdateMinVersionVector(
 	}
 
 	// 03. Calculate the minimum version vector of the given document.
+	return c.GetMinVersionVector(ctx, docRefKey, vector)
+}
+
+// GetMinVersionVector returns the minimum version vector of the given document.
+func (c *Client) GetMinVersionVector(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	vector time.VersionVector,
+) (time.VersionVector, error) {
 	if !c.vvCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{

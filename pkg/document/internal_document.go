@@ -419,3 +419,22 @@ func (d *InternalDocument) ToDocument() *Document {
 	doc.setInternalDoc(d)
 	return doc
 }
+
+// DeepCopy creates a deep copy of this document.
+func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
+	root, err := d.root.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
+	return &InternalDocument{
+		key:           d.key,
+		status:        d.status,
+		checkpoint:    d.checkpoint,
+		changeID:      d.changeID,
+		root:          root,
+		presences:     d.presences.DeepCopy(),
+		onlineClients: &gosync.Map{},
+		localChanges:  d.localChanges,
+	}, nil
+}
