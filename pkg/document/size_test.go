@@ -59,9 +59,38 @@ func TestTreeNodeSize(t *testing.T) {
 			return time.InitialTicket
 		})
 		assert.NoError(t, err)
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff)
 		assert.Equal(t, "<p>hello</p>", crdt.ToXML(para))
 		assert.Equal(t, "<p>world</p>", crdt.ToXML(right))
+	})
+
+	t.Run("split tree node with attribute test", func(t *testing.T) {
+		attributes := crdt.NewRHT()
+		attributes.Set("bold", "true", time.InitialTicket)
+
+		root := crdt.NewTreeNode(dummyTreeNodeID, "r", nil)
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", attributes)
+		assert.NoError(t, root.Append(para))
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "helloworld")))
+		assert.Equal(t, `<r><p bold="true">helloworld</p></r>`, crdt.ToXML(root))
+
+		// split text node
+		left, err := para.Child(0)
+		assert.NoError(t, err)
+		right, diff, err := left.SplitText(5, 0)
+		assert.NoError(t, err)
 		assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff)
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 24}, left.DataSize())
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 24}, right.DataSize())
+
+		// split element node
+		right, diff, err = para.SplitElement(1, func() *time.Ticket {
+			return time.InitialTicket
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, resource.DataSize{Data: 16, Meta: 48}, diff)
+		assert.Equal(t, `<p bold="true">hello</p>`, crdt.ToXML(para))
+		assert.Equal(t, `<p bold="true">world</p>`, crdt.ToXML(right))
 	})
 }
 
