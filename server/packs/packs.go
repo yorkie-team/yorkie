@@ -200,30 +200,21 @@ func PushPull(
 				}
 			}
 
-			locker, err := be.Lockers.Locker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
-			if err != nil {
-				logging.From(ctx).Error(err)
-				return
-			}
-
-			// NOTE: If the snapshot is already being created by another routine, it
-			//       is not necessary to recreate it, so we can skip it.
-			if err := locker.TryLock(ctx); err != nil {
+			// NOTE(hackerwins): If the snapshot is already being created by another routine,
+			// it is not necessary to recreate it, so we can skip it.
+			locker, ok := be.Lockers.LockerWithTryLock(SnapshotKey(project.ID, reqPack.DocumentKey))
+			if !ok {
 				return
 			}
 			defer func() {
-				if err := locker.Unlock(ctx); err != nil {
+				if err := locker.Unlock(); err != nil {
 					logging.From(ctx).Error(err)
 					return
 				}
 			}()
 
 			start := gotime.Now()
-			if err := storeSnapshot(
-				ctx,
-				be,
-				docInfo,
-			); err != nil {
+			if err := storeSnapshot(ctx, be, docInfo); err != nil {
 				logging.From(ctx).Error(err)
 			}
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(
@@ -260,18 +251,18 @@ func BuildInternalDocForServerSeq(
 	docInfo *database.DocInfo,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	docRefKey := docInfo.RefKey()
+	docKey := docInfo.RefKey()
 
 	// NOTE(hackerwins): If the document is already in the cache, we can skip
 	// the database query and use the cached document. If the document's server
 	// sequence in the cache is greater than the given server sequence, we can't
 	// build the document from the document. In this case, we need to
 	// query the database to get the closest snapshot information.
-	doc, ok := be.SnapshotCache.Get(docRefKey)
+	doc, ok := be.SnapshotCache.Get(docKey)
 	if !ok || serverSeq < doc.Checkpoint().ServerSeq {
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
 			ctx,
-			docRefKey,
+			docKey,
 			serverSeq,
 			true,
 		)
@@ -293,7 +284,7 @@ func BuildInternalDocForServerSeq(
 
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docRefKey,
+		docKey,
 		doc.Checkpoint().ServerSeq+1,
 		serverSeq,
 	)
@@ -314,7 +305,7 @@ func BuildInternalDocForServerSeq(
 	if !be.Config.SnapshotDisableGC {
 		vector, err := be.DB.GetMinVersionVector(
 			ctx,
-			docRefKey,
+			docKey,
 			doc.VersionVector(),
 		)
 		if err != nil {
@@ -330,7 +321,7 @@ func BuildInternalDocForServerSeq(
 	if err != nil {
 		return nil, err
 	}
-	be.SnapshotCache.Add(docRefKey, clone)
+	be.SnapshotCache.Add(docKey, clone)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(

@@ -260,7 +260,7 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
             type: "CHANGE_TYPE_PUT",
             presence: {
               data: {
-                color: randomColor,
+                color: `"${randomColor}"`,
               },
             },
           },
