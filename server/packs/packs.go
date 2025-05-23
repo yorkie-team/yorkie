@@ -200,30 +200,21 @@ func PushPull(
 				}
 			}
 
-			locker, err := be.Lockers.Locker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
-			if err != nil {
-				logging.From(ctx).Error(err)
-				return
-			}
-
-			// NOTE: If the snapshot is already being created by another routine, it
-			//       is not necessary to recreate it, so we can skip it.
-			if err := locker.TryLock(ctx); err != nil {
+			// NOTE(hackerwins): If the snapshot is already being created by another routine,
+			// it is not necessary to recreate it, so we can skip it.
+			locker, ok := be.Lockers.LockerWithTryLock(SnapshotKey(project.ID, reqPack.DocumentKey))
+			if !ok {
 				return
 			}
 			defer func() {
-				if err := locker.Unlock(ctx); err != nil {
+				if err := locker.Unlock(); err != nil {
 					logging.From(ctx).Error(err)
 					return
 				}
 			}()
 
 			start := gotime.Now()
-			if err := storeSnapshot(
-				ctx,
-				be,
-				docInfo,
-			); err != nil {
+			if err := storeSnapshot(ctx, be, docInfo); err != nil {
 				logging.From(ctx).Error(err)
 			}
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(

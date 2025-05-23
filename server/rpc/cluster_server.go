@@ -64,16 +64,9 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, summary.Key))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
@@ -152,16 +145,9 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectId, docInfo.Key))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
@@ -194,16 +180,9 @@ func (s *clusterServer) PurgeDocument(
 		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectID, docInfo.Key))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
