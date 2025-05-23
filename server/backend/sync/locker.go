@@ -61,17 +61,17 @@ func (c *LockerManager) Locker(key Key) (Locker, error) {
 
 // A Locker represents an object that can be locked and unlocked.
 type Locker interface {
-	// Lock locks the mutex with a cancelable context
+	// Lock locks the mutex.
 	Lock() error
 
 	// TryLock locks the mutex if not already locked by another session.
-	TryLock() error
+	TryLock() bool
 
 	// Unlock unlocks the mutex.
 	Unlock() error
 
-	// RLock acquires a read lock with a cancelable context.
-	RLock() error
+	// RLock acquires a read lock.
+	RLock()
 
 	// RUnlock releases a read lock previously acquired by RLock.
 	RUnlock() error
@@ -90,35 +90,21 @@ func (il *internalLocker) Lock() error {
 }
 
 // TryLock locks the mutex if not already locked by another session.
-func (il *internalLocker) TryLock() error {
-	if !il.locks.TryLock(il.key) {
-		return ErrAlreadyLocked
-	}
-
-	return nil
+func (il *internalLocker) TryLock() bool {
+	return il.locks.TryLock(il.key)
 }
 
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock() error {
-	if err := il.locks.Unlock(il.key); err != nil {
-		return err
-	}
-
-	return nil
+	return il.locks.Unlock(il.key)
 }
 
 // RLock locks the mutex for reading..
-func (il *internalLocker) RLock() error {
+func (il *internalLocker) RLock() {
 	il.locks.RLock(il.key)
-
-	return nil
 }
 
 // RUnlock unlocks the read lock.
 func (il *internalLocker) RUnlock() error {
-	if err := il.locks.RUnlock(il.key); err != nil {
-		return err
-	}
-
-	return nil
+	return il.locks.RUnlock(il.key)
 }

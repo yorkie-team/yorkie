@@ -207,7 +207,7 @@ func PushPull(
 				logging.From(ctx).Error(err)
 				return
 			}
-			if err := locker.TryLock(); err != nil {
+			if ok := locker.TryLock(); !ok {
 				return
 			}
 			defer func() {
