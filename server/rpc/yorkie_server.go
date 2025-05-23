@@ -158,15 +158,15 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
-	if err := locker.Lock(ctx); err != nil {
+	if err := locker.Lock(); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
@@ -248,15 +248,15 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
+	locker, err := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
-	if err := locker.Lock(ctx); err != nil {
+	if err := locker.Lock(); err != nil {
 		return nil, err
 	}
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
@@ -336,17 +336,16 @@ func (s *yorkieServer) PushPullChanges(
 
 	if pack.HasChanges() {
 		locker, err := s.backend.Lockers.Locker(
-			ctx,
 			packs.DocEditKey(project.ID, pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if err := locker.Lock(ctx); err != nil {
+		if err := locker.Lock(); err != nil {
 			return nil, err
 		}
 		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
+			if err := locker.Unlock(); err != nil {
 				logging.DefaultLogger().Error(err)
 			}
 		}()
@@ -381,6 +380,81 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	return connect.NewResponse(&api.PushPullChangesResponse{
+		ChangePack: pbChangePack,
+	}), nil
+}
+
+// RemoveDocument removes the given document.
+func (s *yorkieServer) RemoveDocument(
+	ctx context.Context,
+	req *connect.Request[api.RemoveDocumentRequest],
+) (*connect.Response[api.RemoveDocumentResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	if err != nil {
+		return nil, err
+	}
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.RemoveDocument,
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if pack.HasChanges() {
+		locker, err := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
+		if err != nil {
+			return nil, err
+		}
+
+		if err := locker.Lock(); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
+
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushPull,
+		Status: document.StatusRemoved,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
 }
@@ -423,28 +497,20 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	locker, err := s.backend.Lockers.Locker(
-		ctx,
-		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)),
-	)
+	locker, err := s.backend.Lockers.Locker(sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)))
 	if err != nil {
 		return err
 	}
-	if err := locker.Lock(ctx); err != nil {
+	if err := locker.Lock(); err != nil {
 		return err
 	}
 	defer func() {
-		if err := locker.Unlock(context.Background()); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(
-		ctx,
-		clientID,
-		docKey,
-		project.MaxSubscribersPerDocument,
-	)
+	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
 	if err != nil {
 		return err
 	}
@@ -509,82 +575,6 @@ func (s *yorkieServer) WatchDocument(
 	}
 }
 
-// RemoveDocument removes the given document.
-func (s *yorkieServer) RemoveDocument(
-	ctx context.Context,
-	req *connect.Request[api.RemoveDocumentRequest],
-) (*connect.Response[api.RemoveDocumentResponse], error) {
-	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
-	if err != nil {
-		return nil, err
-	}
-
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
-	if err != nil {
-		return nil, err
-	}
-	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.RemoveDocument,
-		Attributes: auth.AccessAttributes(pack),
-	}); err != nil {
-		return nil, err
-	}
-
-	project := projects.From(ctx)
-
-	if pack.HasChanges() {
-		locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	}
-
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushPull,
-		Status: document.StatusRemoved,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&api.RemoveDocumentResponse{
-		ChangePack: pbChangePack,
-	}), nil
-}
-
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID time.ActorID,
@@ -640,6 +630,7 @@ func (s *yorkieServer) unwatchDoc(
 	return nil
 }
 
+// Broadcast sends the given payload to all clients watching the document.
 func (s *yorkieServer) Broadcast(
 	ctx context.Context,
 	req *connect.Request[api.BroadcastRequest],
