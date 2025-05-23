@@ -96,7 +96,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		ClientDeactivateThreshold: clientDeactivateThreshold,
 		MaxSubscribersPerDocument: 0,
 		MaxAttachmentsPerDocument: 0,
-		MaxSizePerDocument:        0,
+		MaxSizePerDocument:        10 * 1024 * 1024,
 		PublicKey:                 shortuuid.New(),
 		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),

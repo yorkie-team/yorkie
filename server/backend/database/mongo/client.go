@@ -227,6 +227,7 @@ func (c *Client) CreateProjectInfo(
 		"public_key":                  info.PublicKey,
 		"secret_key":                  info.SecretKey,
 		"created_at":                  info.CreatedAt,
+		"max_size_per_document":       info.MaxSizePerDocument,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
