@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -1606,6 +1607,163 @@ func (d *DB) IsDocumentAttached(
 	}
 
 	return false, nil
+}
+
+func (d *DB) CreateSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+	body string,
+	rules []types.Rule,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// NOTE(hackerwins): Check if the project already exists.
+	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
+	existing, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaAlreadyExists)
+	}
+
+	info := &database.SchemaInfo{
+		ID:        newID(),
+		ProjectID: projectID,
+		Name:      name,
+		Version:   version,
+		Body:      body,
+		Rules:     rules,
+		CreatedAt: gotime.Now(),
+	}
+	if err := txn.Insert(tblSchemas, info); err != nil {
+		return nil, fmt.Errorf("create schema: %w", err)
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+func (d *DB) GetSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	return raw.(*database.SchemaInfo), nil
+}
+
+func (d *DB) GetSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblSchemas,
+		"project_id_name",
+		projectID.String(),
+		name,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	var infos []*database.SchemaInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		infos = append(infos, raw.(*database.SchemaInfo))
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Version > infos[j].Version
+	})
+
+	return infos, nil
+}
+
+func (d *DB) ListSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblSchemas, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+
+	schemaMap := make(map[string]*database.SchemaInfo)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		schema := raw.(*database.SchemaInfo)
+		if existing, ok := schemaMap[schema.Name]; !ok || schema.Version > existing.Version {
+			schemaMap[schema.Name] = schema
+		}
+	}
+
+	var infos []*database.SchemaInfo
+	for _, schema := range schemaMap {
+		infos = append(infos, schema)
+	}
+
+	return infos, nil
+}
+
+func (d DB) RemoveSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	schemaInfo := raw.(*database.SchemaInfo)
+	if err := txn.Delete(tblSchemas, schemaInfo); err != nil {
+		return fmt.Errorf("delete schema: %w", err)
+	}
+
+	return nil
 }
 
 // PurgeDocument purges the given document.

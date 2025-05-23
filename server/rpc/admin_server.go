@@ -37,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/schemas"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -624,6 +625,142 @@ func (s *adminServer) ListChanges(
 	return connect.NewResponse(&api.ListChangesResponse{
 		Changes: pbChanges,
 	}), nil
+}
+
+// CreateSchema creates a new schema.
+func (s *adminServer) CreateSchema(
+	ctx context.Context,
+	req *connect.Request[api.CreateSchemaRequest],
+) (*connect.Response[api.CreateSchemaResponse], error) {
+	fields := &types.CreateSchemaFields{Name: &req.Msg.SchemaName}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := schemas.CreateSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.SchemaVersion),
+		req.Msg.SchemaBody,
+		converter.FromRules(req.Msg.Rules),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateSchemaResponse{
+		Schema: converter.ToSchema(schema),
+	}), nil
+}
+
+// GetSchema gets the schema.
+func (s *adminServer) GetSchema(
+	ctx context.Context,
+	req *connect.Request[api.GetSchemaRequest],
+) (*connect.Response[api.GetSchemaResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := schemas.GetSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.Version),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetSchemaResponse{
+		Schema: converter.ToSchema(schema),
+	}), nil
+}
+
+// GetSchemas gets the schemas.
+func (s *adminServer) GetSchemas(
+	ctx context.Context,
+	req *connect.Request[api.GetSchemasRequest],
+) (*connect.Response[api.GetSchemasResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := schemas.GetSchemas(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetSchemasResponse{
+		Schemas: converter.ToSchemas(schemas),
+	}), nil
+}
+
+// ListSchemas lists the schemas.
+func (s *adminServer) ListSchemas(
+	ctx context.Context,
+	req *connect.Request[api.ListSchemasRequest],
+) (*connect.Response[api.ListSchemasResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := schemas.ListSchemas(
+		ctx,
+		s.backend,
+		project.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListSchemasResponse{
+		Schemas: converter.ToSchemas(schemas),
+	}), nil
+}
+
+// RemoveSchema removes the schema.
+func (s *adminServer) RemoveSchema(
+	ctx context.Context,
+	req *connect.Request[api.RemoveSchemaRequest],
+) (*connect.Response[api.RemoveSchemaResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = schemas.RemoveSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.Version),
+	); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RemoveSchemaResponse{}), nil
 }
 
 // GetServerVersion get the version of yorkie server.
