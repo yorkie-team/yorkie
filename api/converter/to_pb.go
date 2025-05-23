@@ -66,6 +66,7 @@ func ToProject(project *types.Project) *api.Project {
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int32(project.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument: int32(project.MaxAttachmentsPerDocument),
+		MaxSizePerDocument:        int32(project.MaxSizePerDocument),
 		AllowedOrigins:            project.AllowedOrigins,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
@@ -605,6 +606,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.MaxAttachmentsPerDocument != nil {
 		pbUpdatableProjectFields.MaxAttachmentsPerDocument = &wrapperspb.Int32Value{
 			Value: int32(*fields.MaxAttachmentsPerDocument),
+		}
+	}
+	if fields.MaxSizePerDocument != nil {
+		pbUpdatableProjectFields.MaxSizePerDocument = &wrapperspb.Int32Value{
+			Value: int32(*fields.MaxSizePerDocument),
 		}
 	}
 	return pbUpdatableProjectFields, nil

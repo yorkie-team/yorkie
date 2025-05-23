@@ -303,6 +303,7 @@ message Project {
   string client_deactivate_threshold = 9;
   int32 max_subscribers_per_document = 10;
   int32 max_attachments_per_document = 11;
+  int32 max_size_per_document = 15;
   repeated string allowed_origins = 14;
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
@@ -334,6 +335,7 @@ message UpdatableProjectFields {
   google.protobuf.StringValue client_deactivate_threshold = 6;
   google.protobuf.Int32Value max_subscribers_per_document = 7;
   google.protobuf.Int32Value max_attachments_per_document = 8;
+  google.protobuf.Int32Value max_size_per_document = 10;
   AllowedOrigins allowed_origins = 9;
 }
 

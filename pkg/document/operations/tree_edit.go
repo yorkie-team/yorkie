@@ -83,7 +83,7 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			}
 
 		}
-		pairs, err := obj.Edit(
+		pairs, diff, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
@@ -115,6 +115,8 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 		if err != nil {
 			return err
 		}
+
+		root.Acc(diff)
 
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)

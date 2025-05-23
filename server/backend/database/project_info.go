@@ -75,6 +75,9 @@ type ProjectInfo struct {
 	// If it is 0, there is no limit.
 	MaxAttachmentsPerDocument int `bson:"max_attachments_per_document"`
 
+	// MaxSizePerDocument is the maximum size of a document in bytes.
+	MaxSizePerDocument int `bson:"max_size_per_document"`
+
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `bson:"allowed_origins"`
 
@@ -93,6 +96,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		ClientDeactivateThreshold: clientDeactivateThreshold,
 		MaxSubscribersPerDocument: 0,
 		MaxAttachmentsPerDocument: 0,
+		MaxSizePerDocument:        10 * 1024 * 1024,
 		PublicKey:                 shortuuid.New(),
 		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),
@@ -118,6 +122,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
+		MaxSizePerDocument:        i.MaxSizePerDocument,
 		AllowedOrigins:            i.AllowedOrigins,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
@@ -150,6 +155,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.MaxAttachmentsPerDocument != nil {
 		i.MaxAttachmentsPerDocument = *fields.MaxAttachmentsPerDocument
 	}
+	if fields.MaxSizePerDocument != nil {
+		i.MaxSizePerDocument = *fields.MaxSizePerDocument
+	}
 	if fields.AllowedOrigins != nil {
 		i.AllowedOrigins = *fields.AllowedOrigins
 	}
@@ -168,6 +176,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
+		MaxSizePerDocument:        i.MaxSizePerDocument,
 		AllowedOrigins:            i.AllowedOrigins,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,
