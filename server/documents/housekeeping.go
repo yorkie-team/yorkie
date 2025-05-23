@@ -42,17 +42,17 @@ func CompactDocuments(
 ) (types.ID, error) {
 	start := time.Now()
 
-	locker, err := be.Lockers.Locker(ctx, compactionCandidatesKey)
+	locker, err := be.Lockers.Locker(compactionCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
 
-	if err := locker.Lock(ctx); err != nil {
+	if err := locker.Lock(); err != nil {
 		return database.DefaultProjectID, err
 	}
 
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}()
