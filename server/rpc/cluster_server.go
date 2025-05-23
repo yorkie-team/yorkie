@@ -64,20 +64,6 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -86,21 +72,12 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     summary.ID,
-	}
-
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
-	if err != nil {
-		return nil, err
-	}
-
 	// 01. Create changePack with presence clear change
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: summary.ID}
 	cp := clientInfo.Checkpoint(summary.ID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
-		docRefKey,
+		refKey,
 		types.ID(req.Msg.ClientId),
 		cp.ServerSeq,
 	)
@@ -116,21 +93,25 @@ func (s *clusterServer) DetachDocument(
 	p.Clear()
 
 	changes := []*change.Change{changeCtx.ToChange()}
-	pack := change.NewPack(docInfo.Key, cp, changes, nil, nil)
+	pack := change.NewPack(summary.Key, cp, changes, nil, nil)
 
-	// 02. PushPull with the created ChangePack.
-	if _, err := packs.PushPull(
-		ctx,
-		s.backend,
-		project,
-		clientInfo,
-		docInfo,
-		pack,
-		packs.PushPullOptions{
-			Mode:   types.SyncModePushOnly,
-			Status: document.StatusDetached,
-		},
-	); err != nil {
+	// 02. Push the changePack to the document
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, summary.Key))
+	defer func() {
+		if err := locker.Unlock(); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushOnly,
+		Status: document.StatusDetached,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -152,16 +133,9 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectId, docInfo.Key))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
@@ -181,11 +155,8 @@ func (s *clusterServer) PurgeDocument(
 	projectID := types.ID(req.Msg.ProjectId)
 	docID := types.ID(req.Msg.DocumentId)
 
-	docRefKey := types.DocRefKey{
-		ProjectID: projectID,
-		DocID:     docID,
-	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
+	refKey := types.DocRefKey{ProjectID: projectID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
 	if err != nil {
 		return nil, err
 	}
@@ -194,21 +165,14 @@ func (s *clusterServer) PurgeDocument(
 		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectID, docInfo.Key))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
 
-	counts, err := s.backend.DB.PurgeDocument(ctx, docRefKey)
+	counts, err := s.backend.DB.PurgeDocument(ctx, refKey)
 	if err != nil {
 		logging.From(ctx).Error("failed to purge document", zap.Error(err))
 		return nil, err

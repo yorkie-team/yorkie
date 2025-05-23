@@ -89,7 +89,7 @@ func pullPack(
 	initialServerSeq int64,
 	mode types.SyncMode,
 ) (*ServerPack, error) {
-	// If the client is push-only, it does not need to pull changes.
+	// NOTE(hackerwins): If the client is push-only, it does not need to pull changes.
 	// So, just return the checkpoint with server seq after pushing changes.
 	if mode == types.SyncModePushOnly {
 		return NewServerPack(docInfo.Key, change.Checkpoint{
@@ -100,9 +100,9 @@ func pullPack(
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
 		return nil, fmt.Errorf(
-			"serverSeq of CP greater than serverSeq of clientInfo(clientInfo %d, cp %d): %w",
-			initialServerSeq,
+			"serverSeq(%d) of request greater than serverSeq(%d) of ClientInfo: %w",
 			reqPack.Checkpoint.ServerSeq,
+			initialServerSeq,
 			ErrInvalidServerSeq,
 		)
 	}
@@ -125,6 +125,8 @@ func pullPack(
 		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
 	}
 
+	// NOTE(hackerwins): If the size of changes for the response is greater than the snapshot threshold,
+	// we pull the snapshot from DB to reduce the size of the response.
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 }
 
@@ -138,13 +140,13 @@ func pullSnapshot(
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
 ) (*ServerPack, error) {
-	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
 	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply changes that are in the request pack.
+	// NOTE(hackerwins): If the client has pushed changes, we need to apply the
+	// changes to the document to build the snapshot with the changes.
 	if reqPack.HasChanges() {
 		if err := doc.ApplyChangePack(change.NewPack(
 			docInfo.Key,
@@ -156,6 +158,7 @@ func pullSnapshot(
 			return nil, err
 		}
 	}
+
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
