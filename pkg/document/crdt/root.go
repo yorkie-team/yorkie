@@ -106,7 +106,6 @@ func (r *Root) RegisterElement(element Element) {
 		{
 			element.Descendants(func(elem Element, parent Container) bool {
 				r.elementMap[elem.CreatedAt().Key()] = elem
-				r.docSize.Live.Add(elem.DataSize())
 				return false
 			})
 		}
