@@ -174,4 +174,91 @@ func TestDocSize(t *testing.T) {
 		}))
 		assert.Equal(t, 72, docSize.Total())
 	})
+
+	t.Run("Remote changes exceeding limit test", func(t *testing.T) {
+		ctx := context.Background()
+
+		sizeLimit := 100
+		projectName := "remote-changes-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				MaxSizePerDocument: &sizeLimit,
+			},
+		)
+		assert.NoError(t, err)
+
+		c1, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c1.Close()) }()
+		assert.NoError(t, c1.Activate(ctx))
+
+		doc1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc1))
+
+		c2, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Close()) }()
+		assert.NoError(t, c2.Activate(ctx))
+
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2))
+
+		// Client 1 creates content (below limit)
+		assert.NoError(t, doc1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("text")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		docSize := doc1.DocSize()
+		assert.Equal(t, 72, docSize.Total())
+
+		err = doc1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "aa")
+			return nil
+		})
+		docSize = doc1.DocSize()
+		assert.Equal(t, 4, docSize.Live.Data)
+		assert.Equal(t, 96, docSize.Live.Meta)
+		assert.NoError(t, c1.Sync(ctx))
+
+		// Client 2 adds more content that would exceed limit locally
+		assert.NoError(t, doc2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "a")
+			return nil
+		}))
+		doc2Size := doc2.DocSize()
+		assert.Equal(t, 2, doc2Size.Live.Data)
+		assert.Equal(t, 96, doc2Size.Live.Meta)
+		assert.NoError(t, c2.Sync(ctx))
+		doc2Size = doc2.DocSize()
+		// Pulls changes - should succeed despite exceeding limit
+		assert.Equal(t, 6, doc2Size.Live.Data)
+		assert.Equal(t, 120, doc2Size.Live.Meta)
+
+		assert.NoError(t, c1.Sync(ctx))
+		docSize = doc1.DocSize()
+		assert.Equal(t, 6, docSize.Live.Data)
+		assert.Equal(t, 120, docSize.Live.Meta)
+
+		// Local update should still be restricted
+		err = doc1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "a")
+			return nil
+		})
+		assert.ErrorIs(t, document.ErrDocumentSizeExceedsLimit, err)
+		docSize = doc1.DocSize()
+		assert.Equal(t, 6, docSize.Live.Data)
+		assert.Equal(t, 120, docSize.Live.Meta)
+	})
 }
