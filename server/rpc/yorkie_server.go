@@ -325,13 +325,6 @@ func (s *yorkieServer) PushPullChanges(
 
 	// 02. Prepare the project and client info
 	project := projects.From(ctx)
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
-		return nil, err
-	}
 
 	// 03. Push/Pull changes between the client and server
 	if pack.HasChanges() {
@@ -343,6 +336,18 @@ func (s *yorkieServer) PushPullChanges(
 				logging.DefaultLogger().Error(err)
 			}
 		}()
+	}
+
+	// TODO(hackerwins): If fetching the client placed in the outside of the locker
+	// `concurrent garbage collection test(with pushonly)` fails in JS SDK.
+	// It may be caused by using both realtime(pushonly) and manual(pushpull)
+	// at the same time.
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
