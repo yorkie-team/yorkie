@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.13] - 2025-05-27
+
+### Added
+
+- Add presence load test for Yorkie using k6 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1273
+- Introduce document size limit by @raararaara in https://github.com/yorkie-team/yorkie/pull/1270
+
+### Changed
+
+- Update garbage collection related TCs by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1277
+- Adjust snapshot configurations by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1279
+- Optimize snapshot handling with in-memory cache by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1280
+- Adjust lock scope for improved concurrency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1287
+
 ## [0.6.12] - 2025-05-16
 
 ### Added
