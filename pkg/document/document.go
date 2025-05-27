@@ -177,7 +177,7 @@ func (d *Document) Update(
 	}
 
 	cloneSize := d.cloneRoot.DocSize()
-	if d.MaxSizeLimit > 0 && d.MaxSizeLimit < cloneSize.Total() {
+	if !ctx.IsPresenceOnlyChange() && d.MaxSizeLimit > 0 && d.MaxSizeLimit < cloneSize.Total() {
 		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
 		// clonePresences to prevent the user from accessing the invalid state.
 		d.cloneRoot = nil

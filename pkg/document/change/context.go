@@ -59,11 +59,16 @@ func (c *Context) ToChange() *Change {
 	// relationship between changes.
 	// TODO(hackerwins): Consider using only checkpoint of the ID for the
 	// presence change. For now, we just exclude only version vector from the ID.
-	if len(c.operations) == 0 {
+	if c.IsPresenceOnlyChange() {
 		id = c.id.DeepCopy(true)
 	}
 
 	return New(id, c.message, c.operations, c.presenceChange)
+}
+
+// IsPresenceOnlyChange returns whether this context is only for presence change or not.
+func (c *Context) IsPresenceOnlyChange() bool {
+	return len(c.operations) == 0
 }
 
 // HasChange returns whether this context has changes.
