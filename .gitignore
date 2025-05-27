@@ -75,3 +75,6 @@ output.txt
 
 # Analytics data
 /build/docker/analytics/starrocks/
+
+# log files
+*.log

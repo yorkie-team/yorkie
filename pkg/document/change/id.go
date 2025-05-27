@@ -20,11 +20,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-const (
-	// InitialLamport is the initial value of Lamport timestamp.
-	InitialLamport = 0
-)
-
 // ID represents the identifier of the change. It is used to identify the
 // change and to order the changes. It is also used to detect the relationship
 // between changes whether they are causally related or concurrent.
@@ -38,12 +33,12 @@ type ID struct {
 	// stored on the server, serverSeq is 0.
 	serverSeq int64
 
-	// lamport is lamport timestamp.
-	lamport int64
-
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
 	actorID time.ActorID
+
+	// lamport is lamport timestamp.
+	lamport int64
 
 	// versionVector is similar to vector clock, and it is used to detect the
 	// relationship between changes whether they are causally related or concurrent.
@@ -72,11 +67,18 @@ func NewID(
 // InitialID creates an initial state ID. Usually this is used to
 // represent a state where nothing has been edited.
 func InitialID() ID {
-	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID, time.NewVersionVector())
+	return NewID(InitialClientSeq, InitialServerSeq, time.InitialLamport, time.InitialActorID, time.NewVersionVector())
 }
 
 // Next creates a next ID of this ID.
-func (id ID) Next() ID {
+func (id ID) Next(excludeClocks ...bool) ID {
+	if len(excludeClocks) > 0 && excludeClocks[0] {
+		return ID{
+			clientSeq: id.clientSeq + 1,
+			actorID:   id.actorID,
+		}
+	}
+
 	versionVector := id.versionVector.DeepCopy()
 	versionVector.Set(id.actorID, id.lamport+1)
 
@@ -97,8 +99,18 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 	)
 }
 
-// SyncClocks syncs logical clocks with the given ID.
+// HasClocks returns whether this ID has clocks or not.
+func (id ID) HasClocks() bool {
+	return len(id.versionVector) > 0 && id.lamport != time.InitialLamport
+}
+
+// SyncClocks syncs logical clocks with the given ID. If the given ID
+// doesn't have logical clocks, this ID is returned.
 func (id ID) SyncClocks(other ID) ID {
+	if !other.HasClocks() {
+		return id
+	}
+
 	lamport := id.lamport + 1
 	if id.lamport < other.lamport {
 		lamport = other.lamport + 1
@@ -179,13 +191,4 @@ func (id ID) VersionVector() time.VersionVector {
 // AfterOrEqual returns whether this ID is causally after or equal the given ID.
 func (id ID) AfterOrEqual(other ID) bool {
 	return id.versionVector.AfterOrEqual(other.versionVector)
-}
-
-// DeepCopy creates a deep copy of this ID.
-func (id ID) DeepCopy(excludeVersionVector bool) ID {
-	if excludeVersionVector {
-		return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, time.InitialVersionVector)
-	}
-
-	return NewID(id.clientSeq, id.serverSeq, id.lamport, id.actorID, id.versionVector.DeepCopy())
 }

@@ -24,10 +24,12 @@ import (
 	"fmt"
 	"os"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
@@ -53,6 +55,8 @@ type Backend struct {
 	AuthWebhookCache *expirable.LRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
 	// AuthWebhookClient is used to send auth webhook.
 	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	// SnapshotCache is used to cache the snapshot information.
+	SnapshotCache *lru.Cache[types.DocRefKey, *document.InternalDocument]
 
 	// ClusterClient is used to send requests to nodes in the cluster.
 	ClusterClient *cluster.Client
@@ -100,7 +104,7 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the webhook authWebhookCache and client.
+	// 02. Create webhook clients and its cache.
 	authWebhookCache := expirable.NewLRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		conf.AuthWebhookCacheSize,
 		nil,
@@ -114,7 +118,6 @@ func New(
 			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
 		},
 	)
-
 	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](
 		pkgwebhook.Options{
 			MaxRetries:      conf.EventWebhookMaxRetries,
@@ -123,6 +126,13 @@ func New(
 			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
 		},
 	))
+
+	snapshotCache, err := lru.New[types.DocRefKey, *document.InternalDocument](
+		conf.SnapshotCacheSize,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	// 03. Create the cluster client. The cluster client is used to send
 	// requests to other nodes in the cluster.
@@ -201,6 +211,8 @@ func New(
 		AuthWebhookCache:    authWebhookCache,
 		AuthWebhookClient:   authWebhookClient,
 		EventWebhookManager: eventWebhookManger,
+
+		SnapshotCache: snapshotCache,
 
 		ClusterClient: clusterClient,
 

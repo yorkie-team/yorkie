@@ -825,6 +825,8 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
+	now := gotime.Now()
+
 	filter := bson.M{
 		"project_id": clientRefKey.ProjectID,
 		"key":        docKey,
@@ -832,7 +834,6 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"$exists": false,
 		},
 	}
-	now := gotime.Now()
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, filter, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
@@ -1341,15 +1342,17 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateAndFindMinVersionVector updates the version vector of the given client
+// UpdateMinVersionVector updates the version vector of the given client
 // and returns the minimum version vector of all clients.
-func (c *Client) UpdateAndFindMinVersionVector(
+func (c *Client) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
+	// NOTE(hackerwins): Considering removing the detached client's lamport
+	// from the other clients' version vectors. For now, we just ignore it.
 	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
@@ -1367,8 +1370,6 @@ func (c *Client) UpdateAndFindMinVersionVector(
 				return vector
 			})
 		} else {
-			// NOTE(hackerwins): Considering removing the detached client's lamport
-			// from the other clients' version vectors. For now, we just ignore it.
 			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
 				return exists
 			})
@@ -1376,6 +1377,15 @@ func (c *Client) UpdateAndFindMinVersionVector(
 	}
 
 	// 03. Calculate the minimum version vector of the given document.
+	return c.GetMinVersionVector(ctx, docRefKey, vector)
+}
+
+// GetMinVersionVector returns the minimum version vector of the given document.
+func (c *Client) GetMinVersionVector(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	vector time.VersionVector,
+) (time.VersionVector, error) {
 	if !c.vvCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{

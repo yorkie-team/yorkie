@@ -73,6 +73,9 @@ type Config struct {
 	// AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
 	AuthWebhookCacheTTL string `yaml:"AuthWebhookCacheTTL"`
 
+	// SnapshotCacheSize is the cache size of the snapshot.
+	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
+
 	// EventWebhookMaxRetries is the max count that retries the event webhook.
 	EventWebhookMaxRetries uint64 `yaml:"EventWebhookMaxRetries"`
 

@@ -76,9 +76,6 @@ func PushPull(
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	start := gotime.Now()
-	defer func() {
-		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
-	}()
 
 	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
@@ -86,18 +83,12 @@ func PushPull(
 
 	// 01. push changes: filter out the changes that are already saved in the database.
 	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
-	hostname := be.Config.Hostname
-	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
-	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}
-	be.Metrics.AddPushPullSentChanges(hostname, project, respPack.ChangesLen())
-	be.Metrics.AddPushPullSentOperations(hostname, project, respPack.OperationsLen())
-	be.Metrics.AddPushPullSnapshotBytes(hostname, project, respPack.SnapshotLen())
 
 	// 03. update the client's document and checkpoint.
 	docRefKey := docInfo.RefKey()
@@ -115,7 +106,7 @@ func PushPull(
 		}
 	}
 
-	// 04. store pushed changes, docInfo and checkpoint of the client to DB.
+	// 04. store the pushed changes and update the document info in DB.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		if err := be.DB.CreateChangeInfos(
 			ctx,
@@ -128,17 +119,10 @@ func PushPull(
 			return nil, err
 		}
 	}
+	respPack.ApplyDocInfo(docInfo)
 
-	if !clientInfo.IsServerClient() {
-		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-			return nil, err
-		}
-	}
-
-	// 05. update and find min version vector for garbage collection.
-	// NOTE(hackerwins): Since the client could not receive the response, the
-	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minVersionVector, err := be.DB.UpdateAndFindMinVersionVector(
+	// 05. update min version vector of the document.
+	minVersionVector, err := be.DB.UpdateMinVersionVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -151,7 +135,12 @@ func PushPull(
 		respPack.VersionVector = minVersionVector
 	}
 
-	respPack.ApplyDocInfo(docInfo)
+	// 06. update client's checkpoint of the document in DB.
+	if !clientInfo.IsServerClient() {
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+			return nil, err
+		}
+	}
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
 	if respPack.SnapshotLen() > 0 {
@@ -165,8 +154,15 @@ func PushPull(
 		pullLog,
 		gotime.Since(start),
 	)
+	hostname := be.Config.Hostname
+	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
+	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
+	be.Metrics.AddPushPullSentChanges(hostname, project, respPack.ChangesLen())
+	be.Metrics.AddPushPullSentOperations(hostname, project, respPack.OperationsLen())
+	be.Metrics.AddPushPullSnapshotBytes(hostname, project, respPack.SnapshotLen())
+	be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
-	// 06. publish document change event then store snapshot asynchronously.
+	// 07. publish document change event then store snapshot asynchronously.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisherID, err := clientInfo.ID.ToActorID()
@@ -202,31 +198,21 @@ func PushPull(
 				}
 			}
 
-			locker, err := be.Lockers.Locker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
-			if err != nil {
-				logging.From(ctx).Error(err)
-				return
-			}
-
-			// NOTE: If the snapshot is already being created by another routine, it
-			//       is not necessary to recreate it, so we can skip it.
-			if err := locker.TryLock(ctx); err != nil {
+			// NOTE(hackerwins): If the snapshot is already being created by another routine,
+			// it is not necessary to recreate it, so we can skip it.
+			locker, ok := be.Lockers.LockerWithTryLock(SnapshotKey(project.ID, reqPack.DocumentKey))
+			if !ok {
 				return
 			}
 			defer func() {
-				if err := locker.Unlock(ctx); err != nil {
+				if err := locker.Unlock(); err != nil {
 					logging.From(ctx).Error(err)
 					return
 				}
 			}()
 
 			start := gotime.Now()
-			if err := storeSnapshot(
-				ctx,
-				be,
-				docInfo,
-				minVersionVector,
-			); err != nil {
+			if err := storeSnapshot(ctx, be, docInfo); err != nil {
 				logging.From(ctx).Error(err)
 			}
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(
@@ -263,35 +249,41 @@ func BuildInternalDocForServerSeq(
 	docInfo *database.DocInfo,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	docRefKey := docInfo.RefKey()
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
-		ctx,
-		docRefKey,
-		serverSeq,
-		true,
-	)
-	if err != nil {
-		return nil, err
+	docKey := docInfo.RefKey()
+
+	// NOTE(hackerwins): If the document is already in the cache, we can skip
+	// the database query and use the cached document. If the document's server
+	// sequence in the cache is greater than the given server sequence, we can't
+	// build the document from the document. In this case, we need to
+	// query the database to get the closest snapshot information.
+	doc, ok := be.SnapshotCache.Get(docKey)
+	if !ok || serverSeq < doc.Checkpoint().ServerSeq {
+		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
+			ctx,
+			docKey,
+			serverSeq,
+			true,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		doc, err = document.NewInternalDocumentFromSnapshot(
+			docInfo.Key,
+			snapshotInfo.ServerSeq,
+			snapshotInfo.Lamport,
+			snapshotInfo.VersionVector,
+			snapshotInfo.Snapshot,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	doc, err := document.NewInternalDocumentFromSnapshot(
-		docInfo.Key,
-		snapshotInfo.ServerSeq,
-		snapshotInfo.Lamport,
-		snapshotInfo.VersionVector,
-		snapshotInfo.Snapshot,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
-	// number of changes to read at once here. We need to split changes by a
-	// certain size (e.g. 100) and read and gradually reflect it into the document.
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docRefKey,
-		snapshotInfo.ServerSeq+1,
+		docKey,
+		doc.Checkpoint().ServerSeq+1,
 		serverSeq,
 	)
 	if err != nil {
@@ -307,6 +299,27 @@ func BuildInternalDocForServerSeq(
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err
 	}
+
+	if !be.Config.SnapshotDisableGC {
+		vector, err := be.DB.GetMinVersionVector(
+			ctx,
+			docKey,
+			doc.VersionVector(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := doc.GarbageCollect(vector); err != nil {
+			return nil, err
+		}
+	}
+
+	// NOTE(hackerwins): Store the latest document in the cache.
+	clone, err := doc.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+	be.SnapshotCache.Add(docKey, clone)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
