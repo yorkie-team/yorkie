@@ -825,6 +825,8 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
+	now := gotime.Now()
+
 	filter := bson.M{
 		"project_id": clientRefKey.ProjectID,
 		"key":        docKey,
@@ -832,7 +834,6 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"$exists": false,
 		},
 	}
-	now := gotime.Now()
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, filter, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
