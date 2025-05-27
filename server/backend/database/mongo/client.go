@@ -188,6 +188,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
 			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
 			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
+			"max_size_per_document":        candidate.MaxSizePerDocument,
 			"public_key":                   candidate.PublicKey,
 			"secret_key":                   candidate.SecretKey,
 			"created_at":                   candidate.CreatedAt,
