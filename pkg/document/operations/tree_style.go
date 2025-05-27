@@ -19,6 +19,7 @@ package operations
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // TreeStyle represents the style operation of the tree.
@@ -87,18 +88,21 @@ func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) e
 	}
 
 	var pairs []crdt.GCPair
+	var diff resource.DataSize
 	var err error
 	if len(e.attributes) > 0 {
-		pairs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 		if err != nil {
 			return err
 		}
 	} else {
-		pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
+		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
 		if err != nil {
 			return err
 		}
 	}
+
+	root.Acc(diff)
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)

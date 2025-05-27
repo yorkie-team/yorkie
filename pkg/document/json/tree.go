@@ -202,10 +202,12 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	pairs, diff, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
+
+	t.context.Acc(diff)
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
@@ -242,10 +244,12 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	pairs, diff, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
+
+	t.context.Acc(diff)
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
@@ -325,7 +329,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	pairs, err := t.Tree.Edit(
+	pairs, diff, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
@@ -337,6 +341,8 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	if err != nil {
 		panic(err)
 	}
+
+	t.context.Acc(diff)
 
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)

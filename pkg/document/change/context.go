@@ -21,6 +21,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Context is used to record the context of modification when editing a document.
@@ -66,13 +67,16 @@ func (c *Context) ToChange() *Change {
 	id := c.nextID
 
 	// NOTE(hackerwins): If this context was created only for presence change,
-	// we can use the ID without clocks that are used to resolve the
-	// conflict.
-	if len(c.operations) == 0 {
+	if c.IsPresenceOnlyChange() {
 		id = c.prevID.Next(true)
 	}
 
 	return New(id, c.message, c.operations, c.presenceChange)
+}
+
+// IsPresenceOnlyChange returns whether this context is only for presence change or not.
+func (c *Context) IsPresenceOnlyChange() bool {
+	return len(c.operations) == 0
 }
 
 // HasChange returns whether this context has changes.
@@ -104,6 +108,11 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 // RegisterGCPair registers the given GC pair to the root.
 func (c *Context) RegisterGCPair(pair crdt.GCPair) {
 	c.root.RegisterGCPair(pair)
+}
+
+// Acc accumulates the given DataSize to Live size of the root.
+func (c *Context) Acc(diff resource.DataSize) {
+	c.root.Acc(diff)
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.

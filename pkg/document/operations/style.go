@@ -64,10 +64,12 @@ func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error
 		return ErrNotApplicableDataType
 	}
 
-	pairs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+	pairs, diff, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
 	if err != nil {
 		return err
 	}
+
+	root.Acc(diff)
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
