@@ -7,6 +7,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct size calculation in deepcopy during registerElement by @raararaara in https://github.com/yorkie-team/yorkie/pull/1290
+- Resolve data races in snapshot caching logic by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1291
+
 ## [0.6.13] - 2025-05-27
 
 ### Added
