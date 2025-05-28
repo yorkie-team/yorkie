@@ -428,10 +428,15 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 	}
 
 	return &InternalDocument{
-		key:           d.key,
-		status:        d.status,
-		checkpoint:    d.checkpoint,
-		changeID:      d.changeID,
+		key:        d.key,
+		status:     d.status,
+		checkpoint: d.checkpoint,
+
+		// TODO(hackerwins): Previously ChangeID used as an immutable value,
+		// but now it is mutable, so we need to create a new instance of ChangeID.
+		// COnsider removing this in the future.
+		changeID: d.changeID.DeepCopy(),
+
 		root:          root,
 		presences:     d.presences.DeepCopy(),
 		onlineClients: &gosync.Map{},

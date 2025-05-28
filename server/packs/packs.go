@@ -250,14 +250,21 @@ func BuildInternalDocForServerSeq(
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
 	docKey := docInfo.RefKey()
+	var doc *document.InternalDocument
+	var err error
+	if cached, ok := be.SnapshotCache.Get(docKey); ok {
+		doc, err = cached.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// NOTE(hackerwins): If the document is already in the cache, we can skip
 	// the database query and use the cached document. If the document's server
 	// sequence in the cache is greater than the given server sequence, we can't
 	// build the document from the document. In this case, we need to
 	// query the database to get the closest snapshot information.
-	doc, ok := be.SnapshotCache.Get(docKey)
-	if !ok || serverSeq < doc.Checkpoint().ServerSeq {
+	if doc == nil || serverSeq < doc.Checkpoint().ServerSeq {
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
 			ctx,
 			docKey,
@@ -299,7 +306,6 @@ func BuildInternalDocForServerSeq(
 	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err
 	}
-
 	if !be.Config.SnapshotDisableGC {
 		vector, err := be.DB.GetMinVersionVector(
 			ctx,
@@ -314,12 +320,8 @@ func BuildInternalDocForServerSeq(
 		}
 	}
 
-	// NOTE(hackerwins): Store the latest document in the cache.
-	clone, err := doc.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
-	be.SnapshotCache.Add(docKey, clone)
+	// NOTE(hackerwins): Store the last accessed document in the cache.
+	be.SnapshotCache.Add(docKey, doc)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -331,7 +333,12 @@ func BuildInternalDocForServerSeq(
 		)
 	}
 
-	return doc, nil
+	clone, err := doc.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
+	return clone, nil
 }
 
 // Compact compacts the given document and its metadata and stores them in the
