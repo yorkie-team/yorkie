@@ -171,24 +171,6 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 2, Meta: 48}, doc.DocSize().GC)
 	})
 
-	t.Run("gc test", func(t *testing.T) {
-		doc := document.New("doc")
-
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("num", 1)
-			root.SetString("str", "hello")
-			return nil
-		}))
-		assert.Equal(t, resource.DataSize{Data: 14, Meta: 120}, doc.DocSize().Live)
-
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("num")
-			return nil
-		}))
-		assert.Equal(t, resource.DataSize{Data: 10, Meta: 72}, doc.DocSize().Live)
-		assert.Equal(t, resource.DataSize{Data: 4, Meta: 72}, doc.DocSize().GC)
-	})
-
 	t.Run("counter test", func(t *testing.T) {
 		doc := document.New("doc")
 
@@ -314,5 +296,54 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, `<doc><p>world</p></doc>`, doc.Root().GetTree("tree").ToXML())
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 168}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 36, Meta: 168}, doc.DocSize().GC)
+	})
+
+	t.Run("gc test", func(t *testing.T) {
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("num", 1)
+			root.SetString("str", "hello")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 14, Meta: 120}, doc.DocSize().Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("num")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 10, Meta: 72}, doc.DocSize().Live)
+		assert.Equal(t, resource.DataSize{Data: 4, Meta: 72}, doc.DocSize().GC)
+	})
+
+	t.Run("deep copy test", func(t *testing.T) {
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
+			return nil
+		}))
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
+	})
+
+	t.Run("deep copy for nested element test", func(t *testing.T) {
+		doc := document.New("doc")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("arr")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 72}, doc.DocSize().Live)
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("arr").AddNewCounter(crdt.IntegerCnt, 0)
+			return nil
+		}))
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
 	})
 }
