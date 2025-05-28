@@ -95,7 +95,6 @@ func TestAdmin(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 		defer func() {
-			assert.NoError(t, cli.Deactivate(ctx))
 			assert.NoError(t, cli.Close())
 		}()
 
@@ -113,6 +112,7 @@ func TestAdmin(t *testing.T) {
 			return nil
 		}))
 		assert.Equal(t, int32(1), doc.Root().GetCounter("counter").Value())
+		assert.NoError(t, cli.Sync(ctx))
 
 		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(), yson.Object{
 			"counter": yson.Counter{Type: crdt.IntegerCnt, Value: 0},
