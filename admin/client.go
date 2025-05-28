@@ -290,6 +290,26 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Msg.Documents), nil
 }
 
+// GetDocument gets the document.
+func (c *Client) GetDocument(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+) (*types.DocumentSummary, error) {
+	response, err := c.client.GetDocument(
+		ctx,
+		connect.NewRequest(&api.GetDocumentRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+		},
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummary(response.Msg.Document), nil
+}
+
 // UpdateDocument updates a document.
 func (c *Client) UpdateDocument(
 	ctx context.Context,

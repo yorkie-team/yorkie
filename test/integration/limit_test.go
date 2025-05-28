@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -260,5 +261,68 @@ func TestDocSize(t *testing.T) {
 		docSize = doc1.DocSize()
 		assert.Equal(t, 6, docSize.Live.Data)
 		assert.Equal(t, 120, docSize.Live.Meta)
+	})
+
+	t.Run("Document size consistency between document and admin API test", func(t *testing.T) {
+		ctx := context.Background()
+
+		sizeLimit := 10 * 1024 * 1024
+		projectName := "ensure-size-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				MaxSizePerDocument: &sizeLimit,
+			},
+		)
+		assert.NoError(t, err)
+
+		c1, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c1.Close()) }()
+		assert.NoError(t, c1.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("text")
+			return nil
+		}))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "helloworld")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		docSize := doc.DocSize()
+		assert.Equal(t, resource.DataSize{Data: 20, Meta: 96}, docSize.Live)
+		assert.Equal(t, docSize, doc.CloneRoot().DocSize())
+
+		docSummary, err := adminCli.GetDocument(
+			ctx,
+			projectName,
+			helper.TestDocKey(t).String(),
+		)
+		assert.Equal(t, docSize, docSummary.DocSize)
+
+		c2, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Close()) }()
+		assert.NoError(t, c2.Activate(ctx))
+
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2))
+		doc2Size := doc2.DocSize()
+		assert.Equal(t, doc2Size, doc2.CloneRoot().DocSize())
+		assert.Equal(t, docSize, doc2Size)
 	})
 }

@@ -329,6 +329,11 @@ func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
 }
 
+// CloneRoot returns the cloneRoot of this document.
+func (d *Document) CloneRoot() *crdt.Root {
+	return d.cloneRoot
+}
+
 // RootObject returns the internal root object of this document.
 func (d *Document) RootObject() *crdt.Object {
 	return d.doc.RootObject()

@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
@@ -95,6 +96,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 		AccessedAt:      pbSummary.AccessedAt.AsTime(),
 		UpdatedAt:       pbSummary.UpdatedAt.AsTime(),
 		Snapshot:        pbSummary.Snapshot,
+		DocSize:         FromDocSize(pbSummary.DocumentSize),
 	}
 }
 
@@ -220,6 +222,22 @@ func FromEventType(pbDocEventType api.DocEventType) (events.DocEventType, error)
 		return events.DocBroadcastEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
+}
+
+// FromDataSize converts the given Protobuf formats to model format.
+func FromDataSize(pbDataSize *api.DataSize) resource.DataSize {
+	return resource.DataSize{
+		Data: int(pbDataSize.Data),
+		Meta: int(pbDataSize.Meta),
+	}
+}
+
+// FromDocSize converts the given Protobuf formats to model format.
+func FromDocSize(pbDocSize *api.DocSize) resource.DocSize {
+	return resource.DocSize{
+		Live: FromDataSize(pbDocSize.Live),
+		GC:   FromDataSize(pbDocSize.Gc),
+	}
 }
 
 // FromOperations converts the given Protobuf formats to model format.
