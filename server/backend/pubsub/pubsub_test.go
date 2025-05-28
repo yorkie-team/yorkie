@@ -44,7 +44,7 @@ func TestPubSub(t *testing.T) {
 			DocID:     types.ID("000000000000000000000000"),
 		}
 		docEvent := events.DocEvent{
-			Type:      events.DocWatchedEvent,
+			Type:      events.DocWatched,
 			Publisher: idB,
 			DocRefKey: refKey,
 		}

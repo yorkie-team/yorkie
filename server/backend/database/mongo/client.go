@@ -816,14 +816,11 @@ func (c *Client) FindClientInfosByAttachedDocRefKey(
 	return clientInfos, nil
 }
 
-// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-// createDocIfNotExist condition is true, create the document if it does not
-// exist.
-func (c *Client) FindDocInfoByKeyAndOwner(
+// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+func (c *Client) FindOrCreateDocInfo(
 	ctx context.Context,
 	clientRefKey types.ClientRefKey,
 	docKey key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	now := gotime.Now()
 
@@ -838,7 +835,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		"$set": bson.M{
 			"accessed_at": now,
 		},
-	}, options.Update().SetUpsert(createDocIfNotExist))
+	}, options.Update().SetUpsert(true))
 	if err != nil {
 		return nil, fmt.Errorf("upsert document: %w", err)
 	}
@@ -1021,7 +1018,6 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	_ types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
@@ -1101,13 +1097,12 @@ func (c *Client) CreateChangeInfos(
 
 func (c *Client) CompactChangeInfos(
 	ctx context.Context,
-	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
 	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, projectID, docInfo.ID); err != nil {
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
 		return err
 	}
 
@@ -1143,7 +1138,7 @@ func (c *Client) CompactChangeInfos(
 
 	// 3. Update document
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": projectID,
+		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
@@ -1156,7 +1151,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", projectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
