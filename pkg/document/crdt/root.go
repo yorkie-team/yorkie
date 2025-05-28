@@ -101,15 +101,12 @@ func (r *Root) RegisterElement(element Element) {
 	r.elementMap[element.CreatedAt().Key()] = element
 	r.docSize.Live.Add(element.DataSize())
 
-	switch element := element.(type) {
-	case Container:
-		{
-			element.Descendants(func(elem Element, parent Container) bool {
-				r.elementMap[elem.CreatedAt().Key()] = elem
-				r.docSize.Live.Add(elem.DataSize())
-				return false
-			})
-		}
+	if element, ok := element.(Container); ok {
+		element.Descendants(func(elem Element, parent Container) bool {
+			r.elementMap[elem.CreatedAt().Key()] = elem
+			r.docSize.Live.Add(elem.DataSize())
+			return false
+		})
 	}
 }
 
@@ -117,7 +114,7 @@ func (r *Root) RegisterElement(element Element) {
 func (r *Root) deregisterElement(element Element) int {
 	count := 0
 
-	deregisterElementInternal := func(elem Element) {
+	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
 		r.docSize.GC.Sub(elem.DataSize())
 
@@ -126,16 +123,13 @@ func (r *Root) deregisterElement(element Element) int {
 		count++
 	}
 
-	deregisterElementInternal(element)
+	deregister(element)
 
-	switch element := element.(type) {
-	case Container:
-		{
-			element.Descendants(func(elem Element, parent Container) bool {
-				deregisterElementInternal(elem)
-				return false
-			})
-		}
+	if element, ok := element.(Container); ok {
+		element.Descendants(func(elem Element, parent Container) bool {
+			deregister(elem)
+			return false
+		})
 	}
 
 	return count
@@ -209,8 +203,7 @@ func (r *Root) GarbageElementLen() int {
 	for _, pair := range r.gcElementPairMap {
 		seen[pair.elem.CreatedAt().Key()] = true
 
-		switch elem := pair.elem.(type) {
-		case Container:
+		if elem, ok := pair.elem.(Container); ok {
 			elem.Descendants(func(elem Element, parent Container) bool {
 				seen[elem.CreatedAt().Key()] = true
 				return false
