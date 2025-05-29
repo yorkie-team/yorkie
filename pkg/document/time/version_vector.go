@@ -83,6 +83,11 @@ func (v VersionVector) Set(id ActorID, i int64) {
 	v[id] = i
 }
 
+// IsEmpty returns whether the vector is empty or not.
+func (v VersionVector) IsEmpty() bool {
+	return len(v) == 0
+}
+
 // Unset removes the version for the given actor from the VersionVector.
 func (v VersionVector) Unset(id ActorID) {
 	delete(v, id)
@@ -160,10 +165,25 @@ func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 	clientLamport, ok := v[other.actorID]
 
 	if !ok {
-		return false
+		minLamport := v.MinLamport()
+
+		return minLamport > other.lamport
 	}
 
 	return clientLamport >= other.lamport
+}
+
+// MinLamport returns min lamport value in version vector.
+func (v VersionVector) MinLamport() int64 {
+	var minLamport int64 = math.MaxInt64
+
+	for _, value := range v {
+		if value < minLamport {
+			minLamport = value
+		}
+	}
+
+	return minLamport
 }
 
 // Min modifies the receiver in-place to contain the minimum values between itself
@@ -224,6 +244,10 @@ func (v VersionVector) Filter(filter []ActorID) VersionVector {
 	filteredVV := NewVersionVector()
 
 	for _, value := range filter {
+		if _, exists := v.Get(value); !exists {
+			continue
+		}
+
 		filteredVV[value] = v[value]
 	}
 
