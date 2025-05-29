@@ -40,6 +40,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColDetachedClients represents the detachedclients collection in the database.
+	ColDetachedClients = "detachedclients"
 )
 
 // Collections represents the list of all collections in the database.
@@ -142,6 +144,16 @@ var collectionInfos = []collectionInfo{
 		}},
 	}, {
 		name: ColVersionVectors,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "client_id", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	}, {
+		name: ColDetachedClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
