@@ -554,7 +554,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			if ok {
 				clientLamportAtChange = lamport
 			} else {
-				clientLamportAtChange = 0
+				clientLamportAtChange = vector.MaxLamport()
 			}
 		}
 
