@@ -222,7 +222,19 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.GarbageCollect(pack.VersionVector)
 	}
 
-	// 05. Update the status.
+	// 05. Remove detached client's lamport from version vector if it exists
+	if pack.VersionVector != nil && !hasSnapshot {
+		actorIDs, err := pack.VersionVector.Keys()
+		if err != nil {
+			return err
+		}
+
+		if !d.doc.changeID.VersionVector().IsEmpty() {
+			d.doc.changeID = d.doc.changeID.SetVersionVector(d.doc.changeID.VersionVector().Filter(actorIDs))
+		}
+	}
+
+	// 06. Update the status.
 	if pack.IsRemoved {
 		d.SetStatus(StatusRemoved)
 	}

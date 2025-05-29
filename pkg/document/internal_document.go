@@ -192,6 +192,18 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 		}
 	}
 
+	// 04. Remove detached client's lamport from version vector if it exists
+	if pack.VersionVector != nil && !hasSnapshot {
+		actorIDs, err := pack.VersionVector.Keys()
+		if err != nil {
+			return err
+		}
+
+		if !d.changeID.VersionVector().IsEmpty() {
+			d.changeID = d.changeID.SetVersionVector(d.changeID.VersionVector().Filter(actorIDs))
+		}
+	}
+
 	return nil
 }
 
