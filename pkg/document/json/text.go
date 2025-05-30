@@ -22,7 +22,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 
@@ -91,15 +90,7 @@ func (p *Text) Edit(
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
-
-		size := pair.Child.DataSize()
-		diff.Sub(size)
-
-		// NOTE(hackerwins): In general cases, when removing a node, its size
-		// includes removedAt, so when subtracting the node size from docSize.Live,
-		// we need to subtract the removedAt size. However, RHTNode doesn't have
-		// removedAt, so we don't need to subtract it from the Live size.
-		diff.Meta += time.TicketSize
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	p.context.Acc(diff)
@@ -154,9 +145,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
-
-		size := pair.Child.DataSize()
-		diff.Sub(size)
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	p.context.Acc(diff)

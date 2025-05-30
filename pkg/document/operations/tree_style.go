@@ -104,9 +104,7 @@ func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) e
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
-
-		size := pair.Child.DataSize()
-		diff.Sub(size)
+		root.AdjustDiffForGCPair(&diff, pair)
 	}
 
 	root.Acc(diff)
