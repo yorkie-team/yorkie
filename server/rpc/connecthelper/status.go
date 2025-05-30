@@ -20,6 +20,7 @@ package connecthelper
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -306,6 +307,7 @@ func ToRPCCodeString(err error) string {
 	}
 
 	cause := err
+	fmt.Println("ToRPCCodeString:", cause)
 	for errors.Unwrap(cause) != nil {
 		cause = errors.Unwrap(cause)
 	}

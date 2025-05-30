@@ -375,7 +375,7 @@ func UpdateDocument(
 		be,
 		project,
 		clientInfo,
-		docInfo,
+		docInfo.RefKey(),
 		doc.CreateChangePack(),
 		packs.PushPullOptions{
 			Mode:   types.SyncModePushOnly,

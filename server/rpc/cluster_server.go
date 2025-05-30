@@ -94,19 +94,7 @@ func (s *clusterServer) DetachDocument(
 	pack := change.NewPack(summary.Key, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
 	// 02. Push the changePack to the document
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, summary.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
 		Status: document.StatusDetached,
 	}); err != nil {
@@ -130,13 +118,6 @@ func (s *clusterServer) CompactDocument(
 	if err != nil {
 		return nil, err
 	}
-
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectId, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	if err := packs.Compact(ctx, s.backend, projectId, docInfo); err != nil {
 		return nil, err
@@ -162,13 +143,6 @@ func (s *clusterServer) PurgeDocument(
 	if !docInfo.IsRemoved() {
 		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
 	}
-
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(projectID, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	counts, err := s.backend.DB.PurgeDocument(ctx, refKey)
 	if err != nil {
