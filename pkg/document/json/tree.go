@@ -207,11 +207,14 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		panic(err)
 	}
 
-	t.context.Acc(diff)
-
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
+
+		size := pair.Child.DataSize()
+		diff.Sub(size)
 	}
+
+	t.context.Acc(diff)
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
@@ -342,11 +345,20 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		panic(err)
 	}
 
-	t.context.Acc(diff)
-
 	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
+
+		size := pair.Child.DataSize()
+		diff.Sub(size)
+
+		// NOTE(hackerwins): In general cases, when removing a node, its size
+		// includes removedAt, so when subtracting the node size from docSize.Live,
+		// we need to subtract the removedAt size. However, RHTNode doesn't have
+		// removedAt, so we don't need to subtract it from the Live size.
+		diff.Meta += time.TicketSize
 	}
+
+	t.context.Acc(diff)
 
 	t.context.Push(operations.NewTreeEdit(
 		t.CreatedAt(),

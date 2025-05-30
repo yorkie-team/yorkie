@@ -74,11 +74,21 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 			return err
 		}
 
-		root.Acc(diff)
-
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
+
+			size := pair.Child.DataSize()
+			diff.Sub(size)
+
+			// NOTE(hackerwins): In general cases, when removing a node, its size
+			// includes removedAt, so when subtracting the node size from docSize.Live,
+			// we need to subtract the removedAt size. However, RHTNode doesn't have
+			// removedAt, so we don't need to subtract it from the Live size.
+			diff.Meta += time.TicketSize
 		}
+
+		root.Acc(diff)
+
 	default:
 		return ErrNotApplicableDataType
 	}

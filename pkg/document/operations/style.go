@@ -69,11 +69,14 @@ func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error
 		return err
 	}
 
-	root.Acc(diff)
-
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
+
+		size := pair.Child.DataSize()
+		diff.Sub(size)
 	}
+
+	root.Acc(diff)
 
 	return nil
 }
