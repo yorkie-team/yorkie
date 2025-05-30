@@ -212,6 +212,10 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, resource.DataSize{Data: 12, Meta: 120}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 48}, doc.DocSize().GC)
 
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
+
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Style(0, 5, map[string]string{"bold": "true"})
 			return nil
@@ -280,6 +284,10 @@ func TestDocumentSize(t *testing.T) {
 		assert.Equal(t, `<doc><p>world</p></doc>`, doc.Root().GetTree("tree").ToXML())
 		assert.Equal(t, resource.DataSize{Data: 10, Meta: 168}, doc.DocSize().Live)
 		assert.Equal(t, resource.DataSize{Data: 20, Meta: 144}, doc.DocSize().GC)
+
+		clone, err := doc.InternalDocument().DeepCopy()
+		assert.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), clone.DocSize())
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("tree").Style(0, 7, map[string]string{"bold": "true"})

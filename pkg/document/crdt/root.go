@@ -235,18 +235,23 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 
 	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
-	r.docSize.Live.Sub(size)
+}
+
+// Acc accumulates the given DataSize to Live.
+func (r *Root) Acc(diff resource.DataSize) {
+	r.docSize.Live.Add(diff)
+}
+
+// AdjustDiffForGCPair adjusts the given diff for the given GCPair.
+func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
+	size := pair.Child.DataSize()
+	diff.Sub(size)
 
 	// NOTE(hackerwins): In general cases, when removing a node, its size
 	// includes removedAt, so when subtracting the node size from docSize.Live,
 	// we need to subtract the removedAt size. However, RHTNode doesn't have
 	// removedAt, so we don't need to subtract it from the Live size.
 	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
-		r.docSize.Live.Meta += time.TicketSize
+		diff.Meta += time.TicketSize
 	}
-}
-
-// Acc accumulates the given DataSize to Live.
-func (r *Root) Acc(diff resource.DataSize) {
-	r.docSize.Live.Add(diff)
 }

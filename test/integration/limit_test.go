@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -260,5 +261,86 @@ func TestDocSize(t *testing.T) {
 		docSize = doc1.DocSize()
 		assert.Equal(t, 6, docSize.Live.Data)
 		assert.Equal(t, 120, docSize.Live.Meta)
+	})
+
+	t.Run("snapshot after threshold ensures correct doc size on sync test", func(t *testing.T) {
+		ctx := context.Background()
+
+		sizeLimit := 10 * 1024 * 1024
+		projectName := "snapshot-threshold-test"
+		project, err := adminCli.CreateProject(context.Background(), projectName)
+		assert.NoError(t, err)
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				MaxSizePerDocument: &sizeLimit,
+			},
+		)
+		assert.NoError(t, err)
+
+		projectInfo, err := adminCli.GetProject(ctx, projectName)
+		assert.Equal(t, sizeLimit, projectInfo.MaxSizePerDocument)
+
+		c1, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c1.Close()) }()
+		assert.NoError(t, c1.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+
+		c2, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Close()) }()
+		assert.NoError(t, c2.Activate(ctx))
+
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, doc2))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewText("text")
+			return nil
+		}))
+
+		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
+			assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+				r.GetText("text").Edit(0, 0, "a")
+				return nil
+			}))
+		}
+		assert.Equal(
+			t,
+			resource.DataSize{
+				Data: int(2 * (helper.SnapshotThreshold + 1)),
+				Meta: 72 + int(24*(helper.SnapshotThreshold+1)),
+			},
+			doc.DocSize().Live,
+		)
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 11, "")
+			return nil
+		}))
+		assert.Equal(t, resource.DataSize{Data: 0, Meta: 72}, doc.DocSize().Live)
+		assert.Equal(
+			t,
+			resource.DataSize{
+				Data: int(2 * (helper.SnapshotThreshold + 1)),
+				Meta: int(48 * (helper.SnapshotThreshold + 1)),
+			},
+			doc.DocSize().GC,
+		)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.Equal(t, doc.DocSize(), doc2.DocSize())
 	})
 }
