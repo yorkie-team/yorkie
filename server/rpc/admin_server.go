@@ -545,7 +545,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		ctx,
 		publisherID,
 		events.DocEvent{
-			Type:      events.DocChangedEvent,
+			Type:      events.DocChanged,
 			Publisher: publisherID,
 			DocRefKey: docInfo.RefKey(),
 		},

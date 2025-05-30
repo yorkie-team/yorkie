@@ -168,7 +168,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}()
 
-	docInfo, err := documents.FindDocInfoByKeyAndOwner(ctx, s.backend, clientInfo, pack.DocumentKey, true)
+	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey)
 	if err != nil {
 		return nil, err
 	}
@@ -247,15 +247,17 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
-	if err != nil {
-		return nil, err
-	}
-
 	var status document.StatusType
-	if req.Msg.RemoveIfNotAttached && !isAttached {
-		pack.IsRemoved = true
-		status = document.StatusRemoved
+	if req.Msg.RemoveIfNotAttached {
+		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAttached {
+			pack.IsRemoved = true
+			status = document.StatusRemoved
+		}
 	} else {
 		status = document.StatusDetached
 	}
@@ -571,14 +573,14 @@ func (s *yorkieServer) watchDoc(
 	}
 
 	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
-		Type:      events.DocWatchedEvent,
+		Type:      events.DocWatched,
 		Publisher: sub.Subscriber(),
 		DocRefKey: docKey,
 	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		events.DocWatchedEvent,
+		events.DocWatched,
 		0,
 	)
 
@@ -592,14 +594,14 @@ func (s *yorkieServer) unwatchDoc(
 ) error {
 	s.backend.PubSub.Unsubscribe(ctx, docKey, sub)
 	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
-		Type:      events.DocUnwatchedEvent,
+		Type:      events.DocUnwatched,
 		Publisher: sub.Subscriber(),
 		DocRefKey: docKey,
 	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		events.DocUnwatchedEvent,
+		events.DocUnwatched,
 		0,
 	)
 
@@ -644,7 +646,7 @@ func (s *yorkieServer) Broadcast(
 	}
 
 	s.backend.PubSub.Publish(ctx, clientID, events.DocEvent{
-		Type:      events.DocBroadcastEvent,
+		Type:      events.DocBroadcast,
 		Publisher: clientID,
 		DocRefKey: docKey,
 		Body: events.DocEventBody{
@@ -655,7 +657,7 @@ func (s *yorkieServer) Broadcast(
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		project,
-		events.DocBroadcastEvent,
+		events.DocBroadcast,
 		len(req.Msg.Payload),
 	)
 

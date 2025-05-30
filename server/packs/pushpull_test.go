@@ -210,18 +210,10 @@ func TestPacks(t *testing.T) {
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
-					Changes: []*api.Change{
-						{
-							Id: &api.ChangeID{
-								ClientSeq: 1,
-								Lamport:   1,
-								ActorId:   clientID,
-							},
-						},
-					},
+					Changes:     []*api.Change{{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}}},
 				},
-			},
-			))
+			}),
+		)
 		assert.NoError(t, err)
 
 		actorID, err := time.ActorIDFromBytes(clientID)
@@ -251,13 +243,7 @@ func TestPacks(t *testing.T) {
 			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 			Changes: []*api.Change{
-				{
-					Id: &api.ChangeID{
-						ClientSeq: 2,
-						Lamport:   2,
-						ActorId:   clientID,
-					},
-				},
+				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID}},
 			},
 		})
 		assert.NoError(t, err)

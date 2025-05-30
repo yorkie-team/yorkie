@@ -217,13 +217,13 @@ func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
 // ToDocEventType converts the given model format to Protobuf format.
 func ToDocEventType(eventType events.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case events.DocChangedEvent:
+	case events.DocChanged:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED, nil
-	case events.DocWatchedEvent:
+	case events.DocWatched:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, nil
-	case events.DocUnwatchedEvent:
+	case events.DocUnwatched:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED, nil
-	case events.DocBroadcastEvent:
+	case events.DocBroadcast:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)

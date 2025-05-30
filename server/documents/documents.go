@@ -63,14 +63,13 @@ func CreateDocument(
 	docKey key.Key,
 	initialRoot yson.Object,
 ) (*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+	docInfo, err := be.DB.FindOrCreateDocInfo(
 		ctx,
 		types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  userID,
 		},
 		docKey,
-		true,
 	)
 	if err != nil {
 		return nil, err
@@ -90,7 +89,6 @@ func CreateDocument(
 
 	if err = be.DB.CompactChangeInfos(
 		ctx,
-		project.ID,
 		docInfo,
 		docInfo.ServerSeq,
 		newDoc.CreateChangePack().Changes,
@@ -248,14 +246,13 @@ func GetDocumentByServerSeq(
 	k key.Key,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+	docInfo, err := be.DB.FindOrCreateDocInfo(
 		ctx,
 		types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(time.InitialActorID),
 		},
 		k,
-		false,
 	)
 	if err != nil {
 		return nil, err
@@ -322,20 +319,18 @@ func FindDocInfoByRefKey(
 	return be.DB.FindDocInfoByRefKey(ctx, refkey)
 }
 
-// FindDocInfoByKeyAndOwner returns a document for the given document key. If
+// FindOrCreateDocInfo returns a document for the given document key. If
 // createDocIfNotExist is true, it creates a new document if it does not exist.
-func FindDocInfoByKeyAndOwner(
+func FindOrCreateDocInfo(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docKey key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
-	return be.DB.FindDocInfoByKeyAndOwner(
+	return be.DB.FindOrCreateDocInfo(
 		ctx,
 		clientInfo.RefKey(),
 		docKey,
-		createDocIfNotExist,
 	)
 }
 

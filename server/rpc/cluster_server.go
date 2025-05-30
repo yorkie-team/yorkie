@@ -91,9 +91,7 @@ func (s *clusterServer) DetachDocument(
 	)
 	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
-
-	changes := []*change.Change{changeCtx.ToChange()}
-	pack := change.NewPack(summary.Key, cp, changes, nil, nil)
+	pack := change.NewPack(summary.Key, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
 	// 02. Push the changePack to the document
 	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, summary.Key))
