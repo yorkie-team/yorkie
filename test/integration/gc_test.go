@@ -1433,6 +1433,122 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, `{"text":[{"val":"x"},{"val":"a"}]}`, d1.Marshal())
 	})
 
+	t.Run("detached client node deletion test - One client attaches and detaches while another is deleting text", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+		defer deactivateAndCloseClients(t, clients)
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text")
+			return nil
+		}, "insert abc")
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 0, "ab") // ab
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(0, 0, "12") // 12
+			return nil
+		})
+		assert.NoError(t, err)
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, d1.Marshal(), d2.Marshal()) // 12ab
+
+		// c3 attaches and edits the document and then detaches.
+		assert.NoError(t, c3.Attach(ctx, d3))
+		err = d3.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "34") // ab3412
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"text":[{"val":"12"},{"val":"34"},{"val":"ab"}]}`, d3.Marshal())
+		assert.NoError(t, c3.Detach(ctx, d3))
+
+		// c1 deletes text
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 4, "") // 1
+			return nil
+		}, "delete 2ab")
+		assert.NoError(t, err)
+
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, `{"text":[{"val":"1"},{"val":"34"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"1"},{"val":"34"}]}`, d2.Marshal())
+	})
+
+	t.Run("detached client node deletion test - VV doesn't include because it was attached but unedited", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+		defer deactivateAndCloseClients(t, clients)
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c3.Attach(ctx, d3))
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "ab")
+			return nil
+		}, "initial text")
+		assert.NoError(t, err)
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "1") // ab1
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "z") // az
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "2") // ab2
+			return nil
+		})
+		assert.NoError(t, err)
+		err = d3.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "3") // ab3
+			return nil
+		})
+		assert.NoError(t, err)
+
+		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.NoError(t, c3.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"z"},{"val":"3"},{"val":"2"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"a"},{"val":"z"},{"val":"3"},{"val":"2"}]}`, d3.Marshal())
+	})
+
 	t.Run("snapshot version vector test", func(t *testing.T) {
 		clients := activeClients(t, 3)
 		c1, c2, c3 := clients[0], clients[1], clients[2]
