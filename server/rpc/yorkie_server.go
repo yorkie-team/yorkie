@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -33,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -150,7 +148,6 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 02. Prepare the project and client info
 	project := projects.From(ctx)
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -160,14 +157,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 03. Push/Pull changes between the client and server
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
+	// 02. Ensure the document exists and is attached to the client.
 	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey)
 	if err != nil {
 		return nil, err
@@ -175,11 +165,17 @@ func (s *yorkieServer) AttachDocument(
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}
+
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	if project.HasAttachmentLimit() {
-		count, err := documents.FindAttachedClientCount(ctx, s.backend, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docInfo.ID,
-		})
+		locker := s.backend.Lockers.Locker(packs.DocAttachKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+
+		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +185,8 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	// 03. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusAttached,
 	})
@@ -236,7 +233,6 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	// 02. Prepare the project and client info
 	project := projects.From(ctx)
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -246,7 +242,17 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	// 02. Set the document status if it is not attached.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	if req.Msg.RemoveIfNotAttached || project.HasAttachmentLimit() {
+		locker := s.backend.Lockers.Locker(packs.DocAttachKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
+
 	var status document.StatusType
 	if req.Msg.RemoveIfNotAttached {
 		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
@@ -262,20 +268,8 @@ func (s *yorkieServer) DetachDocument(
 		status = document.StatusDetached
 	}
 
-	// 03. Push/Pull changes between the client and server
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	// 03. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: status,
 	})
@@ -325,25 +319,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	// 02. Prepare the project and client info
 	project := projects.From(ctx)
-
-	// 03. Push/Pull changes between the client and server
-	if pack.HasChanges() {
-		locker := s.backend.Lockers.Locker(
-			packs.DocEditKey(project.ID, pack.DocumentKey),
-		)
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	}
-
-	// TODO(hackerwins): If fetching the client placed in the outside of the locker
-	// `concurrent garbage collection test(with pushonly)` fails in JS SDK.
-	// It may be caused by using both realtime(pushonly) and manual(pushpull)
-	// at the same time.
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -352,17 +328,14 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
+	// 02. Ensure the document attached to the client.
+	if err := clientInfo.EnsureDocumentAttached(docID); err != nil {
+		return nil, err
+	}
+
+	// 03. Push/Pull between the client and server.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   syncMode,
 		Status: document.StatusAttached,
 	})
@@ -407,7 +380,6 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	// 02. Prepare the project and client info
 	project := projects.From(ctx)
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -417,9 +389,9 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	// 03. Push/Pull changes between the client and server
-	if pack.HasChanges() {
-		locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, pack.DocumentKey))
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	if project.HasAttachmentLimit() {
+		locker := s.backend.Lockers.Locker(packs.DocAttachKey(docKey))
 		defer func() {
 			if err := locker.Unlock(); err != nil {
 				logging.DefaultLogger().Error(err)
@@ -427,13 +399,8 @@ func (s *yorkieServer) RemoveDocument(
 		}()
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	// 02. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusRemoved,
 	})
@@ -489,7 +456,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	locker := s.backend.Lockers.Locker(sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)))
+	locker := s.backend.Lockers.Locker(packs.DocWatchKey(docID, clientID))
 	defer func() {
 		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)

@@ -836,12 +836,12 @@ func (c *Client) FindOrCreateDocInfo(
 			"accessed_at": now,
 		},
 	}, options.Update().SetUpsert(true))
-	if err != nil {
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return nil, fmt.Errorf("upsert document: %w", err)
 	}
 
 	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
+	if res != nil && res.UpsertedCount > 0 {
 		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 			"project_id": clientRefKey.ProjectID,
 			"_id":        res.UpsertedID,

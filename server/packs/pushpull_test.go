@@ -251,7 +251,7 @@ func TestPacks(t *testing.T) {
 		// 2-1. An arbitrary failure occurs while updating clientInfo
 		triggerErrUpdateClientInfo(true)
 
-		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
@@ -279,7 +279,7 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, uint32(1), clientInfo.Checkpoint(docID).ClientSeq)
 
 		// 3-1. A duplicate request is sent
-		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
