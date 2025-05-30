@@ -17,12 +17,12 @@
 package json
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 )
 

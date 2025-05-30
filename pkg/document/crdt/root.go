@@ -235,15 +235,6 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 
 	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
-	//r.docSize.Live.Sub(size)
-
-	// NOTE(hackerwins): In general cases, when removing a node, its size
-	// includes removedAt, so when subtracting the node size from docSize.Live,
-	// we need to subtract the removedAt size. However, RHTNode doesn't have
-	// removedAt, so we don't need to subtract it from the Live size.
-	//if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
-	//	r.docSize.Live.Meta += time.TicketSize
-	//}
 }
 
 // Acc accumulates the given DataSize to Live.
