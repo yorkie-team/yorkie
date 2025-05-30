@@ -18,7 +18,8 @@ package database
 
 import "github.com/yorkie-team/yorkie/api/types"
 
-// DetachedClients is a structure representing information about the detached client's lamport for each document and client.
+// DetachedClients is a structure representing information about
+// the detached client's lamport for each document and client.
 type DetachedClients struct {
 	ID        types.ID `bson:"_id"`
 	ProjectID types.ID `bson:"project_id"`

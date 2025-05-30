@@ -88,6 +88,9 @@ func Dial(conf *Config) (*Client, error) {
 	}
 
 	clientsCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, int64]](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize clients cache: %w", err)
+	}
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
@@ -1463,7 +1466,8 @@ func (c *Client) UpdateAndFindMinVersionVector(
 					minVersionVector.Unset(actorID)
 				}
 			} else {
-				// every client recognizes the actor has been detached, so now it's safe to remove actor's info from detachedClientsCache
+				// every client recognizes the actor has been detached, so now it's safe
+				// to remove actor's info from detachedClientsCache
 				detachedClientsMap.Delete(keys[i], func(value int64, exists bool) bool {
 					return true
 				})
