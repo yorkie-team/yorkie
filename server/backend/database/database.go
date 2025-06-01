@@ -120,6 +120,15 @@ type Database interface {
 		fields *types.UpdatableProjectFields,
 	) (*ProjectInfo, error)
 
+	// RotateProjectKeys rotates the API keys of the project.
+	RotateProjectKeys(
+		ctx context.Context,
+		owner types.ID,
+		id types.ID,
+		publicKey string,
+		secretKey string,
+	) (*ProjectInfo, error)
+
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(
 		ctx context.Context,

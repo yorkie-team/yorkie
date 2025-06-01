@@ -190,6 +190,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/RotateProjectKeys:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/SearchDocuments:
     post:
       description: ""
@@ -375,6 +387,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest'
       required: true
+    yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysRequest'
+      required: true
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest:
       content:
         application/json:
@@ -556,6 +577,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse'
       description: ""
+    yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysResponse'
+      description: ""
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse:
       content:
         application/json:
@@ -627,6 +657,9 @@ components:
         Wrapper message for `int32`.
 
          The JSON representation for `Int32Value` is JSON number.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -641,6 +674,9 @@ components:
         Wrapper message for `string`.
 
          The JSON representation for `StringValue` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -2177,6 +2213,31 @@ components:
       additionalProperties: false
       description: ""
       title: RemoveDocumentByAdminResponse
+      type: object
+    yorkie.v1.RotateProjectKeysRequest:
+      additionalProperties: false
+      description: RotateProjectKeysRequest is the request message for rotating project
+        API keys.
+      properties:
+        id:
+          additionalProperties: false
+          description: The ID of the project to rotate keys for.
+          title: id
+          type: string
+      title: RotateProjectKeysRequest
+      type: object
+    yorkie.v1.RotateProjectKeysResponse:
+      additionalProperties: false
+      description: RotateProjectKeysResponse is the response message containing the
+        updated project.
+      properties:
+        project:
+          $ref: '#/components/schemas/yorkie.v1.Project'
+          additionalProperties: false
+          description: The updated project with new API keys.
+          title: project
+          type: object
+      title: RotateProjectKeysResponse
       type: object
     yorkie.v1.SearchDocumentsRequest:
       additionalProperties: false

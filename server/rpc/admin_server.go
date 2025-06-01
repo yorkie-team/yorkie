@@ -618,3 +618,28 @@ func (s *adminServer) GetServerVersion(
 		BuildDate:     version.BuildDate,
 	}), nil
 }
+
+// RotateProjectKeys rotates the API keys of the project.
+func (s *adminServer) RotateProjectKeys(
+	ctx context.Context,
+	req *connect.Request[api.RotateProjectKeysRequest],
+) (*connect.Response[api.RotateProjectKeysResponse], error) {
+	// Get current user from context
+	user := users.From(ctx)
+
+	// Call projects package to rotate keys
+	project, err := projects.RotateProjectKeys(
+		ctx,
+		s.backend,
+		user.ID,
+		types.ID(req.Msg.Id),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return updated project
+	return connect.NewResponse(&api.RotateProjectKeysResponse{
+		Project: converter.ToProject(project),
+	}), nil
+}
