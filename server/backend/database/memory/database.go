@@ -796,8 +796,8 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
-func (d *DB) FindClientInfosByAttachedDocRefKey(
+// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
@@ -820,14 +820,11 @@ func (d *DB) FindClientInfosByAttachedDocRefKey(
 	return infos, nil
 }
 
-// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-// createDocIfNotExist condition is true, create the document if it does not
-// exist.
-func (d *DB) FindDocInfoByKeyAndOwner(
+// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+func (d *DB) FindOrCreateDocInfo(
 	_ context.Context,
 	clientRefKey types.ClientRefKey,
 	key key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -835,9 +832,6 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	info, err := d.findDocInfoByKey(txn, clientRefKey.ProjectID, key)
 	if err != nil {
 		return info, err
-	}
-	if !createDocIfNotExist && info == nil {
-		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
 	if info == nil {
@@ -1043,7 +1037,6 @@ func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, er
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
 	_ context.Context,
-	projectID types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
@@ -1078,7 +1071,7 @@ func (d *DB) CreateChangeInfos(
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
-		projectID.String(),
+		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
@@ -1120,7 +1113,6 @@ func (d *DB) CreateChangeInfos(
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.
 func (d *DB) CompactChangeInfos(
 	ctx context.Context,
-	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
 	changes []*change.Change,
@@ -1129,7 +1121,7 @@ func (d *DB) CompactChangeInfos(
 	defer txn.Abort()
 
 	// 1. Purge the resources of the document.
-	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
+	if _, err := d.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, txn); err != nil {
 		return err
 	}
 
@@ -1137,7 +1129,7 @@ func (d *DB) CompactChangeInfos(
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
-		projectID.String(),
+		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
@@ -1608,7 +1600,7 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (d *DB) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,

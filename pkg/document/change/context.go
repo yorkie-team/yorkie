@@ -115,6 +115,11 @@ func (c *Context) Acc(diff resource.DataSize) {
 	c.root.Acc(diff)
 }
 
+// AdjustDiffForGCPair adjusts the given diff for the given GCPair to the root.
+func (c *Context) AdjustDiffForGCPair(diff *resource.DataSize, pair crdt.GCPair) {
+	c.root.AdjustDiffForGCPair(diff, pair)
+}
+
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
 	return c.nextID.NewTimeTicket(c.delimiter)

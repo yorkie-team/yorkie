@@ -88,11 +88,12 @@ func (p *Text) Edit(
 		panic(err)
 	}
 
-	p.context.Acc(diff)
-
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
+
+	p.context.Acc(diff)
 
 	p.context.Push(operations.NewEdit(
 		p.CreatedAt(),
@@ -142,11 +143,12 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		panic(err)
 	}
 
-	p.context.Acc(diff)
-
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
+
+	p.context.Acc(diff)
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),

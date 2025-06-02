@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -90,7 +89,7 @@ func setUpClientsAndDocs(
 	for i := 0; i < n; i++ {
 		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i), map[string]string{"userID": fmt.Sprintf("user-%d", i)})
 		assert.NoError(b, err)
-		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		docInfo, err := be.DB.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NoError(b, err)
 		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
@@ -139,14 +138,10 @@ func benchmarkPushChanges(
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		pack := createChangePack(changeCnt, docs[0], b)
-		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docID,
-		})
-		assert.NoError(b, err)
+		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 		b.StartTimer()
 
-		_, err = packs.PushPull(ctx, be, project, clientInfos[0], docInfo, pack, packs.PushPullOptions{
+		_, err := packs.PushPull(ctx, be, project, clientInfos[0], refKey, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
@@ -170,23 +165,15 @@ func benchmarkPullChanges(
 		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
-		docRefKey := types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docID,
-		}
-		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, docRefKey)
-		assert.NoError(b, err)
-		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, packs.PushPullOptions{
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
 		assert.NoError(b, err)
 
-		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, docRefKey)
-		assert.NoError(b, err)
 		b.StartTimer()
-
-		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docInfo, pullPack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docRefKey, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
@@ -213,13 +200,8 @@ func benchmarkPushSnapshots(
 		b.StartTimer()
 
 		for j := 0; j < snapshotCnt; j++ {
-			b.StopTimer()
 			pushPack := createChangePack(changeCnt, docs[0], b)
-			docInfo, err := documents.FindDocInfoByRefKey(ctx, be, docRefKey)
-			assert.NoError(b, err)
-			b.StartTimer()
-
-			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docInfo, pushPack, packs.PushPullOptions{
+			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docRefKey, pushPack, packs.PushPullOptions{
 				Mode:   types.SyncModePushPull,
 				Status: document.StatusAttached,
 			})
@@ -256,19 +238,14 @@ func benchmarkPullSnapshot(
 			ProjectID: project.ID,
 			DocID:     docID,
 		}
-		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, docRefKey)
-		assert.NoError(b, err)
-		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, packs.PushPullOptions{
+		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
 		assert.NoError(b, err)
 
-		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, docRefKey)
-		assert.NoError(b, err)
 		b.StartTimer()
-
-		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docInfo, pullPack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docRefKey, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})

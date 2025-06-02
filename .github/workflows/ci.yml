@@ -107,7 +107,8 @@ jobs:
   bench:
     name: bench
     runs-on: ubuntu-latest
-    permissions: write-all
+    permissions:
+      contents: write
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.bench == 'true' }}
@@ -131,7 +132,7 @@ jobs:
         continue-on-error: true
 
       - name: Read previous benchmark result
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         id: prev-bench
         run: |
           echo "PREV_BENCH_RESULT=null" >> $GITHUB_OUTPUT
@@ -158,19 +159,31 @@ jobs:
           echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
 
       - name: Trigger n8n webhook
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BENCH_RESULT: ${{ steps.curr-bench.outputs.BENCH_RESULT }}
+          PREV_BENCH_RESULT: ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }}
         run: |
+          payload=$(jq -n \
+           --arg repo "${{ github.repository }}" \
+           --arg pr_number "${{ github.event.pull_request.number }}" \
+           --arg commit_id "${{ github.sha }}" \
+           --arg prev_commit_id "${{ steps.prev-bench.outputs.PREV_COMMIT }}" \
+           --arg bench_result "$BENCH_RESULT" \
+           --arg prev_bench_result "$PREV_BENCH_RESULT" \
+           '{
+               target: "bench",
+               repo: $repo,
+               pr_number: $pr_number,
+               commit_id: $commit_id,
+               prev_commit_id: $prev_commit_id,
+               bench_result: $bench_result,
+               prev_bench_result: $prev_bench_result,
+           }')
+
           response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
           -H "Content-Type: application/json" \
-          -d '{
-            "target": "bench",
-            "repo": "${{ github.repository }}",
-            "pr_number": "${{ github.event.pull_request.number }}",
-            "commit_id": "${{ github.sha }}",
-            "prev_commit_id": "${{ steps.prev-bench.outputs.PREV_COMMIT }}",
-            "bench_result": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
-            "prev_bench_result": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }},
-          }' || echo "CURL_ERROR")
+          -d "$payload" || echo "CURL_ERROR")
 
           if [ "$response" = "CURL_ERROR" ]; then
             echo "::error::Failed to trigger n8n webhook"
@@ -245,7 +258,8 @@ jobs:
   load-test:
     name: load-test
     runs-on: ubuntu-latest
-    permissions: write-all
+    permissions:
+      contents: write
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4
@@ -267,7 +281,7 @@ jobs:
         continue-on-error: true
 
       - name: Read previous load result
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         id: prev-load
         run: |
           echo "PREV_LOAD_RESULT=null" >> $GITHUB_OUTPUT
@@ -290,6 +304,18 @@ jobs:
       - name: Start the server
         run: cd repo && make start
 
+      - name: Wait for Yorkie to be ready
+        run: |
+          for i in {1..10}; do
+            if curl -sf -X POST http://localhost:8080/yorkie.v1.YorkieService/ActivateClient \
+              -H "Content-Type: application/json" -d '{}' > /dev/null; then
+              echo "Yorkie is up!"
+              break
+            fi
+            echo "Waiting for Yorkie..."
+            sleep 2
+          done
+
       - name: Run local k6 test
         id: curr-load
         run: |
@@ -305,7 +331,7 @@ jobs:
         run: cd repo && make stop
 
       - name: Trigger n8n webhook
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         env:
           LOAD_RESULT: ${{ steps.curr-load.outputs.LOAD_RESULT }}
           PREV_LOAD_RESULT: ${{ steps.prev-load.outputs.PREV_LOAD_RESULT }}
@@ -332,8 +358,6 @@ jobs:
                load_summary: $load_summary,
                prev_load_summary: $prev_load_summary
            }')
-
-           echo "$payload"
 
            response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
            -H "Content-Type: application/json" \

@@ -624,9 +624,9 @@ func handleResponse(
 		}
 
 		switch eventType {
-		case events.DocChangedEvent:
+		case events.DocChanged:
 			return &WatchResponse{Type: DocumentChanged}, nil
-		case events.DocWatchedEvent:
+		case events.DocWatched:
 			doc.AddOnlineClient(cli.String())
 
 			// NOTE(hackerwins): If the presence does not exist, it means that
@@ -642,7 +642,7 @@ func handleResponse(
 					cli.String(): doc.Presence(cli.String()),
 				},
 			}, nil
-		case events.DocUnwatchedEvent:
+		case events.DocUnwatched:
 			p := doc.Presence(cli.String())
 			doc.RemoveOnlineClient(cli.String())
 
@@ -659,7 +659,7 @@ func handleResponse(
 					cli.String(): p,
 				},
 			}, nil
-		case events.DocBroadcastEvent:
+		case events.DocBroadcast:
 			eventBody := resp.Event.Body
 			// If the handler exists, it means that the broadcast topic has been subscribed to.
 			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {

@@ -213,13 +213,13 @@ func FromDocumentID(pbID string) (types.ID, error) {
 func FromEventType(pbDocEventType api.DocEventType) (events.DocEventType, error) {
 	switch pbDocEventType {
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED:
-		return events.DocChangedEvent, nil
+		return events.DocChanged, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED:
-		return events.DocWatchedEvent, nil
+		return events.DocWatched, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED:
-		return events.DocUnwatchedEvent, nil
+		return events.DocUnwatched, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST:
-		return events.DocBroadcastEvent, nil
+		return events.DocBroadcast, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

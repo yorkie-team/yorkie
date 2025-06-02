@@ -158,8 +158,8 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
-	FindClientInfosByAttachedDocRefKey(ctx context.Context, docRefKey types.DocRefKey) ([]*ClientInfo, error)
+	// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
@@ -197,14 +197,11 @@ type Database interface {
 		docKeys []key.Key,
 	) ([]*DocInfo, error)
 
-	// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-	// createDocIfNotExist condition is true, create the document if it does not
-	// exist.
-	FindDocInfoByKeyAndOwner(
+	// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+	FindOrCreateDocInfo(
 		ctx context.Context,
 		clientRefKey types.ClientRefKey,
 		docKey key.Key,
-		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
 	// FindDocInfoByRefKey finds the document of the given refKey.
@@ -228,7 +225,6 @@ type Database interface {
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
-		projectID types.ID,
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
@@ -238,7 +234,6 @@ type Database interface {
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
 	CompactChangeInfos(
 		ctx context.Context,
-		projectID types.ID,
 		docInfo *DocInfo,
 		lastServerSeq int64,
 		changes []*change.Change,

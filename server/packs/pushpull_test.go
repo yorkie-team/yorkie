@@ -210,18 +210,10 @@ func TestPacks(t *testing.T) {
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
-					Changes: []*api.Change{
-						{
-							Id: &api.ChangeID{
-								ClientSeq: 1,
-								Lamport:   1,
-								ActorId:   clientID,
-							},
-						},
-					},
+					Changes:     []*api.Change{{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}}},
 				},
-			},
-			))
+			}),
+		)
 		assert.NoError(t, err)
 
 		actorID, err := time.ActorIDFromBytes(clientID)
@@ -251,13 +243,7 @@ func TestPacks(t *testing.T) {
 			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 			Changes: []*api.Change{
-				{
-					Id: &api.ChangeID{
-						ClientSeq: 2,
-						Lamport:   2,
-						ActorId:   clientID,
-					},
-				},
+				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID}},
 			},
 		})
 		assert.NoError(t, err)
@@ -265,7 +251,7 @@ func TestPacks(t *testing.T) {
 		// 2-1. An arbitrary failure occurs while updating clientInfo
 		triggerErrUpdateClientInfo(true)
 
-		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
@@ -293,7 +279,7 @@ func TestPacks(t *testing.T) {
 		assert.Equal(t, uint32(1), clientInfo.Checkpoint(docID).ClientSeq)
 
 		// 3-1. A duplicate request is sent
-		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
 		})
