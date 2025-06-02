@@ -145,7 +145,7 @@ func BenchmarkVersionVector(b *testing.B) {
 
 	// NOTE(hackerwins): To prevent the snapshot from being created, we set
 	// snapshot threshold and snapshot interval to very large values.
-	svr, err := helper.TestServerWithSnapshotCfg(10, 10)
+	svr, err := helper.TestServerWithSnapshotCfg(100_000, 100_000)
 	if err != nil {
 		b.Fatal(err)
 	}

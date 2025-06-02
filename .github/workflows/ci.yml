@@ -181,7 +181,7 @@ jobs:
                prev_bench_result: $prev_bench_result,
            }')
 
-          response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
+          response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
           -H "Content-Type: application/json" \
           -d "$payload" || echo "CURL_ERROR")
 
@@ -304,22 +304,11 @@ jobs:
       - name: Start the server
         run: cd repo && make start
 
-      - name: Wait for Yorkie to be ready
-        run: |
-          for i in {1..10}; do
-            if curl -sf -X POST http://localhost:8080/yorkie.v1.YorkieService/ActivateClient \
-              -H "Content-Type: application/json" -d '{}' > /dev/null; then
-              echo "Yorkie is up!"
-              break
-            fi
-            echo "Waiting for Yorkie..."
-            sleep 2
-          done
-
       - name: Run local k6 test
         id: curr-load
         run: |
           cd repo
+          sleep 5
           if ! k6 run test/k6/presence.ts --summary-export=summary.json | tee output.txt; then
            echo "::error::K6 load test failed"
            exit 1
@@ -359,7 +348,7 @@ jobs:
                prev_load_summary: $prev_load_summary
            }')
 
-           response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
+           response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
            -H "Content-Type: application/json" \
            -d "$payload" || echo "CURL_ERROR")
 
