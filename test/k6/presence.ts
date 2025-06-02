@@ -68,9 +68,9 @@ const controlDocLatency = new Trend("control_doc_latency"); // Metrics for measu
 // k6 options for load testing
 export const options = {
   stages: [
-    { duration: "5s", target: 10 }, // Ramp up to concurrenct(default: 500) users in 1 minute
-    { duration: "5s", target: 10 }, // Maintain concurrent users(default: 500) for 1 minute
-    { duration: "5s", target: 0 }, // Ramp down to 0 users in 30 seconds
+    { duration: "1m", target: CONCURRENCY }, // Ramp up to concurrenct(default: 500) users in 1 minute
+    { duration: "1m", target: CONCURRENCY }, // Maintain concurrent users(default: 500) for 1 minute
+    { duration: "30s", target: 0 }, // Ramp down to 0 users in 30 seconds
   ],
   thresholds: {
     transaction_success_rate: ["rate>0.99"], // Maintain 99% success rate

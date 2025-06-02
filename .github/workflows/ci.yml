@@ -257,7 +257,7 @@ jobs:
         with:
           path: repo
       - name: Stack
-        run: docker compose -f build/docker/docker-compose.yml up --build -d
+        run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
 
       - name: Checkout load branch
         uses: actions/checkout@v4
@@ -288,18 +288,21 @@ jobs:
         uses: grafana/setup-k6-action@v1
 
       - name: Start the server
-        run: make start
+        run: cd repo && make start
 
       - name: Run local k6 test
         id: curr-load
         run: |
           cd repo
-          k6 run k6_test.js --summary-export=summary.json | tee output.txt
+          if ! k6 run test/k6/presence.ts --summary-export=summary.json | tee output.txt; then
+           echo "::error::K6 load test failed"
+           exit 1
+          fi
           echo "LOAD_RESULT=$(cat output.txt | jq -R -s .)" >> $GITHUB_OUTPUT
           echo "LOAD_SUMMARY=$(jq -c . summary.json)" >> $GITHUB_OUTPUT
 
       - name: Stop the server
-        run: make stop
+        run: cd repo && make stop
 
       - name: Trigger n8n webhook
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
