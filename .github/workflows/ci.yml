@@ -130,11 +130,10 @@ jobs:
           path: benchmark-repo
         continue-on-error: true
 
-      - name: Read previous benchmark result and prepare cache
+      - name: Read previous benchmark result
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         id: prev-bench
         run: |
-          mkdir -p ./cache
           echo "PREV_BENCH_RESULT=null" >> $GITHUB_OUTPUT
           echo "PREV_COMMIT=null" >> $GITHUB_OUTPUT
 
@@ -146,16 +145,6 @@ jobs:
               echo "PREV_COMMIT=$prev_commit" >> $GITHUB_OUTPUT
             fi
           fi
-
-      - name: Restore cache
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
-        id: cache-restore
-        uses: actions/cache@v4
-        with:
-          path: ./cache
-          key: comment-id-${{ github.event.pull_request.number }}
-          restore-keys: |
-            comment-id-${{ github.event.pull_request.number }}
 
       - name: Stack
         run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
@@ -171,32 +160,22 @@ jobs:
       - name: Trigger n8n webhook
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
         run: |
-          # Read comment_id from cache
-          comment_id_file="./cache/comment_id.txt"
-          comment_id=""
-          if [ -f "$comment_id_file" ]; then
-            comment_id=$(cat "$comment_id_file" | jq -r '.comment_id')
-          fi
-
-          response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
+          response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
           -H "Content-Type: application/json" \
           -d '{
+            "target": "bench",
             "repo": "${{ github.repository }}",
             "pr_number": "${{ github.event.pull_request.number }}",
             "commit_id": "${{ github.sha }}",
             "prev_commit_id": "${{ steps.prev-bench.outputs.PREV_COMMIT }}",
             "bench_result": ${{ steps.curr-bench.outputs.BENCH_RESULT }},
             "prev_bench_result": ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }},
-            "comment_id": "'"${comment_id}"'"
           }' || echo "CURL_ERROR")
 
           if [ "$response" = "CURL_ERROR" ]; then
             echo "::error::Failed to trigger n8n webhook"
             exit 1
           fi
-
-          echo "🚀 Webhook Response: $response"
-          echo "$response" > "$comment_id_file"
 
       - name: Store benchmark result
         if: github.ref == 'refs/heads/main'
@@ -266,6 +245,7 @@ jobs:
   load-test:
     name: load-test
     runs-on: ubuntu-latest
+    permissions: write-all
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4
@@ -274,8 +254,35 @@ jobs:
 
       - name: Checkout current repository
         uses: actions/checkout@v4
+        with:
+          path: repo
       - name: Stack
         run: docker compose -f build/docker/docker-compose.yml up --build -d
+
+      - name: Checkout load branch
+        uses: actions/checkout@v4
+        with:
+          ref: yorkie-ci-load
+          path: load-repo
+        continue-on-error: true
+
+      - name: Read previous load result
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        id: prev-load
+        run: |
+          echo "PREV_LOAD_RESULT=null" >> $GITHUB_OUTPUT
+          echo "PREV_LOAD_SUMMARY=null" >> $GITHUB_OUTPUT
+          echo "PREV_COMMIT=null" >> $GITHUB_OUTPUT
+
+          if [ -d "load-repo" ] && [ -f "load-repo/load_summary.json" ]; then
+            content=$(cat load-repo/output.txt | jq -R -s .)
+            echo "PREV_LOAD_RESULT=$content" >> $GITHUB_OUTPUT
+            echo "PREV_LOAD_SUMMARY=$(jq -c . load-repo/load_summary.json)" >> $GITHUB_OUTPUT
+            if [ -f "load-repo/commit_hash.txt" ]; then
+              prev_commit=$(cat load-repo/commit_hash.txt)
+              echo "PREV_COMMIT=$prev_commit" >> $GITHUB_OUTPUT
+            fi
+          fi
 
       - name: Setup K6
         uses: grafana/setup-k6-action@v1
@@ -284,9 +291,79 @@ jobs:
         run: make start
 
       - name: Run local k6 test
-        uses: grafana/run-k6-action@v1
-        with:
-          path: test/k6/presence.ts
+        id: curr-load
+        run: |
+          cd repo
+          k6 run k6_test.js --summary-export=summary.json | tee output.txt
+          echo "LOAD_RESULT=$(cat output.txt | jq -R -s .)" >> $GITHUB_OUTPUT
+          echo "LOAD_SUMMARY=$(jq -c . summary.json)" >> $GITHUB_OUTPUT
 
       - name: Stop the server
         run: make stop
+
+      - name: Trigger n8n webhook
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        env:
+          LOAD_RESULT: ${{ steps.curr-load.outputs.LOAD_RESULT }}
+          PREV_LOAD_RESULT: ${{ steps.prev-load.outputs.PREV_LOAD_RESULT }}
+          LOAD_SUMMARY: ${{ steps.curr-load.outputs.LOAD_SUMMARY }}
+          PREV_LOAD_SUMMARY: ${{ steps.prev-load.outputs.PREV_LOAD_SUMMARY }}
+        run: |
+          payload=$(jq -n \
+           --arg repo "${{ github.repository }}" \
+           --arg pr_number "${{ github.event.pull_request.number }}" \
+           --arg commit_id "${{ github.sha }}" \
+           --arg prev_commit_id "${{ steps.prev-load.outputs.PREV_COMMIT }}" \
+           --arg load_result "$LOAD_RESULT" \
+           --arg prev_load_result "$PREV_LOAD_RESULT" \
+           --arg load_summary "$LOAD_SUMMARY" \
+           --arg prev_load_summary "$PREV_LOAD_SUMMARY" \
+           '{
+               target: "load",
+               repo: $repo,
+               pr_number: $pr_number,
+               commit_id: $commit_id,
+               prev_commit_id: $prev_commit_id,
+               load_result: $load_result,
+               prev_load_result: $prev_load_result,
+               load_summary: $load_summary,
+               prev_load_summary: $prev_load_summary
+           }')
+
+           echo "$payload"
+
+           response=$(curl -f -X POST "https://n8n.yorkie.dev/webhook-test/4b6acb5b-07fb-4236-a77f-1a10d7e4dd82" \
+           -H "Content-Type: application/json" \
+           -d "$payload" || echo "CURL_ERROR")
+
+           if [ "$response" = "CURL_ERROR" ]; then
+               echo "::error::Failed to trigger n8n webhook"
+               exit 1
+           fi
+
+      - name: Store load result
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p load-repo
+          cp repo/summary.json load-repo/load_summary.json
+          cp repo/output.txt load-repo/output.txt
+          echo "${{ github.sha }}" > load-repo/commit_hash.txt
+
+          cd load-repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+          if [ ! -d ".git" ]; then
+            git init
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          fi
+
+          git add load_summary.json
+          git add output.txt
+          git add commit_hash.txt
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          git diff --staged --quiet || git commit -m "Update load results at $TIMESTAMP"
+          git checkout -B yorkie-ci-load
+          git push -f origin yorkie-ci-load
+
+          echo "load results have been pushed to yorkie-ci-load branch"
