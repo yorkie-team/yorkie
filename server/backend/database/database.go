@@ -167,8 +167,8 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
-	FindClientInfosByAttachedDocRefKey(ctx context.Context, docRefKey types.DocRefKey) ([]*ClientInfo, error)
+	// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(

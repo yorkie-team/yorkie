@@ -37,9 +37,14 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// DocEditKey creates a new sync.Key of Document Edit for the given document.
-func DocEditKey(projectID types.ID, docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("docedit-%s-%s", projectID, docKey))
+// DocPushKey generates a sync key for pushing changes to the document.
+func DocPushKey(docKey types.DocRefKey) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-push-%s-%s", docKey.ProjectID, docKey.DocID))
+}
+
+// DocPullKey generates a sync key for pulling changes from the document.
+func DocPullKey(clientID time.ActorID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-pull-%s-%s", clientID, docKey))
 }
 
 // PushPullOptions represents the options for PushPull.
@@ -64,54 +69,22 @@ func PushPull(
 	be *backend.Backend,
 	project *types.Project,
 	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
+	docKey types.DocRefKey,
 	reqPack *change.Pack,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
-	// NOTE(hackerwins, krapie): docInfo is constantly mutating as they are
-	// constantly used as parameters in subsequent subroutines.
 	start := gotime.Now()
 
-	// 01. push changes to the database.
-	pushedChanges, seqBeforePush, cpAfterPush, err := pushChanges(ctx, be, clientInfo, docInfo, reqPack)
+	// 01. push the change pack to the database.
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		return nil, err
 	}
 
-	// 02. pull changes or a snapshot from the database and create a response pack.
-	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, seqBeforePush, opts.Mode)
+	// 02. pull the pack from the database.
+	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts)
 	if err != nil {
 		return nil, err
-	}
-
-	// 03. update the document's status in the client.
-	docKey := docInfo.RefKey()
-	if opts.Status == document.StatusRemoved {
-		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else if opts.Status == document.StatusDetached {
-		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := clientInfo.UpdateCheckpoint(docKey.DocID, resPack.Checkpoint); err != nil {
-			return nil, err
-		}
-	}
-
-	// 04. update client's vector and checkpoint to DB.
-	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docKey, reqPack.VersionVector)
-	if err != nil {
-		return nil, err
-	}
-	if resPack.SnapshotLen() == 0 {
-		resPack.VersionVector = minVersionVector
-	}
-	if !clientInfo.IsServerClient() {
-		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-			return nil, err
-		}
 	}
 
 	pullLog := strconv.Itoa(resPack.ChangesLen())
@@ -134,7 +107,7 @@ func PushPull(
 	be.Metrics.AddPushPullSnapshotBytes(hostname, project, resPack.SnapshotLen())
 	be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
-	// 05. publish document event and store the snapshot if needed.
+	// 03. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisher, err := clientInfo.ID.ToActorID()
@@ -178,14 +151,28 @@ func PushPull(
 	return resPack, nil
 }
 
-// pushChanges returns the changes excluding already saved in DB.
-func pushChanges(
+// pushPack pushes the given ChangePack to the database.
+func pushPack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
+	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*change.Change, int64, change.Checkpoint, error) {
+) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
+	// TODO(hackerwins): We can replace this locker with lock-free implementation
+	// using $inc operator with upsert in MongoDB.
+	locker := be.Lockers.Locker(DocPushKey(docKey))
+	defer func() {
+		if err := locker.Unlock(); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+	if err != nil {
+		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+	}
+
 	initialSeq := docInfo.ServerSeq
 	checkpoint := clientInfo.Checkpoint(docInfo.ID)
 
@@ -215,7 +202,7 @@ func pushChanges(
 			pushables,
 			reqPack.IsRemoved,
 		); err != nil {
-			return nil, time.InitialLamport, checkpoint, err
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 		}
 	}
 
@@ -232,10 +219,61 @@ func pushChanges(
 		)
 	}
 
-	return pushables, initialSeq, checkpoint, nil
+	return pushables, docInfo, initialSeq, checkpoint, nil
 }
 
 func pullPack(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+	reqPack *change.Pack,
+	cpAfterPush change.Checkpoint,
+	initialSeq int64,
+	opts PushPullOptions,
+) (*ServerPack, error) {
+	docKey := docInfo.RefKey()
+
+	// 01. pull changes or a snapshot from the database and create a response pack.
+	resPack, err := preparePack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. update the document's status in the client.
+	if opts.Status == document.StatusRemoved {
+		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
+	} else if opts.Status == document.StatusDetached {
+		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := clientInfo.UpdateCheckpoint(docKey.DocID, resPack.Checkpoint); err != nil {
+			return nil, err
+		}
+	}
+
+	// 03. update client's vector and checkpoint to DB.
+	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docKey, reqPack.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+	if resPack.SnapshotLen() == 0 {
+		resPack.VersionVector = minVersionVector
+	}
+	if !clientInfo.IsServerClient() {
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	return resPack, nil
+}
+
+// preparePack prepares the response pack for the given request pack.
+func preparePack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,

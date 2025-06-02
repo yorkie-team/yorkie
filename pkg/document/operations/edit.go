@@ -74,11 +74,13 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 			return err
 		}
 
-		root.Acc(diff)
-
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
+			root.AdjustDiffForGCPair(&diff, pair)
 		}
+
+		root.Acc(diff)
+
 	default:
 		return ErrNotApplicableDataType
 	}

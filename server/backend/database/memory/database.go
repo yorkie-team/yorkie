@@ -796,8 +796,8 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
-func (d *DB) FindClientInfosByAttachedDocRefKey(
+// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
@@ -1600,7 +1600,7 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (d *DB) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
