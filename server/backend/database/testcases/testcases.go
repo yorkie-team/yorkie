@@ -1719,3 +1719,115 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	}
 	assert.EqualValues(t, expectedKeys, keys)
 }
+
+// RunDeactivateClientTest runs the deactivate client tests for the given db.
+func RunDeactivateClientTest(t *testing.T, db database.Database) {
+	t.Run("deactivate client with attached documents", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create a test project
+		project, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-DeactivateClientTest", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+
+		// Activate a client
+		clientInfo, err := db.ActivateClient(ctx, project.ID, t.Name(), nil)
+		assert.NoError(t, err)
+		assert.Equal(t, database.ClientActivated, clientInfo.Status)
+
+		// Create and attach a document
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), helper.TestDocKey(t))
+		assert.NoError(t, err)
+
+		err = clientInfo.AttachDocument(docInfo.ID, false)
+		assert.NoError(t, err)
+
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, err)
+
+		// Verify document is attached
+		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		isAttached, err := updatedClientInfo.IsAttached(docInfo.ID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		// Deactivate the client
+		deactivatedInfo, err := db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, database.ClientDeactivated, deactivatedInfo.Status)
+
+		// Verify all documents are detached
+		isAttached, err = deactivatedInfo.IsAttached(docInfo.ID)
+		assert.NoError(t, err)
+		assert.False(t, isAttached)
+
+		// Verify no error when checking for attached documents
+		err = deactivatedInfo.EnsureDocumentsNotAttachedWhenDeactivated()
+		assert.NoError(t, err)
+	})
+
+	t.Run("deactivate client with multiple documents", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Create a test project
+		project, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-DeactivateClientTest-Multiple", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+
+		// Activate a client
+		clientInfo, err := db.ActivateClient(ctx, project.ID, t.Name(), nil)
+		assert.NoError(t, err)
+
+		// Create and attach multiple documents
+		docCount := 3
+		docInfos := make([]*database.DocInfo, docCount)
+
+		for i := 0; i < docCount; i++ {
+			docKey := key.Key(fmt.Sprintf("test-doc-%d", i))
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+			assert.NoError(t, err)
+			docInfos[i] = docInfo
+
+			err = clientInfo.AttachDocument(docInfo.ID, false)
+			assert.NoError(t, err)
+
+			err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+			assert.NoError(t, err)
+		}
+
+		// Verify all documents are attached
+		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+
+		for _, docInfo := range docInfos {
+			isAttached, err := updatedClientInfo.IsAttached(docInfo.ID)
+			assert.NoError(t, err)
+			assert.True(t, isAttached)
+		}
+
+		// Deactivate the client
+		deactivatedInfo, err := db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, database.ClientDeactivated, deactivatedInfo.Status)
+
+		// Verify all documents are detached
+		for _, docInfo := range docInfos {
+			isAttached, err := deactivatedInfo.IsAttached(docInfo.ID)
+			assert.NoError(t, err)
+			assert.False(t, isAttached)
+		}
+
+		// Verify no error when checking for attached documents
+		err = deactivatedInfo.EnsureDocumentsNotAttachedWhenDeactivated()
+		assert.NoError(t, err)
+	})
+}
