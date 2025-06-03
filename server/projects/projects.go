@@ -170,7 +170,6 @@ func RotateProjectKeys(
 	if err != nil {
 		return nil, nil, err
 	}
-
 	// Generate new API keys
 	publicKey := shortuuid.New()
 	secretKey := shortuuid.New()

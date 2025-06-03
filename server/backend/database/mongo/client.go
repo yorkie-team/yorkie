@@ -824,8 +824,8 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
-func (c *Client) FindClientInfosByAttachedDocRefKey(
+// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
@@ -868,12 +868,12 @@ func (c *Client) FindOrCreateDocInfo(
 			"accessed_at": now,
 		},
 	}, options.Update().SetUpsert(true))
-	if err != nil {
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
 		return nil, fmt.Errorf("upsert document: %w", err)
 	}
 
 	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
+	if res != nil && res.UpsertedCount > 0 {
 		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 			"project_id": clientRefKey.ProjectID,
 			"_id":        res.UpsertedID,
@@ -1584,7 +1584,7 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,

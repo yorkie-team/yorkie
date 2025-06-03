@@ -286,13 +286,6 @@ func (s *adminServer) CreateDocument(
 		}
 	}
 
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, key.Key(req.Msg.DocumentKey)))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	doc, err := documents.CreateDocument(
 		ctx,
 		s.backend,
@@ -492,13 +485,6 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	doc, err := documents.UpdateDocument(
 		ctx,
 		s.backend,
@@ -530,13 +516,6 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	if err != nil {
 		return nil, err
 	}
-
-	locker := s.backend.Lockers.Locker(packs.DocEditKey(project.ID, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	if err := documents.RemoveDocument(
 		ctx, s.backend,

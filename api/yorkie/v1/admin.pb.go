@@ -2119,13 +2119,11 @@ func (x *GetServerVersionResponse) GetBuildDate() string {
 	return ""
 }
 
-// RotateProjectKeysRequest is the request message for rotating project API keys.
 type RotateProjectKeysRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The ID of the project to rotate keys for.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 }
 
@@ -2168,13 +2166,11 @@ func (x *RotateProjectKeysRequest) GetId() string {
 	return ""
 }
 
-// RotateProjectKeysResponse is the response message containing the updated project.
 type RotateProjectKeysResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The updated project with new API keys.
 	Project *Project `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
 }
 
