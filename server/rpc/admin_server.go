@@ -37,19 +37,26 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
 type adminServer struct {
-	backend      *backend.Backend
-	tokenManager *auth.TokenManager
+	backend           *backend.Backend
+	tokenManager      *auth.TokenManager
+	yorkieInterceptor *interceptors.YorkieServiceInterceptor
 }
 
 // newAdminServer creates a new instance of adminServer.
-func newAdminServer(be *backend.Backend, tokenManager *auth.TokenManager) *adminServer {
+func newAdminServer(
+	be *backend.Backend,
+	tokenManager *auth.TokenManager,
+	yorkieInterceptor *interceptors.YorkieServiceInterceptor,
+) *adminServer {
 	return &adminServer{
-		backend:      be,
-		tokenManager: tokenManager,
+		backend:           be,
+		tokenManager:      tokenManager,
+		yorkieInterceptor: yorkieInterceptor,
 	}
 }
 
@@ -628,7 +635,7 @@ func (s *adminServer) RotateProjectKeys(
 	user := users.From(ctx)
 
 	// Call projects package to rotate keys
-	project, err := projects.RotateProjectKeys(
+	oldProject, newProject, err := projects.RotateProjectKeys(
 		ctx,
 		s.backend,
 		user.ID,
@@ -638,8 +645,11 @@ func (s *adminServer) RotateProjectKeys(
 		return nil, err
 	}
 
+	// Invalidate project cache for the old API key only
+	s.yorkieInterceptor.InvalidateProjectCache(oldProject.PublicKey)
+
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{
-		Project: converter.ToProject(project),
+		Project: converter.ToProject(newProject),
 	}), nil
 }

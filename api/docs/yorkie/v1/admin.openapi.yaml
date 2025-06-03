@@ -2216,25 +2216,23 @@ components:
       type: object
     yorkie.v1.RotateProjectKeysRequest:
       additionalProperties: false
-      description: RotateProjectKeysRequest is the request message for rotating project
-        API keys.
+      description: ""
       properties:
         id:
           additionalProperties: false
-          description: The ID of the project to rotate keys for.
+          description: ""
           title: id
           type: string
       title: RotateProjectKeysRequest
       type: object
     yorkie.v1.RotateProjectKeysResponse:
       additionalProperties: false
-      description: RotateProjectKeysResponse is the response message containing the
-        updated project.
+      description: ""
       properties:
         project:
           $ref: '#/components/schemas/yorkie.v1.Project'
           additionalProperties: false
-          description: The updated project with new API keys.
+          description: ""
           title: project
           type: object
       title: RotateProjectKeysResponse
