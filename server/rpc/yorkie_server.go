@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -33,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -130,7 +128,7 @@ func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
 	req *connect.Request[api.AttachDocumentRequest],
 ) (*connect.Response[api.AttachDocumentResponse], error) {
-	// 01. Validate the request
+	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -149,7 +147,6 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 02. Verify access
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
@@ -157,22 +154,14 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 03. Lock the given document
 	project := projects.From(ctx)
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
-	if err != nil {
-		return nil, err
-	}
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
-
-	// 04. Find the client and document info
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -180,17 +169,31 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfoByKeyAndOwner(ctx, s.backend, clientInfo, pack.DocumentKey, true)
+
+	// 02. Ensure the document exists and is attached to the client.
+	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// 05. Check the attachment limit
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
+	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
+		return nil, err
+	}
+
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	if project.HasAttachmentLimit() {
-		count, err := documents.GetAttachedClientsCount(ctx, s.backend, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docInfo.ID,
-		})
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+
+		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
 		if err != nil {
 			return nil, err
 		}
@@ -200,18 +203,8 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}
 
-	// 06. Fetch ruleset from the given schema
-	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	// 07. Attach the document to the client and push/pull the changes
-	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	// 03. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusAttached,
 	})
@@ -228,8 +221,9 @@ func (s *yorkieServer) AttachDocument(
 	}
 
 	return connect.NewResponse(&api.AttachDocumentResponse{
-		ChangePack: pbChangePack,
-		DocumentId: docInfo.ID.String(),
+		ChangePack:         pbChangePack,
+		DocumentId:         docInfo.ID.String(),
+		MaxSizePerDocument: int32(project.MaxSizePerDocument),
 	}), nil
 }
 
@@ -238,6 +232,7 @@ func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
 	req *connect.Request[api.DetachDocumentRequest],
 ) (*connect.Response[api.DetachDocumentResponse], error) {
+	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -260,20 +255,13 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	project := projects.From(ctx)
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
-	if err != nil {
-		return nil, err
-	}
 
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
 	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
-
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -282,33 +270,37 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     docID,
-	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
-	if err != nil {
-		return nil, err
-	}
-
-	isAttached, err := documents.IsDocumentAttached(
-		ctx, s.backend,
-		docRefKey,
-		clientInfo.ID,
-	)
-	if err != nil {
-		return nil, err
+	// 02. Set the document status if it is not attached.
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	if project.HasAttachmentLimit() {
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
 	}
 
+	// NOTE(hackerwins): If the project does not have an attachment limit,
+	// removing the document by removeIfNotAttached does not guarantee that
+	// the document is not attached to the client.
 	var status document.StatusType
-	if req.Msg.RemoveIfNotAttached && !isAttached {
-		pack.IsRemoved = true
-		status = document.StatusRemoved
+	if req.Msg.RemoveIfNotAttached {
+		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAttached {
+			pack.IsRemoved = true
+			status = document.StatusRemoved
+		}
 	} else {
 		status = document.StatusDetached
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+	// 03. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: status,
 	})
@@ -332,6 +324,79 @@ func (s *yorkieServer) PushPullChanges(
 	ctx context.Context,
 	req *connect.Request[api.PushPullChangesRequest],
 ) (*connect.Response[api.PushPullChangesResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
+	if err != nil {
+		return nil, err
+	}
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+	syncMode := types.SyncModePushPull
+	if req.Msg.PushOnly {
+		syncMode = types.SyncModePushOnly
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.PushPull,
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
+	defer func() {
+		if err := locker.Unlock(); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Ensure the document attached to the client.
+	if err := clientInfo.EnsureDocumentAttached(docID); err != nil {
+		return nil, err
+	}
+
+	// 03. Push/Pull between the client and server.
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
+		Mode:   syncMode,
+		Status: document.StatusAttached,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.PushPullChangesResponse{
+		ChangePack: pbChangePack,
+	}), nil
+}
+
+// RemoveDocument removes the given document.
+func (s *yorkieServer) RemoveDocument(
+	ctx context.Context,
+	req *connect.Request[api.RemoveDocumentRequest],
+) (*connect.Response[api.RemoveDocumentResponse], error) {
+	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -347,7 +412,7 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.PushPull,
+		Method:     types.RemoveDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
@@ -355,25 +420,12 @@ func (s *yorkieServer) PushPullChanges(
 
 	project := projects.From(ctx)
 
-	if pack.HasChanges() {
-		locker, err := s.backend.Lockers.Locker(
-			ctx,
-			packs.DocEditKey(project.ID, pack.DocumentKey),
-		)
-		if err != nil {
-			return nil, err
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
+	defer func() {
+		if err := locker.Unlock(); err != nil {
+			logging.DefaultLogger().Error(err)
 		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	}
-
+	}()
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -382,27 +434,20 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     docID,
-	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	if project.HasAttachmentLimit() {
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
 	}
 
-	syncMode := types.SyncModePushPull
-	if req.Msg.PushOnly {
-		syncMode = types.SyncModePushOnly
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
-		Mode:   syncMode,
-		Status: document.StatusAttached,
+	// 02. Push/Pull between the client and server.
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushPull,
+		Status: document.StatusRemoved,
 	})
 	if err != nil {
 		return nil, err
@@ -413,7 +458,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.PushPullChangesResponse{
+	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
 }
@@ -435,10 +480,6 @@ func (s *yorkieServer) WatchDocument(
 	if err != nil {
 		return err
 	}
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     docID,
-	}
 
 	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -447,11 +488,8 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	docInfo, err := documents.FindDocInfoByRefKey(
-		ctx,
-		s.backend,
-		docRefKey,
-	)
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil
 	}
@@ -463,35 +501,21 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	locker, err := s.backend.Lockers.Locker(
-		ctx,
-		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)),
-	)
-	if err != nil {
-		return err
-	}
-	if err := locker.Lock(ctx); err != nil {
-		return err
-	}
+	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
 	defer func() {
-		if err := locker.Unlock(context.Background()); err != nil {
+		if err := locker.Unlock(); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(
-		ctx,
-		clientID,
-		docRefKey,
-		project.MaxSubscribersPerDocument,
-	)
+	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
 	if err != nil {
 		return err
 	}
 
 	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
-		if err := s.unwatchDoc(ctx, subscription, docRefKey); err != nil {
+		if err := s.unwatchDoc(ctx, subscription, docKey); err != nil {
 			logging.From(ctx).Error(err)
 		} else {
 			s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
@@ -549,140 +573,54 @@ func (s *yorkieServer) WatchDocument(
 	}
 }
 
-// RemoveDocument removes the given document.
-func (s *yorkieServer) RemoveDocument(
-	ctx context.Context,
-	req *connect.Request[api.RemoveDocumentRequest],
-) (*connect.Response[api.RemoveDocumentResponse], error) {
-	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
-	if err != nil {
-		return nil, err
-	}
-
-	pack, err := converter.FromChangePack(req.Msg.ChangePack)
-	if err != nil {
-		return nil, err
-	}
-	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.RemoveDocument,
-		Attributes: auth.AccessAttributes(pack),
-	}); err != nil {
-		return nil, err
-	}
-
-	project := projects.From(ctx)
-
-	if pack.HasChanges() {
-		locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, pack.DocumentKey))
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
-	}
-
-	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     docID,
-	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
-	if err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushPull,
-		Status: document.StatusRemoved,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&api.RemoveDocumentResponse{
-		ChangePack: pbChangePack,
-	}), nil
-}
-
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID time.ActorID,
 	docKey types.DocRefKey,
 	limit int,
 ) (*pubsub.Subscription, []time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
+	sub, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	s.backend.PubSub.Publish(
-		ctx,
-		subscription.Subscriber(),
-		events.DocEvent{
-			Type:      events.DocWatchedEvent,
-			Publisher: subscription.Subscriber(),
-			DocRefKey: docKey,
-		},
-	)
+	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
+		Type:      events.DocWatched,
+		Publisher: sub.Subscriber(),
+		DocRefKey: docKey,
+	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		events.DocWatchedEvent,
+		events.DocWatched,
 		0,
 	)
 
-	return subscription, clientIDs, nil
+	return sub, clientIDs, nil
 }
 
 func (s *yorkieServer) unwatchDoc(
 	ctx context.Context,
-	subscription *pubsub.Subscription,
+	sub *pubsub.Subscription,
 	docKey types.DocRefKey,
 ) error {
-	s.backend.PubSub.Unsubscribe(ctx, docKey, subscription)
-	s.backend.PubSub.Publish(
-		ctx,
-		subscription.Subscriber(),
-		events.DocEvent{
-			Type:      events.DocUnwatchedEvent,
-			Publisher: subscription.Subscriber(),
-			DocRefKey: docKey,
-		},
-	)
+	s.backend.PubSub.Unsubscribe(ctx, docKey, sub)
+	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
+		Type:      events.DocUnwatched,
+		Publisher: sub.Subscriber(),
+		DocRefKey: docKey,
+	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		projects.From(ctx),
-		events.DocUnwatchedEvent,
+		events.DocUnwatched,
 		0,
 	)
 
 	return nil
 }
 
+// Broadcast sends the given payload to all clients watching the document.
 func (s *yorkieServer) Broadcast(
 	ctx context.Context,
 	req *connect.Request[api.BroadcastRequest],
@@ -697,16 +635,9 @@ func (s *yorkieServer) Broadcast(
 	if err != nil {
 		return nil, err
 	}
-	docKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     docID,
-	}
 
-	docInfo, err := documents.FindDocInfoByRefKey(
-		ctx,
-		s.backend,
-		docKey,
-	)
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil, err
 	}
@@ -726,23 +657,19 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	s.backend.PubSub.Publish(
-		ctx,
-		clientID,
-		events.DocEvent{
-			Type:      events.DocBroadcastEvent,
-			Publisher: clientID,
-			DocRefKey: docKey,
-			Body: events.DocEventBody{
-				Topic:   req.Msg.Topic,
-				Payload: req.Msg.Payload,
-			},
+	s.backend.PubSub.Publish(ctx, clientID, events.DocEvent{
+		Type:      events.DocBroadcast,
+		Publisher: clientID,
+		DocRefKey: docKey,
+		Body: events.DocEventBody{
+			Topic:   req.Msg.Topic,
+			Payload: req.Msg.Payload,
 		},
-	)
+	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
 		project,
-		events.DocBroadcastEvent,
+		events.DocBroadcast,
 		len(req.Msg.Payload),
 	)
 

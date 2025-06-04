@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.6.12
+YORKIE_VERSION := 0.6.14
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
@@ -69,6 +69,17 @@ docker: ## builds docker images with the current version and latest tag
 docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
+start: ## runs the server in the background and redirects output to a log file
+	CGO_ENABLED=0 go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
+	./bin/yorkie server --mongo-connection-uri mongodb://localhost:27017 --enable-pprof > yorkie-server.log 2>&1 &
+	@echo "Server is running in background. Check logs in yorkie-server.log"
+	@echo "To stop the server, run: pkill -f 'yorkie server'"
+
+stop: ## stops the server
+	@echo "Stopping server..."
+	@pkill -f 'yorkie server'
+	@echo "Server stopped."
+
 swagger: ## runs swagger-ui with the yorkie api docs
 	docker run -p 3000:8080 \
   		-e URLS="[ \
@@ -84,4 +95,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest help
+.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest start stop swagger help

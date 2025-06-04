@@ -276,18 +276,24 @@ func (n *TreeNode) Purge(child GCChild) error {
 }
 
 // Split splits the node at the given offset.
-func (n *TreeNode) Split(tree *Tree, offset int, issueTimeTicket func() *time.Ticket) error {
+func (n *TreeNode) Split(
+	tree *Tree,
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+) (resource.DataSize, error) {
 	var split *TreeNode
 	var err error
+	var diff resource.DataSize
+
 	if n.IsText() {
-		split, err = n.SplitText(offset, n.id.Offset)
+		split, diff, err = n.SplitText(offset, n.id.Offset)
 		if err != nil {
-			return err
+			return diff, err
 		}
 	} else {
-		split, err = n.SplitElement(offset, issueTimeTicket)
+		split, diff, err = n.SplitElement(offset, issueTimeTicket)
 		if err != nil {
-			return err
+			return diff, err
 		}
 	}
 
@@ -302,13 +308,18 @@ func (n *TreeNode) Split(tree *Tree, offset int, issueTimeTicket func() *time.Ti
 		tree.NodeMapByID.Put(split.id, split)
 	}
 
-	return nil
+	return diff, nil
 }
 
 // SplitText splits the text node at the given offset.
-func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
+func (n *TreeNode) SplitText(
+	offset int,
+	absOffset int,
+) (*TreeNode, resource.DataSize, error) {
+	var diff resource.DataSize
+
 	if offset == 0 || offset == n.Len() {
-		return nil, nil
+		return nil, diff, nil
 	}
 
 	encoded := utf16.Encode([]rune(n.Value))
@@ -316,8 +327,10 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 	rightRune := utf16.Decode(encoded[offset:])
 
 	if len(rightRune) == 0 {
-		return nil, nil
+		return nil, diff, nil
 	}
+
+	prevSize := n.DataSize()
 
 	n.Value = string(leftRune)
 	n.Index.Length = len(leftRune)
@@ -332,34 +345,49 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 		rightNode.Index,
 		n.Index,
 	); err != nil {
-		return nil, err
+		return nil, diff, err
 	}
 
-	return rightNode, nil
+	// NOTE(hackerwins): Calculate data size after node splitting:
+	// Take the sum of the two split nodes(left and right) minus the size of
+	// the original node. This calculates the net metadata overhead added by
+	// the split operation.
+	diff.Add(n.DataSize(), rightNode.DataSize())
+	diff.Sub(prevSize)
+
+	return rightNode, diff, nil
 }
 
 // SplitElement splits the given element at the given offset.
-func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket) (*TreeNode, error) {
+func (n *TreeNode) SplitElement(
+	offset int,
+	issueTimeTicket func() *time.Ticket,
+) (*TreeNode, resource.DataSize, error) {
+	var diff resource.DataSize
+
+	prvSize := n.DataSize()
+
 	// TODO(hackerwins): Define IDString of split node for concurrent editing.
 	// Text has fixed content and its split nodes could have limited offset
 	// range. But element node could have arbitrary children and its split
 	// nodes could have arbitrary offset range. So, id could be duplicated
 	// and its order could be broken when concurrent editing happens.
 	// Currently, we use the similar IDString of split element with the split text.
+	// TODO(raararaara): We need to check if the attributes are copied correctly when splitting elements.
 	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), nil)
 	split.removedAt = n.removedAt
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
-		return nil, err
+		return nil, diff, err
 	}
 	split.Index.UpdateAncestorsSize()
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
 	if err := n.Index.SetChildren(leftChildren); err != nil {
-		return nil, err
+		return nil, diff, err
 	}
 	if err := split.Index.SetChildren(rightChildren); err != nil {
-		return nil, err
+		return nil, diff, err
 	}
 
 	nodeLength := 0
@@ -374,7 +402,14 @@ func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket)
 	}
 	split.Index.Length = splitLength
 
-	return split, nil
+	// NOTE(hackerwins): Calculate data size after node splitting:
+	// Take the sum of the two split nodes(left and right) minus the size of
+	// the original node. This calculates the net metadata overhead added by
+	// the split operation.
+	diff.Add(n.DataSize(), split.DataSize())
+	diff.Sub(prvSize)
+
+	return split, diff, nil
 }
 
 // remove marks the node as removed.
@@ -753,7 +788,7 @@ func (t *Tree) EditT(
 		return err
 	}
 
-	_, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	_, _, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
 	return err
 }
 
@@ -801,23 +836,27 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, error) {
+) ([]GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
 	// 01. find nodes from the given range and split nodes.
-	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
-	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
+
+	diff.Add(diffFrom, diffTo)
 
 	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
 		editedAt, versionVector,
 	)
 	if err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
 	// 02. Delete: delete the nodes that are marked as removed.
@@ -835,14 +874,14 @@ func (t *Tree) Edit(
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
 			if err := fromParent.Append(node); err != nil {
-				return nil, err
+				return nil, resource.DataSize{}, err
 			}
 		}
 	}
 
 	// 04. Split: split the element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket); err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
 	// 05. Insert: insert the given node at the given position.
@@ -855,13 +894,13 @@ func (t *Tree) Edit(
 				// 05-1-1. when there's no leftSibling, then insert content into very front of parent's children List
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
-					return nil, err
+					return nil, resource.DataSize{}, err
 				}
 			} else {
 				// 05-1-2. insert after leftSibling
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
-					return nil, err
+					return nil, resource.DataSize{}, err
 				}
 			}
 
@@ -875,6 +914,8 @@ func (t *Tree) Edit(
 						Parent: t,
 						Child:  node.Value,
 					})
+				} else {
+					diff.Add(node.Value.DataSize())
 				}
 
 				t.NodeMapByID.Put(node.Value.id, node.Value)
@@ -882,7 +923,7 @@ func (t *Tree) Edit(
 		}
 	}
 
-	return pairs, nil
+	return pairs, diff, nil
 }
 
 // collectBetween collects nodes that are marked as removed or moved.
@@ -975,7 +1016,7 @@ func (t *Tree) split(
 
 			offset++
 		}
-		if err := parent.Split(t, offset, issueTimeTicket); err != nil {
+		if _, err := parent.Split(t, offset, issueTimeTicket); err != nil {
 			return err
 		}
 		left = parent
@@ -1008,15 +1049,15 @@ func (t *Tree) StyleByIndex(
 	attributes map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, error) {
+) ([]GCPair, resource.DataSize, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
 	toPos, err := t.FindPos(end)
 	if err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
 	return t.Style(fromPos, toPos, attributes, editedAt, versionVector)
@@ -1028,15 +1069,19 @@ func (t *Tree) Style(
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, error) {
-	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
+) ([]GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
-	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
+
+	diff.Add(diffFrom, diffTo)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 
@@ -1067,13 +1112,16 @@ func (t *Tree) Style(
 						Child:  rhtNode,
 					})
 				}
+				if newNode, ok := node.Attrs.nodeMapByKey[key]; ok && token.TokenType != index.End {
+					diff.Add(newNode.DataSize())
+				}
 			}
 		}
 	}); err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
-	return pairs, nil
+	return pairs, diff, nil
 }
 
 // RemoveStyle removes the given attributes of the given range.
@@ -1083,15 +1131,19 @@ func (t *Tree) RemoveStyle(
 	attrs []string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, error) {
-	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
+) ([]GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
-	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, diff, err
 	}
+
+	diff.Add(diffFrom, diffTo)
 
 	isVersionVectorEmpty := len(versionVector) == 0
 
@@ -1126,10 +1178,10 @@ func (t *Tree) RemoveStyle(
 			}
 		}
 	}); err != nil {
-		return nil, err
+		return nil, resource.DataSize{}, err
 	}
 
-	return pairs, nil
+	return pairs, diff, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
@@ -1138,12 +1190,13 @@ func (t *Tree) RemoveStyle(
 // from indexTree.TreePos which is a position of the tree in physical
 // perspective.
 func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
-	*TreeNode, *TreeNode, error,
+	*TreeNode, *TreeNode, resource.DataSize, error,
 ) {
+	var diff resource.DataSize
 	// 01. Find the parent and left sibling nodes of the given position.
 	parentNode, leftNode := t.ToTreeNodes(pos)
 	if parentNode == nil || leftNode == nil {
-		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
+		return nil, nil, diff, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
 	}
 
 	// 02. Determine whether the position is left-most and the exact parent
@@ -1156,10 +1209,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 	// 03. Split text node if the left node is text node.
 	if leftNode.IsText() {
-		err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil)
+		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, diff, err
 		}
+		diff = diff2
 	}
 
 	// 04. Find the appropriate left node. If some nodes are inserted at the
@@ -1179,7 +1233,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		leftNode = next
 	}
 
-	return realParentNode, leftNode, nil
+	return realParentNode, leftNode, diff, nil
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.

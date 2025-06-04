@@ -37,20 +37,27 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 	"github.com/yorkie-team/yorkie/server/schemas"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
 type adminServer struct {
-	backend      *backend.Backend
-	tokenManager *auth.TokenManager
+	backend           *backend.Backend
+	tokenManager      *auth.TokenManager
+	yorkieInterceptor *interceptors.YorkieServiceInterceptor
 }
 
 // newAdminServer creates a new instance of adminServer.
-func newAdminServer(be *backend.Backend, tokenManager *auth.TokenManager) *adminServer {
+func newAdminServer(
+	be *backend.Backend,
+	tokenManager *auth.TokenManager,
+	yorkieInterceptor *interceptors.YorkieServiceInterceptor,
+) *adminServer {
 	return &adminServer{
-		backend:      be,
-		tokenManager: tokenManager,
+		backend:           be,
+		tokenManager:      tokenManager,
+		yorkieInterceptor: yorkieInterceptor,
 	}
 }
 
@@ -280,19 +287,6 @@ func (s *adminServer) CreateDocument(
 		}
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, key.Key(req.Msg.DocumentKey)))
-	if err != nil {
-		return nil, err
-	}
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	doc, err := documents.CreateDocument(
 		ctx,
 		s.backend,
@@ -492,19 +486,6 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	doc, err := documents.UpdateDocument(
 		ctx,
 		s.backend,
@@ -537,20 +518,6 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	if err := documents.RemoveDocument(
 		ctx, s.backend,
 		docInfo.RefKey(),
@@ -565,7 +532,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		ctx,
 		publisherID,
 		events.DocEvent{
-			Type:      events.DocChangedEvent,
+			Type:      events.DocChanged,
 			Publisher: publisherID,
 			DocRefKey: docInfo.RefKey(),
 		},
@@ -772,5 +739,35 @@ func (s *adminServer) GetServerVersion(
 		YorkieVersion: version.Version,
 		GoVersion:     runtime.Version(),
 		BuildDate:     version.BuildDate,
+	}), nil
+}
+
+// RotateProjectKeys rotates the API keys of the project.
+func (s *adminServer) RotateProjectKeys(
+	ctx context.Context,
+	req *connect.Request[api.RotateProjectKeysRequest],
+) (*connect.Response[api.RotateProjectKeysResponse], error) {
+	user := users.From(ctx)
+
+	oldProject, newProject, err := projects.RotateProjectKeys(
+		ctx,
+		s.backend,
+		user.ID,
+		types.ID(req.Msg.Id),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// NOTE(hackerwins): Each node maintains its own in-memory project cache.
+	// So invalidating the cache on a single node may not be sufficient to
+	// ensure consistency across the entire cluster.
+	// After introducing broadcasting across the cluster, we need to broadcast
+	// the project cache invalidation event to all nodes.
+	s.yorkieInterceptor.InvalidateProjectCache(oldProject.PublicKey)
+
+	// Return updated project
+	return connect.NewResponse(&api.RotateProjectKeysResponse{
+		Project: converter.ToProject(newProject),
 	}), nil
 }

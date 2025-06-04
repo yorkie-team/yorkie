@@ -19,7 +19,6 @@
 package bench
 
 import (
-	"context"
 	gosync "sync"
 	"testing"
 
@@ -57,12 +56,9 @@ func benchmarkMemorySync(cnt int, b *testing.B) {
 			go func() {
 				defer wg.Done()
 
-				ctx := context.Background()
-				locker, err := locker.Locker(ctx, sync.Key(b.Name()))
-				assert.NoError(b, err)
-				assert.NoError(b, locker.Lock(ctx))
+				locker := locker.Locker(sync.Key(b.Name()))
 				sum += 1
-				assert.NoError(b, locker.Unlock(ctx))
+				assert.NoError(b, locker.Unlock())
 			}()
 		}
 		wg.Wait()

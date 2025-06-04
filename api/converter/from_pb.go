@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
@@ -72,6 +73,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument: int(pbProject.MaxAttachmentsPerDocument),
+		MaxSizePerDocument:        int(pbProject.MaxSizePerDocument),
 		AllowedOrigins:            pbProject.AllowedOrigins,
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
@@ -99,6 +101,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 		AccessedAt:      pbSummary.AccessedAt.AsTime(),
 		UpdatedAt:       pbSummary.UpdatedAt.AsTime(),
 		Snapshot:        pbSummary.Snapshot,
+		DocSize:         FromDocSize(pbSummary.DocumentSize),
 	}
 }
 
@@ -215,15 +218,31 @@ func FromDocumentID(pbID string) (types.ID, error) {
 func FromEventType(pbDocEventType api.DocEventType) (events.DocEventType, error) {
 	switch pbDocEventType {
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED:
-		return events.DocChangedEvent, nil
+		return events.DocChanged, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED:
-		return events.DocWatchedEvent, nil
+		return events.DocWatched, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED:
-		return events.DocUnwatchedEvent, nil
+		return events.DocUnwatched, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST:
-		return events.DocBroadcastEvent, nil
+		return events.DocBroadcast, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
+}
+
+// FromDataSize converts the given Protobuf formats to model format.
+func FromDataSize(pbDataSize *api.DataSize) resource.DataSize {
+	return resource.DataSize{
+		Data: int(pbDataSize.Data),
+		Meta: int(pbDataSize.Meta),
+	}
+}
+
+// FromDocSize converts the given Protobuf formats to model format.
+func FromDocSize(pbDocSize *api.DocSize) resource.DocSize {
+	return resource.DocSize{
+		Live: FromDataSize(pbDocSize.Live),
+		GC:   FromDataSize(pbDocSize.Gc),
+	}
 }
 
 // FromOperations converts the given Protobuf formats to model format.
@@ -904,6 +923,10 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.MaxAttachmentsPerDocument != nil {
 		value := int(pbProjectFields.MaxAttachmentsPerDocument.Value)
 		updatableProjectFields.MaxAttachmentsPerDocument = &value
+	}
+	if pbProjectFields.MaxSizePerDocument != nil {
+		value := int(pbProjectFields.MaxSizePerDocument.Value)
+		updatableProjectFields.MaxSizePerDocument = &value
 	}
 	if pbProjectFields.AllowedOrigins != nil {
 		updatableProjectFields.AllowedOrigins = &pbProjectFields.AllowedOrigins.Origins

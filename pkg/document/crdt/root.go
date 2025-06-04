@@ -41,6 +41,7 @@ type Root struct {
 	elementMap       map[string]Element
 	gcElementPairMap map[string]ElementPair
 	gcNodePairMap    map[string]GCPair
+	docSize          resource.DocSize
 }
 
 // NewRoot creates a new instance of Root.
@@ -49,6 +50,16 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[string]GCPair),
+		docSize: resource.DocSize{
+			Live: resource.DataSize{
+				Data: 0,
+				Meta: 0,
+			},
+			GC: resource.DataSize{
+				Data: 0,
+				Meta: 0,
+			},
+		},
 	}
 
 	r.object = root
@@ -88,15 +99,14 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(element Element) {
 	r.elementMap[element.CreatedAt().Key()] = element
+	r.docSize.Live.Add(element.DataSize())
 
-	switch element := element.(type) {
-	case Container:
-		{
-			element.Descendants(func(elem Element, parent Container) bool {
-				r.elementMap[elem.CreatedAt().Key()] = elem
-				return false
-			})
-		}
+	if element, ok := element.(Container); ok {
+		element.Descendants(func(elem Element, parent Container) bool {
+			r.elementMap[elem.CreatedAt().Key()] = elem
+			r.docSize.Live.Add(elem.DataSize())
+			return false
+		})
 	}
 }
 
@@ -104,23 +114,22 @@ func (r *Root) RegisterElement(element Element) {
 func (r *Root) deregisterElement(element Element) int {
 	count := 0
 
-	deregisterElementInternal := func(elem Element) {
+	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
+		r.docSize.GC.Sub(elem.DataSize())
+
 		delete(r.elementMap, createdAt)
 		delete(r.gcElementPairMap, createdAt)
 		count++
 	}
 
-	deregisterElementInternal(element)
+	deregister(element)
 
-	switch element := element.(type) {
-	case Container:
-		{
-			element.Descendants(func(elem Element, parent Container) bool {
-				deregisterElementInternal(elem)
-				return false
-			})
-		}
+	if element, ok := element.(Container); ok {
+		element.Descendants(func(elem Element, parent Container) bool {
+			deregister(elem)
+			return false
+		})
 	}
 
 	return count
@@ -128,42 +137,21 @@ func (r *Root) deregisterElement(element Element) int {
 
 // RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
+	r.docSize.GC.Add(elem.DataSize())
+	r.docSize.Live.Sub(elem.DataSize())
+	// NOTE(hackerwins): When an element is removed, parent sets the removedAt
+	// to mark the child as removed.
+	r.docSize.Live.Meta += time.TicketSize
+
 	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{
 		parent,
 		elem,
 	}
 }
 
+// DocSize returns the size of the document.
 func (r *Root) DocSize() resource.DocSize {
-	docSize := resource.DocSize{
-		Live: resource.DataSize{
-			Data: 0,
-			Meta: 0,
-		},
-		GC: resource.DataSize{
-			Data: 0,
-			Meta: 0,
-		},
-	}
-
-	for createdAt, element := range r.elementMap {
-		elementSize := element.DataSize()
-		if _, exists := r.gcElementPairMap[createdAt]; exists {
-			docSize.GC.Data += elementSize.Data
-			docSize.GC.Meta += elementSize.Meta
-		} else {
-			docSize.Live.Data += elementSize.Data
-			docSize.Live.Meta += elementSize.Meta
-		}
-	}
-
-	for _, pair := range r.gcNodePairMap {
-		size := pair.Child.DataSize()
-		docSize.GC.Data += size.Data
-		docSize.GC.Meta += size.Meta
-	}
-
-	return docSize
+	return r.docSize
 }
 
 // DeepCopy copies itself deeply.
@@ -215,8 +203,7 @@ func (r *Root) GarbageElementLen() int {
 	for _, pair := range r.gcElementPairMap {
 		seen[pair.elem.CreatedAt().Key()] = true
 
-		switch elem := pair.elem.(type) {
-		case Container:
+		if elem, ok := pair.elem.(Container); ok {
 			elem.Descendants(func(elem Element, parent Container) bool {
 				seen[elem.CreatedAt().Key()] = true
 				return false
@@ -236,10 +223,35 @@ func (r *Root) GarbageLen() int {
 func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
-	if _, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
-		delete(r.gcNodePairMap, pair.Child.IDString())
+	if p, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
+		size := p.Child.DataSize()
+		r.docSize.GC.Sub(size)
+
+		delete(r.gcNodePairMap, p.Child.IDString())
 		return
 	}
 
 	r.gcNodePairMap[pair.Child.IDString()] = pair
+
+	size := pair.Child.DataSize()
+	r.docSize.GC.Add(size)
+}
+
+// Acc accumulates the given DataSize to Live.
+func (r *Root) Acc(diff resource.DataSize) {
+	r.docSize.Live.Add(diff)
+}
+
+// AdjustDiffForGCPair adjusts the given diff for the given GCPair.
+func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
+	size := pair.Child.DataSize()
+	diff.Sub(size)
+
+	// NOTE(hackerwins): In general cases, when removing a node, its size
+	// includes removedAt, so when subtracting the node size from docSize.Live,
+	// we need to subtract the removedAt size. However, RHTNode doesn't have
+	// removedAt, so we don't need to subtract it from the Live size.
+	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
+		diff.Meta += time.TicketSize
+	}
 }

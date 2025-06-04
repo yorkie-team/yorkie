@@ -55,6 +55,8 @@ service AdminService {
   rpc RemoveSchema (RemoveSchemaRequest) returns (RemoveSchemaResponse) {}
 
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
+
+  rpc RotateProjectKeys(RotateProjectKeysRequest) returns (RotateProjectKeysResponse) {}
 }
 
 message SignUpRequest {
@@ -290,4 +292,12 @@ message GetServerVersionResponse {
   string yorkie_version = 1;
   string go_version = 2;
   string build_date = 3;
+}
+
+message RotateProjectKeysRequest {
+  string id = 1;
+}
+
+message RotateProjectKeysResponse {
+  Project project = 1;
 }

@@ -35,6 +35,9 @@ import (
 var (
 	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
 	ErrUnsupportedPayloadType = errors.New("unsupported payload type")
+
+	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
+	ErrDocumentSizeExceedsLimit = errors.New("document size exceeds the limit")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -106,6 +109,9 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *innerpresence.Map
 
+	// MaxSizeLimit is the maximum size of a document in bytes.
+	MaxSizeLimit int
+
 	// events is the channel to send events that occurred in the document.
 	events chan DocEvent
 
@@ -163,10 +169,20 @@ func (d *Document) Update(
 		json.NewObject(ctx, d.cloneRoot.Object()),
 		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.New())),
 	); err != nil {
-		// drop cloneRoot because it is contaminated.
+		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
+		// clonePresences to prevent the user from accessing the invalid state.
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		return err
+	}
+
+	cloneSize := d.cloneRoot.DocSize()
+	if !ctx.IsPresenceOnlyChange() && d.MaxSizeLimit > 0 && d.MaxSizeLimit < cloneSize.Total() {
+		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
+		// clonePresences to prevent the user from accessing the invalid state.
+		d.cloneRoot = nil
+		d.clonePresences = nil
+		return ErrDocumentSizeExceedsLimit
 	}
 
 	if ctx.HasChange() {

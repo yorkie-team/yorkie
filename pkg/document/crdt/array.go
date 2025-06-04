@@ -226,10 +226,7 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 			return
 		}
 
-		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
+		if elem, ok := node.elem.(Container); ok {
 			elem.Descendants(callback)
 		}
 	}

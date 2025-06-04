@@ -73,6 +73,7 @@ func TestMain(m *testing.M) {
 		UseDefaultProject:           helper.UseDefaultProject,
 		ClientDeactivateThreshold:   helper.ClientDeactivateThreshold,
 		SnapshotThreshold:           helper.SnapshotThreshold,
+		SnapshotCacheSize:           helper.SnapshotCacheSize,
 		AuthWebhookCacheSize:        helper.AuthWebhookSize,
 		AuthWebhookCacheTTL:         helper.AuthWebhookCacheTTL.String(),
 		AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
@@ -236,6 +237,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin get server version test", func(t *testing.T) {
 		testcases.RunAdminGetServerVersionTest(t, testAdminClient)
+	})
+
+	t.Run("admin rotate project keys test", func(t *testing.T) {
+		testcases.RunAdminRotateProjectKeysTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
 }
 

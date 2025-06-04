@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/packs"
 )
 
@@ -41,6 +42,16 @@ const SnapshotMaxLen = 50
 
 // pageSizeLimit is the limit of the pagination size of documents.
 const pageSizeLimit = 101
+
+// DocAttachmentKey generates a key for the document attachment.
+func DocAttachmentKey(docKey types.DocRefKey) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-attachment-%s-%s", docKey.ProjectID, docKey.DocID))
+}
+
+// DocWatchStreamKey generates a key for watching document.
+func DocWatchStreamKey(clientID time.ActorID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-watchstream-%s-%s", clientID, docKey))
+}
 
 var (
 	// ErrDocumentAttached is returned when the document is attached when
@@ -63,14 +74,13 @@ func CreateDocument(
 	docKey key.Key,
 	initialRoot yson.Object,
 ) (*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+	docInfo, err := be.DB.FindOrCreateDocInfo(
 		ctx,
 		types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  userID,
 		},
 		docKey,
-		true,
 	)
 	if err != nil {
 		return nil, err
@@ -90,7 +100,6 @@ func CreateDocument(
 
 	if err = be.DB.CompactChangeInfos(
 		ctx,
-		project.ID,
 		docInfo,
 		docInfo.ServerSeq,
 		newDoc.CreateChangePack().Changes,
@@ -130,7 +139,7 @@ func ListDocumentSummaries(
 	var summaries []*types.DocumentSummary
 	for _, info := range infos {
 		// TODO(hackerwins): Resolve the N+1 problem.
-		clientInfos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, info.RefKey())
+		clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +186,7 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	clientInfos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, info.RefKey())
+	clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
 	if err != nil {
 		return nil, err
 	}
@@ -248,14 +257,13 @@ func GetDocumentByServerSeq(
 	k key.Key,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+	docInfo, err := be.DB.FindOrCreateDocInfo(
 		ctx,
 		types.ClientRefKey{
 			ProjectID: project.ID,
 			ClientID:  types.IDFromActorID(time.InitialActorID),
 		},
 		k,
-		false,
 	)
 	if err != nil {
 		return nil, err
@@ -322,20 +330,18 @@ func FindDocInfoByRefKey(
 	return be.DB.FindDocInfoByRefKey(ctx, refkey)
 }
 
-// FindDocInfoByKeyAndOwner returns a document for the given document key. If
+// FindOrCreateDocInfo returns a document for the given document key. If
 // createDocIfNotExist is true, it creates a new document if it does not exist.
-func FindDocInfoByKeyAndOwner(
+func FindOrCreateDocInfo(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docKey key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
-	return be.DB.FindDocInfoByKeyAndOwner(
+	return be.DB.FindOrCreateDocInfo(
 		ctx,
 		clientInfo.RefKey(),
 		docKey,
-		createDocIfNotExist,
 	)
 }
 
@@ -380,7 +386,7 @@ func UpdateDocument(
 		be,
 		project,
 		clientInfo,
-		docInfo,
+		docInfo.RefKey(),
 		doc.CreateChangePack(),
 		packs.PushPullOptions{
 			Mode:   types.SyncModePushOnly,
@@ -434,13 +440,13 @@ func IsDocumentAttached(
 	return be.DB.IsDocumentAttached(ctx, docRefKey, excludeClientID)
 }
 
-// GetAttachedClientsCount returns the number of attached clients for the given document.
-func GetAttachedClientsCount(
+// FindAttachedClientCount returns the number of attached clients for the given document.
+func FindAttachedClientCount(
 	ctx context.Context,
 	be *backend.Backend,
 	docRefKey types.DocRefKey,
 ) (int, error) {
-	infos, err := be.DB.FindClientInfosByAttachedDocRefKey(ctx, docRefKey)
+	infos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, docRefKey)
 	if err != nil {
 		return 0, err
 	}

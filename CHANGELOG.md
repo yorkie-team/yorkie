@@ -7,6 +7,34 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.14] - 2025-06-02
+
+### Changed
+
+- Simplify and unify PushPull-related logic by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1293
+- Split the monolithic document lock into separate locks by @hackerwins https://github.com/yorkie-team/yorkie/pull/1295
+
+### Fixed
+
+- Correct size calculation in deepcopy during registerElement by @raararaara in https://github.com/yorkie-team/yorkie/pull/1290
+- Resolve data races in snapshot caching logic by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1291
+- Separate correction logic in RegisterGCPair for editing and build by @raararaara in https://github.com/yorkie-team/yorkie/pull/1294
+- Modify conditions for benchmark comments in CI by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1298
+
+## [0.6.13] - 2025-05-27
+
+### Added
+
+- Add presence load test for Yorkie using k6 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1273
+- Introduce document size limit by @raararaara in https://github.com/yorkie-team/yorkie/pull/1270
+
+### Changed
+
+- Update garbage collection related TCs by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1277
+- Adjust snapshot configurations by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1279
+- Optimize snapshot handling with in-memory cache by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1280
+- Adjust lock scope for improved concurrency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1287
+
 ## [0.6.12] - 2025-05-16
 
 ### Added

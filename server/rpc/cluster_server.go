@@ -64,20 +64,6 @@ func (s *clusterServer) DetachDocument(
 	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
 	project := converter.FromProject(req.Msg.Project)
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(project.ID, summary.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -86,21 +72,12 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	docRefKey := types.DocRefKey{
-		ProjectID: project.ID,
-		DocID:     summary.ID,
-	}
-
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// 01. Create changePack with presence clear change
+	// 01. Create request pack with presence clear change.
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: summary.ID}
 	cp := clientInfo.Checkpoint(summary.ID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
-		docRefKey,
+		docKey,
 		types.ID(req.Msg.ClientId),
 		cp.ServerSeq,
 	)
@@ -114,36 +91,37 @@ func (s *clusterServer) DetachDocument(
 	)
 	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
+	pack := change.NewPack(summary.Key, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
-	changes := []*change.Change{changeCtx.ToChange()}
-	pack := change.NewPack(docInfo.Key, cp, changes, nil, nil)
+	// 02. Push the changePack to the document
+	if project.HasAttachmentLimit() {
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer func() {
+			if err := locker.Unlock(); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
 
-	// 02. PushPull with the created ChangePack.
-	if _, err := packs.PushPull(
-		ctx,
-		s.backend,
-		project,
-		clientInfo,
-		docInfo,
-		pack,
-		packs.PushPullOptions{
-			Mode:   types.SyncModePushOnly,
-			Status: document.StatusDetached,
-		},
-	); err != nil {
+	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushOnly,
+		Status: document.StatusDetached,
+	}); err != nil {
 		return nil, err
 	}
 
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
 }
 
-// CompactDocument compacts the given document.
+// CompactDocument unnecessary data from the document and its metadata to reduce
+// storage usage.
 func (s *clusterServer) CompactDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
 ) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
 	docId := types.ID(req.Msg.DocumentId)
 	projectId := types.ID(req.Msg.ProjectId)
+
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
 		ProjectID: projectId,
 		DocID:     docId,
@@ -152,20 +130,9 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectId, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
+	// TODO(hackerwins): We should prevent other requests from modifying the
+	// document's attachments while compacting it. For now, we just check if the
+	// document is attached to any client.
 	if err := packs.Compact(ctx, s.backend, projectId, docInfo); err != nil {
 		return nil, err
 	}
@@ -173,7 +140,7 @@ func (s *clusterServer) CompactDocument(
 	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (s *clusterServer) PurgeDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServicePurgeDocumentRequest],
@@ -181,34 +148,20 @@ func (s *clusterServer) PurgeDocument(
 	projectID := types.ID(req.Msg.ProjectId)
 	docID := types.ID(req.Msg.DocumentId)
 
-	docRefKey := types.DocRefKey{
-		ProjectID: projectID,
-		DocID:     docID,
-	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
+	docKey := types.DocRefKey{ProjectID: projectID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO(hackerwins): We should prevent other requests from modifying the
+	// document while purging it. For now, we just check if the document
+	// is removed.
 	if !docInfo.IsRemoved() {
 		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
 	}
 
-	locker, err := s.backend.Lockers.Locker(ctx, packs.DocEditKey(projectID, docInfo.Key))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	counts, err := s.backend.DB.PurgeDocument(ctx, docRefKey)
+	counts, err := s.backend.DB.PurgeDocument(ctx, docKey)
 	if err != nil {
 		logging.From(ctx).Error("failed to purge document", zap.Error(err))
 		return nil, err

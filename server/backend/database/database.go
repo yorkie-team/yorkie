@@ -126,6 +126,15 @@ type Database interface {
 		fields *types.UpdatableProjectFields,
 	) (*ProjectInfo, error)
 
+	// RotateProjectKeys rotates the API keys of the project.
+	RotateProjectKeys(
+		ctx context.Context,
+		owner types.ID,
+		id types.ID,
+		publicKey string,
+		secretKey string,
+	) (*ProjectInfo, error)
+
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(
 		ctx context.Context,
@@ -164,8 +173,8 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
-	FindClientInfosByAttachedDocRefKey(ctx context.Context, docRefKey types.DocRefKey) ([]*ClientInfo, error)
+	// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
@@ -203,14 +212,11 @@ type Database interface {
 		docKeys []key.Key,
 	) ([]*DocInfo, error)
 
-	// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-	// createDocIfNotExist condition is true, create the document if it does not
-	// exist.
-	FindDocInfoByKeyAndOwner(
+	// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+	FindOrCreateDocInfo(
 		ctx context.Context,
 		clientRefKey types.ClientRefKey,
 		docKey key.Key,
-		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
 	// FindDocInfoByRefKey finds the document of the given refKey.
@@ -234,7 +240,6 @@ type Database interface {
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
-		projectID types.ID,
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
@@ -244,7 +249,6 @@ type Database interface {
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
 	CompactChangeInfos(
 		ctx context.Context,
-		projectID types.ID,
 		docInfo *DocInfo,
 		lastServerSeq int64,
 		changes []*change.Change,
@@ -295,13 +299,20 @@ type Database interface {
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
-	// UpdateAndFindMinVersionVector updates the version vector of the given client
+	// UpdateMinVersionVector updates the version vector of the given client
 	// and returns the minimum version vector of all clients.
-	UpdateAndFindMinVersionVector(
+	UpdateMinVersionVector(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
-		versionVector time.VersionVector,
+		vector time.VersionVector,
+	) (time.VersionVector, error)
+
+	// GetMinVersionVector returns the minimum version vector of all clients.
+	GetMinVersionVector(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		vector time.VersionVector,
 	) (time.VersionVector, error)
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

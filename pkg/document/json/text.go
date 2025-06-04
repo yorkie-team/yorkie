@@ -76,7 +76,7 @@ func (p *Text) Edit(
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, pairs, err := p.Text.Edit(
+	_, pairs, diff, err := p.Text.Edit(
 		fromPos,
 		toPos,
 		content,
@@ -90,7 +90,10 @@ func (p *Text) Edit(
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
+
+	p.context.Acc(diff)
 
 	p.context.Push(operations.NewEdit(
 		p.CreatedAt(),
@@ -129,7 +132,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	pairs, err := p.Text.Style(
+	pairs, diff, err := p.Text.Style(
 		fromPos,
 		toPos,
 		attributes,
@@ -142,7 +145,10 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	for _, pair := range pairs {
 		p.context.RegisterGCPair(pair)
+		p.context.AdjustDiffForGCPair(&diff, pair)
 	}
+
+	p.context.Acc(diff)
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),

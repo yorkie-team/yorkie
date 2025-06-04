@@ -63,6 +63,7 @@ message AttachDocumentRequest {
 
 message AttachDocumentResponse {
   string document_id = 1;
+  int32 max_size_per_document = 3;
   ChangePack change_pack = 2;
 }
 
