@@ -1663,3 +1663,42 @@ func (d *DB) purgeDocumentInternals(
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }
+
+// RotateProjectKeys rotates the API keys of the project.
+func (d *DB) RotateProjectKeys(
+	_ context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Find project by ID and owner
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	project := raw.(*database.ProjectInfo).DeepCopy()
+	if project.Owner != owner {
+		return nil, database.ErrProjectNotFound
+	}
+
+	// Update project keys
+	project.PublicKey = publicKey
+	project.SecretKey = secretKey
+	project.UpdatedAt = gotime.Now()
+
+	// Save updated project
+	if err := txn.Insert(tblProjects, project); err != nil {
+		return nil, fmt.Errorf("update project: %w", err)
+	}
+
+	txn.Commit()
+	return project, nil
+}

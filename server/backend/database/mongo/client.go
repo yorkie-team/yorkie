@@ -419,6 +419,38 @@ func (c *Client) UpdateProjectInfo(
 	return &info, nil
 }
 
+// RotateProjectKeys rotates the API keys of the project.
+func (c *Client) RotateProjectKeys(
+	ctx context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	// Update project with new keys
+	res := c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
+		"_id":   id,
+		"owner": owner,
+	}, bson.M{
+		"$set": bson.M{
+			"public_key": publicKey,
+			"secret_key": secretKey,
+			"updated_at": gotime.Now(),
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	// Handle errors and decode result
+	info := database.ProjectInfo{}
+	if err := res.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		return nil, fmt.Errorf("decode project info: %w", err)
+	}
+
+	return &info, nil
+}
+
 // CreateUserInfo creates a new user.
 func (c *Client) CreateUserInfo(
 	ctx context.Context,

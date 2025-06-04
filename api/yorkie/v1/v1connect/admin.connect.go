@@ -102,6 +102,9 @@ const (
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
+	// AdminServiceRotateProjectKeysProcedure is the fully-qualified name of the AdminService's
+	// RotateProjectKeys RPC.
+	AdminServiceRotateProjectKeysProcedure = "/yorkie.v1.AdminService/RotateProjectKeys"
 )
 
 // AdminServiceClient is a client for the yorkie.v1.AdminService service.
@@ -125,6 +128,7 @@ type AdminServiceClient interface {
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
+	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the yorkie.v1.AdminService service. By default, it
@@ -232,6 +236,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetServerVersionProcedure,
 			opts...,
 		),
+		rotateProjectKeys: connect.NewClient[v1.RotateProjectKeysRequest, v1.RotateProjectKeysResponse](
+			httpClient,
+			baseURL+AdminServiceRotateProjectKeysProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -256,6 +265,7 @@ type adminServiceClient struct {
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
 	listChanges           *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
 	getServerVersion      *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
+	rotateProjectKeys     *connect.Client[v1.RotateProjectKeysRequest, v1.RotateProjectKeysResponse]
 }
 
 // SignUp calls yorkie.v1.AdminService.SignUp.
@@ -353,6 +363,11 @@ func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.
 	return c.getServerVersion.CallUnary(ctx, req)
 }
 
+// RotateProjectKeys calls yorkie.v1.AdminService.RotateProjectKeys.
+func (c *adminServiceClient) RotateProjectKeys(ctx context.Context, req *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error) {
+	return c.rotateProjectKeys.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the yorkie.v1.AdminService service.
 type AdminServiceHandler interface {
 	SignUp(context.Context, *connect.Request[v1.SignUpRequest]) (*connect.Response[v1.SignUpResponse], error)
@@ -374,6 +389,7 @@ type AdminServiceHandler interface {
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
+	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -477,6 +493,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetServerVersion,
 		opts...,
 	)
+	adminServiceRotateProjectKeysHandler := connect.NewUnaryHandler(
+		AdminServiceRotateProjectKeysProcedure,
+		svc.RotateProjectKeys,
+		opts...,
+	)
 	return "/yorkie.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceSignUpProcedure:
@@ -517,6 +538,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceListChangesHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
+		case AdminServiceRotateProjectKeysProcedure:
+			adminServiceRotateProjectKeysHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -600,4 +623,8 @@ func (UnimplementedAdminServiceHandler) ListChanges(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetServerVersion is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RotateProjectKeys is not implemented"))
 }

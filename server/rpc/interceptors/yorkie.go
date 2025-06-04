@@ -228,3 +228,8 @@ func (i *YorkieServiceInterceptor) checkCORS(ctx context.Context, header http.He
 		fmt.Errorf("origin %q not allowed", origin),
 	)
 }
+
+// InvalidateProjectCache removes the project from cache by its API key.
+func (i *YorkieServiceInterceptor) InvalidateProjectCache(apiKey string) {
+	i.projectCache.Remove(apiKey)
+}
