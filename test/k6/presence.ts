@@ -38,7 +38,7 @@ const TEST_MODE = __ENV.TEST_MODE || "skew";
 const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500");
 
 // Virtual users per document (for even distribution)
-const VU_PER_DOCS = parseInt(__ENV.DOC_COUNT || "10");
+const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10");
 
 // Whether to use control document (for interference testing in skew mode)
 const USE_CONTROL_DOC = __ENV.USE_CONTROL_DOC === "true";
