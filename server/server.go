@@ -25,10 +25,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -158,6 +160,21 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 		ClientID:  types.IDFromActorID(c1.ID()),
 	})
 	return err
+}
+
+// CompactDocument compacts the given document. It is used for testing.
+func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key) error {
+	project, err := r.DefaultProject(ctx)
+	if err != nil {
+		return err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, r.backend, project, docKey)
+	if err != nil {
+		return err
+	}
+
+	return packs.Compact(ctx, r.backend, project.ID, docInfo)
 }
 
 // RegisterHousekeepingTasks registers housekeeping tasks.

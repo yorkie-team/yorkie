@@ -20,6 +20,7 @@ package packs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -32,6 +33,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+var (
+	// ErrDocumentNotRemoved is returned when the document is not removed yet.
+	ErrDocumentNotRemoved = errors.New("document is not removed yet")
+)
+
 // Compact compacts the given document and its metadata and stores them in the
 // database.
 func Compact(
@@ -40,6 +46,9 @@ func Compact(
 	projectID types.ID,
 	docInfo *database.DocInfo,
 ) error {
+	// 0. Invalidate snapshot cache.
+	be.SnapshotCache.Remove(docInfo.RefKey())
+
 	// 1. Check if the document is attached.
 	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
 		ProjectID: projectID,
@@ -49,7 +58,7 @@ func Compact(
 		return err
 	}
 	if isAttached {
-		// TODO(hackerwins): ErrDocumentNotRemoved exists in documents package,
+		// TODO(hackerwins): ErrDocumentNotAttached exists in documents package,
 		// but it can not be here because of the circular dependency.
 		return fmt.Errorf("document is attached")
 	}
@@ -105,6 +114,35 @@ func Compact(
 		)
 		return err
 	}
+
+	return nil
+}
+
+// Purge removes the document from the database permanently.
+func Purge(
+	ctx context.Context,
+	be *backend.Backend,
+	projectID types.ID,
+	docInfo *database.DocInfo,
+) error {
+	// 0. Invalidate snapshot cache.
+	be.SnapshotCache.Remove(docInfo.RefKey())
+
+	// 1. Check if the document is removed.
+	if !docInfo.IsRemoved() {
+		return fmt.Errorf("document %s is not removed: %w", docInfo.ID, ErrDocumentNotRemoved)
+	}
+
+	// 2. Purge the document from the database.
+	counts, err := be.DB.PurgeDocument(ctx, docInfo.RefKey())
+	if err != nil {
+		return err
+	}
+
+	logging.From(ctx).Infow(fmt.Sprintf(
+		"purged document internals [project_id=%s doc_id=%s]",
+		projectID, docInfo.ID,
+	), "changes", counts["changes"], "snapshots", counts["snapshots"], "versionvectors", counts["versionvectors"])
 
 	return nil
 }
