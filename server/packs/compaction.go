@@ -58,7 +58,7 @@ func Compact(
 		return err
 	}
 	if isAttached {
-		// TODO(hackerwins): ErrDocumentNotRemoved exists in documents package,
+		// TODO(hackerwins): ErrDocumentNotAttached exists in documents package,
 		// but it can not be here because of the circular dependency.
 		return fmt.Errorf("document is attached")
 	}
@@ -118,6 +118,7 @@ func Compact(
 	return nil
 }
 
+// Purge removes the document from the database permanently.
 func Purge(
 	ctx context.Context,
 	be *backend.Backend,
@@ -129,13 +130,12 @@ func Purge(
 
 	// 1. Check if the document is removed.
 	if !docInfo.IsRemoved() {
-		return fmt.Errorf("document %s is not removed", docInfo.ID)
+		return fmt.Errorf("document %s is not removed: %w", docInfo.ID, ErrDocumentNotRemoved)
 	}
 
 	// 2. Purge the document from the database.
 	counts, err := be.DB.PurgeDocument(ctx, docInfo.RefKey())
 	if err != nil {
-		logging.From(ctx).Error("failed to purge document", "error", err)
 		return err
 	}
 
