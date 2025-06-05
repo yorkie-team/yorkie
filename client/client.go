@@ -237,7 +237,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		withShardKey(connect.NewRequest(&api.ActivateClientRequest{
 			ClientKey: c.key,
 		},
-		), c.options.APIKey))
+		), c.options.APIKey, c.key))
 	if err != nil {
 		return err
 	}
@@ -264,7 +264,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
 			ClientId: c.id.String(),
 		},
-		), c.options.APIKey))
+		), c.options.APIKey, c.key))
 	if err != nil {
 		return err
 	}
