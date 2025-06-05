@@ -234,11 +234,11 @@ type Database interface {
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
-		docInfo *DocInfo,
-		initialServerSeq int64,
+		docRefKey types.DocRefKey,
+		cpBeforePush change.Checkpoint,
 		changes []*change.Change,
 		isRemoved bool,
-	) error
+	) (*DocInfo, change.Checkpoint, error)
 
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
 	CompactChangeInfos(

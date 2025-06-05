@@ -113,7 +113,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
-		assert.Equal(t, doc.Status(), document.StatusDetached)
+		assert.Equal(t, document.StatusDetached, doc.Status())
 
 		// 03. attach again to c1 and check if it is attached normally
 		doc = document.New(helper.TestDocKey(t))
@@ -125,7 +125,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc, client.WithRemoveIfNotAttached())
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
-		assert.Equal(t, doc.Status(), document.StatusRemoved)
+		assert.Equal(t, document.StatusRemoved, doc.Status())
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
