@@ -1036,19 +1036,38 @@ func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, er
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
-	_ context.Context,
-	docInfo *database.DocInfo,
-	initialServerSeq int64,
+	ctx context.Context,
+	refKey types.DocRefKey,
+	checkpoint change.Checkpoint,
 	changes []*change.Change,
 	isRemoved bool,
-) error {
+) (*database.DocInfo, change.Checkpoint, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", err)
+	}
+	if raw == nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+	initialServerSeq := docInfo.ServerSeq
+
 	for _, cn := range changes {
+		serverSeq := docInfo.IncreaseServerSeq()
+		checkpoint = checkpoint.NextServerSeq(serverSeq)
+		cn.SetServerSeq(serverSeq)
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
+
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
-			return err
+			return nil, change.InitialCheckpoint, err
 		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
@@ -1064,25 +1083,25 @@ func (d *DB) CreateChangeInfos(
 			Operations:     encodedOperations,
 			PresenceChange: cn.PresenceChange(),
 		}); err != nil {
-			return fmt.Errorf("create change: %w", err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("create change: %w", err)
 		}
 	}
 
-	raw, err := txn.First(
+	raw, err = txn.First(
 		tblDocuments,
 		"project_id_id",
 		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("find document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	now := gotime.Now()
@@ -1099,7 +1118,7 @@ func (d *DB) CreateChangeInfos(
 		loadedDocInfo.RemovedAt = now
 	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	txn.Commit()
 
@@ -1107,7 +1126,7 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
-	return nil
+	return docInfo, checkpoint, nil
 }
 
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.

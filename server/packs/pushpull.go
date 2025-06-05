@@ -155,53 +155,34 @@ func pushPack(
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
 ) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
-	// TODO(hackerwins): We can replace this locker with lock-free implementation
-	// using $inc operator with upsert in MongoDB.
-	locker := be.Lockers.Locker(DocPushKey(docKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
-	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+	// 01. Filter out changes that are already pushed.
+	var pushables []*change.Change
+	for _, change := range reqPack.Changes {
+		if change.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			logging.From(ctx).Warnf(
+				"change already pushed, clientSeq: %d, cp: %d",
+				change.ID().ClientSeq(),
+				cpBeforePush.ClientSeq,
+			)
+			continue
+		}
+		pushables = append(pushables, change)
+	}
+
+	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
+		ctx,
+		docKey,
+		cpBeforePush,
+		pushables,
+		reqPack.IsRemoved,
+	)
 	if err != nil {
 		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 	}
 
-	initialSeq := docInfo.ServerSeq
-	checkpoint := clientInfo.Checkpoint(docInfo.ID)
-
-	var pushables []*change.Change
-	for _, change := range reqPack.Changes {
-		if change.ID().ClientSeq() > checkpoint.ClientSeq {
-			serverSeq := docInfo.IncreaseServerSeq()
-			checkpoint = checkpoint.NextServerSeq(serverSeq)
-			change.SetServerSeq(serverSeq)
-			pushables = append(pushables, change)
-		} else {
-			logging.From(ctx).Warnf(
-				"change already pushed, clientSeq: %d, cp: %d",
-				change.ID().ClientSeq(),
-				checkpoint.ClientSeq,
-			)
-		}
-
-		checkpoint = checkpoint.SyncClientSeq(change.ClientSeq())
-	}
-
-	if len(pushables) > 0 || reqPack.IsRemoved {
-		if err := be.DB.CreateChangeInfos(
-			ctx,
-			docInfo,
-			initialSeq,
-			pushables,
-			reqPack.IsRemoved,
-		); err != nil {
-			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-		}
-	}
-
+	initialSeq := docInfo.ServerSeq - int64(len(pushables))
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Debugf(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
@@ -211,11 +192,11 @@ func pushPack(
 			len(reqPack.Changes)-len(pushables),
 			initialSeq,
 			docInfo.ServerSeq,
-			checkpoint,
+			cpAfterPush,
 		)
 	}
 
-	return pushables, docInfo, initialSeq, checkpoint, nil
+	return pushables, docInfo, initialSeq, cpAfterPush, nil
 }
 
 func pullPack(
@@ -235,6 +216,7 @@ func pullPack(
 	if err != nil {
 		return nil, err
 	}
+	resPack.ApplyDocInfo(docInfo)
 
 	// 02. update the document's status in the client.
 	if opts.Status == document.StatusRemoved {
@@ -282,12 +264,10 @@ func preparePack(
 	// NOTE(hackerwins): If the client is push-only, it does not need to pull changes.
 	// So, just return the checkpoint with server seq after pushing changes.
 	if mode == types.SyncModePushOnly {
-		pack := NewServerPack(docInfo.Key, change.Checkpoint{
+		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil)
-		pack.ApplyDocInfo(docInfo)
-		return pack, nil
+		}, nil, nil), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -314,20 +294,12 @@ func preparePack(
 			return nil, err
 		}
 
-		pack := NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil)
-		pack.ApplyDocInfo(docInfo)
-		return pack, nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
 	}
 
 	// NOTE(hackerwins): If the size of changes for the response is greater than the snapshot threshold,
 	// we pull the snapshot from DB to reduce the size of the response.
-	pack, err := pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
-	if err != nil {
-		return nil, err
-	}
-
-	pack.ApplyDocInfo(docInfo)
-	return pack, nil
+	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 }
 
 // pullSnapshot pulls the snapshot from DB.
