@@ -49,9 +49,10 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config  *Config
-	client  *mongo.Client
-	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	config               *Config
+	client               *mongo.Client
+	vvCache              *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	detachedClientsCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, int64]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -81,17 +82,23 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	vvCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize VV cache: %w", err)
+	}
+
+	clientsCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, int64]](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize clients cache: %w", err)
 	}
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		vvCache: cache,
+		config:               conf,
+		client:               client,
+		vvCache:              vvCache,
+		detachedClientsCache: clientsCache,
 	}, nil
 }
 
@@ -102,6 +109,7 @@ func (c *Client) Close() error {
 	}
 
 	c.vvCache.Purge()
+	c.detachedClientsCache.Purge()
 
 	return nil
 }
@@ -1377,6 +1385,16 @@ func (c *Client) UpdateMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
+	actorID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return nil, err
+	}
+
 	// 01. Update synced version vector of the given client and document.
 	// NOTE(hackerwins): Considering removing the detached client's lamport
 	// from the other clients' version vectors. For now, we just ignore it.
@@ -1387,11 +1405,6 @@ func (c *Client) UpdateMinVersionVector(
 	// 02. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
 	if vvMap, ok := c.vvCache.Get(docRefKey); ok {
-		attached, err := clientInfo.IsAttached(docRefKey.DocID)
-		if err != nil {
-			return nil, err
-		}
-
 		if attached {
 			vvMap.Upsert(clientInfo.ID, func(value time.VersionVector, exists bool) time.VersionVector {
 				return vector
@@ -1400,6 +1413,11 @@ func (c *Client) UpdateMinVersionVector(
 			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
 				return exists
 			})
+
+			infoMap := cmap.New[types.ID, int64]()
+
+			infoMap.Set(clientInfo.ID, vector[actorID])
+			c.detachedClientsCache.Add(docRefKey, infoMap)
 		}
 	}
 
@@ -1440,7 +1458,82 @@ func (c *Client) GetMinVersionVector(
 	}
 
 	vectors := append(vvMap.Values(), vector)
-	return time.MinVersionVector(vectors...), nil
+	minVersionVector := time.MinVersionVector(vectors...)
+
+	// 04. Filter detached client's information from min version vector
+	if !c.detachedClientsCache.Contains(docRefKey) {
+		var infos []database.DetachedClients
+		cursor, err := c.collection(ColDetachedClients).Find(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("find detached clients: %w", err)
+		}
+		if err := cursor.All(ctx, &infos); err != nil {
+			return nil, fmt.Errorf("decode version vectors: %w", err)
+		}
+
+		infoMap := cmap.New[types.ID, int64]()
+		for i := range infos {
+			infoMap.Set(infos[i].ClientID, infos[i].Lamport)
+		}
+
+		c.detachedClientsCache.Add(docRefKey, infoMap)
+	}
+
+	if detachedClientsMap, ok := c.detachedClientsCache.Get(docRefKey); ok {
+		currentActorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+		keys := detachedClientsMap.Keys()
+
+		for i := range keys {
+			actorID, err := keys[i].ToActorID()
+
+			if actorID == currentActorID {
+				continue
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			if lamport, exists := minVersionVector.Get(actorID); exists {
+				value, exists := detachedClientsMap.Get(keys[i])
+
+				if exists && value == lamport {
+					minVersionVector.Unset(actorID)
+				}
+			} else {
+				// every client recognizes the actor has been detached, so now it's safe
+				// to remove actor's info from detachedClientsCache
+				detachedClientsMap.Delete(keys[i], func(value int64, exists bool) bool {
+					return true
+				})
+				if _, err = c.collection(ColDetachedClients).DeleteOne(ctx, bson.M{
+					"project_id": docRefKey.ProjectID,
+					"doc_id":     docRefKey.DocID,
+					"client_id":  keys[i],
+				}, options.Delete()); err != nil {
+					return nil, fmt.Errorf("delete version vector: %w", err)
+				}
+			}
+		}
+	}
+
+	attaching := attached && vector.IsEmpty()
+	edited := !minVersionVector.IsEmpty()
+	if attaching && edited {
+		_, exists := minVersionVector.Get(actorID)
+
+		if !exists {
+			minVersionVector.Set(actorID, int64(0))
+		}
+	}
+
+	return minVersionVector, nil
 }
 
 // updateVersionVector updates the given version vector of the given client
@@ -1463,6 +1556,27 @@ func (c *Client) updateVersionVector(
 		}, options.Delete()); err != nil {
 			return fmt.Errorf("delete version vector: %w", err)
 		}
+
+		actorID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			return err
+		}
+
+		lamport, exists := vector.Get(actorID)
+		if exists {
+			if _, err = c.collection(ColDetachedClients).UpdateOne(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"client_id":  clientInfo.ID,
+			}, bson.M{
+				"$set": bson.M{
+					"lamport": lamport,
+				},
+			}, options.Update().SetUpsert(true)); err != nil {
+				return fmt.Errorf("update detached client: %w", err)
+			}
+		}
+
 		return nil
 	}
 
