@@ -119,15 +119,11 @@ func PushPull(
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
 			// webhook manually. But we need to consider unified event handling system
 			// to handle this with rate-limiter and retry mechanism.
-			be.PubSub.Publish(
-				ctx,
-				publisher,
-				events.DocEvent{
-					Type:      events.DocChanged,
-					Publisher: publisher,
-					DocRefKey: docKey,
-				},
-			)
+			be.PubSub.Publish(ctx, publisher, events.DocEvent{
+				Type:      events.DocChanged,
+				Publisher: publisher,
+				DocRefKey: docKey,
+			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
 				if err := be.EventWebhookManager.Send(ctx, types.NewEventWebhookInfo(
