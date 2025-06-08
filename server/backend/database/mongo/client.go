@@ -1016,6 +1016,31 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// UpdateDocInfoSchema updates the document schema.
+func (c *Client) UpdateDocInfoSchema(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	schema string,
+) error {
+	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+	}, bson.M{
+		"$set": bson.M{
+			"schema": schema,
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	if result.Err() == mongo.ErrNoDocuments {
+		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		return fmt.Errorf("update document schema: %w", result.Err())
+	}
+
+	return nil
+}
+
 // GetDocumentsCount returns the number of documents in the given project.
 func (c *Client) GetDocumentsCount(
 	ctx context.Context,

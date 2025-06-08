@@ -142,11 +142,6 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	schemaName, schemaVersion, err := converter.FromSchemaKey(req.Msg.Schema)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
@@ -176,10 +171,21 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	if docInfo.Schema == "" {
+		docInfo.Schema = req.Msg.Schema
+		if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.Schema); err != nil {
+			return nil, err
+		}
+	}
+	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
+	if err != nil {
+		return nil, err
+	}
 	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}

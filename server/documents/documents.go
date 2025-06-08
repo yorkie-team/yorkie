@@ -345,6 +345,15 @@ func FindOrCreateDocInfo(
 	)
 }
 
+func UpdateDocInfoSchema(
+	ctx context.Context,
+	be *backend.Backend,
+	refKey types.DocRefKey,
+	schema string,
+) error {
+	return be.DB.UpdateDocInfoSchema(ctx, refKey, schema)
+}
+
 // UpdateDocument updates the given document with the given root.
 // change pack.
 func UpdateDocument(

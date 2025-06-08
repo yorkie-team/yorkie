@@ -231,6 +231,13 @@ type Database interface {
 		refKey types.DocRefKey,
 	) error
 
+	// UpdateDocInfoSchema updates the document schema.
+	UpdateDocInfoSchema(
+		ctx context.Context,
+		refKey types.DocRefKey,
+		schema string,
+	) error
+
 	// GetDocumentsCount returns the number of documents in the given project.
 	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
 

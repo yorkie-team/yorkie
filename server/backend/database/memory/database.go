@@ -987,6 +987,39 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// UpdateDocInfoSchema updates the document schema.
+func (d *DB) UpdateDocInfoSchema(
+	_ context.Context,
+	refKey types.DocRefKey,
+	schema string,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return fmt.Errorf("find document by id: %w", err)
+	}
+
+	if raw == nil {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo.Schema = schema
+
+	if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		return fmt.Errorf("update document schema: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // GetDocumentsCount returns the number of documents in the given project.
 func (d *DB) GetDocumentsCount(
 	_ context.Context,
