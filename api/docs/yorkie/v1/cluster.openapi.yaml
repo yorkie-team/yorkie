@@ -244,6 +244,11 @@ components:
           description: ""
           title: document_id
           type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
         projectId:
           additionalProperties: false
           description: ""
@@ -292,6 +297,11 @@ components:
           additionalProperties: false
           description: ""
           title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
           type: string
         projectId:
           additionalProperties: false

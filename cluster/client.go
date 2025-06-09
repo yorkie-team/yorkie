@@ -140,16 +140,17 @@ func (c *Client) DetachDocument(
 // CompactDocument compacts the given document.
 func (c *Client) CompactDocument(
 	ctx context.Context,
+	project *types.Project,
 	document *database.DocInfo,
-	apiKey string,
 ) error {
 	_, err := c.client.CompactDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
-			ProjectId:  document.ProjectID.String(),
-			DocumentId: document.ID.String(),
+			ProjectId:   document.ProjectID.String(),
+			DocumentId:  document.ID.String(),
+			DocumentKey: document.Key.String(),
 		},
-		), apiKey, document.Key.String()))
+		), project.PublicKey, document.Key.String()))
 	if err != nil {
 		return err
 	}
@@ -160,16 +161,17 @@ func (c *Client) CompactDocument(
 // PurgeDocument purges the given document.
 func (c *Client) PurgeDocument(
 	ctx context.Context,
+	project *types.Project,
 	document *database.DocInfo,
-	apiKey string,
 ) error {
 	_, err := c.client.PurgeDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServicePurgeDocumentRequest{
-			ProjectId:  document.ProjectID.String(),
-			DocumentId: document.ID.String(),
+			ProjectId:   document.ProjectID.String(),
+			DocumentId:  document.ID.String(),
+			DocumentKey: document.Key.String(),
 		},
-		), apiKey, document.Key.String()))
+		), project.PublicKey, document.Key.String()))
 	if err != nil {
 		return err
 	}

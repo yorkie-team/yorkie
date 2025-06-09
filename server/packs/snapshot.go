@@ -168,13 +168,7 @@ func storeSnapshot(
 	if !ok {
 		return nil
 	}
-
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.From(ctx).Error(err)
-			return
-		}
-	}()
+	defer locker.Unlock()
 
 	start := gotime.Now()
 

@@ -286,6 +286,9 @@ func (s *adminServer) CreateDocument(
 		}
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
 	doc, err := documents.CreateDocument(
 		ctx,
 		s.backend,
@@ -475,6 +478,9 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
 		s.backend,
@@ -511,6 +517,9 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	if err != nil {
 		return nil, err
 	}
+
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
 
 	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
 	if err != nil {

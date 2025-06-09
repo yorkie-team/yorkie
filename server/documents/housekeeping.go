@@ -43,11 +43,7 @@ func CompactDocuments(
 	start := time.Now()
 
 	locker := be.Lockers.Locker(compactionCandidatesKey)
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
+	defer locker.Unlock()
 
 	lastProjectID, candidates, err := FindCompactionCandidates(
 		ctx,

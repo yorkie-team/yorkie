@@ -37,6 +37,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+// DocKey generates document-wide sync key.
+func DocKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-%s-%s", projectID, docKey))
+}
+
 // DocPushKey generates a sync key for pushing changes to the document.
 func DocPushKey(docKey types.DocRefKey) sync.Key {
 	return sync.NewKey(fmt.Sprintf("doc-push-%s-%s", docKey.ProjectID, docKey.DocID))
@@ -171,6 +176,9 @@ func pushPack(
 		pushables = append(pushables, change)
 	}
 
+	// 02. Push the changes to the database.
+	// NOTE(hackerwins): We replace the push lock with the lock-free implementation
+	// to increase the performance of the push operation.
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
 		docKey,
