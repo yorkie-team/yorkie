@@ -999,3 +999,22 @@ func FromRule(pbRule *api.Rule) types.Rule {
 		Type: pbRule.Type,
 	}
 }
+
+// FromSchemas converts the given Protobuf formats to model format.
+func FromSchemas(pbSchemas []*api.Schema) []*types.Schema {
+	var schemas []*types.Schema
+	for _, pbSchema := range pbSchemas {
+		schemas = append(schemas, FromSchema(pbSchema))
+	}
+	return schemas
+}
+
+// FromSchema converts the given Protobuf formats to model format.
+func FromSchema(pbSchema *api.Schema) *types.Schema {
+	return &types.Schema{
+		Name:    pbSchema.Name,
+		Version: int(pbSchema.Version),
+		Body:    pbSchema.Body,
+		Rules:   FromRules(pbSchema.Rules),
+	}
+}

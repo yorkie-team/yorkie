@@ -276,14 +276,6 @@ components:
           description: deprecated
           title: min_synced_ticket
           type: object
-        rules:
-          additionalProperties: false
-          description: ""
-          items:
-            $ref: '#/components/schemas/yorkie.v1.Rule'
-            type: object
-          title: rules
-          type: array
         snapshot:
           additionalProperties: false
           description: ""

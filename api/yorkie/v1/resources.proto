@@ -47,7 +47,6 @@ message ChangePack {
   TimeTicket min_synced_ticket = 5; // deprecated
   bool is_removed = 6;
   VersionVector version_vector = 7;
-  repeated Rule rules = 8;
 }
 
 message Change {
@@ -429,15 +428,15 @@ message DocSize {
 }
 
 message Schema {
-string id = 1;
-string name = 2;
-int32 version = 3;
-string body = 4;
-repeated Rule rules = 5;
-google.protobuf.Timestamp created_at = 6;
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+  string body = 4;
+  repeated Rule rules = 5;
+  google.protobuf.Timestamp created_at = 6;
 }
 
 message Rule {
-string path = 1;
-string type = 2;
+  string path = 1;
+  string type = 2;
 }

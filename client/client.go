@@ -309,6 +309,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
+			Schema:     opts.Schema,
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
@@ -321,6 +322,9 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	doc.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+	if res.Msg.SchemaRules != nil {
+		doc.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
+	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err

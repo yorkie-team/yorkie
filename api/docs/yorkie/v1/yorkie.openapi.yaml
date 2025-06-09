@@ -363,6 +363,14 @@ components:
           description: ""
           title: max_size_per_document
           type: integer
+        schemaRules:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Rule'
+            type: object
+          title: schema_rules
+          type: array
       title: AttachDocumentResponse
       type: object
     yorkie.v1.BroadcastRequest:
@@ -501,14 +509,6 @@ components:
           description: deprecated
           title: min_synced_ticket
           type: object
-        rules:
-          additionalProperties: false
-          description: ""
-          items:
-            $ref: '#/components/schemas/yorkie.v1.Rule'
-            type: object
-          title: rules
-          type: array
         snapshot:
           additionalProperties: false
           description: ""

@@ -1851,16 +1851,9 @@ func (c *Client) IsSchemaAttached(
 		"schema":     schema,
 	}
 
-	cursor, err := c.collection(ColDocuments).Find(ctx, filter)
-	if err != nil {
-		return false, fmt.Errorf("find documents by schema: %w", err)
+	result := c.collection(ColDocuments).FindOne(ctx, filter)
+	if result.Err() == mongo.ErrNoDocuments {
+		return false, nil
 	}
-	defer cursor.Close(ctx)
-
-	var infos []*database.DocInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return false, fmt.Errorf("decode documents: %w", err)
-	}
-
-	return len(infos) > 0, nil
+	return true, nil
 }

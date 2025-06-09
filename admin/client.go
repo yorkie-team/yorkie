@@ -467,3 +467,60 @@ func (c *Client) ChangePassword(ctx context.Context, username, password, newPass
 
 	return nil
 }
+
+// CreateSchema creates a new schema.
+func (c *Client) CreateSchema(
+	ctx context.Context,
+	projectName,
+	schemaName string,
+	version int,
+	schemaBody string,
+	rules []types.Rule,
+) error {
+	_, err := c.client.CreateSchema(ctx, connect.NewRequest(&api.CreateSchemaRequest{
+		ProjectName:   projectName,
+		SchemaName:    schemaName,
+		SchemaVersion: int32(version),
+		SchemaBody:    schemaBody,
+		Rules:         converter.ToRules(rules),
+	}))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GetSchemas gets the schemas.
+func (c *Client) GetSchemas(
+	ctx context.Context,
+	projectName,
+	schemaName string,
+) ([]*types.Schema, error) {
+	response, err := c.client.GetSchemas(
+		ctx,
+		connect.NewRequest(&api.GetSchemasRequest{
+			ProjectName: projectName,
+			SchemaName:  schemaName,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromSchemas(response.Msg.Schemas), nil
+}
+
+// RemoveSchema removes a schema.
+func (c *Client) RemoveSchema(ctx context.Context, projectName, schemaName string, version int) error {
+	_, err := c.client.RemoveSchema(ctx, connect.NewRequest(&api.RemoveSchemaRequest{
+		ProjectName: projectName,
+		SchemaName:  schemaName,
+		Version:     int32(version),
+	}))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

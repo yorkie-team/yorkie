@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -231,5 +232,38 @@ func TestAdmin(t *testing.T) {
 
 		// 02. server should return unauthenticated error.
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	})
+
+	t.Run("schema attachment test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+	})
+
+	t.Run("schema removal test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc))
+
+		err = adminCli.CreateSchema(ctx, "default", "test-schema", 1, "{type Document = { name: string; };}", []types.Rule{
+			{
+				Path: "$.name",
+				Type: "string",
+			},
+		})
+		assert.NoError(t, err)
+
+		err = adminCli.RemoveSchema(ctx, "default", "test-schema", 1)
+		assert.NoError(t, err)
 	})
 }

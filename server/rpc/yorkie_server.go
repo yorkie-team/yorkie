@@ -171,13 +171,11 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	if docInfo.Schema == "" {
-		docInfo.Schema = req.Msg.Schema
-		if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.Schema); err != nil {
-			return nil, err
-		}
+	schemaKey := docInfo.Schema
+	if schemaKey == "" {
+		schemaKey = req.Msg.Schema
 	}
-	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
+	schemaName, schemaVersion, err := converter.FromSchemaKey(schemaKey)
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +186,11 @@ func (s *yorkieServer) AttachDocument(
 
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
+	}
+	if docInfo.Schema == "" {
+		if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), schemaKey); err != nil {
+			return nil, err
+		}
 	}
 
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
@@ -222,15 +225,16 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	if schema != nil {
-		pbChangePack.Rules = converter.ToRules(schema.Rules)
-	}
 
-	return connect.NewResponse(&api.AttachDocumentResponse{
+	response := &api.AttachDocumentResponse{
 		ChangePack:         pbChangePack,
 		DocumentId:         docInfo.ID.String(),
 		MaxSizePerDocument: int32(project.MaxSizePerDocument),
-	}), nil
+	}
+	if schema != nil {
+		response.SchemaRules = converter.ToRules(schema.Rules)
+	}
+	return connect.NewResponse(response), nil
 }
 
 // DetachDocument detaches the given document to the client.
