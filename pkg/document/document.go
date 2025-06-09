@@ -171,7 +171,7 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
+		if err := c.Execute(d.doc.root, d.doc.presences, nil); err != nil {
 			return err
 		}
 
@@ -194,7 +194,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.applyChanges(pack.Changes); err != nil {
+		if err := d.applyChanges(pack.Changes, pack.VersionVector); err != nil {
 			return err
 		}
 	}
@@ -208,8 +208,8 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.doc.localChanges = d.doc.localChanges[1:]
 	}
 
-	if len(pack.Snapshot) > 0 {
-		if err := d.applyChanges(d.doc.localChanges); err != nil {
+	if hasSnapshot {
+		if err := d.applyChanges(d.doc.localChanges, nil); err != nil {
 			return err
 		}
 	}
@@ -242,18 +242,18 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
-func (d *Document) applyChanges(changes []*change.Change) error {
+func (d *Document) applyChanges(changes []*change.Change, vector time.VersionVector) error {
 	if err := d.ensureClone(); err != nil {
 		return err
 	}
 
 	for _, c := range changes {
-		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+		if err := c.Execute(d.cloneRoot, d.clonePresences, vector); err != nil {
 			return err
 		}
 	}
 
-	events, err := d.doc.ApplyChanges(changes...)
+	events, err := d.doc.ApplyChanges(vector, changes...)
 	if err != nil {
 		return err
 	}

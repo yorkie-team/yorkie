@@ -753,7 +753,7 @@ func (t *Tree) EditT(
 		return err
 	}
 
-	_, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
+	_, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil, nil)
 	return err
 }
 
@@ -801,6 +801,7 @@ func (t *Tree) Edit(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) ([]GCPair, error) {
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
@@ -814,7 +815,7 @@ func (t *Tree) Edit(
 
 	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
-		editedAt, versionVector,
+		editedAt, versionVector, minVersionVector,
 	)
 	if err != nil {
 		return nil, err
@@ -891,6 +892,7 @@ func (t *Tree) collectBetween(
 	toParent *TreeNode, toLeft *TreeNode,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) ([]*TreeNode, []*TreeNode, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
@@ -1019,7 +1021,7 @@ func (t *Tree) StyleByIndex(
 		return nil, err
 	}
 
-	return t.Style(fromPos, toPos, attributes, editedAt, versionVector)
+	return t.Style(fromPos, toPos, attributes, editedAt, versionVector, nil)
 }
 
 // Style applies the given attributes of the given range.
@@ -1028,6 +1030,7 @@ func (t *Tree) Style(
 	attrs map[string]string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) ([]GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -1083,6 +1086,7 @@ func (t *Tree) RemoveStyle(
 	attrs []string,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) ([]GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {

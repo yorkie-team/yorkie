@@ -57,14 +57,14 @@ func NewStyle(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error {
+func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector, minVersionVector time.VersionVector) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Text)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
 
-	pairs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+	pairs, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector, minVersionVector)
 	if err != nil {
 		return err
 	}

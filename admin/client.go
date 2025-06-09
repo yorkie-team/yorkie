@@ -402,7 +402,7 @@ func (c *Client) ListChangeSummaries(
 	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if _, err := newDoc.ApplyChanges(c); err != nil {
+		if _, err := newDoc.ApplyChanges(nil, c); err != nil {
 			return nil, err
 		}
 

@@ -471,6 +471,7 @@ func (s *RGATreeSplit[V]) edit(
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, []GCPair, error) {
 	// 01. Split nodes with from and to
 	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
@@ -484,7 +485,7 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	removedNodes := s.deleteNodes(nodesToDelete, editedAt, versionVector)
+	removedNodes := s.deleteNodes(nodesToDelete, editedAt, versionVector, minVersionVector)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -526,6 +527,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
 	editedAt *time.Ticket,
 	vector time.VersionVector,
+	minVector time.VersionVector,
 ) map[string]*RGATreeSplitNode[V] {
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 	isVersionVectorEmpty := len(vector) == 0
@@ -554,7 +556,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			if ok {
 				clientLamportAtChange = lamport
 			} else {
-				clientLamportAtChange = vector.MaxLamport()
+				clientLamportAtChange = 0
 			}
 		}
 

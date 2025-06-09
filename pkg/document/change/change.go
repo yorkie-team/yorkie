@@ -51,9 +51,9 @@ func New(id ID, message string, operations []operations.Operation, pc *innerpres
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
+func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map, vector time.VersionVector) error {
 	for _, op := range c.operations {
-		if err := op.Execute(root, c.ID().versionVector); err != nil {
+		if err := op.Execute(root, c.ID().versionVector, vector); err != nil {
 			return err
 		}
 	}

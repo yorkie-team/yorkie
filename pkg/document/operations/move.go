@@ -52,7 +52,7 @@ func NewMove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *crdt.Root, _ time.VersionVector) error {
+func (o *Move) Execute(root *crdt.Root, _ time.VersionVector, _ time.VersionVector) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*crdt.Array)

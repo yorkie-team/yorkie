@@ -34,7 +34,7 @@ var (
 // Operation represents an operation to be executed on a document.
 type Operation interface {
 	// Execute executes this operation on the given document(`root`).
-	Execute(root *crdt.Root, versionVector time.VersionVector) error
+	Execute(root *crdt.Root, versionVector time.VersionVector, minVersionVector time.VersionVector) error
 
 	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket

@@ -169,7 +169,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 			return err
 		}
 	} else {
-		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
+		if _, err := d.ApplyChanges(pack.VersionVector, pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -303,7 +303,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 }
 
 // ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
+func (d *InternalDocument) ApplyChanges(vector time.VersionVector, changes ...*change.Change) ([]DocEvent, error) {
 	var events []DocEvent
 	for _, c := range changes {
 		if c.PresenceChange() != nil {
@@ -343,7 +343,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			}
 		}
 
-		if err := c.Execute(d.root, d.presences); err != nil {
+		if err := c.Execute(d.root, d.presences, vector); err != nil {
 			return nil, err
 		}
 

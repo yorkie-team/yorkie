@@ -326,6 +326,7 @@ func (t *Text) Edit(
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
@@ -338,6 +339,7 @@ func (t *Text) Edit(
 		val,
 		executedAt,
 		versionVector,
+		minVersionVector,
 	)
 }
 
@@ -348,6 +350,7 @@ func (t *Text) Style(
 	attributes map[string]string,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
+	minVersionVector time.VersionVector,
 ) ([]GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
