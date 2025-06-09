@@ -121,12 +121,10 @@ func (c *Client) DetachDocument(
 	_, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceDetachDocumentRequest{
-			Project:  converter.ToProject(project),
-			ClientId: clientID.String(),
-			DocumentSummary: converter.ToDocumentSummary(&types.DocumentSummary{
-				ID:  docID,
-				Key: docKey,
-			}),
+			Project:     converter.ToProject(project),
+			ClientId:    clientID.String(),
+			DocumentId:  docID.String(),
+			DocumentKey: docKey.String(),
 		}), project.PublicKey, docKey.String()),
 	)
 	if err != nil {

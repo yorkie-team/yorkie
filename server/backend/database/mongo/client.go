@@ -1097,7 +1097,7 @@ func (c *Client) CreateChangeInfos(
 			"_id":        refKey.DocID,
 		},
 		updateOps,
-		options.FindOneAndUpdate().SetReturnDocument(options.After),
+		options.FindOneAndUpdate().SetReturnDocument(options.Before),
 	)
 	docInfo := &database.DocInfo{}
 	if err := result.Decode(docInfo); err != nil {
@@ -1106,7 +1106,6 @@ func (c *Client) CreateChangeInfos(
 		}
 		return nil, change.InitialCheckpoint, fmt.Errorf("decode document: %w", err)
 	}
-	docInfo.ServerSeq -= int64(len(changes))
 
 	// 03. Insert changes into the changes collection.
 	var models []mongo.WriteModel
@@ -1136,6 +1135,11 @@ func (c *Client) CreateChangeInfos(
 		}}).SetUpsert(true))
 	}
 
+	// NOTE(hackerwins): If InsertMany operation fails, there will be a mismatch
+	// between the already incremented server_seq and the actual stored changes.
+	// This can lead to gaps in the sequence numbers, which can cause data
+	// consistency issues. We need to handle this case by either rolling back
+	// the increment or ensuring that the changes are always pushed successfully.
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,

@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	gosync "sync"
 	"testing"
 	gotime "time"
 
@@ -1196,6 +1197,52 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, err)
 		docInfo3, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NotEqual(t, updatedAt, docInfo3.UpdatedAt)
+	})
+
+	t.Run("create change infos without conflict test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+		numOfClients := 100
+
+		owner, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s", t.Name()), map[string]string{})
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, owner.RefKey(), docKey)
+		assert.NoError(t, err)
+
+		var clients []*database.ClientInfo
+		for i := range numOfClients {
+			c, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s-%d", t.Name(), i), map[string]string{})
+			assert.NoError(t, err)
+			assert.NoError(t, c.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c, docInfo))
+			clients = append(clients, c)
+		}
+
+		wg := gosync.WaitGroup{}
+		for i, c := range clients {
+			wg.Add(1)
+			go func(client *database.ClientInfo, idx int) {
+				defer wg.Done()
+				ctx := context.Background()
+				doc := document.New(docKey)
+				actorID, err := client.ID.ToActorID()
+				assert.NoError(t, err)
+				doc.SetActor(actorID)
+
+				assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+					p.Set("key", fmt.Sprintf("val-%d", idx))
+					return nil
+				}))
+				pack := doc.CreateChangePack()
+				_, _, err = db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
+				assert.NoError(t, err)
+			}(c, i)
+		}
+		wg.Wait()
+
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docInfo.RefKey(), 1, int64(numOfClients))
+		assert.NoError(t, err)
+		assert.Equal(t, numOfClients, len(changes))
 	})
 }
 

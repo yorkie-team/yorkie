@@ -1,11 +1,11 @@
 ---
-title: fine-grained-document-lock
+title: fine-grained-document-locking
 target-version: 0.6.15
 ---
 
 <!-- Make sure to append document link in design README.md after creating the document. -->
 
-# Fine-Grained Document Lock
+# Fine-Grained Document Locking
 
 ## Summary
 
@@ -20,7 +20,6 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 ### Non-Goals
 
 - Does not include distributed or cluster-wide locking mechanisms
-- Does not involve changes to GC policies or global document management
 - Does not address client-side locking
 
 ## Proposal Details
@@ -36,27 +35,26 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 
 ### Lock Acquisition by API
 
-**AttachDocument**
+**AttachDocument(by SDK)**
 
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
 3. `findClient` / `findOrCreateDoc`
-4. 🔒 Acquire `doc.attachment`
-5. Count attachments
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit)
+5. Count attachments (if applicable)
 6. PushPull
 7. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
 
-**DetachDocument**
+**DetachDocument(by SDK)**
 
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
 3. `findClient`
-4. 🔒 Acquire `doc.attachment`
-5. Count attachments
-6. PushPull
-7. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit)
+5. PushPull
+6. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
 
-**PushPullChanges**
+**PushPullChanges/RemoveDocument(by SDK)**
 
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
@@ -64,7 +62,13 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 4. PushPull
 5. 🔓 Release `doc.pull`, `doc`
 
-**PurgeDocument / CompactDocument**
+**CreateDocument/UpdateDocument(by Admin)**
+
+1. 🔒 Acquire `doc` RLock
+2. PushPull
+3. 🔓 Release `doc`
+
+**PurgeDocument/CompactDocument(by System)**
 
 1. 🔒 Acquire `doc` exclusive Lock
 2. `findDoc`
@@ -73,9 +77,29 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 
 **PushPull(Internal Function)**
 
-1. 🔒 Acquire `doc.push`
+1. 🔒 Acquire `doc.push` (conceptually lock, but uses lock-free implementation for high concurrency)
 2. Push changes and assign `ServerSeq`
 3. 🔓 Release `doc.push`
+
+```ts
+// 01. Atomically Reserve ServerSeq
+db.documents.findOneAndUpdate(
+  { _id: "doc123" },
+  { $inc: { server_seq: pushedChanges.length } },
+  { returnDocument: "before" }
+);
+
+// 02. Push incoming changes using the reserved ServerSeq range
+db.changes.insertMany(
+  pushedChanges.map((change, index) => ({
+    ...change,
+    server_seq: initialServerSeq + index + 1,
+  }))
+);
+```
+
+> NOTE(hackerwins): If InsertMany operation fails, there will be a mismatch between the already incremented server_seq and the actual stored changes. This can lead to gaps in the sequence numbers, which can cause data consistency issues.
+> We need to handle this case by either rolling back the increment or ensuring that the changes are always pushed successfully.
 
 ### Before vs. After Summary
 
@@ -83,7 +107,7 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 | ----------------------------------------- | --------------------------------- |
 | Single `Document` lock for all operations | Separate locks per logical task   |
 | Low concurrency, high contention          | Higher parallelism and throughput |
-| Compaction blocks all operations          | Minimal interference via RLock    |
+| Compaction blocks all operations          | Minimal interference via RWLock   |
 
 ### Future Considerations
 
@@ -95,4 +119,4 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 | --------------------------------- | ---------------------------------------------------------------------------------- |
 | Increased code complexity         | Use standardized lock helpers and runtime assertions                               |
 | Potential for deadlocks           | Enforce consistent lock acquisition order (`doc` → `pull` → `attachment` → `push`) |
-| Difficulty implementing lock-free | Retain mutex-based implementation as fallback, phase in lock-free safely           |
+| Difficulty implementing lock-free | Consider using rollback mechanisms or retry logic for failed operations            |

@@ -54,13 +54,13 @@ func (s *clusterServer) DetachDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceDetachDocumentRequest],
 ) (*connect.Response[api.ClusterServiceDetachDocumentResponse], error) {
+	project := converter.FromProject(req.Msg.Project)
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
-
-	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
-	project := converter.FromProject(req.Msg.Project)
+	docID := types.ID(req.Msg.DocumentId)
+	docKey := key.Key(req.Msg.DocumentKey)
 
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -71,11 +71,11 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	// 01. Create request pack with presence clear change.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: summary.ID}
-	cp := clientInfo.Checkpoint(summary.ID)
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
-		docKey,
+		refKey,
 		types.ID(req.Msg.ClientId),
 		cp.ServerSeq,
 	)
@@ -89,17 +89,17 @@ func (s *clusterServer) DetachDocument(
 	)
 	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
-	pack := change.NewPack(summary.Key, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
+	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
 	defer docLocker.RUnlock()
 	if project.HasAttachmentLimit() {
-		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
 	}
 
-	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
+	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
 		Status: document.StatusDetached,
 	}); err != nil {
