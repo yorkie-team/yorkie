@@ -93,7 +93,6 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 
 | Risk                              | Mitigation Strategy                                                                |
 | --------------------------------- | ---------------------------------------------------------------------------------- |
-| Potential for deadlocks           | Enforce consistent lock acquisition order (`doc` → `pull` → `attachment` → `push`) |
 | Increased code complexity         | Use standardized lock helpers and runtime assertions                               |
-| Minimal performance improvement   | Validate through benchmarks and production load tests                              |
+| Potential for deadlocks           | Enforce consistent lock acquisition order (`doc` → `pull` → `attachment` → `push`) |
 | Difficulty implementing lock-free | Retain mutex-based implementation as fallback, phase in lock-free safely           |

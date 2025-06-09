@@ -336,8 +336,7 @@ func (c *Client) RemoveDocument(
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 			Force:       force,
-		},
-		), apiKey, documentKey),
+		}), apiKey, documentKey),
 	)
 	return err
 }

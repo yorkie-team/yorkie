@@ -1097,7 +1097,7 @@ func (c *Client) CreateChangeInfos(
 			"_id":        refKey.DocID,
 		},
 		updateOps,
-		options.FindOneAndUpdate().SetReturnDocument(options.Before),
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 	docInfo := &database.DocInfo{}
 	if err := result.Decode(docInfo); err != nil {
@@ -1106,6 +1106,7 @@ func (c *Client) CreateChangeInfos(
 		}
 		return nil, change.InitialCheckpoint, fmt.Errorf("decode document: %w", err)
 	}
+	docInfo.ServerSeq -= int64(len(changes))
 
 	// 03. Insert changes into the changes collection.
 	var models []mongo.WriteModel

@@ -116,7 +116,6 @@ func (c *Client) DetachDocument(
 	project *types.Project,
 	clientID time.ActorID,
 	docID types.ID,
-	apiKey string,
 	docKey key.Key,
 ) error {
 	_, err := c.client.DetachDocument(
@@ -128,8 +127,8 @@ func (c *Client) DetachDocument(
 				ID:  docID,
 				Key: docKey,
 			}),
-		},
-		), apiKey, docKey.String()))
+		}), project.PublicKey, docKey.String()),
+	)
 	if err != nil {
 		return err
 	}
@@ -141,16 +140,15 @@ func (c *Client) DetachDocument(
 func (c *Client) CompactDocument(
 	ctx context.Context,
 	project *types.Project,
-	document *database.DocInfo,
+	docInfo *database.DocInfo,
 ) error {
 	_, err := c.client.CompactDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
-			ProjectId:   document.ProjectID.String(),
-			DocumentId:  document.ID.String(),
-			DocumentKey: document.Key.String(),
-		},
-		), project.PublicKey, document.Key.String()))
+			ProjectId:   docInfo.ProjectID.String(),
+			DocumentId:  docInfo.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
 		return err
 	}
@@ -162,16 +160,15 @@ func (c *Client) CompactDocument(
 func (c *Client) PurgeDocument(
 	ctx context.Context,
 	project *types.Project,
-	document *database.DocInfo,
+	docInfo *database.DocInfo,
 ) error {
 	_, err := c.client.PurgeDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServicePurgeDocumentRequest{
-			ProjectId:   document.ProjectID.String(),
-			DocumentId:  document.ID.String(),
-			DocumentKey: document.Key.String(),
-		},
-		), project.PublicKey, document.Key.String()))
+			ProjectId:   docInfo.ProjectID.String(),
+			DocumentId:  docInfo.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
 		return err
 	}
