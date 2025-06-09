@@ -717,6 +717,16 @@ func (s *adminServer) RemoveSchema(
 		return nil, err
 	}
 
+	// Check if the schema is being used by any documents
+	schema := fmt.Sprintf("%s@%d", req.Msg.SchemaName, req.Msg.Version)
+	isAttached, err := s.backend.DB.IsSchemaAttached(ctx, project.ID, schema)
+	if err != nil {
+		return nil, err
+	}
+	if isAttached {
+		return nil, fmt.Errorf("schema %s is being used", schema)
+	}
+
 	if err = schemas.RemoveSchema(
 		ctx,
 		s.backend,

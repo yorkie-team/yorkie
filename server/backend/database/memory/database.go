@@ -1893,3 +1893,25 @@ func (d *DB) RotateProjectKeys(
 	txn.Commit()
 	return project, nil
 }
+
+// IsSchemaAttached returns true if the schema is being used by any documents.
+func (d *DB) IsSchemaAttached(
+	_ context.Context,
+	projectID types.ID,
+	schema string,
+) (bool, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_schema",
+		projectID.String(),
+		schema,
+	)
+	if err != nil {
+		return false, fmt.Errorf("find documents by schema: %w", err)
+	}
+
+	return iter.Next() != nil, nil
+}

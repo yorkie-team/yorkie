@@ -1839,3 +1839,28 @@ func escapeRegex(str string) string {
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
 }
+
+// IsSchemaAttached returns true if the schema is being used by any documents.
+func (c *Client) IsSchemaAttached(
+	ctx context.Context,
+	projectID types.ID,
+	schema string,
+) (bool, error) {
+	filter := bson.M{
+		"project_id": projectID,
+		"schema":     schema,
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, filter)
+	if err != nil {
+		return false, fmt.Errorf("find documents by schema: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return false, fmt.Errorf("decode documents: %w", err)
+	}
+
+	return len(infos) > 0, nil
+}

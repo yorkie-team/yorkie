@@ -388,4 +388,11 @@ type Database interface {
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 	) (map[string]int64, error)
+
+	// IsSchemaAttached returns true if the schema is being used by any documents.
+	IsSchemaAttached(
+		ctx context.Context,
+		projectID types.ID,
+		schema string,
+	) (bool, error)
 }
