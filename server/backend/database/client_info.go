@@ -21,6 +21,8 @@ import (
 	"fmt"
 	gotime "time"
 
+	"slices"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -76,6 +78,9 @@ type ClientInfo struct {
 
 	// Documents is a map of document which is attached to the client.
 	Documents ClientDocInfoMap `bson:"documents"`
+
+	// DocumentKeys is a list of document keys that are attached to the client.
+	DocumentKeys []types.ID `bson:"document_keys"`
 
 	// Metadata is the metadata of the client.
 	Metadata map[string]string `bson:"metadata"`
@@ -135,6 +140,11 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 		ServerSeq: 0,
 		ClientSeq: 0,
 	}
+
+	if !i.containsDocumentKey(docID) {
+		i.DocumentKeys = append(i.DocumentKeys, docID)
+	}
+
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -149,6 +159,8 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
+	i.removeDocumentKey(docID)
+
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -163,6 +175,8 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
+	i.removeDocumentKey(docID)
+
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -276,14 +290,15 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 
 	return &ClientInfo{
-		ID:        i.ID,
-		ProjectID: i.ProjectID,
-		Key:       i.Key,
-		Status:    i.Status,
-		Documents: documents,
-		Metadata:  i.Metadata,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: i.UpdatedAt,
+		ID:           i.ID,
+		ProjectID:    i.ProjectID,
+		Key:          i.Key,
+		Status:       i.Status,
+		Documents:    documents,
+		DocumentKeys: slices.Clone(i.DocumentKeys),
+		Metadata:     i.Metadata,
+		CreatedAt:    i.CreatedAt,
+		UpdatedAt:    i.UpdatedAt,
 	}
 }
 
@@ -307,4 +322,19 @@ func (i *ClientInfo) IsServerClient() bool {
 	}
 
 	return actorID == time.InitialActorID
+}
+
+// containsDocumentKey checks if the document key exists in the client's document keys.
+func (i *ClientInfo) containsDocumentKey(docID types.ID) bool {
+	return slices.Contains(i.DocumentKeys, docID)
+}
+
+// removeDocumentKey removes the document key from the client's document keys.
+func (i *ClientInfo) removeDocumentKey(docID types.ID) {
+	for idx, key := range i.DocumentKeys {
+		if key == docID {
+			i.DocumentKeys = slices.Delete(i.DocumentKeys, idx, idx+1)
+			return
+		}
+	}
 }

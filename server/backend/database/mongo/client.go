@@ -703,6 +703,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
 			"updated_at":                            clientInfo.UpdatedAt,
 		},
+		"$addToSet": bson.M{"document_keys": docInfo.ID},
 	}
 
 	attached, err := clientInfo.IsAttached(docInfo.ID)
@@ -718,6 +719,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
 				"updated_at":                               clientInfo.UpdatedAt,
 			},
+			"$pull": bson.M{"document_keys": docInfo.ID},
 		}
 	}
 
