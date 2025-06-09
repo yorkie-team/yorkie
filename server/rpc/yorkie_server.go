@@ -150,12 +150,11 @@ func (s *yorkieServer) AttachDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
+
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -176,11 +175,7 @@ func (s *yorkieServer) AttachDocument(
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 
 		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
 		if err != nil {
@@ -242,12 +237,11 @@ func (s *yorkieServer) DetachDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
+
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -260,11 +254,7 @@ func (s *yorkieServer) DetachDocument(
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 	}
 
 	// NOTE(hackerwins): If the project does not have an attachment limit,
@@ -338,12 +328,10 @@ func (s *yorkieServer) PushPullChanges(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -406,12 +394,10 @@ func (s *yorkieServer) RemoveDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -423,11 +409,7 @@ func (s *yorkieServer) RemoveDocument(
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 	}
 
 	// 02. Push/Pull between the client and server.
@@ -488,12 +470,7 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
+	defer locker.Unlock()
 	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
 	if err != nil {
 		return err

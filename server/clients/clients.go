@@ -81,7 +81,6 @@ func Deactivate(
 			project,
 			actorID,
 			docID,
-			project.PublicKey,
 			docInfo.Key,
 		); err != nil {
 			return nil, err

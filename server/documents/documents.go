@@ -458,11 +458,7 @@ func CompactDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.CompactDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.CompactDocument(ctx, project, document)
 }
 
 // PurgeDocument purges the given document.
@@ -472,9 +468,5 @@ func PurgeDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.PurgeDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.PurgeDocument(ctx, project, document)
 }

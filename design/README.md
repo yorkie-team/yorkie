@@ -23,6 +23,7 @@
 - [MongoDB Sharding](mongodb-sharding.md): MongoDB sharding with sharding strategy considerations
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
 - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
+- [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
 
 ## Maintaining the Document

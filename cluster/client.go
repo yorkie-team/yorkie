@@ -116,20 +116,17 @@ func (c *Client) DetachDocument(
 	project *types.Project,
 	clientID time.ActorID,
 	docID types.ID,
-	apiKey string,
 	docKey key.Key,
 ) error {
 	_, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceDetachDocumentRequest{
-			Project:  converter.ToProject(project),
-			ClientId: clientID.String(),
-			DocumentSummary: converter.ToDocumentSummary(&types.DocumentSummary{
-				ID:  docID,
-				Key: docKey,
-			}),
-		},
-		), apiKey, docKey.String()))
+			Project:     converter.ToProject(project),
+			ClientId:    clientID.String(),
+			DocumentId:  docID.String(),
+			DocumentKey: docKey.String(),
+		}), project.PublicKey, docKey.String()),
+	)
 	if err != nil {
 		return err
 	}
@@ -140,16 +137,16 @@ func (c *Client) DetachDocument(
 // CompactDocument compacts the given document.
 func (c *Client) CompactDocument(
 	ctx context.Context,
-	document *database.DocInfo,
-	apiKey string,
+	project *types.Project,
+	docInfo *database.DocInfo,
 ) error {
 	_, err := c.client.CompactDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
-			ProjectId:  document.ProjectID.String(),
-			DocumentId: document.ID.String(),
-		},
-		), apiKey, document.Key.String()))
+			ProjectId:   docInfo.ProjectID.String(),
+			DocumentId:  docInfo.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
 		return err
 	}
@@ -160,16 +157,16 @@ func (c *Client) CompactDocument(
 // PurgeDocument purges the given document.
 func (c *Client) PurgeDocument(
 	ctx context.Context,
-	document *database.DocInfo,
-	apiKey string,
+	project *types.Project,
+	docInfo *database.DocInfo,
 ) error {
 	_, err := c.client.PurgeDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServicePurgeDocumentRequest{
-			ProjectId:  document.ProjectID.String(),
-			DocumentId: document.ID.String(),
-		},
-		), apiKey, document.Key.String()))
+			ProjectId:   docInfo.ProjectID.String(),
+			DocumentId:  docInfo.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
 		return err
 	}
