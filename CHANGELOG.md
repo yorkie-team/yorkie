@@ -7,11 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.6.15] - 2025-06-09
+
+### Added
+
 - Refactor CI workflow for benchmark and load testing by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1297
 - Implement project API key rotation with auth checks by @minwoo1999 in https://github.com/yorkie-team/yorkie/pull/1296
+
+### Changed
+
+- Improve Shard Key for Client Requests to Prevent Load Skew by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1306
+- Replace Push Lock with lock-free implementation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1309
+
+### Fixed
+
 - Fix invalid env by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1303
 - Fix garbage collection design document typo by @blurfx in https://github.com/yorkie-team/yorkie/pull/1301
-- Improve Shard Key for Client Requests to Prevent Load Skew by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1306
 - Invalidate snapshot cache on compaction and purging by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1307
 
 ## [0.6.14] - 2025-06-02
