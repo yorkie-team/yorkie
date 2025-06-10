@@ -599,43 +599,48 @@ func (c *Client) ActivateClient(
 	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+	findResult := c.collection(ColClients).FindOne(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"metadata":   metadata,
-	}, bson.M{
-		"$set": bson.M{
-			StatusKey:    database.ClientActivated,
-			"updated_at": now,
-		},
-	}, options.Update().SetUpsert(true))
-	if err != nil {
-		return nil, fmt.Errorf("upsert client: %w", err)
+	})
+
+	// if result is not empty, return the client info
+	if findResult.Err() == nil {
+		clientInfo := database.ClientInfo{}
+		if err := findResult.Decode(&clientInfo); err != nil {
+			return nil, fmt.Errorf("decode client info: %w", err)
+		}
+		return &clientInfo, nil
 	}
 
-	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
-		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-			"project_id": projectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
-			"$set": bson.M{
-				"created_at": now,
-			},
-		})
-	} else {
-		result = c.collection(ColClients).FindOne(ctx, bson.M{
+	// if result is empty, create a new client
+	if findResult.Err() == mongo.ErrNoDocuments {
+		insertResult, err := c.collection(ColClients).InsertOne(ctx, bson.M{
 			"project_id": projectID,
 			"key":        key,
+			"metadata":   metadata,
+			"created_at": now,
+			"updated_at": now,
+			"status":     database.ClientActivated,
 		})
+		if err != nil {
+			return nil, fmt.Errorf("insert client: %w", err)
+		}
+
+		returnResult := &database.ClientInfo{
+			ProjectID: projectID,
+			ID:        types.ID(insertResult.InsertedID.(primitive.ObjectID).Hex()),
+			Key:       key,
+			Metadata:  metadata,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Status:    database.ClientActivated,
+		}
+
+		return returnResult, nil
 	}
 
-	clientInfo := database.ClientInfo{}
-	if err = result.Decode(&clientInfo); err != nil {
-		return nil, fmt.Errorf("decode client info: %w", err)
-	}
-
-	return &clientInfo, nil
+	return nil, fmt.Errorf("find client: %w", findResult.Err())
 }
 
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.

@@ -86,10 +86,9 @@ var collectionInfos = []collectionInfo{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)},
