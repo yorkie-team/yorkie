@@ -177,8 +177,10 @@ func pushPack(
 	}
 
 	// 02. Push the changes to the database.
-	// NOTE(hackerwins): We replace the push lock with the lock-free implementation
-	// to increase the performance of the push operation.
+	if len(pushables) > 0 || reqPack.IsRemoved {
+		locker := be.Lockers.Locker(DocPushKey(docKey))
+		defer locker.Unlock()
+	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
 		docKey,
