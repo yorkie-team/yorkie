@@ -349,9 +349,9 @@ func UpdateDocInfoSchema(
 	ctx context.Context,
 	be *backend.Backend,
 	refKey types.DocRefKey,
-	schema string,
+	schemaKey string,
 ) error {
-	return be.DB.UpdateDocInfoSchema(ctx, refKey, schema)
+	return be.DB.UpdateDocInfoSchema(ctx, refKey, schemaKey)
 }
 
 // UpdateDocument updates the given document with the given root.

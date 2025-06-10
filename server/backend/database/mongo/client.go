@@ -1020,14 +1020,14 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 func (c *Client) UpdateDocInfoSchema(
 	ctx context.Context,
 	refKey types.DocRefKey,
-	schema string,
+	schemaKey string,
 ) error {
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
 	}, bson.M{
 		"$set": bson.M{
-			"schema": schema,
+			"schema": schemaKey,
 		},
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 

@@ -171,11 +171,12 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	schemaKey := docInfo.Schema
-	if schemaKey == "" {
-		schemaKey = req.Msg.Schema
+	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
+		return nil, err
 	}
-	schemaName, schemaVersion, err := converter.FromSchemaKey(schemaKey)
+
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -183,18 +184,7 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-
-	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
-		return nil, err
-	}
-	if docInfo.Schema == "" {
-		if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), schemaKey); err != nil {
-			return nil, err
-		}
-	}
-
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.Schema != "") {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer func() {
 			if err := locker.Unlock(); err != nil {
@@ -209,6 +199,20 @@ func (s *yorkieServer) AttachDocument(
 
 		if err := project.CheckAttachmentLimit(count); err != nil {
 			return nil, err
+		}
+
+		if count == 0 {
+			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.Schema)
+			if err != nil {
+				return nil, err
+			}
+			schema, err = schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+			if err != nil {
+				return nil, err
+			}
+			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.Schema); err != nil {
+				return nil, err
+			}
 		}
 	}
 

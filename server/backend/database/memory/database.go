@@ -991,7 +991,7 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 func (d *DB) UpdateDocInfoSchema(
 	_ context.Context,
 	refKey types.DocRefKey,
-	schema string,
+	schemaKey string,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -1010,7 +1010,7 @@ func (d *DB) UpdateDocInfoSchema(
 		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
 	}
 
-	docInfo.Schema = schema
+	docInfo.Schema = schemaKey
 
 	if err := txn.Insert(tblDocuments, docInfo); err != nil {
 		return fmt.Errorf("update document schema: %w", err)

@@ -185,11 +185,16 @@ func (d *Document) Update(
 		return err
 	}
 
-	if !ctx.IsPresenceOnlyChange() && d.SchemaRules != nil {
-		if err := d.validateSchema(d.cloneRoot.Object()); err != nil {
+	if !ctx.IsPresenceOnlyChange() && len(d.SchemaRules) > 0 {
+		result := schema.ValidateYorkieRuleset(d.cloneRoot.Object(), d.SchemaRules)
+		if !result.Valid {
+			var errorMessages []string
+			for _, err := range result.Errors {
+				errorMessages = append(errorMessages, err.Message)
+			}
 			d.cloneRoot = nil
 			d.clonePresences = nil
-			return err
+			return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, strings.Join(errorMessages, ", "))
 		}
 	}
 
@@ -525,18 +530,6 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 
 // validateSchema validates the document against the schema rules.
 func (d *Document) validateSchema(root *crdt.Object) error {
-	if len(d.SchemaRules) == 0 {
-		return nil
-	}
-
-	result := schema.ValidateYorkieRuleset(root, d.SchemaRules)
-	if !result.Valid {
-		var errorMessages []string
-		for _, err := range result.Errors {
-			errorMessages = append(errorMessages, err.Message)
-		}
-		return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, strings.Join(errorMessages, ", "))
-	}
 
 	return nil
 }
