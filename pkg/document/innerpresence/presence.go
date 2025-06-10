@@ -113,22 +113,53 @@ func (m *Map) DeepCopy() *Map {
 	return copied
 }
 
+type P struct {
+	Key, Val string
+}
+
 // Presence represents custom presence that can be defined by the client.
-type Presence map[string]string
+type Presence []P
 
 // New creates a new instance of Presence.
 func New() Presence {
-	return make(map[string]string)
+	return make(Presence, 0)
+}
+
+const NotFound = ""
+
+// Get gets the value of the given key
+func (p Presence) Get(key string) string {
+	for _, kv := range p {
+		if kv.Key == key {
+			return kv.Val
+		}
+	}
+	// TODO(raara).
+	return NotFound
+}
+
+// GetIndex TODO(raara).
+func (p Presence) GetIndex(key string) int {
+	for i, kv := range p {
+		if kv.Key == key {
+			return i
+		}
+	}
+	return -1
 }
 
 // Set sets the value of the given key.
-func (p Presence) Set(key string, value string) {
-	p[key] = value
+func (p *Presence) Set(key, value string) {
+	if idx := p.GetIndex(key); idx != -1 {
+		(*p)[idx] = P{key, value}
+		return
+	}
+	*p = append(*p, P{key, value})
 }
 
 // Clear clears the presence.
 func (p *Presence) Clear() {
-	*p = make(map[string]string)
+	*p = []P{}
 }
 
 // DeepCopy copies itself deeply.
@@ -137,9 +168,9 @@ func (p Presence) DeepCopy() Presence {
 		return nil
 	}
 
-	clone := make(map[string]string, len(p))
-	for k, v := range p {
-		clone[k] = v
-	}
+	clone := make(Presence, len(p))
+	copy(clone, p)
+	//clone = append(clone[:0], p...)
+
 	return clone
 }
