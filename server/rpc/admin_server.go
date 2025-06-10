@@ -636,7 +636,7 @@ func (s *adminServer) RotateProjectKeys(
 	// ensure consistency across the entire cluster.
 	// After introducing broadcasting across the cluster, we need to broadcast
 	// the project cache invalidation event to all nodes.
-	s.yorkieInterceptor.InvalidateProjectCache(oldProject.PublicKey)
+	s.backend.Cache.Project.Remove(oldProject.PublicKey)
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{

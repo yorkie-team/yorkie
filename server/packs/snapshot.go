@@ -67,7 +67,7 @@ func BuildInternalDocForServerSeq(
 	docKey := docInfo.RefKey()
 	var doc *document.InternalDocument
 	var err error
-	if cached, ok := be.SnapshotCache.Get(docKey); ok {
+	if cached, ok := be.Cache.Snapshot.Get(docKey); ok {
 		doc, err = cached.DeepCopy()
 		if err != nil {
 			return nil, err
@@ -136,7 +136,7 @@ func BuildInternalDocForServerSeq(
 	}
 
 	// NOTE(hackerwins): Store the last accessed document in the cache.
-	be.SnapshotCache.Add(docKey, doc)
+	be.Cache.Snapshot.Add(docKey, doc)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(

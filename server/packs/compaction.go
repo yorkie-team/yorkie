@@ -47,7 +47,7 @@ func Compact(
 	docInfo *database.DocInfo,
 ) error {
 	// 0. Invalidate snapshot cache.
-	be.SnapshotCache.Remove(docInfo.RefKey())
+	be.Cache.Snapshot.Remove(docInfo.RefKey())
 
 	// 1. Check if the document is attached.
 	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
@@ -126,7 +126,7 @@ func Purge(
 	docInfo *database.DocInfo,
 ) error {
 	// 0. Invalidate snapshot cache.
-	be.SnapshotCache.Remove(docInfo.RefKey())
+	be.Cache.Snapshot.Remove(docInfo.RefKey())
 
 	// 1. Check if the document is removed.
 	if !docInfo.IsRemoved() {
