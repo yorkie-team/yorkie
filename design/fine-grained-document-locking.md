@@ -1,6 +1,6 @@
 ---
 title: fine-grained-document-locking
-target-version: 0.6.15
+target-version: 0.6.16
 ---
 
 <!-- Make sure to append document link in design README.md after creating the document. -->
@@ -30,7 +30,7 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 | ---------------- | ----------------------------------------------------------------------------------- |
 | `doc`            | Coordinates consistency between PushPull-series requests(RLock) and compaction      |
 | `doc.attachment` | Ensures consistency during Attach/Detach operations                                 |
-| `doc.push`       | Ensures consistency while pushing changes to server (lock-free implementation)      |
+| `doc.push`       | Ensures consistency while pushing changes to server                                 |
 | `doc.pull`       | Ensures consistency when clients have already pushed changes or pull unseen changes |
 
 ### Lock Acquisition by API
@@ -77,9 +77,11 @@ This proposal introduces a fine-grained document locking mechanism to improve co
 
 **PushPull(Internal Function)**
 
-1. 🔒 Acquire `doc.push` (conceptually lock, but uses lock-free implementation for high concurrency)
-2. Push changes and assign `ServerSeq`
-3. 🔓 Release `doc.push`
+1. 🔒 Acquire `doc.push`
+2. `findDoc` to fetch `server_seq`
+3. Push `changes` and assign `server_seq`
+4. `updateDoc` with `server_seq`
+5. 🔓 Release `doc.push`
 
 ```ts
 // 01. Atomically Reserve ServerSeq
