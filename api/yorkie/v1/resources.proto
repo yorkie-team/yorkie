@@ -361,13 +361,8 @@ message PresenceChange {
   Presence presence = 2;
 }
 
-message P {
-  string key = 1;
-  string val = 2;
-}
-
 message Presence {
-  repeated P data = 1;
+  repeated string data = 1;
 }
 
 message Checkpoint {

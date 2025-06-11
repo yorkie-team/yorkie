@@ -113,12 +113,8 @@ func (m *Map) DeepCopy() *Map {
 	return copied
 }
 
-type P struct {
-	Key, Val string
-}
-
 // Presence represents custom presence that can be defined by the client.
-type Presence []P
+type Presence []string
 
 // New creates a new instance of Presence.
 func New() Presence {
@@ -129,9 +125,9 @@ const NotFound = ""
 
 // Get gets the value of the given key
 func (p Presence) Get(key string) string {
-	for _, kv := range p {
-		if kv.Key == key {
-			return kv.Val
+	for i := 0; i < len(p); i += 2 {
+		if p[i] == key {
+			return p[i+1]
 		}
 	}
 	// TODO(raara).
@@ -140,8 +136,8 @@ func (p Presence) Get(key string) string {
 
 // GetIndex TODO(raara).
 func (p Presence) GetIndex(key string) int {
-	for i, kv := range p {
-		if kv.Key == key {
+	for i := 0; i < len(p); i += 2 {
+		if p[i] == key {
 			return i
 		}
 	}
@@ -151,15 +147,17 @@ func (p Presence) GetIndex(key string) int {
 // Set sets the value of the given key.
 func (p *Presence) Set(key, value string) {
 	if idx := p.GetIndex(key); idx != -1 {
-		(*p)[idx] = P{key, value}
+		(*p)[idx] = key
+		(*p)[idx+1] = value
 		return
 	}
-	*p = append(*p, P{key, value})
+	*p = append(*p, key)
+	*p = append(*p, value)
 }
 
 // Clear clears the presence.
 func (p *Presence) Clear() {
-	*p = []P{}
+	*p = []string{}
 }
 
 // DeepCopy copies itself deeply.

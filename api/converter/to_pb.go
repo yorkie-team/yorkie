@@ -125,17 +125,8 @@ func ToPresence(p innerpresence.Presence) *api.Presence {
 		return nil
 	}
 
-	dst := make([]*api.P, len(p))
-	for i, kv := range p {
-		dst[i] = &api.P{
-			Key: kv.Key,
-			Val: kv.Val,
-		}
-	}
-
-	// 2. 새 슬라이스를 Presence에 담아 반환
 	return &api.Presence{
-		Data: dst,
+		Data: p,
 	}
 }
 
@@ -147,16 +138,9 @@ func ToPresenceChange(p *innerpresence.Change) *api.PresenceChange {
 
 	switch p.ChangeType {
 	case innerpresence.Put:
-		dst := make([]*api.P, len(p.Presence))
-		for i, kv := range p.Presence {
-			dst[i] = &api.P{
-				Key: kv.Key,
-				Val: kv.Val,
-			}
-		}
 		return &api.PresenceChange{
 			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-			Presence: &api.Presence{Data: dst},
+			Presence: &api.Presence{Data: p.Presence},
 		}
 	case innerpresence.Clear:
 		return &api.PresenceChange{

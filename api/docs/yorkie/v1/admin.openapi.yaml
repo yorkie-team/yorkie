@@ -2036,22 +2036,6 @@ components:
           type: object
       title: CreatedAtMapByActorEntry
       type: object
-    yorkie.v1.P:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        val:
-          additionalProperties: false
-          description: ""
-          title: val
-          type: string
-      title: P
-      type: object
     yorkie.v1.Presence:
       additionalProperties: false
       description: ""
@@ -2060,8 +2044,7 @@ components:
           additionalProperties: false
           description: ""
           items:
-            $ref: '#/components/schemas/yorkie.v1.P'
-            type: object
+            type: string
           title: data
           type: array
       title: Presence

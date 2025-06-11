@@ -60,14 +60,14 @@ func TestPresence(t *testing.T) {
 		}))
 		encoded, err := gojson.Marshal(d1.AllPresences())
 		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":[{"Key":"updated","Val":"true"}]}`, c1.ID()), string(encoded))
+		assert.Equal(t, fmt.Sprintf(`{"%s":["updated","true"]}`, c1.ID()), string(encoded))
 
 		// 03 Sync documents and check that the presence is updated on the other client
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 		encoded, err = gojson.Marshal(d2.AllPresences())
 		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":[{"Key":"updated","Val":"true"}],"%s":[]}`, c1.ID(), c2.ID()), string(encoded))
+		assert.Equal(t, fmt.Sprintf(`{"%s":["updated","true"],"%s":[]}`, c1.ID(), c2.ID()), string(encoded))
 	})
 
 	t.Run("presence with snapshot test", func(t *testing.T) {
@@ -90,48 +90,48 @@ func TestPresence(t *testing.T) {
 		}
 		encoded, err := gojson.Marshal(d1.AllPresences())
 		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":[{"Key":"updated","Val":"9"}]}`, c1.ID()), string(encoded))
+		assert.Equal(t, fmt.Sprintf(`{"%s":["updated","9"]}`, c1.ID()), string(encoded))
 
 		// 03 Sync documents and check that the presence is updated on the other client
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 		encoded, err = gojson.Marshal(d2.AllPresences())
 		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":[{"Key":"updated","Val":"9"}],"%s":[]}`, c1.ID(), c2.ID()), string(encoded))
+		assert.Equal(t, fmt.Sprintf(`{"%s":["updated","9"],"%s":[]}`, c1.ID(), c2.ID()), string(encoded))
 	})
 
 	t.Run("presence with attach and detach test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{{Key: "key", Val: c1.Key()}})))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key", c1.Key()})))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{{Key: "key", Val: c2.Key()}})))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key", c2.Key()})))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Check that the presence is updated on the other client.
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t,
-			innerpresence.Presence{{Key: "key", Val: c1.Key()}},
+			innerpresence.Presence{"key", c1.Key()},
 			d1.MyPresence(),
 		)
 		assert.Equal(t,
-			innerpresence.Presence{{Key: "key", Val: c2.Key()}},
+			innerpresence.Presence{"key", c2.Key()},
 			d1.PresenceForTest(c2.ID().String()),
 		)
 		assert.Equal(t,
-			innerpresence.Presence{{Key: "key", Val: c2.Key()}},
+			innerpresence.Presence{"key", c2.Key()},
 			d2.MyPresence(),
 		)
 		assert.Equal(t,
-			innerpresence.Presence{{Key: "key", Val: c2.Key()}},
+			innerpresence.Presence{"key", c2.Key()},
 			d2.PresenceForTest(c2.ID().String()),
 		)
 
 		// 03. The first client detaches the document and check that the presence is updated on the other client.
 		assert.NoError(t, c1.Detach(ctx, d1))
 		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, innerpresence.Presence{{Key: "key", Val: c2.Key()}}, d2.MyPresence())
+		assert.Equal(t, innerpresence.Presence{"key", c2.Key()}, d2.MyPresence())
 		assert.Nil(t, d2.PresenceForTest(c1.ID().String()))
 	})
 
@@ -571,7 +571,7 @@ func TestPresence(t *testing.T) {
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
 			Presences: map[string]innerpresence.Presence{
-				c2.ID().String(): {{Key: "updated", Val: "true"}},
+				c2.ID().String(): {"updated", "true"},
 			},
 		})
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
