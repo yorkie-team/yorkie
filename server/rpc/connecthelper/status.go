@@ -80,7 +80,7 @@ var errorToConnectCode = map[error]connect.Code{
 	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
 	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
 	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,
-	documents.ErrDocumentNotRemoved:     connect.CodeFailedPrecondition,
+	packs.ErrDocumentNotRemoved:         connect.CodeFailedPrecondition,
 
 	// Unimplemented means the server does not implement the functionality.
 	converter.ErrUnsupportedOperation:   connect.CodeUnimplemented,

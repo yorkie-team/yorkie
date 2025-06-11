@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.14
+  version: v0.6.15
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -244,6 +244,11 @@ components:
           description: ""
           title: document_id
           type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
         projectId:
           additionalProperties: false
           description: ""
@@ -265,12 +270,16 @@ components:
           description: ""
           title: client_id
           type: string
-        documentSummary:
-          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+        documentId:
           additionalProperties: false
           description: ""
-          title: document_summary
-          type: object
+          title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
         project:
           $ref: '#/components/schemas/yorkie.v1.Project'
           additionalProperties: false
@@ -293,6 +302,11 @@ components:
           description: ""
           title: document_id
           type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
         projectId:
           additionalProperties: false
           description: ""
@@ -304,90 +318,6 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServicePurgeDocumentResponse
-      type: object
-    yorkie.v1.DataSize:
-      additionalProperties: false
-      description: ""
-      properties:
-        data:
-          additionalProperties: false
-          description: ""
-          title: data
-          type: integer
-        meta:
-          additionalProperties: false
-          description: ""
-          title: meta
-          type: integer
-      title: DataSize
-      type: object
-    yorkie.v1.DocSize:
-      additionalProperties: false
-      description: ""
-      properties:
-        gc:
-          $ref: '#/components/schemas/yorkie.v1.DataSize'
-          additionalProperties: false
-          description: ""
-          title: gc
-          type: object
-        live:
-          $ref: '#/components/schemas/yorkie.v1.DataSize'
-          additionalProperties: false
-          description: ""
-          title: live
-          type: object
-      title: DocSize
-      type: object
-    yorkie.v1.DocumentSummary:
-      additionalProperties: false
-      description: ""
-      properties:
-        accessedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
-          additionalProperties: false
-          description: ""
-          title: accessed_at
-          type: object
-        attachedClients:
-          additionalProperties: false
-          description: ""
-          title: attached_clients
-          type: integer
-        createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
-          additionalProperties: false
-          description: ""
-          title: created_at
-          type: object
-        documentSize:
-          $ref: '#/components/schemas/yorkie.v1.DocSize'
-          additionalProperties: false
-          description: ""
-          title: document_size
-          type: object
-        id:
-          additionalProperties: false
-          description: ""
-          title: id
-          type: string
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        snapshot:
-          additionalProperties: false
-          description: ""
-          title: snapshot
-          type: string
-        updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
-          additionalProperties: false
-          description: ""
-          title: updated_at
-          type: object
-      title: DocumentSummary
       type: object
     yorkie.v1.Project:
       additionalProperties: false

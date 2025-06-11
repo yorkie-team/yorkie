@@ -287,6 +287,9 @@ func (s *adminServer) CreateDocument(
 		}
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
 	doc, err := documents.CreateDocument(
 		ctx,
 		s.backend,
@@ -476,6 +479,9 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
 		s.backend,
@@ -512,6 +518,9 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	if err != nil {
 		return nil, err
 	}
+
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
 
 	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
 	if err != nil {
@@ -774,7 +783,7 @@ func (s *adminServer) RotateProjectKeys(
 	// ensure consistency across the entire cluster.
 	// After introducing broadcasting across the cluster, we need to broadcast
 	// the project cache invalidation event to all nodes.
-	s.yorkieInterceptor.InvalidateProjectCache(oldProject.PublicKey)
+	s.backend.Cache.Project.Remove(oldProject.PublicKey)
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{

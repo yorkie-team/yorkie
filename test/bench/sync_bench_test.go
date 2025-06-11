@@ -58,7 +58,7 @@ func benchmarkMemorySync(cnt int, b *testing.B) {
 
 				locker := locker.Locker(sync.Key(b.Name()))
 				sum += 1
-				assert.NoError(b, locker.Unlock())
+				locker.Unlock()
 			}()
 		}
 		wg.Wait()

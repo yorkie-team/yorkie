@@ -61,6 +61,16 @@ func (c *LockerManager) Locker(key Key) Locker {
 	return locker
 }
 
+// Locker creates locker of the given key.
+func (c *LockerManager) LockerWithRLock(key Key) Locker {
+	locker := &internalLocker{
+		key.String(),
+		c.locks,
+	}
+	locker.RLock()
+	return locker
+}
+
 // LockerWithTryLock creates locker of the given key with try lock.
 func (c *LockerManager) LockerWithTryLock(key Key) (Locker, bool) {
 	locker := &internalLocker{
@@ -80,13 +90,13 @@ type Locker interface {
 	tryLock() bool
 
 	// Unlock unlocks the mutex.
-	Unlock() error
+	Unlock()
 
 	// RLock acquires a read lock.
 	RLock()
 
 	// RUnlock releases a read lock previously acquired by RLock.
-	RUnlock() error
+	RUnlock()
 }
 
 type internalLocker struct {
@@ -105,8 +115,10 @@ func (il *internalLocker) tryLock() bool {
 }
 
 // Unlock unlocks the mutex.
-func (il *internalLocker) Unlock() error {
-	return il.locks.Unlock(il.key)
+func (il *internalLocker) Unlock() {
+	if err := il.locks.Unlock(il.key); err != nil {
+		panic(err)
+	}
 }
 
 // RLock locks the mutex for reading..
@@ -115,6 +127,8 @@ func (il *internalLocker) RLock() {
 }
 
 // RUnlock unlocks the read lock.
-func (il *internalLocker) RUnlock() error {
-	return il.locks.RUnlock(il.key)
+func (il *internalLocker) RUnlock() {
+	if err := il.locks.RUnlock(il.key); err != nil {
+		panic(err)
+	}
 }

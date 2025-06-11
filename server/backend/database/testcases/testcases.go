@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	gosync "sync"
 	"testing"
 	gotime "time"
 
@@ -86,7 +87,7 @@ func RunFindDocInfoTest(
 		assert.Equal(t, docKey, info.Key)
 
 		// 02. Remove the document
-		err = db.CreateChangeInfos(ctx, info, 0, []*change.Change{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, info.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Find the document
@@ -330,7 +331,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		}
 
 		// Store changes
-		err := db.CreateChangeInfos(ctx, docInfo, 0, pack.Changes, false)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// Find changes
@@ -392,8 +393,6 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		initialServerSeq := docInfo.ServerSeq
-
 		// 01. Create a document and store changes
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
@@ -416,13 +415,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			c.SetServerSeq(serverSeq)
 		}
 
-		err := db.CreateChangeInfos(
-			ctx,
-			docInfo,
-			initialServerSeq,
-			pack.Changes,
-			false,
-		)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// 02. Create a snapshot that reflect the latest doc info
@@ -470,8 +463,6 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		initialServerSeq := docInfo.ServerSeq
-
 		// 01. Create a document and store changes
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
@@ -493,13 +484,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			c.SetServerSeq(serverSeq)
 		}
 
-		err := db.CreateChangeInfos(
-			ctx,
-			docInfo,
-			initialServerSeq,
-			pack.Changes,
-			false,
-		)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// 02. Find changes
@@ -542,8 +527,6 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		initialServerSeq := docInfo.ServerSeq
-
 		// 02. Create a document and store changes.
 		bytesID, err := clientInfo.ID.Bytes()
 		assert.NoError(t, err)
@@ -568,13 +551,8 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 			c.SetServerSeq(serverSeq)
 		}
 
-		assert.NoError(t, db.CreateChangeInfos(
-			ctx,
-			docInfo,
-			initialServerSeq,
-			pack.Changes,
-			false,
-		))
+		_, _, err = db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
+		assert.NoError(t, err)
 
 		// 03. Find all changes and determine the maximum Lamport timestamp.
 		changes, err := db.FindChangesBetweenServerSeqs(ctx, docRefKey, 1, 10)
@@ -1088,9 +1066,9 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		AssertKeys(t, docKeysInReverse, result)
 
 		// 03. Remove some documents.
-		err = db.CreateChangeInfos(ctx, docInfos[1], 0, []*change.Change{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[1].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
-		err = db.CreateChangeInfos(ctx, docInfos[3], 0, []*change.Change{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[3].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
@@ -1118,7 +1096,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
-		err := db.CreateChangeInfos(ctx, docInfo, 0, []*change.Change{}, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -1138,7 +1116,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// 02. Remove the document.
 		assert.NoError(t, clientInfo1.RemoveDocument(docRefKey1.DocID))
-		err := db.CreateChangeInfos(ctx, docInfo1, 0, []*change.Change{}, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Create a document with same key and check they have same key but different id.
@@ -1160,12 +1138,9 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		doc := document.New(key.Key(t.Name()))
-		pack := doc.CreateChangePack()
-
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		err := db.CreateChangeInfos(ctx, docInfo, 0, pack.Changes, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
@@ -1205,7 +1180,8 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		}))
 		pack := doc.CreateChangePack()
 		updatedAt := docInfo1.UpdatedAt
-		assert.NoError(t, db.CreateChangeInfos(ctx, docInfo1, 0, pack.Changes, false))
+		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), pack.Checkpoint, pack.Changes, false)
+		assert.NoError(t, err)
 		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.Equal(t, updatedAt, docInfo2.UpdatedAt)
 
@@ -1217,9 +1193,56 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		}))
 		pack = doc.CreateChangePack()
 		updatedAt = docInfo2.UpdatedAt
-		assert.NoError(t, db.CreateChangeInfos(ctx, docInfo2, 0, pack.Changes, false))
+		_, _, err = db.CreateChangeInfos(ctx, docInfo2.RefKey(), pack.Checkpoint, pack.Changes, false)
+		assert.NoError(t, err)
 		docInfo3, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NotEqual(t, updatedAt, docInfo3.UpdatedAt)
+	})
+
+	t.Run("create change infos without conflict test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+		numOfClients := 100
+
+		owner, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s", t.Name()), map[string]string{})
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, owner.RefKey(), docKey)
+		assert.NoError(t, err)
+
+		var clients []*database.ClientInfo
+		for i := range numOfClients {
+			c, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s-%d", t.Name(), i), map[string]string{})
+			assert.NoError(t, err)
+			assert.NoError(t, c.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c, docInfo))
+			clients = append(clients, c)
+		}
+
+		wg := gosync.WaitGroup{}
+		for i, c := range clients {
+			wg.Add(1)
+			go func(client *database.ClientInfo, idx int) {
+				defer wg.Done()
+				ctx := context.Background()
+				doc := document.New(docKey)
+				actorID, err := client.ID.ToActorID()
+				assert.NoError(t, err)
+				doc.SetActor(actorID)
+
+				assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+					p.Set("key", fmt.Sprintf("val-%d", idx))
+					return nil
+				}))
+				pack := doc.CreateChangePack()
+				_, _, err = db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
+				assert.NoError(t, err)
+			}(c, i)
+		}
+		wg.Wait()
+
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docInfo.RefKey(), 1, int64(numOfClients))
+		assert.NoError(t, err)
+		assert.Equal(t, numOfClients, len(changes))
 	})
 }
 

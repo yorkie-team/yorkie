@@ -60,9 +60,6 @@ var (
 
 	// ErrDocumentAlreadyExists is returned when the document already exists.
 	ErrDocumentAlreadyExists = errors.New("document already exists")
-
-	// ErrDocumentNotRemoved is returned when the document is not removed yet.
-	ErrDocumentNotRemoved = errors.New("document is not removed yet")
 )
 
 // CreateDocument creates a new document with the given key and server sequence.
@@ -470,11 +467,7 @@ func CompactDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.CompactDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.CompactDocument(ctx, project, document)
 }
 
 // PurgeDocument purges the given document.
@@ -484,9 +477,5 @@ func PurgeDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.PurgeDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.PurgeDocument(ctx, project, document)
 }

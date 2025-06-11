@@ -38,7 +38,7 @@ const TEST_MODE = __ENV.TEST_MODE || "skew";
 const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500");
 
 // Virtual users per document (for even distribution)
-const VU_PER_DOCS = parseInt(__ENV.DOC_COUNT || "10");
+const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10");
 
 // Whether to use control document (for interference testing in skew mode)
 const USE_CONTROL_DOC = __ENV.USE_CONTROL_DOC === "true";
@@ -89,7 +89,7 @@ export default function () {
 
   group("Attachment", function () {
     try {
-      const clientID = activateClient();
+      const [clientID, clientKey] = activateClient();
       activeClients.add(1);
 
       const [docID, serverSeq] = attachDocument(
@@ -128,7 +128,7 @@ export default function () {
         controlDocLatency.add(controlEndTime - controlStartTime);
       }
 
-      deactivateClient(clientID);
+      deactivateClient(clientID, clientKey);
     } catch (error: any) {
       console.error(`Error in main function: ${error.message}`);
       transactionFaileds.add(1);
@@ -218,18 +218,22 @@ function activateClient() {
     .substring(2)}-${Date.now().toString(36)}`;
   const url = `${API_URL}/yorkie.v1.YorkieService/ActivateClient`;
 
-  const result = makeRequest(url, { clientKey }, { "x-shard-key": API_KEY });
+  const result = makeRequest(
+    url,
+    { clientKey },
+    { "x-shard-key": `${API_KEY}/${clientKey}` }
+  );
 
-  return result!.clientId;
+  return [result!.clientId, clientKey];
 }
 
-function deactivateClient(clientID: string): string {
+function deactivateClient(clientID: string, clientKey: string): string {
   const url = `${API_URL}/yorkie.v1.YorkieService/DeactivateClient`;
 
   const result = makeRequest(
     url,
     { clientId: clientID },
-    { "x-shard-key": API_KEY }
+    { "x-shard-key": `${API_KEY}/${clientKey}` }
   );
 
   return result!.clientId;

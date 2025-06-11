@@ -18,10 +18,8 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
-	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -29,12 +27,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 )
 
@@ -56,13 +54,13 @@ func (s *clusterServer) DetachDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceDetachDocumentRequest],
 ) (*connect.Response[api.ClusterServiceDetachDocumentResponse], error) {
+	project := converter.FromProject(req.Msg.Project)
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
-
-	summary := converter.FromDocumentSummary(req.Msg.DocumentSummary)
-	project := converter.FromProject(req.Msg.Project)
+	docID := types.ID(req.Msg.DocumentId)
+	docKey := key.Key(req.Msg.DocumentKey)
 
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
@@ -73,11 +71,11 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	// 01. Create request pack with presence clear change.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: summary.ID}
-	cp := clientInfo.Checkpoint(summary.ID)
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
-		docKey,
+		refKey,
 		types.ID(req.Msg.ClientId),
 		cp.ServerSeq,
 	)
@@ -91,19 +89,17 @@ func (s *clusterServer) DetachDocument(
 	)
 	p := presence.New(changeCtx, innerpresence.New())
 	p.Clear()
-	pack := change.NewPack(summary.Key, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
+	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
 	// 02. Push the changePack to the document
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	if project.HasAttachmentLimit() {
-		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
+		defer locker.Unlock()
 	}
 
-	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
+	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
 		Status: document.StatusDetached,
 	}); err != nil {
@@ -120,20 +116,24 @@ func (s *clusterServer) CompactDocument(
 	req *connect.Request[api.ClusterServiceCompactDocumentRequest],
 ) (*connect.Response[api.ClusterServiceCompactDocumentResponse], error) {
 	docId := types.ID(req.Msg.DocumentId)
-	projectId := types.ID(req.Msg.ProjectId)
+	projectID := types.ID(req.Msg.ProjectId)
+	docKey := key.Key(req.Msg.DocumentKey)
+
+	// NOTE(hackerwins): This locker is used to prevent concurrent compaction
+	// requests for the same document. And it is also used to prevent
+	// concurrent push/pull requests while compaction is in progress.
+	locker := s.backend.Lockers.Locker(packs.DocKey(projectID, docKey))
+	defer locker.Unlock()
 
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
-		ProjectID: projectId,
+		ProjectID: projectID,
 		DocID:     docId,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(hackerwins): We should prevent other requests from modifying the
-	// document's attachments while compacting it. For now, we just check if the
-	// document is attached to any client.
-	if err := packs.Compact(ctx, s.backend, projectId, docInfo); err != nil {
+	if err := packs.Compact(ctx, s.backend, projectID, docInfo); err != nil {
 		return nil, err
 	}
 
@@ -147,34 +147,25 @@ func (s *clusterServer) PurgeDocument(
 ) (*connect.Response[api.ClusterServicePurgeDocumentResponse], error) {
 	projectID := types.ID(req.Msg.ProjectId)
 	docID := types.ID(req.Msg.DocumentId)
+	docKey := key.Key(req.Msg.DocumentKey)
 
-	docKey := types.DocRefKey{ProjectID: projectID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	// NOTE(hackerwins): This locker is used to prevent concurrent compaction
+	// requests for the same document. And it is also used to prevent
+	// concurrent push/pull requests while compaction is in progress.
+	locker := s.backend.Lockers.Locker(packs.DocKey(projectID, docKey))
+	defer locker.Unlock()
+
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
+		ProjectID: projectID,
+		DocID:     docID,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(hackerwins): We should prevent other requests from modifying the
-	// document while purging it. For now, we just check if the document
-	// is removed.
-	if !docInfo.IsRemoved() {
-		return nil, fmt.Errorf("purge document %s: %w", docID, documents.ErrDocumentNotRemoved)
-	}
-
-	counts, err := s.backend.DB.PurgeDocument(ctx, docKey)
-	if err != nil {
-		logging.From(ctx).Error("failed to purge document", zap.Error(err))
+	if err := packs.Purge(ctx, s.backend, projectID, docInfo); err != nil {
 		return nil, err
 	}
-
-	logging.From(ctx).Infow(fmt.Sprintf(
-		"purged document internals [project_id=%s doc_id=%s]",
-		projectID, docID,
-	),
-		"changes", counts["changes"],
-		"snapshots", counts["snapshots"],
-		"versionvectors", counts["versionvectors"],
-	)
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
 }
