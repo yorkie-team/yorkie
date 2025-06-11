@@ -50,6 +50,24 @@ type SchemaInfo struct {
 func (s *SchemaInfo) ToSchema() *types.Schema {
 	return &types.Schema{
 		ID:        s.ID,
+		ProjectID: s.ProjectID,
+		Name:      s.Name,
+		Version:   s.Version,
+		Body:      s.Body,
+		Rules:     s.Rules,
+		CreatedAt: s.CreatedAt,
+	}
+}
+
+// DeepCopy returns a deep copy of the SchemaInfo.
+func (s *SchemaInfo) DeepCopy() *SchemaInfo {
+	if s == nil {
+		return nil
+	}
+
+	return &SchemaInfo{
+		ID:        s.ID,
+		ProjectID: s.ProjectID,
 		Name:      s.Name,
 		Version:   s.Version,
 		Body:      s.Body,

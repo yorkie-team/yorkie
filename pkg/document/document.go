@@ -527,9 +527,3 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	}
 	return ""
 }
-
-// validateSchema validates the document against the schema rules.
-func (d *Document) validateSchema(root *crdt.Object) error {
-
-	return nil
-}

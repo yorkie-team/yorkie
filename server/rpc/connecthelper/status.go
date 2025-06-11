@@ -112,6 +112,7 @@ var errorToConnectCode = map[error]connect.Code{
 var errorToCode = map[error]string{
 	converter.ErrPackRequired:       "ErrPackRequired",
 	converter.ErrCheckpointRequired: "ErrCheckpointRequired",
+	converter.ErrInvalidSchemaKey:   "ErrInvalidSchemaKey",
 	time.ErrInvalidHexString:        "ErrInvalidHexString",
 	time.ErrInvalidActorID:          "ErrInvalidActorID",
 	types.ErrInvalidID:              "ErrInvalidID",
@@ -124,10 +125,12 @@ var errorToCode = map[error]string{
 	database.ErrClientNotFound:   "ErrClientNotFound",
 	database.ErrDocumentNotFound: "ErrDocumentNotFound",
 	database.ErrUserNotFound:     "ErrUserNotFound",
+	database.ErrSchemaNotFound:   "ErrSchemaNotFound",
 
 	database.ErrProjectAlreadyExists:     "ErrProjectAlreadyExists",
 	database.ErrProjectNameAlreadyExists: "ErrProjectNameAlreadyExists",
 	database.ErrUserAlreadyExists:        "ErrUserAlreadyExists",
+	database.ErrSchemaAlreadyExists:      "ErrSchemaAlreadyExists",
 
 	database.ErrClientNotActivated:      "ErrClientNotActivated",
 	database.ErrDocumentNotAttached:     "ErrDocumentNotAttached",

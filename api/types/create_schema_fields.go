@@ -33,6 +33,9 @@ var (
 type CreateSchemaFields struct {
 	// Name is the name of this schema.
 	Name *string `bson:"name,omitempty" validate:"required,min=2,max=30,slug,reserved_schema_name"`
+
+	// Version is the version of this schema.
+	Version *int32 `bson:"version" validate:"required,min=1"`
 }
 
 // Validate validates the CreateSchemaFields.

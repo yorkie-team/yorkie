@@ -1636,13 +1636,14 @@ func (c *Client) CreateSchemaInfo(
 	body string,
 	rules []types.Rule,
 ) (*database.SchemaInfo, error) {
-	rst, err := c.collection(ColSchemas).InsertOne(ctx, bson.M{
+	now := gotime.Now()
+	result, err := c.collection(ColSchemas).InsertOne(ctx, bson.M{
 		"project_id": projectID,
 		"name":       name,
 		"version":    version,
 		"body":       body,
 		"rules":      rules,
-		"created_at": gotime.Now(),
+		"created_at": now,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -1653,11 +1654,13 @@ func (c *Client) CreateSchemaInfo(
 	}
 
 	return &database.SchemaInfo{
-		ID:        types.ID(rst.InsertedID.(primitive.ObjectID).Hex()),
+		ID:        types.ID(result.InsertedID.(primitive.ObjectID).Hex()),
 		ProjectID: projectID,
 		Name:      name,
 		Version:   version,
 		Body:      body,
+		Rules:     rules,
+		CreatedAt: now,
 	}, nil
 }
 

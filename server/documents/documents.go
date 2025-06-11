@@ -342,6 +342,7 @@ func FindOrCreateDocInfo(
 	)
 }
 
+// UpdateDocInfoSchema updates the schema key stored in DocInfo.
 func UpdateDocInfoSchema(
 	ctx context.Context,
 	be *backend.Backend,

@@ -274,4 +274,53 @@ func TestDocumentSchema(t *testing.T) {
 
 		cli.Deactivate(ctx)
 	})
+
+	t.Run("create schema test", func(t *testing.T) {
+		err = adminCli.CreateSchema(
+			ctx,
+			"default",
+			"new",
+			1,
+			"type Document = {title: string;};",
+			[]types.Rule{
+				{
+					Path: "$.title",
+					Type: "string",
+				},
+			},
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "reserved_schema_name")
+
+		err = adminCli.CreateSchema(
+			ctx,
+			"default",
+			"new-schema",
+			0,
+			"type Document = {title: string;};",
+			[]types.Rule{
+				{
+					Path: "$.title",
+					Type: "string",
+				},
+			},
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "min")
+
+		err = adminCli.CreateSchema(
+			ctx,
+			"default",
+			"new-schema",
+			1,
+			"type Document = {title: string;};",
+			[]types.Rule{
+				{
+					Path: "$.title",
+					Type: "string",
+				},
+			},
+		)
+		assert.NoError(t, err)
+	})
 }

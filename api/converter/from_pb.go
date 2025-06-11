@@ -1012,9 +1012,11 @@ func FromSchemas(pbSchemas []*api.Schema) []*types.Schema {
 // FromSchema converts the given Protobuf formats to model format.
 func FromSchema(pbSchema *api.Schema) *types.Schema {
 	return &types.Schema{
-		Name:    pbSchema.Name,
-		Version: int(pbSchema.Version),
-		Body:    pbSchema.Body,
-		Rules:   FromRules(pbSchema.Rules),
+		ID:        types.ID(pbSchema.Id),
+		Name:      pbSchema.Name,
+		Version:   int(pbSchema.Version),
+		Body:      pbSchema.Body,
+		Rules:     FromRules(pbSchema.Rules),
+		CreatedAt: pbSchema.CreatedAt.AsTime(),
 	}
 }

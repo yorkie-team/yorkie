@@ -608,7 +608,7 @@ func (s *adminServer) CreateSchema(
 	ctx context.Context,
 	req *connect.Request[api.CreateSchemaRequest],
 ) (*connect.Response[api.CreateSchemaResponse], error) {
-	fields := &types.CreateSchemaFields{Name: &req.Msg.SchemaName}
+	fields := &types.CreateSchemaFields{Name: &req.Msg.SchemaName, Version: &req.Msg.SchemaVersion}
 	if err := fields.Validate(); err != nil {
 		return nil, err
 	}

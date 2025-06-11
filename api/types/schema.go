@@ -31,6 +31,9 @@ type Schema struct {
 	// ID is the unique identifier of the schema.
 	ID ID `json:"id"`
 
+	// ProjectID is the ID of the project that the schema belongs to.
+	ProjectID ID `json:"project_id"`
+
 	// Name is the name of the schema.
 	Name string `json:"name"`
 
