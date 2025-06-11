@@ -388,7 +388,9 @@ func UpdateDocument(
 		packs.PushPullOptions{
 			Mode:   types.SyncModePushOnly,
 			Status: document.StatusAttached,
-		}); err != nil {
+		},
+		docInfo.Key.String(),
+	); err != nil {
 		return nil, err
 	}
 
