@@ -1069,59 +1069,17 @@ func (c *Client) CreateChangeInfos(
 	changes []*change.Change,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	// 01. If there are no changes, return the existing docInfo.
-	if !isRemoved && len(changes) == 0 {
-		docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
-		}
+	// 01. Fetch the document info.
+	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, change.InitialCheckpoint, err
+	}
+	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. First, update the document info with the given changes.
-	// If the insertion changes is failed, document will spend server_seq
-	// without corresponding changes.
-	hasOperations := false
-	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
-			hasOperations = true
-			break
-		}
-	}
-
-	now := gotime.Now()
-	updateOps := bson.M{}
-	if len(changes) > 0 {
-		updateOps["$inc"] = bson.M{"server_seq": len(changes)}
-	}
-	setFields := bson.M{}
-	if hasOperations {
-		setFields["updated_at"] = now
-	}
-	if isRemoved {
-		setFields["removed_at"] = now
-	}
-	if len(setFields) > 0 {
-		updateOps["$set"] = setFields
-	}
-	result := c.collection(ColDocuments).FindOneAndUpdate(
-		ctx,
-		bson.M{
-			"project_id": refKey.ProjectID,
-			"_id":        refKey.DocID,
-		},
-		updateOps,
-		options.FindOneAndUpdate().SetReturnDocument(options.Before),
-	)
-	docInfo := &database.DocInfo{}
-	if err := result.Decode(docInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey.DocID, database.ErrDocumentNotFound)
-		}
-		return nil, change.InitialCheckpoint, fmt.Errorf("decode document: %w", err)
-	}
-
-	// 03. Insert changes into the changes collection.
+	// 02. Insert changes into the changes collection.
+	initialServerSeq := docInfo.ServerSeq
 	var models []mongo.WriteModel
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
@@ -1148,12 +1106,6 @@ func (c *Client) CreateChangeInfos(
 			"presence_change": cn.PresenceChange(),
 		}}).SetUpsert(true))
 	}
-
-	// NOTE(hackerwins): If InsertMany operation fails, there will be a mismatch
-	// between the already incremented server_seq and the actual stored changes.
-	// This can lead to gaps in the sequence numbers, which can cause data
-	// consistency issues. We need to handle this case by either rolling back
-	// the increment or ensuring that the changes are always pushed successfully.
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
@@ -1163,6 +1115,38 @@ func (c *Client) CreateChangeInfos(
 			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
+
+	// 03. Update the document info with the given changes.
+	now := gotime.Now()
+	updateFields := bson.M{
+		"server_seq": docInfo.ServerSeq,
+	}
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			updateFields["updated_at"] = now
+			break
+		}
+	}
+
+	if isRemoved {
+		updateFields["removed_at"] = now
+	}
+
+	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+		"server_seq": initialServerSeq,
+	}, bson.M{
+		"$set": updateFields,
+	})
+	if err != nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+	}
+
 	if isRemoved {
 		docInfo.RemovedAt = now
 	}

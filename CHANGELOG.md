@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Rollback lock-free implementation due to CPU overhead by @hackerwins https://github.com/yorkie-team/yorkie/pull/1318
+
 ## [0.6.15] - 2025-06-09
 
 ### Added
