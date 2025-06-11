@@ -263,9 +263,9 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
           presenceChange: {
             type: "CHANGE_TYPE_PUT",
             presence: {
-              data: {
-                color: `"${randomColor}"`,
-              },
+              data: [{
+                "Key":"color", "Val":`"${randomColor}"`,
+              }],
             },
           },
         },
