@@ -854,8 +854,6 @@ func (c *Client) FindOrCreateDocInfo(
 	clientRefKey types.ClientRefKey,
 	docKey key.Key,
 ) (*database.DocInfo, error) {
-	now := gotime.Now()
-
 	filter := bson.M{
 		"project_id": clientRefKey.ProjectID,
 		"key":        docKey,
@@ -863,49 +861,40 @@ func (c *Client) FindOrCreateDocInfo(
 			"$exists": false,
 		},
 	}
-	res, err := c.collection(ColDocuments).UpdateOne(ctx, filter, bson.M{
-		"$set": bson.M{
-			"accessed_at": now,
-		},
-	}, options.Update().SetUpsert(true))
-	if err != nil && !mongo.IsDuplicateKeyError(err) {
-		return nil, fmt.Errorf("upsert document: %w", err)
-	}
 
-	var result *mongo.SingleResult
-	if res != nil && res.UpsertedCount > 0 {
-		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-			"project_id": clientRefKey.ProjectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
+	now := gotime.Now()
+	result := c.collection(ColDocuments).FindOneAndUpdate(
+		ctx,
+		filter,
+		bson.M{
 			"$set": bson.M{
+				"accessed_at": now,
+			},
+			"$setOnInsert": bson.M{
 				"owner":      clientRefKey.ClientID,
 				"server_seq": 0,
 				"created_at": now,
 				"updated_at": now,
 			},
-		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
-	} else {
+		},
+		options.FindOneAndUpdate().
+			SetUpsert(true).
+			SetReturnDocument(options.After),
+	)
+
+	if result.Err() != nil && mongo.IsDuplicateKeyError(result.Err()) {
+		// NOTE(hackerwins): If duplicate key error occurred, retry with a
+		// simple find operation since another concurrent request successfully
+		// created the document.
 		result = c.collection(ColDocuments).FindOne(ctx, filter)
-		if result.Err() == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf(
-				"%s %s: %w",
-				clientRefKey.ProjectID,
-				docKey,
-				database.ErrDocumentNotFound,
-			)
-		}
-		if result.Err() != nil {
-			return nil, fmt.Errorf("find document: %w", result.Err())
-		}
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return info, nil
 }
 
 // FindDocInfoByKey finds the document of the given key.
