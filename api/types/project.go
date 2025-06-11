@@ -130,8 +130,8 @@ func (p *Project) HasAttachmentLimit() bool {
 	return p.MaxAttachmentsPerDocument > 0
 }
 
-// CheckAttachmentLimit checks whether the attachment limit is exceeded.
-func (p *Project) CheckAttachmentLimit(count int) error {
+// IsAttachmentLimitExceeded checks whether the attachment limit is exceeded.
+func (p *Project) IsAttachmentLimitExceeded(count int) error {
 	if p.MaxAttachmentsPerDocument > 0 && count >= p.MaxAttachmentsPerDocument {
 		return fmt.Errorf("%d attachments allowed per document: %w",
 			p.MaxAttachmentsPerDocument,

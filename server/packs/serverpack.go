@@ -130,6 +130,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	pbPack.VersionVector = pbVersionVector
 
 	return pbPack, nil

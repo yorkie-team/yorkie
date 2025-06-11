@@ -65,13 +65,16 @@ func (s *SchemaInfo) DeepCopy() *SchemaInfo {
 		return nil
 	}
 
+	rules := make([]types.Rule, len(s.Rules))
+	copy(rules, s.Rules)
+
 	return &SchemaInfo{
 		ID:        s.ID,
 		ProjectID: s.ProjectID,
 		Name:      s.Name,
 		Version:   s.Version,
 		Body:      s.Body,
-		Rules:     s.Rules,
+		Rules:     rules,
 		CreatedAt: s.CreatedAt,
 	}
 }

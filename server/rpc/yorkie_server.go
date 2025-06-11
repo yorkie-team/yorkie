@@ -192,7 +192,7 @@ func (s *yorkieServer) AttachDocument(
 			return nil, err
 		}
 
-		if err := project.CheckAttachmentLimit(count); err != nil {
+		if err := project.IsAttachmentLimitExceeded(count); err != nil {
 			return nil, err
 		}
 

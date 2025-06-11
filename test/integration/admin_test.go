@@ -232,5 +232,4 @@ func TestAdmin(t *testing.T) {
 		// 02. server should return unauthenticated error.
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
-
 }
