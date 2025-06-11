@@ -82,6 +82,7 @@ func Deactivate(
 			actorID,
 			docID,
 			docInfo.Key,
+			info.Key,
 		); err != nil {
 			return nil, err
 		}

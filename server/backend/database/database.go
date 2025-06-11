@@ -238,6 +238,7 @@ type Database interface {
 		cpBeforePush change.Checkpoint,
 		changes []*change.Change,
 		isRemoved bool,
+		docInfoKey string,
 	) (*DocInfo, change.Checkpoint, error)
 
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.

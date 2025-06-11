@@ -65,6 +65,7 @@ func (s *clusterServer) DetachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -102,7 +103,7 @@ func (s *clusterServer) DetachDocument(
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
 		Status: document.StatusDetached,
-	}); err != nil {
+	}, req.Msg.DocumentKey); err != nil {
 		return nil, err
 	}
 
