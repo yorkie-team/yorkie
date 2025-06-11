@@ -76,19 +76,10 @@ func getValueByPath(obj any, path string) any {
 }
 
 // validateValue validates a value against a rule.
-func validateValue(value any, rule types.Rule) ValidationResult {
+func validateValue(value interface{}, rule types.Rule) ValidationResult {
 	switch rule.Type {
-	case "string":
-		if primitive, ok := value.(*crdt.Primitive); ok && primitive.ValueType() == crdt.String {
-			return ValidationResult{Valid: true}
-		}
-		return ValidationResult{
-			Valid: false,
-			Errors: []ValidationError{{
-				Path:    rule.Path,
-				Message: fmt.Sprintf("Expected string at path %s", rule.Path),
-			}},
-		}
+	case "string", "boolean", "integer", "double", "long", "date", "bytes", "null":
+		return validatePrimitiveValue(value, rule)
 	case "object":
 		if _, ok := value.(*crdt.Object); !ok {
 			return ValidationResult{
@@ -144,4 +135,52 @@ func validateValue(value any, rule types.Rule) ValidationResult {
 	}
 
 	return ValidationResult{Valid: true}
+}
+
+// validatePrimitiveValue validates a primitive value against a rule.
+func validatePrimitiveValue(value interface{}, rule types.Rule) ValidationResult {
+	if primitive, ok := value.(*crdt.Primitive); ok {
+		switch rule.Type {
+		case "string":
+			if primitive.ValueType() == crdt.String {
+				return ValidationResult{Valid: true}
+			}
+		case "boolean":
+			if primitive.ValueType() == crdt.Boolean {
+				return ValidationResult{Valid: true}
+			}
+		case "integer":
+			if primitive.ValueType() == crdt.Integer {
+				return ValidationResult{Valid: true}
+			}
+		case "double":
+			if primitive.ValueType() == crdt.Double {
+				return ValidationResult{Valid: true}
+			}
+		case "long":
+			if primitive.ValueType() == crdt.Long {
+				return ValidationResult{Valid: true}
+			}
+		case "date":
+			if primitive.ValueType() == crdt.Date {
+				return ValidationResult{Valid: true}
+			}
+		case "bytes":
+			if primitive.ValueType() == crdt.Bytes {
+				return ValidationResult{Valid: true}
+			}
+		case "null":
+			if primitive.ValueType() == crdt.Null {
+				return ValidationResult{Valid: true}
+			}
+		}
+	}
+
+	return ValidationResult{
+		Valid: false,
+		Errors: []ValidationError{{
+			Path:    rule.Path,
+			Message: fmt.Sprintf("Expected %s at path %s", rule.Type, rule.Path),
+		}},
+	}
 }
