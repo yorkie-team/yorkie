@@ -1185,6 +1185,7 @@ func (c *Client) CreateChangeInfos(
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        docInfoKey,
 		"_id":        refKey.DocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
@@ -1253,6 +1254,7 @@ func (c *Client) CompactChangeInfos(
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
+		"key":        docInfo.Key,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
