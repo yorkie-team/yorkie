@@ -646,6 +646,7 @@ func (c *Client) ActivateClient(
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 			"project_id": projectID,
+			"key":        key,
 			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -671,6 +672,7 @@ func (c *Client) ActivateClient(
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -694,6 +696,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -759,6 +762,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
+		"key":        clientInfo.Key,
 		"_id":        clientInfo.ID,
 	}, updater)
 
@@ -1105,6 +1109,7 @@ func (c *Client) CreateChangeInfos(
 	checkpoint change.Checkpoint,
 	changes []*database.ChangeInfo,
 	isRemoved bool,
+	docInfoKey string,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	cached, ok := c.docCache.Get(refKey)
 	if !ok {

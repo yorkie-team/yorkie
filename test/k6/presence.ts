@@ -105,7 +105,8 @@ export default function () {
       const [docID, serverSeq] = attachDocument(
         clientID,
         hexToBase64(clientID),
-        docKey
+        docKey,
+        clientKey
       );
 
       sleep(1); // Simulate some processing time
@@ -117,7 +118,8 @@ export default function () {
           clientID,
           docID,
           docKey,
-          lastServerSeq
+          lastServerSeq,
+          clientKey
         );
         sleep(1); // Simulate some processing time
       }
@@ -234,7 +236,7 @@ function deactivateClient(clientID: string, clientKey: string): string {
 
   const result = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/DeactivateClient`,
-    { clientId: clientID },
+    { clientId: clientID, clientKey: clientKey },
     { "x-shard-key": `${API_KEY}/${clientKey}` }
   );
 
@@ -250,7 +252,7 @@ function deactivateClient(clientID: string, clientKey: string): string {
   return clientID;
 }
 
-function attachDocument(clientID: string, actorID: string, docKey: string) {
+function attachDocument(clientID: string, actorID: string, docKey: string, clientKey: string) {
   const startTime = new Date().getTime();
 
   // Generate a random color for presence data
@@ -259,6 +261,7 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
 
   const payload = {
     clientId: clientID,
+    clientKey: clientKey,
     changePack: {
       documentKey: docKey,
       checkpoint: { clientSeq: 1 },
@@ -298,12 +301,15 @@ function pushpullChanges(
   clientID: string,
   docID: string,
   docKey: string,
-  lastServerSeq: number
+  lastServerSeq: number,
+  clientKey: string
 ) {
   const startTime = new Date().getTime();
   const payload = {
     clientId: clientID,
     documentId: docID,
+    clientKey: clientKey,
+    documentKey: docKey,
     changePack: {
       documentKey: docKey,
       checkpoint: {

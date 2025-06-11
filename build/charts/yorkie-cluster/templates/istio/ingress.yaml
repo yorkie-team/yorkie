@@ -1,13 +1,13 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  {{ if .Values.ingress.nginx.enabled }}
+  {{- if .Values.ingress.nginx.enabled }}
   name: ingress-nginx
-  {{ else }}
+  {{- else }}
   name: {{ .Values.yorkie.name }}
-  {{ end }}
+  {{- end }}
   namespace: {{ .Values.yorkie.namespace }}
-  {{ if .Values.ingress.awsAlb.enabled }}
+  {{- if .Values.ingress.awsAlb.enabled }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued by AWS ACM
@@ -17,8 +17,8 @@ metadata:
     alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
     alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
     alb.ingress.kubernetes.io/group.order: '10'
-  {{ end }}
-  {{ if .Values.ingress.ncpAlb.enabled }}
+  {{- end }}
+  {{- if .Values.ingress.ncpAlb.enabled }}
   annotations:
     # Set alb.ingress.kubernetes.io/ssl-certificate-no annotation to TLS certificate's number issued by NCP
     alb.ingress.kubernetes.io/ssl-certificate-no: "{{ .Values.ingress.ncpAlb.certNo }}"
@@ -30,21 +30,21 @@ metadata:
     # NCP ALB will use this path to check the health of the service
     # If the health check fails, NCP ALB will not route the traffic to the service
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
-  {{ end }}
-  {{ if .Values.ingress.nginx.enabled }}
+  {{- end }}
+  {{- if .Values.ingress.nginx.enabled }}
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     kubernetes.io/ingress.class: "nginx"
-  {{ end }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   rules:
-    {{ if .Values.ingress.hosts.enabled }}
+    {{- if .Values.ingress.hosts.enabled }}
     - host: {{ .Values.ingress.hosts.apiHost }}
       http:
-    {{ else }}
+    {{- else }}
     - http:
-    {{ end }}
+    {{- end }}
         paths:
           - path: /
             pathType: Prefix

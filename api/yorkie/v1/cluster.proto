@@ -36,6 +36,7 @@ message ClusterServiceDetachDocumentRequest {
   string client_id = 2;
   string document_id = 3;
   string document_key = 4;
+  string client_key = 5;
 }
 
 message ClusterServiceDetachDocumentResponse {}

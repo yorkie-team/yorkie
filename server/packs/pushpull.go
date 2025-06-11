@@ -83,7 +83,7 @@ func PushPull(
 	start := gotime.Now()
 
 	// 01. push the change pack to the database.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack, docInfoKey)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,8 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
+	docInfoKey string,
+) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
@@ -197,6 +198,7 @@ func pushPack(
 		cpBeforePush,
 		pushables,
 		reqPack.IsRemoved,
+		docInfoKey,
 	)
 	if err != nil {
 		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
