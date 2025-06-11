@@ -34,40 +34,52 @@ import (
 )
 
 func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt int, concurrentCnt int, syncCnt int) {
-	ctx := context.Background()
-	docKey := key.Key(fmt.Sprintf("presence-concurrency-bench-%d-%d-%d-%d", initialCnt, concurrentCnt, syncCnt, b.N))
+	// Reset the timer to exclude setup time
+	b.ResetTimer()
 
-	// 01. Prepare n clients and attach them to the document.
-	clients, _, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, initialCnt)
-	assert.NoError(b, err)
-	helper.CleanupClients(b, clients)
+	for i := 0; i < b.N; i++ {
+		// Stop the timer during setup
+		b.StopTimer()
 
-	// 02. Then create new clients and attach them to the document concurrently.
-	var wg sync.WaitGroup
-	for range concurrentCnt {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("presence-concurrency-bench-%d-%d-%d-%d", initialCnt, concurrentCnt, syncCnt, i))
 
-			client, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
-			if err != nil {
-				b.Logf("client and doc creation: %v", err)
-				return
-			}
+		// 01. Prepare n clients and attach them to the document.
+		clients, _, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, initialCnt)
+		assert.NoError(b, err)
 
-			assert.NoError(b, client.Sync(ctx))
+		// Start the timer for the actual benchmark operation
+		b.StartTimer()
 
-			for i := range syncCnt {
-				assert.NoError(b, doc.Update(func(root *json.Object, p *presence.Presence) error {
-					p.Set("key", fmt.Sprintf("%d", i))
-					return nil
-				}))
-			}
-			assert.NoError(b, client.Sync(ctx))
-			assert.NoError(b, client.Close())
-		}()
+		// 02. Then create new clients and attach them to the document concurrently.
+		var wg sync.WaitGroup
+		for range concurrentCnt {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				client, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
+				assert.NoError(b, err)
+				err = client.Sync(ctx)
+				assert.NoError(b, err)
+
+				for j := range syncCnt {
+					err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+						p.Set("key", fmt.Sprintf("%d", j))
+						return nil
+					})
+					assert.NoError(b, err)
+				}
+				assert.NoError(b, client.Sync(ctx))
+				assert.NoError(b, client.Close())
+			}()
+		}
+		wg.Wait()
+
+		// Stop the timer during cleanup
+		b.StopTimer()
+		helper.CleanupClients(b, clients)
 	}
-	wg.Wait()
 }
 
 func BenchmarkPresenceConcurrency(b *testing.B) {
@@ -85,8 +97,6 @@ func BenchmarkPresenceConcurrency(b *testing.B) {
 			b.Fatal(err)
 		}
 	})
-
-	b.ResetTimer()
 
 	b.Run("0-100-10", func(b *testing.B) {
 		benchmarkPresenceConcurrency(b, svr, 0, 100, 10)
