@@ -117,6 +117,7 @@ func (c *Client) DetachDocument(
 	clientID time.ActorID,
 	docID types.ID,
 	docKey key.Key,
+	clientKey string,
 ) error {
 	_, err := c.client.DetachDocument(
 		ctx,
@@ -125,6 +126,7 @@ func (c *Client) DetachDocument(
 			ClientId:    clientID.String(),
 			DocumentId:  docID.String(),
 			DocumentKey: docKey.String(),
+			ClientKey:   clientKey,
 		}), project.PublicKey, docKey.String()),
 	)
 	if err != nil {

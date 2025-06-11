@@ -336,6 +336,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
       title: AttachDocumentRequest
       type: object
     yorkie.v1.AttachDocumentResponse:
@@ -368,6 +373,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false
@@ -537,6 +547,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
       title: DeactivateClientRequest
       type: object
     yorkie.v1.DeactivateClientResponse:
@@ -559,10 +574,20 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         documentId:
           additionalProperties: false
           description: ""
           title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
           type: string
         removeIfNotAttached:
           additionalProperties: false
@@ -1333,10 +1358,20 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         documentId:
           additionalProperties: false
           description: ""
           title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
           type: string
         pushOnly:
           additionalProperties: false
@@ -1372,10 +1407,20 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         documentId:
           additionalProperties: false
           description: ""
           title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
           type: string
       title: RemoveDocumentRequest
       type: object
@@ -1623,6 +1668,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false

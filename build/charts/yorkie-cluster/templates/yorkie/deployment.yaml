@@ -13,9 +13,9 @@ metadata:
     app.kubernetes.io/managed-by: istio
     version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
 spec:
-  {{ if not .Values.yorkie.autoscaling.enabled }}
+  {{- if not .Values.yorkie.autoscaling.enabled }}
   replicas: {{ .Values.yorkie.autoscaling.replicaCount }}
-  {{ end }}
+  {{- end }}
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -32,7 +32,7 @@ spec:
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
     spec:
-      {{ if index .Values "yorkie-mongodb" "sharded" "enabled"}}
+      {{- if index .Values "yorkie-mongodb" "sharded" "enabled"}}
       initContainers:
       - name: wait-for-sharded-db-provision
         image: bitnami/kubectl:latest
@@ -63,7 +63,7 @@ spec:
         - name: kubeconfig
           emptyDir: { }
       serviceAccountName: yorkie-db-provisioning-job-account
-      {{ end }}
+      {{- end }}
       containers:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
@@ -157,4 +157,4 @@ spec:
             port: {{ .Values.yorkie.ports.rpcPort }}
           initialDelaySeconds: 10
         resources:
-          {{ toYaml .Values.yorkie.resources | nindent 12 }}
+          {{- toYaml .Values.yorkie.resources | nindent 10 }}

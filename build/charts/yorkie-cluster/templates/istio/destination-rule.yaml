@@ -10,12 +10,12 @@ spec:
     # using `x-shard-key` request header as hash parameter
     loadBalancer:
       consistentHash:
-            {{ if .Values.ingressGateway.consistentHash.maglev.enabled }}
+            {{- if .Values.ingressGateway.consistentHash.maglev.enabled }}
         maglev:
           tableSize: {{ .Values.ingressGateway.consistentHash.maglev.tableSize }}
-            {{ end }}
-            {{ if .Values.ingressGateway.consistentHash.ringHash.enabled }}
+            {{- end }}
+            {{- if .Values.ingressGateway.consistentHash.ringHash.enabled }}
         ringHash:
           minimumRingSize: {{ .Values.ingressGateway.consistentHash.ringHash.minimumRingSize }}
-            {{ end }}
+            {{- end }}
         httpHeaderName: {{ .Values.ingressGateway.consistentHash.hashParameter }}
