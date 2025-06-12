@@ -201,7 +201,7 @@ func pushPack(
 		docInfoKey,
 	)
 	if err != nil {
-		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		return nil, nil, time.InitialLamport, change.InitialCheckpoint, fmt.Errorf("create change infos: %w", err)
 	}
 
 	initialSeq := docInfo.ServerSeq - int64(len(pushables))
