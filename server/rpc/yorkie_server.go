@@ -183,7 +183,7 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.Schema != "") {
+	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.SchemaKey != "") {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 
@@ -197,7 +197,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 
 		if count == 0 {
-			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.Schema)
+			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
 			if err != nil {
 				return nil, err
 			}
@@ -205,7 +205,7 @@ func (s *yorkieServer) AttachDocument(
 			if err != nil {
 				return nil, err
 			}
-			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.Schema); err != nil {
+			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.SchemaKey); err != nil {
 				return nil, err
 			}
 		}

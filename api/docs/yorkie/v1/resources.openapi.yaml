@@ -431,6 +431,11 @@ components:
           description: ""
           title: key
           type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
+          type: string
         snapshot:
           additionalProperties: false
           description: ""

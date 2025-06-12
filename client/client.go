@@ -307,7 +307,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
-			Schema:     opts.Schema,
+			SchemaKey:  opts.Schema,
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {

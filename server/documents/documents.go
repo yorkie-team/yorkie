@@ -113,6 +113,7 @@ func CreateDocument(
 		UpdatedAt:       docInfo.UpdatedAt,
 		Snapshot:        newDoc.Marshal(),
 		DocSize:         newDoc.DocSize(),
+		SchemaKey:       docInfo.Schema,
 	}, nil
 }
 
@@ -148,6 +149,7 @@ func ListDocumentSummaries(
 			CreatedAt:       info.CreatedAt,
 			AccessedAt:      info.AccessedAt,
 			UpdatedAt:       info.UpdatedAt,
+			SchemaKey:       info.Schema,
 		}
 
 		if includeSnapshot {
@@ -202,6 +204,7 @@ func GetDocumentSummary(
 		UpdatedAt:       info.UpdatedAt,
 		Snapshot:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
+		SchemaKey:       info.Schema,
 	}, nil
 }
 
@@ -238,6 +241,7 @@ func GetDocumentSummaries(
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
 			Snapshot:   snapshot,
+			SchemaKey:  docInfo.Schema,
 		}
 
 		summaries = append(summaries, summary)
@@ -295,6 +299,7 @@ func SearchDocumentSummaries(
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
+			SchemaKey:  docInfo.Schema,
 		})
 	}
 
@@ -411,6 +416,7 @@ func UpdateDocument(
 		UpdatedAt:       docInfo.UpdatedAt,
 		Snapshot:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
+		SchemaKey:       docInfo.Schema,
 	}, nil
 }
 

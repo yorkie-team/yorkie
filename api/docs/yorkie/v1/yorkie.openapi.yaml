@@ -336,10 +336,10 @@ components:
           description: ""
           title: client_id
           type: string
-        schema:
+        schemaKey:
           additionalProperties: false
           description: ""
-          title: schema
+          title: schema_key
           type: string
       title: AttachDocumentRequest
       type: object
