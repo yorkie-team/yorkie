@@ -234,6 +234,9 @@ func (s *adminServer) UpdateProject(
 		return nil, err
 	}
 
+	// Invalidate project cache after successful update
+	s.yorkieInterceptor.InvalidateProjectCache(project.PublicKey)
+
 	return connect.NewResponse(&api.UpdateProjectResponse{
 		Project: converter.ToProject(project),
 	}), nil

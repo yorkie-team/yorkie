@@ -91,6 +91,10 @@ func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
 		testcases.RunAdminUpdateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
 	})
 
+	t.Run("admin update project cache invalidation test", func(t *testing.T) {
+		testcases.RunAdminUpdateProjectCacheInvalidationTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
+
 	t.Run("admin list documents test", func(t *testing.T) {
 		testcases.RunAdminListDocumentsTest(t, testAdminClient, testAdminAuthInterceptor)
 	})
