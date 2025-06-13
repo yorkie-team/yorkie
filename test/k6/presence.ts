@@ -23,7 +23,7 @@ import { Counter, Rate, Trend } from "k6/metrics";
 const API_URL = __ENV.API_URL || "http://localhost:8080";
 
 // API Key
-const API_KEY = __ENV.API_KEY || "";
+let API_KEY = __ENV.API_KEY || "";
 
 // Document key prefix
 const DOC_KEY_PREFIX = __ENV.DOC_KEY_PREFIX || "test-presence";
@@ -42,6 +42,12 @@ const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10");
 
 // Whether to use control document (for interference testing in skew mode)
 const USE_CONTROL_DOC = __ENV.USE_CONTROL_DOC === "true";
+
+const USERNAME = __ENV.USER_NAME || "admin";
+
+const PASSWORD = __ENV.PASSWD || "admin";
+
+const PROJECT_NAME = __ENV.PROJECT_NAME || "default";
 
 // In 'skew' mode, use a single document; in 'even' mode, distribute VUs across documents
 function getDocKey() {
@@ -82,7 +88,30 @@ export const options = {
   teardownTimeout: "30s",
 };
 
-export default function () {
+export function setup() {
+  const passedApiKey = __ENV.API_KEY;
+  if (passedApiKey) {
+    return { API_KEY: passedApiKey }
+  }
+  const urlPrefix = `${API_URL}/yorkie.v1.AdminService/`;
+
+  const loginResponse = makeRequest(
+      urlPrefix + "LogIn",
+      { username: USERNAME, password: PASSWORD },
+  );
+  const adminToken = loginResponse.token;
+
+  const projectResponse = makeRequest(
+      urlPrefix + "GetProject",
+      { name: PROJECT_NAME },
+      { Authorization: adminToken }
+  )
+  API_KEY = projectResponse.project.publicKey;
+  return {API_KEY};
+}
+
+export default function (data) {
+  API_KEY = data.API_KEY;
   const startTime = new Date().getTime();
   let success = false;
   const docKey = getDocKey();
