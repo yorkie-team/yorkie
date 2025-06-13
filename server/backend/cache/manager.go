@@ -38,6 +38,8 @@ type Manager struct {
 
 	// Snapshot is used to cache the snapshot information.
 	Snapshot *lru.Cache[types.DocRefKey, *document.InternalDocument]
+
+	ChangeInfos *expirable.LRU[types.DocRefKey, *ChangeInfos]
 }
 
 // Options contains configuration for cache manager.
@@ -52,6 +54,10 @@ type Options struct {
 
 	// Document related cache options
 	SnapshotCacheSize int
+
+	// ChangeInfo related cache options
+	ChangeInfoCacheSize int
+	ChangeInfoCacheTTL  time.Duration
 }
 
 // New creates a new cache manager.
@@ -75,9 +81,16 @@ func New(opts Options) (*Manager, error) {
 		return nil, err
 	}
 
+	changeInfoCache := expirable.NewLRU[types.DocRefKey, *ChangeInfos](
+		opts.ChangeInfoCacheSize,
+		nil,
+		opts.ChangeInfoCacheTTL,
+	)
+
 	return &Manager{
 		AuthWebhook: authWebhookCache,
 		Project:     projectCache,
 		Snapshot:    snapshotCache,
+		ChangeInfos: changeInfoCache,
 	}, nil
 }

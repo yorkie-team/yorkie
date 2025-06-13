@@ -70,6 +70,8 @@ var (
 
 	projectCacheTTL time.Duration
 
+	changeInfoCacheTTL time.Duration
+
 	kafkaAddresses    string
 	kafkaTopic        string
 	kafkaWriteTimeout time.Duration
@@ -107,6 +109,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
 
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
+
+			conf.Backend.ChangeInfoCacheTTL = changeInfoCacheTTL.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -476,6 +480,18 @@ func init() {
 		"project-info-cache-ttl",
 		server.DefaultProjectCacheTTL,
 		"TTL value to set when caching project info.",
+	)
+	cmd.Flags().IntVar(
+		&conf.Backend.ChangeInfoCacheSize,
+		"change-info-cache-size",
+		server.DefaultChangeInfoCacheSize,
+		"The cache size of the change info.",
+	)
+	cmd.Flags().DurationVar(
+		&changeInfoCacheTTL,
+		"change-info-cache-ttl",
+		server.DefaultChangeInfoCacheTTL,
+		"TTL value to set when caching change info.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,

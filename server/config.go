@@ -87,6 +87,9 @@ const (
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
 
+	DefaultChangeInfoCacheSize = 256
+	DefaultChangeInfoCacheTTL  = 5 * time.Minute
+
 	DefaultHostname    = ""
 	DefaultGatewayAddr = "localhost:8080"
 )

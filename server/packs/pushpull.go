@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/backend/cache"
 	"strconv"
 	gotime "time"
 
@@ -371,8 +372,9 @@ func pullChangeInfos(
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
 ) (change.Checkpoint, []*database.ChangeInfo, error) {
-	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
+	pulledChanges, err := getOrFetchChangeInfos(
 		ctx,
+		be,
 		docInfo.RefKey(),
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
@@ -380,6 +382,15 @@ func pullChangeInfos(
 	if err != nil {
 		return change.InitialCheckpoint, nil, err
 	}
+	//pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
+	//	ctx,
+	//	docInfo.RefKey(),
+	//	reqPack.Checkpoint.ServerSeq+1,
+	//	initialServerSeq,
+	//)
+	//if err != nil {
+	//	return change.InitialCheckpoint, nil, err
+	//}
 
 	// NOTE(hackerwins, humdrum): Remove changes from the pulled if the client already has them.
 	// This could happen when the client has pushed changes and the server receives the changes
@@ -412,4 +423,28 @@ func pullChangeInfos(
 	}
 
 	return cpAfterPull, filteredChanges, nil
+}
+
+func getOrFetchChangeInfos(
+	ctx context.Context,
+	be *backend.Backend,
+	docRefKey types.DocRefKey,
+	from, to int64,
+) ([]*database.ChangeInfo, error) {
+	ci, ok := be.Cache.ChangeInfos.Get(docRefKey)
+	if !ok {
+		ci = cache.NewChangeInfos()
+		be.Cache.ChangeInfos.Add(docRefKey, ci)
+	}
+
+	if cached, ok := ci.GetRange(from, to); ok {
+		return cached, nil
+	}
+
+	fetched, err := be.DB.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, from, to)
+	if err != nil {
+		return nil, err
+	}
+	ci.Merge(fetched)
+	return fetched, nil
 }

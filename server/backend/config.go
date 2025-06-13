@@ -94,6 +94,12 @@ type Config struct {
 	// ProjectCacheTTL is the TTL value to set when caching the project metadata.
 	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
 
+	// ProjectCacheSize is the cache size of the project metadata.
+	ChangeInfoCacheSize int `yaml:"ChangeInfoCacheSize"`
+
+	// ProjectCacheTTL is the TTL value to set when caching the project metadata.
+	ChangeInfoCacheTTL string `yaml:"ChangeInfoCacheTTL"`
+
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
 

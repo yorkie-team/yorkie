@@ -103,6 +103,8 @@ func New(
 		ProjectCacheSize:     conf.ProjectCacheSize,
 		ProjectCacheTTL:      conf.ParseProjectCacheTTL(),
 		SnapshotCacheSize:    conf.SnapshotCacheSize,
+		ChangeInfoCacheSize:  conf.ProjectCacheSize,
+		ChangeInfoCacheTTL:   conf.ParseProjectCacheTTL(),
 	})
 	if err != nil {
 		return nil, err
