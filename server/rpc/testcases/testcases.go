@@ -1175,6 +1175,94 @@ func RunAdminUpdateProjectTest(
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
+// RunAdminUpdateProjectCacheInvalidationTest runs the UpdateProject cache invalidation test.
+func RunAdminUpdateProjectCacheInvalidationTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	// 01. Log in as admin
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		}),
+	)
+	assert.NoError(t, err)
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	// 02. Create a new project
+	projectName := helper.TestSlugName(t)
+	createResp, err := testAdminClient.CreateProject(
+		context.Background(),
+		connect.NewRequest(&api.CreateProjectRequest{
+			Name: projectName,
+		}),
+	)
+	assert.NoError(t, err)
+
+	// 03. Create a client with the project's API key to cache the project
+	authInterceptor := client.NewAuthInterceptor(createResp.Msg.Project.PublicKey, "")
+	projectClient := v1connect.NewYorkieServiceClient(
+		http.DefaultClient,
+		fmt.Sprintf("http://localhost:%d", helper.RPCPort),
+		connect.WithInterceptors(authInterceptor),
+	)
+
+	// 04. Activate client to trigger project caching
+	activateResp, err := projectClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: helper.TestSlugName(t),
+		}),
+	)
+	assert.NoError(t, err)
+
+	// 05. Update the project with a webhook URL to verify cache invalidation
+	newWebhookURL := "http://example.com/webhook"
+	updateResp, err := testAdminClient.UpdateProject(
+		context.Background(),
+		connect.NewRequest(&api.UpdateProjectRequest{
+			Id: createResp.Msg.Project.Id,
+			Fields: &api.UpdatableProjectFields{
+				AuthWebhookUrl: &wrapperspb.StringValue{Value: newWebhookURL},
+			},
+		}),
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, newWebhookURL, updateResp.Msg.Project.AuthWebhookUrl)
+
+	// 06. Activate another client to verify the cache has been invalidated
+	// and the new project data is being used
+	activateResp2, err := projectClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: helper.TestSlugName(t) + "2",
+		}),
+	)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, activateResp2.Msg.ClientId)
+
+	// 07. Deactivate clients for cleanup
+	_, err = projectClient.DeactivateClient(
+		context.Background(),
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientId: activateResp.Msg.ClientId,
+		}),
+	)
+	assert.NoError(t, err)
+
+	_, err = projectClient.DeactivateClient(
+		context.Background(),
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientId: activateResp2.Msg.ClientId,
+		}),
+	)
+	assert.NoError(t, err)
+}
+
 // RunAdminListDocumentsTest runs the ListDocuments test in admin.
 func RunAdminListDocumentsTest(
 	t *testing.T,
