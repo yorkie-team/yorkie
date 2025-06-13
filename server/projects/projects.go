@@ -21,6 +21,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/lithammer/shortuuid/v4"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -154,4 +156,29 @@ func GetProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey
 	}
 
 	return info.ToProject(), nil
+}
+
+// RotateProjectKeys rotates the API keys of the project.
+func RotateProjectKeys(
+	ctx context.Context,
+	be *backend.Backend,
+	owner types.ID,
+	id types.ID,
+) (*types.Project, *types.Project, error) {
+	// Get the current project to store old API key
+	oldProject, err := be.DB.FindProjectInfoByID(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Generate new API keys
+	publicKey := shortuuid.New()
+	secretKey := shortuuid.New()
+
+	// Update project with new keys
+	info, err := be.DB.RotateProjectKeys(ctx, owner, id, publicKey, secretKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return oldProject.ToProject(), info.ToProject(), nil
 }

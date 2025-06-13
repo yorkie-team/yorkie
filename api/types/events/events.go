@@ -26,31 +26,31 @@ import (
 type DocEventType string
 
 const (
-	// DocChangedEvent is an event indicating that document is being
+	// DocChanged is an event indicating that document is being
 	// modified by a change.
-	DocChangedEvent DocEventType = "document-changed"
+	DocChanged DocEventType = "document-changed"
 
-	// DocRootChangedEvent is an event indicating that document's root content
+	// DocRootChanged is an event indicating that document's root content
 	// is being changed by operation.
-	DocRootChangedEvent DocEventType = "document-root-changed"
+	DocRootChanged DocEventType = "document-root-changed"
 
-	// DocWatchedEvent is an event that occurs when document is watched
+	// DocWatched is an event that occurs when document is watched
 	// by other clients.
-	DocWatchedEvent DocEventType = "document-watched"
+	DocWatched DocEventType = "document-watched"
 
-	// DocUnwatchedEvent is an event that occurs when document is
+	// DocUnwatched is an event that occurs when document is
 	// unwatched by other clients.
-	DocUnwatchedEvent DocEventType = "document-unwatched"
+	DocUnwatched DocEventType = "document-unwatched"
 
-	// DocBroadcastEvent is an event that occurs when a payload is broadcasted
+	// DocBroadcast is an event that occurs when a payload is broadcasted
 	// on a specific topic.
-	DocBroadcastEvent DocEventType = "document-broadcast"
+	DocBroadcast DocEventType = "document-broadcast"
 )
 
 // WebhookType returns a matched event webhook type.
 func (t DocEventType) WebhookType() types.EventWebhookType {
 	switch t {
-	case DocRootChangedEvent:
+	case DocRootChanged:
 		return types.DocRootChanged
 	default:
 		return ""

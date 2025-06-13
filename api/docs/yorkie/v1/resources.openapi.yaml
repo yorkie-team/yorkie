@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.12
+  version: v0.6.15
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -1442,6 +1442,11 @@ components:
           description: ""
           title: max_attachments_per_document
           type: integer
+        maxSizePerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_size_per_document
+          type: integer
         maxSubscribersPerDocument:
           additionalProperties: false
           description: ""
@@ -1817,6 +1822,12 @@ components:
           additionalProperties: false
           description: ""
           title: max_attachments_per_document
+          type: object
+        maxSizePerDocument:
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
+          additionalProperties: false
+          description: ""
+          title: max_size_per_document
           type: object
         maxSubscribersPerDocument:
           $ref: "#/components/schemas/google.protobuf.Int32Value"

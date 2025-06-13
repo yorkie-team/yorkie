@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	compactionCandidatesKey = "housekeeping/compactionCandidates"
+	compactionKey = "housekeeping/compaction"
 )
 
 // CompactDocuments compacts documents by removing old changes and creating
@@ -40,23 +40,13 @@ func CompactDocuments(
 	compactionMinChanges int,
 	lastCompactionProjectID types.ID,
 ) (types.ID, error) {
+	locker, ok := be.Lockers.LockerWithTryLock(compactionKey)
+	if !ok {
+		return database.DefaultProjectID, nil
+	}
+	defer locker.Unlock()
+
 	start := time.Now()
-
-	locker, err := be.Lockers.Locker(ctx, compactionCandidatesKey)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
-
 	lastProjectID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,

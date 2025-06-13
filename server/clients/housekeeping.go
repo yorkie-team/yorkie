@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	deactivationKey = "housekeeping/deactivation"
 )
 
 // DeactivateInactives deactivates clients that have not been active for a
@@ -39,23 +39,13 @@ func DeactivateInactives(
 	projectFetchSize int,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
+	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
+	if !ok {
+		return database.DefaultProjectID, nil
+	}
+	defer locker.Unlock()
+
 	start := time.Now()
-
-	locker, err := be.Lockers.Locker(ctx, deactivateCandidatesKey)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
-
 	lastProjectID, candidates, err := FindDeactivateCandidates(
 		ctx,
 		be,

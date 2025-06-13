@@ -76,7 +76,7 @@ func TestTreeNode(t *testing.T) {
 
 		left, err := para.Child(0)
 		assert.NoError(t, err)
-		right, err := left.SplitText(5, 0)
+		right, _, err := left.SplitText(5, 0)
 		assert.NoError(t, err)
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
@@ -86,7 +86,7 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 0}, left.ID())
 		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 5}, right.ID())
 
-		split, err := para.SplitElement(1, func() *time.Ticket {
+		split, _, err := para.SplitElement(1, func() *time.Ticket {
 			return time.InitialTicket
 		})
 		assert.NoError(t, err)
@@ -121,7 +121,7 @@ func TestTreeNode(t *testing.T) {
 			left, err := para.Child(0)
 			assert.NoError(t, err)
 			assert.Equal(t, test.length, left.Len())
-			right, err := left.SplitText(2, 0)
+			right, _, err := left.SplitText(2, 0)
 			assert.NoError(t, err)
 			assert.Equal(t, test.length-2, right.Len())
 		}
@@ -405,28 +405,28 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
 		// style attributes with opening tag
-		_, err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.TimeT(ctx), nil)
+		_, _, err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// style attributes with closing tag
-		_, err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.TimeT(ctx), nil)
+		_, _, err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// style attributes with the whole
-		_, err = tree.StyleByIndex(0, 4, map[string]string{"size": "small"}, helper.TimeT(ctx), nil)
+		_, _, err = tree.StyleByIndex(0, 4, map[string]string{"size": "small"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// 02. style attributes to elements.
-		_, err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.TimeT(ctx), nil)
+		_, _, err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
 			`<p style="italic">cd</p></root>`, tree.ToXML())
 
 		// 03. Ignore styling attributes to text nodes.
-		_, err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.TimeT(ctx), nil)
+		_, _, err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
 			`<p style="italic">cd</p></root>`, tree.ToXML())
@@ -461,7 +461,7 @@ func TestTreeEdit(t *testing.T) {
 
 		treePos := crdt.NewTreePos(pNode.ID(), textNode.ID())
 
-		parent, leftSibling, err := tree.FindTreeNodesWithSplitText(treePos, helper.TimeT(ctx))
+		parent, leftSibling, _, err := tree.FindTreeNodesWithSplitText(treePos, helper.TimeT(ctx))
 		assert.NoError(t, err)
 		idx, err := tree.ToIndex(parent, leftSibling)
 		assert.NoError(t, err)
@@ -475,7 +475,7 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<r></r>", tree.ToXML())
 
 		treePos = crdt.NewTreePos(pNode.ID(), textNode.ID())
-		parent, leftSibling, err = tree.FindTreeNodesWithSplitText(treePos, helper.TimeT(ctx))
+		parent, leftSibling, _, err = tree.FindTreeNodesWithSplitText(treePos, helper.TimeT(ctx))
 		assert.NoError(t, err)
 		idx, err = tree.ToIndex(parent, leftSibling)
 		assert.NoError(t, err)

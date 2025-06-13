@@ -192,3 +192,14 @@ func (id ID) VersionVector() time.VersionVector {
 func (id ID) AfterOrEqual(other ID) bool {
 	return id.versionVector.AfterOrEqual(other.versionVector)
 }
+
+// DeepCopy clones the ID deeply.
+func (id ID) DeepCopy() ID {
+	return NewID(
+		id.clientSeq,
+		id.serverSeq,
+		id.lamport,
+		id.actorID,
+		id.versionVector.DeepCopy(),
+	)
+}

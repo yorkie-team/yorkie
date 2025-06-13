@@ -34,7 +34,8 @@ service ClusterService {
 message ClusterServiceDetachDocumentRequest {
   Project project = 1;
   string client_id = 2;
-  DocumentSummary document_summary = 3;
+  string document_id = 3;
+  string document_key = 4;
 }
 
 message ClusterServiceDetachDocumentResponse {}
@@ -42,6 +43,7 @@ message ClusterServiceDetachDocumentResponse {}
 message ClusterServiceCompactDocumentRequest {
   string project_id = 1;
   string document_id = 2;
+  string document_key = 3;
 }
 
 message ClusterServiceCompactDocumentResponse {}
@@ -49,6 +51,7 @@ message ClusterServiceCompactDocumentResponse {}
 message ClusterServicePurgeDocumentRequest {
   string project_id = 1;
   string document_id = 2;
+  string document_key = 3;
 }
 
 message ClusterServicePurgeDocumentResponse {}

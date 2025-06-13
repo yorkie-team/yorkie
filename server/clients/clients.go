@@ -76,7 +76,13 @@ func Deactivate(
 			return nil, err
 		}
 
-		if err := be.ClusterClient.DetachDocument(ctx, project, actorID, docID, project.PublicKey, docInfo.Key); err != nil {
+		if err := be.ClusterClient.DetachDocument(
+			ctx,
+			project,
+			actorID,
+			docID,
+			docInfo.Key,
+		); err != nil {
 			return nil, err
 		}
 	}

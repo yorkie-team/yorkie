@@ -419,3 +419,27 @@ func (d *InternalDocument) ToDocument() *Document {
 	doc.setInternalDoc(d)
 	return doc
 }
+
+// DeepCopy creates a deep copy of this document.
+func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
+	root, err := d.root.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+
+	return &InternalDocument{
+		key:        d.key,
+		status:     d.status,
+		checkpoint: d.checkpoint,
+
+		// TODO(hackerwins): Previously ChangeID used as an immutable value,
+		// but now it is mutable, so we need to create a new instance of ChangeID.
+		// COnsider removing this in the future.
+		changeID: d.changeID.DeepCopy(),
+
+		root:          root,
+		presences:     d.presences.DeepCopy(),
+		onlineClients: &gosync.Map{},
+		localChanges:  d.localChanges,
+	}, nil
+}

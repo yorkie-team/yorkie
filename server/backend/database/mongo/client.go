@@ -188,6 +188,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
 			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
 			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
+			"max_size_per_document":        candidate.MaxSizePerDocument,
 			"public_key":                   candidate.PublicKey,
 			"secret_key":                   candidate.SecretKey,
 			"created_at":                   candidate.CreatedAt,
@@ -227,6 +228,7 @@ func (c *Client) CreateProjectInfo(
 		"public_key":                  info.PublicKey,
 		"secret_key":                  info.SecretKey,
 		"created_at":                  info.CreatedAt,
+		"max_size_per_document":       info.MaxSizePerDocument,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -410,6 +412,38 @@ func (c *Client) UpdateProjectInfo(
 		}
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}
+		return nil, fmt.Errorf("decode project info: %w", err)
+	}
+
+	return &info, nil
+}
+
+// RotateProjectKeys rotates the API keys of the project.
+func (c *Client) RotateProjectKeys(
+	ctx context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	// Update project with new keys
+	res := c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
+		"_id":   id,
+		"owner": owner,
+	}, bson.M{
+		"$set": bson.M{
+			"public_key": publicKey,
+			"secret_key": secretKey,
+			"updated_at": gotime.Now(),
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	// Handle errors and decode result
+	info := database.ProjectInfo{}
+	if err := res.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		return nil, fmt.Errorf("decode project info: %w", err)
 	}
@@ -790,8 +824,8 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindClientInfosByAttachedDocRefKey returns the client infos of the given document.
-func (c *Client) FindClientInfosByAttachedDocRefKey(
+// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
@@ -814,14 +848,11 @@ func (c *Client) FindClientInfosByAttachedDocRefKey(
 	return clientInfos, nil
 }
 
-// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-// createDocIfNotExist condition is true, create the document if it does not
-// exist.
-func (c *Client) FindDocInfoByKeyAndOwner(
+// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+func (c *Client) FindOrCreateDocInfo(
 	ctx context.Context,
 	clientRefKey types.ClientRefKey,
 	docKey key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	filter := bson.M{
 		"project_id": clientRefKey.ProjectID,
@@ -830,50 +861,40 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"$exists": false,
 		},
 	}
-	now := gotime.Now()
-	res, err := c.collection(ColDocuments).UpdateOne(ctx, filter, bson.M{
-		"$set": bson.M{
-			"accessed_at": now,
-		},
-	}, options.Update().SetUpsert(createDocIfNotExist))
-	if err != nil {
-		return nil, fmt.Errorf("upsert document: %w", err)
-	}
 
-	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
-		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-			"project_id": clientRefKey.ProjectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
+	now := gotime.Now()
+	result := c.collection(ColDocuments).FindOneAndUpdate(
+		ctx,
+		filter,
+		bson.M{
 			"$set": bson.M{
+				"accessed_at": now,
+			},
+			"$setOnInsert": bson.M{
 				"owner":      clientRefKey.ClientID,
 				"server_seq": 0,
 				"created_at": now,
 				"updated_at": now,
 			},
-		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
-	} else {
+		},
+		options.FindOneAndUpdate().
+			SetUpsert(true).
+			SetReturnDocument(options.After),
+	)
+
+	if result.Err() != nil && mongo.IsDuplicateKeyError(result.Err()) {
+		// NOTE(hackerwins): If duplicate key error occurred, retry with a
+		// simple find operation since another concurrent request successfully
+		// created the document.
 		result = c.collection(ColDocuments).FindOne(ctx, filter)
-		if result.Err() == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf(
-				"%s %s: %w",
-				clientRefKey.ProjectID,
-				docKey,
-				database.ErrDocumentNotFound,
-			)
-		}
-		if result.Err() != nil {
-			return nil, fmt.Errorf("find document: %w", result.Err())
-		}
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return info, nil
 }
 
 // FindDocInfoByKey finds the document of the given key.
@@ -1018,24 +1039,37 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	_ types.ID,
-	docInfo *database.DocInfo,
-	initialServerSeq int64,
+	refKey types.DocRefKey,
+	checkpoint change.Checkpoint,
 	changes []*change.Change,
 	isRemoved bool,
-) error {
-	docRefKey := docInfo.RefKey()
+) (*database.DocInfo, change.Checkpoint, error) {
+	// 01. Fetch the document info.
+	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, change.InitialCheckpoint, err
+	}
+	if len(changes) == 0 && !isRemoved {
+		return docInfo, checkpoint, nil
+	}
 
+	// 02. Insert changes into the changes collection.
+	initialServerSeq := docInfo.ServerSeq
 	var models []mongo.WriteModel
 	for _, cn := range changes {
+		serverSeq := docInfo.IncreaseServerSeq()
+		checkpoint = checkpoint.NextServerSeq(serverSeq)
+		cn.SetServerSeq(serverSeq)
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
+
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
-			return err
+			return nil, change.InitialCheckpoint, err
 		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
+			"project_id": refKey.ProjectID,
+			"doc_id":     refKey.DocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":        cn.ID().ActorID(),
@@ -1047,19 +1081,17 @@ func (c *Client) CreateChangeInfos(
 			"presence_change": cn.PresenceChange(),
 		}}).SetUpsert(true))
 	}
-
-	// TODO(hackerwins): We need to handle the updates for the two collections
-	// below atomically.
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
 			models,
 			options.BulkWrite().SetOrdered(true),
 		); err != nil {
-			return fmt.Errorf("bulk write changes: %w", err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
 
+	// 03. Update the document info with the given changes.
 	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
@@ -1077,34 +1109,34 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"_id":        docRefKey.DocID,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
 	})
 	if err != nil {
-		return fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", docRefKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
 	}
+
 	if isRemoved {
 		docInfo.RemovedAt = now
 	}
 
-	return nil
+	return docInfo, checkpoint, nil
 }
 
 func (c *Client) CompactChangeInfos(
 	ctx context.Context,
-	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
 	changes []*change.Change,
 ) error {
 	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, projectID, docInfo.ID); err != nil {
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
 		return err
 	}
 
@@ -1140,7 +1172,7 @@ func (c *Client) CompactChangeInfos(
 
 	// 3. Update document
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": projectID,
+		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
@@ -1153,7 +1185,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", projectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
@@ -1339,15 +1371,17 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// UpdateAndFindMinVersionVector updates the version vector of the given client
+// UpdateMinVersionVector updates the version vector of the given client
 // and returns the minimum version vector of all clients.
-func (c *Client) UpdateAndFindMinVersionVector(
+func (c *Client) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
+	// NOTE(hackerwins): Considering removing the detached client's lamport
+	// from the other clients' version vectors. For now, we just ignore it.
 	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}
@@ -1365,8 +1399,6 @@ func (c *Client) UpdateAndFindMinVersionVector(
 				return vector
 			})
 		} else {
-			// NOTE(hackerwins): Considering removing the detached client's lamport
-			// from the other clients' version vectors. For now, we just ignore it.
 			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
 				return exists
 			})
@@ -1374,6 +1406,15 @@ func (c *Client) UpdateAndFindMinVersionVector(
 	}
 
 	// 03. Calculate the minimum version vector of the given document.
+	return c.GetMinVersionVector(ctx, docRefKey, vector)
+}
+
+// GetMinVersionVector returns the minimum version vector of the given document.
+func (c *Client) GetMinVersionVector(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	vector time.VersionVector,
+) (time.VersionVector, error) {
 	if !c.vvCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
@@ -1545,7 +1586,7 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,

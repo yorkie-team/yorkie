@@ -81,6 +81,14 @@ spec:
           "{{ .Values.yorkie.ports.profilingPort }}",
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
+          {{- if .Values.yorkie.args.snapshotInterval }}
+          "--backend-snapshot-interval",
+          "{{ .Values.yorkie.args.snapshotInterval }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.snapshotThreshold }}
+          "--backend-snapshot-threshold",
+          "{{ .Values.yorkie.args.snapshotThreshold }}",
+          {{- end }}
           {{- if .Values.yorkie.args.kafkaAddresses }}
           "--kafka-addresses",
           "{{ .Values.yorkie.args.kafkaAddresses }}",

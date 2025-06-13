@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -1348,4 +1350,90 @@ func RunAdminGetServerVersionTest(
 	assert.NotEmpty(t, responseMsg.GoVersion)
 	assert.Regexp(t, `^\d+\.\d+\.\d+$`, responseMsg.YorkieVersion)
 	assert.Regexp(t, `^go\d+\.\d+(\.\d+)?$`, responseMsg.GoVersion)
+}
+
+// RunAdminRotateProjectKeysTest runs the RotateProjectKeys test in admin.
+func RunAdminRotateProjectKeysTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	// 01. Log in as admin
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		}),
+	)
+	assert.NoError(t, err)
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	// 02. Create a new project
+	projectName := helper.TestSlugName(t)
+	createResp, err := testAdminClient.CreateProject(
+		context.Background(),
+		connect.NewRequest(&api.CreateProjectRequest{
+			Name: projectName,
+		}),
+	)
+	assert.NoError(t, err)
+	oldPublicKey := createResp.Msg.Project.PublicKey
+	oldSecretKey := createResp.Msg.Project.SecretKey
+
+	// 03. Create a client with the old API key
+	oldAuthInterceptor := client.NewAuthInterceptor(oldPublicKey, "")
+	oldClient := v1connect.NewYorkieServiceClient(
+		http.DefaultClient,
+		fmt.Sprintf("http://localhost:%d", helper.RPCPort),
+		connect.WithInterceptors(oldAuthInterceptor),
+	)
+
+	// 04. Activate client with old key (should work)
+	_, err = oldClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: helper.TestSlugName(t),
+		}),
+	)
+	assert.NoError(t, err)
+
+	// 05. Rotate project keys
+	rotateResp, err := testAdminClient.RotateProjectKeys(
+		context.Background(),
+		connect.NewRequest(&api.RotateProjectKeysRequest{
+			Id: createResp.Msg.Project.Id,
+		}),
+	)
+	assert.NoError(t, err)
+	assert.NotEqual(t, oldPublicKey, rotateResp.Msg.Project.PublicKey)
+	assert.NotEqual(t, oldSecretKey, rotateResp.Msg.Project.SecretKey)
+
+	// 06. Try to activate client with old key (should fail)
+	_, err = oldClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: helper.TestSlugName(t),
+		}),
+	)
+	assert.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	// 07. Create a client with the new API key
+	newAuthInterceptor := client.NewAuthInterceptor(rotateResp.Msg.Project.PublicKey, "")
+	newClient := v1connect.NewYorkieServiceClient(
+		http.DefaultClient,
+		fmt.Sprintf("http://localhost:%d", helper.RPCPort),
+		connect.WithInterceptors(newAuthInterceptor),
+	)
+
+	// 08. Activate client with new key (should work)
+	_, err = newClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: helper.TestSlugName(t),
+		}),
+	)
+	assert.NoError(t, err)
 }

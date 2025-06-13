@@ -69,14 +69,18 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, pairs, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+		_, pairs, diff, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
 		if err != nil {
 			return err
 		}
 
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
+			root.AdjustDiffForGCPair(&diff, pair)
 		}
+
+		root.Acc(diff)
+
 	default:
 		return ErrNotApplicableDataType
 	}

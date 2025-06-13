@@ -796,8 +796,8 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindClientInfosByAttachedDocRefKey finds the client infos of the given document.
-func (d *DB) FindClientInfosByAttachedDocRefKey(
+// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
@@ -820,14 +820,11 @@ func (d *DB) FindClientInfosByAttachedDocRefKey(
 	return infos, nil
 }
 
-// FindDocInfoByKeyAndOwner finds the document of the given key. If the
-// createDocIfNotExist condition is true, create the document if it does not
-// exist.
-func (d *DB) FindDocInfoByKeyAndOwner(
+// FindOrCreateDocInfo finds the document or creates it if it does not exist.
+func (d *DB) FindOrCreateDocInfo(
 	_ context.Context,
 	clientRefKey types.ClientRefKey,
 	key key.Key,
-	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -835,9 +832,6 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	info, err := d.findDocInfoByKey(txn, clientRefKey.ProjectID, key)
 	if err != nil {
 		return info, err
-	}
-	if !createDocIfNotExist && info == nil {
-		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
 	if info == nil {
@@ -1042,20 +1036,38 @@ func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, er
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
-	_ context.Context,
-	projectID types.ID,
-	docInfo *database.DocInfo,
-	initialServerSeq int64,
+	ctx context.Context,
+	refKey types.DocRefKey,
+	checkpoint change.Checkpoint,
 	changes []*change.Change,
 	isRemoved bool,
-) error {
+) (*database.DocInfo, change.Checkpoint, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", err)
+	}
+	if raw == nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+	initialServerSeq := docInfo.ServerSeq
+
 	for _, cn := range changes {
+		serverSeq := docInfo.IncreaseServerSeq()
+		checkpoint = checkpoint.NextServerSeq(serverSeq)
+		cn.SetServerSeq(serverSeq)
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
+
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
-			return err
+			return nil, change.InitialCheckpoint, err
 		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
@@ -1071,25 +1083,25 @@ func (d *DB) CreateChangeInfos(
 			Operations:     encodedOperations,
 			PresenceChange: cn.PresenceChange(),
 		}); err != nil {
-			return fmt.Errorf("create change: %w", err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("create change: %w", err)
 		}
 	}
 
-	raw, err := txn.First(
+	raw, err = txn.First(
 		tblDocuments,
 		"project_id_id",
-		projectID.String(),
+		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("find document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	now := gotime.Now()
@@ -1106,7 +1118,7 @@ func (d *DB) CreateChangeInfos(
 		loadedDocInfo.RemovedAt = now
 	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	txn.Commit()
 
@@ -1114,13 +1126,12 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
-	return nil
+	return docInfo, checkpoint, nil
 }
 
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.
 func (d *DB) CompactChangeInfos(
 	ctx context.Context,
-	projectID types.ID,
 	docInfo *database.DocInfo,
 	lastServerSeq int64,
 	changes []*change.Change,
@@ -1129,7 +1140,7 @@ func (d *DB) CompactChangeInfos(
 	defer txn.Abort()
 
 	// 1. Purge the resources of the document.
-	if _, err := d.purgeDocumentInternals(ctx, projectID, docInfo.ID, txn); err != nil {
+	if _, err := d.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, txn); err != nil {
 		return err
 	}
 
@@ -1137,7 +1148,7 @@ func (d *DB) CompactChangeInfos(
 	raw, err := txn.First(
 		tblDocuments,
 		"project_id_id",
-		projectID.String(),
+		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
@@ -1443,18 +1454,31 @@ func (d *DB) updateVersionVector(
 	return nil
 }
 
-// UpdateAndFindMinVersionVector updates the version vector of the given client
+// UpdateMinVersionVector updates the version vector of the given client
 // and returns the minimum version vector of all clients.
-func (d *DB) UpdateAndFindMinVersionVector(
+func (d *DB) UpdateMinVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
-	versionVector time.VersionVector,
+	vector time.VersionVector,
 ) (time.VersionVector, error) {
+	// 01. Update synced version vector of the given client and document.
 	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
 	// from min version vector.
+	if err := d.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+		return nil, err
+	}
 
-	// 01. Find all version vectors of the given document from DB.
+	// 02. Compute min version vector.
+	return d.GetMinVersionVector(ctx, docRefKey, vector)
+}
+
+// GetMinVersionVector returns the minimum version vector of the given document.
+func (d *DB) GetMinVersionVector(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	vector time.VersionVector,
+) (time.VersionVector, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
@@ -1462,28 +1486,19 @@ func (d *DB) UpdateAndFindMinVersionVector(
 		return nil, fmt.Errorf("find all version vectors: %w", err)
 	}
 
-	var versionVectorInfos []database.VersionVectorInfo
+	var infos []database.VersionVectorInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		vvi := raw.(*database.VersionVectorInfo)
-		versionVectorInfos = append(versionVectorInfos, *vvi)
+		infos = append(infos, *vvi)
 	}
 
-	// 02. Compute min version vector.
-	minVersionVector := versionVector.DeepCopy()
-	for i, vvi := range versionVectorInfos {
-		if vvi.ClientID == clientInfo.ID {
-			continue
-		}
-		minVersionVector.Min(&versionVectorInfos[i].VersionVector)
+	var vectors []time.VersionVector
+	vectors = append(vectors, vector)
+	for _, vv := range infos {
+		vectors = append(vectors, vv.VersionVector)
 	}
 
-	// 03. Update current client's version vector. If the client is detached, remove it.
-	// This is only for the current client and does not affect the version vector of other clients.
-	if err = d.updateVersionVector(ctx, clientInfo, docRefKey, versionVector); err != nil {
-		return nil, err
-	}
-
-	return minVersionVector, nil
+	return time.MinVersionVector(vectors...), nil
 }
 
 // FindDocInfosByPaging returns the documentInfos of the given paging.
@@ -1604,7 +1619,7 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
-// PurgeDocument purges the given document.
+// PurgeDocument purges the given document and its metadata from the database.
 func (d *DB) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
@@ -1666,4 +1681,43 @@ func (d *DB) purgeDocumentInternals(
 
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
+}
+
+// RotateProjectKeys rotates the API keys of the project.
+func (d *DB) RotateProjectKeys(
+	_ context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Find project by ID and owner
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	project := raw.(*database.ProjectInfo).DeepCopy()
+	if project.Owner != owner {
+		return nil, database.ErrProjectNotFound
+	}
+
+	// Update project keys
+	project.PublicKey = publicKey
+	project.SecretKey = secretKey
+	project.UpdatedAt = gotime.Now()
+
+	// Save updated project
+	if err := txn.Insert(tblProjects, project); err != nil {
+		return nil, fmt.Errorf("update project: %w", err)
+	}
+
+	txn.Commit()
+	return project, nil
 }

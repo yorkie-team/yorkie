@@ -4,7 +4,7 @@ info:
     Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.12
+  version: v0.6.15
 servers:
   - description: Production server
     url: https://api.yorkie.dev
@@ -187,6 +187,18 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse"
+        default:
+          $ref: "#/components/responses/connect.error"
+      tags:
+        - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/RotateProjectKeys:
+    post:
+      description: ""
+      requestBody:
+        $ref: "#/components/requestBodies/yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse"
         default:
           $ref: "#/components/responses/connect.error"
       tags:
@@ -376,6 +388,15 @@ components:
           schema:
             $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest"
       required: true
+    yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/yorkie.v1.RotateProjectKeysRequest"
+        application/proto:
+          schema:
+            $ref: "#/components/schemas/yorkie.v1.RotateProjectKeysRequest"
+      required: true
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest:
       content:
         application/json:
@@ -556,6 +577,15 @@ components:
         application/proto:
           schema:
             $ref: "#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse"
+      description: ""
+    yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/yorkie.v1.RotateProjectKeysResponse"
+        application/proto:
+          schema:
+            $ref: "#/components/schemas/yorkie.v1.RotateProjectKeysResponse"
       description: ""
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse:
       content:
@@ -2120,6 +2150,11 @@ components:
           description: ""
           title: max_attachments_per_document
           type: integer
+        maxSizePerDocument:
+          additionalProperties: false
+          description: ""
+          title: max_size_per_document
+          type: integer
         maxSubscribersPerDocument:
           additionalProperties: false
           description: ""
@@ -2173,6 +2208,29 @@ components:
       additionalProperties: false
       description: ""
       title: RemoveDocumentByAdminResponse
+      type: object
+    yorkie.v1.RotateProjectKeysRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+      title: RotateProjectKeysRequest
+      type: object
+    yorkie.v1.RotateProjectKeysResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        project:
+          $ref: "#/components/schemas/yorkie.v1.Project"
+          additionalProperties: false
+          description: ""
+          title: project
+          type: object
+      title: RotateProjectKeysResponse
       type: object
     yorkie.v1.SearchDocumentsRequest:
       additionalProperties: false
@@ -2449,6 +2507,12 @@ components:
           additionalProperties: false
           description: ""
           title: max_attachments_per_document
+          type: object
+        maxSizePerDocument:
+          $ref: "#/components/schemas/google.protobuf.Int32Value"
+          additionalProperties: false
+          description: ""
+          title: max_size_per_document
           type: object
         maxSubscribersPerDocument:
           $ref: "#/components/schemas/google.protobuf.Int32Value"

@@ -74,7 +74,7 @@ func (bp *BatchPublisher) Publish(event events.DocEvent) {
 	// the same publisher, only the two events are processed.
 	// This occurs when a client attaches/detaches a document since the order
 	// of Changed and Watch/Unwatch events is not guaranteed.
-	if event.Type == events.DocChangedEvent {
+	if event.Type == events.DocChanged {
 		count, exists := bp.docChangedCountMap[event.Publisher.String()]
 		if exists && count > 1 {
 			return

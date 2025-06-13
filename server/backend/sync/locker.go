@@ -18,7 +18,6 @@
 package sync
 
 import (
-	"context"
 	"errors"
 
 	"github.com/yorkie-team/yorkie/pkg/locker"
@@ -53,32 +52,51 @@ func New() *LockerManager {
 }
 
 // Locker creates locker of the given key.
-func (c *LockerManager) Locker(
-	_ context.Context,
-	key Key,
-) (Locker, error) {
-	return &internalLocker{
+func (c *LockerManager) Locker(key Key) Locker {
+	locker := &internalLocker{
 		key.String(),
 		c.locks,
-	}, nil
+	}
+	locker.lock()
+	return locker
+}
+
+// Locker creates locker of the given key.
+func (c *LockerManager) LockerWithRLock(key Key) Locker {
+	locker := &internalLocker{
+		key.String(),
+		c.locks,
+	}
+	locker.RLock()
+	return locker
+}
+
+// LockerWithTryLock creates locker of the given key with try lock.
+func (c *LockerManager) LockerWithTryLock(key Key) (Locker, bool) {
+	locker := &internalLocker{
+		key.String(),
+		c.locks,
+	}
+	ok := locker.tryLock()
+	return locker, ok
 }
 
 // A Locker represents an object that can be locked and unlocked.
 type Locker interface {
-	// Lock locks the mutex with a cancelable context
-	Lock(ctx context.Context) error
+	// Lock locks the mutex.
+	lock()
 
 	// TryLock locks the mutex if not already locked by another session.
-	TryLock(ctx context.Context) error
+	tryLock() bool
 
 	// Unlock unlocks the mutex.
-	Unlock(ctx context.Context) error
+	Unlock()
 
-	// RLock acquires a read lock with a cancelable context.
-	RLock(ctx context.Context) error
+	// RLock acquires a read lock.
+	RLock()
 
 	// RUnlock releases a read lock previously acquired by RLock.
-	RUnlock(ctx context.Context) error
+	RUnlock()
 }
 
 type internalLocker struct {
@@ -87,42 +105,30 @@ type internalLocker struct {
 }
 
 // Lock locks the mutex.
-func (il *internalLocker) Lock(_ context.Context) error {
+func (il *internalLocker) lock() {
 	il.locks.Lock(il.key)
-
-	return nil
 }
 
 // TryLock locks the mutex if not already locked by another session.
-func (il *internalLocker) TryLock(_ context.Context) error {
-	if !il.locks.TryLock(il.key) {
-		return ErrAlreadyLocked
-	}
-
-	return nil
+func (il *internalLocker) tryLock() bool {
+	return il.locks.TryLock(il.key)
 }
 
 // Unlock unlocks the mutex.
-func (il *internalLocker) Unlock(_ context.Context) error {
+func (il *internalLocker) Unlock() {
 	if err := il.locks.Unlock(il.key); err != nil {
-		return err
+		panic(err)
 	}
-
-	return nil
 }
 
 // RLock locks the mutex for reading..
-func (il *internalLocker) RLock(_ context.Context) error {
+func (il *internalLocker) RLock() {
 	il.locks.RLock(il.key)
-
-	return nil
 }
 
 // RUnlock unlocks the read lock.
-func (il *internalLocker) RUnlock(_ context.Context) error {
+func (il *internalLocker) RUnlock() {
 	if err := il.locks.RUnlock(il.key); err != nil {
-		return err
+		panic(err)
 	}
-
-	return nil
 }

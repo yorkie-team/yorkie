@@ -19,16 +19,23 @@
 package integration
 
 import (
-	"encoding/json"
+	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -53,7 +60,7 @@ func TestRESTAPI(t *testing.T) {
 		)
 
 		summary := &documentSummary{}
-		assert.NoError(t, json.Unmarshal(res, summary))
+		assert.NoError(t, gojson.Unmarshal(res, summary))
 		assert.Equal(t, docs[0].Key(), summary.Document.Key)
 	})
 
@@ -67,7 +74,7 @@ func TestRESTAPI(t *testing.T) {
 		)
 
 		summaries := &documentSummaries{}
-		assert.NoError(t, json.Unmarshal(res, summaries))
+		assert.NoError(t, gojson.Unmarshal(res, summaries))
 		assert.Len(t, summaries.Documents, 2)
 	})
 
@@ -81,7 +88,7 @@ func TestRESTAPI(t *testing.T) {
 		)
 
 		summaries := &documentSummaries{}
-		assert.NoError(t, json.Unmarshal(res, summaries))
+		assert.NoError(t, gojson.Unmarshal(res, summaries))
 		assert.Len(t, summaries.Documents, 3)
 	})
 
@@ -94,7 +101,7 @@ func TestRESTAPI(t *testing.T) {
 			fmt.Sprintf(`{"project_name": "%s", "query": "0-", "page_size": 3}`, project.Name),
 		)
 		summaries := &documentSummaries{}
-		assert.NoError(t, json.Unmarshal(res, summaries))
+		assert.NoError(t, gojson.Unmarshal(res, summaries))
 		assert.Len(t, summaries.Documents, 1)
 
 		_ = post(
@@ -111,8 +118,70 @@ func TestRESTAPI(t *testing.T) {
 			fmt.Sprintf(`{"project_name": "%s", "query": "0-", "page_size": 3}`, project.Name),
 		)
 		summaries = &documentSummaries{}
-		assert.NoError(t, json.Unmarshal(res, summaries))
+		assert.NoError(t, gojson.Unmarshal(res, summaries))
 		assert.Len(t, summaries.Documents, 0)
+	})
+
+	t.Run("concurrent document retrieval test", func(t *testing.T) {
+		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 1)
+
+		res := post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr()),
+			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
+		)
+		summary := &documentSummary{}
+		assert.NoError(t, gojson.Unmarshal(res, summary))
+		assert.Equal(t, "{}", summary.Document.Snapshot)
+
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer cli.Close()
+
+		doc := document.New(docs[0].Key())
+		assert.NoError(t, cli.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetYSON(yson.Object{"arr": yson.Array{}})
+			return nil
+		}))
+		cli.Sync(ctx)
+
+		res = post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr()),
+			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
+		)
+		assert.NoError(t, gojson.Unmarshal(res, summary))
+		assert.Equal(t, `{"arr":[]}`, summary.Document.Snapshot)
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetArray("arr").AddInteger(1)
+			return nil
+		}))
+		cli.Sync(ctx)
+
+		wg := sync.WaitGroup{}
+		for range 10 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				res := post(
+					t,
+					project,
+					fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr()),
+					fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
+				)
+				summary := &documentSummary{}
+				assert.NoError(t, gojson.Unmarshal(res, summary))
+				assert.Equal(t, `{"arr":[1]}`, summary.Document.Snapshot)
+			}()
+		}
+		wg.Wait()
 	})
 }
 

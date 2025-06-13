@@ -51,13 +51,10 @@ Backend:
 
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
-  SnapshotThreshold: 1000
+  SnapshotThreshold: 500
 
   # SnapshotInterval is the number of changes to create a snapshot.
-  SnapshotInterval: 3000
-
-  # SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
-  SnapshotWithPurgingChanges: false
+  SnapshotInterval: 500
 
   # AuthWebhookURL is the URL to send authorization requests to.
   AuthWebhookURL: ""

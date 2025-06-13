@@ -98,7 +98,7 @@ func TestClient(t *testing.T) {
 					assert.NoError(t, patch.Patch())
 				}()
 
-				assert.Equal(t, "dummy-api-key", req.Header().Get(types.ShardKey))
+				assert.Equal(t, "dummy-api-key/"+cli.Key(), req.Header().Get(types.ShardKey))
 
 				return connect.NewResponse(&api.ActivateClientResponse{
 					ClientId: dummyID.String(),
