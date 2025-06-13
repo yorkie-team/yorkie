@@ -345,6 +345,7 @@ message DocumentSummary {
   string snapshot = 3;
   int32 attached_clients = 7;
   DocSize document_size = 8;
+  string schema_key = 9;
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp accessed_at = 5;
   google.protobuf.Timestamp updated_at = 6;
@@ -425,4 +426,18 @@ message DataSize {
 message DocSize {
   DataSize live = 1;
   DataSize gc = 2;
+}
+
+message Schema {
+  string id = 1;
+  string name = 2;
+  int32 version = 3;
+  string body = 4;
+  repeated Rule rules = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message Rule {
+  string path = 1;
+  string type = 2;
 }

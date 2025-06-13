@@ -32,4 +32,7 @@ type DocumentSummary struct {
 
 	// DocSize represents the size of a document in bytes.
 	DocSize resource.DocSize
+
+	// SchemaKey is the key of the schema of the document.
+	SchemaKey string
 }
