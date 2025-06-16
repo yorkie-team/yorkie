@@ -86,8 +86,8 @@ var collectionInfos = []collectionInfo{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "key", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "key", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
@@ -106,8 +106,8 @@ var collectionInfos = []collectionInfo{
 		name: ColDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "key", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "key", Value: bsonx.Int32(1)},
 				{Key: "removed_at", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
