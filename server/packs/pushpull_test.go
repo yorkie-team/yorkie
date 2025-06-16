@@ -254,7 +254,7 @@ func TestPacks(t *testing.T) {
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		})
+		}, docInfo.Key.String())
 		assert.ErrorIs(t, err, ErrUpdateClientInfoFailed)
 
 		triggerErrUpdateClientInfo(false)
@@ -282,7 +282,7 @@ func TestPacks(t *testing.T) {
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		})
+		}, docInfo.Key.String())
 		assert.NoError(t, err)
 
 		// 3-2. duplicated change is not stored in the database

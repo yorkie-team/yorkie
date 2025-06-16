@@ -261,7 +261,8 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	_, err := c.client.DeactivateClient(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
-			ClientId: c.id.String(),
+			ClientId:  c.id.String(),
+			ClientKey: c.key,
 		}), c.options.APIKey, c.key))
 	if err != nil {
 		return err
@@ -306,6 +307,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
+			ClientKey:  c.key,
 			ChangePack: pbChangePack,
 			SchemaKey:  opts.Schema,
 		},
@@ -411,7 +413,9 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:            c.id.String(),
+			ClientKey:           c.key,
 			DocumentId:          attachment.docID.String(),
+			DocumentKey:         doc.Key().String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
 		}), c.options.APIKey, doc.Key().String()))
@@ -485,6 +489,7 @@ func (c *Client) Watch(ctx context.Context, doc *document.Document) (
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
 			ClientId:   c.id.String(),
+			ClientKey:  c.key,
 			DocumentId: attachment.docID.String(),
 		}), c.options.APIKey, doc.Key().String()),
 	)
@@ -712,10 +717,12 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	res, err := c.client.PushPullChanges(
 		ctx,
 		withShardKey(connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-			ChangePack: pbChangePack,
-			PushOnly:   opt.mode == types.SyncModePushOnly,
+			ClientId:    c.id.String(),
+			ClientKey:   c.key,
+			DocumentId:  attachment.docID.String(),
+			DocumentKey: opt.key.String(),
+			ChangePack:  pbChangePack,
+			PushOnly:    opt.mode == types.SyncModePushOnly,
 		}), c.options.APIKey, opt.key.String()))
 	if err != nil {
 		return err
@@ -756,9 +763,11 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	res, err := c.client.RemoveDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-			ChangePack: pbChangePack,
+			ClientId:    c.id.String(),
+			ClientKey:   c.key,
+			DocumentId:  attachment.docID.String(),
+			DocumentKey: attachment.doc.Key().String(),
+			ChangePack:  pbChangePack,
 		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
@@ -793,6 +802,7 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
 			ClientId:   c.id.String(),
+			ClientKey:  c.key,
 			DocumentId: attachment.docID.String(),
 			Topic:      topic,
 			Payload:    payload,

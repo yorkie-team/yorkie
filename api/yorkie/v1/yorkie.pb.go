@@ -142,8 +142,9 @@ type DeactivateClientRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ClientId  string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ClientKey string `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	ClientId    string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientKey   string `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentKey string `protobuf:"bytes,3,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
 }
 
 func (x *DeactivateClientRequest) Reset() {
@@ -188,6 +189,13 @@ func (x *DeactivateClientRequest) GetClientId() string {
 func (x *DeactivateClientRequest) GetClientKey() string {
 	if x != nil {
 		return x.ClientKey
+	}
+	return ""
+}
+
+func (x *DeactivateClientRequest) GetDocumentKey() string {
+	if x != nil {
+		return x.DocumentKey
 	}
 	return ""
 }
@@ -293,6 +301,13 @@ func (x *AttachDocumentRequest) GetSchemaKey() string {
 	return ""
 }
 
+func (x *AttachDocumentRequest) GetChangePack() *ChangePack {
+	if x != nil {
+		return x.ChangePack
+	}
+	return nil
+}
+
 type AttachDocumentResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -370,11 +385,11 @@ type DetachDocumentRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	ClientId            string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId          string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ChangePack          *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
-	RemoveIfNotAttached bool        `protobuf:"varint,4,opt,name=remove_if_not_attached,json=removeIfNotAttached,proto3" json:"remove_if_not_attached,omitempty"`
-	ClientKey           string      `protobuf:"bytes,5,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	DocumentKey         string      `protobuf:"bytes,6,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ClientKey           string      `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentId          string      `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	DocumentKey         string      `protobuf:"bytes,4,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ChangePack          *ChangePack `protobuf:"bytes,5,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	RemoveIfNotAttached bool        `protobuf:"varint,6,opt,name=remove_if_not_attached,json=removeIfNotAttached,proto3" json:"remove_if_not_attached,omitempty"`
 }
 
 func (x *DetachDocumentRequest) Reset() {
@@ -416,9 +431,23 @@ func (x *DetachDocumentRequest) GetClientId() string {
 	return ""
 }
 
+func (x *DetachDocumentRequest) GetClientKey() string {
+	if x != nil {
+		return x.ClientKey
+	}
+	return ""
+}
+
 func (x *DetachDocumentRequest) GetDocumentId() string {
 	if x != nil {
 		return x.DocumentId
+	}
+	return ""
+}
+
+func (x *DetachDocumentRequest) GetDocumentKey() string {
+	if x != nil {
+		return x.DocumentKey
 	}
 	return ""
 }
@@ -435,20 +464,6 @@ func (x *DetachDocumentRequest) GetRemoveIfNotAttached() bool {
 		return x.RemoveIfNotAttached
 	}
 	return false
-}
-
-func (x *DetachDocumentRequest) GetClientKey() string {
-	if x != nil {
-		return x.ClientKey
-	}
-	return ""
-}
-
-func (x *DetachDocumentRequest) GetDocumentKey() string {
-	if x != nil {
-		return x.DocumentKey
-	}
-	return ""
 }
 
 type DetachDocumentResponse struct {
@@ -504,8 +519,8 @@ type WatchDocumentRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	ClientId   string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId string `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ClientKey  string `protobuf:"bytes,3,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	ClientKey  string `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentId string `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 }
 
 func (x *WatchDocumentRequest) Reset() {
@@ -547,16 +562,16 @@ func (x *WatchDocumentRequest) GetClientId() string {
 	return ""
 }
 
-func (x *WatchDocumentRequest) GetDocumentId() string {
+func (x *WatchDocumentRequest) GetClientKey() string {
 	if x != nil {
-		return x.DocumentId
+		return x.ClientKey
 	}
 	return ""
 }
 
-func (x *WatchDocumentRequest) GetClientKey() string {
+func (x *WatchDocumentRequest) GetDocumentId() string {
 	if x != nil {
-		return x.ClientKey
+		return x.DocumentId
 	}
 	return ""
 }
@@ -648,10 +663,10 @@ type RemoveDocumentRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	ClientId    string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId  string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ChangePack  *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
-	ClientKey   string      `protobuf:"bytes,4,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	DocumentKey string      `protobuf:"bytes,5,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ClientKey   string      `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentId  string      `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	DocumentKey string      `protobuf:"bytes,4,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ChangePack  *ChangePack `protobuf:"bytes,5,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 }
 
 func (x *RemoveDocumentRequest) Reset() {
@@ -693,23 +708,16 @@ func (x *RemoveDocumentRequest) GetClientId() string {
 	return ""
 }
 
-func (x *RemoveDocumentRequest) GetDocumentId() string {
+func (x *RemoveDocumentRequest) GetClientKey() string {
 	if x != nil {
-		return x.DocumentId
+		return x.ClientKey
 	}
 	return ""
 }
 
-func (x *RemoveDocumentRequest) GetChangePack() *ChangePack {
+func (x *RemoveDocumentRequest) GetDocumentId() string {
 	if x != nil {
-		return x.ChangePack
-	}
-	return nil
-}
-
-func (x *RemoveDocumentRequest) GetClientKey() string {
-	if x != nil {
-		return x.ClientKey
+		return x.DocumentId
 	}
 	return ""
 }
@@ -719,6 +727,13 @@ func (x *RemoveDocumentRequest) GetDocumentKey() string {
 		return x.DocumentKey
 	}
 	return ""
+}
+
+func (x *RemoveDocumentRequest) GetChangePack() *ChangePack {
+	if x != nil {
+		return x.ChangePack
+	}
+	return nil
 }
 
 type RemoveDocumentResponse struct {
@@ -774,11 +789,11 @@ type PushPullChangesRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	ClientId    string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId  string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ChangePack  *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
-	PushOnly    bool        `protobuf:"varint,4,opt,name=push_only,json=pushOnly,proto3" json:"push_only,omitempty"`
-	ClientKey   string      `protobuf:"bytes,5,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	DocumentKey string      `protobuf:"bytes,6,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ClientKey   string      `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentId  string      `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	DocumentKey string      `protobuf:"bytes,4,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ChangePack  *ChangePack `protobuf:"bytes,5,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	PushOnly    bool        `protobuf:"varint,6,opt,name=push_only,json=pushOnly,proto3" json:"push_only,omitempty"`
 }
 
 func (x *PushPullChangesRequest) Reset() {
@@ -820,9 +835,23 @@ func (x *PushPullChangesRequest) GetClientId() string {
 	return ""
 }
 
+func (x *PushPullChangesRequest) GetClientKey() string {
+	if x != nil {
+		return x.ClientKey
+	}
+	return ""
+}
+
 func (x *PushPullChangesRequest) GetDocumentId() string {
 	if x != nil {
 		return x.DocumentId
+	}
+	return ""
+}
+
+func (x *PushPullChangesRequest) GetDocumentKey() string {
+	if x != nil {
+		return x.DocumentKey
 	}
 	return ""
 }
@@ -839,20 +868,6 @@ func (x *PushPullChangesRequest) GetPushOnly() bool {
 		return x.PushOnly
 	}
 	return false
-}
-
-func (x *PushPullChangesRequest) GetClientKey() string {
-	if x != nil {
-		return x.ClientKey
-	}
-	return ""
-}
-
-func (x *PushPullChangesRequest) GetDocumentKey() string {
-	if x != nil {
-		return x.DocumentKey
-	}
-	return ""
 }
 
 type PushPullChangesResponse struct {
@@ -908,10 +923,10 @@ type BroadcastRequest struct {
 	unknownFields protoimpl.UnknownFields
 
 	ClientId   string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId string `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	Topic      string `protobuf:"bytes,3,opt,name=topic,proto3" json:"topic,omitempty"`
-	Payload    []byte `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
-	ClientKey  string `protobuf:"bytes,5,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	ClientKey  string `protobuf:"bytes,2,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	DocumentId string `protobuf:"bytes,3,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	Topic      string `protobuf:"bytes,4,opt,name=topic,proto3" json:"topic,omitempty"`
+	Payload    []byte `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
 }
 
 func (x *BroadcastRequest) Reset() {
@@ -953,6 +968,13 @@ func (x *BroadcastRequest) GetClientId() string {
 	return ""
 }
 
+func (x *BroadcastRequest) GetClientKey() string {
+	if x != nil {
+		return x.ClientKey
+	}
+	return ""
+}
+
 func (x *BroadcastRequest) GetDocumentId() string {
 	if x != nil {
 		return x.DocumentId
@@ -972,13 +994,6 @@ func (x *BroadcastRequest) GetPayload() []byte {
 		return x.Payload
 	}
 	return nil
-}
-
-func (x *BroadcastRequest) GetClientKey() string {
-	if x != nil {
-		return x.ClientKey
-	}
-	return ""
 }
 
 type BroadcastResponse struct {
@@ -1088,7 +1103,7 @@ var file_yorkie_v1_yorkie_proto_rawDesc = []byte{
 	0x22, 0x35, 0x0a, 0x16, 0x41, 0x63, 0x74, 0x69, 0x76, 0x61, 0x74, 0x65, 0x43, 0x6c, 0x69, 0x65,
 	0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c,
 	0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63,
-	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x55, 0x0a, 0x17, 0x44, 0x65, 0x61, 0x63, 0x74,
+	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x78, 0x0a, 0x17, 0x44, 0x65, 0x61, 0x63, 0x74,
 	0x69, 0x76, 0x61, 0x74, 0x65, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
 	0x73, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22,

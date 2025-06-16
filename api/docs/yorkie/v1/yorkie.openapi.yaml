@@ -560,6 +560,11 @@ components:
           description: ""
           title: client_key
           type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
       title: DeactivateClientRequest
       type: object
     yorkie.v1.DeactivateClientResponse:

@@ -1197,7 +1197,7 @@ func (c *Client) CreateChangeInfos(
 	}
 	if res.MatchedCount == 0 {
 		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s: %w", refKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s, %s: %w", refKey, docInfoKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
