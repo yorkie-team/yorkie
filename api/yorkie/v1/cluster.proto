@@ -34,9 +34,9 @@ service ClusterService {
 message ClusterServiceDetachDocumentRequest {
   Project project = 1;
   string client_id = 2;
-  string document_id = 3;
-  string document_key = 4;
-  string client_key = 5;
+  string client_key = 3;
+  string document_id = 4;
+  string document_key = 5;
 }
 
 message ClusterServiceDetachDocumentResponse {}
