@@ -1038,7 +1038,7 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 	return count, nil
 }
 
-// changeInfos stores the given changes and doc info.
+// CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,
