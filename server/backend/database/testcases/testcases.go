@@ -22,6 +22,8 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	gosync "sync"
+	"sync/atomic"
 	"testing"
 	gotime "time"
 
@@ -331,7 +333,7 @@ func RunFindChangesBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
@@ -417,7 +419,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
@@ -488,7 +490,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
@@ -515,10 +517,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 }
 
 // RunFindLatestChangeInfoTest runs the FindLatestChangeInfoByActor test for the given db.
-func RunFindLatestChangeInfoTest(t *testing.T,
-	db database.Database,
-	projectID types.ID,
-) {
+func RunFindLatestChangeInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store changes and find latest changeInfo test", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -556,13 +555,13 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
 
 		// 03. Find all changes and determine the maximum Lamport timestamp.
-		changes, err := db.FindChangesBetweenServerSeqs(ctx, refKey, 1, 10)
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, refKey, 1, 6)
 		assert.NoError(t, err)
 		maxLamport := int64(0)
 		for _, ch := range changes {
@@ -1191,7 +1190,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 			ctx,
 			docInfo1.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
@@ -1210,13 +1209,177 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 			ctx,
 			docInfo2.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			toChangeInfos(refKey, pack.Changes),
 			false,
 		)
 		assert.NoError(t, err)
 		docInfo3, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NotEqual(t, updatedAt, docInfo3.UpdatedAt)
 	})
+
+	t.Run("create change infos without conflict test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := helper.TestDocKey(t)
+		numOfClients := 100
+
+		owner, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s", t.Name()), map[string]string{})
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, owner.RefKey(), docKey)
+		assert.NoError(t, err)
+
+		var clients []*database.ClientInfo
+		for i := range numOfClients {
+			c, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("%s-%d", t.Name(), i), map[string]string{})
+			assert.NoError(t, err)
+			assert.NoError(t, c.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c, docInfo))
+			clients = append(clients, c)
+		}
+
+		wg := gosync.WaitGroup{}
+		for i, c := range clients {
+			wg.Add(1)
+			go func(client *database.ClientInfo, idx int) {
+				defer wg.Done()
+				ctx := context.Background()
+				doc := document.New(docKey)
+				actorID, err := client.ID.ToActorID()
+				assert.NoError(t, err)
+				doc.SetActor(actorID)
+
+				assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+					p.Set("key", fmt.Sprintf("val-%d", idx))
+					return nil
+				}))
+				pack := doc.CreateChangePack()
+				_, _, err = db.CreateChangeInfos(
+					ctx,
+					docInfo.RefKey(),
+					pack.Checkpoint,
+					toChangeInfos(docInfo.RefKey(), pack.Changes),
+					false,
+				)
+				assert.NoError(t, err)
+			}(c, i)
+		}
+		wg.Wait()
+
+		changes, err := db.FindChangesBetweenServerSeqs(ctx, docInfo.RefKey(), 1, int64(numOfClients))
+		assert.NoError(t, err)
+		assert.Equal(t, numOfClients, len(changes))
+	})
+}
+
+func RunConcurrentChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
+	for i := range 1000 {
+		detected := false
+
+		t.Run(fmt.Sprintf("race-%d", i), func(t *testing.T) {
+			ctx := context.Background()
+			docKey := key.Key(fmt.Sprintf("concurrent$%d", i))
+
+			clientA, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("ClientA-%d", i), nil)
+			assert.NoError(t, err)
+			clientB, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("ClientB-%d", i), nil)
+			assert.NoError(t, err)
+			clientC, err := db.ActivateClient(ctx, projectID, fmt.Sprintf("ClientC-%d", i), nil)
+			assert.NoError(t, err)
+
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientA.RefKey(), docKey)
+			assert.NoError(t, err)
+			refKey := docInfo.RefKey()
+
+			assert.NoError(t, clientA.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientA, docInfo))
+			assert.NoError(t, clientB.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientB, docInfo))
+			assert.NoError(t, clientC.AttachDocument(docInfo.ID, false))
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientC, docInfo))
+
+			// Prepare document for A
+			bytesIDA, _ := clientA.ID.Bytes()
+			actorIDA, _ := time.ActorIDFromBytes(bytesIDA)
+			docA := document.New(docKey)
+			docA.SetActor(actorIDA)
+
+			// Prepare document for B
+			bytesIDB, _ := clientB.ID.Bytes()
+			actorIDB, _ := time.ActorIDFromBytes(bytesIDB)
+			docB := document.New(docKey)
+			docB.SetActor(actorIDB)
+
+			var wg gosync.WaitGroup
+			var maxSeq int32
+
+			// Concurrently update documents and read changes.
+			wg.Add(3)
+			go func() {
+				var err error
+				defer wg.Done()
+
+				_ = docA.Update(func(r *json.Object, p *presence.Presence) error {
+					r.SetNewObject("obj")
+					return nil
+				})
+				packA := docA.CreateChangePack()
+				_, _, err = db.CreateChangeInfos(
+					ctx,
+					refKey,
+					packA.Checkpoint,
+					toChangeInfos(refKey, packA.Changes),
+					false,
+				)
+				assert.NoError(t, err)
+				atomic.AddInt32(&maxSeq, 1)
+			}()
+			go func() {
+				var err error
+				defer wg.Done()
+
+				_ = docB.Update(func(r *json.Object, p *presence.Presence) error {
+					r.SetNewArray("arr")
+					return nil
+				})
+				packB := docB.CreateChangePack()
+				_, _, err = db.CreateChangeInfos(
+					ctx,
+					refKey,
+					packB.Checkpoint,
+					toChangeInfos(refKey, packB.Changes),
+					false,
+				)
+				assert.NoError(t, err)
+				atomic.AddInt32(&maxSeq, 1)
+			}()
+			go func() {
+				var err error
+				defer wg.Done()
+
+				// NOTE(hackerwins): Add a delay to ensure that the other goroutines have a chance to run.
+				var currSeq int32
+				for {
+					currSeq = atomic.LoadInt32(&maxSeq)
+					if currSeq > 0 {
+						break
+					}
+
+					gotime.Sleep(gotime.Duration(i%5) * gotime.Millisecond)
+				}
+
+				infos, err := db.FindChangeInfosBetweenServerSeqs(ctx, refKey, 1, int64(currSeq))
+				assert.NoError(t, err)
+				assert.Equal(t, int(currSeq), len(infos), "race detected: expected %d changes, got %d", currSeq, len(infos))
+				if int(currSeq) != len(infos) {
+					detected = true
+				}
+			}()
+			wg.Wait()
+		})
+
+		if detected {
+			break
+		}
+	}
 }
 
 // RunUpdateClientInfoAfterPushPullTest runs the UpdateClientInfoAfterPushPull tests for the given db.
@@ -1716,12 +1879,11 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Change) []*database.ChangeInfo {
-	changeInfos := make([]*database.ChangeInfo, len(changes))
+func toChangeInfos(docKey types.DocRefKey, changes []*change.Change) []*database.ChangeInfo {
+	infos := make([]*database.ChangeInfo, len(changes))
 	for i, cn := range changes {
-		info, err := database.NewFromChange(docKey, cn)
-		assert.NoError(t, err)
-		changeInfos[i] = info
+		info, _ := database.NewFromChange(docKey, cn)
+		infos[i] = info
 	}
-	return changeInfos
+	return infos
 }
