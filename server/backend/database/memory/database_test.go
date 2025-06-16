@@ -104,8 +104,12 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDocInfosByPagingTest(t, db, projectTwoID)
 	})
 
-	t.Run("CreateClientInfo test", func(t *testing.T) {
+	t.Run("CreateChangeInfos test", func(t *testing.T) {
 		testcases.RunCreateChangeInfosTest(t, db, projectID)
+	})
+
+	t.Run("RunConcurrentChangeInfos test", func(t *testing.T) {
+		testcases.RunConcurrentChangeInfosTest(t, db, projectID)
 	})
 
 	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
