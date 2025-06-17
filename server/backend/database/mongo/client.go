@@ -832,9 +832,9 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		"status":     database.ClientActivated,
-		clientDocInfoKey(docRefKey.DocID, "status"): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"status":        database.ClientActivated,
+		"document_keys": docRefKey.DocID,
 	}
 
 	cursor, err := c.collection(ColClients).Find(ctx, filter)
@@ -1572,8 +1572,8 @@ func (c *Client) IsDocumentAttached(
 	excludeClientID types.ID,
 ) (bool, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"document_keys": docRefKey.DocID,
 	}
 
 	if excludeClientID != "" {
