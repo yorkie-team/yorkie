@@ -92,5 +92,6 @@ func (info *DocInfo) RefKey() types.DocRefKey {
 	return types.DocRefKey{
 		ProjectID: info.ProjectID,
 		DocID:     info.ID,
+		DocKey:    info.Key,
 	}
 }

@@ -158,17 +158,17 @@ type Database interface {
 	ActivateClient(ctx context.Context, projectID types.ID, key string, metadata map[string]string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given refKey.
-	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
+	DeactivateClient(ctx context.Context, clientRefKey types.ClientRefKey) (*ClientInfo, error)
 
 	// FindClientInfoByRefKey finds the client of the given refKey.
-	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
+	FindClientInfoByRefKey(ctx context.Context, clientRefKey types.ClientRefKey) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
 	// FindAttachedClientInfosByRefKey returns the client infos of the given document.
-	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
+	FindAttachedClientInfosByRefKey(ctx context.Context, docRefKey types.DocRefKey) ([]*ClientInfo, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
@@ -216,13 +216,13 @@ type Database interface {
 	// FindDocInfoByRefKey finds the document of the given refKey.
 	FindDocInfoByRefKey(
 		ctx context.Context,
-		refKey types.DocRefKey,
+		docRefKey types.DocRefKey,
 	) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
-		refKey types.DocRefKey,
+		docRefKey types.DocRefKey,
 	) error
 
 	// GetDocumentsCount returns the number of documents in the given project.
@@ -238,7 +238,6 @@ type Database interface {
 		cpBeforePush change.Checkpoint,
 		changes []*ChangeInfo,
 		isRemoved bool,
-		docInfoKey string,
 	) (*DocInfo, change.Checkpoint, error)
 
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
@@ -283,7 +282,7 @@ type Database interface {
 	// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
 	FindSnapshotInfoByRefKey(
 		ctx context.Context,
-		refKey types.SnapshotRefKey,
+		snapshotRefKey types.SnapshotRefKey,
 	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.

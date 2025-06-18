@@ -98,13 +98,16 @@ func RunAttachAndDetachDocumentTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
+	docKey := helper.TestDocKey(t).String()
+
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: docKey,
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
@@ -112,8 +115,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.NoError(t, err)
@@ -123,8 +126,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   invalidClientID,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -135,8 +138,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   nilClientID,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -147,8 +150,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -159,8 +162,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: invalidChangePack,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -170,9 +173,9 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.NoError(t, err)
@@ -182,9 +185,9 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -194,8 +197,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: invalidChangePack,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -206,11 +209,11 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			DocumentId: "000000000000000000000000",
 			ChangePack: &api.ChangePack{
 				Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			},
-			ClientKey: t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -218,7 +221,7 @@ func RunAttachAndDetachDocumentTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, ClientKey: t.Name()}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	// try to attach the document with a deactivated client
@@ -226,8 +229,8 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -262,8 +265,8 @@ func RunAttachAndDetachRemovedDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
-			ChangePack: packWithNoChanges,
 			ClientKey:  clientKey,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.NoError(t, err)
@@ -271,11 +274,10 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.NoError(t, err)
@@ -285,11 +287,10 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			DocumentId:  resPack.Msg.DocumentId,
-			ChangePack:  packWithNoChanges,
-			ClientKey:   clientKey,
-			DocumentKey: docKey,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -300,8 +301,8 @@ func RunAttachAndDetachRemovedDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
 			ChangePack: packWithNoChanges,
-			ClientKey:  t.Name(),
 		},
 		))
 	assert.NoError(t, err)
@@ -309,11 +310,10 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			DocumentId:  resPack.Msg.DocumentId,
-			ChangePack:  packWithRemoveRequest,
-			ClientKey:   t.Name(),
-			DocumentKey: docKey,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.NoError(t, err)
@@ -363,10 +363,9 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
 				DocumentKey: docKey,
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
@@ -386,10 +385,9 @@ func RunPushPullChangeTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
 				DocumentKey: docKey,
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
@@ -410,11 +408,10 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithNoChanges,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -424,11 +421,10 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  invalidChangePack,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: invalidChangePack,
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -443,11 +439,10 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithNoChanges,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -491,11 +486,10 @@ func RunPushPullChangeOnRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.NoError(t, err)
@@ -504,11 +498,10 @@ func RunPushPullChangeOnRemovedDocumentTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithNoChanges,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -551,11 +544,10 @@ func RunRemoveDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.NoError(t, err)
@@ -564,11 +556,10 @@ func RunRemoveDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -611,11 +602,10 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithNoChanges,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.NoError(t, err)
@@ -624,11 +614,10 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -643,11 +632,10 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			ClientKey:   clientKey,
-			DocumentId:  resPack.Msg.DocumentId,
-			DocumentKey: docKey,
-			ChangePack:  packWithRemoveRequest,
+			ClientId:   activateResp.Msg.ClientId,
+			ClientKey:  clientKey,
+			DocumentId: resPack.Msg.DocumentId,
+			ChangePack: packWithRemoveRequest,
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
@@ -800,9 +788,10 @@ func RunMaxSubscribersPerDocumentConcurrencyTest(
 			watchResp, err := testClient.WatchDocument(
 				context.Background(),
 				connect.NewRequest(&api.WatchDocumentRequest{
-					ClientId:   client["clientId"],
-					ClientKey:  client["clientKey"],
-					DocumentId: resPack.Msg.DocumentId,
+					ClientId:    client["clientId"],
+					ClientKey:   client["clientKey"],
+					DocumentId:  resPack.Msg.DocumentId,
+					DocumentKey: docKey,
 				},
 				))
 			assert.NoError(t, err)

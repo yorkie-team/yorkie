@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -197,18 +198,22 @@ func TestPacks(t *testing.T) {
 
 		triggerErrUpdateClientInfo(false)
 
+		clientKey := helper.TestDocKey(t).String()
+		docKey := helper.TestDocKey(t).String()
+
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 		assert.NoError(t, err)
 
 		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			connect.NewRequest(&api.AttachDocumentRequest{
-				ClientId: activateResp.Msg.ClientId,
+				ClientId:  activateResp.Msg.ClientId,
+				ClientKey: clientKey,
 				ChangePack: &api.ChangePack{
-					DocumentKey: helper.TestDocKey(t).String(),
+					DocumentKey: docKey,
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 					Changes:     []*api.Change{{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}}},
 				},
@@ -223,6 +228,7 @@ func TestPacks(t *testing.T) {
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
+			DocKey:    key.Key(docKey),
 		}
 
 		// 0. Check docInfo.ServerSeq and clientInfo.Checkpoint
@@ -240,7 +246,7 @@ func TestPacks(t *testing.T) {
 
 		// 1. Create a ChangePack with a single Change
 		pack, err := converter.FromChangePack(&api.ChangePack{
-			DocumentKey: helper.TestDocKey(t).String(),
+			DocumentKey: docKey,
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 			Changes: []*api.Change{
 				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID}},
@@ -254,7 +260,7 @@ func TestPacks(t *testing.T) {
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docInfo.Key.String())
+		})
 		assert.ErrorIs(t, err, ErrUpdateClientInfoFailed)
 
 		triggerErrUpdateClientInfo(false)
@@ -282,7 +288,7 @@ func TestPacks(t *testing.T) {
 		_, err = packs.PushPull(ctx, testBackend, project, clientInfo, docInfo.RefKey(), pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docInfo.Key.String())
+		})
 		assert.NoError(t, err)
 
 		// 3-2. duplicated change is not stored in the database

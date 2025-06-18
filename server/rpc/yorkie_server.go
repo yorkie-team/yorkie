@@ -174,7 +174,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -193,7 +193,7 @@ func (s *yorkieServer) AttachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusAttached,
-	}, docInfo.Key.String())
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	// 02. Set the document status if it is not attached.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -282,7 +282,7 @@ func (s *yorkieServer) DetachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: status,
-	}, req.Msg.DocumentKey)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -350,11 +350,11 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	// 03. Push/Pull between the client and server.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   syncMode,
 		Status: document.StatusAttached,
-	}, req.Msg.DocumentKey)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +411,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -421,7 +421,7 @@ func (s *yorkieServer) RemoveDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushPull,
 		Status: document.StatusRemoved,
-	}, req.Msg.DocumentKey)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +462,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: key.Key(req.Msg.DocumentKey)}
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil
@@ -605,7 +605,7 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: key.Key(req.Msg.DocumentKey)}
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil, err
