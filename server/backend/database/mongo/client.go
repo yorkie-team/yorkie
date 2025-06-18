@@ -1041,7 +1041,7 @@ func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,
 	checkpoint change.Checkpoint,
-	changes []*change.Change,
+	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	// 01. Fetch the document info.
@@ -1059,26 +1059,21 @@ func (c *Client) CreateChangeInfos(
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
-		cn.SetServerSeq(serverSeq)
-		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
-
-		encodedOperations, err := database.EncodeOperations(cn.Operations())
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
-		}
+		cn.ServerSeq = serverSeq
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": refKey.ProjectID,
 			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq(),
+			"server_seq": cn.ServerSeq,
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        cn.ID().ActorID(),
-			"client_seq":      cn.ID().ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
+			"actor_id":        cn.ActorID,
+			"client_seq":      cn.ClientSeq,
+			"lamport":         cn.Lamport,
+			"version_vector":  cn.VersionVector,
+			"message":         cn.Message,
+			"operations":      cn.Operations,
+			"presence_change": cn.PresenceChange,
 		}}).SetUpsert(true))
 	}
 	if len(changes) > 0 {
@@ -1098,7 +1093,7 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
+		if len(cn.Operations) > 0 {
 			updateFields["updated_at"] = now
 			break
 		}

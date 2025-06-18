@@ -159,21 +159,26 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
+) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
-	var pushables []*change.Change
-	for _, change := range reqPack.Changes {
-		if change.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+	var pushables []*database.ChangeInfo
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
 				"change already pushed, clientSeq: %d, cp: %d",
-				change.ID().ClientSeq(),
+				cn.ID().ClientSeq(),
 				cpBeforePush.ClientSeq,
 			)
 			continue
 		}
-		pushables = append(pushables, change)
+		info, err := database.NewFromChange(docKey, cn)
+		if err != nil {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		}
+
+		pushables = append(pushables, info)
 	}
 
 	// 02. Push the changes to the database.
