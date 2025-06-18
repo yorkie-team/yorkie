@@ -77,11 +77,12 @@ func PushPull(
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
 	opts PushPullOptions,
+	docInfoKey string,
 ) (*ServerPack, error) {
 	start := gotime.Now()
 
 	// 01. push the change pack to the database.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack, docInfoKey)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +160,7 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
+	docInfoKey string,
 ) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
@@ -187,9 +189,10 @@ func pushPack(
 		cpBeforePush,
 		pushables,
 		reqPack.IsRemoved,
+		docInfoKey,
 	)
 	if err != nil {
-		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		return nil, nil, time.InitialLamport, change.InitialCheckpoint, fmt.Errorf("create change infos: %w", err)
 	}
 
 	initialSeq := docInfo.ServerSeq - int64(len(pushables))

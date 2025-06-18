@@ -34,28 +34,32 @@ sharded:
     rules:
       - collectionName: clients
         shardKeys:
+          - name: key
+            method: "\"hashed\""
           - name: project_id
             method: "1"
         unique: false
       - collectionName: documents
         shardKeys:
+          - name: key
+            method: "\"hashed\""
           - name: project_id
             method: "1"
         unique: false
       - collectionName: changes
         shardKeys:
           - name: doc_id
-            method: "1"
+            method: "\"hashed\""
         unique: false
       - collectionName: snapshots
         shardKeys:
           - name: doc_id
-            method: "1"
+            method: "\"hashed\""
         unique: false
       - collectionName: versionvectors
         shardKeys:
           - name: doc_id
-            method: "1"
+            method: "\"hashed\""
         unique: false
 
 # Configuration for manual dmongodb sharded stack

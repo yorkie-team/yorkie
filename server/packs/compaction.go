@@ -112,7 +112,7 @@ func Compact(
 			"[CD] Document %s failed to compact: %v\n Root: %s\n",
 			docInfo.ID, err, prevMarshalled,
 		)
-		return err
+		return fmt.Errorf("compact change infos: %w", err)
 	}
 
 	return nil

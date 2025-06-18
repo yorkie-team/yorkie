@@ -617,6 +617,7 @@ func (c *Client) ActivateClient(
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 			"project_id": projectID,
+			"key":        key,
 			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -642,6 +643,7 @@ func (c *Client) ActivateClient(
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -665,6 +667,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -723,6 +726,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
+		"key":        clientInfo.Key,
 		"_id":        clientInfo.ID,
 	}, updater)
 
@@ -1043,6 +1047,7 @@ func (c *Client) CreateChangeInfos(
 	checkpoint change.Checkpoint,
 	changes []*change.Change,
 	isRemoved bool,
+	docInfoKey string,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	// 01. Fetch the document info.
 	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
@@ -1110,6 +1115,7 @@ func (c *Client) CreateChangeInfos(
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        docInfoKey,
 		"_id":        refKey.DocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
@@ -1119,7 +1125,7 @@ func (c *Client) CreateChangeInfos(
 		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s, %s: %w", refKey, docInfoKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
@@ -1173,6 +1179,7 @@ func (c *Client) CompactChangeInfos(
 	// 3. Update document
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
+		"key":        docInfo.Key,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
@@ -1185,7 +1192,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("update document: %s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil

@@ -296,6 +296,7 @@ func (i *ClientInfo) RefKey() types.ClientRefKey {
 	return types.ClientRefKey{
 		ProjectID: i.ProjectID,
 		ClientID:  i.ID,
+		ClientKey: i.Key,
 	}
 }
 
