@@ -230,12 +230,12 @@ function activateClient() {
   return [result!.clientId, clientKey];
 }
 
-function deactivateClient(clientID: string, clientKey: string, docKey: string): string {
+function deactivateClient(clientID: string, clientKey: string): string {
   const url = `${API_URL}/yorkie.v1.YorkieService/DeactivateClient`;
 
   const result = makeRequest(
     url,
-    { clientId: clientID, clientKey: clientKey, documentKey: docKey },
+    { clientId: clientID, clientKey: clientKey },
     { "x-shard-key": `${API_KEY}/${clientKey}` }
   );
 
@@ -300,7 +300,6 @@ function pushpullChanges(
     clientId: clientID,
     documentId: docID,
     clientKey: clientKey,
-    documentKey: docKey,
     changePack: {
       documentKey: docKey,
       checkpoint: {
