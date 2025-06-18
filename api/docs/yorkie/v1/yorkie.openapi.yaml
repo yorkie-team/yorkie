@@ -392,6 +392,11 @@ components:
           description: ""
           title: document_id
           type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
         payload:
           additionalProperties: false
           description: ""
@@ -560,11 +565,6 @@ components:
           description: ""
           title: client_key
           type: string
-        documentKey:
-          additionalProperties: false
-          description: ""
-          title: document_key
-          type: string
       title: DeactivateClientRequest
       type: object
     yorkie.v1.DeactivateClientResponse:
@@ -596,11 +596,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_id
-          type: string
-        documentKey:
-          additionalProperties: false
-          description: ""
-          title: document_key
           type: string
         removeIfNotAttached:
           additionalProperties: false
@@ -1381,11 +1376,6 @@ components:
           description: ""
           title: document_id
           type: string
-        documentKey:
-          additionalProperties: false
-          description: ""
-          title: document_key
-          type: string
         pushOnly:
           additionalProperties: false
           description: ""
@@ -1429,11 +1419,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_id
-          type: string
-        documentKey:
-          additionalProperties: false
-          description: ""
-          title: document_key
           type: string
       title: RemoveDocumentRequest
       type: object
@@ -1707,6 +1692,11 @@ components:
           additionalProperties: false
           description: ""
           title: document_id
+          type: string
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
           type: string
       title: WatchDocumentRequest
       type: object

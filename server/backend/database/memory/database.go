@@ -1070,7 +1070,6 @@ func (d *DB) CreateChangeInfos(
 	checkpoint change.Checkpoint,
 	changes []*database.ChangeInfo,
 	isRemoved bool,
-	docInfoKey string,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()

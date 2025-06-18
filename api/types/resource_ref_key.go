@@ -18,17 +18,20 @@ package types
 
 import (
 	"fmt"
+
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // DocRefKey represents an identifier used to reference a document.
 type DocRefKey struct {
 	ProjectID ID
 	DocID     ID
+	DocKey    key.Key
 }
 
 // String returns the string representation of the given DocRefKey.
 func (r DocRefKey) String() string {
-	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
+	return fmt.Sprintf("Document (%s.%s.%s)", r.ProjectID, r.DocID, r.DocKey.String())
 }
 
 // ClientRefKey represents an identifier used to reference a client.

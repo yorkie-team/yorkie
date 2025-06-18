@@ -415,7 +415,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 			ClientId:            c.id.String(),
 			ClientKey:           c.key,
 			DocumentId:          attachment.docID.String(),
-			DocumentKey:         doc.Key().String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
 		}), c.options.APIKey, doc.Key().String()))
@@ -488,9 +487,10 @@ func (c *Client) Watch(ctx context.Context, doc *document.Document) (
 	return c.client.WatchDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:   c.id.String(),
-			ClientKey:  c.key,
-			DocumentId: attachment.docID.String(),
+			ClientId:    c.id.String(),
+			ClientKey:   c.key,
+			DocumentId:  attachment.docID.String(),
+			DocumentKey: doc.Key().String(),
 		}), c.options.APIKey, doc.Key().String()),
 	)
 }
@@ -717,12 +717,11 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	res, err := c.client.PushPullChanges(
 		ctx,
 		withShardKey(connect.NewRequest(&api.PushPullChangesRequest{
-			ClientId:    c.id.String(),
-			ClientKey:   c.key,
-			DocumentId:  attachment.docID.String(),
-			DocumentKey: opt.key.String(),
-			ChangePack:  pbChangePack,
-			PushOnly:    opt.mode == types.SyncModePushOnly,
+			ClientId:   c.id.String(),
+			ClientKey:  c.key,
+			DocumentId: attachment.docID.String(),
+			ChangePack: pbChangePack,
+			PushOnly:   opt.mode == types.SyncModePushOnly,
 		}), c.options.APIKey, opt.key.String()))
 	if err != nil {
 		return err
@@ -763,11 +762,10 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	res, err := c.client.RemoveDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RemoveDocumentRequest{
-			ClientId:    c.id.String(),
-			ClientKey:   c.key,
-			DocumentId:  attachment.docID.String(),
-			DocumentKey: attachment.doc.Key().String(),
-			ChangePack:  pbChangePack,
+			ClientId:   c.id.String(),
+			ClientKey:  c.key,
+			DocumentId: attachment.docID.String(),
+			ChangePack: pbChangePack,
 		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
@@ -801,11 +799,12 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	_, err := c.client.Broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
-			ClientId:   c.id.String(),
-			ClientKey:  c.key,
-			DocumentId: attachment.docID.String(),
-			Topic:      topic,
-			Payload:    payload,
+			ClientId:    c.id.String(),
+			ClientKey:   c.key,
+			DocumentId:  attachment.docID.String(),
+			DocumentKey: doc.Key().String(),
+			Topic:       topic,
+			Payload:     payload,
 		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err

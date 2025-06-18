@@ -951,10 +951,10 @@ func (c *Client) FindDocInfoByKey(
 		},
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, result.Err())
 	}
 
 	info := database.DocInfo{}
@@ -1007,10 +1007,10 @@ func (c *Client) FindDocInfoByRefKey(
 		"_id":        refKey.DocID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, result.Err())
 	}
 
 	info := database.DocInfo{}
@@ -1037,10 +1037,10 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return fmt.Errorf("update document info status to removed: %w", result.Err())
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, result.Err())
 	}
 
 	return nil
@@ -1083,7 +1083,7 @@ func (c *Client) GetDocumentsCount(
 		},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("count documents: %w", err)
+		return 0, fmt.Errorf("count documents(%s): %w", projectID, err)
 	}
 
 	return count, nil
@@ -1105,11 +1105,10 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	refKey types.DocRefKey,
+	docRefKey types.DocRefKey,
 	checkpoint change.Checkpoint,
 	changes []*database.ChangeInfo,
 	isRemoved bool,
-	docInfoKey string,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	cached, ok := c.docCache.Get(refKey)
 	if !ok {
@@ -1184,9 +1183,9 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": refKey.ProjectID,
-		"key":        docInfoKey,
-		"_id":        refKey.DocID,
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+		"key":        docRefKey.DocKey,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
