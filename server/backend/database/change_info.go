@@ -52,6 +52,32 @@ type ChangeInfo struct {
 	PresenceChange *innerpresence.Change `bson:"presence_change"`
 }
 
+// NewFromChange creates a new ChangeInfo from the given change.
+func NewFromChange(docKey types.DocRefKey, c *change.Change) (*ChangeInfo, error) {
+	if c == nil {
+		return nil, fmt.Errorf("change cannot be nil")
+	}
+
+	encodedOperations, err := EncodeOperations(c.Operations())
+	if err != nil {
+		return nil, fmt.Errorf("encode operations: %w", err)
+	}
+
+	return &ChangeInfo{
+		ProjectID:      docKey.ProjectID,
+		DocID:          docKey.DocID,
+		ServerSeq:      c.ServerSeq(),
+		ClientSeq:      c.ClientSeq(),
+		Lamport:        c.ID().Lamport(),
+		ActorID:        types.ID(c.ID().ActorID().String()),
+		VersionVector:  c.ID().VersionVector(),
+		Message:        c.Message(),
+		Operations:     encodedOperations,
+		PresenceChange: c.PresenceChange(),
+	}, nil
+
+}
+
 // EncodeOperations encodes the given operations into bytes array.
 func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	var encodedOps [][]byte
