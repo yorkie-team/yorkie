@@ -309,7 +309,6 @@ function pushpullChanges(
     clientId: clientID,
     documentId: docID,
     clientKey: clientKey,
-    documentKey: docKey,
     changePack: {
       documentKey: docKey,
       checkpoint: {
