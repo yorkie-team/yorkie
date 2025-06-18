@@ -72,7 +72,7 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	// 01. Create request pack with presence clear change.
-	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
@@ -103,7 +103,7 @@ func (s *clusterServer) DetachDocument(
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
 		Status: document.StatusDetached,
-	}, req.Msg.DocumentKey); err != nil {
+	}); err != nil {
 		return nil, err
 	}
 

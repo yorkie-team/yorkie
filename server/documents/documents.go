@@ -389,7 +389,6 @@ func UpdateDocument(
 			Mode:   types.SyncModePushOnly,
 			Status: document.StatusAttached,
 		},
-		docInfo.Key.String(),
 	); err != nil {
 		return nil, err
 	}

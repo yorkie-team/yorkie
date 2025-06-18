@@ -915,10 +915,10 @@ func (c *Client) FindDocInfoByKey(
 		},
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, result.Err())
 	}
 
 	docInfo := database.DocInfo{}
@@ -971,10 +971,10 @@ func (c *Client) FindDocInfoByRefKey(
 		"_id":        refKey.DocID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, result.Err())
 	}
 
 	docInfo := database.DocInfo{}
@@ -1000,10 +1000,10 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return fmt.Errorf("update document info status to removed: %w", result.Err())
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, result.Err())
 	}
 
 	return nil
@@ -1021,7 +1021,7 @@ func (c *Client) GetDocumentsCount(
 		},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("count documents: %w", err)
+		return 0, fmt.Errorf("count documents(%s): %w", projectID, err)
 	}
 
 	return count, nil
@@ -1043,14 +1043,13 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	refKey types.DocRefKey,
+	docRefKey types.DocRefKey,
 	checkpoint change.Checkpoint,
 	changes []*change.Change,
 	isRemoved bool,
-	docInfoKey string,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	// 01. Fetch the document info.
-	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
+	docInfo, err := c.FindDocInfoByRefKey(ctx, docRefKey)
 	if err != nil {
 		return nil, change.InitialCheckpoint, err
 	}
@@ -1073,8 +1072,8 @@ func (c *Client) CreateChangeInfos(
 		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":        cn.ID().ActorID(),
@@ -1114,9 +1113,9 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": refKey.ProjectID,
-		"key":        docInfoKey,
-		"_id":        refKey.DocID,
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
+		"key":        docRefKey.DocKey,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
@@ -1125,7 +1124,7 @@ func (c *Client) CreateChangeInfos(
 		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s, %s: %w", refKey, docInfoKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s: %w", docRefKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {

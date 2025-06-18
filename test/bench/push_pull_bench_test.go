@@ -138,13 +138,13 @@ func benchmarkPushChanges(
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		pack := createChangePack(changeCnt, docs[0], b)
-		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 		b.StartTimer()
 
 		_, err := packs.PushPull(ctx, be, project, clientInfos[0], refKey, pack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docKey.String())
+		})
 		assert.NoError(b, err)
 	}
 }
@@ -165,18 +165,18 @@ func benchmarkPullChanges(
 		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
-		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docKey.String())
+		})
 		assert.NoError(b, err)
 
 		b.StartTimer()
 		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docRefKey, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docKey.String())
+		})
 		assert.NoError(b, err)
 	}
 }
@@ -196,6 +196,7 @@ func benchmarkPushSnapshots(
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
+			DocKey:    docKey,
 		}
 		b.StartTimer()
 
@@ -204,7 +205,7 @@ func benchmarkPushSnapshots(
 			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docRefKey, pushPack, packs.PushPullOptions{
 				Mode:   types.SyncModePushPull,
 				Status: document.StatusAttached,
-			}, docKey.String())
+			})
 			assert.NoError(b, err)
 
 			b.StopTimer()
@@ -237,18 +238,19 @@ func benchmarkPullSnapshot(
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
+			DocKey:    docKey,
 		}
 		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docKey.String())
+		})
 		assert.NoError(b, err)
 
 		b.StartTimer()
 		_, err = packs.PushPull(ctx, be, project, pullerClientInfo, docRefKey, pullPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
-		}, docKey.String())
+		})
 		assert.NoError(b, err)
 	}
 }

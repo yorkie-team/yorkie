@@ -57,13 +57,14 @@ func RunFindDocInfoTest(
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 		_, err = db.FindDocInfoByRefKey(ctx, types.DocRefKey{
 			ProjectID: projectID,
 			DocID:     dummyClientID,
+			DocKey:    docKey,
 		})
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 		firstInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, firstInfo.Key)
@@ -86,11 +87,11 @@ func RunFindDocInfoTest(
 		assert.Equal(t, docKey, info.Key)
 
 		// 02. Remove the document
-		_, _, err = db.CreateChangeInfos(ctx, info.RefKey(), change.InitialCheckpoint, []*change.Change{}, true, info.Key.String())
+		_, _, err = db.CreateChangeInfos(ctx, info.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Find the document
-		info, err = db.FindDocInfoByKey(ctx, projectID, docKey)
+		_, err = db.FindDocInfoByKey(ctx, projectID, docKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 }
@@ -330,7 +331,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		}
 
 		// Store changes
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// Find changes
@@ -414,7 +415,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			c.SetServerSeq(serverSeq)
 		}
 
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// 02. Create a snapshot that reflect the latest doc info
@@ -483,7 +484,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			c.SetServerSeq(serverSeq)
 		}
 
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// 02. Find changes
@@ -550,7 +551,7 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 			c.SetServerSeq(serverSeq)
 		}
 
-		_, _, err = db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo.Key.String())
+		_, _, err = db.CreateChangeInfos(ctx, docInfo.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// 03. Find all changes and determine the maximum Lamport timestamp.
@@ -1065,9 +1066,9 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		AssertKeys(t, docKeysInReverse, result)
 
 		// 03. Remove some documents.
-		_, _, err = db.CreateChangeInfos(ctx, docInfos[1].RefKey(), change.InitialCheckpoint, []*change.Change{}, true, docInfos[1].Key.String())
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[1].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
-		_, _, err = db.CreateChangeInfos(ctx, docInfos[3].RefKey(), change.InitialCheckpoint, []*change.Change{}, true, docInfos[3].Key.String())
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[3].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
@@ -1095,7 +1096,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true, docInfo.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -1115,7 +1116,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// 02. Remove the document.
 		assert.NoError(t, clientInfo1.RemoveDocument(docRefKey1.DocID))
-		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), change.InitialCheckpoint, []*change.Change{}, true, docInfo1.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Create a document with same key and check they have same key but different id.
@@ -1139,7 +1140,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true, docInfo.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
@@ -1179,7 +1180,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		}))
 		pack := doc.CreateChangePack()
 		updatedAt := docInfo1.UpdatedAt
-		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo1.Key.String())
+		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.Equal(t, updatedAt, docInfo2.UpdatedAt)
@@ -1192,7 +1193,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		}))
 		pack = doc.CreateChangePack()
 		updatedAt = docInfo2.UpdatedAt
-		_, _, err = db.CreateChangeInfos(ctx, docInfo2.RefKey(), pack.Checkpoint, pack.Changes, false, docInfo2.Key.String())
+		_, _, err = db.CreateChangeInfos(ctx, docInfo2.RefKey(), pack.Checkpoint, pack.Changes, false)
 		assert.NoError(t, err)
 		docInfo3, _ := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NotEqual(t, updatedAt, docInfo3.UpdatedAt)
@@ -1677,7 +1678,7 @@ func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 		// 02. Purge the document and check the document is purged.
 		counts, err := db.PurgeDocument(ctx, docRefKey)
 		assert.NoError(t, err)
-		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		_, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 		// NOTE(raararaara): This test is only checking the document is purged.
