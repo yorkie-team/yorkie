@@ -199,7 +199,7 @@ func pushPack(
 		reqPack.IsRemoved,
 	)
 	if err != nil {
-		return nil, nil, time.InitialLamport, change.InitialCheckpoint, fmt.Errorf("create change infos: %w", err)
+		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 	}
 
 	initialSeq := docInfo.ServerSeq - int64(len(pushables))
