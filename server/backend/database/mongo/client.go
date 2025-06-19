@@ -721,6 +721,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
+	syncDocumentKeys(updater, clientInfo.Documents)
+
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
 		"_id":        clientInfo.ID,
@@ -830,9 +832,9 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		"status":     database.ClientActivated,
-		clientDocInfoKey(docRefKey.DocID, "status"): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"status":        database.ClientActivated,
+		"document_keys": docRefKey.DocID,
 	}
 
 	cursor, err := c.collection(ColClients).Find(ctx, filter)
@@ -1565,8 +1567,8 @@ func (c *Client) IsDocumentAttached(
 	excludeClientID types.ID,
 ) (bool, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"document_keys": docRefKey.DocID,
 	}
 
 	if excludeClientID != "" {
@@ -1668,4 +1670,30 @@ func escapeRegex(str string) string {
 // clientDocInfoKey returns the key for the client document info.
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
+}
+
+// syncDocumentKeys syncs the document keys in the updater map.
+func syncDocumentKeys(updater bson.M, documents map[types.ID]*database.ClientDocInfo) {
+	attachedKeys := make([]types.ID, 0)
+
+	for docID, docInfo := range documents {
+		if docInfo.Status == database.DocumentAttached {
+			attachedKeys = append(attachedKeys, docID)
+		}
+	}
+
+	if len(attachedKeys) == 0 {
+		if unsetOp, exists := updater["$unset"]; exists {
+			unsetOp.(bson.M)["document_keys"] = ""
+		} else {
+			updater["$unset"] = bson.M{"document_keys": ""}
+		}
+		return
+	}
+
+	if setOp, exists := updater["$set"]; exists {
+		setOp.(bson.M)["document_keys"] = attachedKeys
+	} else {
+		updater["$set"] = bson.M{"document_keys": attachedKeys}
+	}
 }

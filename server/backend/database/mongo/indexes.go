@@ -98,7 +98,7 @@ var collectionInfos = []collectionInfo{
 			},
 		}, {
 			Keys: bsonx.Doc{
-				{Key: "documents.$**", Value: bsonx.Int32(1)},
+				{Key: "document_keys", Value: bsonx.Int32(1)},
 			},
 		}},
 	},

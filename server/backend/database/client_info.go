@@ -149,6 +149,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
+
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -163,6 +164,7 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
+
 	i.UpdatedAt = gotime.Now()
 
 	return nil
