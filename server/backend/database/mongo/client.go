@@ -49,9 +49,11 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config  *Config
-	client  *mongo.Client
-	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	config *Config
+	client *mongo.Client
+
+	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
+	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -81,17 +83,23 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
 	if err != nil {
-		return nil, fmt.Errorf("initialize VV cache: %w", err)
+		return nil, fmt.Errorf("initialize docinfo cache: %w", err)
+	}
+
+	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		vvCache: cache,
+		config:      conf,
+		client:      client,
+		docCache:    docCache,
+		vectorCache: vectorCache,
 	}, nil
 }
 
@@ -101,7 +109,8 @@ func (c *Client) Close() error {
 		return fmt.Errorf("close mongo client: %w", err)
 	}
 
-	c.vvCache.Purge()
+	c.docCache.Purge()
+	c.vectorCache.Purge()
 
 	return nil
 }
@@ -917,12 +926,12 @@ func (c *Client) FindDocInfoByKey(
 		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := database.DocInfo{}
+	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return &info, nil
 }
 
 // FindDocInfosByKeys finds the documents of the given keys.
@@ -973,12 +982,12 @@ func (c *Client) FindDocInfoByRefKey(
 		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := database.DocInfo{}
+	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return &info, nil
 }
 
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
@@ -986,6 +995,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) error {
+	c.docCache.Remove(refKey)
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
@@ -1044,11 +1054,18 @@ func (c *Client) CreateChangeInfos(
 	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	// 01. Fetch the document info.
-	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
-	if err != nil {
-		return nil, change.InitialCheckpoint, err
+	cached, ok := c.docCache.Get(refKey)
+	if !ok {
+		info, err := c.FindDocInfoByRefKey(ctx, refKey)
+		if err != nil {
+			return nil, change.InitialCheckpoint, err
+		}
+		c.docCache.Add(refKey, info)
+		cached = info
 	}
+	docInfo := cached.DeepCopy()
+
+	// 01. Fetch the document info.
 	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
@@ -1111,15 +1128,19 @@ func (c *Client) CreateChangeInfos(
 		"$set": updateFields,
 	})
 	if err != nil {
+		c.docCache.Remove(refKey)
 		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
+		c.docCache.Remove(refKey)
 		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
 		docInfo.RemovedAt = now
 	}
+
+	c.docCache.Add(refKey, docInfo)
 
 	return docInfo, checkpoint, nil
 }
@@ -1166,6 +1187,7 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 3. Update document
+	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
@@ -1383,7 +1405,7 @@ func (c *Client) UpdateMinVersionVector(
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if vvMap, ok := c.vvCache.Get(docRefKey); ok {
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
 		attached, err := clientInfo.IsAttached(docRefKey.DocID)
 		if err != nil {
 			return nil, err
@@ -1410,7 +1432,7 @@ func (c *Client) GetMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
-	if !c.vvCache.Contains(docRefKey) {
+	if !c.vectorCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -1428,10 +1450,10 @@ func (c *Client) GetMinVersionVector(
 			infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
 		}
 
-		c.vvCache.Add(docRefKey, infoMap)
+		c.vectorCache.Add(docRefKey, infoMap)
 	}
 
-	vvMap, ok := c.vvCache.Get(docRefKey)
+	vvMap, ok := c.vectorCache.Get(docRefKey)
 	if !ok {
 		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
