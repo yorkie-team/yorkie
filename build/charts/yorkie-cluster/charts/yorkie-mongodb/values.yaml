@@ -36,15 +36,11 @@ sharded:
         shardKeys:
           - name: key
             method: "\"hashed\""
-          - name: project_id
-            method: "1"
         unique: false
       - collectionName: documents
         shardKeys:
           - name: key
             method: "\"hashed\""
-          - name: project_id
-            method: "1"
         unique: false
       - collectionName: changes
         shardKeys:
