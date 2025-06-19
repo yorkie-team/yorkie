@@ -2043,25 +2043,11 @@ components:
         data:
           additionalProperties: false
           description: ""
+          items:
+            type: string
           title: data
-          type: object
+          type: array
       title: Presence
-      type: object
-    yorkie.v1.Presence.DataEntry:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        value:
-          additionalProperties: false
-          description: ""
-          title: value
-          type: string
-      title: DataEntry
       type: object
     yorkie.v1.PresenceChange:
       additionalProperties: false
