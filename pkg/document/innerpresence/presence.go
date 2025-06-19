@@ -114,21 +114,38 @@ func (m *Map) DeepCopy() *Map {
 }
 
 // Presence represents custom presence that can be defined by the client.
-type Presence map[string]string
+type Presence []string
 
 // New creates a new instance of Presence.
 func New() Presence {
-	return make(map[string]string)
+	return make([]string, 0)
+}
+
+// index returns the index of the given key in the presence.
+func (p *Presence) index(key string) int {
+	for i := 0; i < len(*p); i += 2 {
+		if (*p)[i] == key {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // Set sets the value of the given key.
-func (p Presence) Set(key string, value string) {
-	p[key] = value
+func (p *Presence) Set(key string, value string) {
+	if idx := p.index(key); idx != -1 {
+		(*p)[idx] = key
+		(*p)[idx+1] = value
+		return
+	}
+	*p = append(*p, key)
+	*p = append(*p, value)
 }
 
 // Clear clears the presence.
 func (p *Presence) Clear() {
-	*p = make(map[string]string)
+	clear(*p)
 }
 
 // DeepCopy copies itself deeply.
@@ -137,9 +154,7 @@ func (p Presence) DeepCopy() Presence {
 		return nil
 	}
 
-	clone := make(map[string]string, len(p))
-	for k, v := range p {
-		clone[k] = v
-	}
+	clone := make(Presence, len(p))
+	copy(clone, p)
 	return clone
 }
