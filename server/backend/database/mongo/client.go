@@ -1030,6 +1030,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
+		"key":        refKey.DocKey,
 	}, bson.M{
 		"$set": bson.M{
 			"removed_at": gotime.Now(),
