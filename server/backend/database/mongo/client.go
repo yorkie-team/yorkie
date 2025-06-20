@@ -61,12 +61,25 @@ func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
-	client, err := mongo.Connect(
-		ctx,
-		options.Client().
-			ApplyURI(conf.ConnectionURI).
-			SetRegistry(NewRegistryBuilder().Build()),
-	)
+	clientOptions := options.Client().
+		ApplyURI(conf.ConnectionURI).
+		SetRegistry(NewRegistryBuilder().Build())
+
+	if conf.MonitoringEnabled {
+		threshold, err := gotime.ParseDuration(conf.MonitoringSlowQueryThreshold)
+		if err != nil {
+			return nil, fmt.Errorf("parse slow query threshold: %w", err)
+		}
+
+		monitor := NewQueryMonitor(&MonitorConfig{
+			Enabled:            conf.MonitoringEnabled,
+			SlowQueryThreshold: threshold,
+		})
+
+		clientOptions.SetMonitor(monitor.CreateCommandMonitor())
+	}
+
+	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("connect to mongo: %w", err)
 	}
