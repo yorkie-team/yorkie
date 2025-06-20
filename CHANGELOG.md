@@ -7,7 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.16] - 2025-06-20
+
+### Changed
+
+- Replace individual caches with a centralized cache manager by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1316
+- Extract encodeOperations outside the push lock by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1331
+- Update modules by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1334
+- Bump up JWT to v5 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1337
+- Introduce a cache for document info for push pack by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1333
+
+### Fixed
+
+- Fix race condition by initializing server_seq with setOnInsert by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1321
 - Rollback lock-free implementation due to CPU overhead by @hackerwins https://github.com/yorkie-team/yorkie/pull/1318
+- Add missing condition for load-test job by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1324
 
 ## [0.6.15] - 2025-06-09
 
