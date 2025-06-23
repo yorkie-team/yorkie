@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.17] - 2025-06-23
+
+### Added
+
+- Add MongoDB query monitoring using CommandMonitor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1341
+- Introduce B-tree-based cache for ChangeInfos in Pull phase by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1338
+- Add log level and MongoDB monitoring args to Helm chart by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1342
+
+### Changed
+
+- Refactor Presence data structure to repeated string by @raararaara in https://github.com/yorkie-team/yorkie/pull/1339
+- Add dedicated VV encoder/decoder for MongoDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1232
+
 ## [v0.6.16] - 2025-06-20
 
 ### Changed
