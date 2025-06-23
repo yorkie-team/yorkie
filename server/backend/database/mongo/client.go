@@ -1106,7 +1106,7 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	docRefKey types.DocRefKey,
+	refKey types.DocRefKey,
 	checkpoint change.Checkpoint,
 	changes []*database.ChangeInfo,
 	isRemoved bool,
@@ -1184,9 +1184,9 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"_id":        docRefKey.DocID,
-		"key":        docRefKey.DocKey,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+		"key":        refKey.DocKey,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
@@ -1197,7 +1197,7 @@ func (c *Client) CreateChangeInfos(
 	}
 	if res.MatchedCount == 0 {
 		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s, %s: %w", refKey, docInfoKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
