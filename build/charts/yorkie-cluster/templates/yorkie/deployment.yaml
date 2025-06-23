@@ -89,6 +89,17 @@ spec:
           "--backend-snapshot-threshold",
           "{{ .Values.yorkie.args.snapshotThreshold }}",
           {{- end }}
+          {{- if .Values.yorkie.logLevel }}
+          "--log-level",
+          "{{ .Values.yorkie.logLevel }}",
+          {{- end }}
+          {{- if .Values.yorkie.mongoMonitoringEnabled }}
+          "--mongo-monitoring-enabled",
+          {{- if .Values.yorkie.mongoMonitoringSlowQueryThreshold }}
+          "--mongo-monitoring-slow-query-threshold",
+          "{{ .Values.yorkie.mongoMonitoringSlowQueryThreshold }}",
+          {{- end }}
+          {{- end }}
           {{- if .Values.yorkie.args.kafkaAddresses }}
           "--kafka-addresses",
           "{{ .Values.yorkie.args.kafkaAddresses }}",
