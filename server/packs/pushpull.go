@@ -159,7 +159,7 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
+) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
