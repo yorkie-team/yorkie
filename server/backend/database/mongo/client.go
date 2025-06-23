@@ -53,6 +53,7 @@ type Client struct {
 	client *mongo.Client
 
 	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
+	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
 	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
@@ -101,6 +102,11 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, fmt.Errorf("initialize docinfo cache: %w", err)
 	}
 
+	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize change range store: %w", err)
+	}
+
 	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
@@ -112,6 +118,7 @@ func Dial(conf *Config) (*Client, error) {
 		config:      conf,
 		client:      client,
 		docCache:    docCache,
+		changeCache: changeCache,
 		vectorCache: vectorCache,
 	}, nil
 }
@@ -1290,24 +1297,41 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	if from > to {
 		return nil, nil
 	}
-	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
-			"$gte": from,
-			"$lte": to,
-		},
-	}, options.Find())
-	if err != nil {
-		return nil, fmt.Errorf("find changes: %w", err)
+
+	// Get or create a change range store for this document
+	var store *ChangeStore
+	if cached, ok := c.changeCache.Get(docRefKey); ok {
+		store = cached
+	} else {
+		store = NewChangeStore()
+		c.changeCache.Add(docRefKey, store)
 	}
 
-	var infos []*database.ChangeInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch changes: %w", err)
+	// Calculate missing ranges and fetch them in a single operation
+	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
+		cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"server_seq": bson.M{
+				"$gte": from,
+				"$lte": to,
+			},
+		}, options.Find())
+		if err != nil {
+			return nil, fmt.Errorf("find changes: %w", err)
+		}
+
+		var infos []*database.ChangeInfo
+		if err := cursor.All(ctx, &infos); err != nil {
+			return nil, fmt.Errorf("fetch changes: %w", err)
+		}
+
+		return infos, nil
+	}); err != nil {
+		return nil, err
 	}
 
-	return infos, nil
+	return store.ChangesInRange(from, to), nil
 }
 
 // CreateSnapshotInfo stores the snapshot of the given document.
@@ -1643,6 +1667,7 @@ func (c *Client) purgeDocumentInternals(
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
+	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,
