@@ -20,6 +20,10 @@ yorkie:
     rpcPort: 8080
     profilingPort: 8081
 
+  logLevel: "info"
+  mongoMonitoringEnabled: false
+  mongoMonitoringSlowQueryThreshold: "100ms"
+
   resources: {}
 
 # Configuration for istio ingress gateway
