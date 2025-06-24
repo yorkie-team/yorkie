@@ -1074,7 +1074,7 @@ func (d *DB) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,
 	checkpoint change.Checkpoint,
-	changes []*change.Change,
+	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	txn := d.db.Txn(true)
@@ -1097,26 +1097,21 @@ func (d *DB) CreateChangeInfos(
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
-		cn.SetServerSeq(serverSeq)
-		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
-
-		encodedOperations, err := database.EncodeOperations(cn.Operations())
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
-		}
+		cn.ServerSeq = serverSeq
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
 			ProjectID:      docInfo.ProjectID,
 			DocID:          docInfo.ID,
-			ServerSeq:      cn.ServerSeq(),
-			ClientSeq:      cn.ClientSeq(),
-			Lamport:        cn.ID().Lamport(),
-			ActorID:        types.ID(cn.ID().ActorID().String()),
-			VersionVector:  cn.ID().VersionVector(),
-			Message:        cn.Message(),
-			Operations:     encodedOperations,
-			PresenceChange: cn.PresenceChange(),
+			ServerSeq:      cn.ServerSeq,
+			ClientSeq:      cn.ClientSeq,
+			Lamport:        cn.Lamport,
+			ActorID:        cn.ActorID,
+			VersionVector:  cn.VersionVector,
+			Message:        cn.Message,
+			Operations:     cn.Operations,
+			PresenceChange: cn.PresenceChange,
 		}); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("create change: %w", err)
 		}
@@ -1143,7 +1138,7 @@ func (d *DB) CreateChangeInfos(
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
 
 	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
+		if len(cn.Operations) > 0 {
 			loadedDocInfo.UpdatedAt = now
 			break
 		}

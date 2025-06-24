@@ -46,18 +46,12 @@ The Yorkie server is running with pprof enabled on port 8081.
 To access the profiling reports, you can:
 
 ```bash
-curl http://localhost:8081/debug/pprof/profile\?seconds\=60 --output profile.out
+curl http://localhost:8081/debug/pprof/profile\?seconds\=150 --output cpu.out
 ```
 
-This will download 60 seconds of CPU profile.
-Then open interactive pprof tool with:
+This will download 150 seconds of CPU profile.
+Then open interactive pprof web tool with:
 
 ```bash
-go tool pprof profile.out
+go tool pprof -http=:9090 cpu.out
 ```
-
-After running a pprof command, use:
-
-- 'top' - Show top consumers
-- 'web' - Generate a graph visualization (requires graphviz)
-- 'pdf' - Generate PDF report

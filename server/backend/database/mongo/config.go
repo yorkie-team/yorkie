@@ -28,6 +28,13 @@ type Config struct {
 	ConnectionURI     string `yaml:"ConnectionURI"`
 	YorkieDatabase    string `yaml:"YorkieDatabase"`
 	PingTimeout       string `yaml:"PingTimeout"`
+
+	// MonitoringEnabled determines whether query monitoring is enabled.
+	MonitoringEnabled bool `yaml:"MonitoringEnabled"`
+
+	// MonitoringSlowQueryThreshold is the threshold in milliseconds to log slow queries.
+	// If a query takes longer than this threshold, it will be logged as a slow query.
+	MonitoringSlowQueryThreshold string `yaml:"MonitoringSlowQueryThreshold"`
 }
 
 // Validate returns an error if the provided Config is invalidated.
@@ -71,4 +78,22 @@ func (c *Config) ParsePingTimeout() time.Duration {
 	}
 
 	return result
+}
+
+// ParseMonitoringConfig returns the monitoring configuration for MongoDB query monitoring.
+func (c *Config) ParseMonitoringConfig() *MonitorConfig {
+	conf := &MonitorConfig{
+		Enabled: c.MonitoringEnabled,
+	}
+
+	if c.MonitoringSlowQueryThreshold != "" {
+		duration, err := time.ParseDuration(c.MonitoringSlowQueryThreshold)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "parse slow query threshold: %w", err)
+			os.Exit(1)
+		}
+		conf.SlowQueryThreshold = duration
+	}
+
+	return conf
 }

@@ -249,7 +249,7 @@ type Database interface {
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		cpBeforePush change.Checkpoint,
-		changes []*change.Change,
+		changes []*ChangeInfo,
 		isRemoved bool,
 	) (*DocInfo, change.Checkpoint, error)
 
