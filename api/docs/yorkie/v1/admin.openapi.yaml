@@ -2956,6 +2956,11 @@ components:
           description: ""
           title: root
           type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
+          type: string
       title: UpdateDocumentRequest
       type: object
     yorkie.v1.UpdateDocumentResponse:

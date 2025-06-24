@@ -474,9 +474,27 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
+	hasRoot := req.Msg.Root != ""
+	hasSchemaKey := req.Msg.SchemaKey != ""
+
+	// Determine update mode based on provided parameters
+	var updateMode string
+	switch {
+	case !hasRoot && !hasSchemaKey:
+		updateMode = documents.UpdateModeDetachSchema
+	case hasRoot && !hasSchemaKey:
+		updateMode = documents.UpdateModeRootOnly
+	case !hasRoot && hasSchemaKey:
+		updateMode = documents.UpdateModeSchemaOnly
+	case hasRoot && hasSchemaKey:
+		updateMode = documents.UpdateModeBoth
+	}
+
 	var root yson.Object
-	if err := yson.Unmarshal(req.Msg.Root, &root); err != nil {
-		return nil, err
+	if hasRoot {
+		if err := yson.Unmarshal(req.Msg.Root, &root); err != nil {
+			return nil, err
+		}
 	}
 
 	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
@@ -491,6 +509,34 @@ func (s *adminServer) UpdateDocument(
 	if err != nil {
 		return nil, err
 	}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+
+	// Check document attachment status for schema updates
+	if updateMode != documents.UpdateModeRootOnly {
+		attachLocker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer attachLocker.Unlock()
+
+		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
+		if err != nil {
+			return nil, err
+		}
+		if count > 0 {
+			return nil, documents.ErrDocumentAttached
+		}
+	}
+
+	schemaKey := docInfo.Schema
+	if hasSchemaKey {
+		schemaKey = req.Msg.SchemaKey
+	}
+	schemaName, schemaVersion, err := converter.FromSchemaKey(schemaKey)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
 
 	doc, err := documents.UpdateDocument(
 		ctx,
@@ -498,6 +544,8 @@ func (s *adminServer) UpdateDocument(
 		project,
 		docInfo,
 		root,
+		schema,
+		updateMode,
 	)
 	if err != nil {
 		return nil, err

@@ -190,6 +190,7 @@ message UpdateDocumentRequest {
   string project_name = 1;
   string document_key = 2;
   string root = 3;
+  string schema_key = 4;
 }
 
 message UpdateDocumentResponse {

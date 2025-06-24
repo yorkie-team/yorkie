@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -43,19 +44,20 @@ import (
 // errorToConnectCode maps an error to connectRPC status code.
 var errorToConnectCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:         connect.CodeInvalidArgument,
-	converter.ErrCheckpointRequired:   connect.CodeInvalidArgument,
-	converter.ErrUnsupportedDateRange: connect.CodeInvalidArgument,
-	converter.ErrInvalidSchemaKey:     connect.CodeInvalidArgument,
-	time.ErrInvalidHexString:          connect.CodeInvalidArgument,
-	time.ErrInvalidActorID:            connect.CodeInvalidArgument,
-	types.ErrInvalidID:                connect.CodeInvalidArgument,
-	clients.ErrInvalidClientID:        connect.CodeInvalidArgument,
-	clients.ErrInvalidClientKey:       connect.CodeInvalidArgument,
-	key.ErrInvalidKey:                 connect.CodeInvalidArgument,
-	types.ErrEmptyProjectFields:       connect.CodeInvalidArgument,
-	yson.ErrInvalidYSON:               connect.CodeInvalidArgument,
-	yson.ErrUnsupported:               connect.CodeInvalidArgument,
+	converter.ErrPackRequired:          connect.CodeInvalidArgument,
+	converter.ErrCheckpointRequired:    connect.CodeInvalidArgument,
+	converter.ErrUnsupportedDateRange:  connect.CodeInvalidArgument,
+	converter.ErrInvalidSchemaKey:      connect.CodeInvalidArgument,
+	time.ErrInvalidHexString:           connect.CodeInvalidArgument,
+	time.ErrInvalidActorID:             connect.CodeInvalidArgument,
+	types.ErrInvalidID:                 connect.CodeInvalidArgument,
+	clients.ErrInvalidClientID:         connect.CodeInvalidArgument,
+	clients.ErrInvalidClientKey:        connect.CodeInvalidArgument,
+	key.ErrInvalidKey:                  connect.CodeInvalidArgument,
+	types.ErrEmptyProjectFields:        connect.CodeInvalidArgument,
+	yson.ErrInvalidYSON:                connect.CodeInvalidArgument,
+	yson.ErrUnsupported:                connect.CodeInvalidArgument,
+	document.ErrSchemaValidationFailed: connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,
@@ -120,6 +122,8 @@ var errorToCode = map[error]string{
 	clients.ErrInvalidClientKey:     "ErrInvalidClientKey",
 	key.ErrInvalidKey:               "ErrInvalidKey",
 	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
+
+	document.ErrSchemaValidationFailed: "ErrSchemaValidationFailed",
 
 	database.ErrProjectNotFound:  "ErrProjectNotFound",
 	database.ErrClientNotFound:   "ErrClientNotFound",

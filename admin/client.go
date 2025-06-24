@@ -295,19 +295,16 @@ func (c *Client) UpdateDocument(
 	ctx context.Context,
 	projectName string,
 	documentKey key.Key,
-	newRoot yson.Object,
+	root string,
+	schemaKey string,
 ) (*types.DocumentSummary, error) {
-	marshalled, err := newRoot.Marshal()
-	if err != nil {
-		return nil, err
-	}
-
 	response, err := c.client.UpdateDocument(
 		ctx,
 		connect.NewRequest(&api.UpdateDocumentRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey.String(),
-			Root:        marshalled,
+			Root:        root,
+			SchemaKey:   schemaKey,
 		}),
 	)
 	if err != nil {

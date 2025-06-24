@@ -48,6 +48,7 @@ func TestDocumentSchema(t *testing.T) {
 
 	schemaName1 := fmt.Sprintf("schema1-%d", gotime.Now().UnixMilli())
 	schemaName2 := fmt.Sprintf("schema2-%d", gotime.Now().UnixMilli())
+	schemaName3 := fmt.Sprintf("schema3-%d", gotime.Now().UnixMilli())
 	schemaRule1 := []types.Rule{
 		{
 			Path: "$.title",
@@ -58,6 +59,12 @@ func TestDocumentSchema(t *testing.T) {
 		{
 			Path: "$.title2",
 			Type: "string",
+		},
+	}
+	schemaRule3 := []types.Rule{
+		{
+			Path: "$.title",
+			Type: "integer",
 		},
 	}
 	err = adminCli.CreateSchema(
@@ -76,6 +83,15 @@ func TestDocumentSchema(t *testing.T) {
 		1,
 		"type Document = {title2: string;};",
 		schemaRule2,
+	)
+	assert.NoError(t, err)
+	err = adminCli.CreateSchema(
+		ctx,
+		"default",
+		schemaName3,
+		1,
+		"type Document = {title: integer;};",
+		schemaRule3,
 	)
 	assert.NoError(t, err)
 
@@ -322,5 +338,331 @@ func TestDocumentSchema(t *testing.T) {
 			},
 		)
 		assert.NoError(t, err)
+	})
+
+	t.Run("update schema with new rules via UpdateDocument API test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+		assert.NoError(t, cli.Detach(ctx, doc))
+
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": Int(123)}`,
+			schemaName3+"@1",
+		)
+		assert.NoError(t, err)
+
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc2))
+		assert.Equal(t, `{"title":123}`, doc2.Marshal())
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("reject schema update when document is attached test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": Int(123)}`,
+			schemaName3+"@1",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "document is attached")
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("reject schema update when existing root violates new schema test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+		assert.NoError(t, cli.Detach(ctx, doc))
+
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": Long(123)}`,
+			schemaName3+"@1",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("detach schema via UpdateDocument API test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+
+		// Try to detach schema while document is attached
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			"",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "document is attached")
+
+		// Detach document then detach schema
+		assert.NoError(t, cli.Detach(ctx, doc))
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			"",
+		)
+		assert.NoError(t, err)
+
+		// Verify schema is detached
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc2))
+		assert.Equal(t, `{"title":"hello"}`, doc2.Marshal())
+		assert.Equal(t, []types.Rule(nil), doc2.SchemaRules)
+
+		// Should be able to update with integer now (no schema validation)
+		assert.NoError(t, doc2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("title", 123)
+			return nil
+		}))
+		assert.Equal(t, `{"title":123}`, doc2.Marshal())
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("attach schema via UpdateDocument API test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+
+		// Try to attach schema while document is attached
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			schemaName3+"@1",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "document is attached")
+
+		// Detach document then try to attach incompatible schema
+		assert.NoError(t, cli.Detach(ctx, doc))
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			schemaName3+"@1",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+
+		// Attach compatible schema
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			schemaName1+"@1",
+		)
+		assert.NoError(t, err)
+
+		// Verify schema is attached
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc2))
+		assert.Equal(t, `{"title":"hello"}`, doc2.Marshal())
+		assert.Equal(t, schemaRule1, doc2.SchemaRules)
+
+		// Should not be able to update with integer (schema validation)
+		err = doc2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("title", 123)
+			return nil
+		})
+		assert.ErrorIs(t, err, document.ErrSchemaValidationFailed)
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("update schema only test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+		assert.NoError(t, cli.Detach(ctx, doc))
+
+		// TODO(chacha912): We can verify schema-only updates work correctly
+		// after features like conditional types are implemented in schema-ruleset.
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			"",
+			schemaName3+"@1",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("update root only test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+
+		// Update root only (no schema change)
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": Int(123)}`,
+			"",
+		)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Detach(ctx, doc))
+
+		// Verify root is updated
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc2))
+		assert.Equal(t, `{"title":123}`, doc2.Marshal())
+
+		cli.Deactivate(ctx)
+	})
+
+	t.Run("update root only when document has attached schema test", func(t *testing.T) {
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
+
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("title", "hello")
+			return nil
+		}))
+		assert.Equal(t, `{"title":"hello"}`, doc.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
+		assert.Equal(t, schemaRule1, doc.SchemaRules)
+
+		// Try to update root with invalid type for attached schema
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": Int(123)}`,
+			"",
+		)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Expected string at path $.title")
+
+		// Update root with valid type for attached schema
+		_, err = adminCli.UpdateDocument(
+			ctx,
+			"default",
+			doc.Key(),
+			`{"title": "world"}`,
+			"",
+		)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Detach(ctx, doc))
+
+		// Verify root is updated and schema is still attached
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc2))
+		assert.Equal(t, `{"title":"world"}`, doc2.Marshal())
+
+		// Should not be able to update with integer (schema validation)
+		err = doc2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("title", 123)
+			return nil
+		})
+		assert.ErrorIs(t, err, document.ErrSchemaValidationFailed)
+		assert.Equal(t, schemaRule1, doc2.SchemaRules)
+
+		cli.Deactivate(ctx)
 	})
 }
