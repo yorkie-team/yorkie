@@ -362,7 +362,7 @@ message PresenceChange {
 }
 
 message Presence {
-  repeated string data = 1;
+  map<string, string> data = 1;
 }
 
 message Checkpoint {

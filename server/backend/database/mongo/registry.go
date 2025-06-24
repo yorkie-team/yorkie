@@ -24,8 +24,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 	"go.mongodb.org/mongo-driver/bson/bsonoptions"
 	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -91,8 +94,12 @@ func versionVectorEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val 
 		return bsoncodec.ValueEncoderError{Name: "versionVectorEncoder", Types: []reflect.Type{tVersionVector}, Received: val}
 	}
 
-	vector := val.Interface().(time.VersionVector)
-	bytes, err := vector.Bytes()
+	pbChangeVector, err := converter.ToVersionVector(val.Interface().(time.VersionVector))
+	if err != nil {
+		return err
+	}
+
+	bytes, err := proto.Marshal(pbChangeVector)
 	if err != nil {
 		return fmt.Errorf("encode error: %w", err)
 	}
@@ -116,9 +123,14 @@ func versionVectorDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val 
 			return fmt.Errorf("decode error: %w", err)
 		}
 
-		vector, err := time.VersionVectorFromBytes(data)
-		if err != nil {
+		var pbVector api.VersionVector
+		if err := proto.Unmarshal(data, &pbVector); err != nil {
 			return fmt.Errorf("decode error: %w", err)
+		}
+
+		vector, err := converter.FromVersionVector(&pbVector)
+		if err != nil {
+			return err
 		}
 
 		val.Set(reflect.ValueOf(vector))

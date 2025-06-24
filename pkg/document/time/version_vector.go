@@ -18,7 +18,6 @@ package time
 
 import (
 	"bytes"
-	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -70,35 +69,6 @@ func MinVersionVector(vectors ...VersionVector) VersionVector {
 	}
 
 	return minVec
-}
-
-// VersionVectorFromBytes creates a new instance of VersionVector from the given bytes.
-func VersionVectorFromBytes(data []byte) (VersionVector, error) {
-	buffer := bytes.NewReader(data)
-	vv := NewVersionVector()
-
-	// Read the number of entries
-	length, err := readInt64(buffer)
-	if err != nil {
-		return nil, err
-	}
-
-	// Read each ActorID and its corresponding version
-	for i := int64(0); i < length; i++ {
-		var actorID ActorID
-		if _, err := buffer.Read(actorID[:]); err != nil {
-			return nil, fmt.Errorf("read ActorID: %w", err)
-		}
-
-		version, err := readInt64(buffer)
-		if err != nil {
-			return nil, err
-		}
-
-		vv[actorID] = version
-	}
-
-	return vv, nil
 }
 
 // Get gets the version of the given actor.
@@ -274,52 +244,4 @@ func (v VersionVector) Keys() ([]ActorID, error) {
 	}
 
 	return actors, nil
-}
-
-// Bytes returns the byte representation of the VersionVector.
-func (v VersionVector) Bytes() ([]byte, error) {
-	buffer := bytes.Buffer{}
-
-	// Write the number of entries in the VersionVector
-	if err := writeInt64(&buffer, int64(len(v))); err != nil {
-		return nil, fmt.Errorf("write length: %w", err)
-	}
-
-	// Write each ActorID and its corresponding version
-	for actorID, version := range v {
-		if _, err := buffer.Write(actorID[:]); err != nil {
-			return nil, fmt.Errorf("write ActorID: %w", err)
-		}
-		if err := writeInt64(&buffer, version); err != nil {
-			return nil, fmt.Errorf("write version: %w", err)
-		}
-	}
-
-	return buffer.Bytes(), nil
-}
-
-func writeInt64(buffer *bytes.Buffer, value int64) error {
-	data := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		data[i] = byte(value >> (56 - i*8))
-	}
-
-	if _, err := buffer.Write(data); err != nil {
-		return fmt.Errorf("write int64: %w", err)
-	}
-
-	return nil
-}
-
-func readInt64(buffer *bytes.Reader) (int64, error) {
-	data := make([]byte, 8)
-	if _, err := buffer.Read(data); err != nil {
-		return 0, fmt.Errorf("read int64: %w", err)
-	}
-
-	var value int64
-	for i := 0; i < 8; i++ {
-		value = (value << 8) | int64(data[i])
-	}
-	return value, nil
 }
