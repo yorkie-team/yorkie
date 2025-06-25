@@ -1216,7 +1216,7 @@ func (c *Client) CompactChangeInfos(
 	changes []*change.Change,
 ) error {
 	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, docInfo.Key); err != nil {
 		return err
 	}
 
@@ -1835,7 +1835,7 @@ func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) (map[string]int64, error) {
-	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, docRefKey.DocKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1854,10 +1854,11 @@ func (c *Client) purgeDocumentInternals(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	docKey key.Key,
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
-	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID, DocKey: docKey})
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,
