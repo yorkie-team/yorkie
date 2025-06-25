@@ -52,7 +52,6 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
 	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
 	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
@@ -97,11 +96,6 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
-	if err != nil {
-		return nil, fmt.Errorf("initialize docinfo cache: %w", err)
-	}
-
 	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize change range store: %w", err)
@@ -117,7 +111,6 @@ func Dial(conf *Config) (*Client, error) {
 	return &Client{
 		config:      conf,
 		client:      client,
-		docCache:    docCache,
 		changeCache: changeCache,
 		vectorCache: vectorCache,
 	}, nil
@@ -129,7 +122,6 @@ func (c *Client) Close() error {
 		return fmt.Errorf("close mongo client: %w", err)
 	}
 
-	c.docCache.Purge()
 	c.vectorCache.Purge()
 
 	return nil
@@ -628,43 +620,34 @@ func (c *Client) ActivateClient(
 	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"metadata":   metadata,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
+			"metadata":   metadata,
 			"updated_at": now,
 		},
-	}, options.Update().SetUpsert(true))
-	if err != nil {
-		return nil, fmt.Errorf("upsert client: %w", err)
-	}
+		"$setOnInsert": bson.M{
+			"created_at": now,
+		},
+	}, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
 
-	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
-		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-			"project_id": projectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
-			"$set": bson.M{
-				"created_at": now,
-			},
-		})
-	} else {
+	if result.Err() != nil && mongo.IsDuplicateKeyError(result.Err()) {
 		result = c.collection(ColClients).FindOne(ctx, bson.M{
 			"project_id": projectID,
 			"key":        key,
 		})
 	}
 
-	clientInfo := database.ClientInfo{}
-	if err = result.Decode(&clientInfo); err != nil {
+	info := database.ClientInfo{}
+	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
-	return &clientInfo, nil
+	return &info, nil
 }
 
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
@@ -679,15 +662,15 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 		},
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	clientInfo := database.ClientInfo{}
-	if err := res.Decode(&clientInfo); err != nil {
+	info := database.ClientInfo{}
+	if err := res.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
-	return &clientInfo, nil
+	return &info, nil
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
@@ -1015,7 +998,6 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) error {
-	c.docCache.Remove(refKey)
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
@@ -1074,35 +1056,72 @@ func (c *Client) CreateChangeInfos(
 	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	cached, ok := c.docCache.Get(refKey)
-	if !ok {
-		info, err := c.FindDocInfoByRefKey(ctx, refKey)
+	// 01. If there are no changes, return the existing docInfo.
+	if !isRemoved && len(changes) == 0 {
+		docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
 		if err != nil {
 			return nil, change.InitialCheckpoint, err
 		}
-		c.docCache.Add(refKey, info)
-		cached = info
-	}
-	docInfo := cached.DeepCopy()
-
-	// 01. Fetch the document info.
-	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Insert changes into the changes collection.
-	initialServerSeq := docInfo.ServerSeq
+	// 02. First, update the document info with the given changes.
+	// If the insertion changes is failed, document will spend server_seq
+	// without corresponding changes.
+	hasOperations := false
+	for _, cn := range changes {
+		if len(cn.Operations) > 0 {
+			hasOperations = true
+			break
+		}
+	}
+
+	now := gotime.Now()
+	updateOps := bson.M{}
+	if len(changes) > 0 {
+		updateOps["$inc"] = bson.M{"server_seq": len(changes)}
+	}
+	setFields := bson.M{}
+	if hasOperations {
+		setFields["updated_at"] = now
+	}
+	if isRemoved {
+		setFields["removed_at"] = now
+	}
+	if len(setFields) > 0 {
+		updateOps["$set"] = setFields
+	}
+	result := c.collection(ColDocuments).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.DocID,
+		},
+		updateOps,
+		options.FindOneAndUpdate().SetReturnDocument(options.Before),
+	)
+	docInfo := &database.DocInfo{}
+	if err := result.Decode(docInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey.DocID, database.ErrDocumentNotFound)
+		}
+		return nil, change.InitialCheckpoint, fmt.Errorf("decode document: %w", err)
+	}
+	if isRemoved {
+		docInfo.RemovedAt = now
+	}
+
+	// 03. Insert changes into the changes collection.
 	var models []mongo.WriteModel
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
-		cn.ServerSeq = serverSeq
 		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": refKey.ProjectID,
 			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq,
+			"server_seq": serverSeq,
 		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":        cn.ActorID,
 			"client_seq":      cn.ClientSeq,
@@ -1113,6 +1132,12 @@ func (c *Client) CreateChangeInfos(
 			"presence_change": cn.PresenceChange,
 		}}).SetUpsert(true))
 	}
+
+	// NOTE(hackerwins): If InsertMany operation fails, there will be a mismatch
+	// between the already incremented server_seq and the actual stored changes.
+	// This can lead to gaps in the sequence numbers, which can cause data
+	// consistency issues. We need to handle this case by either rolling back
+	// the increment or ensuring that the changes are always pushed successfully.
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
@@ -1122,45 +1147,6 @@ func (c *Client) CreateChangeInfos(
 			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
-
-	// 03. Update the document info with the given changes.
-	now := gotime.Now()
-	updateFields := bson.M{
-		"server_seq": docInfo.ServerSeq,
-	}
-
-	for _, cn := range changes {
-		if len(cn.Operations) > 0 {
-			updateFields["updated_at"] = now
-			break
-		}
-	}
-
-	if isRemoved {
-		updateFields["removed_at"] = now
-	}
-
-	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"project_id": refKey.ProjectID,
-		"_id":        refKey.DocID,
-		"server_seq": initialServerSeq,
-	}, bson.M{
-		"$set": updateFields,
-	})
-	if err != nil {
-		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
-	}
-	if res.MatchedCount == 0 {
-		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
-	}
-
-	if isRemoved {
-		docInfo.RemovedAt = now
-	}
-
-	c.docCache.Add(refKey, docInfo)
 
 	return docInfo, checkpoint, nil
 }
@@ -1207,7 +1193,6 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 3. Update document
-	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
@@ -1309,24 +1294,45 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 
 	// Calculate missing ranges and fetch them in a single operation
 	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
-		cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"server_seq": bson.M{
-				"$gte": from,
-				"$lte": to,
-			},
-		}, options.Find())
-		if err != nil {
-			return nil, fmt.Errorf("find changes: %w", err)
+		const maxRetry = 5
+		const retryInterval = 100 * gotime.Millisecond
+
+		for range maxRetry {
+			cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"server_seq": bson.M{
+					"$gte": from,
+					"$lte": to,
+				},
+			}, options.Find().SetSort(bson.M{"server_seq": 1}))
+			if err != nil {
+				return nil, fmt.Errorf("find changes: %w", err)
+			}
+
+			var infos []*database.ChangeInfo
+			if err := cursor.All(ctx, &infos); err != nil {
+				return nil, fmt.Errorf("fetch changes: %w", err)
+			}
+
+			// NOTE(hackerwins): gap detection: check if server_seq is continuous
+			expected := from
+			gap := false
+			for _, info := range infos {
+				if info.ServerSeq != expected {
+					gap = true
+					break
+				}
+				expected++
+			}
+			if !gap && int64(len(infos)) == to-from+1 {
+				return infos, nil
+			}
+
+			gotime.Sleep(retryInterval)
 		}
 
-		var infos []*database.ChangeInfo
-		if err := cursor.All(ctx, &infos); err != nil {
-			return nil, fmt.Errorf("fetch changes: %w", err)
-		}
-
-		return infos, nil
+		return nil, fmt.Errorf("gap detected in server_seq after retries")
 	}); err != nil {
 		return nil, err
 	}
