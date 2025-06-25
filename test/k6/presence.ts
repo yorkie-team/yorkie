@@ -95,7 +95,8 @@ export default function () {
       const [docID, serverSeq] = attachDocument(
         clientID,
         hexToBase64(clientID),
-        docKey
+        docKey,
+        clientKey
       );
       success = docID !== "";
       if (success) {
@@ -109,7 +110,8 @@ export default function () {
           clientID,
           docID,
           docKey,
-          lastServerSeq
+          lastServerSeq,
+          clientKey
         );
         pushpulls.add(1);
         sleep(1); // Sleep for 1 second between changes
@@ -122,13 +124,14 @@ export default function () {
         const controlDocID = attachDocument(
           clientID,
           hexToBase64(clientID),
-          CONTROL_DOC_KEY
+          CONTROL_DOC_KEY,
+          clientKey
         );
         const controlEndTime = new Date().getTime();
         controlDocLatency.add(controlEndTime - controlStartTime);
       }
 
-      deactivateClient(clientID, clientKey);
+      deactivateClient(clientID, clientKey, docKey);
     } catch (error: any) {
       console.error(`Error in main function: ${error.message}`);
       transactionFaileds.add(1);
@@ -232,14 +235,14 @@ function deactivateClient(clientID: string, clientKey: string): string {
 
   const result = makeRequest(
     url,
-    { clientId: clientID },
+    { clientId: clientID, clientKey: clientKey },
     { "x-shard-key": `${API_KEY}/${clientKey}` }
   );
 
   return result!.clientId;
 }
 
-function attachDocument(clientID: string, actorID: string, docKey: string) {
+function attachDocument(clientID: string, actorID: string, docKey: string, clientKey: string) {
   const url = `${API_URL}/yorkie.v1.YorkieService/AttachDocument`;
 
   // Generate a random color for presence data
@@ -248,6 +251,7 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
 
   const payload = {
     clientId: clientID,
+    clientKey: clientKey,
     changePack: {
       documentKey: docKey,
       checkpoint: {
@@ -287,13 +291,15 @@ function pushpullChanges(
   clientID: string,
   docID: string,
   docKey: string,
-  lastServerSeq: number
+  lastServerSeq: number,
+  clientKey: string
 ) {
   const url = `${API_URL}/yorkie.v1.YorkieService/PushPullChanges`;
 
   const payload = {
     clientId: clientID,
     documentId: docID,
+    clientKey: clientKey,
     changePack: {
       documentKey: docKey,
       checkpoint: {

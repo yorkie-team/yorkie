@@ -114,6 +114,7 @@ func (s *yorkieServer) DeactivateClient(
 	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -158,6 +159,7 @@ func (s *yorkieServer) AttachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -172,7 +174,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -245,13 +247,14 @@ func (s *yorkieServer) DetachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// 02. Set the document status if it is not attached.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -335,6 +338,7 @@ func (s *yorkieServer) PushPullChanges(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -346,7 +350,7 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	// 03. Push/Pull between the client and server.
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
 		Mode:   syncMode,
 		Status: document.StatusAttached,
@@ -401,12 +405,13 @@ func (s *yorkieServer) RemoveDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: pack.DocumentKey}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
@@ -452,11 +457,12 @@ func (s *yorkieServer) WatchDocument(
 	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
+		ClientKey: req.Msg.ClientKey,
 	}); err != nil {
 		return err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: key.Key(req.Msg.DocumentKey)}
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil
@@ -599,7 +605,7 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: key.Key(req.Msg.DocumentKey)}
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
 	if err != nil {
 		return nil, err
@@ -616,6 +622,7 @@ func (s *yorkieServer) Broadcast(
 	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
+		ClientKey: req.Msg.ClientKey,
 	}); err != nil {
 		return nil, err
 	}

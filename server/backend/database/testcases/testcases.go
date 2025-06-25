@@ -57,13 +57,14 @@ func RunFindDocInfoTest(
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 		_, err = db.FindDocInfoByRefKey(ctx, types.DocRefKey{
 			ProjectID: projectID,
 			DocID:     dummyClientID,
+			DocKey:    docKey,
 		})
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 		firstInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, firstInfo.Key)
@@ -90,7 +91,7 @@ func RunFindDocInfoTest(
 		assert.NoError(t, err)
 
 		// 03. Find the document
-		info, err = db.FindDocInfoByKey(ctx, projectID, docKey)
+		_, err = db.FindDocInfoByKey(ctx, projectID, docKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 }
@@ -690,13 +691,15 @@ func RunFindUserInfoByNameTest(t *testing.T, db database.Database) {
 func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("activate and find client test", func(t *testing.T) {
 		ctx := context.Background()
+		clientKey := t.Name()
 		_, err := db.FindClientInfoByRefKey(ctx, types.ClientRefKey{
 			ProjectID: projectID,
 			ClientID:  dummyClientID,
+			ClientKey: clientKey,
 		})
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		clientInfo, err := db.ActivateClient(ctx, projectID, clientKey, map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		found, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -706,22 +709,24 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		ctx := context.Background()
+		clientKey := t.Name()
 
 		// try to deactivate the client with not exists ID.
 		_, err := db.DeactivateClient(ctx, types.ClientRefKey{
 			ProjectID: projectID,
 			ClientID:  dummyClientID,
+			ClientKey: clientKey,
 		})
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		clientInfo, err := db.ActivateClient(ctx, projectID, clientKey, map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		// try to activate the client twice.
-		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		clientInfo, err = db.ActivateClient(ctx, projectID, clientKey, map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
@@ -947,6 +952,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			docInfo, err := db.FindOrCreateDocInfo(ctx, types.ClientRefKey{
 				ProjectID: testProjectInfo.ID,
 				ClientID:  dummyClientID,
+				ClientKey: t.Name(),
 			}, testDocKey)
 			assert.NoError(t, err)
 			dummyDocInfos = append(dummyDocInfos, docInfo)
@@ -1053,6 +1059,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			docInfo, err := db.FindOrCreateDocInfo(ctx, types.ClientRefKey{
 				ProjectID: projectInfo.ID,
 				ClientID:  dummyClientID,
+				ClientKey: t.Name(),
 			}, testDocKey)
 			assert.NoError(t, err)
 			docInfos = append(docInfos, docInfo)
@@ -1697,7 +1704,7 @@ func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 		// 02. Purge the document and check the document is purged.
 		counts, err := db.PurgeDocument(ctx, docRefKey)
 		assert.NoError(t, err)
-		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		_, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 		// NOTE(raararaara): This test is only checking the document is purged.

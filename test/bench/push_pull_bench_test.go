@@ -138,7 +138,7 @@ func benchmarkPushChanges(
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		pack := createChangePack(changeCnt, docs[0], b)
-		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 		b.StartTimer()
 
 		_, err := packs.PushPull(ctx, be, project, clientInfos[0], refKey, pack, packs.PushPullOptions{
@@ -165,7 +165,7 @@ func benchmarkPullChanges(
 		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
-		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+		docRefKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
 			Status: document.StatusAttached,
@@ -196,6 +196,7 @@ func benchmarkPushSnapshots(
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
+			DocKey:    docKey,
 		}
 		b.StartTimer()
 
@@ -237,6 +238,7 @@ func benchmarkPullSnapshot(
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     docID,
+			DocKey:    docKey,
 		}
 		_, err := packs.PushPull(ctx, be, project, pusherClientInfo, docRefKey, pushPack, packs.PushPullOptions{
 			Mode:   types.SyncModePushPull,
