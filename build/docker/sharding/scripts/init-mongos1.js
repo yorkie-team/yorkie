@@ -20,9 +20,9 @@ const mongoClientDB = "test-yorkie-meta-mongo-client";
 sh.enableSharding(mongoClientDB);
 sh.shardCollection(mongoClientDB + ".clients", { project_id: 1 });
 sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 });
-sh.shardCollection(mongoClientDB + ".changes", { doc_id: 1 });
-sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: 1 });
-sh.shardCollection(mongoClientDB + ".versionvectors", { doc_id: 1 });
+sh.shardCollection(mongoClientDB + ".changes", { doc_id: "hashed" });
+sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: "hashed" });
+sh.shardCollection(mongoClientDB + ".versionvectors", { doc_id: "hashed" });
 
 // Split the inital range at `splitPoint` to allow doc_ids duplicate in different shards.
 const splitPoint = ObjectId("500000000000000000000000");
@@ -39,6 +39,6 @@ const serverDB = "test-yorkie-meta-server";
 sh.enableSharding(serverDB);
 sh.shardCollection(serverDB + ".clients", { project_id: 1 });
 sh.shardCollection(serverDB + ".documents", { project_id: 1 });
-sh.shardCollection(serverDB + ".changes", { doc_id: 1 });
-sh.shardCollection(serverDB + ".snapshots", { doc_id: 1 });
-sh.shardCollection(serverDB + ".versionvectors", { doc_id: 1 });
+sh.shardCollection(serverDB + ".changes", { doc_id: "hashed" });
+sh.shardCollection(serverDB + ".snapshots", { doc_id: "hashed" });
+sh.shardCollection(serverDB + ".versionvectors", { doc_id: "hashed" });
