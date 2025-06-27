@@ -23,6 +23,8 @@ import (
 	"strconv"
 	gotime "time"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -92,18 +94,21 @@ func PushPull(
 		return nil, err
 	}
 
-	pullLog := strconv.Itoa(resPack.ChangesLen())
-	if resPack.SnapshotLen() > 0 {
-		pullLog = units.HumanSize(float64(resPack.SnapshotLen()))
+	if logging.Enabled(zap.DebugLevel) {
+		pullLog := strconv.Itoa(resPack.ChangesLen())
+		if resPack.SnapshotLen() > 0 {
+			pullLog = units.HumanSize(float64(resPack.SnapshotLen()))
+		}
+		logging.From(ctx).Debugf(
+			"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
+			docInfo.Key,
+			clientInfo.Key,
+			len(pushedChanges),
+			pullLog,
+			gotime.Since(start),
+		)
 	}
-	logging.From(ctx).Infof(
-		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
-		docInfo.Key,
-		clientInfo.Key,
-		len(pushedChanges),
-		pullLog,
-		gotime.Since(start),
-	)
+
 	hostname := be.Config.Hostname
 	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
@@ -224,8 +229,6 @@ func pullPack(
 	initialSeq int64,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
-	docKey := docInfo.RefKey()
-
 	// 01. pull changes or a snapshot from the database and create a response pack.
 	resPack, err := preparePack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
 	if err != nil {
@@ -234,22 +237,12 @@ func pullPack(
 	resPack.ApplyDocInfo(docInfo)
 
 	// 02. update the document's status in the client.
-	if opts.Status == document.StatusRemoved {
-		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else if opts.Status == document.StatusDetached {
-		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := clientInfo.UpdateCheckpoint(docKey.DocID, resPack.Checkpoint); err != nil {
-			return nil, err
-		}
+	if err := clientInfo.UpdateDocStatus(docInfo.ID, opts.Status, resPack.Checkpoint); err != nil {
+		return nil, err
 	}
 
 	// 03. update client's vector and checkpoint to DB.
-	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docKey, reqPack.VersionVector)
+	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
 	if err != nil {
 		return nil, err
 	}
