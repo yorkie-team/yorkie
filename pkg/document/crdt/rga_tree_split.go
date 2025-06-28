@@ -603,7 +603,7 @@ func (s *RGATreeSplit[V]) findEdgesOfCandidates(
 // deleteIndexNodes clears the index nodes of the given deletion boundaries.
 // The boundaries mean the nodes that will not be deleted in the range.
 func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
-	for i := 0; i < len(boundaries)-1; i++ {
+	for i := range len(boundaries) - 1 {
 		leftBoundary := boundaries[i]
 		rightBoundary := boundaries[i+1]
 		if leftBoundary.next == rightBoundary {

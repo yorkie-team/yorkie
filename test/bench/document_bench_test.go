@@ -35,7 +35,7 @@ import (
 
 func BenchmarkDocument(b *testing.B) {
 	b.Run("constructor test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 			assert.Equal(b, doc.Checkpoint(), change.InitialCheckpoint)
 			assert.False(b, doc.HasLocalChanges())
@@ -44,7 +44,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("status test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
 			doc.SetStatus(document.StatusAttached)
@@ -53,7 +53,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("equals test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc1 := document.New("d1")
 			doc2 := document.New("d2")
 			doc3 := document.New("d3")
@@ -70,7 +70,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("nested update test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
 			doc := document.New("d1")
@@ -92,7 +92,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("delete test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
@@ -120,7 +120,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("object test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetString("k1", "v1")
@@ -135,7 +135,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("array test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -159,7 +159,7 @@ func BenchmarkDocument(b *testing.B) {
 				assert.Equal(b, 4, root.GetArray("k1").Len())
 				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").ToTestString())
 
-				for i := 0; i < root.GetArray("k1").Len(); i++ {
+				for i := range root.GetArray("k1").Len() {
 					assert.Equal(
 						b,
 						fmt.Sprintf("%d", i+1),
@@ -175,7 +175,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 
 			//           ---------- ins links --------
@@ -219,7 +219,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text composition test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -239,7 +239,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("rich text test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -333,7 +333,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("counter test", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			doc := document.New("d1")
 			var integer = 10
 			var long int64 = 5
@@ -531,7 +531,7 @@ func BenchmarkDocumentDeletion(b *testing.B) {
 }
 
 func benchmarkTree(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -552,7 +552,7 @@ func benchmarkTree(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeEditGC(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -584,11 +584,11 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeSplitGC(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		var builder strings.Builder
-		for i := 0; i < cnt; i++ {
+		for i := range cnt {
 			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -619,12 +619,12 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkText(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				text.Edit(c, c, "a")
 			}
 			return nil
@@ -634,14 +634,14 @@ func benchmarkText(cnt int, b *testing.B) {
 }
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.SetNewText("k1")
-			for i := 0; i < cnt; i++ {
+			for i := range cnt {
 				text.Edit(i, i, "a")
 			}
 			return nil
@@ -650,7 +650,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
-			for i := 0; i < cnt; i++ {
+			for i := range cnt {
 				text.Edit(i, i+1, "b")
 			}
 			return nil
@@ -662,12 +662,12 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 		var builder strings.Builder
-		for i := 0; i < cnt; i++ {
+		for i := range cnt {
 			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -679,7 +679,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k2")
-			for i := 0; i < cnt; i++ {
+			for i := range cnt {
 				if i != cnt {
 					text.Edit(i, i+1, "b")
 				}
@@ -694,12 +694,12 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkArray(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			array := root.SetNewArray("k1")
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				array.AddInteger(c)
 			}
 			return nil
@@ -709,11 +709,11 @@ func benchmarkArray(cnt int, b *testing.B) {
 }
 
 func benchmarkArrayGC(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("1")
-			for i := 0; i < cnt; i++ {
+			for i := range cnt {
 				root.GetArray("1").AddInteger(i)
 			}
 
@@ -733,12 +733,12 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 }
 
 func benchmarkCounter(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			counter := root.SetNewCounter("k1", crdt.IntegerCnt, 0)
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				counter.Increase(c)
 			}
 			return nil
@@ -748,11 +748,11 @@ func benchmarkCounter(cnt int, b *testing.B) {
 }
 
 func benchmarkObject(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				root.SetInteger("k1", c)
 			}
 			return nil
@@ -762,13 +762,13 @@ func benchmarkObject(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		b.StopTimer()
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				text.Edit(c, c, "a")
 			}
 			return nil
@@ -788,7 +788,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -816,13 +816,13 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteRange(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		// Create text with cnt number of characters
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
+			for c := range cnt {
 				text.Edit(c, c, "a")
 			}
 			return nil
@@ -834,7 +834,7 @@ func benchmarkTextDeleteRange(cnt int, b *testing.B) {
 		deleteCount := cnt / deleteRangeSize
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
-			for i := 0; i < deleteCount; i++ {
+			for i := range deleteCount {
 				text.Edit(0, deleteRangeSize, "")
 			}
 			return nil
@@ -844,7 +844,7 @@ func benchmarkTextDeleteRange(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		doc := document.New("d1")
 
 		// Create tree with cnt number of nodes
@@ -868,7 +868,7 @@ func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
 		deleteCount := cnt / deleteRangeSize
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
-			for i := 0; i < deleteCount; i++ {
+			for i := range deleteCount {
 				tree.Edit(1, deleteRangeSize+1, nil, 0)
 			}
 			return nil

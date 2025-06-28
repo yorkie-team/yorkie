@@ -184,7 +184,7 @@ func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 
 // activeClients creates and activates the given number of clients.
 func activeClients(t *testing.T, n int) (clients []*client.Client) {
-	for i := 0; i < n; i++ {
+	for i := range n {
 		c, err := client.Dial(testRPCAddr)
 		assert.NoError(t, err)
 		assert.NoError(t, c.Activate(context.Background()))

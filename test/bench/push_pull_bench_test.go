@@ -86,7 +86,7 @@ func setUpClientsAndDocs(
 	var clientInfos []*database.ClientInfo
 	var docID types.ID
 	var docs []*document.Document
-	for i := 0; i < n; i++ {
+	for i := range n {
 		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i), map[string]string{"userID": fmt.Sprintf("user-%d", i)})
 		assert.NoError(b, err)
 		docInfo, err := be.DB.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
@@ -117,7 +117,7 @@ func createChangePack(
 	doc *document.Document,
 	b *testing.B,
 ) *change.Pack {
-	for idx := 0; idx < cnt; idx++ {
+	for idx := range cnt {
 		assert.NoError(b, doc.Update(func(root *json.Object, _ *presence.Presence) error {
 			root.GetArray("array").AddString("A")
 			return nil
@@ -199,7 +199,7 @@ func benchmarkPushSnapshots(
 		}
 		b.StartTimer()
 
-		for j := 0; j < snapshotCnt; j++ {
+		for j := range snapshotCnt {
 			pushPack := createChangePack(changeCnt, docs[0], b)
 			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docRefKey, pushPack, packs.PushPullOptions{
 				Mode:   types.SyncModePushPull,
