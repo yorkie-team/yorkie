@@ -561,9 +561,7 @@ func WaitForServerToStart(addr string) error {
 		// Exponential backoff calculation
 		delay := initialDelay * gotime.Duration(1<<uint(attempt))
 		fmt.Println("delay: ", delay)
-		if delay > maxDelay {
-			delay = maxDelay
-		}
+		delay = min(delay, maxDelay)
 
 		conn, err := net.DialTimeout("tcp", addr, 1*gotime.Second)
 		if err != nil {

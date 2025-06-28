@@ -111,10 +111,7 @@ func (id ID) SyncClocks(other ID) ID {
 		return id
 	}
 
-	lamport := id.lamport + 1
-	if id.lamport < other.lamport {
-		lamport = other.lamport + 1
-	}
+	lamport := max(id.lamport, other.lamport) + 1
 
 	id.versionVector.Max(&other.versionVector)
 
@@ -126,10 +123,7 @@ func (id ID) SyncClocks(other ID) ID {
 // SetClocks sets the given clocks to this ID. This is used when the snapshot is
 // given from the server.
 func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
-	lamport := id.lamport + 1
-	if id.lamport < otherLamport {
-		lamport = otherLamport + 1
-	}
+	lamport := max(id.lamport, otherLamport) + 1
 
 	// NOTE(chacha912): Documents created by server may have an InitialActorID
 	// in their version vector. Although server is not an actual client, it

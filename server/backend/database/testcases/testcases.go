@@ -566,9 +566,7 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 		assert.NoError(t, err)
 		maxLamport := int64(0)
 		for _, ch := range changes {
-			if maxLamport < ch.ID().Lamport() {
-				maxLamport = ch.ID().Lamport()
-			}
+			maxLamport = max(maxLamport, ch.ID().Lamport())
 		}
 
 		// 04. Find the latest change info by actor before the given server sequence.

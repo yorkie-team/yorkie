@@ -56,9 +56,7 @@ func MinVersionVector(vectors ...VersionVector) VersionVector {
 		minValue := int64(math.MaxInt64)
 		for _, vec := range vectors {
 			if v, ok := vec[k]; ok {
-				if v < minValue {
-					minValue = v
-				}
+				minValue = min(minValue, v)
 			} else {
 				minValue = 0
 				break
@@ -172,9 +170,7 @@ func (v VersionVector) EqualToOrAfter(other *Ticket) bool {
 func (v VersionVector) Min(other *VersionVector) {
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
-			if value > otherValue {
-				v[key] = otherValue
-			}
+			v[key] = min(value, otherValue)
 		} else {
 			v[key] = 0
 		}
@@ -193,9 +189,7 @@ func (v VersionVector) Min(other *VersionVector) {
 func (v VersionVector) Max(other *VersionVector) {
 	for key, value := range v {
 		if otherValue, exists := (*other)[key]; exists {
-			if value < otherValue {
-				v[key] = otherValue
-			}
+			v[key] = max(value, otherValue)
 		}
 	}
 
@@ -211,9 +205,7 @@ func (v VersionVector) MaxLamport() int64 {
 	var maxLamport int64 = -1
 
 	for _, value := range v {
-		if value > maxLamport {
-			maxLamport = value
-		}
+		maxLamport = max(maxLamport, value)
 	}
 
 	return maxLamport
