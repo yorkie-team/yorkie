@@ -709,7 +709,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 }
 
 func benchmarkArrayGC(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("1")
@@ -834,7 +834,7 @@ func benchmarkTextDeleteRange(cnt int, b *testing.B) {
 		deleteCount := cnt / deleteRangeSize
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
-			for i := range deleteCount {
+			for range deleteCount {
 				text.Edit(0, deleteRangeSize, "")
 			}
 			return nil
