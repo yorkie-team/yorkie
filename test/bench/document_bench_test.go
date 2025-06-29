@@ -35,7 +35,7 @@ import (
 
 func BenchmarkDocument(b *testing.B) {
 	b.Run("constructor test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 			assert.Equal(b, doc.Checkpoint(), change.InitialCheckpoint)
 			assert.False(b, doc.HasLocalChanges())
@@ -44,7 +44,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("status test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
 			doc.SetStatus(document.StatusAttached)
@@ -53,7 +53,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("equals test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc1 := document.New("d1")
 			doc2 := document.New("d2")
 			doc3 := document.New("d3")
@@ -70,7 +70,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("nested update test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
 			doc := document.New("d1")
@@ -92,7 +92,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("delete test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
@@ -120,7 +120,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("object test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetString("k1", "v1")
@@ -135,7 +135,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("array test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -175,7 +175,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 
 			//           ---------- ins links --------
@@ -219,7 +219,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text composition test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -239,7 +239,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("rich text test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {

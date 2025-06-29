@@ -815,7 +815,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	}
 
 	node := t.root
-	for i := range len(path) - 1 {
+	for i := 0; i < len(path)-1; i++ {
 		pathElement := path[i]
 		node = node.Children()[pathElement]
 
