@@ -34,7 +34,7 @@ import (
 
 func BenchmarkLocker(b *testing.B) {
 	l := locker.New()
-	for i := range b.N {
+	for range b.N {
 		l.Lock("test")
 		assert.NoError(b, l.Unlock("test"))
 	}

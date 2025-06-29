@@ -46,12 +46,12 @@ func BenchmarkSync(b *testing.B) {
 }
 
 func benchmarkMemorySync(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		locker := sync.New()
 
 		sum := 0
 		var wg gosync.WaitGroup
-		for i := range cnt {
+		for range cnt {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

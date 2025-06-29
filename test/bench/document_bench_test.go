@@ -333,7 +333,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("counter test", func(b *testing.B) {
-		for i := range b.N {
+		for range b.N {
 			doc := document.New("d1")
 			var integer = 10
 			var long int64 = 5
@@ -531,7 +531,7 @@ func BenchmarkDocumentDeletion(b *testing.B) {
 }
 
 func benchmarkTree(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -552,7 +552,7 @@ func benchmarkTree(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeEditGC(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -584,11 +584,11 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeSplitGC(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		var builder strings.Builder
-		for i := range cnt {
+		for range cnt {
 			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -619,7 +619,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkText(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -634,7 +634,7 @@ func benchmarkText(cnt int, b *testing.B) {
 }
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
@@ -662,12 +662,12 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 		var builder strings.Builder
-		for i := range cnt {
+		for range cnt {
 			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -694,7 +694,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkArray(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -733,7 +733,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 }
 
 func benchmarkCounter(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -748,7 +748,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 }
 
 func benchmarkObject(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -762,7 +762,7 @@ func benchmarkObject(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteAll(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		b.StopTimer()
 		doc := document.New("d1")
 
@@ -788,7 +788,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -816,7 +816,7 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteRange(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		// Create text with cnt number of characters
@@ -844,7 +844,7 @@ func benchmarkTextDeleteRange(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
-	for i := range b.N {
+	for range b.N {
 		doc := document.New("d1")
 
 		// Create tree with cnt number of nodes
@@ -868,7 +868,7 @@ func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
 		deleteCount := cnt / deleteRangeSize
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
-			for i := range deleteCount {
+			for range deleteCount {
 				tree.Edit(1, deleteRangeSize+1, nil, 0)
 			}
 			return nil

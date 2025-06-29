@@ -47,7 +47,7 @@ func benchmarkUpdateAndSync(
 	d *document.Document,
 	key string,
 ) {
-	for i := range cnt {
+	for range cnt {
 		err := d.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText(key)
 			text.Edit(0, 0, "c")
@@ -130,7 +130,7 @@ func BenchmarkRPC(b *testing.B) {
 		cli, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), "doc1")
 		assert.NoError(b, err)
 
-		for i := range b.N {
+		for range b.N {
 			testKey := "testKey"
 			err = doc.Update(func(r *json.Object, p *presence.Presence) error {
 				r.SetNewText(testKey)
@@ -179,7 +179,7 @@ func BenchmarkRPC(b *testing.B) {
 		done1 := make(chan bool)
 		done2 := make(chan bool)
 
-		for i := range b.N {
+		for range b.N {
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 			go func() {
@@ -207,7 +207,7 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("attach large document", func(b *testing.B) {
 		str := strings.Repeat("a", 10485000)
 
-		for i := range b.N {
+		for range b.N {
 			func() {
 				clients := helper.ActiveClients(b, svr.RPCAddr(), 2)
 				c1, c2 := clients[0], clients[1]
@@ -255,7 +255,7 @@ func BenchmarkRPC(b *testing.B) {
 		project, err := adminCli.CreateProject(ctx, "admin-cli-test")
 		assert.NoError(b, err)
 
-		for i := range b.N {
+		for range b.N {
 			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli, project))
 		}
 	})

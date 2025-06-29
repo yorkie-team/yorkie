@@ -67,7 +67,7 @@ The figure and codes below show the situation in which some new nodes `N1` and `
 ```go
 func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
   // boundaries = [Lb, N1, N2, Rb]
-  for i := 0; i < len(boundaries)-1; i++ { {
+  for i := 0; i < len(boundaries)-1; i++ { 
     leftBoundary := boundaries[i]
     rightBoundary := boundaries[i+1]
     s.treeByIndex.DeleteRange(

@@ -117,7 +117,7 @@ func createChangePack(
 	doc *document.Document,
 	b *testing.B,
 ) *change.Pack {
-	for idx := range cnt {
+	for range cnt {
 		assert.NoError(b, doc.Update(func(root *json.Object, _ *presence.Presence) error {
 			root.GetArray("array").AddString("A")
 			return nil
@@ -199,7 +199,7 @@ func benchmarkPushSnapshots(
 		}
 		b.StartTimer()
 
-		for j := range snapshotCnt {
+		for range snapshotCnt {
 			pushPack := createChangePack(changeCnt, docs[0], b)
 			pulled, err := packs.PushPull(ctx, be, project, clientInfos[0], docRefKey, pushPack, packs.PushPullOptions{
 				Mode:   types.SyncModePushPull,
