@@ -92,13 +92,14 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)},
+				{Key: "project_id", Value: int32(1)}, // shard key
 				{Key: "status", Value: int32(1)},
 				{Key: "updated_at", Value: int32(1)},
 			},
 		}, {
 			Keys: bson.D{
-				{Key: "documents.$**", Value: int32(1)},
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "attached_docs", Value: int32(1)},
 			},
 		}},
 	},

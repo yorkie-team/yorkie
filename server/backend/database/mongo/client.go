@@ -723,29 +723,36 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
 
-	updater := bson.M{
-		"$max": bson.M{
-			clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
-			clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
-		},
-		"$set": bson.M{
-			clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
-			"updated_at":                            clientInfo.UpdatedAt,
-		},
-	}
-
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
 	}
 
-	if !attached {
+	var updater bson.M
+	if attached {
+		updater = bson.M{
+			"$max": bson.M{
+				clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
+				clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
+			},
+			"$set": bson.M{
+				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+				"updated_at":                            clientInfo.UpdatedAt,
+			},
+			"$addToSet": bson.M{
+				"attached_docs": docInfo.ID,
+			},
+		}
+	} else {
 		updater = bson.M{
 			"$set": bson.M{
 				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
 				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
 				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
 				"updated_at":                               clientInfo.UpdatedAt,
+			},
+			"$pull": bson.M{
+				"attached_docs": docInfo.ID,
 			},
 		}
 	}
@@ -859,9 +866,9 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	docRefKey types.DocRefKey,
 ) ([]*database.ClientInfo, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		"status":     database.ClientActivated,
-		clientDocInfoKey(docRefKey.DocID, "status"): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"status":        database.ClientActivated,
+		"attached_docs": docRefKey.DocID,
 	}
 
 	cursor, err := c.collection(ColClients).Find(ctx, filter)
@@ -1629,8 +1636,8 @@ func (c *Client) IsDocumentAttached(
 	excludeClientID types.ID,
 ) (bool, error) {
 	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
+		"project_id":    docRefKey.ProjectID,
+		"attached_docs": docRefKey.DocID,
 	}
 
 	if excludeClientID != "" {
