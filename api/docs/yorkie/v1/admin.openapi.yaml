@@ -46,6 +46,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/CreateSchema:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.CreateSchema.yorkie.v1.CreateSchemaRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.CreateSchema.yorkie.v1.CreateSchemaResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/DeleteAccount:
     post:
       description: ""
@@ -102,6 +114,30 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.GetProjectStats.yorkie.v1.GetProjectStatsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/GetSchema:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetSchema.yorkie.v1.GetSchemaRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.GetSchema.yorkie.v1.GetSchemaResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/GetSchemas:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -166,6 +202,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/ListSchemas:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListSchemas.yorkie.v1.ListSchemasRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ListSchemas.yorkie.v1.ListSchemasResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/LogIn:
     post:
       description: ""
@@ -186,6 +234,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/RemoveSchema:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -279,6 +339,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.CreateProjectRequest'
       required: true
+    yorkie.v1.AdminService.CreateSchema.yorkie.v1.CreateSchemaRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateSchemaRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateSchemaRequest'
+      required: true
     yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountRequest:
       content:
         application/json:
@@ -323,6 +392,24 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetProjectStatsRequest'
+      required: true
+    yorkie.v1.AdminService.GetSchema.yorkie.v1.GetSchemaRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemaRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemaRequest'
+      required: true
+    yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasRequest'
       required: true
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionRequest:
       content:
@@ -369,6 +456,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListProjectsRequest'
       required: true
+    yorkie.v1.AdminService.ListSchemas.yorkie.v1.ListSchemasRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListSchemasRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListSchemasRequest'
+      required: true
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInRequest:
       content:
         application/json:
@@ -386,6 +482,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest'
+      required: true
+    yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveSchemaRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveSchemaRequest'
       required: true
     yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysRequest:
       content:
@@ -469,6 +574,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.CreateProjectResponse'
       description: ""
+    yorkie.v1.AdminService.CreateSchema.yorkie.v1.CreateSchemaResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateSchemaResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CreateSchemaResponse'
+      description: ""
     yorkie.v1.AdminService.DeleteAccount.yorkie.v1.DeleteAccountResponse:
       content:
         application/json:
@@ -513,6 +627,24 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetProjectStatsResponse'
+      description: ""
+    yorkie.v1.AdminService.GetSchema.yorkie.v1.GetSchemaResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemaResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemaResponse'
+      description: ""
+    yorkie.v1.AdminService.GetSchemas.yorkie.v1.GetSchemasResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetSchemasResponse'
       description: ""
     yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse:
       content:
@@ -559,6 +691,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListProjectsResponse'
       description: ""
+    yorkie.v1.AdminService.ListSchemas.yorkie.v1.ListSchemasResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListSchemasResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListSchemasResponse'
+      description: ""
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInResponse:
       content:
         application/json:
@@ -576,6 +717,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse'
+      description: ""
+    yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveSchemaResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveSchemaResponse'
       description: ""
     yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse:
       content:
@@ -923,6 +1073,52 @@ components:
           type: object
       title: CreateProjectResponse
       type: object
+    yorkie.v1.CreateSchemaRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        rules:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Rule'
+            type: object
+          title: rules
+          type: array
+        schemaBody:
+          additionalProperties: false
+          description: ""
+          title: schema_body
+          type: string
+        schemaName:
+          additionalProperties: false
+          description: ""
+          title: schema_name
+          type: string
+        schemaVersion:
+          additionalProperties: false
+          description: ""
+          title: schema_version
+          type: integer
+      title: CreateSchemaRequest
+      type: object
+    yorkie.v1.CreateSchemaResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        schema:
+          $ref: '#/components/schemas/yorkie.v1.Schema'
+          additionalProperties: false
+          description: ""
+          title: schema
+          type: object
+      title: CreateSchemaResponse
+      type: object
     yorkie.v1.DataSize:
       additionalProperties: false
       description: ""
@@ -1014,6 +1210,11 @@ components:
           additionalProperties: false
           description: ""
           title: key
+          type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
           type: string
         snapshot:
           additionalProperties: false
@@ -1179,6 +1380,69 @@ components:
           - type: number
           title: documents_count
       title: GetProjectStatsResponse
+      type: object
+    yorkie.v1.GetSchemaRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        schemaName:
+          additionalProperties: false
+          description: ""
+          title: schema_name
+          type: string
+        version:
+          additionalProperties: false
+          description: ""
+          title: version
+          type: integer
+      title: GetSchemaRequest
+      type: object
+    yorkie.v1.GetSchemaResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        schema:
+          $ref: '#/components/schemas/yorkie.v1.Schema'
+          additionalProperties: false
+          description: ""
+          title: schema
+          type: object
+      title: GetSchemaResponse
+      type: object
+    yorkie.v1.GetSchemasRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        schemaName:
+          additionalProperties: false
+          description: ""
+          title: schema_name
+          type: string
+      title: GetSchemasRequest
+      type: object
+    yorkie.v1.GetSchemasResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        schemas:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Schema'
+            type: object
+          title: schemas
+          type: array
+      title: GetSchemasResponse
       type: object
     yorkie.v1.GetServerVersionRequest:
       additionalProperties: false
@@ -1399,6 +1663,31 @@ components:
           title: projects
           type: array
       title: ListProjectsResponse
+      type: object
+    yorkie.v1.ListSchemasRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+      title: ListSchemasRequest
+      type: object
+    yorkie.v1.ListSchemasResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        schemas:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Schema'
+            type: object
+          title: schemas
+          type: array
+      title: ListSchemasResponse
       type: object
     yorkie.v1.LogInRequest:
       additionalProperties: false
@@ -2208,6 +2497,32 @@ components:
       description: ""
       title: RemoveDocumentByAdminResponse
       type: object
+    yorkie.v1.RemoveSchemaRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        schemaName:
+          additionalProperties: false
+          description: ""
+          title: schema_name
+          type: string
+        version:
+          additionalProperties: false
+          description: ""
+          title: version
+          type: integer
+      title: RemoveSchemaRequest
+      type: object
+    yorkie.v1.RemoveSchemaResponse:
+      additionalProperties: false
+      description: ""
+      title: RemoveSchemaResponse
+      type: object
     yorkie.v1.RotateProjectKeysRequest:
       additionalProperties: false
       description: ""
@@ -2230,6 +2545,62 @@ components:
           title: project
           type: object
       title: RotateProjectKeysResponse
+      type: object
+    yorkie.v1.Rule:
+      additionalProperties: false
+      description: ""
+      properties:
+        path:
+          additionalProperties: false
+          description: ""
+          title: path
+          type: string
+        type:
+          additionalProperties: false
+          description: ""
+          title: type
+          type: string
+      title: Rule
+      type: object
+    yorkie.v1.Schema:
+      additionalProperties: false
+      description: ""
+      properties:
+        body:
+          additionalProperties: false
+          description: ""
+          title: body
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        name:
+          additionalProperties: false
+          description: ""
+          title: name
+          type: string
+        rules:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Rule'
+            type: object
+          title: rules
+          type: array
+        version:
+          additionalProperties: false
+          description: ""
+          title: version
+          type: integer
+      title: Schema
       type: object
     yorkie.v1.SearchDocumentsRequest:
       additionalProperties: false
@@ -2584,6 +2955,11 @@ components:
           additionalProperties: false
           description: ""
           title: root
+          type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
           type: string
       title: UpdateDocumentRequest
       type: object

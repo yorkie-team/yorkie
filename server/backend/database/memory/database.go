@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -836,6 +837,7 @@ func (d *DB) FindOrCreateDocInfo(
 			Key:        key,
 			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
+			Schema:     "",
 			CreatedAt:  now,
 			UpdatedAt:  now,
 			AccessedAt: now,
@@ -977,6 +979,39 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 
 	txn.Commit()
 
+	return nil
+}
+
+// UpdateDocInfoSchema updates the document schema.
+func (d *DB) UpdateDocInfoSchema(
+	_ context.Context,
+	refKey types.DocRefKey,
+	schemaKey string,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return fmt.Errorf("find document by id: %w", err)
+	}
+
+	if raw == nil {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo.Schema = schemaKey
+
+	if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		return fmt.Errorf("update document schema: %w", err)
+	}
+
+	txn.Commit()
 	return nil
 }
 
@@ -1609,6 +1644,167 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
+func (d *DB) CreateSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+	body string,
+	rules []types.Rule,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// NOTE(hackerwins): Check if the project already exists.
+	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
+	existing, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaAlreadyExists)
+	}
+
+	info := &database.SchemaInfo{
+		ID:        newID(),
+		ProjectID: projectID,
+		Name:      name,
+		Version:   version,
+		Body:      body,
+		Rules:     rules,
+		CreatedAt: gotime.Now(),
+	}
+	if err := txn.Insert(tblSchemas, info); err != nil {
+		return nil, fmt.Errorf("create schema: %w", err)
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+func (d *DB) GetSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	return raw.(*database.SchemaInfo).DeepCopy(), nil
+}
+
+func (d *DB) GetSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblSchemas,
+		"project_id_name",
+		projectID.String(),
+		name,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	var infos []*database.SchemaInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		infos = append(infos, raw.(*database.SchemaInfo).DeepCopy())
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Version > infos[j].Version
+	})
+
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+	return infos, nil
+}
+
+func (d *DB) ListSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblSchemas, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+
+	schemaMap := make(map[string]*database.SchemaInfo)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		schema := raw.(*database.SchemaInfo)
+		if existing, ok := schemaMap[schema.Name]; !ok || schema.Version > existing.Version {
+			schemaMap[schema.Name] = schema.DeepCopy()
+		}
+	}
+
+	var infos []*database.SchemaInfo
+	for _, schema := range schemaMap {
+		infos = append(infos, schema)
+	}
+
+	return infos, nil
+}
+
+func (d *DB) RemoveSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	schemaInfo := raw.(*database.SchemaInfo)
+	if err := txn.Delete(tblSchemas, schemaInfo); err != nil {
+		return fmt.Errorf("delete schema: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // PurgeDocument purges the given document and its metadata from the database.
 func (d *DB) PurgeDocument(
 	ctx context.Context,
@@ -1710,4 +1906,32 @@ func (d *DB) RotateProjectKeys(
 
 	txn.Commit()
 	return project, nil
+}
+
+// IsSchemaAttached returns true if the schema is being used by any documents.
+func (d *DB) IsSchemaAttached(
+	_ context.Context,
+	projectID types.ID,
+	schema string,
+) (bool, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id",
+		projectID.String(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("find documents by project id: %w", err)
+	}
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		doc := raw.(*database.DocInfo)
+		if doc.Schema == schema && schema != "" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

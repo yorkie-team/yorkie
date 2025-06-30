@@ -40,6 +40,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColSchemas represents the schemas collection in the database.
+	ColSchemas = "schemas"
 )
 
 // Collections represents the list of all collections in the database.
@@ -50,6 +52,7 @@ var Collections = []string{
 	ColDocuments,
 	ColChanges,
 	ColSnapshots,
+	ColSchemas,
 }
 
 type collectionInfo struct {
@@ -148,6 +151,17 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: int32(1)}, // shard key
 				{Key: "project_id", Value: int32(1)},
 				{Key: "client_id", Value: int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: ColSchemas,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "name", Value: int32(1)},
+				{Key: "version", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},

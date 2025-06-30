@@ -1042,6 +1042,31 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// UpdateDocInfoSchema updates the document schema.
+func (c *Client) UpdateDocInfoSchema(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	schemaKey string,
+) error {
+	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
+	}, bson.M{
+		"$set": bson.M{
+			"schema": schemaKey,
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	if result.Err() == mongo.ErrNoDocuments {
+		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		return fmt.Errorf("update document schema: %w", result.Err())
+	}
+
+	return nil
+}
+
 // GetDocumentsCount returns the number of documents in the given project.
 func (c *Client) GetDocumentsCount(
 	ctx context.Context,
@@ -1653,6 +1678,151 @@ func (c *Client) IsDocumentAttached(
 	return true, nil
 }
 
+// CreateSchemaInfo stores the schema of the given document.
+func (c *Client) CreateSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+	body string,
+	rules []types.Rule,
+) (*database.SchemaInfo, error) {
+	now := gotime.Now()
+	result, err := c.collection(ColSchemas).InsertOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+		"body":       body,
+		"rules":      rules,
+		"created_at": now,
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrSchemaAlreadyExists
+		}
+
+		return nil, fmt.Errorf("create schema info: %w", err)
+	}
+
+	return &database.SchemaInfo{
+		ID:        types.ID(result.InsertedID.(primitive.ObjectID).Hex()),
+		ProjectID: projectID,
+		Name:      name,
+		Version:   version,
+		Body:      body,
+		Rules:     rules,
+		CreatedAt: now,
+	}, nil
+}
+
+// GetSchemaInfo returns the schema of the given document.
+func (c *Client) GetSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) (*database.SchemaInfo, error) {
+	result := c.collection(ColSchemas).FindOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+	})
+
+	info := &database.SchemaInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("%s %d: %w", name, version, database.ErrSchemaNotFound)
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find schema: %w", result.Err())
+	}
+
+	if err := result.Decode(info); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	return info, nil
+}
+
+// GetSchemaInfos returns all versions of the schema.
+func (c *Client) GetSchemaInfos(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+) ([]*database.SchemaInfo, error) {
+	cursor, err := c.collection(ColSchemas).Find(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+	}, options.Find().SetSort(bson.D{{Key: "version", Value: -1}}))
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+
+	var infos []*database.SchemaInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+	return infos, nil
+}
+
+func (c *Client) ListSchemaInfos(
+	ctx context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	result, err := c.collection(ColSchemas).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"project_id": projectID}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "name", Value: 1},
+			{Key: "version", Value: -1},
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":          "$name",
+			"latestSchema": bson.M{"$first": "$$ROOT"},
+		}}}})
+	if err != nil {
+		return nil, fmt.Errorf("aggregate schema: %w", err)
+	}
+
+	var results []struct {
+		LatestSchema *database.SchemaInfo `bson:"latestSchema"`
+	}
+	if err := result.All(ctx, &results); err != nil {
+		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+
+	var infos []*database.SchemaInfo
+	for _, result := range results {
+		infos = append(infos, result.LatestSchema)
+	}
+
+	return infos, nil
+}
+
+func (c *Client) RemoveSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) error {
+	rst, err := c.collection(ColSchemas).DeleteOne(ctx, bson.M{
+		"project_id": projectID,
+		"name":       name,
+		"version":    version,
+	})
+	if err != nil {
+		return fmt.Errorf("delete schema: %w", err)
+	}
+
+	if rst.DeletedCount == 0 {
+		return fmt.Errorf("%s %d: %w", name, version, database.ErrSchemaNotFound)
+	}
+
+	return nil
+}
+
 // PurgeDocument purges the given document and its metadata from the database.
 func (c *Client) PurgeDocument(
 	ctx context.Context,
@@ -1741,4 +1911,22 @@ func escapeRegex(str string) string {
 // clientDocInfoKey returns the key for the client document info.
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
+}
+
+// IsSchemaAttached returns true if the schema is being used by any documents.
+func (c *Client) IsSchemaAttached(
+	ctx context.Context,
+	projectID types.ID,
+	schema string,
+) (bool, error) {
+	filter := bson.M{
+		"project_id": projectID,
+		"schema":     schema,
+	}
+
+	result := c.collection(ColDocuments).FindOne(ctx, filter)
+	if result.Err() == mongo.ErrNoDocuments {
+		return false, nil
+	}
+	return true, nil
 }

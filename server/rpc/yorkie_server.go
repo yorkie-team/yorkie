@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
 type yorkieServer struct {
@@ -168,12 +169,21 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}
 
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
-	if project.HasAttachmentLimit() {
+	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
+	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.SchemaKey != "") {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 
@@ -184,6 +194,20 @@ func (s *yorkieServer) AttachDocument(
 
 		if err := project.IsAttachmentLimitExceeded(count); err != nil {
 			return nil, err
+		}
+
+		if count == 0 {
+			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
+			if err != nil {
+				return nil, err
+			}
+			schema, err = schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+			if err != nil {
+				return nil, err
+			}
+			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.SchemaKey); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -201,11 +225,15 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.AttachDocumentResponse{
+	response := &api.AttachDocumentResponse{
 		ChangePack:         pbChangePack,
 		DocumentId:         docInfo.ID.String(),
 		MaxSizePerDocument: int32(project.MaxSizePerDocument),
-	}), nil
+	}
+	if schema != nil {
+		response.SchemaRules = converter.ToRules(schema.Rules)
+	}
+	return connect.NewResponse(response), nil
 }
 
 // DetachDocument detaches the given document to the client.

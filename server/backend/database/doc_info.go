@@ -40,6 +40,9 @@ type DocInfo struct {
 	// Owner is the owner(ID of the client) of the document.
 	Owner types.ID `bson:"owner"`
 
+	// Schema is the schema of the document.
+	Schema string `bson:"schema"`
+
 	// CreatedAt is the time when the document is created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -79,6 +82,7 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		Key:         info.Key,
 		ServerSeq:   info.ServerSeq,
 		Owner:       info.Owner,
+		Schema:      info.Schema,
 		CreatedAt:   info.CreatedAt,
 		AccessedAt:  info.AccessedAt,
 		UpdatedAt:   info.UpdatedAt,

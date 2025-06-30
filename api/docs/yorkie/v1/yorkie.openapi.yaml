@@ -336,6 +336,11 @@ components:
           description: ""
           title: client_id
           type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
+          type: string
       title: AttachDocumentRequest
       type: object
     yorkie.v1.AttachDocumentResponse:
@@ -358,6 +363,14 @@ components:
           description: ""
           title: max_size_per_document
           type: integer
+        schemaRules:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Rule'
+            type: object
+          title: schema_rules
+          type: array
       title: AttachDocumentResponse
       type: object
     yorkie.v1.BroadcastRequest:
@@ -1390,6 +1403,22 @@ components:
           title: change_pack
           type: object
       title: RemoveDocumentResponse
+      type: object
+    yorkie.v1.Rule:
+      additionalProperties: false
+      description: ""
+      properties:
+        path:
+          additionalProperties: false
+          description: ""
+          title: path
+          type: string
+        type:
+          additionalProperties: false
+          description: ""
+          title: type
+          type: string
+      title: Rule
       type: object
     yorkie.v1.TextNodePos:
       additionalProperties: false
