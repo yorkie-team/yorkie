@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
+	"github.com/yorkie-team/yorkie/server/schemas"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -473,9 +474,27 @@ func (s *adminServer) UpdateDocument(
 		return nil, err
 	}
 
+	hasRoot := req.Msg.Root != ""
+	hasSchemaKey := req.Msg.SchemaKey != ""
+
+	// Determine update mode based on provided parameters
+	var updateMode string
+	switch {
+	case !hasRoot && !hasSchemaKey:
+		updateMode = documents.UpdateModeDetachSchema
+	case hasRoot && !hasSchemaKey:
+		updateMode = documents.UpdateModeRootOnly
+	case !hasRoot && hasSchemaKey:
+		updateMode = documents.UpdateModeSchemaOnly
+	case hasRoot && hasSchemaKey:
+		updateMode = documents.UpdateModeBoth
+	}
+
 	var root yson.Object
-	if err := yson.Unmarshal(req.Msg.Root, &root); err != nil {
-		return nil, err
+	if hasRoot {
+		if err := yson.Unmarshal(req.Msg.Root, &root); err != nil {
+			return nil, err
+		}
 	}
 
 	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
@@ -490,6 +509,34 @@ func (s *adminServer) UpdateDocument(
 	if err != nil {
 		return nil, err
 	}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+
+	// Check document attachment status for schema updates
+	if updateMode != documents.UpdateModeRootOnly {
+		attachLocker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
+		defer attachLocker.Unlock()
+
+		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
+		if err != nil {
+			return nil, err
+		}
+		if count > 0 {
+			return nil, documents.ErrDocumentAttached
+		}
+	}
+
+	schemaKey := docInfo.Schema
+	if hasSchemaKey {
+		schemaKey = req.Msg.SchemaKey
+	}
+	schemaName, schemaVersion, err := converter.FromSchemaKey(schemaKey)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
 
 	doc, err := documents.UpdateDocument(
 		ctx,
@@ -497,6 +544,8 @@ func (s *adminServer) UpdateDocument(
 		project,
 		docInfo,
 		root,
+		schema,
+		updateMode,
 	)
 	if err != nil {
 		return nil, err
@@ -600,6 +649,152 @@ func (s *adminServer) ListChanges(
 	return connect.NewResponse(&api.ListChangesResponse{
 		Changes: pbChanges,
 	}), nil
+}
+
+// CreateSchema creates a new schema.
+func (s *adminServer) CreateSchema(
+	ctx context.Context,
+	req *connect.Request[api.CreateSchemaRequest],
+) (*connect.Response[api.CreateSchemaResponse], error) {
+	fields := &types.CreateSchemaFields{Name: &req.Msg.SchemaName, Version: &req.Msg.SchemaVersion}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := schemas.CreateSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.SchemaVersion),
+		req.Msg.SchemaBody,
+		converter.FromRules(req.Msg.Rules),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateSchemaResponse{
+		Schema: converter.ToSchema(schema),
+	}), nil
+}
+
+// GetSchema gets the schema.
+func (s *adminServer) GetSchema(
+	ctx context.Context,
+	req *connect.Request[api.GetSchemaRequest],
+) (*connect.Response[api.GetSchemaResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schema, err := schemas.GetSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.Version),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetSchemaResponse{
+		Schema: converter.ToSchema(schema),
+	}), nil
+}
+
+// GetSchemas gets the schemas.
+func (s *adminServer) GetSchemas(
+	ctx context.Context,
+	req *connect.Request[api.GetSchemasRequest],
+) (*connect.Response[api.GetSchemasResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := schemas.GetSchemas(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetSchemasResponse{
+		Schemas: converter.ToSchemas(schemas),
+	}), nil
+}
+
+// ListSchemas lists the schemas.
+func (s *adminServer) ListSchemas(
+	ctx context.Context,
+	req *connect.Request[api.ListSchemasRequest],
+) (*connect.Response[api.ListSchemasResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := schemas.ListSchemas(
+		ctx,
+		s.backend,
+		project.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListSchemasResponse{
+		Schemas: converter.ToSchemas(schemas),
+	}), nil
+}
+
+// RemoveSchema removes the schema.
+func (s *adminServer) RemoveSchema(
+	ctx context.Context,
+	req *connect.Request[api.RemoveSchemaRequest],
+) (*connect.Response[api.RemoveSchemaResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the schema is being used by any documents
+	schema := fmt.Sprintf("%s@%d", req.Msg.SchemaName, req.Msg.Version)
+	isAttached, err := s.backend.DB.IsSchemaAttached(ctx, project.ID, schema)
+	if err != nil {
+		return nil, err
+	}
+	if isAttached {
+		return nil, fmt.Errorf("schema %s is being used", schema)
+	}
+
+	if err = schemas.RemoveSchema(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.SchemaName,
+		int(req.Msg.Version),
+	); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RemoveSchemaResponse{}), nil
 }
 
 // GetServerVersion get the version of yorkie server.

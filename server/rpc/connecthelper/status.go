@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/metaerrors"
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -43,30 +44,34 @@ import (
 // errorToConnectCode maps an error to connectRPC status code.
 var errorToConnectCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:         connect.CodeInvalidArgument,
-	converter.ErrCheckpointRequired:   connect.CodeInvalidArgument,
-	converter.ErrUnsupportedDateRange: connect.CodeInvalidArgument,
-	time.ErrInvalidHexString:          connect.CodeInvalidArgument,
-	time.ErrInvalidActorID:            connect.CodeInvalidArgument,
-	types.ErrInvalidID:                connect.CodeInvalidArgument,
-	clients.ErrInvalidClientID:        connect.CodeInvalidArgument,
-	clients.ErrInvalidClientKey:       connect.CodeInvalidArgument,
-	key.ErrInvalidKey:                 connect.CodeInvalidArgument,
-	types.ErrEmptyProjectFields:       connect.CodeInvalidArgument,
-	yson.ErrInvalidYSON:               connect.CodeInvalidArgument,
-	yson.ErrUnsupported:               connect.CodeInvalidArgument,
+	converter.ErrPackRequired:          connect.CodeInvalidArgument,
+	converter.ErrCheckpointRequired:    connect.CodeInvalidArgument,
+	converter.ErrUnsupportedDateRange:  connect.CodeInvalidArgument,
+	converter.ErrInvalidSchemaKey:      connect.CodeInvalidArgument,
+	time.ErrInvalidHexString:           connect.CodeInvalidArgument,
+	time.ErrInvalidActorID:             connect.CodeInvalidArgument,
+	types.ErrInvalidID:                 connect.CodeInvalidArgument,
+	clients.ErrInvalidClientID:         connect.CodeInvalidArgument,
+	clients.ErrInvalidClientKey:        connect.CodeInvalidArgument,
+	key.ErrInvalidKey:                  connect.CodeInvalidArgument,
+	types.ErrEmptyProjectFields:        connect.CodeInvalidArgument,
+	yson.ErrInvalidYSON:                connect.CodeInvalidArgument,
+	yson.ErrUnsupported:                connect.CodeInvalidArgument,
+	document.ErrSchemaValidationFailed: connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  connect.CodeNotFound,
 	database.ErrClientNotFound:   connect.CodeNotFound,
 	database.ErrDocumentNotFound: connect.CodeNotFound,
 	database.ErrUserNotFound:     connect.CodeNotFound,
+	database.ErrSchemaNotFound:   connect.CodeNotFound,
 
 	// AlreadyExists means the requested resource already exists.
 	database.ErrProjectAlreadyExists:     connect.CodeAlreadyExists,
 	database.ErrProjectNameAlreadyExists: connect.CodeAlreadyExists,
 	database.ErrUserAlreadyExists:        connect.CodeAlreadyExists,
 	pubsub.ErrAlreadyConnected:           connect.CodeAlreadyExists,
+	database.ErrSchemaAlreadyExists:      connect.CodeAlreadyExists,
 
 	// FailedPrecondition means the request is rejected because the state of the
 	// system is not the desired state.
@@ -109,6 +114,7 @@ var errorToConnectCode = map[error]connect.Code{
 var errorToCode = map[error]string{
 	converter.ErrPackRequired:       "ErrPackRequired",
 	converter.ErrCheckpointRequired: "ErrCheckpointRequired",
+	converter.ErrInvalidSchemaKey:   "ErrInvalidSchemaKey",
 	time.ErrInvalidHexString:        "ErrInvalidHexString",
 	time.ErrInvalidActorID:          "ErrInvalidActorID",
 	types.ErrInvalidID:              "ErrInvalidID",
@@ -117,14 +123,18 @@ var errorToCode = map[error]string{
 	key.ErrInvalidKey:               "ErrInvalidKey",
 	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
 
+	document.ErrSchemaValidationFailed: "ErrSchemaValidationFailed",
+
 	database.ErrProjectNotFound:  "ErrProjectNotFound",
 	database.ErrClientNotFound:   "ErrClientNotFound",
 	database.ErrDocumentNotFound: "ErrDocumentNotFound",
 	database.ErrUserNotFound:     "ErrUserNotFound",
+	database.ErrSchemaNotFound:   "ErrSchemaNotFound",
 
 	database.ErrProjectAlreadyExists:     "ErrProjectAlreadyExists",
 	database.ErrProjectNameAlreadyExists: "ErrProjectNameAlreadyExists",
 	database.ErrUserAlreadyExists:        "ErrUserAlreadyExists",
+	database.ErrSchemaAlreadyExists:      "ErrSchemaAlreadyExists",
 
 	database.ErrClientNotActivated:      "ErrClientNotActivated",
 	database.ErrDocumentNotAttached:     "ErrDocumentNotAttached",

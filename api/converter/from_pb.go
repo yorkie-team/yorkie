@@ -18,6 +18,8 @@ package converter
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -35,6 +37,9 @@ import (
 var (
 	// ErrUnsupportedDateRange is returned when the given date range is unsupported.
 	ErrUnsupportedDateRange = fmt.Errorf("unsupported date range")
+
+	// ErrInvalidSchemaKey is returned when the given schema key is invalid.
+	ErrInvalidSchemaKey = fmt.Errorf("invalid schema key")
 )
 
 // FromUser converts the given Protobuf formats to model format.
@@ -957,4 +962,61 @@ func FromDateRange(
 	}
 
 	return from, to, nil
+}
+
+// FromSchemaKey converts the given Protobuf formats to model format.
+func FromSchemaKey(schemaKey string) (string, int, error) {
+	if schemaKey == "" {
+		return "", 0, nil
+	}
+
+	split := strings.Split(schemaKey, "@")
+	if len(split) != 2 {
+		return "", 0, fmt.Errorf("parse schema %s: %w", schemaKey, ErrInvalidSchemaKey)
+	}
+
+	name := split[0]
+	version, err := strconv.Atoi(split[1])
+	if err != nil {
+		return "", 0, fmt.Errorf("parse version %s: %w", split[1], ErrInvalidSchemaKey)
+	}
+
+	return name, version, nil
+}
+
+func FromRules(pbRules []*api.Rule) []types.Rule {
+	var rules []types.Rule
+	for _, pbRule := range pbRules {
+		rules = append(rules, FromRule(pbRule))
+	}
+	return rules
+}
+
+// FromRule converts the given Protobuf formats to model format.
+func FromRule(pbRule *api.Rule) types.Rule {
+	return types.Rule{
+		Path: pbRule.Path,
+		Type: pbRule.Type,
+	}
+}
+
+// FromSchemas converts the given Protobuf formats to model format.
+func FromSchemas(pbSchemas []*api.Schema) []*types.Schema {
+	var schemas []*types.Schema
+	for _, pbSchema := range pbSchemas {
+		schemas = append(schemas, FromSchema(pbSchema))
+	}
+	return schemas
+}
+
+// FromSchema converts the given Protobuf formats to model format.
+func FromSchema(pbSchema *api.Schema) *types.Schema {
+	return &types.Schema{
+		ID:        types.ID(pbSchema.Id),
+		Name:      pbSchema.Name,
+		Version:   int(pbSchema.Version),
+		Body:      pbSchema.Body,
+		Rules:     FromRules(pbSchema.Rules),
+		CreatedAt: pbSchema.CreatedAt.AsTime(),
+	}
 }

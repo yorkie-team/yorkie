@@ -30,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -101,9 +100,8 @@ func TestAdmin(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
-		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(), yson.Object{
-			"counter": yson.Counter{Type: crdt.IntegerCnt, Value: 0},
-		})
+		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(),
+			`{"counter": Counter(Int(0))}`, "")
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Sync(ctx))
 
@@ -114,9 +112,8 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, int32(1), doc.Root().GetCounter("counter").Value())
 		assert.NoError(t, cli.Sync(ctx))
 
-		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(), yson.Object{
-			"counter": yson.Counter{Type: crdt.IntegerCnt, Value: 0},
-		})
+		_, err = adminCli.UpdateDocument(ctx, "default", doc.Key(),
+			`{"counter": Counter(Int(0))}`, "")
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Sync(ctx))
 		assert.Equal(t, int32(0), doc.Root().GetCounter("counter").Value())

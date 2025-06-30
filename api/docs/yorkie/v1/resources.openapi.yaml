@@ -431,6 +431,11 @@ components:
           description: ""
           title: key
           type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
+          type: string
         snapshot:
           additionalProperties: false
           description: ""
@@ -1508,6 +1513,62 @@ components:
           title: key
           type: string
       title: RHTNode
+      type: object
+    yorkie.v1.Rule:
+      additionalProperties: false
+      description: ""
+      properties:
+        path:
+          additionalProperties: false
+          description: ""
+          title: path
+          type: string
+        type:
+          additionalProperties: false
+          description: ""
+          title: type
+          type: string
+      title: Rule
+      type: object
+    yorkie.v1.Schema:
+      additionalProperties: false
+      description: ""
+      properties:
+        body:
+          additionalProperties: false
+          description: ""
+          title: body
+          type: string
+        createdAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        name:
+          additionalProperties: false
+          description: ""
+          title: name
+          type: string
+        rules:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Rule'
+            type: object
+          title: rules
+          type: array
+        version:
+          additionalProperties: false
+          description: ""
+          title: version
+          type: integer
+      title: Schema
       type: object
     yorkie.v1.Snapshot:
       additionalProperties: false
