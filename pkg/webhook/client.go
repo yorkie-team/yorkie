@@ -192,11 +192,8 @@ func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn
 // waitInterval returns the interval of given retries. (2^retries * minWaitInterval) .
 func waitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration) time.Duration {
 	interval := time.Duration(math.Pow(2, float64(retries))) * minWaitInterval
-	if maxWaitInterval < interval {
-		return maxWaitInterval
-	}
 
-	return interval
+	return min(interval, maxWaitInterval)
 }
 
 // shouldRetry returns true if the given error should be retried.

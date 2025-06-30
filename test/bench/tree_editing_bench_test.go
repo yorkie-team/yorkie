@@ -38,13 +38,13 @@ func BenchmarkTree(b *testing.B) {
 		b.ResetTimer()
 
 		b.Run(fmt.Sprintf("%d vertices to protobuf", cnt), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = converter.ToTreeNodes(root)
 			}
 		})
 
 		b.Run(fmt.Sprintf("%d vertices from protobuf", cnt), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				pbNodes := converter.ToTreeNodes(root)
 				_, err := converter.FromTreeNodes(pbNodes)
 				assert.NoError(b, err)
@@ -56,7 +56,7 @@ func BenchmarkTree(b *testing.B) {
 // buildTree creates a tree with the given number of vertices.
 func buildTree(vertexCnt int) *crdt.TreeNode {
 	children := make([]json.TreeNode, vertexCnt)
-	for i := 0; i < vertexCnt; i++ {
+	for i := range vertexCnt {
 		children[i] = json.TreeNode{
 			Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}},
 		}

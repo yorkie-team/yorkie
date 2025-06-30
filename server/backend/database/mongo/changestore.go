@@ -207,9 +207,7 @@ func mergeAdjacentRanges(ranges []ChangeRange) []ChangeRange {
 
 	for i := 1; i < len(ranges); i++ {
 		if ranges[i].From <= current.To+1 {
-			if ranges[i].To > current.To {
-				current.To = ranges[i].To
-			}
+			current.To = max(current.To, ranges[i].To)
 		} else {
 			result = append(result, current)
 			current = ranges[i]

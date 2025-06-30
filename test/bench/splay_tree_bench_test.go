@@ -61,7 +61,7 @@ func BenchmarkSplayTree(b *testing.B) {
 			// find, insert, delete
 			tree := splay.NewTree[*stringValue](nil)
 			treeSize := 1
-			for i := 0; i < cnt; i++ {
+			for range cnt {
 				maxVal := big.NewInt(3)
 				operation, err := rand.Int(rand.Reader, maxVal)
 				if err != nil {
@@ -99,13 +99,13 @@ func BenchmarkSplayTree(b *testing.B) {
 			// Create a skewed tree by inserting characters only at the very end.
 			b.StopTimer()
 			tree := splay.NewTree[*stringValue](nil)
-			for i := 0; i < cnt; i++ {
+			for range cnt {
 				tree.Insert(newSplayNode("A"))
 			}
 			b.StartTimer()
 
 			// 1000 times random access
-			for i := 0; i < 1000; i++ {
+			for range 1000 {
 				maxVal := big.NewInt(int64(cnt))
 				index, err := rand.Int(rand.Reader, maxVal)
 				if err != nil {

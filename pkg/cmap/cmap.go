@@ -40,7 +40,7 @@ type Map[K comparable, V any] struct {
 // New creates a new Map.
 func New[K comparable, V any]() *Map[K, V] {
 	m := &Map[K, V]{}
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		m.shards[i].items = make(map[K]V)
 	}
 	return m
@@ -145,7 +145,7 @@ func (m *Map[K, V]) Has(key K) bool {
 func (m *Map[K, V]) Len() int {
 	count := 0
 
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shard := &m.shards[i]
 
 		shard.RLock()
@@ -160,7 +160,7 @@ func (m *Map[K, V]) Len() int {
 func (m *Map[K, V]) Keys() []K {
 	keys := make([]K, 0)
 
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shard := &m.shards[i]
 
 		shard.RLock()
@@ -176,7 +176,7 @@ func (m *Map[K, V]) Keys() []K {
 func (m *Map[K, V]) Values() []V {
 	values := make([]V, 0)
 
-	for i := 0; i < numShards; i++ {
+	for i := range numShards {
 		shard := &m.shards[i]
 
 		shard.RLock()

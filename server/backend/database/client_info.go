@@ -22,6 +22,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -307,4 +308,20 @@ func (i *ClientInfo) IsServerClient() bool {
 	}
 
 	return actorID == time.InitialActorID
+}
+
+// UpdateDocStatus updates the status of the document in the client info.
+func (i *ClientInfo) UpdateDocStatus(
+	docID types.ID,
+	status document.StatusType,
+	cp change.Checkpoint,
+) error {
+	switch status {
+	case document.StatusRemoved:
+		return i.RemoveDocument(docID)
+	case document.StatusDetached:
+		return i.DetachDocument(docID)
+	default:
+		return i.UpdateCheckpoint(docID, cp)
+	}
 }

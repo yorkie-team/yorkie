@@ -60,37 +60,25 @@ func (m *QueryMonitor) CreateCommandMonitor() *event.CommandMonitor {
 	return &event.CommandMonitor{
 		Started: func(ctx context.Context, evt *event.CommandStartedEvent) {
 			if logging.Enabled(zap.DebugLevel) {
-				m.logger.Debugf("STAR: %d(%s): %s",
-					evt.RequestID,
-					evt.CommandName,
-					evt.Command,
-				)
+				m.logger.Debugf("STAR: %d(%s): %s", evt.RequestID, evt.CommandName, evt.Command)
 			}
 		},
 		Succeeded: func(ctx context.Context, evt *event.CommandSucceededEvent) {
 			duration := evt.Duration.Milliseconds()
-			isSlowQuery := m.config.SlowQueryThreshold > 0 && evt.Duration > m.config.SlowQueryThreshold
 
-			if isSlowQuery {
-				m.logger.Warnf("SLOW: %d(%s): %dms",
-					evt.RequestID,
-					evt.CommandName,
-					duration,
-				)
-			} else if logging.Enabled(zap.DebugLevel) {
-				m.logger.Debugf("SUCC: %d(%s): %dms",
-					evt.RequestID,
-					evt.CommandName,
-					duration,
-				)
+			if m.config.SlowQueryThreshold > 0 && evt.Duration > m.config.SlowQueryThreshold {
+				m.logger.Warnf("SLOW: %d(%s): %dms", evt.RequestID, evt.CommandName, duration)
+				return
 			}
+
+			m.logger.Debugf("SUCC: %d(%s): %dms", evt.RequestID, evt.CommandName, duration)
 		},
 		Failed: func(ctx context.Context, evt *event.CommandFailedEvent) {
-			m.logger.Errorf("FAIL: [%dms] %s - Error: %s - RequestID: %d",
-				evt.Duration.Milliseconds(),
+			m.logger.Warnf("FAIL: %d(%s), %s: %dms",
+				evt.RequestID,
 				evt.CommandName,
 				evt.Failure,
-				evt.RequestID,
+				evt.Duration.Milliseconds(),
 			)
 		},
 	}

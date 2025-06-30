@@ -86,7 +86,7 @@ func TestHousekeeping(t *testing.T) {
 
 		var err error
 		lastProjectID := database.DefaultProjectID
-		for i := 0; i < len(projects)/fetchSize; i++ {
+		for i := range len(projects) / fetchSize {
 			lastProjectID, _, err = clients.FindDeactivateCandidates(
 				ctx,
 				be,
@@ -149,7 +149,7 @@ func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo 
 	ctx := context.Background()
 
 	projects := make([]*database.ProjectInfo, 0)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		projects = append(projects, p)

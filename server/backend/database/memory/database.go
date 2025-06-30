@@ -685,14 +685,8 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 		}
 
 		loadedClientDocInfo := loaded.Documents[docRefKey.DocID]
-		serverSeq := loadedClientDocInfo.ServerSeq
-		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
-			serverSeq = clientDocInfo.ServerSeq
-		}
-		clientSeq := loadedClientDocInfo.ClientSeq
-		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
-			clientSeq = clientDocInfo.ClientSeq
-		}
+		serverSeq := max(clientDocInfo.ServerSeq, loadedClientDocInfo.ServerSeq)
+		clientSeq := max(clientDocInfo.ClientSeq, loadedClientDocInfo.ClientSeq)
 		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,

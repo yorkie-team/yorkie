@@ -91,7 +91,7 @@ func BenchmarkDeletionConcurrency(b *testing.B) {
 }
 
 func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
@@ -106,14 +106,14 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			return nil
 		})
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, `{"k1":[]}`, docs[0].Marshal())
 		assert.Equal(b, `{"k1":[]}`, docs[clientCount-1].Marshal())
 
 		// 3. Each client performs edits
-		for k := 0; k < cnt; k++ {
+		for k := range cnt {
 			// Calculate which client's turn it is
 			clientIdx := k % clientCount
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
@@ -125,7 +125,7 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			assert.NoError(b, err)
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
@@ -133,7 +133,7 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 		// 4. One client performs deletions and other client performs insertions
 		deleteRangeSize := 10
 		deleteCount := cnt / deleteRangeSize
-		for k := 0; k < deleteCount; k++ {
+		for k := range deleteCount {
 			clientIdx := k % clientCount
 			clientIdx2 := (clientIdx + 1) % clientCount
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
@@ -156,7 +156,7 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 			assert.NoError(b, clients[clientIdx2].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
@@ -167,7 +167,7 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 }
 
 func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
@@ -188,12 +188,12 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			return nil
 		})
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 
 		// 3. Each client performs edits
-		for k := 0; k < cnt; k++ {
+		for k := range cnt {
 			// Calculate which client's turn it is
 			clientIdx := k % clientCount
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
@@ -205,7 +205,7 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			assert.NoError(b, err)
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
@@ -236,7 +236,7 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 			assert.NoError(b, clients[clientIdx2].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
@@ -247,7 +247,7 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 }
 
 func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
@@ -262,14 +262,14 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			return nil
 		})
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, `{"k1":[]}`, docs[0].Marshal())
 		assert.Equal(b, `{"k1":[]}`, docs[clientCount-1].Marshal())
 
 		// 3. Each client performs edits
-		for k := 0; k < cnt; k++ {
+		for k := range cnt {
 			// Calculate which client's turn it is
 			clientIdx := k % clientCount
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
@@ -281,7 +281,7 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			assert.NoError(b, err)
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetText("k1").Marshal(), docs[clientCount-1].Root().GetText("k1").Marshal())
@@ -293,7 +293,7 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			return nil
 		}, "Delete all at a time")
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, "[]", docs[0].Root().GetText("k1").Marshal())
@@ -305,7 +305,7 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 }
 
 func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
 
@@ -326,12 +326,12 @@ func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			return nil
 		})
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 
 		// 3. Each client performs edits
-		for k := 0; k < cnt; k++ {
+		for k := range cnt {
 			// Calculate which client's turn it is
 			clientIdx := k % clientCount
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
@@ -343,7 +343,7 @@ func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			assert.NoError(b, err)
 			assert.NoError(b, clients[clientIdx].Sync(ctx))
 		}
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, docs[0].Root().GetTree("t").Marshal(), docs[clientCount-1].Root().GetTree("t").Marshal())
@@ -355,7 +355,7 @@ func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 			return nil
 		})
 		assert.NoError(b, err)
-		for j := 0; j < clientCount; j++ {
+		for j := range clientCount {
 			assert.NoError(b, clients[j].Sync(ctx))
 		}
 		assert.Equal(b, `{"type":"root","children":[{"type":"p","children":[]}]}`, docs[0].Root().GetTree("t").Marshal())

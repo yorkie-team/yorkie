@@ -1115,20 +1115,29 @@ func (c *Client) CreateChangeInfos(
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Insert changes into the changes collection.
+	// 02. Optimized batch processing
 	initialServerSeq := docInfo.ServerSeq
-	var models []mongo.WriteModel
+	now := gotime.Now()
+
+	// Pre-allocate models slice to avoid dynamic allocations
+	models := make([]mongo.WriteModel, 0, len(changes))
+	hasOperations := false
+
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
 		cn.ServerSeq = serverSeq
 		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq,
-		}).SetUpdate(bson.M{"$set": bson.M{
+		if len(cn.Operations) > 0 {
+			hasOperations = true
+		}
+
+		// Use InsertOneModel instead of UpdateOneModel with upsert for better performance
+		models = append(models, mongo.NewInsertOneModel().SetDocument(bson.M{
+			"project_id":      refKey.ProjectID,
+			"doc_id":          refKey.DocID,
+			"server_seq":      cn.ServerSeq,
 			"actor_id":        cn.ActorID,
 			"client_seq":      cn.ClientSeq,
 			"lamport":         cn.Lamport,
@@ -1136,29 +1145,26 @@ func (c *Client) CreateChangeInfos(
 			"message":         cn.Message,
 			"operations":      cn.Operations,
 			"presence_change": cn.PresenceChange,
-		}}).SetUpsert(true))
+		}))
 	}
+
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
 			models,
-			options.BulkWrite().SetOrdered(true),
+			options.BulkWrite().SetOrdered(false), // Use unordered for better performance
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
 
 	// 03. Update the document info with the given changes.
-	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
 	}
 
-	for _, cn := range changes {
-		if len(cn.Operations) > 0 {
-			updateFields["updated_at"] = now
-			break
-		}
+	if hasOperations {
+		updateFields["updated_at"] = now
 	}
 
 	if isRemoved {
@@ -1633,9 +1639,8 @@ func (c *Client) FindDocInfosByQuery(
 	}
 
 	limit := pageSize
-	if limit > len(infos) {
-		limit = len(infos)
-	}
+	limit = min(limit, len(infos))
+
 	return &types.SearchResult[*database.DocInfo]{
 		TotalCount: len(infos),
 		Elements:   infos[:limit],
