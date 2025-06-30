@@ -95,10 +95,10 @@ func TestConcurrentMap(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(numRoutines)
 
-		for i := 0; i < numRoutines; i++ {
+		for i := range numRoutines {
 			go func(routineID int) {
 				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
+				for j := range numOperations {
 					key := randomIntn(1000)
 					value := routineID*numOperations + j
 
@@ -133,10 +133,10 @@ func TestConcurrentMap(t *testing.T) {
 		wg.Add(numRoutines * 2)
 
 		// Start setter routines
-		for i := 0; i < numRoutines; i++ {
+		for i := range numRoutines {
 			go func(routineID int) {
 				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
+				for j := range numOperations {
 					key := fmt.Sprintf("key-%d-%d", routineID, j)
 					m.Set(key, j)
 				}
@@ -144,10 +144,10 @@ func TestConcurrentMap(t *testing.T) {
 		}
 
 		// Start getter routines
-		for i := 0; i < numRoutines; i++ {
+		for i := range numRoutines {
 			go func(routineID int) {
 				defer wg.Done()
-				for j := 0; j < numOperations; j++ {
+				for j := range numOperations {
 					key := fmt.Sprintf("key-%d-%d", routineID, j)
 					for {
 						if value, ok := m.Get(key); ok && value == j {
@@ -172,7 +172,7 @@ func TestConcurrentMap(t *testing.T) {
 		const numItems = 10000
 
 		// Populate the map
-		for i := 0; i < numItems; i++ {
+		for i := range numItems {
 			m.Set(i, i)
 		}
 
@@ -182,7 +182,7 @@ func TestConcurrentMap(t *testing.T) {
 		// Start a goroutine to continuously modify the map.
 		go func() {
 			defer wg.Done()
-			for i := 0; i < numItems; i++ {
+			for i := range numItems {
 				m.Set(randomIntn(numItems), i)
 				m.Delete(randomIntn(numItems), func(val int, exists bool) bool {
 					return exists

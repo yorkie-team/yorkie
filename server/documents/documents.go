@@ -124,9 +124,7 @@ func ListDocumentSummaries(
 	paging types.Paging[types.ID],
 	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
-	if paging.PageSize > pageSizeLimit {
-		paging.PageSize = pageSizeLimit
-	}
+	paging.PageSize = min(paging.PageSize, pageSizeLimit)
 
 	infos, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {

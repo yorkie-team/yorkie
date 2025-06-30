@@ -1614,9 +1614,8 @@ func (c *Client) FindDocInfosByQuery(
 	}
 
 	limit := pageSize
-	if limit > len(infos) {
-		limit = len(infos)
-	}
+	limit = min(limit, len(infos))
+
 	return &types.SearchResult[*database.DocInfo]{
 		TotalCount: len(infos),
 		Elements:   infos[:limit],

@@ -820,7 +820,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}))
 		assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), 1))
-		for i := 0; i < int(conf.Backend.SnapshotInterval); i++ {
+		for i := range int(conf.Backend.SnapshotInterval) {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
 				return nil
