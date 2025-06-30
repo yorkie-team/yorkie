@@ -1314,22 +1314,23 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-func (d *DB) FindSnapshotInfoByRefKey(
+// FindSnapshotInfo returns the snapshot info of the given DocRefKey and serverSeq.
+func (d *DB) FindSnapshotInfo(
 	_ context.Context,
-	refKey types.SnapshotRefKey,
+	docKey types.DocRefKey,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
-		refKey.DocID.String(),
-		refKey.ServerSeq,
+		docKey.DocID.String(),
+		serverSeq,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find snapshot by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrSnapshotNotFound)
+		return nil, fmt.Errorf("%s: %w", docKey, database.ErrSnapshotNotFound)
 	}
 
 	return raw.(*database.SnapshotInfo).DeepCopy(), nil

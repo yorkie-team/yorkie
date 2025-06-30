@@ -69,12 +69,9 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 }
 
 // RefKey returns the refKey of the snapshot.
-func (i *SnapshotInfo) RefKey() types.SnapshotRefKey {
-	return types.SnapshotRefKey{
-		DocRefKey: types.DocRefKey{
-			ProjectID: i.ProjectID,
-			DocID:     i.DocID,
-		},
-		ServerSeq: i.ServerSeq,
+func (i *SnapshotInfo) DocRefKey() types.DocRefKey {
+	return types.DocRefKey{
+		ProjectID: i.ProjectID,
+		DocID:     i.DocID,
 	}
 }

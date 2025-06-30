@@ -279,10 +279,11 @@ type Database interface {
 		doc *document.InternalDocument,
 	) error
 
-	// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-	FindSnapshotInfoByRefKey(
+	// FindSnapshotInfo return the snapshot by the given DocRefKey and serverSeq.
+	FindSnapshotInfo(
 		ctx context.Context,
-		refKey types.SnapshotRefKey,
+		refKey types.DocRefKey,
+		serverSeq int64,
 	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
