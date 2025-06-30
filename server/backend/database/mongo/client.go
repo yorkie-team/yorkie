@@ -694,23 +694,24 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
 
-	updater := bson.M{
-		"$max": bson.M{
-			clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
-			clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
-		},
-		"$set": bson.M{
-			clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
-			"updated_at":                            clientInfo.UpdatedAt,
-		},
-	}
-
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
 	}
 
-	if !attached {
+	var updater bson.M
+	if attached {
+		updater = bson.M{
+			"$max": bson.M{
+				clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
+				clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
+			},
+			"$set": bson.M{
+				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+				"updated_at":                            clientInfo.UpdatedAt,
+			},
+		}
+	} else {
 		updater = bson.M{
 			"$set": bson.M{
 				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
@@ -721,7 +722,11 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	syncDocumentKeys(updater, clientInfo.Documents)
+	if docIDs := clientInfo.AttachedDocuments(); len(docIDs) > 0 {
+		updater["$set"].(bson.M)["attached_docs"] = docIDs
+	} else {
+		updater["$unset"] = bson.M{"attached_docs": ""}
+	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
@@ -834,7 +839,7 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	filter := bson.M{
 		"project_id":    docRefKey.ProjectID,
 		"status":        database.ClientActivated,
-		"document_keys": docRefKey.DocID,
+		"attached_docs": docRefKey.DocID,
 	}
 
 	cursor, err := c.collection(ColClients).Find(ctx, filter)
@@ -1573,7 +1578,7 @@ func (c *Client) IsDocumentAttached(
 ) (bool, error) {
 	filter := bson.M{
 		"project_id":    docRefKey.ProjectID,
-		"document_keys": docRefKey.DocID,
+		"attached_docs": docRefKey.DocID,
 	}
 
 	if excludeClientID != "" {
@@ -1675,30 +1680,4 @@ func escapeRegex(str string) string {
 // clientDocInfoKey returns the key for the client document info.
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
-}
-
-// syncDocumentKeys syncs the document keys in the updater map.
-func syncDocumentKeys(updater bson.M, documents map[types.ID]*database.ClientDocInfo) {
-	attachedKeys := make([]types.ID, 0)
-
-	for docID, docInfo := range documents {
-		if docInfo.Status == database.DocumentAttached {
-			attachedKeys = append(attachedKeys, docID)
-		}
-	}
-
-	if len(attachedKeys) == 0 {
-		if unsetOp, exists := updater["$unset"]; exists {
-			unsetOp.(bson.M)["document_keys"] = ""
-		} else {
-			updater["$unset"] = bson.M{"document_keys": ""}
-		}
-		return
-	}
-
-	if setOp, exists := updater["$set"]; exists {
-		setOp.(bson.M)["document_keys"] = attachedKeys
-	} else {
-		updater["$set"] = bson.M{"document_keys": attachedKeys}
-	}
 }

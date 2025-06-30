@@ -149,7 +149,6 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
-
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -164,7 +163,6 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
-
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -309,4 +307,22 @@ func (i *ClientInfo) IsServerClient() bool {
 	}
 
 	return actorID == time.InitialActorID
+}
+
+// AttachedDocuments returns the list of document IDs attached to this client.
+func (i *ClientInfo) AttachedDocuments() []types.ID {
+	if i.Documents == nil {
+		return nil
+	}
+
+	docIDs := make([]types.ID, 0, len(i.Documents))
+	for docID := range i.Documents {
+		if i.Documents[docID].Status != DocumentAttached {
+			continue
+		}
+
+		docIDs = append(docIDs, docID)
+	}
+
+	return docIDs
 }
