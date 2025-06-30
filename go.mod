@@ -10,6 +10,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/google/btree v1.1.3
 	github.com/hashicorp/go-memdb v1.3.5
 	github.com/jedib0t/go-pretty/v6 v6.6.7
 	github.com/lithammer/shortuuid/v4 v4.2.0
@@ -35,8 +36,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
-	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/google/btree v1.1.3 // indirect
+	github.com/go-viper/mapstructure/v2 v2.3.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 )
