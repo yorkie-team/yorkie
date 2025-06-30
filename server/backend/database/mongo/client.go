@@ -739,6 +739,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
 				"updated_at":                            clientInfo.UpdatedAt,
 			},
+			"$addToSet": bson.M{
+				"attached_docs": docInfo.ID,
+			},
 		}
 	} else {
 		updater = bson.M{
@@ -748,13 +751,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
 				"updated_at":                               clientInfo.UpdatedAt,
 			},
+			"$pull": bson.M{
+				"attached_docs": docInfo.ID,
+			},
 		}
-	}
-
-	if docIDs := clientInfo.AttachedDocuments(); len(docIDs) > 0 {
-		updater["$set"].(bson.M)["attached_docs"] = docIDs
-	} else {
-		updater["$unset"] = bson.M{"attached_docs": ""}
 	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
