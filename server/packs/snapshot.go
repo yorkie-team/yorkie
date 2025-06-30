@@ -174,7 +174,7 @@ func storeSnapshot(
 
 	// 01. get the closest snapshot's metadata of this docInfo
 	docRefKey := docInfo.RefKey()
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
+	info, err := be.DB.FindClosestSnapshotInfo(
 		ctx,
 		docRefKey,
 		docInfo.ServerSeq,
@@ -183,10 +183,10 @@ func storeSnapshot(
 	if err != nil {
 		return err
 	}
-	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
+	if info.ServerSeq == docInfo.ServerSeq {
 		return nil
 	}
-	if docInfo.ServerSeq-snapshotInfo.ServerSeq < be.Config.SnapshotInterval {
+	if docInfo.ServerSeq-info.ServerSeq < be.Config.SnapshotInterval {
 		return nil
 	}
 
@@ -194,7 +194,7 @@ func storeSnapshot(
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docRefKey,
-		snapshotInfo.ServerSeq+1,
+		info.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
 	if err != nil {
@@ -202,8 +202,8 @@ func storeSnapshot(
 	}
 
 	// 03. Fetch the snapshot info including its snapshot.
-	if snapshotInfo.ID != "" {
-		snapshotInfo, err = be.DB.FindSnapshotInfoByRefKey(ctx, snapshotInfo.RefKey())
+	if info.ID != "" {
+		info, err = be.DB.FindSnapshotInfo(ctx, info.DocRefKey(), info.ServerSeq)
 		if err != nil {
 			return err
 		}
@@ -211,10 +211,10 @@ func storeSnapshot(
 
 	doc, err := document.NewInternalDocumentFromSnapshot(
 		docInfo.Key,
-		snapshotInfo.ServerSeq,
-		snapshotInfo.Lamport,
-		snapshotInfo.VersionVector,
-		snapshotInfo.Snapshot,
+		info.ServerSeq,
+		info.Lamport,
+		info.VersionVector,
+		info.Snapshot,
 	)
 	if err != nil {
 		return err

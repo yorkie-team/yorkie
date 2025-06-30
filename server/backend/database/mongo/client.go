@@ -1373,15 +1373,16 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-func (c *Client) FindSnapshotInfoByRefKey(
+// FindSnapshotInfo returns the snapshot info of the given DocRefKey and serverSeq.
+func (c *Client) FindSnapshotInfo(
 	ctx context.Context,
-	refKey types.SnapshotRefKey,
+	docKey types.DocRefKey,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"project_id": refKey.ProjectID,
-		"doc_id":     refKey.DocID,
-		"server_seq": refKey.ServerSeq,
+		"project_id": docKey.ProjectID,
+		"doc_id":     docKey.DocID,
+		"server_seq": serverSeq,
 	})
 
 	snapshotInfo := &database.SnapshotInfo{}
