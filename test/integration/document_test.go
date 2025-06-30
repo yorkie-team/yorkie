@@ -988,7 +988,7 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		assert.True(t, d1.IsAttached())
 		assert.NoError(t, c1.Sync(ctx))
 
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetCounter("c").Increase(1)
 				return nil

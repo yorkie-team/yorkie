@@ -36,7 +36,7 @@ import (
  */
 func parseSimpleXML(s string) []string {
 	var res []string
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		current := ""
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var (
@@ -31,7 +31,7 @@ var (
 
 // UserClaims is a JWT claims struct for a user.
 type UserClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Username string `json:"username"`
 }
@@ -53,8 +53,8 @@ func NewTokenManager(secretKey string, tokenDuration time.Duration) *TokenManage
 // Generate generates a new token for the user.
 func (m *TokenManager) Generate(username string) (string, error) {
 	claims := UserClaims{
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(m.tokenDuration).Unix(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.tokenDuration)),
 		},
 		Username: username,
 	}

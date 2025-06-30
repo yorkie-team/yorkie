@@ -29,10 +29,7 @@ func GetChangesRange(
 	if paging.IsForward {
 		if prevSeq == 0 {
 			from = 1
-			to = size
-			if size > lastSeq {
-				to = lastSeq
-			}
+			to = min(size, lastSeq)
 		} else if prevSeq >= lastSeq {
 			from = lastSeq + 1
 			to = lastSeq + 1

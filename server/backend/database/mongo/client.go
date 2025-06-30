@@ -49,9 +49,12 @@ const (
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config  *Config
-	client  *mongo.Client
-	vvCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	config *Config
+	client *mongo.Client
+
+	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
+	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
+	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -59,12 +62,25 @@ func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
-	client, err := mongo.Connect(
-		ctx,
-		options.Client().
-			ApplyURI(conf.ConnectionURI).
-			SetRegistry(NewRegistryBuilder().Build()),
-	)
+	clientOptions := options.Client().
+		ApplyURI(conf.ConnectionURI).
+		SetRegistry(NewRegistryBuilder().Build())
+
+	if conf.MonitoringEnabled {
+		threshold, err := gotime.ParseDuration(conf.MonitoringSlowQueryThreshold)
+		if err != nil {
+			return nil, fmt.Errorf("parse slow query threshold: %w", err)
+		}
+
+		monitor := NewQueryMonitor(&MonitorConfig{
+			Enabled:            conf.MonitoringEnabled,
+			SlowQueryThreshold: threshold,
+		})
+
+		clientOptions.SetMonitor(monitor.CreateCommandMonitor())
+	}
+
+	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("connect to mongo: %w", err)
 	}
@@ -81,17 +97,29 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	cache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
 	if err != nil {
-		return nil, fmt.Errorf("initialize VV cache: %w", err)
+		return nil, fmt.Errorf("initialize docinfo cache: %w", err)
+	}
+
+	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize change range store: %w", err)
+	}
+
+	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		vvCache: cache,
+		config:      conf,
+		client:      client,
+		docCache:    docCache,
+		changeCache: changeCache,
+		vectorCache: vectorCache,
 	}, nil
 }
 
@@ -101,7 +129,8 @@ func (c *Client) Close() error {
 		return fmt.Errorf("close mongo client: %w", err)
 	}
 
-	c.vvCache.Purge()
+	c.docCache.Purge()
+	c.vectorCache.Purge()
 
 	return nil
 }
@@ -924,12 +953,12 @@ func (c *Client) FindDocInfoByKey(
 		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := database.DocInfo{}
+	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return &info, nil
 }
 
 // FindDocInfosByKeys finds the documents of the given keys.
@@ -980,12 +1009,12 @@ func (c *Client) FindDocInfoByRefKey(
 		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
+	info := database.DocInfo{}
+	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
-	return &docInfo, nil
+	return &info, nil
 }
 
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
@@ -993,6 +1022,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) error {
+	c.docCache.Remove(refKey)
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
@@ -1048,67 +1078,75 @@ func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,
 	checkpoint change.Checkpoint,
-	changes []*change.Change,
+	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	// 01. Fetch the document info.
-	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
-	if err != nil {
-		return nil, change.InitialCheckpoint, err
+	cached, ok := c.docCache.Get(refKey)
+	if !ok {
+		info, err := c.FindDocInfoByRefKey(ctx, refKey)
+		if err != nil {
+			return nil, change.InitialCheckpoint, err
+		}
+		c.docCache.Add(refKey, info)
+		cached = info
 	}
+	docInfo := cached.DeepCopy()
+
+	// 01. Fetch the document info.
 	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Insert changes into the changes collection.
+	// 02. Optimized batch processing
 	initialServerSeq := docInfo.ServerSeq
-	var models []mongo.WriteModel
+	now := gotime.Now()
+
+	// Pre-allocate models slice to avoid dynamic allocations
+	models := make([]mongo.WriteModel, 0, len(changes))
+	hasOperations := false
+
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
-		cn.SetServerSeq(serverSeq)
-		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
+		cn.ServerSeq = serverSeq
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
-		encodedOperations, err := database.EncodeOperations(cn.Operations())
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
+		if len(cn.Operations) > 0 {
+			hasOperations = true
 		}
 
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq(),
-		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        cn.ID().ActorID(),
-			"client_seq":      cn.ID().ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
-		}}).SetUpsert(true))
+		// Use InsertOneModel instead of UpdateOneModel with upsert for better performance
+		models = append(models, mongo.NewInsertOneModel().SetDocument(bson.M{
+			"project_id":      refKey.ProjectID,
+			"doc_id":          refKey.DocID,
+			"server_seq":      cn.ServerSeq,
+			"actor_id":        cn.ActorID,
+			"client_seq":      cn.ClientSeq,
+			"lamport":         cn.Lamport,
+			"version_vector":  cn.VersionVector,
+			"message":         cn.Message,
+			"operations":      cn.Operations,
+			"presence_change": cn.PresenceChange,
+		}))
 	}
+
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
 			models,
-			options.BulkWrite().SetOrdered(true),
+			options.BulkWrite().SetOrdered(false), // Use unordered for better performance
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
 
 	// 03. Update the document info with the given changes.
-	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
 	}
 
-	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
-			updateFields["updated_at"] = now
-			break
-		}
+	if hasOperations {
+		updateFields["updated_at"] = now
 	}
 
 	if isRemoved {
@@ -1123,15 +1161,19 @@ func (c *Client) CreateChangeInfos(
 		"$set": updateFields,
 	})
 	if err != nil {
+		c.docCache.Remove(refKey)
 		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
+		c.docCache.Remove(refKey)
 		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
 		docInfo.RemovedAt = now
 	}
+
+	c.docCache.Add(refKey, docInfo)
 
 	return docInfo, checkpoint, nil
 }
@@ -1178,6 +1220,7 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 3. Update document
+	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
 		"_id":        docInfo.ID,
@@ -1267,24 +1310,41 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	if from > to {
 		return nil, nil
 	}
-	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
-			"$gte": from,
-			"$lte": to,
-		},
-	}, options.Find())
-	if err != nil {
-		return nil, fmt.Errorf("find changes: %w", err)
+
+	// Get or create a change range store for this document
+	var store *ChangeStore
+	if cached, ok := c.changeCache.Get(docRefKey); ok {
+		store = cached
+	} else {
+		store = NewChangeStore()
+		c.changeCache.Add(docRefKey, store)
 	}
 
-	var infos []*database.ChangeInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch changes: %w", err)
+	// Calculate missing ranges and fetch them in a single operation
+	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
+		cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"server_seq": bson.M{
+				"$gte": from,
+				"$lte": to,
+			},
+		}, options.Find())
+		if err != nil {
+			return nil, fmt.Errorf("find changes: %w", err)
+		}
+
+		var infos []*database.ChangeInfo
+		if err := cursor.All(ctx, &infos); err != nil {
+			return nil, fmt.Errorf("fetch changes: %w", err)
+		}
+
+		return infos, nil
+	}); err != nil {
+		return nil, err
 	}
 
-	return infos, nil
+	return store.ChangesInRange(from, to), nil
 }
 
 // CreateSnapshotInfo stores the snapshot of the given document.
@@ -1395,7 +1455,7 @@ func (c *Client) UpdateMinVersionVector(
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
 	// This is only for the current client and does not affect the version vector of other clients.
-	if vvMap, ok := c.vvCache.Get(docRefKey); ok {
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
 		attached, err := clientInfo.IsAttached(docRefKey.DocID)
 		if err != nil {
 			return nil, err
@@ -1422,7 +1482,7 @@ func (c *Client) GetMinVersionVector(
 	docRefKey types.DocRefKey,
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
-	if !c.vvCache.Contains(docRefKey) {
+	if !c.vectorCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
 		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -1440,10 +1500,10 @@ func (c *Client) GetMinVersionVector(
 			infoMap.Set(infos[i].ClientID, infos[i].VersionVector)
 		}
 
-		c.vvCache.Add(docRefKey, infoMap)
+		c.vectorCache.Add(docRefKey, infoMap)
 	}
 
-	vvMap, ok := c.vvCache.Get(docRefKey)
+	vvMap, ok := c.vectorCache.Get(docRefKey)
 	if !ok {
 		return nil, fmt.Errorf("version vectors from cache: %w", database.ErrVersionVectorNotFound)
 	}
@@ -1561,9 +1621,8 @@ func (c *Client) FindDocInfosByQuery(
 	}
 
 	limit := pageSize
-	if limit > len(infos) {
-		limit = len(infos)
-	}
+	limit = min(limit, len(infos))
+
 	return &types.SearchResult[*database.DocInfo]{
 		TotalCount: len(infos),
 		Elements:   infos[:limit],
@@ -1620,6 +1679,7 @@ func (c *Client) purgeDocumentInternals(
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
+	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,

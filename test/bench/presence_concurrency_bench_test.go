@@ -37,7 +37,7 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 	// Reset the timer to exclude setup time
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		// Stop the timer during setup
 		b.StopTimer()
 
