@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.18] - 2025-07-01
+
+### Added
+
+- Enhance document attachment with schema validation by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1345
+
+### Changed
+
+- Rollback dedicated vv encoder and presence slice encoder by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1343
+- Adjust logging level in QueryMonitor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1346
+- Introduce Go 1.23 functions by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1348
+- Bump github.com/go-viper/mapstructure/v2 from 2.2.1 to 2.3.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/1347
+- Replace wildcard index with regular index on attached_docs by @sigmaith in https://github.com/yorkie-team/yorkie/pull/1315
+- Replace SnapshotRefKey with DocRefKey and ServerSeq by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1350
+
+### Fixed
+
+- Fix memDB iteration logic to match MongoDB behavior by @raararaara in https://github.com/yorkie-team/yorkie/pull/1354
+
 ## [v0.6.17] - 2025-06-23
 
 ### Added
