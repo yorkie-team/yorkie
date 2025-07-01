@@ -1564,7 +1564,13 @@ func (d *DB) FindDocInfosByPaging(
 	var docInfos []*database.DocInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.DocInfo)
-		if len(docInfos) >= paging.PageSize || info.ProjectID != projectID {
+		// NOTE(raararaara): Unlike MongoDB, which treats PageSize == 0 as "no limit",
+		// memDB requires explicit handling. If PageSize == 0, do not apply any limit.
+		if paging.PageSize > 0 && len(docInfos) >= paging.PageSize {
+			break
+		}
+
+		if info.ProjectID != projectID {
 			break
 		}
 
