@@ -52,12 +52,12 @@ func Deactivate(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := FindActiveClientInfo(ctx, be, refKey)
+	info, err := FindActiveClientInfo(ctx, be, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	for docID, clientDocInfo := range clientInfo.Documents {
+	for docID, clientDocInfo := range info.Documents {
 		if clientDocInfo.Status != database.DocumentAttached {
 			continue
 		}
@@ -71,7 +71,7 @@ func Deactivate(
 			return nil, err
 		}
 
-		actorID, err := clientInfo.ID.ToActorID()
+		actorID, err := info.ID.ToActorID()
 		if err != nil {
 			return nil, err
 		}
