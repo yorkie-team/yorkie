@@ -8,7 +8,7 @@ This document provides an overview of the Yorkie load test script and how to pro
 
 #### Prerequisites
 
-**Install k6**: Ensure you have k6 installed on your machine. You can download it from [k6.io](https://k6.io/docs/getting-started/installation/).
+**Install k6**: Ensure you have k6 installed on your machine. You can download it from [k6.io](https://grafana.com/docs/k6/latest/set-up/install-k6/).
 
 #### Run the Yorkie Server
 
