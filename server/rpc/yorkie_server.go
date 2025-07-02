@@ -100,6 +100,10 @@ func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
 	req *connect.Request[api.DeactivateClientRequest],
 ) (*connect.Response[api.DeactivateClientResponse], error) {
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -130,6 +134,10 @@ func (s *yorkieServer) AttachDocument(
 	req *connect.Request[api.AttachDocumentRequest],
 ) (*connect.Response[api.AttachDocumentResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -176,7 +184,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID, DocKey: pack.DocumentKey}
 	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
 	if err != nil {
 		return nil, err
@@ -244,6 +252,10 @@ func (s *yorkieServer) DetachDocument(
 	req *connect.Request[api.DetachDocumentRequest],
 ) (*connect.Response[api.DetachDocumentResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -332,6 +344,10 @@ func (s *yorkieServer) PushPullChanges(
 	req *connect.Request[api.PushPullChangesRequest],
 ) (*connect.Response[api.PushPullChangesResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -471,6 +487,14 @@ func (s *yorkieServer) WatchDocument(
 	req *connect.Request[api.WatchDocumentRequest],
 	stream *connect.ServerStream[api.WatchDocumentResponse],
 ) error {
+	if req.Msg.ClientKey == "" {
+		return clients.ErrInvalidClientKey
+	}
+
+	if req.Msg.DocumentKey == "" {
+		return documents.ErrInvalidDocumentKey
+	}
+
 	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return err
@@ -622,6 +646,14 @@ func (s *yorkieServer) Broadcast(
 	ctx context.Context,
 	req *connect.Request[api.BroadcastRequest],
 ) (*connect.Response[api.BroadcastResponse], error) {
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
+	if req.Msg.DocumentKey == "" {
+		return nil, documents.ErrInvalidDocumentKey
+	}
+
 	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
