@@ -509,7 +509,7 @@ func (s *adminServer) UpdateDocument(
 	if err != nil {
 		return nil, err
 	}
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID, DocKey: docInfo.Key}
 
 	// Check document attachment status for schema updates
 	if updateMode != documents.UpdateModeRootOnly {

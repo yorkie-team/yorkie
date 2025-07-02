@@ -842,6 +842,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     info.ID,
+			DocKey:    info.Key,
 		}, "")
 		if err != nil {
 			return nil, err

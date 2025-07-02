@@ -53,6 +53,7 @@ func Compact(
 	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docInfo.ID,
+		DocKey:    docInfo.Key,
 	}, "")
 	if err != nil {
 		return err

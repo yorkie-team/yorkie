@@ -129,6 +129,7 @@ func (s *clusterServer) CompactDocument(
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docId,
+		DocKey:    docKey,
 	})
 	if err != nil {
 		return nil, err
@@ -159,6 +160,7 @@ func (s *clusterServer) PurgeDocument(
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docID,
+		DocKey:    docKey,
 	})
 	if err != nil {
 		return nil, err
