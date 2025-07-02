@@ -24,7 +24,10 @@ import (
 	"sync/atomic"
 )
 
-// Map is a map of Presence with mutl-routine safety.
+// Map is a multi-routine safe map that stores presences.
+// It uses a read-write mutex to allow concurrent reads and exclusive writes.
+// It also uses an atomic boolean to track whether the map has been copied,
+// which helps in optimizing the memory usage when storing presences in CopyOnWrite mode.
 type Map struct {
 	mu        sync.RWMutex
 	presences map[string]Presence
@@ -53,18 +56,6 @@ func (m *Map) Store(clientID string, presence Presence) {
 	}
 
 	m.presences[clientID] = presence.DeepCopy()
-}
-
-// Range calls f sequentially for each key and value present in the map.
-func (m *Map) Range(f func(clientID string, presence Presence) bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for clientID, presence := range m.presences {
-		if !f(clientID, presence) {
-			break
-		}
-	}
 }
 
 // Load returns the presence for the given clientID.
@@ -128,9 +119,10 @@ func (m *Map) Delete(clientID string) {
 		}
 		m.presences = newPresences
 		m.copied.Store(true)
-	} else {
-		delete(m.presences, clientID)
+		return
 	}
+
+	delete(m.presences, clientID)
 }
 
 // DeepCopy copies itself deeply.
@@ -138,12 +130,17 @@ func (m *Map) DeepCopy() *Map {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	copied := &Map{
+	clone := &Map{
 		presences: m.presences,
 	}
 	m.copied.Store(false)
-	copied.copied.Store(false)
-	return copied
+	clone.copied.Store(false)
+	return clone
+}
+
+// ToMap returns a shallow copy of the presence map.
+func (m *Map) ToMap() map[string]Presence {
+	return m.DeepCopy().presences
 }
 
 // Presence represents custom presence that can be defined by the client.
