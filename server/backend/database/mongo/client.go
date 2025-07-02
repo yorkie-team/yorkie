@@ -1140,11 +1140,11 @@ func (c *Client) CreateChangeInfos(
 			hasOperations = true
 		}
 
-		// Use InsertOneModel instead of UpdateOneModel with upsert for better performance
-		models = append(models, mongo.NewInsertOneModel().SetDocument(bson.M{
-			"project_id":      refKey.ProjectID,
-			"doc_id":          refKey.DocID,
-			"server_seq":      cn.ServerSeq,
+		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
+			"project_id": refKey.ProjectID,
+			"doc_id":     refKey.DocID,
+			"server_seq": cn.ServerSeq,
+		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":        cn.ActorID,
 			"client_seq":      cn.ClientSeq,
 			"lamport":         cn.Lamport,
@@ -1152,14 +1152,14 @@ func (c *Client) CreateChangeInfos(
 			"message":         cn.Message,
 			"operations":      cn.Operations,
 			"presence_change": cn.PresenceChange,
-		}))
+		}}).SetUpsert(true))
 	}
 
 	if len(changes) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
 			models,
-			options.BulkWrite().SetOrdered(false), // Use unordered for better performance
+			options.BulkWrite().SetOrdered(false),
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("bulk write changes: %w", err)
 		}
