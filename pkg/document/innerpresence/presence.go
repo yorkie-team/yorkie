@@ -21,12 +21,14 @@ package innerpresence
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // Map is a map of Presence with mutl-routine safety.
 type Map struct {
 	mu        sync.RWMutex
 	presences map[string]Presence
+	copied    atomic.Bool
 }
 
 // NewMap creates a new instance of Map.
@@ -40,7 +42,17 @@ func NewMap() *Map {
 func (m *Map) Store(clientID string, presence Presence) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.presences[clientID] = presence
+
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			newPresences[k] = v
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+	}
+
+	m.presences[clientID] = presence.DeepCopy()
 }
 
 // Range calls f sequentially for each key and value present in the map.
@@ -75,11 +87,22 @@ func (m *Map) LoadOrStore(clientID string, presence Presence) Presence {
 	defer m.mu.Unlock()
 
 	actual, ok := m.presences[clientID]
-	if !ok {
-		m.presences[clientID] = presence
-		return presence
+	if ok {
+		return actual
 	}
-	return actual
+
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			newPresences[k] = v
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+	}
+
+	clone := presence.DeepCopy()
+	m.presences[clientID] = clone
+	return clone
 }
 
 // Has returns whether the given clientID exists.
@@ -96,7 +119,18 @@ func (m *Map) Delete(clientID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.presences, clientID)
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			if k != clientID {
+				newPresences[k] = v
+			}
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+	} else {
+		delete(m.presences, clientID)
+	}
 }
 
 // DeepCopy copies itself deeply.
@@ -105,11 +139,10 @@ func (m *Map) DeepCopy() *Map {
 	defer m.mu.RUnlock()
 
 	copied := &Map{
-		presences: make(map[string]Presence, len(m.presences)),
+		presences: m.presences,
 	}
-	for clientID, presence := range m.presences {
-		copied.presences[clientID] = presence.DeepCopy()
-	}
+	m.copied.Store(false)
+	copied.copied.Store(false)
 	return copied
 }
 
