@@ -74,7 +74,7 @@ spec:
           "{{ .Values.yorkie.args.dbConnectionUri }}",
           "--mongo-yorkie-database",
           "{{ .Values.yorkie.args.dbName }}",
-          "--enable-pprof",
+          "--pprof-enabled",
           "--rpc-port",
           "{{ .Values.yorkie.ports.rpcPort }}",
           "--profiling-port",

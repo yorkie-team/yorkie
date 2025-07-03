@@ -41,7 +41,7 @@ type Server struct {
 // NewServer creates an instance of Server.
 func NewServer(conf *Config, metrics *prometheus.Metrics) *Server {
 	serveMux := http.NewServeMux()
-	if conf.EnablePprof {
+	if conf.PprofEnabled {
 		serveMux.Handle(httpPrefixPProf+"/", http.HandlerFunc(pprof.Index))
 		serveMux.Handle(httpPrefixPProf+"/profile", http.HandlerFunc(pprof.Profile))
 		serveMux.Handle(httpPrefixPProf+"/symbol", http.HandlerFunc(pprof.Symbol))
