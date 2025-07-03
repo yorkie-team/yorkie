@@ -71,7 +71,7 @@ docker-latest: ## builds docker images with latest tag
 
 start: ## runs the server in the background and redirects output to a log file
 	CGO_ENABLED=0 go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
-	./bin/yorkie server --mongo-connection-uri mongodb://localhost:27017 --enable-pprof > yorkie-server.log 2>&1 &
+	./bin/yorkie server --mongo-connection-uri mongodb://localhost:27017 --pprof-enabled > yorkie-server.log 2>&1 &
 	@echo "Server is running in background. Check logs in yorkie-server.log"
 	@echo "To stop the server, run: pkill -f 'yorkie server'"
 

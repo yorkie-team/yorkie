@@ -14,7 +14,7 @@ This document provides an overview of the Yorkie load test script and how to pro
 
 ```bash
 # Start the Yorkie server
-yorkie server --mongo-connection-uri mongodb://localhost:27017 --enable-pprof
+yorkie server --mongo-connection-uri mongodb://localhost:27017 --pprof-enabled
 ```
 
 #### Run the Load Test

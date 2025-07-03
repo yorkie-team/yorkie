@@ -25,8 +25,8 @@ Profiling:
   # Port is the port to listen on for serving metrics `/metrics` and pprof (default: 8081).
   Port: 8081
 
-  # EnablePprof is whether to enable the pprof `/debug/pprof` endpoint.
-  EnablePprof: false
+  # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
+  PprofEnabled: false
 
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:

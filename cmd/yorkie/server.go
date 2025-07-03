@@ -60,6 +60,8 @@ var (
 	mongoMonitoringEnabled            bool
 	mongoMonitoringSlowQueryThreshold string
 
+	pprofEnabled bool
+
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookMinWaitInterval time.Duration
 	authWebhookRequestTimeout  time.Duration
@@ -95,6 +97,8 @@ func newServerCmd() *cobra.Command {
 			conf.RPC.Auth.GitHubAuthURL = authGitHubAuthURL
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
 			conf.RPC.Auth.GitHubDeviceAuthURL = authGitHubDeviceAuthURL
+
+			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
@@ -243,8 +247,8 @@ func init() {
 		"Profiling port",
 	)
 	cmd.Flags().BoolVar(
-		&conf.Profiling.EnablePprof,
-		"enable-pprof",
+		&pprofEnabled,
+		"pprof-enabled",
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
