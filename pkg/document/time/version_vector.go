@@ -23,6 +23,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/yorkie-team/yorkie/pkg/binary"
 )
 
 // InitialVersionVector is the initial version vector.
@@ -76,7 +78,7 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 	vv := NewVersionVector()
 
 	// Read the number of entries
-	length, err := readInt64(buffer)
+	length, err := binary.ReadInt64(buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +90,7 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 			return nil, fmt.Errorf("read ActorID: %w", err)
 		}
 
-		version, err := readInt64(buffer)
+		version, err := binary.ReadInt64(buffer)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +275,7 @@ func (v VersionVector) Bytes() ([]byte, error) {
 	buffer := bytes.Buffer{}
 
 	// Write the number of entries in the VersionVector
-	if err := writeInt64(&buffer, int64(len(v))); err != nil {
+	if err := binary.WriteInt64(&buffer, int64(len(v))); err != nil {
 		return nil, fmt.Errorf("write length: %w", err)
 	}
 
@@ -282,36 +284,10 @@ func (v VersionVector) Bytes() ([]byte, error) {
 		if _, err := buffer.Write(actorID[:]); err != nil {
 			return nil, fmt.Errorf("write ActorID: %w", err)
 		}
-		if err := writeInt64(&buffer, version); err != nil {
+		if err := binary.WriteInt64(&buffer, version); err != nil {
 			return nil, fmt.Errorf("write version: %w", err)
 		}
 	}
 
 	return buffer.Bytes(), nil
-}
-
-func writeInt64(buffer *bytes.Buffer, value int64) error {
-	data := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		data[i] = byte(value >> (56 - i*8))
-	}
-
-	if _, err := buffer.Write(data); err != nil {
-		return fmt.Errorf("write int64: %w", err)
-	}
-
-	return nil
-}
-
-func readInt64(buffer *bytes.Reader) (int64, error) {
-	data := make([]byte, 8)
-	if _, err := buffer.Read(data); err != nil {
-		return 0, fmt.Errorf("read int64: %w", err)
-	}
-
-	var value int64
-	for i := 0; i < 8; i++ {
-		value = (value << 8) | int64(data[i])
-	}
-	return value, nil
 }

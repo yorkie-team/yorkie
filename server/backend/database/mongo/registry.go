@@ -28,7 +28,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var tID = reflect.TypeOf(types.ID(""))
@@ -143,7 +142,7 @@ func presenceChangeEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val
 		return nil
 	}
 
-	bytes, err := database.EncodePresenceChange(presenceChange)
+	bytes, err := presenceChange.Bytes()
 	if err != nil {
 		return fmt.Errorf("encode error: %w", err)
 	}
@@ -174,7 +173,7 @@ func presenceChangeDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val
 			return fmt.Errorf("decode error: %w", err)
 		}
 
-		presenceChange, err := database.PresenceChangeFromBytes(data)
+		presenceChange, err := innerpresence.ChangeFromBytes(data)
 		if err != nil {
 			return fmt.Errorf("decode error: %w", err)
 		}

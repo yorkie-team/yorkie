@@ -19,7 +19,19 @@
 // all other clients watching the same document.
 package innerpresence
 
-import "github.com/yorkie-team/yorkie/pkg/document/time"
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/yorkie-team/yorkie/pkg/binary"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
+
+// Constants for presence change encoding.
+const (
+	ChangeTypePutByte   = 1
+	ChangeTypeClearByte = 2
+)
 
 // ChangeType represents the type of presence change.
 type ChangeType string
@@ -45,4 +57,129 @@ func (c *Change) Execute(actorID time.ActorID, presences *Map) {
 	} else {
 		presences.Store(actorID.String(), c.Presence)
 	}
+}
+
+// Bytes encodes the presence change into bytes array using custom binary format.
+// This is faster than protobuf encoding for simple presence changes.
+func (c *Change) Bytes() ([]byte, error) {
+	if c == nil {
+		return nil, nil
+	}
+
+	buffer := bytes.Buffer{}
+
+	// Write change type
+	if c.ChangeType == Put {
+		if err := buffer.WriteByte(ChangeTypePutByte); err != nil {
+			return nil, fmt.Errorf("write change type: %w", err)
+		}
+
+		// Write presence data only for Put type
+		if c.Presence != nil {
+			// Write presence count
+			if err := binary.WriteUint32(&buffer, uint32(len(c.Presence))); err != nil {
+				return nil, fmt.Errorf("write presence count: %w", err)
+			}
+
+			// Write each key-value pair
+			for k, v := range c.Presence {
+				// Write key length and key
+				if err := binary.WriteUint32(&buffer, uint32(len(k))); err != nil {
+					return nil, fmt.Errorf("write key length: %w", err)
+				}
+				if _, err := buffer.WriteString(k); err != nil {
+					return nil, fmt.Errorf("write key: %w", err)
+				}
+
+				// Write value length and value
+				if err := binary.WriteUint32(&buffer, uint32(len(v))); err != nil {
+					return nil, fmt.Errorf("write value length: %w", err)
+				}
+				if _, err := buffer.WriteString(v); err != nil {
+					return nil, fmt.Errorf("write value: %w", err)
+				}
+			}
+		} else {
+			// Empty presence
+			if err := binary.WriteUint32(&buffer, 0); err != nil {
+				return nil, fmt.Errorf("write empty presence count: %w", err)
+			}
+		}
+	} else {
+		if err := buffer.WriteByte(ChangeTypeClearByte); err != nil {
+			return nil, fmt.Errorf("write change type: %w", err)
+		}
+	}
+
+	return buffer.Bytes(), nil
+}
+
+// ChangeFromBytes creates a new Change from the given bytes array using custom binary format.
+// This is faster than protobuf decoding for simple presence changes.
+func ChangeFromBytes(data []byte) (*Change, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	buffer := bytes.NewReader(data)
+	change := &Change{}
+
+	// Read change type
+	changeType, err := buffer.ReadByte()
+	if err != nil {
+		return nil, fmt.Errorf("read change type: %w", err)
+	}
+
+	switch changeType {
+	case ChangeTypePutByte:
+		// Read presence count
+		presenceCount, err := binary.ReadUint32(buffer)
+		if err != nil {
+			return nil, fmt.Errorf("read presence count: %w", err)
+		}
+
+		presence := make(map[string]string, presenceCount)
+
+		for range presenceCount {
+			// Read key length
+			keyLen, err := binary.ReadUint32(buffer)
+			if err != nil {
+				return nil, fmt.Errorf("read key length: %w", err)
+			}
+
+			// Read key
+			keyBytes := make([]byte, keyLen)
+			if _, err := buffer.Read(keyBytes); err != nil {
+				return nil, fmt.Errorf("read key: %w", err)
+			}
+			key := string(keyBytes)
+
+			// Read value length
+			valueLen, err := binary.ReadUint32(buffer)
+			if err != nil {
+				return nil, fmt.Errorf("read value length: %w", err)
+			}
+
+			// Read value
+			valueBytes := make([]byte, valueLen)
+			if _, err := buffer.Read(valueBytes); err != nil {
+				return nil, fmt.Errorf("read value: %w", err)
+			}
+			value := string(valueBytes)
+
+			presence[key] = value
+		}
+
+		change.ChangeType = Put
+		change.Presence = presence
+
+	case ChangeTypeClearByte:
+		change.ChangeType = Clear
+		change.Presence = nil
+
+	default:
+		return nil, fmt.Errorf("unknown change type: %d", changeType)
+	}
+
+	return change, nil
 }

@@ -133,36 +133,38 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 		return nil
 	}
 
-	clone := &ChangeInfo{}
-	*clone = *i
+	clone := &ChangeInfo{
+		ID:            i.ID,
+		ProjectID:     i.ProjectID,
+		DocID:         i.DocID,
+		ServerSeq:     i.ServerSeq,
+		ClientSeq:     i.ClientSeq,
+		Lamport:       i.Lamport,
+		ActorID:       i.ActorID,
+		VersionVector: i.VersionVector.DeepCopy(),
+		Message:       i.Message,
+	}
+
+	// Deep copy operations slice
+	if i.Operations != nil {
+		clone.Operations = make([][]byte, len(i.Operations))
+		for idx, op := range i.Operations {
+			if op != nil {
+				clone.Operations[idx] = make([]byte, len(op))
+				copy(clone.Operations[idx], op)
+			}
+		}
+	}
+
+	// Deep copy presence change
+	if i.PresenceChange != nil {
+		clone.PresenceChange = &innerpresence.Change{
+			ChangeType: i.PresenceChange.ChangeType,
+		}
+		if i.PresenceChange.Presence != nil {
+			clone.PresenceChange.Presence = i.PresenceChange.Presence.DeepCopy()
+		}
+	}
 
 	return clone
-}
-
-// EncodePresenceChange encodes the given PresenceChange into bytes array.
-func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
-	if p == nil {
-		return nil, nil
-	}
-
-	bytes, err := proto.Marshal(converter.ToPresenceChange(p))
-	if err != nil {
-		return nil, fmt.Errorf("encode presence change to bytes: %w", err)
-	}
-
-	return bytes, nil
-}
-
-// PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
-func PresenceChangeFromBytes(bytes []byte) (*innerpresence.Change, error) {
-	if bytes == nil {
-		return nil, nil
-	}
-
-	pbChange := &api.PresenceChange{}
-	if err := proto.Unmarshal(bytes, pbChange); err != nil {
-		return nil, fmt.Errorf("decode presence change: %w", err)
-	}
-
-	return converter.FromPresenceChange(pbChange), nil
 }
