@@ -19,6 +19,7 @@ import {Client, Stream} from "k6/net/grpc";
 import {check, sleep} from "k6";
 import {Counter, Rate, Trend} from "k6/metrics";
 import {b64encode} from "k6/encoding";
+import {scenario} from "k6/execution";
 
 const API_URL = __ENV.API_URL || "http://localhost:8080";
 const API_KEY = __ENV.API_KEY || "";
@@ -309,6 +310,15 @@ function openWatchStream(docKey: string) {
     );
 }
 
+function keepAliveUntilEnd() {
+    let timeLeft = scenario.endTime - Date.now();
+
+    while (timeLeft > 0) {
+        sleep(Math.min(1, timeLeft / 1000));
+        timeLeft = scenario.endTime - Date.now();
+    }
+}
+
 export function watcher() {
     const docKey = pickDocKey();
     const [cid, cKey] = activateClient();
@@ -320,9 +330,9 @@ export function watcher() {
     const stream = openWatchStream(docKey);
 
     stream.on("data", (msg) => {
-        console.log(`Watcher received data: ${JSON.stringify(msg)}`);
-
-        [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
+        // console.log(`Watcher received data: ${JSON.stringify(msg)}`);
+        watchEvent.add(1);
+        // [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
     });
 
     stream.on("error", () => watchError.add(1));
@@ -330,8 +340,9 @@ export function watcher() {
     stream.write({client_id: cid, document_id: docId});
     watchOpen.add(1);
 
-    sleep(120);
-    stream.close();
+    keepAliveUntilEnd();
+
+    stream.end();
     deactivateClient(cid, cKey);
 }
 
@@ -346,9 +357,9 @@ export function updater() {
     const stream = openWatchStream(docKey);
 
     stream.on("data", (msg) => {
-        console.log(`Watcher received data: ${JSON.stringify(msg)}`);
-
-        [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
+        // console.log(`Watcher received data: ${JSON.stringify(msg)}`);
+        watchEvent.add(1);
+        // [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
     });
 
     stream.on("error", () => watchError.add(1));
@@ -356,16 +367,21 @@ export function updater() {
     stream.write({client_id: cid, document_id: docId});
     watchOpen.add(1);
 
-    const stop = Date.now() + 120_000;
-    while (Date.now() < stop) {
-        [cSeq, sSeq] = pushpullChanges(
-            cid, docId, docKey,
-            cSeq, sSeq,
-            Date.now(),
-        );
-        sleep(3);
-    }
+    const writeLoop = () => {
+        let cSeq = 2;
+        let sSeq = sSeq0;
 
-    stream.close();
+        while (scenario.endTime - Date.now() > 0) {
+            [cSeq, sSeq] = pushpullChanges(
+                cid, docId, docKey,
+                cSeq, sSeq,
+                Date.now(),
+            );
+            sleep(2);
+        }
+    };
+    writeLoop();
+
+    stream.end();
     deactivateClient(cid, cKey);
 }
