@@ -23,12 +23,27 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/yorkie-team/yorkie/pkg/binary"
 )
 
 // InitialVersionVector is the initial version vector.
 var InitialVersionVector = VersionVector{}
+
+// bufferPool is a sync.Pool for bytes.Buffer to reduce memory allocations.
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Buffer{}
+	},
+}
+
+// readerPool is a sync.Pool for bytes.Reader to reduce memory allocations.
+var readerPool = sync.Pool{
+	New: func() interface{} {
+		return &bytes.Reader{}
+	},
+}
 
 // VersionVector is similar to vector clock, but it is synced with Lamport
 // timestamp of the current change.
@@ -74,11 +89,14 @@ func MinVersionVector(vectors ...VersionVector) VersionVector {
 
 // VersionVectorFromBytes creates a new instance of VersionVector from the given bytes.
 func VersionVectorFromBytes(data []byte) (VersionVector, error) {
-	buffer := bytes.NewReader(data)
+	reader := readerPool.Get().(*bytes.Reader)
+	defer readerPool.Put(reader)
+
+	reader.Reset(data)
 	vv := NewVersionVector()
 
 	// Read the number of entries
-	length, err := binary.ReadInt64(buffer)
+	length, err := binary.ReadInt64(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +104,11 @@ func VersionVectorFromBytes(data []byte) (VersionVector, error) {
 	// Read each ActorID and its corresponding version
 	for i := int64(0); i < length; i++ {
 		var actorID ActorID
-		if _, err := buffer.Read(actorID[:]); err != nil {
+		if _, err := reader.Read(actorID[:]); err != nil {
 			return nil, fmt.Errorf("read ActorID: %w", err)
 		}
 
-		version, err := binary.ReadInt64(buffer)
+		version, err := binary.ReadInt64(reader)
 		if err != nil {
 			return nil, err
 		}
@@ -272,10 +290,14 @@ func (v VersionVector) Keys() ([]ActorID, error) {
 
 // Bytes returns the byte representation of the VersionVector.
 func (v VersionVector) Bytes() ([]byte, error) {
-	buffer := bytes.Buffer{}
+	buffer := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		buffer.Reset()
+		bufferPool.Put(buffer)
+	}()
 
 	// Write the number of entries in the VersionVector
-	if err := binary.WriteInt64(&buffer, int64(len(v))); err != nil {
+	if err := binary.WriteInt64(buffer, int64(len(v))); err != nil {
 		return nil, fmt.Errorf("write length: %w", err)
 	}
 
@@ -284,10 +306,13 @@ func (v VersionVector) Bytes() ([]byte, error) {
 		if _, err := buffer.Write(actorID[:]); err != nil {
 			return nil, fmt.Errorf("write ActorID: %w", err)
 		}
-		if err := binary.WriteInt64(&buffer, version); err != nil {
+		if err := binary.WriteInt64(buffer, version); err != nil {
 			return nil, fmt.Errorf("write version: %w", err)
 		}
 	}
 
-	return buffer.Bytes(), nil
+	// Make a copy of the buffer's bytes before returning it to the pool
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
 }
