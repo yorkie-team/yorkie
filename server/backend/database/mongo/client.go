@@ -646,6 +646,7 @@ func (c *Client) ActivateClient(
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 			"project_id": projectID,
+			"key":        key,
 			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -671,6 +672,7 @@ func (c *Client) ActivateClient(
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -694,6 +696,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.ClientKey,
 		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -759,6 +762,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
+		"key":        clientInfo.Key,
 		"_id":        clientInfo.ID,
 	}, updater)
 
@@ -838,6 +842,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
 			ProjectID: project.ID,
 			DocID:     info.ID,
+			DocKey:    info.Key,
 		}, "")
 		if err != nil {
 			return nil, err
@@ -947,10 +952,10 @@ func (c *Client) FindDocInfoByKey(
 		},
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by key(%s %s): %w", projectID, docKey, result.Err())
 	}
 
 	info := database.DocInfo{}
@@ -1003,10 +1008,10 @@ func (c *Client) FindDocInfoByRefKey(
 		"_id":        refKey.DocID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find document: %w", result.Err())
+		return nil, fmt.Errorf("find document by ref key(%s): %w", refKey, result.Err())
 	}
 
 	info := database.DocInfo{}
@@ -1026,6 +1031,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
+		"key":        refKey.DocKey,
 	}, bson.M{
 		"$set": bson.M{
 			"removed_at": gotime.Now(),
@@ -1033,10 +1039,10 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
-		return fmt.Errorf("update document info status to removed: %w", result.Err())
+		return fmt.Errorf("update document info status to removed(%s): %w", refKey, result.Err())
 	}
 
 	return nil
@@ -1050,6 +1056,7 @@ func (c *Client) UpdateDocInfoSchema(
 ) error {
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.DocKey,
 		"_id":        refKey.DocID,
 	}, bson.M{
 		"$set": bson.M{
@@ -1058,7 +1065,7 @@ func (c *Client) UpdateDocInfoSchema(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("update document schema: %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
 		return fmt.Errorf("update document schema: %w", result.Err())
@@ -1079,7 +1086,7 @@ func (c *Client) GetDocumentsCount(
 		},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("count documents: %w", err)
+		return 0, fmt.Errorf("count documents(%s): %w", projectID, err)
 	}
 
 	return count, nil
@@ -1181,6 +1188,7 @@ func (c *Client) CreateChangeInfos(
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
+		"key":        refKey.DocKey,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
@@ -1191,7 +1199,7 @@ func (c *Client) CreateChangeInfos(
 	}
 	if res.MatchedCount == 0 {
 		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
@@ -1210,7 +1218,7 @@ func (c *Client) CompactChangeInfos(
 	changes []*change.Change,
 ) error {
 	// 1. Purge the resources of the document.
-	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID); err != nil {
+	if _, err := c.purgeDocumentInternals(ctx, docInfo.ProjectID, docInfo.ID, docInfo.Key); err != nil {
 		return err
 	}
 
@@ -1248,6 +1256,7 @@ func (c *Client) CompactChangeInfos(
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
+		"key":        docInfo.Key,
 		"_id":        docInfo.ID,
 		"server_seq": lastServerSeq,
 	}, bson.M{
@@ -1260,7 +1269,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("update document: %s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
@@ -1828,7 +1837,7 @@ func (c *Client) PurgeDocument(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 ) (map[string]int64, error) {
-	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID)
+	res, err := c.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, docRefKey.DocKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1836,6 +1845,7 @@ func (c *Client) PurgeDocument(
 	if _, err = c.collection(ColDocuments).DeleteOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"_id":        docRefKey.DocID,
+		"key":        docRefKey.DocKey,
 	}); err != nil {
 		return nil, fmt.Errorf("delete document: %w", err)
 	}
@@ -1847,10 +1857,11 @@ func (c *Client) purgeDocumentInternals(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	docKey key.Key,
 ) (map[string]int64, error) {
 	counts := make(map[string]int64)
 
-	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID, DocKey: docKey})
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,

@@ -149,7 +149,7 @@ func TestClientWithShardedDB(t *testing.T) {
 			docInfo1.ID,
 			docKey2,
 		)
-		assert.NoError(t, err)
+		assert.Error(t, err)
 
 		// 03. Check if there are two documents with the same ID.
 		infos, err := helper.FindDocInfosWithID(
@@ -157,7 +157,7 @@ func TestClientWithShardedDB(t *testing.T) {
 			docInfo1.ID,
 		)
 		assert.NoError(t, err)
-		assert.Len(t, infos, 2)
+		assert.Len(t, infos, 1)
 
 		// 04. Check if the document is correctly found using docKey and docID.
 		result, err := cli.FindDocInfoByRefKey(

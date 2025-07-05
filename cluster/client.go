@@ -115,6 +115,7 @@ func (c *Client) DetachDocument(
 	ctx context.Context,
 	project *types.Project,
 	clientID time.ActorID,
+	clientKey string,
 	docID types.ID,
 	docKey key.Key,
 ) error {
@@ -123,6 +124,7 @@ func (c *Client) DetachDocument(
 		withShardKey(connect.NewRequest(&api.ClusterServiceDetachDocumentRequest{
 			Project:     converter.ToProject(project),
 			ClientId:    clientID.String(),
+			ClientKey:   clientKey,
 			DocumentId:  docID.String(),
 			DocumentKey: docKey.String(),
 		}), project.PublicKey, docKey.String()),

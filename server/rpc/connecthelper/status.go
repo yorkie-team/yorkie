@@ -53,6 +53,7 @@ var errorToConnectCode = map[error]connect.Code{
 	types.ErrInvalidID:                 connect.CodeInvalidArgument,
 	clients.ErrInvalidClientID:         connect.CodeInvalidArgument,
 	clients.ErrInvalidClientKey:        connect.CodeInvalidArgument,
+	documents.ErrInvalidDocumentKey:    connect.CodeInvalidArgument,
 	key.ErrInvalidKey:                  connect.CodeInvalidArgument,
 	types.ErrEmptyProjectFields:        connect.CodeInvalidArgument,
 	yson.ErrInvalidYSON:                connect.CodeInvalidArgument,
@@ -120,6 +121,7 @@ var errorToCode = map[error]string{
 	types.ErrInvalidID:              "ErrInvalidID",
 	clients.ErrInvalidClientID:      "ErrInvalidClientID",
 	clients.ErrInvalidClientKey:     "ErrInvalidClientKey",
+	documents.ErrInvalidDocumentKey: "ErrInvalidDocumentKey",
 	key.ErrInvalidKey:               "ErrInvalidKey",
 	types.ErrEmptyProjectFields:     "ErrEmptyProjectFields",
 

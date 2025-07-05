@@ -40,6 +40,11 @@ import (
 	yschema "github.com/yorkie-team/yorkie/pkg/schema"
 )
 
+var (
+	// ErrInvalidDocumentKey is returned when the given Key is not valid DocumentKey.
+	ErrInvalidDocumentKey = errors.New("invalid document key")
+)
+
 // SnapshotMaxLen is the maximum length of the document snapshot in the
 // document summary.
 const SnapshotMaxLen = 50

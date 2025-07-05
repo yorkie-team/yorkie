@@ -65,13 +65,14 @@ func (s *clusterServer) DetachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// 01. Create request pack with presence clear change.
-	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID, DocKey: docKey}
 	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
@@ -128,6 +129,7 @@ func (s *clusterServer) CompactDocument(
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docId,
+		DocKey:    docKey,
 	})
 	if err != nil {
 		return nil, err
@@ -158,6 +160,7 @@ func (s *clusterServer) PurgeDocument(
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docID,
+		DocKey:    docKey,
 	})
 	if err != nil {
 		return nil, err
