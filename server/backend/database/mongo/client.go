@@ -1056,6 +1056,7 @@ func (c *Client) UpdateDocInfoSchema(
 ) error {
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
+		"key":        refKey.DocKey,
 		"_id":        refKey.DocID,
 	}, bson.M{
 		"$set": bson.M{
@@ -1064,7 +1065,7 @@ func (c *Client) UpdateDocInfoSchema(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("update document schema: %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
 		return fmt.Errorf("update document schema: %w", result.Err())
@@ -1844,6 +1845,7 @@ func (c *Client) PurgeDocument(
 	if _, err = c.collection(ColDocuments).DeleteOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"_id":        docRefKey.DocID,
+		"key":        docRefKey.DocKey,
 	}); err != nil {
 		return nil, fmt.Errorf("delete document: %w", err)
 	}
