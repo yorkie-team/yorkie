@@ -34,8 +34,8 @@ sharded:
     rules:
       - collectionName: clients
         shardKeys:
-          - name: project_id
-            method: "1"
+          - name: key
+            method: "\"hashed\""
         unique: false
       - collectionName: documents
         shardKeys:

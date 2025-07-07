@@ -100,6 +100,10 @@ func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
 	req *connect.Request[api.DeactivateClientRequest],
 ) (*connect.Response[api.DeactivateClientResponse], error) {
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -115,6 +119,7 @@ func (s *yorkieServer) DeactivateClient(
 	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -129,6 +134,10 @@ func (s *yorkieServer) AttachDocument(
 	req *connect.Request[api.AttachDocumentRequest],
 ) (*connect.Response[api.AttachDocumentResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -159,6 +168,7 @@ func (s *yorkieServer) AttachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -242,6 +252,10 @@ func (s *yorkieServer) DetachDocument(
 	req *connect.Request[api.DetachDocumentRequest],
 ) (*connect.Response[api.DetachDocumentResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -273,6 +287,7 @@ func (s *yorkieServer) DetachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -329,6 +344,10 @@ func (s *yorkieServer) PushPullChanges(
 	req *connect.Request[api.PushPullChangesRequest],
 ) (*connect.Response[api.PushPullChangesResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -363,6 +382,7 @@ func (s *yorkieServer) PushPullChanges(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -399,6 +419,10 @@ func (s *yorkieServer) RemoveDocument(
 	req *connect.Request[api.RemoveDocumentRequest],
 ) (*connect.Response[api.RemoveDocumentResponse], error) {
 	// 01. Validate the request and verify access
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -429,6 +453,7 @@ func (s *yorkieServer) RemoveDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
+		ClientKey: req.Msg.ClientKey,
 	})
 	if err != nil {
 		return nil, err
@@ -466,6 +491,10 @@ func (s *yorkieServer) WatchDocument(
 	req *connect.Request[api.WatchDocumentRequest],
 	stream *connect.ServerStream[api.WatchDocumentResponse],
 ) error {
+	if req.Msg.ClientKey == "" {
+		return clients.ErrInvalidClientKey
+	}
+
 	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return err
@@ -480,6 +509,7 @@ func (s *yorkieServer) WatchDocument(
 	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
+		ClientKey: req.Msg.ClientKey,
 	}); err != nil {
 		return err
 	}
@@ -616,6 +646,10 @@ func (s *yorkieServer) Broadcast(
 	ctx context.Context,
 	req *connect.Request[api.BroadcastRequest],
 ) (*connect.Response[api.BroadcastResponse], error) {
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
 	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -644,6 +678,7 @@ func (s *yorkieServer) Broadcast(
 	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
+		ClientKey: req.Msg.ClientKey,
 	}); err != nil {
 		return nil, err
 	}

@@ -89,8 +89,8 @@ var collectionInfos = []collectionInfo{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
-				{Key: "key", Value: int32(1)},
+				{Key: "key", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {

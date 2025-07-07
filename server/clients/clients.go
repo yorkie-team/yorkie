@@ -80,6 +80,7 @@ func Deactivate(
 			ctx,
 			project,
 			actorID,
+			info.Key,
 			docID,
 			docInfo.Key,
 		); err != nil {

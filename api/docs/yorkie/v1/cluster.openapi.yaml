@@ -270,6 +270,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         documentId:
           additionalProperties: false
           description: ""

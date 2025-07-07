@@ -35,11 +35,12 @@ func (r DocRefKey) String() string {
 type ClientRefKey struct {
 	ProjectID ID
 	ClientID  ID
+	ClientKey string
 }
 
 // String returns the string representation of the given ClientRefKey.
 func (r ClientRefKey) String() string {
-	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
+	return fmt.Sprintf("Client (%s.%s.%s)", r.ProjectID, r.ClientID, r.ClientKey)
 }
 
 // EventRefKey represents an identifier used to reference an event.

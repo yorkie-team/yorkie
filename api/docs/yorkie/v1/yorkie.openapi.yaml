@@ -336,6 +336,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         schemaKey:
           additionalProperties: false
           description: ""
@@ -381,6 +386,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false
@@ -550,6 +560,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
       title: DeactivateClientRequest
       type: object
     yorkie.v1.DeactivateClientResponse:
@@ -571,6 +586,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false
@@ -1346,6 +1366,11 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
+          type: string
         documentId:
           additionalProperties: false
           description: ""
@@ -1384,6 +1409,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false
@@ -1652,6 +1682,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        clientKey:
+          additionalProperties: false
+          description: ""
+          title: client_key
           type: string
         documentId:
           additionalProperties: false
