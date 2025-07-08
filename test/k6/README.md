@@ -43,7 +43,10 @@ This will run the test with a single document with 500 virtual users.
 #### Profiling the Yorkie Server with pprof
 
 The Yorkie server is running with pprof enabled on port 8081.
-To access the profiling reports, you can:
+
+##### CPU Profiling
+
+To collect CPU profile data, you can:
 
 ```bash
 curl http://localhost:8081/debug/pprof/profile\?seconds\=150 --output cpu.out
@@ -54,4 +57,19 @@ Then open interactive pprof web tool with:
 
 ```bash
 go tool pprof -http=:9090 cpu.out
+```
+
+##### Memory Profiling
+
+To collect heap memory profile data(In the middle of the load test):
+
+```bash
+curl http://localhost:8081/debug/pprof/heap --output mem.out
+```
+
+This will download current heap memory profile.
+Then open interactive pprof web tool with:
+
+```bash
+go tool pprof -http=:9090 mem.out
 ```
