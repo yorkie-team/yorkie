@@ -18,6 +18,7 @@ package mongo
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/event"
@@ -74,12 +75,42 @@ func (m *QueryMonitor) CreateCommandMonitor() *event.CommandMonitor {
 			m.logger.Debugf("SUCC: %d(%s): %dms", evt.RequestID, evt.CommandName, duration)
 		},
 		Failed: func(ctx context.Context, evt *event.CommandFailedEvent) {
+			duration := evt.Duration.Milliseconds()
+
+			if m.isExpectedFailure(evt) {
+				m.logger.Debugf("FAIL: %d(%s), %s: %dms",
+					evt.RequestID,
+					evt.CommandName,
+					evt.Failure,
+					duration,
+				)
+				return
+			}
+
+			// Log unexpected failures as warnings
 			m.logger.Warnf("FAIL: %d(%s), %s: %dms",
 				evt.RequestID,
 				evt.CommandName,
 				evt.Failure,
-				evt.Duration.Milliseconds(),
+				duration,
 			)
 		},
 	}
+}
+
+// isExpectedFailure determines if a command failure is expected and should be logged at debug level.
+// This helps reduce noise from normal distributed system operations like leadership competition.
+func (m *QueryMonitor) isExpectedFailure(evt *event.CommandFailedEvent) bool {
+	if evt.Failure == nil {
+		return false
+	}
+
+	failureStr := evt.Failure.Error()
+
+	// Check for duplicate key errors which are expected in leadership competition
+	if strings.Contains(failureStr, "E11000 duplicate key") && strings.Contains(failureStr, "leaderships") {
+		return true
+	}
+
+	return false
 }
