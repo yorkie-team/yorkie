@@ -757,16 +757,16 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
 		"project_id": clientInfo.ProjectID,
 		"_id":        clientInfo.ID,
 	}, updater)
 
-	if result.Err() != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
-		}
-		return fmt.Errorf("update client info: %w", result.Err())
+	if err != nil {
+		return fmt.Errorf("update client info: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
 	}
 
 	return nil
