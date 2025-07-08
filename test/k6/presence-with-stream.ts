@@ -26,7 +26,7 @@ const API_KEY = __ENV.API_KEY || "";
 const DOC_PREFIX = __ENV.DOC_KEY_PREFIX || "test-watch";
 const TEST_MODE = __ENV.TEST_MODE || "skew"; // skew | even
 const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "300", 10);
-const VU_PER_DOC = parseInt(__ENV.VU_PER_DOCS || "10", 10);
+const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10", 10);
 const WATCHER_RATIO = parseFloat(__ENV.WATCHER_RATIO || "0.7"); // 0~1
 
 export const options = {
@@ -43,9 +43,9 @@ export const options = {
         updaters: {
             executor: "ramping-vus",
             stages: [
-                {duration: "1m", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "1m", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "30s", target: 0},
+                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
+                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
+                {duration: "15s", target: 0},
             ],
             exec: "updater",
         },
@@ -79,7 +79,7 @@ const deactivateClientsTime = new Trend("deactivate_clients_time", true);
 
 function pickDocKey() {
     if (TEST_MODE === "skew") return DOC_PREFIX;
-    const cnt = CONCURRENCY / VU_PER_DOC;
+    const cnt = CONCURRENCY / VU_PER_DOCS;
     return `${DOC_PREFIX}-${__VU % cnt}`;
 }
 
@@ -248,23 +248,8 @@ function pushpullChanges(
     docKey: string,
     clientSeq: number,
     serverSeq: number,
-    sentAt: number | null = null,
 ): [number, number] {
     const start = Date.now();
-
-    const changes = sentAt !== null
-        ? [{
-            id: {
-                clientSeq,
-                actorId: hexToBase64(clientID),
-                versionVector: {},
-            },
-            presenceChange: {
-                type: "CHANGE_TYPE_PUT",
-                presence: {data: {sentAt: sentAt.toString()}},
-            },
-        }]
-        : [];
 
     const payload = {
         clientId: clientID,
@@ -272,7 +257,7 @@ function pushpullChanges(
         changePack: {
             documentKey: docKey,
             checkpoint: {clientSeq, serverSeq},
-            changes,
+            changes: [],
             versionVector: {},
         },
     };
@@ -283,14 +268,14 @@ function pushpullChanges(
         {"x-shard-key": `${API_KEY}/${docKey}`},
     );
 
-    const nextServerSeq = Number(resp.changePack.checkpoint.serverSeq);
-    const nextClientSeq = sentAt === null ? clientSeq : clientSeq + 1;
+    const lastServerSeq = Number(resp.changePack.checkpoint.serverSeq);
+    const lastClientSeq = clientSeq;
 
     pushpulls.add(1);
     pushpullsSuccessRate.add(true);
     pushpullsTime.add(Date.now() - start);
 
-    return [nextClientSeq, nextServerSeq];
+    return [lastClientSeq, lastServerSeq];
 }
 
 const PROTO_DIR   = ["../../api"];
@@ -375,7 +360,6 @@ export function updater() {
             [cSeq, sSeq] = pushpullChanges(
                 cid, docId, docKey,
                 cSeq, sSeq,
-                Date.now(),
             );
             sleep(2);
         }
