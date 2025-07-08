@@ -135,6 +135,149 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// TryLeadership attempts to acquire or renew leadership with the given lease duration.
+// If leaseToken is empty, it attempts to acquire new leadership.
+// If leaseToken is provided, it attempts to renew the existing lease.
+func (c *Client) TryLeadership(
+	ctx context.Context,
+	nodeID,
+	leaseToken string,
+	leaseDuration gotime.Duration,
+) (*database.LeadershipInfo, error) {
+	now := gotime.Now()
+	expiresAt := now.Add(leaseDuration)
+
+	if leaseToken == "" {
+		// Try to acquire new leadership
+		return c.tryAcquireLeadership(ctx, nodeID, expiresAt, now)
+	}
+
+	// Try to renew existing leadership
+	return c.tryRenewLeadership(ctx, nodeID, leaseToken, expiresAt, now)
+}
+
+// FindLeadership returns the current leadership information.
+func (c *Client) FindLeadership(
+	ctx context.Context,
+) (*database.LeadershipInfo, error) {
+	result := c.collection(ColLeaderships).FindOne(ctx, bson.M{})
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find leadership: %w", result.Err())
+	}
+
+	var info database.LeadershipInfo
+	if err := result.Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode leadership info: %w", err)
+	}
+
+	// Check if leadership has expired
+	if info.IsExpired() {
+		return nil, nil
+	}
+
+	return &info, nil
+}
+
+// tryAcquireLeadership attempts to acquire new leadership
+func (c *Client) tryAcquireLeadership(
+	ctx context.Context,
+	nodeID string,
+	expiresAt gotime.Time,
+	now gotime.Time,
+) (*database.LeadershipInfo, error) {
+	// Generate a new lease token
+	leaseToken, err := database.GenerateLeaseToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate lease token: %w", err)
+	}
+
+	// Try to find existing leadership
+	existingResult := c.collection(ColLeaderships).FindOne(ctx, bson.M{})
+
+	var term int64 = 1
+	if existingResult.Err() == nil {
+		var existing database.LeadershipInfo
+		if err := existingResult.Decode(&existing); err == nil && !existing.IsExpired() {
+			// Leadership exists and is valid, return the existing leadership
+			return &existing, nil
+		}
+		// Leadership expired, increment term
+		term = existing.Term + 1
+	}
+
+	// Create new info
+	info := &database.LeadershipInfo{
+		NodeID:     nodeID,
+		LeaseToken: leaseToken,
+		ElectedAt:  now,
+		ExpiresAt:  expiresAt,
+		RenewedAt:  now,
+		Term:       term,
+	}
+
+	// Use upsert to handle race conditions
+	_, err = c.collection(ColLeaderships).ReplaceOne(
+		ctx,
+		bson.M{},
+		info,
+		options.Replace().SetUpsert(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("upsert leadership: %w", err)
+	}
+
+	return info, nil
+}
+
+// tryRenewLeadership attempts to renew existing leadership
+func (c *Client) tryRenewLeadership(
+	ctx context.Context,
+	nodeID string,
+	leaseToken string,
+	expiresAt gotime.Time,
+	now gotime.Time,
+) (*database.LeadershipInfo, error) {
+	// Generate a new lease token for renewal
+	newLeaseToken, err := database.GenerateLeaseToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate lease token: %w", err)
+	}
+
+	// Try to update the existing leadership with the correct token and nodeID
+	result := c.collection(ColLeaderships).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"node_id":     nodeID,
+			"lease_token": leaseToken,
+		},
+		bson.M{
+			"$set": bson.M{
+				"lease_token": newLeaseToken,
+				"expires_at":  expiresAt,
+				"renewed_at":  now,
+			},
+		},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("invalid token or node: %w", database.ErrInvalidLeaseToken)
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("renew leadership: %w", result.Err())
+	}
+
+	var leadershipInfo database.LeadershipInfo
+	if err := result.Decode(&leadershipInfo); err != nil {
+		return nil, fmt.Errorf("decode leadership info: %w", err)
+	}
+
+	return &leadershipInfo, nil
+}
+
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
 func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,

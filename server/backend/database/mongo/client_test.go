@@ -61,6 +61,10 @@ func TestClient(t *testing.T) {
 		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
 	})
 
+	t.Run("RunLeadership Test", func(t *testing.T) {
+		testcases.RunLeadershipTest(t, cli)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
