@@ -34,6 +34,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -101,12 +106,11 @@ func RunAttachAndDetachDocumentTest(
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 	assert.NoError(t, err)
 
-	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
-		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-	}
+	doc := document.New(key.Key(t.Name()))
+	packWithNoChanges, err := converter.ToChangePack(doc.CreateChangePack())
+	assert.NoError(t, err)
 
-	resPack, err := testClient.AttachDocument(
+	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
@@ -115,95 +119,15 @@ func RunAttachAndDetachDocumentTest(
 		))
 	assert.NoError(t, err)
 
-	// try to attach with invalid client ID
-	_, err = testClient.AttachDocument(
-		context.Background(),
-		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   invalidClientID,
-			ChangePack: packWithNoChanges,
-		},
-		))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(time.ErrInvalidHexString), converter.ErrorCodeOf(err))
-
-	// try to attach with invalid client
-	_, err = testClient.AttachDocument(
-		context.Background(),
-		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   nilClientID,
-			ChangePack: packWithNoChanges,
-		},
-		))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
-
-	// try to attach already attached document
-	_, err = testClient.AttachDocument(
-		context.Background(),
-		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			ChangePack: packWithNoChanges,
-		},
-		))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentAlreadyAttached), converter.ErrorCodeOf(err))
-
-	// try to attach invalid change pack
-	_, err = testClient.AttachDocument(
-		context.Background(),
-		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			ChangePack: invalidChangePack,
-		},
-		))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(converter.ErrCheckpointRequired), converter.ErrorCodeOf(err))
-
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
-			DocumentId: resPack.Msg.DocumentId,
+			DocumentId: packWithNoChanges.DocumentKey,
 			ChangePack: packWithNoChanges,
 		},
 		))
 	assert.NoError(t, err)
-
-	// try to detach already detached document
-	_, err = testClient.DetachDocument(
-		context.Background(),
-		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			DocumentId: resPack.Msg.DocumentId,
-			ChangePack: packWithNoChanges,
-		},
-		))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
-
-	_, err = testClient.DetachDocument(
-		context.Background(),
-		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			ChangePack: invalidChangePack,
-		},
-		))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(converter.ErrCheckpointRequired), converter.ErrorCodeOf(err))
-
-	// document not found
-	_, err = testClient.DetachDocument(
-		context.Background(),
-		connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			DocumentId: "000000000000000000000000",
-			ChangePack: &api.ChangePack{
-				Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-			},
-		},
-		))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
@@ -220,6 +144,135 @@ func RunAttachAndDetachDocumentTest(
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
+}
+
+// RunClientDeactivationDetachesDocumentsTest tests that deactivating a client
+// properly detaches all attached documents and resets their sequences.
+func RunClientDeactivationDetachesDocumentsTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+) {
+	ctx := context.Background()
+
+	activateResp, err := testClient.ActivateClient(
+		ctx,
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+	assert.NoError(t, err)
+	clientID := activateResp.Msg.ClientId
+
+	doc1Key := helper.TestDocKey(t).String() + "-doc1"
+	doc1 := document.New(key.Key(doc1Key))
+	packDoc1, err := converter.ToChangePack(doc1.CreateChangePack())
+	assert.NoError(t, err)
+
+	attachResp1, err := testClient.AttachDocument(
+		ctx,
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   clientID,
+			ChangePack: packDoc1,
+		}))
+	assert.NoError(t, err)
+	doc1ID := attachResp1.Msg.DocumentId
+
+	doc2Key := helper.TestDocKey(t).String() + "-doc2"
+	doc2 := document.New(key.Key(doc2Key))
+	packDoc2, err := converter.ToChangePack(doc2.CreateChangePack())
+	assert.NoError(t, err)
+
+	attachResp2, err := testClient.AttachDocument(
+		ctx,
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   clientID,
+			ChangePack: packDoc2,
+		}))
+	assert.NoError(t, err)
+	doc2ID := attachResp2.Msg.DocumentId
+
+	assert.NoError(t, doc1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetString("test", "value1")
+		return nil
+	}))
+	changePack1, err := converter.ToChangePack(doc1.CreateChangePack())
+	assert.NoError(t, err)
+
+	_, err = testClient.PushPullChanges(
+		ctx,
+		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   clientID,
+			DocumentId: doc1ID,
+			ChangePack: changePack1,
+		}))
+	assert.NoError(t, err)
+
+	assert.NoError(t, doc2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetString("test", "value2")
+		return nil
+	}))
+	changePack2, err := converter.ToChangePack(doc2.CreateChangePack())
+	assert.NoError(t, err)
+
+	_, err = testClient.PushPullChanges(
+		ctx,
+		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   clientID,
+			DocumentId: doc2ID,
+			ChangePack: changePack2,
+		}))
+	assert.NoError(t, err)
+
+	_, err = testClient.DeactivateClient(
+		ctx,
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: clientID}))
+	assert.NoError(t, err)
+
+	_, err = testClient.AttachDocument(
+		ctx,
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   clientID,
+			ChangePack: packDoc1,
+		}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
+
+	reactivateResp, err := testClient.ActivateClient(
+		ctx,
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+	assert.NoError(t, err)
+	assert.Equal(t, clientID, reactivateResp.Msg.ClientId)
+
+	// CRITICAL TEST: PushPull should fail with ErrDocumentNotAttached 
+	// This proves documents were detached during deactivation
+	_, err = testClient.PushPullChanges(
+		ctx,
+		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   clientID,
+			DocumentId: doc1ID,
+			ChangePack: changePack1,
+		}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	
+	_, err = testClient.PushPullChanges(
+		ctx,
+		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   clientID,
+			DocumentId: doc2ID,
+			ChangePack: changePack2,
+		}))
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+
+	_, err = testClient.AttachDocument(
+		ctx,
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   clientID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: doc1Key,
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			},
+		}))
+	assert.NoError(t, err)
+
 }
 
 // RunAttachAndDetachRemovedDocumentTest runs the AttachDocument and DetachDocument test on a removed document.

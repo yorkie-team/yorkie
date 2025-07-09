@@ -584,7 +584,7 @@ func (d *DB) ActivateClient(
 	return clientInfo, nil
 }
 
-// DeactivateClient deactivates a client.
+// DeactivateClient deactivates a client and detaches all attached documents.
 func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
@@ -611,6 +611,18 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	// the stored objects are returned instead of new objects. This can cause
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
 	clientInfo = clientInfo.DeepCopy()
+	
+	// Detach all attached documents and reset their sequences
+	for docID, docInfo := range clientInfo.Documents {
+		if docInfo.Status == database.DocumentAttached {
+			clientInfo.Documents[docID] = &database.ClientDocInfo{
+				Status:    database.DocumentDetached,
+				ServerSeq: 0,
+				ClientSeq: 0,
+			}
+		}
+	}
+	
 	clientInfo.Deactivate()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {

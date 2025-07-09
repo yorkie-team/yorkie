@@ -157,6 +157,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		testcases.RunAttachAndDetachDocumentTest(t, testClient)
 	})
 
+	t.Run("client deactivation detaches documents test", func(t *testing.T) {
+		testcases.RunClientDeactivationDetachesDocumentsTest(t, testClient)
+	})
+
 	t.Run("attach/detach on removed document test", func(t *testing.T) {
 		testcases.RunAttachAndDetachRemovedDocumentTest(t, testClient)
 	})
@@ -221,6 +225,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin update project test", func(t *testing.T) {
 		testcases.RunAdminUpdateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
+	})
+
+	t.Run("admin update project cache invalidation test", func(t *testing.T) {
+		testcases.RunAdminUpdateProjectCacheInvalidationTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
 
 	t.Run("admin list documents test", func(t *testing.T) {

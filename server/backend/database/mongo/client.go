@@ -608,15 +608,39 @@ func (c *Client) ActivateClient(
 
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	// First, find the client to get document information
+	findResult := c.collection(ColClients).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
+	})
+	
+	var existingClient database.ClientInfo
+	if err := findResult.Decode(&existingClient); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
+		}
+		return nil, fmt.Errorf("find client info: %w", err)
+	}
+
+	updateDoc := bson.M{
 		"$set": bson.M{
 			"status":     database.ClientDeactivated,
 			"updated_at": gotime.Now(),
 		},
-	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+	}
+
+	for docID, docInfo := range existingClient.Documents {
+		if docInfo.Status == database.DocumentAttached {
+			updateDoc["$set"].(bson.M)[clientDocInfoKey(docID, "status")] = database.DocumentDetached
+			updateDoc["$set"].(bson.M)[clientDocInfoKey(docID, "server_seq")] = 0
+			updateDoc["$set"].(bson.M)[clientDocInfoKey(docID, "client_seq")] = 0
+		}
+	}
+
+	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
+	}, updateDoc, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {

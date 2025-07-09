@@ -137,7 +137,7 @@ func TestClient(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("DeactivateClient test", func(t *testing.T) {
-		testcases.RunDeactivateClientTest(t, cli)
+	t.Run("ClientDeactivationDetachesDocuments test", func(t *testing.T) {
+		testcases.RunClientDeactivationDetachesDocumentsTest(t, cli, dummyProjectID)
 	})
 }

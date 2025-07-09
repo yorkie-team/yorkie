@@ -1720,114 +1720,115 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-// RunDeactivateClientTest runs the deactivate client tests for the given db.
-func RunDeactivateClientTest(t *testing.T, db database.Database) {
-	t.Run("deactivate client with attached documents", func(t *testing.T) {
+// RunClientDeactivationDetachesDocumentsTest runs the client deactivation document detachment tests for the given db.
+func RunClientDeactivationDetachesDocumentsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("deactivate client detaches all attached documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		// Create a test project
-		project, err := db.CreateProjectInfo(
-			ctx,
-			fmt.Sprintf("%s-DeactivateClientTest", t.Name()),
-			otherOwnerID,
-			clientDeactivateThreshold,
-		)
-		assert.NoError(t, err)
-
-		// Activate a client
-		clientInfo, err := db.ActivateClient(ctx, project.ID, t.Name(), nil)
+		// 01. Activate client and attach multiple documents with non-zero sequences
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
-		// Create and attach a document
-		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), helper.TestDocKey(t))
+		docKey1 := key.Key(fmt.Sprintf("tests$%s-doc1", t.Name()))
+		docInfo1, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey1)
 		assert.NoError(t, err)
 
-		err = clientInfo.AttachDocument(docInfo.ID, false)
+		docKey2 := key.Key(fmt.Sprintf("tests$%s-doc2", t.Name()))
+		docInfo2, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey2)
 		assert.NoError(t, err)
 
-		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
-		assert.NoError(t, err)
+		// Attach documents with non-zero sequences to verify they are reset
+		assert.NoError(t, clientInfo.AttachDocument(docInfo1.ID, false))
+		clientInfo.Documents[docInfo1.ID].ServerSeq = 10
+		clientInfo.Documents[docInfo1.ID].ClientSeq = 8
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
-		// Verify document is attached
+		assert.NoError(t, clientInfo.AttachDocument(docInfo2.ID, false))
+		clientInfo.Documents[docInfo2.ID].ServerSeq = 5
+		clientInfo.Documents[docInfo2.ID].ClientSeq = 3
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo2))
+
+		// 02. Verify documents are attached with expected sequences
 		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
-		isAttached, err := updatedClientInfo.IsAttached(docInfo.ID)
-		assert.NoError(t, err)
-		assert.True(t, isAttached)
+		assert.Equal(t, database.DocumentAttached, updatedClientInfo.Documents[docInfo1.ID].Status)
+		assert.Equal(t, database.DocumentAttached, updatedClientInfo.Documents[docInfo2.ID].Status)
+		assert.Equal(t, int64(10), updatedClientInfo.Documents[docInfo1.ID].ServerSeq)
+		assert.Equal(t, uint32(8), updatedClientInfo.Documents[docInfo1.ID].ClientSeq)
+		assert.Equal(t, int64(5), updatedClientInfo.Documents[docInfo2.ID].ServerSeq)
+		assert.Equal(t, uint32(3), updatedClientInfo.Documents[docInfo2.ID].ClientSeq)
 
-		// Deactivate the client
-		deactivatedInfo, err := db.DeactivateClient(ctx, clientInfo.RefKey())
+		// 03. Deactivate client and verify all documents are detached with reset sequences
+		deactivatedClient, err := db.DeactivateClient(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
-		assert.Equal(t, database.ClientDeactivated, deactivatedInfo.Status)
+		assert.Equal(t, database.ClientDeactivated, deactivatedClient.Status)
+		assert.Equal(t, database.DocumentDetached, deactivatedClient.Documents[docInfo1.ID].Status)
+		assert.Equal(t, database.DocumentDetached, deactivatedClient.Documents[docInfo2.ID].Status)
+		assert.Equal(t, int64(0), deactivatedClient.Documents[docInfo1.ID].ServerSeq)
+		assert.Equal(t, uint32(0), deactivatedClient.Documents[docInfo1.ID].ClientSeq)
+		assert.Equal(t, int64(0), deactivatedClient.Documents[docInfo2.ID].ServerSeq)
+		assert.Equal(t, uint32(0), deactivatedClient.Documents[docInfo2.ID].ClientSeq)
 
-		// Verify all documents are detached
-		isAttached, err = deactivatedInfo.IsAttached(docInfo.ID)
+		// 04. Verify documents are not attached from database perspective
+		isAttached, err := db.IsDocumentAttached(ctx, docInfo1.RefKey(), "")
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
-
-		// Verify no error when checking for attached documents
-		err = deactivatedInfo.EnsureDocumentsNotAttachedWhenDeactivated()
+		isAttached, err = db.IsDocumentAttached(ctx, docInfo2.RefKey(), "")
 		assert.NoError(t, err)
+		assert.False(t, isAttached)
 	})
 
-	t.Run("deactivate client with multiple documents", func(t *testing.T) {
+	t.Run("deactivate client with no attached documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		// Create a test project
-		project, err := db.CreateProjectInfo(
-			ctx,
-			fmt.Sprintf("%s-DeactivateClientTest-Multiple", t.Name()),
-			otherOwnerID,
-			clientDeactivateThreshold,
-		)
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
-		// Activate a client
-		clientInfo, err := db.ActivateClient(ctx, project.ID, t.Name(), nil)
+		deactivatedClient, err := db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		assert.Equal(t, database.ClientDeactivated, deactivatedClient.Status)
+		assert.Len(t, deactivatedClient.Documents, 0)
+	})
+
+	t.Run("deactivate client with mixed document states test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
-		// Create and attach multiple documents
-		docCount := 3
-		docInfos := make([]*database.DocInfo, docCount)
+		docKey1 := key.Key(fmt.Sprintf("tests$%s-doc1", t.Name()))
+		docInfo1, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey1)
+		assert.NoError(t, err)
 
-		for i := 0; i < docCount; i++ {
-			docKey := key.Key(fmt.Sprintf("test-doc-%d", i))
-			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
-			assert.NoError(t, err)
-			docInfos[i] = docInfo
+		docKey2 := key.Key(fmt.Sprintf("tests$%s-doc2", t.Name()))
+		docInfo2, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey2)
+		assert.NoError(t, err)
 
-			err = clientInfo.AttachDocument(docInfo.ID, false)
-			assert.NoError(t, err)
+		// Attach first document (remains attached)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo1.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
-			err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
-			assert.NoError(t, err)
-		}
+		// Attach then detach second document
+		assert.NoError(t, clientInfo.AttachDocument(docInfo2.ID, false))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo2.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo2))
 
-		// Verify all documents are attached
+		// Verify mixed states before deactivation
 		updatedClientInfo, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
+		assert.Equal(t, database.DocumentAttached, updatedClientInfo.Documents[docInfo1.ID].Status)
+		assert.Equal(t, database.DocumentDetached, updatedClientInfo.Documents[docInfo2.ID].Status)
 
-		for _, docInfo := range docInfos {
-			isAttached, err := updatedClientInfo.IsAttached(docInfo.ID)
-			assert.NoError(t, err)
-			assert.True(t, isAttached)
-		}
-
-		// Deactivate the client
-		deactivatedInfo, err := db.DeactivateClient(ctx, clientInfo.RefKey())
+		// Deactivate and verify all documents are detached with reset sequences
+		deactivatedClient, err := db.DeactivateClient(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
-		assert.Equal(t, database.ClientDeactivated, deactivatedInfo.Status)
-
-		// Verify all documents are detached
-		for _, docInfo := range docInfos {
-			isAttached, err := deactivatedInfo.IsAttached(docInfo.ID)
-			assert.NoError(t, err)
-			assert.False(t, isAttached)
-		}
-
-		// Verify no error when checking for attached documents
-		err = deactivatedInfo.EnsureDocumentsNotAttachedWhenDeactivated()
-		assert.NoError(t, err)
+		assert.Equal(t, database.ClientDeactivated, deactivatedClient.Status)
+		assert.Equal(t, database.DocumentDetached, deactivatedClient.Documents[docInfo1.ID].Status)
+		assert.Equal(t, database.DocumentDetached, deactivatedClient.Documents[docInfo2.ID].Status)
+		assert.Equal(t, int64(0), deactivatedClient.Documents[docInfo1.ID].ServerSeq)
+		assert.Equal(t, uint32(0), deactivatedClient.Documents[docInfo1.ID].ClientSeq)
+		assert.Equal(t, int64(0), deactivatedClient.Documents[docInfo2.ID].ServerSeq)
+		assert.Equal(t, uint32(0), deactivatedClient.Documents[docInfo2.ID].ClientSeq)
 	})
 }
