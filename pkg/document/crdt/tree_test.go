@@ -684,31 +684,6 @@ func TestTreeSplit(t *testing.T) {
 		assert.Equal(t, "<r><p>abcd</p></r>", tree.ToXML())
 		assert.Equal(t, 6, tree.Root().Len())
 	})
-
-	t.Run("split element nodes with attributes", func(t *testing.T) {
-		attributes := crdt.NewRHT()
-		attributes.Set("bold", "true", time.InitialTicket)
-
-		root := crdt.NewTreeNode(dummyTreeNodeID, "r", nil)
-		para := crdt.NewTreeNode(dummyTreeNodeID, "p", attributes)
-		assert.NoError(t, root.Append(para))
-		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "helloworld")))
-		assert.Equal(t, `<r><p bold="true">helloworld</p></r>`, crdt.ToXML(root))
-
-		// split text node
-		left, err := para.Child(0)
-		assert.NoError(t, err)
-		_, _, err = left.SplitText(5, 0)
-		assert.NoError(t, err)
-
-		// split element node
-		right, _, err := para.SplitElement(1, func() *time.Ticket {
-			return time.InitialTicket
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<p bold="true">hello</p>`, crdt.ToXML(para))
-		assert.Equal(t, `<p bold="true">world</p>`, crdt.ToXML(right))
-	})
 }
 
 func TestTreeMerge(t *testing.T) {

@@ -65,7 +65,6 @@ func TestTreeNodeSize(t *testing.T) {
 	})
 
 	t.Run("split tree node with attribute test", func(t *testing.T) {
-		t.Skip("TODO(raararaara): We need to check if the attributes are copied correctly when splitting elements.")
 		attributes := crdt.NewRHT()
 		attributes.Set("bold", "true", time.InitialTicket)
 
