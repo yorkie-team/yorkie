@@ -15,8 +15,7 @@ import (
 
 var initialRoot string
 
-const defaultYSON = `
-{
+const defaultYSON = `{
   "str": "value1",
   "num": 42,
   "int": Int(42),
@@ -68,7 +67,10 @@ func newCreateDocumentCmd() *cobra.Command {
 				rootStr = defaultYSON
 			}
 
-			obj := yson.ParseObject(rootStr)
+			var obj yson.Object
+			if err := yson.Unmarshal(rootStr, &obj); err != nil {
+				return fmt.Errorf("failed to parse YSON: %w", err)
+			}
 
 			ctx := context.Background()
 			doc, err := cli.CreateDocument(ctx, projectName, documentKey, obj)
