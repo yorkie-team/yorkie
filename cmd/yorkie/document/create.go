@@ -31,21 +31,7 @@ import (
 
 var initialRoot string
 
-const defaultYSON = `
-{
-  "str": "value1",
-  "num": 42,
-  "int": Int(42),
-  "long": Long(64),
-  "null": null,
-  "bool": true,
-  "bytes": BinData("AQID"),
-  "date": Date("2025-01-02T15:04:05.058Z"),
-  "counter": Counter(Int(10)),
-  "text": Text([{"val":"Hello","attrs":{"color":"red"}},{"val":"World","attrs":{"color":"blue"}}]),
-  "tree": Tree({"type":"p","attrs":{"align":"center"},"children":[{"type":"text","value":"Hello World"}]})
-}
-`
+const defaultYSON = `{}`
 
 func newCreateDocumentCmd() *cobra.Command {
 	return &cobra.Command{
@@ -75,9 +61,7 @@ func newCreateDocumentCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer func() {
-				cli.Close()
-			}()
+			defer cli.Close()
 
 			rootStr := initialRoot
 			if rootStr == "" {
@@ -89,7 +73,7 @@ func newCreateDocumentCmd() *cobra.Command {
 			ctx := context.Background()
 			doc, err := cli.CreateDocument(ctx, projectName, documentKey, obj)
 			if err != nil {
-				return fmt.Errorf("failed to create document: %w", err)
+				return fmt.Errorf("create document: %w", err)
 			}
 
 			cmd.Printf("Document created: %s (%s)\n", doc.Key, doc.ID)

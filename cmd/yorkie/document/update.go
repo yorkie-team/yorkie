@@ -68,7 +68,7 @@ func newUpdateDocumentCmd() *cobra.Command {
 			ctx := context.Background()
 			doc, err := cli.UpdateDocument(ctx, projectName, key.Key(documentKey), updateRoot, "")
 			if err != nil {
-				return fmt.Errorf("failed to update document: %w", err)
+				return fmt.Errorf("update document: %w", err)
 			}
 
 			cmd.Printf("Document updated: %s (%s)\n", doc.Key, doc.ID)
