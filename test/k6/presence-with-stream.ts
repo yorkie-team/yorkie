@@ -19,45 +19,44 @@ import {Client, Stream} from "k6/net/grpc";
 import {check, sleep} from "k6";
 import {Counter, Rate, Trend} from "k6/metrics";
 import {b64encode} from "k6/encoding";
-import {scenario} from "k6/execution";
+import exec from "k6/execution";
 
 const API_URL = __ENV.API_URL || "http://localhost:8080";
 const API_KEY = __ENV.API_KEY || "";
 const DOC_PREFIX = __ENV.DOC_KEY_PREFIX || "test-watch";
 const TEST_MODE = __ENV.TEST_MODE || "skew"; // skew | even
-const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "300", 10);
+const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "200", 10);
 const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10", 10);
-const WATCHER_RATIO = parseFloat(__ENV.WATCHER_RATIO || "0.7"); // 0~1
+const WATCHER_RATIO = parseFloat(__ENV.WATCHER_RATIO || "0.5"); // 0~1
 
 export const options = {
     scenarios: {
         watchers: {
             executor: "ramping-vus",
             stages: [
-                {duration: "1m", target: Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "1m", target: Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "30s", target: 0},
+                {duration: "30s", target: Math.round(CONCURRENCY * WATCHER_RATIO)}, // ramp up
+                {duration: "30s", target: Math.round(CONCURRENCY * WATCHER_RATIO)}, // maintain
+                {duration: "20s", target: 0}, // ramp down
             ],
             exec: "watcher",
         },
         updaters: {
             executor: "ramping-vus",
             stages: [
-                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)},
-                {duration: "15s", target: 0},
+                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)}, // ramp up
+                {duration: "30s", target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO)}, // maintain
+                {duration: "20s", target: 0}, // ramp down
             ],
             exec: "updater",
         },
     },
-    setupTimeout: "30s",
-    teardownTimeout: "30s",
+    setupTimeout: "20s",
+    teardownTimeout: "20s",
 };
 
 const watchOpen = new Counter("watch_open");
 const watchError = new Counter("watch_error");
-const watchEvent = new Counter("watch_event");
-const watchDelay = new Trend("watch_delay");
+const watchEventReceived = new Counter("watch_event_received");
 
 const activeClients = new Counter("active_clients");
 const activeClientsSuccessRate = new Rate("active_clients_success_rate");
@@ -77,10 +76,18 @@ const deactivateClientsSuccessRate = new Rate(
 );
 const deactivateClientsTime = new Trend("deactivate_clients_time", true);
 
-function pickDocKey() {
+const watcherTransactionFaileds = new Counter("watcher_transaction_faileds");
+const watcherTransactionSuccessRate = new Rate("watcher_transaction_success_rate");
+const watcherTransactionTime = new Trend("watcher_transaction_time", true); // true enables time formatting
+
+const updaterTransactionFaileds = new Counter("updater_transaction_faileds");
+const updaterTransactionSuccessRate = new Rate("updater_transaction_success_rate");
+const updaterTransactionTime = new Trend("updater_transaction_time", true); // true enables time formatting
+
+function getDocKey() {
     if (TEST_MODE === "skew") return DOC_PREFIX;
     const cnt = CONCURRENCY / VU_PER_DOCS;
-    return `${DOC_PREFIX}-${__VU % cnt}`;
+    return `${DOC_PREFIX}-${exec.vu.idInTest % cnt}`;
 }
 
 function hexToBase64(hex: string) {
@@ -246,126 +253,171 @@ function pushpullChanges(
     clientID: string,
     docID: string,
     docKey: string,
-    clientSeq: number,
-    serverSeq: number,
-): [number, number] {
+    lastServerSeq: number,
+): number {
     const start = Date.now();
 
     const payload = {
-        clientId: clientID,
-        documentId: docID,
-        changePack: {
-            documentKey: docKey,
-            checkpoint: {clientSeq, serverSeq},
-            changes: [],
-            versionVector: {},
-        },
-    };
+    clientId: clientID,
+    documentId: docID,
+    changePack: {
+      documentKey: docKey,
+      checkpoint: {
+        clientSeq: 1,
+        serverSeq: lastServerSeq,
+      },
+      versionVector: {},
+    },
+  };
 
     const resp = makeRequest(
         `${API_URL}/yorkie.v1.YorkieService/PushPullChanges`,
         payload,
-        {"x-shard-key": `${API_KEY}/${docKey}`},
+        { "x-shard-key": `${API_KEY}/${docKey}` }
     );
 
-    const lastServerSeq = Number(resp.changePack.checkpoint.serverSeq);
-    const lastClientSeq = clientSeq;
+    const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
 
     pushpulls.add(1);
     pushpullsSuccessRate.add(true);
     pushpullsTime.add(Date.now() - start);
 
-    return [lastClientSeq, lastServerSeq];
+    return serverSeq;
 }
 
 const PROTO_DIR   = ["../../api"];
 const PROTO_FILE  = "yorkie/v1/yorkie.proto";
 const GRPC_TARGET = "localhost:8080";
 
-const gcli = new Client();
-gcli.load(PROTO_DIR, PROTO_FILE);
+// Create a Map of gRPC clients for VUs to use
+const grpcClients: Map<number, Client> = new Map();
 
-function openWatchStream(docKey: string) {
-    gcli.connect(GRPC_TARGET, { plaintext: true });
-
-    return new Stream(
-        gcli,
-        "yorkie.v1.YorkieService/WatchDocument",
-        { metadata: { "x-shard-key": `${API_KEY}/${docKey}` } },
-    );
+// Load proto and create clients in init stage
+// Only create clients for watcher VUs (based on WATCHER_RATIO)
+const MAX_WATCHER_VU = Math.round(CONCURRENCY * WATCHER_RATIO);
+for (let i = 0; i < MAX_WATCHER_VU; i++) {
+    const client = new Client();
+    client.load(PROTO_DIR, PROTO_FILE);
+    grpcClients.set(i, client);
 }
 
-function keepAliveUntilEnd() {
-    let timeLeft = scenario.endTime - Date.now();
+// Track which watcher VU gets which client index
+const vuToClientIndex: Map<number, number> = new Map();
+const assignedClients: Set<number> = new Set();
 
-    while (timeLeft > 0) {
-        sleep(Math.min(1, timeLeft / 1000));
-        timeLeft = scenario.endTime - Date.now();
+function getGrpcClient(): Client {
+    const vuId = exec.vu.idInTest;
+    
+    // Check if this VU already has a client assigned
+    if (vuToClientIndex.has(vuId)) {
+        const clientIndex = vuToClientIndex.get(vuId)!;
+        return grpcClients.get(clientIndex)!;
+    }
+    
+    // Find the next available client index atomically
+    let clientIndex = -1;
+    for (let i = 0; i < MAX_WATCHER_VU; i++) {
+        if (!assignedClients.has(i)) {
+            assignedClients.add(i);
+            clientIndex = i;
+            break;
+        }
+    }
+    
+    if (clientIndex === -1) {
+        throw new Error(`No available gRPC clients. Expected max ${MAX_WATCHER_VU}, but VU ${vuId} is requesting a client.`);
+    }
+    
+    vuToClientIndex.set(vuId, clientIndex);
+    const client = grpcClients.get(clientIndex)!;
+    
+    return client;
+}
+
+// Watcher function to handle document watching
+export function watcher() {
+    console.log(`Watcher VU ${exec.vu.idInTest} started`);
+    const startTime = new Date().getTime();
+    let success = false;
+    const docKey = getDocKey();
+
+    try {
+        const [cid, cKey] = activateClient();
+        const [docId,] = attachDocument(cid, hexToBase64(cid), docKey);
+        sleep(0.5); // Ensure activation and attachment are complete
+
+        // Get a gRPC client
+        const gcli = getGrpcClient();
+
+        // Connect to the gRPC server
+        // Use plaintext for local testing
+        gcli.connect(GRPC_TARGET, { plaintext: true });
+
+        // Create a stream to watch the document
+        const stream = new Stream(
+            gcli,
+            "yorkie.v1.YorkieService/WatchDocument",
+            { metadata: { "x-shard-key": `${API_KEY}/${docKey}` } },
+        );
+
+        // receive events from the stream
+        stream.on("data", (msg) => {
+            watchEventReceived.add(1);
+        });
+
+        // error handling for the stream
+        stream.on("error", () => {
+            watchError.add(1);
+        });
+
+        // send the initial watch request
+        stream.write({client_id: cid, document_id: docId});
+        watchOpen.add(1);
+
+        // keep alive the stream for a while to receive events
+        sleep(5);
+
+        stream.end();
+        gcli.close();
+
+        deactivateClient(cid, cKey);
+
+        success = true;
+    } catch (e: any) {
+        watcherTransactionFaileds.add(1);
+    } finally {
+        watcherTransactionSuccessRate.add(success);
+        const endTime = new Date().getTime();
+        watcherTransactionTime.add(endTime - startTime);
     }
 }
 
-export function watcher() {
-    const docKey = pickDocKey();
-    const [cid, cKey] = activateClient();
-    const [docId, sSeq0] = attachDocument(cid, hexToBase64(cid), docKey);
-
-    let cSeq = 2;
-    let sSeq = sSeq0;
-
-    const stream = openWatchStream(docKey);
-
-    stream.on("data", (msg) => {
-        // console.log(`Watcher received data: ${JSON.stringify(msg)}`);
-        watchEvent.add(1);
-        // [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
-    });
-
-    stream.on("error", () => watchError.add(1));
-
-    stream.write({client_id: cid, document_id: docId});
-    watchOpen.add(1);
-
-    keepAliveUntilEnd();
-
-    stream.end();
-    deactivateClient(cid, cKey);
-}
-
+// Updater function to handle document updates
 export function updater() {
-    const docKey = pickDocKey();
-    const [cid, cKey] = activateClient();
-    const [docId, sSeq0] = attachDocument(cid, hexToBase64(cid), docKey);
+    const startTime = new Date().getTime();
+    let success = false;
+    const docKey = getDocKey();
 
-    let cSeq = 2;
-    let sSeq = sSeq0;
+    try {
+        const [cid, cKey] = activateClient();
+        const [docId, sSeq0] = attachDocument(cid, hexToBase64(cid), docKey);
 
-    const stream = openWatchStream(docKey);
-
-    stream.on("data", (msg) => {
-        // console.log(`Watcher received data: ${JSON.stringify(msg)}`);
-        watchEvent.add(1);
-        // [cSeq, sSeq] = pushpullChanges(cid, docId, docKey, cSeq, sSeq);
-    });
-
-    stream.on("error", () => watchError.add(1));
-
-    stream.write({client_id: cid, document_id: docId});
-    watchOpen.add(1);
-
-    const writeLoop = () => {
-        let cSeq = 2;
         let sSeq = sSeq0;
-
-        while (scenario.endTime - Date.now() > 0) {
-            [cSeq, sSeq] = pushpullChanges(
-                cid, docId, docKey,
-                cSeq, sSeq,
-            );
-            sleep(2);
+        
+        // Randomly push and pull changes to the document to emulate presence updates
+        for (let i = 0; i < 10; i++) {
+            sSeq = pushpullChanges(cid, docId, docKey, sSeq);
+            sleep(0.5);
         }
-    };
-    writeLoop();
 
-    stream.end();
-    deactivateClient(cid, cKey);
+        deactivateClient(cid, cKey);
+
+        success = true;
+    } catch (e: any) {
+        updaterTransactionFaileds.add(1);
+    } finally {
+        updaterTransactionSuccessRate.add(success);
+        const endTime = new Date().getTime();
+        updaterTransactionTime.add(endTime - startTime);
+    }
 }
