@@ -7,6 +7,29 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.19] - 2025-07-09
+
+### Added
+
+- Add signup, document create/update commands by @KMSstudio in https://github.com/yorkie-team/yorkie/pull/1372
+
+### Changed
+
+- Add dedicated VV encoder/decoder for MongoDB by @raararaara in https://github.com/yorkie-team/yorkie/pull/1358
+- Apply Copy-on-Write to Presence by @blurfx in https://github.com/yorkie-team/yorkie/pull/1361
+- Rename pprof flags and update documentation for consistency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1364
+- Update housekeeping documentation to reflect current features by @hackerwins https://github.com/yorkie-team/yorkie/pull/1365
+- Replace FindOneAndUpdate with UpdateOne for Clients by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1370
+
+### Fixed
+
+- Rollback Changes bulk insert to upsert in CreateChangeInfos by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1356
+- Fix invalid k6 installation link by @kokodak in https://github.com/yorkie-team/yorkie/pull/1360
+
+### Removed
+
+- Remove legacy CLI-based migration tool used in v0.5.x by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1362
+
 ## [v0.6.18] - 2025-07-01
 
 ### Added
