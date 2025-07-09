@@ -35,14 +35,14 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-  
+
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 
 	"github.com/yorkie-team/yorkie/client"
-  
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -244,7 +244,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 	assert.NoError(t, err)
 	assert.Equal(t, clientID, reactivateResp.Msg.ClientId)
 
-	// CRITICAL TEST: PushPull should fail with ErrDocumentNotAttached 
+	// CRITICAL TEST: PushPull should fail with ErrDocumentNotAttached
 	// This proves documents were detached during deactivation
 	_, err = testClient.PushPullChanges(
 		ctx,
@@ -255,7 +255,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 		}))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
-	
+
 	_, err = testClient.PushPullChanges(
 		ctx,
 		connect.NewRequest(&api.PushPullChangesRequest{
@@ -269,7 +269,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 	_, err = testClient.AttachDocument(
 		ctx,
 		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   clientID,
+			ClientId: clientID,
 			ChangePack: &api.ChangePack{
 				DocumentKey: doc1Key,
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},

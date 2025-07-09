@@ -1714,7 +1714,6 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-
 // RunClientDeactivationDetachesDocumentsTest runs the client deactivation document detachment tests for the given db.
 func RunClientDeactivationDetachesDocumentsTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("deactivate client detaches all attached documents test", func(t *testing.T) {
@@ -1826,7 +1825,9 @@ func RunClientDeactivationDetachesDocumentsTest(t *testing.T, db database.Databa
 		assert.Equal(t, int64(0), deactivatedClient.Documents[docInfo2.ID].ServerSeq)
 		assert.Equal(t, uint32(0), deactivatedClient.Documents[docInfo2.ID].ClientSeq)
 	})
-  
+}
+
+// toChangeInfos converts a slice of changes to a slice of ChangeInfo
 func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Change) []*database.ChangeInfo {
 	changeInfos := make([]*database.ChangeInfo, len(changes))
 	for i, cn := range changes {
@@ -1835,5 +1836,4 @@ func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Chang
 		changeInfos[i] = info
 	}
 	return changeInfos
-
 }

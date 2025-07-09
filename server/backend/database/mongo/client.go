@@ -674,7 +674,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
 	})
-	
+
 	var existingClient database.ClientInfo
 	if err := findResult.Decode(&existingClient); err != nil {
 		if err == mongo.ErrNoDocuments {
