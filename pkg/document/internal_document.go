@@ -383,12 +383,7 @@ func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
 // AllPresences returns the presence map of all clients
 // regardless of whether the client is online or not.
 func (d *InternalDocument) AllPresences() map[string]innerpresence.Presence {
-	presences := make(map[string]innerpresence.Presence)
-	d.presences.Range(func(key string, value innerpresence.Presence) bool {
-		presences[key] = value.DeepCopy()
-		return true
-	})
-	return presences
+	return d.presences.ToMap()
 }
 
 // SetOnlineClients sets the online clients.

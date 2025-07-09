@@ -1,6 +1,6 @@
 ---
 title: mongodb-sharding
-target-version: 0.5.7
+target-version: 0.6.20
 ---
 
 # MongoDB Sharding
@@ -124,7 +124,7 @@ result := c.collection(colSnapshots).FindOne(ctx, bson.M{
 The shard keys are selected based on the query patterns and properties (cardinality, frequency) of keys.
 
 1. Project-wide: `project_id`, ranged
-2. Document-wide: `doc_id`, ranged
+2. Document-wide: `doc_id`, hashed
 
 Every unique constraint can be satisfied because each has the shard key as a prefix.
 
@@ -133,6 +133,14 @@ Every unique constraint can be satisfied because each has the shard key as a pre
 3. `Changes`: `(doc_id, server_seq)`
 4. `Snapshots`: `(doc_id, server_seq)`
 5. `Versionvectors`: `(doc_id, client_id)`
+
+**Benefits of Hashed Sharding for Document-wide Collections**
+
+Hashed sharding for document-wide collections provides:
+
+1. **Even Data Distribution**: Prevents ObjectID clustering and hotspots caused by timestamp-based sequential generation.
+2. **Improved Write Performance**: Distributes writes across all shards instead of concentrating on the latest ObjectID range.
+3. **Better Scalability**: New shards immediately participate in handling traffic rather than only new data.
 
 **Changes of Reference Keys**
 
@@ -200,6 +208,8 @@ TimeStamp(4 bytes) + MachineId(3 bytes) + ProcessId(2 bytes) + Counter(3 bytes)
 ```
 
 The condition for duplicate ObjectIDs is that more than `16,777,216` documents/clients are created every single second in a single machine and process. Considering Google processes over `99,000` searches every single second, it is unlikely to occur.
+
+Additionally, the use of **hashed sharding for document-wide collections** significantly reduces the risk of ObjectID clustering and related performance issues. Even if duplicate ObjectIDs occur, they will be distributed across different shards, minimizing the impact on cluster operations.
 
 When we have to meet that amount of traffic in the future, consider the following options:
 

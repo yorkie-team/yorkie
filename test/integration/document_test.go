@@ -113,7 +113,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
-		assert.Equal(t, doc.Status(), document.StatusDetached)
+		assert.Equal(t, document.StatusDetached, doc.Status())
 
 		// 03. attach again to c1 and check if it is attached normally
 		doc = document.New(helper.TestDocKey(t))
@@ -125,7 +125,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc, client.WithRemoveIfNotAttached())
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
-		assert.Equal(t, doc.Status(), document.StatusRemoved)
+		assert.Equal(t, document.StatusRemoved, doc.Status())
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
@@ -975,5 +975,36 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 
 		// 03. client2 try to update counter
 		assert.Panics(t, func() { doc2.Root().GetText("k").Edit(0, 1, "a") })
+	})
+
+	t.Run("compaction test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+
+		// 01. create a document and update it 1000 times.
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"c":Counter(Long(0))}`),
+		)))
+		assert.True(t, d1.IsAttached())
+		assert.NoError(t, c1.Sync(ctx))
+
+		for range 1000 {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("c").Increase(1)
+				return nil
+			}))
+		}
+		assert.Equal(t, `{"c":1000}`, d1.Marshal())
+		assert.NoError(t, c1.Detach(ctx, d1))
+		assert.Equal(t, int64(1003), d1.Checkpoint().ServerSeq)
+
+		// 02. compact the document.
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key()))
+
+		// 03. attach again and check if the counter is compacted.
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.Equal(t, `{"c":1000}`, d2.Marshal())
+		assert.Equal(t, int64(2), d2.Checkpoint().ServerSeq)
 	})
 }

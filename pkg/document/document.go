@@ -21,7 +21,9 @@ import (
 	gojson "encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -30,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/resource"
+	"github.com/yorkie-team/yorkie/pkg/schema"
 )
 
 var (
@@ -38,6 +41,9 @@ var (
 
 	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
 	ErrDocumentSizeExceedsLimit = errors.New("document size exceeds the limit")
+
+	// ErrSchemaValidationFailed is returned when the document schema validation failed.
+	ErrSchemaValidationFailed = errors.New("schema validation failed")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -112,6 +118,9 @@ type Document struct {
 	// MaxSizeLimit is the maximum size of a document in bytes.
 	MaxSizeLimit int
 
+	// SchemaRules is the rules of the schema of the document.
+	SchemaRules []types.Rule
+
 	// events is the channel to send events that occurred in the document.
 	events chan DocEvent
 
@@ -174,6 +183,19 @@ func (d *Document) Update(
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		return err
+	}
+
+	if !ctx.IsPresenceOnlyChange() && len(d.SchemaRules) > 0 {
+		result := schema.ValidateYorkieRuleset(d.cloneRoot.Object(), d.SchemaRules)
+		if !result.Valid {
+			var errorMessages []string
+			for _, err := range result.Errors {
+				errorMessages = append(errorMessages, err.Message)
+			}
+			d.cloneRoot = nil
+			d.clonePresences = nil
+			return fmt.Errorf("%w: %s", ErrSchemaValidationFailed, strings.Join(errorMessages, ", "))
+		}
 	}
 
 	cloneSize := d.cloneRoot.DocSize()

@@ -21,68 +21,126 @@ package innerpresence
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
-// Map is a map of Presence. It is wrapper of sync.Map to use type-safe.
+// Map is a multi-routine safe map that stores presences.
+// It uses a read-write mutex to allow concurrent reads and exclusive writes.
+// It also uses an atomic boolean to track whether the map has been copied,
+// which helps in optimizing the memory usage when storing presences in CopyOnWrite mode.
 type Map struct {
-	presences sync.Map
+	mu        sync.RWMutex
+	presences map[string]Presence
+	copied    atomic.Bool
 }
 
 // NewMap creates a new instance of Map.
 func NewMap() *Map {
-	return &Map{presences: sync.Map{}}
+	return &Map{
+		presences: make(map[string]Presence),
+	}
 }
 
 // Store stores the given presence to the map.
 func (m *Map) Store(clientID string, presence Presence) {
-	m.presences.Store(clientID, presence)
-}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-// Range calls f sequentially for each key and value present in the map.
-func (m *Map) Range(f func(clientID string, presence Presence) bool) {
-	m.presences.Range(func(key, value interface{}) bool {
-		clientID := key.(string)
-		presence := value.(Presence)
-		return f(clientID, presence)
-	})
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			newPresences[k] = v
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+	}
+
+	m.presences[clientID] = presence.DeepCopy()
 }
 
 // Load returns the presence for the given clientID.
 func (m *Map) Load(clientID string) Presence {
-	presence, ok := m.presences.Load(clientID)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	presence, ok := m.presences[clientID]
 	if !ok {
 		return nil
 	}
 
-	return presence.(Presence)
+	return presence
 }
 
 // LoadOrStore returns the existing presence if exists.
 // Otherwise, it stores and returns the given presence.
 func (m *Map) LoadOrStore(clientID string, presence Presence) Presence {
-	actual, _ := m.presences.LoadOrStore(clientID, presence)
-	return actual.(Presence)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	actual, ok := m.presences[clientID]
+	if ok {
+		return actual
+	}
+
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			newPresences[k] = v
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+	}
+
+	clone := presence.DeepCopy()
+	m.presences[clientID] = clone
+	return clone
 }
 
 // Has returns whether the given clientID exists.
 func (m *Map) Has(clientID string) bool {
-	_, ok := m.presences.Load(clientID)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	_, ok := m.presences[clientID]
 	return ok
 }
 
 // Delete deletes the presence for the given clientID.
 func (m *Map) Delete(clientID string) {
-	m.presences.Delete(clientID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.copied.Load() {
+		newPresences := make(map[string]Presence, len(m.presences))
+		for k, v := range m.presences {
+			if k != clientID {
+				newPresences[k] = v
+			}
+		}
+		m.presences = newPresences
+		m.copied.Store(true)
+		return
+	}
+
+	delete(m.presences, clientID)
 }
 
 // DeepCopy copies itself deeply.
 func (m *Map) DeepCopy() *Map {
-	copied := NewMap()
-	m.Range(func(clientID string, presence Presence) bool {
-		copied.Store(clientID, presence.DeepCopy())
-		return true
-	})
-	return copied
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	clone := &Map{
+		presences: m.presences,
+	}
+	m.copied.Store(false)
+	clone.copied.Store(false)
+	return clone
+}
+
+// ToMap returns a shallow copy of the presence map.
+func (m *Map) ToMap() map[string]Presence {
+	return m.DeepCopy().presences
 }
 
 // Presence represents custom presence that can be defined by the client.
@@ -109,7 +167,7 @@ func (p Presence) DeepCopy() Presence {
 		return nil
 	}
 
-	clone := make(map[string]string)
+	clone := make(map[string]string, len(p))
 	for k, v := range p {
 		clone[k] = v
 	}

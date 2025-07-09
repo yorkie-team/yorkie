@@ -7,6 +7,95 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.19] - 2025-07-09
+
+### Added
+
+- Add signup, document create/update commands by @KMSstudio in https://github.com/yorkie-team/yorkie/pull/1372
+
+### Changed
+
+- Add dedicated VV encoder/decoder for MongoDB by @raararaara in https://github.com/yorkie-team/yorkie/pull/1358
+- Apply Copy-on-Write to Presence by @blurfx in https://github.com/yorkie-team/yorkie/pull/1361
+- Rename pprof flags and update documentation for consistency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1364
+- Update housekeeping documentation to reflect current features by @hackerwins https://github.com/yorkie-team/yorkie/pull/1365
+- Replace FindOneAndUpdate with UpdateOne for Clients by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1370
+
+### Fixed
+
+- Rollback Changes bulk insert to upsert in CreateChangeInfos by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1356
+- Fix invalid k6 installation link by @kokodak in https://github.com/yorkie-team/yorkie/pull/1360
+
+### Removed
+
+- Remove legacy CLI-based migration tool used in v0.5.x by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1362
+
+## [v0.6.18] - 2025-07-01
+
+### Added
+
+- Enhance document attachment with schema validation by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1345
+
+### Changed
+
+- Rollback dedicated vv encoder and presence slice encoder by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1343
+- Adjust logging level in QueryMonitor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1346
+- Introduce Go 1.23 functions by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1348
+- Bump github.com/go-viper/mapstructure/v2 from 2.2.1 to 2.3.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/1347
+- Replace wildcard index with regular index on attached_docs by @sigmaith in https://github.com/yorkie-team/yorkie/pull/1315
+- Replace SnapshotRefKey with DocRefKey and ServerSeq by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1350
+
+### Fixed
+
+- Fix memDB iteration logic to match MongoDB behavior by @raararaara in https://github.com/yorkie-team/yorkie/pull/1354
+
+## [v0.6.17] - 2025-06-23
+
+### Added
+
+- Add MongoDB query monitoring using CommandMonitor by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1341
+- Introduce B-tree-based cache for ChangeInfos in Pull phase by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1338
+- Add log level and MongoDB monitoring args to Helm chart by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1342
+
+### Changed
+
+- Refactor Presence data structure to repeated string by @raararaara in https://github.com/yorkie-team/yorkie/pull/1339
+- Add dedicated VV encoder/decoder for MongoDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1232
+
+## [v0.6.16] - 2025-06-20
+
+### Changed
+
+- Replace individual caches with a centralized cache manager by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1316
+- Extract encodeOperations outside the push lock by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1331
+- Update modules by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1334
+- Bump up JWT to v5 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1337
+- Introduce a cache for document info for push pack by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1333
+
+### Fixed
+
+- Fix race condition by initializing server_seq with setOnInsert by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1321
+- Rollback lock-free implementation due to CPU overhead by @hackerwins https://github.com/yorkie-team/yorkie/pull/1318
+- Add missing condition for load-test job by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1324
+
+## [0.6.15] - 2025-06-09
+
+### Added
+
+- Refactor CI workflow for benchmark and load testing by @chacha912 in https://github.com/yorkie-team/yorkie/pull/1297
+- Implement project API key rotation with auth checks by @minwoo1999 in https://github.com/yorkie-team/yorkie/pull/1296
+
+### Changed
+
+- Improve Shard Key for Client Requests to Prevent Load Skew by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1306
+- Replace Push Lock with lock-free implementation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1309
+
+### Fixed
+
+- Fix invalid env by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1303
+- Fix garbage collection design document typo by @blurfx in https://github.com/yorkie-team/yorkie/pull/1301
+- Invalidate snapshot cache on compaction and purging by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1307
+
 ## [0.6.14] - 2025-06-02
 
 ### Changed

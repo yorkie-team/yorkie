@@ -53,10 +53,14 @@ var (
 	housekeepingInterval      time.Duration
 	clientDeactivateThreshold string
 
-	mongoConnectionURI     string
-	mongoConnectionTimeout time.Duration
-	mongoYorkieDatabase    string
-	mongoPingTimeout       time.Duration
+	mongoConnectionURI                string
+	mongoConnectionTimeout            time.Duration
+	mongoYorkieDatabase               string
+	mongoPingTimeout                  time.Duration
+	mongoMonitoringEnabled            bool
+	mongoMonitoringSlowQueryThreshold string
+
+	pprofEnabled bool
 
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookMinWaitInterval time.Duration
@@ -94,6 +98,8 @@ func newServerCmd() *cobra.Command {
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
 			conf.RPC.Auth.GitHubDeviceAuthURL = authGitHubDeviceAuthURL
 
+			conf.Profiling.PprofEnabled = pprofEnabled
+
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
@@ -110,10 +116,12 @@ func newServerCmd() *cobra.Command {
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
-					ConnectionURI:     mongoConnectionURI,
-					ConnectionTimeout: mongoConnectionTimeout.String(),
-					YorkieDatabase:    mongoYorkieDatabase,
-					PingTimeout:       mongoPingTimeout.String(),
+					ConnectionURI:                mongoConnectionURI,
+					ConnectionTimeout:            mongoConnectionTimeout.String(),
+					YorkieDatabase:               mongoYorkieDatabase,
+					PingTimeout:                  mongoPingTimeout.String(),
+					MonitoringEnabled:            mongoMonitoringEnabled,
+					MonitoringSlowQueryThreshold: mongoMonitoringSlowQueryThreshold,
 				}
 			}
 
@@ -239,8 +247,8 @@ func init() {
 		"Profiling port",
 	)
 	cmd.Flags().BoolVar(
-		&conf.Profiling.EnablePprof,
-		"enable-pprof",
+		&pprofEnabled,
+		"pprof-enabled",
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
@@ -347,6 +355,18 @@ func init() {
 		"mongo-ping-timeout",
 		server.DefaultMongoPingTimeout,
 		"Mongo DB's ping timeout",
+	)
+	cmd.Flags().BoolVar(
+		&mongoMonitoringEnabled,
+		"mongo-monitoring-enabled",
+		false,
+		"Enable MongoDB query monitoring",
+	)
+	cmd.Flags().StringVar(
+		&mongoMonitoringSlowQueryThreshold,
+		"mongo-monitoring-slow-query-threshold",
+		"100ms",
+		"Threshold for logging slow MongoDB queries (e.g. '100ms', '1s')",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminUser,

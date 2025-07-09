@@ -22,6 +22,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -324,4 +325,38 @@ func (i *ClientInfo) IsServerClient() bool {
 	}
 
 	return actorID == time.InitialActorID
+}
+
+// UpdateDocStatus updates the status of the document in the client info.
+func (i *ClientInfo) UpdateDocStatus(
+	docID types.ID,
+	status document.StatusType,
+	cp change.Checkpoint,
+) error {
+	switch status {
+	case document.StatusRemoved:
+		return i.RemoveDocument(docID)
+	case document.StatusDetached:
+		return i.DetachDocument(docID)
+	default:
+		return i.UpdateCheckpoint(docID, cp)
+	}
+}
+
+// AttachedDocuments returns the list of document IDs attached to this client.
+func (i *ClientInfo) AttachedDocuments() []types.ID {
+	if i.Documents == nil {
+		return nil
+	}
+
+	docIDs := make([]types.ID, 0, len(i.Documents))
+	for docID := range i.Documents {
+		if i.Documents[docID].Status != DocumentAttached {
+			continue
+		}
+
+		docIDs = append(docIDs, docID)
+	}
+
+	return docIDs
 }

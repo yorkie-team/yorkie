@@ -17,11 +17,13 @@
 package mongo_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -139,5 +141,87 @@ func TestClient(t *testing.T) {
 
 	t.Run("ClientDeactivationDetachesDocuments test", func(t *testing.T) {
 		testcases.RunClientDeactivationDetachesDocumentsTest(t, cli, dummyProjectID)
+	})
+}
+
+func TestClient_RotateProjectKeys(t *testing.T) {
+	t.Run("success: should rotate project API keys", func(t *testing.T) {
+		// Given
+		ctx := context.Background()
+		client := setupTestWithDummyData(t)
+		defer func() {
+			assert.NoError(t, client.Close())
+		}()
+
+		// Create a test project
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID, "1h")
+		assert.NoError(t, err)
+
+		originalPublicKey := projectInfo.PublicKey
+		originalSecretKey := projectInfo.SecretKey
+
+		// When
+		updatedProject, err := client.RotateProjectKeys(
+			ctx,
+			dummyProjectID,
+			projectInfo.ID,
+			"new-public-key",
+			"new-secret-key",
+		)
+
+		// Then
+		assert.NoError(t, err)
+		assert.Equal(t, "new-public-key", updatedProject.PublicKey)
+		assert.Equal(t, "new-secret-key", updatedProject.SecretKey)
+		assert.NotEqual(t, originalPublicKey, updatedProject.PublicKey)
+		assert.NotEqual(t, originalSecretKey, updatedProject.SecretKey)
+	})
+
+	t.Run("fail: should return error when project not found", func(t *testing.T) {
+		// Given
+		ctx := context.Background()
+		client := setupTestWithDummyData(t)
+		defer func() {
+			assert.NoError(t, client.Close())
+		}()
+
+		// When
+		_, err := client.RotateProjectKeys(
+			ctx,
+			dummyProjectID,
+			types.ID("000000000000000000000003"),
+			"new-public-key",
+			"new-secret-key",
+		)
+
+		// Then
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, database.ErrProjectNotFound)
+	})
+
+	t.Run("fail: should return error when user is not owner", func(t *testing.T) {
+		// Given
+		ctx := context.Background()
+		client := setupTestWithDummyData(t)
+		defer func() {
+			assert.NoError(t, client.Close())
+		}()
+
+		// Create a test project
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID, "1h")
+		assert.NoError(t, err)
+
+		// When
+		_, err = client.RotateProjectKeys(
+			ctx,
+			types.ID("000000000000000000000003"),
+			projectInfo.ID,
+			"new-public-key",
+			"new-secret-key",
+		)
+
+		// Then
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, database.ErrProjectNotFound)
 	})
 }

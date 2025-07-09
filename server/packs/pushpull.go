@@ -23,6 +23,8 @@ import (
 	"strconv"
 	gotime "time"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -36,6 +38,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
+
+// DocKey generates document-wide sync key.
+func DocKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("doc-%s-%s", projectID, docKey))
+}
 
 // DocPushKey generates a sync key for pushing changes to the document.
 func DocPushKey(docKey types.DocRefKey) sync.Key {
@@ -87,18 +94,21 @@ func PushPull(
 		return nil, err
 	}
 
-	pullLog := strconv.Itoa(resPack.ChangesLen())
-	if resPack.SnapshotLen() > 0 {
-		pullLog = units.HumanSize(float64(resPack.SnapshotLen()))
+	if logging.Enabled(zap.DebugLevel) {
+		pullLog := strconv.Itoa(resPack.ChangesLen())
+		if resPack.SnapshotLen() > 0 {
+			pullLog = units.HumanSize(float64(resPack.SnapshotLen()))
+		}
+		logging.From(ctx).Debugf(
+			"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
+			docInfo.Key,
+			clientInfo.Key,
+			len(pushedChanges),
+			pullLog,
+			gotime.Since(start),
+		)
 	}
-	logging.From(ctx).Infof(
-		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, elapsed: %s",
-		docInfo.Key,
-		clientInfo.Key,
-		len(pushedChanges),
-		pullLog,
-		gotime.Since(start),
-	)
+
 	hostname := be.Config.Hostname
 	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
@@ -119,15 +129,11 @@ func PushPull(
 			// TODO(hackerwins): For now, we are publishing the event to pubsub and
 			// webhook manually. But we need to consider unified event handling system
 			// to handle this with rate-limiter and retry mechanism.
-			be.PubSub.Publish(
-				ctx,
-				publisher,
-				events.DocEvent{
-					Type:      events.DocChanged,
-					Publisher: publisher,
-					DocRefKey: docKey,
-				},
-			)
+			be.PubSub.Publish(ctx, publisher, events.DocEvent{
+				Type:      events.DocChanged,
+				Publisher: publisher,
+				DocRefKey: docKey,
+			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
 				if err := be.EventWebhookManager.Send(ctx, types.NewEventWebhookInfo(
@@ -158,54 +164,45 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*change.Change, *database.DocInfo, int64, change.Checkpoint, error) {
-	// TODO(hackerwins): We can replace this locker with lock-free implementation
-	// using $inc operator with upsert in MongoDB.
-	locker := be.Lockers.Locker(DocPushKey(docKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
+	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
-	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+	// 01. Filter out changes that are already pushed.
+	var pushables []*database.ChangeInfo
+	for _, cn := range reqPack.Changes {
+		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
+			logging.From(ctx).Warnf(
+				"change already pushed, clientSeq: %d, cp: %d",
+				cn.ID().ClientSeq(),
+				cpBeforePush.ClientSeq,
+			)
+			continue
+		}
+		info, err := database.NewFromChange(docKey, cn)
+		if err != nil {
+			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		}
+
+		pushables = append(pushables, info)
+	}
+
+	// 02. Push the changes to the database.
+	if len(pushables) > 0 || reqPack.IsRemoved {
+		locker := be.Lockers.Locker(DocPushKey(docKey))
+		defer locker.Unlock()
+	}
+	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
+		ctx,
+		docKey,
+		cpBeforePush,
+		pushables,
+		reqPack.IsRemoved,
+	)
 	if err != nil {
 		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
 	}
 
-	initialSeq := docInfo.ServerSeq
-	checkpoint := clientInfo.Checkpoint(docInfo.ID)
-
-	var pushables []*change.Change
-	for _, change := range reqPack.Changes {
-		if change.ID().ClientSeq() > checkpoint.ClientSeq {
-			serverSeq := docInfo.IncreaseServerSeq()
-			checkpoint = checkpoint.NextServerSeq(serverSeq)
-			change.SetServerSeq(serverSeq)
-			pushables = append(pushables, change)
-		} else {
-			logging.From(ctx).Warnf(
-				"change already pushed, clientSeq: %d, cp: %d",
-				change.ID().ClientSeq(),
-				checkpoint.ClientSeq,
-			)
-		}
-
-		checkpoint = checkpoint.SyncClientSeq(change.ClientSeq())
-	}
-
-	if len(pushables) > 0 || reqPack.IsRemoved {
-		if err := be.DB.CreateChangeInfos(
-			ctx,
-			docInfo,
-			initialSeq,
-			pushables,
-			reqPack.IsRemoved,
-		); err != nil {
-			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-		}
-	}
-
+	initialSeq := docInfo.ServerSeq - int64(len(pushables))
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Debugf(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
@@ -215,11 +212,11 @@ func pushPack(
 			len(reqPack.Changes)-len(pushables),
 			initialSeq,
 			docInfo.ServerSeq,
-			checkpoint,
+			cpAfterPush,
 		)
 	}
 
-	return pushables, docInfo, initialSeq, checkpoint, nil
+	return pushables, docInfo, initialSeq, cpAfterPush, nil
 }
 
 func pullPack(
@@ -232,31 +229,20 @@ func pullPack(
 	initialSeq int64,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
-	docKey := docInfo.RefKey()
-
 	// 01. pull changes or a snapshot from the database and create a response pack.
 	resPack, err := preparePack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}
+	resPack.ApplyDocInfo(docInfo)
 
 	// 02. update the document's status in the client.
-	if opts.Status == document.StatusRemoved {
-		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else if opts.Status == document.StatusDetached {
-		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := clientInfo.UpdateCheckpoint(docKey.DocID, resPack.Checkpoint); err != nil {
-			return nil, err
-		}
+	if err := clientInfo.UpdateDocStatus(docInfo.ID, opts.Status, resPack.Checkpoint); err != nil {
+		return nil, err
 	}
 
 	// 03. update client's vector and checkpoint to DB.
-	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docKey, reqPack.VersionVector)
+	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
 	if err != nil {
 		return nil, err
 	}
@@ -286,12 +272,10 @@ func preparePack(
 	// NOTE(hackerwins): If the client is push-only, it does not need to pull changes.
 	// So, just return the checkpoint with server seq after pushing changes.
 	if mode == types.SyncModePushOnly {
-		pack := NewServerPack(docInfo.Key, change.Checkpoint{
+		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil)
-		pack.ApplyDocInfo(docInfo)
-		return pack, nil
+		}, nil, nil), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -318,20 +302,12 @@ func preparePack(
 			return nil, err
 		}
 
-		pack := NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil)
-		pack.ApplyDocInfo(docInfo)
-		return pack, nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
 	}
 
 	// NOTE(hackerwins): If the size of changes for the response is greater than the snapshot threshold,
 	// we pull the snapshot from DB to reduce the size of the response.
-	pack, err := pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
-	if err != nil {
-		return nil, err
-	}
-
-	pack.ApplyDocInfo(docInfo)
-	return pack, nil
+	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 }
 
 // pullSnapshot pulls the snapshot from DB.

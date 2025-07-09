@@ -24,15 +24,11 @@ import (
 	"fmt"
 	"os"
 
-	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/hashicorp/golang-lru/v2/expirable"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
-	"github.com/yorkie-team/yorkie/pkg/document"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
+	"github.com/yorkie-team/yorkie/server/backend/cache"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -51,23 +47,24 @@ import (
 type Backend struct {
 	Config *Config
 
-	// AuthWebhookCache is used to cache the response of the auth webhook.
-	AuthWebhookCache *expirable.LRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
-	// AuthWebhookClient is used to send auth webhook.
-	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
-	// SnapshotCache is used to cache the snapshot information.
-	SnapshotCache *lru.Cache[types.DocRefKey, *document.InternalDocument]
-
-	// ClusterClient is used to send requests to nodes in the cluster.
-	ClusterClient *cluster.Client
-
-	// EventWebhookManager is used to send event webhook
-	EventWebhookManager *webhook.Manager
-
+	// Cache is the central cache manager for all caches.
+	Cache *cache.Manager
 	// PubSub is used to publish/subscribe events to/from clients.
 	PubSub *pubsub.PubSub
 	// Lockers is used to lock/unlock resources.
 	Lockers *sync.LockerManager
+
+	// Background is used to manage background tasks.
+	Background *background.Background
+	// Housekeeping is used to manage background batch tasks.
+	Housekeeping *housekeeping.Housekeeping
+
+	// AuthWebhookClient is used to send auth webhook.
+	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
+	// ClusterClient is used to send requests to nodes in the cluster.
+	ClusterClient *cluster.Client
+	// EventWebhookManager is used to send event webhook
+	EventWebhookManager *webhook.Manager
 
 	// Metrics is used to expose metrics.
 	Metrics *prometheus.Metrics
@@ -77,11 +74,6 @@ type Backend struct {
 	MsgBroker messagebroker.Broker
 	// Warehouse is the warehouse instance.
 	Warehouse warehouse.Warehouse
-
-	// Background is used to manage background tasks.
-	Background *background.Background
-	// Housekeeping is used to manage background batch tasks.
-	Housekeeping *housekeeping.Housekeeping
 }
 
 // New creates a new instance of Backend.
@@ -104,12 +96,32 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create webhook clients and its cache.
-	authWebhookCache := expirable.NewLRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
-		conf.AuthWebhookCacheSize,
-		nil,
-		conf.ParseAuthWebhookCacheTTL(),
-	)
+	// 02. Create the cache manager, pubsub, and lockers.
+	cacheManager, err := cache.New(cache.Options{
+		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
+		AuthWebhookCacheTTL:  conf.ParseAuthWebhookCacheTTL(),
+		ProjectCacheSize:     conf.ProjectCacheSize,
+		ProjectCacheTTL:      conf.ParseProjectCacheTTL(),
+		SnapshotCacheSize:    conf.SnapshotCacheSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+	lockers := sync.New()
+	pubsub := pubsub.New()
+
+	// 03. Create the background instance. The background instance is used to
+	// manage background tasks.
+	bg := background.New(metrics)
+
+	// 04. Create the housekeeping instance. The housekeeping is used
+	// to manage housekeeper tasks such as deactivating inactive clients.
+	housekeeper, err := housekeeping.New(housekeepingConf)
+	if err != nil {
+		return nil, err
+	}
+
+	// 05. Create webhook clients and cluster client.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		pkgwebhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
@@ -126,28 +138,10 @@ func New(
 			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
 		},
 	))
-
-	snapshotCache, err := lru.New[types.DocRefKey, *document.InternalDocument](
-		conf.SnapshotCacheSize,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// 03. Create the cluster client. The cluster client is used to send
-	// requests to other nodes in the cluster.
 	clusterClient, err := cluster.Dial(conf.GatewayAddr)
 	if err != nil {
 		return nil, err
 	}
-
-	// 04. Create pubsub, and lockers.
-	lockers := sync.New()
-	pubsub := pubsub.New()
-
-	// 05. Create the background instance. The background instance is used to
-	// manage background tasks.
-	bg := background.New(metrics)
 
 	// 06. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
@@ -164,14 +158,16 @@ func New(
 		}
 	}
 
-	// 07. Create the housekeeping instance. The housekeeping is used
-	// to manage keeping tasks such as deactivating inactive clients.
-	keeping, err := housekeeping.New(housekeepingConf)
+	// 07. Create the message broker instance.
+	broker := messagebroker.Ensure(kafkaConf)
+
+	// 08. Ensure the warehouse instance.
+	warehouse, err := warehouse.Ensure(rocksConf)
 	if err != nil {
 		return nil, err
 	}
 
-	// 08. Ensure the default user and project. If the default user and project
+	// 09. Ensure the default user and project. If the default user and project
 	// do not exist, create them.
 	if conf.UseDefaultProject {
 		_, _, err = db.EnsureDefaultUserAndProject(
@@ -185,46 +181,29 @@ func New(
 		}
 	}
 
-	// 09. Create the message broker instance.
-	broker := messagebroker.Ensure(kafkaConf)
-
-	// 10. Ensure the warehouse instance.
-	warehouse, err := warehouse.Ensure(rocksConf)
-	if err != nil {
-		return nil, err
-	}
-
-	// 11. Return the backend instance.
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
 	}
-
-	logging.DefaultLogger().Infof(
-		"backend created: db: %s",
-		dbInfo,
-	)
+	logging.DefaultLogger().Infof("backend created: db: %s", dbInfo)
 
 	return &Backend{
 		Config: conf,
 
-		AuthWebhookCache:    authWebhookCache,
+		Cache:        cacheManager,
+		Lockers:      lockers,
+		PubSub:       pubsub,
+		Background:   bg,
+		Housekeeping: housekeeper,
+
 		AuthWebhookClient:   authWebhookClient,
 		EventWebhookManager: eventWebhookManger,
+		ClusterClient:       clusterClient,
 
-		SnapshotCache: snapshotCache,
-
-		ClusterClient: clusterClient,
-
-		Lockers: lockers,
-		PubSub:  pubsub,
-
-		Metrics:      metrics,
-		DB:           db,
-		Background:   bg,
-		Housekeeping: keeping,
-		MsgBroker:    broker,
-		Warehouse:    warehouse,
+		Metrics:   metrics,
+		DB:        db,
+		MsgBroker: broker,
+		Warehouse: warehouse,
 	}, nil
 }
 
@@ -243,18 +222,18 @@ func (b *Backend) Shutdown() error {
 	if err := b.Housekeeping.Stop(); err != nil {
 		return err
 	}
-
 	b.Background.Close()
 
 	b.AuthWebhookClient.Close()
 	b.EventWebhookManager.Close()
-
 	b.ClusterClient.Close()
 
 	if err := b.MsgBroker.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}
-
+	if err := b.Warehouse.Close(); err != nil {
+		logging.DefaultLogger().Error(err)
+	}
 	if err := b.DB.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}

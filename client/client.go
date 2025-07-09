@@ -236,8 +236,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		ctx,
 		withShardKey(connect.NewRequest(&api.ActivateClientRequest{
 			ClientKey: c.key,
-		},
-		), c.options.APIKey))
+		}), c.options.APIKey, c.key))
 	if err != nil {
 		return err
 	}
@@ -263,8 +262,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		ctx,
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
 			ClientId: c.id.String(),
-		},
-		), c.options.APIKey))
+		}), c.options.APIKey, c.key))
 	if err != nil {
 		return err
 	}
@@ -309,6 +307,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
+			SchemaKey:  opts.Schema,
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
@@ -321,6 +320,9 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	doc.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+	if res.Msg.SchemaRules != nil {
+		doc.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
+	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
@@ -412,8 +414,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
-		},
-		), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -715,8 +716,7 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
-		},
-		), c.options.APIKey, opt.key.String()))
+		}), c.options.APIKey, opt.key.String()))
 	if err != nil {
 		return err
 	}
@@ -759,8 +759,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
-		},
-		), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -797,8 +796,7 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 			DocumentId: attachment.docID.String(),
 			Topic:      topic,
 			Payload:    payload,
-		},
-		), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}

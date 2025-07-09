@@ -61,6 +61,12 @@ var (
 
 	// ErrVersionVectorNotFound is returned when the version vector could not be found.
 	ErrVersionVectorNotFound = errors.New("version vector not found")
+
+	// ErrSchemaNotFound is returned when the schema could not be found.
+	ErrSchemaNotFound = errors.New("schema not found")
+
+	// ErrSchemaAlreadyExists is returned when the schema already exists.
+	ErrSchemaAlreadyExists = errors.New("schema already exists")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -118,6 +124,15 @@ type Database interface {
 		owner types.ID,
 		id types.ID,
 		fields *types.UpdatableProjectFields,
+	) (*ProjectInfo, error)
+
+	// RotateProjectKeys rotates the API keys of the project.
+	RotateProjectKeys(
+		ctx context.Context,
+		owner types.ID,
+		id types.ID,
+		publicKey string,
+		secretKey string,
 	) (*ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
@@ -216,6 +231,13 @@ type Database interface {
 		refKey types.DocRefKey,
 	) error
 
+	// UpdateDocInfoSchema updates the document schema.
+	UpdateDocInfoSchema(
+		ctx context.Context,
+		refKey types.DocRefKey,
+		schemaKey string,
+	) error
+
 	// GetDocumentsCount returns the number of documents in the given project.
 	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
 
@@ -225,11 +247,11 @@ type Database interface {
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
-		docInfo *DocInfo,
-		initialServerSeq int64,
-		changes []*change.Change,
+		docRefKey types.DocRefKey,
+		cpBeforePush change.Checkpoint,
+		changes []*ChangeInfo,
 		isRemoved bool,
-	) error
+	) (*DocInfo, change.Checkpoint, error)
 
 	// CompactChangeInfos stores the given compacted changes then updates the docInfo.
 	CompactChangeInfos(
@@ -270,10 +292,11 @@ type Database interface {
 		doc *document.InternalDocument,
 	) error
 
-	// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-	FindSnapshotInfoByRefKey(
+	// FindSnapshotInfo return the snapshot by the given DocRefKey and serverSeq.
+	FindSnapshotInfo(
 		ctx context.Context,
-		refKey types.SnapshotRefKey,
+		refKey types.DocRefKey,
+		serverSeq int64,
 	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
@@ -322,9 +345,55 @@ type Database interface {
 		excludeClientID types.ID,
 	) (bool, error)
 
+	// CreateSchemaInfo creates a new schema.
+	CreateSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+		body string,
+		rules []types.Rule,
+	) (*SchemaInfo, error)
+
+	// GetSchemaInfo retrieves a schema by its ID.
+	GetSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+	) (*SchemaInfo, error)
+
+	// GetSchemaInfos retrieves all versions of a schema by its name.
+	GetSchemaInfos(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+	) ([]*SchemaInfo, error)
+
+	// ListSchemaInfos lists all schemas in the project.
+	ListSchemaInfos(
+		ctx context.Context,
+		projectID types.ID,
+	) ([]*SchemaInfo, error)
+
+	// RemoveSchemaInfo removes a schema by its ID.
+	RemoveSchemaInfo(
+		ctx context.Context,
+		projectID types.ID,
+		name string,
+		version int,
+	) error
+
 	// PurgeDocument purges the given document.
 	PurgeDocument(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 	) (map[string]int64, error)
+
+	// IsSchemaAttached returns true if the schema is being used by any documents.
+	IsSchemaAttached(
+		ctx context.Context,
+		projectID types.ID,
+		schema string,
+	) (bool, error)
 }

@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/hashicorp/golang-lru/v2/expirable"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -42,18 +41,15 @@ func isYorkieService(method string) bool {
 // YorkieServiceInterceptor is an interceptor for building additional context
 // and handling authentication for YorkieService.
 type YorkieServiceInterceptor struct {
-	backend      *backend.Backend
-	requestID    *requestID
-	projectCache *expirable.LRU[string, *types.Project]
+	backend   *backend.Backend
+	requestID *requestID
 }
 
 // NewYorkieServiceInterceptor creates a new instance of YorkieServiceInterceptor.
 func NewYorkieServiceInterceptor(be *backend.Backend) *YorkieServiceInterceptor {
-	cache := expirable.NewLRU[string, *types.Project](be.Config.ProjectCacheSize, nil, be.Config.ParseProjectCacheTTL())
 	return &YorkieServiceInterceptor{
-		backend:      be,
-		requestID:    newRequestID("r"),
-		projectCache: cache,
+		backend:   be,
+		requestID: newRequestID("r"),
 	}
 }
 
@@ -168,14 +164,14 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	cacheKey := md.APIKey
 
 	// 02. Build Project from API Key
-	if _, ok := i.projectCache.Get(cacheKey); !ok {
+	if _, ok := i.backend.Cache.Project.Get(cacheKey); !ok {
 		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
 			return nil, connecthelper.ToStatusError(err)
 		}
-		i.projectCache.Add(cacheKey, prj)
+		i.backend.Cache.Project.Add(cacheKey, prj)
 	}
-	project, _ := i.projectCache.Get(cacheKey)
+	project, _ := i.backend.Cache.Project.Get(cacheKey)
 	ctx = projects.With(ctx, project)
 
 	// 03. Check CORS after project is loaded

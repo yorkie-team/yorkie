@@ -81,7 +81,7 @@ func TestPresence(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Update the root of the document and presence
-		for i := 0; i < int(helper.SnapshotThreshold); i++ {
+		for i := range int(helper.SnapshotThreshold) {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetString("key", "value")
 				p.Set("updated", strconv.Itoa(i))

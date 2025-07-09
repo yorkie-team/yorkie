@@ -37,7 +37,7 @@ import (
 )
 
 func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("vv-bench-%d-%d", i, gotime.Now().UnixMilli()))
 

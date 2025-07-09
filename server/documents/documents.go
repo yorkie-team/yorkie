@@ -21,6 +21,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -34,6 +36,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/packs"
+
+	yschema "github.com/yorkie-team/yorkie/pkg/schema"
 )
 
 // SnapshotMaxLen is the maximum length of the document snapshot in the
@@ -42,6 +46,21 @@ const SnapshotMaxLen = 50
 
 // pageSizeLimit is the limit of the pagination size of documents.
 const pageSizeLimit = 101
+
+// UpdateMode constants define the modes for updating a document
+const (
+	// UpdateModeBoth updates both the document root and schema
+	UpdateModeBoth = "both"
+
+	// UpdateModeRootOnly updates only the document root
+	UpdateModeRootOnly = "root_only"
+
+	// UpdateModeSchemaOnly updates only the document schema
+	UpdateModeSchemaOnly = "schema_only"
+
+	// UpdateModeDetachSchema detaches the schema from the document
+	UpdateModeDetachSchema = "detach_schema"
+)
 
 // DocAttachmentKey generates a key for the document attachment.
 func DocAttachmentKey(docKey types.DocRefKey) sync.Key {
@@ -60,9 +79,6 @@ var (
 
 	// ErrDocumentAlreadyExists is returned when the document already exists.
 	ErrDocumentAlreadyExists = errors.New("document already exists")
-
-	// ErrDocumentNotRemoved is returned when the document is not removed yet.
-	ErrDocumentNotRemoved = errors.New("document is not removed yet")
 )
 
 // CreateDocument creates a new document with the given key and server sequence.
@@ -116,6 +132,7 @@ func CreateDocument(
 		UpdatedAt:       docInfo.UpdatedAt,
 		Snapshot:        newDoc.Marshal(),
 		DocSize:         newDoc.DocSize(),
+		SchemaKey:       docInfo.Schema,
 	}, nil
 }
 
@@ -127,9 +144,7 @@ func ListDocumentSummaries(
 	paging types.Paging[types.ID],
 	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
-	if paging.PageSize > pageSizeLimit {
-		paging.PageSize = pageSizeLimit
-	}
+	paging.PageSize = min(paging.PageSize, pageSizeLimit)
 
 	infos, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
@@ -151,6 +166,7 @@ func ListDocumentSummaries(
 			CreatedAt:       info.CreatedAt,
 			AccessedAt:      info.AccessedAt,
 			UpdatedAt:       info.UpdatedAt,
+			SchemaKey:       info.Schema,
 		}
 
 		if includeSnapshot {
@@ -205,6 +221,7 @@ func GetDocumentSummary(
 		UpdatedAt:       info.UpdatedAt,
 		Snapshot:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
+		SchemaKey:       info.Schema,
 	}, nil
 }
 
@@ -241,6 +258,7 @@ func GetDocumentSummaries(
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
 			Snapshot:   snapshot,
+			SchemaKey:  docInfo.Schema,
 		}
 
 		summaries = append(summaries, summary)
@@ -298,6 +316,7 @@ func SearchDocumentSummaries(
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
+			SchemaKey:  docInfo.Schema,
 		})
 	}
 
@@ -345,6 +364,16 @@ func FindOrCreateDocInfo(
 	)
 }
 
+// UpdateDocInfoSchema updates the schema key stored in DocInfo.
+func UpdateDocInfoSchema(
+	ctx context.Context,
+	be *backend.Backend,
+	refKey types.DocRefKey,
+	schemaKey string,
+) error {
+	return be.DB.UpdateDocInfoSchema(ctx, refKey, schemaKey)
+}
+
 // UpdateDocument updates the given document with the given root.
 // change pack.
 func UpdateDocument(
@@ -353,6 +382,8 @@ func UpdateDocument(
 	project *types.Project,
 	docInfo *database.DocInfo,
 	root yson.Object,
+	schema *types.Schema,
+	updateMode string,
 ) (*types.DocumentSummary, error) {
 	clientInfo := &database.ClientInfo{
 		ID:        types.IDFromActorID(time.InitialActorID),
@@ -374,25 +405,54 @@ func UpdateDocument(
 		return nil, err
 	}
 
-	if err = doc.Update(func(r *json.Object, p *presence.Presence) error {
-		r.SetYSON(root)
-		return nil
-	}); err != nil {
-		return nil, err
+	// 1. Update document root
+	if updateMode == UpdateModeRootOnly || updateMode == UpdateModeBoth {
+		if err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetYSON(root)
+			return nil
+		}); err != nil {
+			return nil, err
+		}
 	}
 
-	if _, err = packs.PushPull(
-		ctx,
-		be,
-		project,
-		clientInfo,
-		docInfo.RefKey(),
-		doc.CreateChangePack(),
-		packs.PushPullOptions{
-			Mode:   types.SyncModePushOnly,
-			Status: document.StatusAttached,
-		}); err != nil {
-		return nil, err
+	// 2. Validate document root against schema rules
+	if updateMode != UpdateModeDetachSchema && schema != nil {
+		result := yschema.ValidateYorkieRuleset(doc.RootObject(), schema.Rules)
+		if !result.Valid {
+			var errorMessages []string
+			for _, err := range result.Errors {
+				errorMessages = append(errorMessages, err.Message)
+			}
+			return nil, fmt.Errorf("%w: %s", document.ErrSchemaValidationFailed, strings.Join(errorMessages, ", "))
+		}
+	}
+
+	// 3. Push changes to the server
+	if updateMode == UpdateModeRootOnly || updateMode == UpdateModeBoth {
+		if _, err = packs.PushPull(
+			ctx,
+			be,
+			project,
+			clientInfo,
+			docInfo.RefKey(),
+			doc.CreateChangePack(),
+			packs.PushPullOptions{
+				Mode:   types.SyncModePushOnly,
+				Status: document.StatusAttached,
+			}); err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Update document schema
+	if updateMode != UpdateModeRootOnly {
+		docInfo.Schema = ""
+		if updateMode != UpdateModeDetachSchema {
+			docInfo.Schema = schema.Name + "@" + strconv.Itoa(schema.Version)
+		}
+		if err := UpdateDocInfoSchema(ctx, be, docInfo.RefKey(), docInfo.Schema); err != nil {
+			return nil, err
+		}
 	}
 
 	return &types.DocumentSummary{
@@ -404,6 +464,7 @@ func UpdateDocument(
 		UpdatedAt:       docInfo.UpdatedAt,
 		Snapshot:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
+		SchemaKey:       docInfo.Schema,
 	}, nil
 }
 
@@ -461,11 +522,7 @@ func CompactDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.CompactDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.CompactDocument(ctx, project, document)
 }
 
 // PurgeDocument purges the given document.
@@ -475,9 +532,5 @@ func PurgeDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	if err := be.ClusterClient.PurgeDocument(ctx, document, project.PublicKey); err != nil {
-		return err
-	}
-
-	return nil
+	return be.ClusterClient.PurgeDocument(ctx, project, document)
 }

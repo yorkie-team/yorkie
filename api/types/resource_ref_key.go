@@ -42,17 +42,6 @@ func (r ClientRefKey) String() string {
 	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
 }
 
-// SnapshotRefKey represents an identifier used to reference a snapshot.
-type SnapshotRefKey struct {
-	DocRefKey
-	ServerSeq int64
-}
-
-// String returns the string representation of the given SnapshotRefKey.
-func (r SnapshotRefKey) String() string {
-	return fmt.Sprintf("Snapshot (%s.%s.%d)", r.ProjectID, r.DocID, r.ServerSeq)
-}
-
 // EventRefKey represents an identifier used to reference an event.
 type EventRefKey struct {
 	DocRefKey

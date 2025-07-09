@@ -96,6 +96,7 @@ type AttachOptions struct {
 	Presence    innerpresence.Presence
 	InitialRoot yson.Object
 	IsRealtime  bool
+	Schema      string
 }
 
 // WithPresence configures the presence of the client.
@@ -115,6 +116,11 @@ func WithInitialRoot(root yson.Object) AttachOption {
 // WithRealtimeSync configures the manual sync of the client.
 func WithRealtimeSync() AttachOption {
 	return func(o *AttachOptions) { o.IsRealtime = true }
+}
+
+// WithSchema configures the schema of the document.
+func WithSchema(schema string) AttachOption {
+	return func(o *AttachOptions) { o.Schema = schema }
 }
 
 // DetachOption configures DetachOptions.

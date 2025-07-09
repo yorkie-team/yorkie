@@ -260,6 +260,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    needs: ci-target-check
+    if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.load-test == 'true' }}
+
     steps:
       - name: Set up Go ${{ env.GO_VERSION }}
         uses: actions/setup-go@v4

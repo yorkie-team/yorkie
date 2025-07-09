@@ -25,7 +25,7 @@ func EscapeString(s string) string {
 	var buf bytes.Buffer
 
 	l := len(s)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		c := s[i]
 		if c >= 0x20 && c != '\\' && c != '"' {
 			buf.WriteByte(c)

@@ -246,6 +246,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 	t.Run("admin get server version test", func(t *testing.T) {
 		testcases.RunAdminGetServerVersionTest(t, testAdminClient)
 	})
+
+	t.Run("admin rotate project keys test", func(t *testing.T) {
+		testcases.RunAdminRotateProjectKeysTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {

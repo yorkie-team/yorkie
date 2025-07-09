@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -696,14 +697,8 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 		}
 
 		loadedClientDocInfo := loaded.Documents[docRefKey.DocID]
-		serverSeq := loadedClientDocInfo.ServerSeq
-		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
-			serverSeq = clientDocInfo.ServerSeq
-		}
-		clientSeq := loadedClientDocInfo.ClientSeq
-		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
-			clientSeq = clientDocInfo.ClientSeq
-		}
+		serverSeq := max(clientDocInfo.ServerSeq, loadedClientDocInfo.ServerSeq)
+		clientSeq := max(clientDocInfo.ClientSeq, loadedClientDocInfo.ClientSeq)
 		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
@@ -854,6 +849,7 @@ func (d *DB) FindOrCreateDocInfo(
 			Key:        key,
 			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
+			Schema:     "",
 			CreatedAt:  now,
 			UpdatedAt:  now,
 			AccessedAt: now,
@@ -998,6 +994,39 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	return nil
 }
 
+// UpdateDocInfoSchema updates the document schema.
+func (d *DB) UpdateDocInfoSchema(
+	_ context.Context,
+	refKey types.DocRefKey,
+	schemaKey string,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return fmt.Errorf("find document by id: %w", err)
+	}
+
+	if raw == nil {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+	}
+
+	docInfo.Schema = schemaKey
+
+	if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		return fmt.Errorf("update document schema: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // GetDocumentsCount returns the number of documents in the given project.
 func (d *DB) GetDocumentsCount(
 	_ context.Context,
@@ -1048,60 +1077,74 @@ func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, er
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
-	_ context.Context,
-	docInfo *database.DocInfo,
-	initialServerSeq int64,
-	changes []*change.Change,
+	ctx context.Context,
+	refKey types.DocRefKey,
+	checkpoint change.Checkpoint,
+	changes []*database.ChangeInfo,
 	isRemoved bool,
-) error {
+) (*database.DocInfo, change.Checkpoint, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
+	if err != nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", err)
+	}
+	if raw == nil {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	if docInfo.ProjectID != refKey.ProjectID {
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+	}
+	initialServerSeq := docInfo.ServerSeq
+
 	for _, cn := range changes {
-		encodedOperations, err := database.EncodeOperations(cn.Operations())
-		if err != nil {
-			return err
-		}
+		serverSeq := docInfo.IncreaseServerSeq()
+		checkpoint = checkpoint.NextServerSeq(serverSeq)
+		cn.ServerSeq = serverSeq
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
 			ProjectID:      docInfo.ProjectID,
 			DocID:          docInfo.ID,
-			ServerSeq:      cn.ServerSeq(),
-			ClientSeq:      cn.ClientSeq(),
-			Lamport:        cn.ID().Lamport(),
-			ActorID:        types.ID(cn.ID().ActorID().String()),
-			VersionVector:  cn.ID().VersionVector(),
-			Message:        cn.Message(),
-			Operations:     encodedOperations,
-			PresenceChange: cn.PresenceChange(),
+			ServerSeq:      cn.ServerSeq,
+			ClientSeq:      cn.ClientSeq,
+			Lamport:        cn.Lamport,
+			ActorID:        cn.ActorID,
+			VersionVector:  cn.VersionVector,
+			Message:        cn.Message,
+			Operations:     cn.Operations,
+			PresenceChange: cn.PresenceChange,
 		}); err != nil {
-			return fmt.Errorf("create change: %w", err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("create change: %w", err)
 		}
 	}
 
-	raw, err := txn.First(
+	raw, err = txn.First(
 		tblDocuments,
 		"project_id_id",
 		docInfo.ProjectID.String(),
 		docInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("find document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
 
 	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
+		if len(cn.Operations) > 0 {
 			loadedDocInfo.UpdatedAt = now
 			break
 		}
@@ -1111,7 +1154,7 @@ func (d *DB) CreateChangeInfos(
 		loadedDocInfo.RemovedAt = now
 	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
 	}
 	txn.Commit()
 
@@ -1119,7 +1162,7 @@ func (d *DB) CreateChangeInfos(
 		docInfo.RemovedAt = now
 	}
 
-	return nil
+	return docInfo, checkpoint, nil
 }
 
 // CompactChangeInfos stores the given compacted changes then updates the docInfo.
@@ -1318,22 +1361,23 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
-func (d *DB) FindSnapshotInfoByRefKey(
+// FindSnapshotInfo returns the snapshot info of the given DocRefKey and serverSeq.
+func (d *DB) FindSnapshotInfo(
 	_ context.Context,
-	refKey types.SnapshotRefKey,
+	docKey types.DocRefKey,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
-		refKey.DocID.String(),
-		refKey.ServerSeq,
+		docKey.DocID.String(),
+		serverSeq,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find snapshot by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrSnapshotNotFound)
+		return nil, fmt.Errorf("%s: %w", docKey, database.ErrSnapshotNotFound)
 	}
 
 	return raw.(*database.SnapshotInfo).DeepCopy(), nil
@@ -1532,7 +1576,13 @@ func (d *DB) FindDocInfosByPaging(
 	var docInfos []*database.DocInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.DocInfo)
-		if len(docInfos) >= paging.PageSize || info.ProjectID != projectID {
+		// NOTE(raararaara): Unlike MongoDB, which treats PageSize == 0 as "no limit",
+		// memDB requires explicit handling. If PageSize == 0, do not apply any limit.
+		if paging.PageSize > 0 && len(docInfos) >= paging.PageSize {
+			break
+		}
+
+		if info.ProjectID != projectID {
 			break
 		}
 
@@ -1612,6 +1662,167 @@ func (d *DB) IsDocumentAttached(
 	return false, nil
 }
 
+func (d *DB) CreateSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+	body string,
+	rules []types.Rule,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// NOTE(hackerwins): Check if the project already exists.
+	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
+	existing, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaAlreadyExists)
+	}
+
+	info := &database.SchemaInfo{
+		ID:        newID(),
+		ProjectID: projectID,
+		Name:      name,
+		Version:   version,
+		Body:      body,
+		Rules:     rules,
+		CreatedAt: gotime.Now(),
+	}
+	if err := txn.Insert(tblSchemas, info); err != nil {
+		return nil, fmt.Errorf("create schema: %w", err)
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+func (d *DB) GetSchemaInfo(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) (*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	return raw.(*database.SchemaInfo).DeepCopy(), nil
+}
+
+func (d *DB) GetSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+	name string,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblSchemas,
+		"project_id_name",
+		projectID.String(),
+		name,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+	var infos []*database.SchemaInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		infos = append(infos, raw.(*database.SchemaInfo).DeepCopy())
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Version > infos[j].Version
+	})
+
+	if len(infos) == 0 {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+	return infos, nil
+}
+
+func (d *DB) ListSchemaInfos(
+	_ context.Context,
+	projectID types.ID,
+) ([]*database.SchemaInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblSchemas, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find schema: %w", err)
+	}
+
+	schemaMap := make(map[string]*database.SchemaInfo)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		schema := raw.(*database.SchemaInfo)
+		if existing, ok := schemaMap[schema.Name]; !ok || schema.Version > existing.Version {
+			schemaMap[schema.Name] = schema.DeepCopy()
+		}
+	}
+
+	var infos []*database.SchemaInfo
+	for _, schema := range schemaMap {
+		infos = append(infos, schema)
+	}
+
+	return infos, nil
+}
+
+func (d *DB) RemoveSchemaInfo(
+	ctx context.Context,
+	projectID types.ID,
+	name string,
+	version int,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(
+		tblSchemas,
+		"project_id_name_version",
+		projectID.String(),
+		name,
+		version,
+	)
+	if err != nil {
+		return fmt.Errorf("find schema: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+	}
+
+	schemaInfo := raw.(*database.SchemaInfo)
+	if err := txn.Delete(tblSchemas, schemaInfo); err != nil {
+		return fmt.Errorf("delete schema: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // PurgeDocument purges the given document and its metadata from the database.
 func (d *DB) PurgeDocument(
 	ctx context.Context,
@@ -1674,4 +1885,71 @@ func (d *DB) purgeDocumentInternals(
 
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
+}
+
+// RotateProjectKeys rotates the API keys of the project.
+func (d *DB) RotateProjectKeys(
+	_ context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Find project by ID and owner
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	project := raw.(*database.ProjectInfo).DeepCopy()
+	if project.Owner != owner {
+		return nil, database.ErrProjectNotFound
+	}
+
+	// Update project keys
+	project.PublicKey = publicKey
+	project.SecretKey = secretKey
+	project.UpdatedAt = gotime.Now()
+
+	// Save updated project
+	if err := txn.Insert(tblProjects, project); err != nil {
+		return nil, fmt.Errorf("update project: %w", err)
+	}
+
+	txn.Commit()
+	return project, nil
+}
+
+// IsSchemaAttached returns true if the schema is being used by any documents.
+func (d *DB) IsSchemaAttached(
+	_ context.Context,
+	projectID types.ID,
+	schema string,
+) (bool, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id",
+		projectID.String(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("find documents by project id: %w", err)
+	}
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		doc := raw.(*database.DocInfo)
+		if doc.Schema == schema && schema != "" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

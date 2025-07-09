@@ -20,9 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/x/bsonx"
 )
 
 const (
@@ -40,6 +40,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColSchemas represents the schemas collection in the database.
+	ColSchemas = "schemas"
 )
 
 // Collections represents the list of all collections in the database.
@@ -50,6 +52,7 @@ var Collections = []string{
 	ColDocuments,
 	ColChanges,
 	ColSnapshots,
+	ColSchemas,
 }
 
 type collectionInfo struct {
@@ -62,91 +65,103 @@ var collectionInfos = []collectionInfo{
 	{
 		name: ColProjects,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "owner", Value: bsonx.Int32(1)},
-				{Key: "name", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "owner", Value: int32(1)},
+				{Key: "name", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
-			Keys:    bsonx.Doc{{Key: "public_key", Value: bsonx.Int32(1)}},
+			Keys:    bson.D{{Key: "public_key", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}, {
-			Keys:    bsonx.Doc{{Key: "secret_key", Value: bsonx.Int32(1)}},
+			Keys:    bson.D{{Key: "secret_key", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},
 	{
 		name: ColUsers,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
+			Keys:    bson.D{{Key: "username", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},
 	{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "key", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "key", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
-			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "status", Value: bsonx.Int32(1)},
-				{Key: "updated_at", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "status", Value: int32(1)},
+				{Key: "updated_at", Value: int32(1)},
 			},
 		}, {
-			Keys: bsonx.Doc{
-				{Key: "documents.$**", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "attached_docs", Value: int32(1)},
 			},
 		}},
 	},
 	{
 		name: ColDocuments,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "key", Value: bsonx.Int32(1)},
-				{Key: "removed_at", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "key", Value: int32(1)},
+				{Key: "removed_at", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: ColChanges,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)},
+				{Key: "server_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "actor_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)},
+				{Key: "actor_id", Value: int32(1)},
+				{Key: "server_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: ColSnapshots,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)},
+				{Key: "server_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: ColVersionVectors,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "client_id", Value: bsonx.Int32(1)},
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)},
+				{Key: "client_id", Value: int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: ColSchemas,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "name", Value: int32(1)},
+				{Key: "version", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},

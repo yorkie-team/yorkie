@@ -101,15 +101,9 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 		return cp
 	}
 
-	maxServerSeq := cp.ServerSeq
-	if cp.ServerSeq < other.ServerSeq {
-		maxServerSeq = other.ServerSeq
-	}
+	maxServerSeq := max(cp.ServerSeq, other.ServerSeq)
 
-	maxClientSeq := cp.ClientSeq
-	if cp.ClientSeq < other.ClientSeq {
-		maxClientSeq = other.ClientSeq
-	}
+	maxClientSeq := max(cp.ClientSeq, other.ClientSeq)
 
 	return NewCheckpoint(maxServerSeq, maxClientSeq)
 }

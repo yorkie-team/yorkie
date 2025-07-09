@@ -28,9 +28,6 @@ const API_KEY = __ENV.API_KEY || "";
 // Document key prefix
 const DOC_KEY_PREFIX = __ENV.DOC_KEY_PREFIX || "test-presence";
 
-// Control document key (for interference testing in skew mode)
-const CONTROL_DOC_KEY = "control-doc";
-
 // Test mode: 'skew' or 'even'
 const TEST_MODE = __ENV.TEST_MODE || "skew";
 
@@ -38,32 +35,42 @@ const TEST_MODE = __ENV.TEST_MODE || "skew";
 const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500");
 
 // Virtual users per document (for even distribution)
-const VU_PER_DOCS = parseInt(__ENV.DOC_COUNT || "10");
-
-// Whether to use control document (for interference testing in skew mode)
-const USE_CONTROL_DOC = __ENV.USE_CONTROL_DOC === "true";
+const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10");
 
 // In 'skew' mode, use a single document; in 'even' mode, distribute VUs across documents
 function getDocKey() {
   if (TEST_MODE === "skew") {
     return DOC_KEY_PREFIX;
-  } else {
-    // 'even' mode
-    const documentCount = CONCURRENCY / VU_PER_DOCS;
-    // Distribute documents evenly based on virtual user ID
-    return `${DOC_KEY_PREFIX}-${__VU % documentCount}`;
   }
+
+  // 'even' mode
+  const docCount = CONCURRENCY / VU_PER_DOCS;
+  // Distribute documents evenly based on virtual user ID
+  return `${DOC_KEY_PREFIX}-${__VU % docCount}`;
 }
 
 // Custom metrics
 const activeClients = new Counter("active_clients");
+const activeClientsSuccessRate = new Rate("active_clients_success_rate");
+const activeClientsTime = new Trend("active_clients_time", true); // true enables time formatting
+
 const attachDocuments = new Counter("attach_documents");
+const attachDocumentsSuccessRate = new Rate("attach_documents_success_rate");
+const attachDocumentsTime = new Trend("attach_documents_time", true); // true enables time formatting
+
 const pushpulls = new Counter("pushpulls");
+const pushpullsSuccessRate = new Rate("pushpulls_success_rate");
+const pushpullsTime = new Trend("pushpulls_time", true); // true enables time formatting
+
+const deactivateClients = new Counter("deactivate_clients");
+const deactivateClientsSuccessRate = new Rate(
+  "deactivate_clients_success_rate"
+);
+const deactivateClientsTime = new Trend("deactivate_clients_time", true); // true enables time formatting
 
 const transactionFaileds = new Counter("transaction_faileds");
 const transactionSuccessRate = new Rate("transaction_success_rate");
-const transactionTime = new Trend("transaction_time");
-const controlDocLatency = new Trend("control_doc_latency"); // Metrics for measuring interference
+const transactionTime = new Trend("transaction_time", true); // true enables time formatting
 
 // k6 options for load testing
 export const options = {
@@ -75,7 +82,12 @@ export const options = {
   thresholds: {
     transaction_success_rate: ["rate>0.99"], // Maintain 99% success rate
     http_req_duration: ["p(95)<10000"], // 95% of requests complete within 10 seconds
-    control_doc_latency: ["p(95)<500"], // Control document response time(Threshold for interference testing)
+    // Add specific thresholds for our custom timing metrics
+    active_clients_time: ["p(95)<500"], // 95% under 500ms
+    attach_documents_time: ["p(95)<10000"], // 95% under 10s
+    pushpulls_time: ["p(95)<1000"], // 95% under 1s
+    deactivate_clients_time: ["p(95)<10000"], // 95% under 10s
+    transaction_time: ["p(95)<30000"], // 95% under 30s
   },
   // System resource settings
   setupTimeout: "30s",
@@ -87,50 +99,33 @@ export default function () {
   let success = false;
   const docKey = getDocKey();
 
-  group("Attachment", function () {
+  group("Presence", function () {
     try {
-      const clientID = activateClient();
-      activeClients.add(1);
-
+      const [clientID, clientKey] = activateClient();
       const [docID, serverSeq] = attachDocument(
         clientID,
         hexToBase64(clientID),
         docKey
       );
-      success = docID !== "";
-      if (success) {
-        attachDocuments.add(1);
-      }
+
+      sleep(1); // Simulate some processing time
 
       let lastServerSeq = serverSeq;
       // Randomly push and pull changes to the document to emulate presence updates
-      for (let i = 0; i < Math.random() * 3 + 2; i++) {
+      for (let i = 0; i < 5; i++) {
         [, lastServerSeq] = pushpullChanges(
           clientID,
           docID,
           docKey,
           lastServerSeq
         );
-        pushpulls.add(1);
-        sleep(1); // Sleep for 1 second between changes
+        sleep(1); // Simulate some processing time
       }
 
-      // Skew interference test: measuring control document response time under load
-      if (USE_CONTROL_DOC && __VU % 10 === 0) {
-        // 10% sampling
-        const controlStartTime = new Date().getTime();
-        const controlDocID = attachDocument(
-          clientID,
-          hexToBase64(clientID),
-          CONTROL_DOC_KEY
-        );
-        const controlEndTime = new Date().getTime();
-        controlDocLatency.add(controlEndTime - controlStartTime);
-      }
+      deactivateClient(clientID, clientKey);
 
-      deactivateClient(clientID);
+      success = true;
     } catch (error: any) {
-      console.error(`Error in main function: ${error.message}`);
       transactionFaileds.add(1);
     } finally {
       transactionSuccessRate.add(success);
@@ -181,10 +176,7 @@ function makeRequest(url: string, payload: any, additionalHeaders = {}) {
     ...additionalHeaders,
   };
 
-  const params = {
-    headers,
-    timeout: "10s",
-  };
+  const params = { headers, timeout: "100s" };
 
   try {
     const response = http.post(url, JSON.stringify(payload), params);
@@ -212,31 +204,54 @@ function makeRequest(url: string, payload: any, additionalHeaders = {}) {
 }
 
 function activateClient() {
+  const startTime = new Date().getTime();
+
   // Generate a random client key
   const clientKey = `${Math.random()
     .toString(36)
     .substring(2)}-${Date.now().toString(36)}`;
-  const url = `${API_URL}/yorkie.v1.YorkieService/ActivateClient`;
-
-  const result = makeRequest(url, { clientKey }, { "x-shard-key": API_KEY });
-
-  return result!.clientId;
-}
-
-function deactivateClient(clientID: string): string {
-  const url = `${API_URL}/yorkie.v1.YorkieService/DeactivateClient`;
 
   const result = makeRequest(
-    url,
-    { clientId: clientID },
-    { "x-shard-key": API_KEY }
+    `${API_URL}/yorkie.v1.YorkieService/ActivateClient`,
+    { clientKey },
+    { "x-shard-key": `${API_KEY}/${clientKey}` }
   );
 
-  return result!.clientId;
+  const response = [result!.clientId, clientKey];
+
+  const endTime = new Date().getTime();
+  const duration = endTime - startTime;
+
+  activeClients.add(1);
+  activeClientsSuccessRate.add(true);
+  activeClientsTime.add(duration);
+
+  return response;
+}
+
+function deactivateClient(clientID: string, clientKey: string): string {
+  const startTime = new Date().getTime();
+
+  const result = makeRequest(
+    `${API_URL}/yorkie.v1.YorkieService/DeactivateClient`,
+    { clientId: clientID },
+    { "x-shard-key": `${API_KEY}/${clientKey}` }
+  );
+
+  result!.clientId;
+
+  const endTime = new Date().getTime();
+  const duration = endTime - startTime;
+
+  deactivateClients.add(1);
+  deactivateClientsSuccessRate.add(true);
+  deactivateClientsTime.add(duration);
+
+  return clientID;
 }
 
 function attachDocument(clientID: string, actorID: string, docKey: string) {
-  const url = `${API_URL}/yorkie.v1.YorkieService/AttachDocument`;
+  const startTime = new Date().getTime();
 
   // Generate a random color for presence data
   const colors = ["#00C9A7", "#C0392B", "#3498DB", "#F1C40F", "#9B59B6"];
@@ -246,23 +261,13 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
     clientId: clientID,
     changePack: {
       documentKey: docKey,
-      checkpoint: {
-        clientSeq: 1,
-      },
+      checkpoint: { clientSeq: 1 },
       changes: [
         {
-          id: {
-            clientSeq: 1,
-            actorId: actorID,
-            versionVector: {},
-          },
+          id: { clientSeq: 1, actorId: actorID, versionVector: {} },
           presenceChange: {
             type: "CHANGE_TYPE_PUT",
-            presence: {
-              data: {
-                color: `"${randomColor}"`,
-              },
-            },
+            presence: { data: { color: `"${randomColor}"` } },
           },
         },
       ],
@@ -270,12 +275,22 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
     },
   };
 
-  const resp = makeRequest(url, payload, {
-    "x-shard-key": `${API_KEY}/${docKey}`,
-  });
+  const resp = makeRequest(
+    `${API_URL}/yorkie.v1.YorkieService/AttachDocument`,
+    payload,
+    { "x-shard-key": `${API_KEY}/${docKey}` }
+  );
 
   const documentId = resp!.documentId;
   const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+
+  const endTime = new Date().getTime();
+  const duration = endTime - startTime;
+
+  attachDocuments.add(1);
+  attachDocumentsSuccessRate.add(true);
+  attachDocumentsTime.add(duration);
+
   return [documentId, serverSeq];
 }
 
@@ -285,8 +300,7 @@ function pushpullChanges(
   docKey: string,
   lastServerSeq: number
 ) {
-  const url = `${API_URL}/yorkie.v1.YorkieService/PushPullChanges`;
-
+  const startTime = new Date().getTime();
   const payload = {
     clientId: clientID,
     documentId: docID,
@@ -300,11 +314,21 @@ function pushpullChanges(
     },
   };
 
-  const resp = makeRequest(url, payload, {
-    "x-shard-key": `${API_KEY}/${docKey}`,
-  });
+  const resp = makeRequest(
+    `${API_URL}/yorkie.v1.YorkieService/PushPullChanges`,
+    payload,
+    { "x-shard-key": `${API_KEY}/${docKey}` }
+  );
 
   const documentId = resp!.documentId;
   const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+
+  const endTime = new Date().getTime();
+  const duration = endTime - startTime;
+
+  pushpulls.add(1);
+  pushpullsSuccessRate.add(true);
+  pushpullsTime.add(duration);
+
   return [documentId, serverSeq];
 }

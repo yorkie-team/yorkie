@@ -151,7 +151,7 @@ func TestLockerConcurrency(t *testing.T) {
 func TestTryLock(t *testing.T) {
 	l := New()
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if l.TryLock("test") == false {
 			t.Fatal("lock should have been acquired")
 		}

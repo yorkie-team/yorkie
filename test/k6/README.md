@@ -8,13 +8,13 @@ This document provides an overview of the Yorkie load test script and how to pro
 
 #### Prerequisites
 
-**Install k6**: Ensure you have k6 installed on your machine. You can download it from [k6.io](https://k6.io/docs/getting-started/installation/).
+**Install k6**: Ensure you have k6 installed on your machine. You can download it from [k6.io](https://grafana.com/docs/k6/latest/set-up/install-k6/).
 
 #### Run the Yorkie Server
 
 ```bash
 # Start the Yorkie server
-yorkie server --mongo-connection-uri mongodb://localhost:27017 --enable-pprof
+yorkie server --mongo-connection-uri mongodb://localhost:27017 --pprof-enabled
 ```
 
 #### Run the Load Test
@@ -43,21 +43,33 @@ This will run the test with a single document with 500 virtual users.
 #### Profiling the Yorkie Server with pprof
 
 The Yorkie server is running with pprof enabled on port 8081.
-To access the profiling reports, you can:
+
+##### CPU Profiling
+
+To collect CPU profile data, you can:
 
 ```bash
-curl http://localhost:8081/debug/pprof/profile\?seconds\=60 --output profile.out
+curl http://localhost:8081/debug/pprof/profile\?seconds\=150 --output cpu.out
 ```
 
-This will download 60 seconds of CPU profile.
-Then open interactive pprof tool with:
+This will download 150 seconds of CPU profile.
+Then open interactive pprof web tool with:
 
 ```bash
-go tool pprof profile.out
+go tool pprof -http=:9090 cpu.out
 ```
 
-After running a pprof command, use:
+##### Memory Profiling
 
-- 'top' - Show top consumers
-- 'web' - Generate a graph visualization (requires graphviz)
-- 'pdf' - Generate PDF report
+To collect heap memory profile data(In the middle of the load test):
+
+```bash
+curl http://localhost:8081/debug/pprof/heap --output mem.out
+```
+
+This will download current heap memory profile.
+Then open interactive pprof web tool with:
+
+```bash
+go tool pprof -http=:9090 mem.out
+```

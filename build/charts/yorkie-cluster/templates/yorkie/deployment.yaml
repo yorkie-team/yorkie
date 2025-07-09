@@ -74,7 +74,7 @@ spec:
           "{{ .Values.yorkie.args.dbConnectionUri }}",
           "--mongo-yorkie-database",
           "{{ .Values.yorkie.args.dbName }}",
-          "--enable-pprof",
+          "--pprof-enabled",
           "--rpc-port",
           "{{ .Values.yorkie.ports.rpcPort }}",
           "--profiling-port",
@@ -88,6 +88,17 @@ spec:
           {{- if .Values.yorkie.args.snapshotThreshold }}
           "--backend-snapshot-threshold",
           "{{ .Values.yorkie.args.snapshotThreshold }}",
+          {{- end }}
+          {{- if .Values.yorkie.logLevel }}
+          "--log-level",
+          "{{ .Values.yorkie.logLevel }}",
+          {{- end }}
+          {{- if .Values.yorkie.mongoMonitoringEnabled }}
+          "--mongo-monitoring-enabled",
+          {{- if .Values.yorkie.mongoMonitoringSlowQueryThreshold }}
+          "--mongo-monitoring-slow-query-threshold",
+          "{{ .Values.yorkie.mongoMonitoringSlowQueryThreshold }}",
+          {{- end }}
           {{- end }}
           {{- if .Values.yorkie.args.kafkaAddresses }}
           "--kafka-addresses",

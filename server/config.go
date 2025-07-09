@@ -47,10 +47,11 @@ const (
 	DefaultHousekeepingProjectFetchSize          = 100
 	DefaultHousekeepingCompactionMinChanges      = 1000
 
-	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
-	DefaultMongoConnectionTimeout = 5 * time.Second
-	DefaultMongoPingTimeout       = 5 * time.Second
-	DefaultMongoYorkieDatabase    = "yorkie-meta"
+	DefaultMongoConnectionURI                = "mongodb://localhost:27017"
+	DefaultMongoConnectionTimeout            = 5 * time.Second
+	DefaultMongoPingTimeout                  = 5 * time.Second
+	DefaultMongoYorkieDatabase               = "yorkie-meta"
+	DefaultMongoMonitoringSlowQueryThreshold = 100 * time.Millisecond
 
 	DefaultKafkaTopic        = "user-events"
 	DefaultKafkaWriteTimeout = 5 * time.Second
@@ -253,6 +254,12 @@ func (c *Config) ensureDefaultValue() {
 
 		if c.Mongo.PingTimeout == "" {
 			c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+		}
+
+		if c.Mongo.MonitoringEnabled {
+			if c.Mongo.MonitoringSlowQueryThreshold == "" {
+				c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
+			}
 		}
 	}
 }

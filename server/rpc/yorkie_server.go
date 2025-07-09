@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/schemas"
 )
 
 type yorkieServer struct {
@@ -150,12 +151,11 @@ func (s *yorkieServer) AttachDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
+
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -169,18 +169,23 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}
 
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID}
-	if project.HasAttachmentLimit() {
+	schemaName, schemaVersion, err := converter.FromSchemaKey(docInfo.Schema)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+	if err != nil {
+		return nil, err
+	}
+	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.SchemaKey != "") {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 
 		count, err := documents.FindAttachedClientCount(ctx, s.backend, docKey)
 		if err != nil {
@@ -189,6 +194,20 @@ func (s *yorkieServer) AttachDocument(
 
 		if err := project.IsAttachmentLimitExceeded(count); err != nil {
 			return nil, err
+		}
+
+		if count == 0 {
+			schemaName, schemaVersion, err = converter.FromSchemaKey(req.Msg.SchemaKey)
+			if err != nil {
+				return nil, err
+			}
+			schema, err = schemas.GetSchema(ctx, s.backend, project.ID, schemaName, schemaVersion)
+			if err != nil {
+				return nil, err
+			}
+			if err := documents.UpdateDocInfoSchema(ctx, s.backend, docInfo.RefKey(), req.Msg.SchemaKey); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -206,11 +225,15 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.AttachDocumentResponse{
+	response := &api.AttachDocumentResponse{
 		ChangePack:         pbChangePack,
 		DocumentId:         docInfo.ID.String(),
 		MaxSizePerDocument: int32(project.MaxSizePerDocument),
-	}), nil
+	}
+	if schema != nil {
+		response.SchemaRules = converter.ToRules(schema.Rules)
+	}
+	return connect.NewResponse(response), nil
 }
 
 // DetachDocument detaches the given document to the client.
@@ -242,12 +265,11 @@ func (s *yorkieServer) DetachDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
+
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -260,11 +282,7 @@ func (s *yorkieServer) DetachDocument(
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 	}
 
 	// NOTE(hackerwins): If the project does not have an attachment limit,
@@ -338,12 +356,10 @@ func (s *yorkieServer) PushPullChanges(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -406,12 +422,10 @@ func (s *yorkieServer) RemoveDocument(
 
 	project := projects.From(ctx)
 
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
+	defer docLocker.RUnlock()
 	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, pack.DocumentKey))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
+	defer locker.Unlock()
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -423,11 +437,7 @@ func (s *yorkieServer) RemoveDocument(
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	if project.HasAttachmentLimit() {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
-		defer func() {
-			if err := locker.Unlock(); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+		defer locker.Unlock()
 	}
 
 	// 02. Push/Pull between the client and server.
@@ -488,12 +498,7 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
-	defer func() {
-		if err := locker.Unlock(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
+	defer locker.Unlock()
 	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
 	if err != nil {
 		return err
