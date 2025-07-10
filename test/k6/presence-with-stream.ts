@@ -34,9 +34,9 @@ export const options = {
     watchers: {
       executor: "ramping-vus",
       stages: [
-        { duration: "30s", target: Math.round(CONCURRENCY * WATCHER_RATIO) }, // ramp up
-        { duration: "30s", target: Math.round(CONCURRENCY * WATCHER_RATIO) }, // maintain
-        { duration: "20s", target: 0 }, // ramp down
+        { duration: "1m", target: Math.round(CONCURRENCY * WATCHER_RATIO) }, // ramp up
+        { duration: "1m", target: Math.round(CONCURRENCY * WATCHER_RATIO) }, // maintain
+        { duration: "30s", target: 0 }, // ramp down
       ],
       exec: "watcher",
     },
@@ -44,20 +44,20 @@ export const options = {
       executor: "ramping-vus",
       stages: [
         {
-          duration: "30s",
+          duration: "1m",
           target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO),
         }, // ramp up
         {
-          duration: "30s",
+          duration: "1m",
           target: CONCURRENCY - Math.round(CONCURRENCY * WATCHER_RATIO),
         }, // maintain
-        { duration: "20s", target: 0 }, // ramp down
+        { duration: "30s", target: 0 }, // ramp down
       ],
       exec: "updater",
     },
   },
-  setupTimeout: "20s",
-  teardownTimeout: "20s",
+  setupTimeout: "30s",
+  teardownTimeout: "30s",
 };
 
 const watchOpen = new Counter("watch_open");
@@ -299,56 +299,11 @@ const PROTO_DIR = ["../../api"];
 const PROTO_FILE = "yorkie/v1/yorkie.proto";
 const GRPC_TARGET = "localhost:8080";
 
-// Create a Map of gRPC clients for VUs to use
-const grpcClients: Map<number, Client> = new Map();
-
-// Load proto and create clients in init stage
-// Only create clients for watcher VUs (based on WATCHER_RATIO)
-const MAX_WATCHER_VU = Math.round(CONCURRENCY * WATCHER_RATIO);
-for (let i = 0; i < MAX_WATCHER_VU; i++) {
-  const client = new Client();
-  client.load(PROTO_DIR, PROTO_FILE);
-  grpcClients.set(i, client);
-}
-
-// Track which watcher VU gets which client index
-const vuToClientIndex: Map<number, number> = new Map();
-const assignedClients: Set<number> = new Set();
-
-function getGrpcClient(): Client {
-  const vuId = exec.vu.idInTest;
-
-  // Check if this VU already has a client assigned
-  if (vuToClientIndex.has(vuId)) {
-    const clientIndex = vuToClientIndex.get(vuId)!;
-    return grpcClients.get(clientIndex)!;
-  }
-
-  // Find the next available client index atomically
-  let clientIndex = -1;
-  for (let i = 0; i < MAX_WATCHER_VU; i++) {
-    if (!assignedClients.has(i)) {
-      assignedClients.add(i);
-      clientIndex = i;
-      break;
-    }
-  }
-
-  if (clientIndex === -1) {
-    throw new Error(
-      `No available gRPC clients. Expected max ${MAX_WATCHER_VU}, but VU ${vuId} is requesting a client.`
-    );
-  }
-
-  vuToClientIndex.set(vuId, clientIndex);
-  const client = grpcClients.get(clientIndex)!;
-
-  return client;
-}
+const gRPCClient = new Client();
+gRPCClient.load(PROTO_DIR, PROTO_FILE);
 
 // Watcher function to handle document watching
 export function watcher() {
-  console.log(`Watcher VU ${exec.vu.idInTest} started`);
   const startTime = new Date().getTime();
   let success = false;
   const docKey = getDocKey();
@@ -356,19 +311,20 @@ export function watcher() {
   try {
     const [cid, cKey] = activateClient();
     const [docId] = attachDocument(cid, hexToBase64(cid), docKey);
-    sleep(0.5); // Ensure activation and attachment are complete
 
-    // Get a gRPC client
-    const gcli = getGrpcClient();
+    // Ensure the client activates and attaches the document before watching
+    sleep(1);
 
-    // Connect to the gRPC server
-    // Use plaintext for local testing
-    gcli.connect(GRPC_TARGET, { plaintext: true });
+    gRPCClient.connect(GRPC_TARGET, { plaintext: true });
 
     // Create a stream to watch the document
-    const stream = new Stream(gcli, "yorkie.v1.YorkieService/WatchDocument", {
-      metadata: { "x-shard-key": `${API_KEY}/${docKey}` },
-    });
+    const stream = new Stream(
+      gRPCClient,
+      "yorkie.v1.YorkieService/WatchDocument",
+      {
+        metadata: { "x-shard-key": `${API_KEY}/${docKey}` },
+      }
+    );
 
     // receive events from the stream
     stream.on("data", (msg) => {
@@ -376,7 +332,7 @@ export function watcher() {
     });
 
     // error handling for the stream
-    stream.on("error", () => {
+    stream.on("error", (e) => {
       watchError.add(1);
     });
 
@@ -388,7 +344,7 @@ export function watcher() {
     sleep(5);
 
     stream.end();
-    gcli.close();
+    gRPCClient.close();
 
     deactivateClient(cid, cKey);
 
@@ -411,6 +367,9 @@ export function updater() {
   try {
     const [cid, cKey] = activateClient();
     const [docId, sSeq0] = attachDocument(cid, hexToBase64(cid), docKey);
+
+    // Ensure the client activates and attaches the document before updating
+    sleep(1);
 
     let sSeq = sSeq0;
 
