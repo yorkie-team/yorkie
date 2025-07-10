@@ -308,7 +308,7 @@ jobs:
       - name: Start the server
         run: cd repo && make start
 
-      - name: Run local k6 test
+      - name: Run Presence Load test
         id: curr-load
         run: |
           cd repo
@@ -319,7 +319,11 @@ jobs:
           fi
           echo "LOAD_RESULT=$(cat output.txt | jq -R -s .)" >> $GITHUB_OUTPUT
           echo "LOAD_SUMMARY=$(jq -c . summary.json)" >> $GITHUB_OUTPUT
-
+      - name: Run Stream Load test
+        id: curr-load-stream
+        run: |
+          cd repo
+          k6 run test/k6/presence-with-stream.ts
       - name: Stop the server
         run: cd repo && make stop
 
