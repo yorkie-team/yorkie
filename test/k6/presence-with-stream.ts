@@ -23,9 +23,9 @@ import exec from "k6/execution";
 
 const API_URL = __ENV.API_URL || "http://localhost:8080";
 const API_KEY = __ENV.API_KEY || "";
-const DOC_PREFIX = __ENV.DOC_KEY_PREFIX || "test-watch";
+const DOC_KEY_PREFIX = __ENV.DOC_KEY_PREFIX || "test-watch";
 const TEST_MODE = __ENV.TEST_MODE || "skew"; // skew | even
-const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "200", 10);
+const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500", 10);
 const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10", 10);
 const WATCHER_RATIO = parseFloat(__ENV.WATCHER_RATIO || "0.5"); // 0~1
 
@@ -95,9 +95,9 @@ const updaterTransactionSuccessRate = new Rate(
 const updaterTransactionTime = new Trend("updater_transaction_time", true); // true enables time formatting
 
 function getDocKey() {
-  if (TEST_MODE === "skew") return DOC_PREFIX;
+  if (TEST_MODE === "skew") return DOC_KEY_PREFIX;
   const cnt = CONCURRENCY / VU_PER_DOCS;
-  return `${DOC_PREFIX}-${exec.vu.idInTest % cnt}`;
+  return `${DOC_KEY_PREFIX}-${__VU % cnt}`;
 }
 
 function hexToBase64(hex: string) {
