@@ -44,6 +44,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
 	})
 
+	t.Run("RunLeadership Test", func(t *testing.T) {
+		testcases.RunLeadershipTest(t, db)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
