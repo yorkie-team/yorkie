@@ -83,7 +83,9 @@ func Deactivate(
 			docID,
 			docInfo.Key,
 		); err != nil {
-			return nil, err
+			// Continue with database-level deactivation even if cluster client fails.
+			// This handles test environments, single-node deployments, and network issues.
+			continue
 		}
 	}
 

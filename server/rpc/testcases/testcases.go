@@ -158,12 +158,14 @@ func RunClientDeactivationDetachesDocumentsTest(
 ) {
 	ctx := context.Background()
 
+	// 01. Activate client
 	activateResp, err := testClient.ActivateClient(
 		ctx,
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 	assert.NoError(t, err)
 	clientID := activateResp.Msg.ClientId
 
+	// 02. Create and attach first document
 	doc1Key := helper.TestDocKey(t).String() + "-doc1"
 	doc1 := document.New(key.Key(doc1Key))
 	packDoc1, err := converter.ToChangePack(doc1.CreateChangePack())
@@ -178,6 +180,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 	assert.NoError(t, err)
 	doc1ID := attachResp1.Msg.DocumentId
 
+	// 03. Create and attach second document
 	doc2Key := helper.TestDocKey(t).String() + "-doc2"
 	doc2 := document.New(key.Key(doc2Key))
 	packDoc2, err := converter.ToChangePack(doc2.CreateChangePack())
@@ -192,6 +195,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 	assert.NoError(t, err)
 	doc2ID := attachResp2.Msg.DocumentId
 
+	// 04. Make changes to documents to ensure they have content
 	assert.NoError(t, doc1.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetString("test", "value1")
 		return nil
@@ -224,11 +228,13 @@ func RunClientDeactivationDetachesDocumentsTest(
 		}))
 	assert.NoError(t, err)
 
+	// 05. Deactivate client - this should automatically detach all documents
 	_, err = testClient.DeactivateClient(
 		ctx,
 		connect.NewRequest(&api.DeactivateClientRequest{ClientId: clientID}))
 	assert.NoError(t, err)
 
+	// 06. Verify client is deactivated - try to attach document with deactivated client
 	_, err = testClient.AttachDocument(
 		ctx,
 		connect.NewRequest(&api.AttachDocumentRequest{
@@ -238,14 +244,15 @@ func RunClientDeactivationDetachesDocumentsTest(
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
 
+	// 07. Reactivate the same client
 	reactivateResp, err := testClient.ActivateClient(
 		ctx,
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 	assert.NoError(t, err)
 	assert.Equal(t, clientID, reactivateResp.Msg.ClientId)
 
-	// CRITICAL TEST: PushPull should fail with ErrDocumentNotAttached
-	// This proves documents were detached during deactivation
+	// 08. CRITICAL TEST: Verify documents were automatically detached during deactivation
+	// PushPull should fail with ErrDocumentNotAttached
 	_, err = testClient.PushPullChanges(
 		ctx,
 		connect.NewRequest(&api.PushPullChangesRequest{
@@ -266,6 +273,7 @@ func RunClientDeactivationDetachesDocumentsTest(
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
 
+	// 09. Verify client can attach new documents after reactivation
 	_, err = testClient.AttachDocument(
 		ctx,
 		connect.NewRequest(&api.AttachDocumentRequest{
@@ -275,6 +283,24 @@ func RunClientDeactivationDetachesDocumentsTest(
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			},
 		}))
+	assert.NoError(t, err)
+
+	// 10. Test edge case: Deactivate client with no attached documents
+	_, err = testClient.DetachDocument(
+		ctx,
+		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientId:   clientID,
+			DocumentId: doc1ID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: doc1Key,
+				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+			},
+		}))
+	assert.NoError(t, err)
+
+	_, err = testClient.DeactivateClient(
+		ctx,
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: clientID}))
 	assert.NoError(t, err)
 
 }
