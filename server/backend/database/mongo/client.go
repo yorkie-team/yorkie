@@ -1686,8 +1686,8 @@ func (c *Client) IsDocumentAttached(
 	excludeClientID types.ID,
 ) (bool, error) {
 	filter := bson.M{
-		"project_id":    docRefKey.ProjectID,
-		"attached_docs": docRefKey.DocID,
+		"project_id": docRefKey.ProjectID,
+		clientDocInfoKey(docRefKey.DocID, "status"): database.DocumentAttached,
 	}
 
 	if excludeClientID != "" {

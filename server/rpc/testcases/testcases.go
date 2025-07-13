@@ -110,11 +110,11 @@ func RunAttachAndDetachDocumentTest(
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 	assert.NoError(t, err)
 
-	doc := document.New(key.Key(t.Name()))
+	doc := document.New(helper.TestDocKey(t))
 	packWithNoChanges, err := converter.ToChangePack(doc.CreateChangePack())
 	assert.NoError(t, err)
 
-	_, err = testClient.AttachDocument(
+	attachResp, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
@@ -127,7 +127,7 @@ func RunAttachAndDetachDocumentTest(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:   activateResp.Msg.ClientId,
-			DocumentId: packWithNoChanges.DocumentKey,
+			DocumentId: attachResp.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
 		},
 		))
