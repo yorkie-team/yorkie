@@ -92,7 +92,7 @@ This logic is executed with 2 sub-logics.
 - 2-1. `Client` checks `LocalChanges` of `Document` at specific intervals.
 - 2-2. If there are changes in `LocalChanges`, `Client` sends them to the `Server`.
 
-If `LocalChanges` has changes that need to be synchronized with other peers, it collects them and [sends them to the server](https://github.com/yorkie-team/yorkie/blob/3d3123f6e96a91db935ece49a29701360e764392/client/client.go#L544-L552). These logics work **asynchronously**.
+If `LocalChanges` has changes that need to be synchronized with other peers, it collects them and [sends them to the server](https://github.com/yorkie-team/yorkie/blob/48dcdb835ce22869f384c60a60e85787ec54b8c5/client/client.go#L707-L719). These logics work **asynchronously**.
 
 #### 3. Propagating Changes to Peers
 
