@@ -207,7 +207,7 @@ func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
 			return nil, err
 		}
 
-		pbVersionVector[id.StringBase64()] = clock
+		pbVersionVector[id.String()] = clock
 	}
 
 	return &api.VersionVector{

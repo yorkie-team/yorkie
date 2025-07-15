@@ -193,7 +193,7 @@ func FromVersionVector(pbVersionVector *api.VersionVector) (time.VersionVector, 
 		return versionVector, nil
 	}
 	for id, lamport := range pbVersionVector.Vector {
-		actorID, err := time.ActorIDFromBase64(id)
+		actorID, err := time.ActorIDFromHex(id)
 		if err != nil {
 			return nil, err
 		}
