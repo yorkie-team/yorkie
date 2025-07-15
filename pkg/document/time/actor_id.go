@@ -19,6 +19,7 @@ package time
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
@@ -90,10 +91,39 @@ func ActorIDFromBytes(bytes []byte) (ActorID, error) {
 	return ActorID(bytes[:]), nil
 }
 
+func ActorIDFromBase64(str string) (ActorID, error) {
+	if str == "" {
+		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+	}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(str)
+	if err != nil {
+		return ActorID{}, err
+	}
+
+	if len(decoded) != actorIDSize {
+		return ActorID{}, ErrInvalidActorID
+	}
+
+	actorID := ActorID{}
+	copy(actorID[:], decoded[:actorIDSize])
+
+	return actorID, nil
+}
+
+
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
 func (id ActorID) String() string {
-	return hex.EncodeToString(id[:])
+	encoded := hex.EncodeToString(id[:])
+	return encoded
+	//return hex.EncodeToString(id[:])
+}
+
+func (id ActorID) StringBase64() string {
+	encoded := base64.RawURLEncoding.EncodeToString(id[:])
+	return encoded
+	//return base64.RawURLEncoding.EncodeToString(id[:])
 }
 
 // Bytes returns the bytes of ActorID itself.

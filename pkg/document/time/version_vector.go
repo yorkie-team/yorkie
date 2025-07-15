@@ -155,7 +155,7 @@ func (v VersionVector) Marshal() string {
 			panic(err)
 		}
 
-		builder.WriteString(id.String())
+		builder.WriteString(id.StringBase64())
 		builder.WriteRune(':')
 		builder.WriteString(strconv.FormatInt(v[k], 10))
 		isFirst = false
