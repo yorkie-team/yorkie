@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
+	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 // clusterServer is a server that provides the internal Yorkie cluster service.
@@ -168,4 +169,59 @@ func (s *clusterServer) PurgeDocument(
 	}
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
+}
+
+// GetDocument gets the document for a single document.
+func (s *clusterServer) GetDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceGetDocumentRequest],
+) (*connect.Response[api.ClusterServiceGetDocumentResponse], error) {
+	project, err := projects.GetProject(ctx, s.backend, "", req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(
+		ctx,
+		s.backend,
+		project,
+		key.Key(req.Msg.DocumentKey),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := &types.DocumentSummary{
+		ID:         docInfo.ID,
+		Key:        docInfo.Key,
+		CreatedAt:  docInfo.CreatedAt,
+		AccessedAt: docInfo.AccessedAt,
+		UpdatedAt:  docInfo.UpdatedAt,
+		SchemaKey:  docInfo.Schema,
+		Snapshot:   "",
+		Presences:  nil,
+	}
+
+	// If snapshot or presences are requested, we need to build the internal document
+	if req.Msg.IncludeSnapshot || req.Msg.IncludePresences {
+		// This is safe to call here since this is the responsible shard server
+		doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set snapshot if requested
+		if req.Msg.IncludeSnapshot {
+			summary.Snapshot = doc.Marshal()
+		}
+
+		// Set presences if requested
+		if req.Msg.IncludePresences {
+			summary.Presences = doc.AllPresences()
+		}
+	}
+
+	return connect.NewResponse(&api.ClusterServiceGetDocumentResponse{
+		Document: converter.ToDocumentSummary(summary),
+	}), nil
 }

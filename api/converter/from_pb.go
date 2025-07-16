@@ -93,7 +93,7 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) []*types.Document
 
 // FromDocumentSummary converts the given Protobuf formats to model format.
 func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary {
-	return &types.DocumentSummary{
+	summary := &types.DocumentSummary{
 		ID:              types.ID(pbSummary.Id),
 		Key:             key.Key(pbSummary.Key),
 		AttachedClients: int(pbSummary.AttachedClients),
@@ -103,6 +103,16 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 		Snapshot:        pbSummary.Snapshot,
 		DocSize:         FromDocSize(pbSummary.DocumentSize),
 	}
+
+	if pbSummary.Presences != nil {
+		presences := make(map[string]innerpresence.Presence)
+		for k, v := range pbSummary.Presences {
+			presences[k] = fromPresence(v)
+		}
+		summary.Presences = presences
+	}
+
+	return summary
 }
 
 // FromChangePack converts the given Protobuf formats to model format.

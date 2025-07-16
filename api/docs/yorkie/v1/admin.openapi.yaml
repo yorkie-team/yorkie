@@ -1211,6 +1211,11 @@ components:
           description: ""
           title: key
           type: string
+        presences:
+          additionalProperties: false
+          description: ""
+          title: presences
+          type: object
         schemaKey:
           additionalProperties: false
           description: ""
@@ -1228,6 +1233,23 @@ components:
           title: updated_at
           type: object
       title: DocumentSummary
+      type: object
+    yorkie.v1.DocumentSummary.PresencesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.Presence'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: PresencesEntry
       type: object
     yorkie.v1.GetDocumentRequest:
       additionalProperties: false
@@ -1268,6 +1290,11 @@ components:
             type: string
           title: document_keys
           type: array
+        includePresences:
+          additionalProperties: false
+          description: ""
+          title: include_presences
+          type: boolean
         includeSnapshot:
           additionalProperties: false
           description: ""

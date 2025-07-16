@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	stdSync "sync"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -232,36 +233,73 @@ func GetDocumentSummaries(
 	project *types.Project,
 	keys []key.Key,
 	includeSnapshot bool,
+	includePresences bool,
 ) ([]*types.DocumentSummary, error) {
 	docInfos, err := be.DB.FindDocInfosByKeys(ctx, project.ID, keys)
 	if err != nil {
 		return nil, err
 	}
 
-	var summaries []*types.DocumentSummary
-	for _, docInfo := range docInfos {
-		snapshot := ""
-		if includeSnapshot {
-			// TODO(hackerwins, kokodak): Resolve the N+1 problem.
-			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
-			if err != nil {
-				return nil, err
-			}
-
-			snapshot = doc.Marshal()
-		}
-
-		summary := &types.DocumentSummary{
+	// Initialize all document summaries with basic info first
+	summaries := make([]*types.DocumentSummary, len(docInfos))
+	for i, docInfo := range docInfos {
+		summaries[i] = &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
-			Snapshot:   snapshot,
 			SchemaKey:  docInfo.Schema,
+			Snapshot:   "",
+			Presences:  nil,
+		}
+	}
+
+	// If snapshot or presences are needed, use cluster API to fill additional fields
+	if includeSnapshot || includePresences {
+		var wg stdSync.WaitGroup
+		errChan := make(chan error, len(docInfos))
+
+		// Launch goroutines for parallel cluster API calls
+		for i, docInfo := range docInfos {
+			wg.Add(1)
+			go func(idx int, info *database.DocInfo) {
+				defer wg.Done()
+
+				// Call cluster API to get only snapshot/presence data
+				summary, err := be.ClusterClient.GetDocument(
+					ctx,
+					project,
+					info.Key.String(),
+					includeSnapshot,
+					includePresences,
+				)
+
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				// Update summaries - no mutex needed since each goroutine accesses different index
+				if includeSnapshot {
+					summaries[idx].Snapshot = summary.Snapshot
+				}
+				if includePresences {
+					summaries[idx].Presences = summary.Presences
+				}
+			}(i, docInfo)
 		}
 
-		summaries = append(summaries, summary)
+		// Wait for all goroutines to complete
+		wg.Wait()
+		close(errChan)
+
+		// Check for any errors
+		for err := range errChan {
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return summaries, nil
