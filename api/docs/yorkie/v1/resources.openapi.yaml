@@ -56,6 +56,9 @@ components:
         Wrapper message for `int32`.
 
          The JSON representation for `Int32Value` is JSON number.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -70,6 +73,9 @@ components:
         Wrapper message for `string`.
 
          The JSON representation for `StringValue` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -431,15 +437,20 @@ components:
           description: ""
           title: key
           type: string
+        presences:
+          additionalProperties: false
+          description: ""
+          title: presences
+          type: object
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
         schemaKey:
           additionalProperties: false
           description: ""
           title: schema_key
-          type: string
-        snapshot:
-          additionalProperties: false
-          description: ""
-          title: snapshot
           type: string
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -448,6 +459,23 @@ components:
           title: updated_at
           type: object
       title: DocumentSummary
+      type: object
+    yorkie.v1.DocumentSummary.PresencesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.Presence'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: PresencesEntry
       type: object
     yorkie.v1.JSONElement:
       additionalProperties: false

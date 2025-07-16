@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	stdSync "sync"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -40,9 +41,9 @@ import (
 	yschema "github.com/yorkie-team/yorkie/pkg/schema"
 )
 
-// SnapshotMaxLen is the maximum length of the document snapshot in the
+// RootMaxLen is the maximum length of the document root in the
 // document summary.
-const SnapshotMaxLen = 50
+const RootMaxLen = 50
 
 // pageSizeLimit is the limit of the pagination size of documents.
 const pageSizeLimit = 101
@@ -130,7 +131,7 @@ func CreateDocument(
 		CreatedAt:       docInfo.CreatedAt,
 		AccessedAt:      docInfo.AccessedAt,
 		UpdatedAt:       docInfo.UpdatedAt,
-		Snapshot:        newDoc.Marshal(),
+		Root:            newDoc.Marshal(),
 		DocSize:         newDoc.DocSize(),
 		SchemaKey:       docInfo.Schema,
 	}, nil
@@ -142,7 +143,7 @@ func ListDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	paging types.Paging[types.ID],
-	includeSnapshot bool,
+	includeRoot bool,
 ) ([]*types.DocumentSummary, error) {
 	paging.PageSize = min(paging.PageSize, pageSizeLimit)
 
@@ -169,18 +170,18 @@ func ListDocumentSummaries(
 			SchemaKey:       info.Schema,
 		}
 
-		if includeSnapshot {
+		if includeRoot {
 			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
 			if err != nil {
 				return nil, err
 			}
 
-			snapshot := doc.Marshal()
-			if len(snapshot) > SnapshotMaxLen {
-				snapshot = snapshot[:SnapshotMaxLen] + "..."
+			root := doc.Marshal()
+			if len(root) > RootMaxLen {
+				root = root[:RootMaxLen] + "..."
 			}
 
-			summary.Snapshot = snapshot
+			summary.Root = root
 			summary.DocSize = doc.DocSize()
 		}
 
@@ -219,7 +220,7 @@ func GetDocumentSummary(
 		CreatedAt:       info.CreatedAt,
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
-		Snapshot:        doc.Marshal(),
+		Root:            doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       info.Schema,
 	}, nil
@@ -231,37 +232,74 @@ func GetDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	keys []key.Key,
-	includeSnapshot bool,
+	includeRoot bool,
+	includePresences bool,
 ) ([]*types.DocumentSummary, error) {
 	docInfos, err := be.DB.FindDocInfosByKeys(ctx, project.ID, keys)
 	if err != nil {
 		return nil, err
 	}
 
-	var summaries []*types.DocumentSummary
-	for _, docInfo := range docInfos {
-		snapshot := ""
-		if includeSnapshot {
-			// TODO(hackerwins, kokodak): Resolve the N+1 problem.
-			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
-			if err != nil {
-				return nil, err
-			}
-
-			snapshot = doc.Marshal()
-		}
-
-		summary := &types.DocumentSummary{
+	// Initialize all document summaries with basic info first
+	summaries := make([]*types.DocumentSummary, len(docInfos))
+	for i, docInfo := range docInfos {
+		summaries[i] = &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
-			Snapshot:   snapshot,
 			SchemaKey:  docInfo.Schema,
+			Root:       "",
+			Presences:  nil,
+		}
+	}
+
+	// If root or presences are needed, use cluster API to fill additional fields
+	if includeRoot || includePresences {
+		var wg stdSync.WaitGroup
+		errChan := make(chan error, len(docInfos))
+
+		// Launch goroutines for parallel cluster API calls
+		for i, docInfo := range docInfos {
+			wg.Add(1)
+			go func(idx int, info *database.DocInfo) {
+				defer wg.Done()
+
+				// Call cluster API to get only snapshot/presence data
+				summary, err := be.ClusterClient.GetDocument(
+					ctx,
+					project,
+					info.Key.String(),
+					includeRoot,
+					includePresences,
+				)
+
+				if err != nil {
+					errChan <- err
+					return
+				}
+
+				if includeRoot {
+					summaries[idx].Root = summary.Root
+					summaries[idx].DocSize = summary.DocSize
+				}
+				if includePresences {
+					summaries[idx].Presences = summary.Presences
+				}
+			}(i, docInfo)
 		}
 
-		summaries = append(summaries, summary)
+		// Wait for all goroutines to complete
+		wg.Wait()
+		close(errChan)
+
+		// Check for any errors
+		for err := range errChan {
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return summaries, nil
@@ -462,7 +500,7 @@ func UpdateDocument(
 		CreatedAt:       docInfo.CreatedAt,
 		AccessedAt:      docInfo.AccessedAt,
 		UpdatedAt:       docInfo.UpdatedAt,
-		Snapshot:        doc.Marshal(),
+		Root:            doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       docInfo.Schema,
 	}, nil

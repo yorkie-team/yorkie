@@ -133,7 +133,7 @@ func TestRESTAPI(t *testing.T) {
 		)
 		summary := &documentSummary{}
 		assert.NoError(t, gojson.Unmarshal(res, summary))
-		assert.Equal(t, "{}", summary.Document.Snapshot)
+		assert.Equal(t, "{}", summary.Document.Root)
 
 		ctx := context.Background()
 
@@ -157,7 +157,7 @@ func TestRESTAPI(t *testing.T) {
 			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
 		)
 		assert.NoError(t, gojson.Unmarshal(res, summary))
-		assert.Equal(t, `{"arr":[]}`, summary.Document.Snapshot)
+		assert.Equal(t, `{"arr":[]}`, summary.Document.Root)
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.GetArray("arr").AddInteger(1)
@@ -178,7 +178,7 @@ func TestRESTAPI(t *testing.T) {
 				)
 				summary := &documentSummary{}
 				assert.NoError(t, gojson.Unmarshal(res, summary))
-				assert.Equal(t, `{"arr":[1]}`, summary.Document.Snapshot)
+				assert.Equal(t, `{"arr":[1]}`, summary.Document.Root)
 			}()
 		}
 		wg.Wait()
