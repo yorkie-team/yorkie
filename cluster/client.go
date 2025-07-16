@@ -179,7 +179,7 @@ func (c *Client) GetDocument(
 	ctx context.Context,
 	project *types.Project,
 	documentKey string,
-	includeSnapshot bool,
+	includeRoot bool,
 	includePresences bool,
 ) (*types.DocumentSummary, error) {
 	response, err := c.client.GetDocument(
@@ -187,7 +187,7 @@ func (c *Client) GetDocument(
 		withShardKey(connect.NewRequest(&api.ClusterServiceGetDocumentRequest{
 			ProjectName:      project.Name,
 			DocumentKey:      documentKey,
-			IncludeSnapshot:  includeSnapshot,
+			IncludeRoot:      includeRoot,
 			IncludePresences: includePresences,
 		}), project.PublicKey, documentKey),
 	)

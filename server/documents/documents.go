@@ -143,7 +143,7 @@ func ListDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	paging types.Paging[types.ID],
-	includeSnapshot bool,
+	includeRoot bool,
 ) ([]*types.DocumentSummary, error) {
 	paging.PageSize = min(paging.PageSize, pageSizeLimit)
 
@@ -170,7 +170,7 @@ func ListDocumentSummaries(
 			SchemaKey:       info.Schema,
 		}
 
-		if includeSnapshot {
+		if includeRoot {
 			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
 			if err != nil {
 				return nil, err
@@ -232,7 +232,7 @@ func GetDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	keys []key.Key,
-	includeSnapshot bool,
+	includeRoot bool,
 	includePresences bool,
 ) ([]*types.DocumentSummary, error) {
 	docInfos, err := be.DB.FindDocInfosByKeys(ctx, project.ID, keys)
@@ -256,7 +256,7 @@ func GetDocumentSummaries(
 	}
 
 	// If snapshot or presences are needed, use cluster API to fill additional fields
-	if includeSnapshot || includePresences {
+	if includeRoot || includePresences {
 		var wg stdSync.WaitGroup
 		errChan := make(chan error, len(docInfos))
 
@@ -271,7 +271,7 @@ func GetDocumentSummaries(
 					ctx,
 					project,
 					info.Key.String(),
-					includeSnapshot,
+					includeRoot,
 					includePresences,
 				)
 
@@ -281,7 +281,7 @@ func GetDocumentSummaries(
 				}
 
 				// Update summaries - no mutex needed since each goroutine accesses different index
-				if includeSnapshot {
+				if includeRoot {
 					summaries[idx].Snapshot = summary.Snapshot
 				}
 				if includePresences {

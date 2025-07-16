@@ -337,10 +337,10 @@ components:
           description: ""
           title: include_presences
           type: boolean
-        includeSnapshot:
+        includeRoot:
           additionalProperties: false
           description: ""
-          title: include_snapshot
+          title: include_root
           type: boolean
         projectName:
           additionalProperties: false
