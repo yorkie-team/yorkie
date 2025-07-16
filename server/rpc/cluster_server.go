@@ -202,15 +202,14 @@ func (s *clusterServer) GetDocument(
 		Presences:  nil,
 	}
 
-	// If snapshot or presences are requested, we need to build the internal document
+	// If root or presences are requested, we need to build the internal document
 	if req.Msg.IncludeRoot || req.Msg.IncludePresences {
-		// This is safe to call here since this is the responsible shard server
 		doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
 		if err != nil {
 			return nil, err
 		}
 
-		// Set snapshot if requested
+		// Set root if requested
 		if req.Msg.IncludeRoot {
 			summary.Root = doc.Marshal()
 		}
