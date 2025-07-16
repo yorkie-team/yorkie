@@ -10,7 +10,6 @@ yorkie:
   image:
     repository: yorkieteam/yorkie
     pullPolicy: IfNotPresent
-    tag: ""
 
   args:
     useDefaultProject: false
