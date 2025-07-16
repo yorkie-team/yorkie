@@ -81,6 +81,7 @@ spec:
           "{{ .Values.yorkie.ports.profilingPort }}",
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
+          "--backend-use-default-project", "{{ .Values.yorkie.args.useDefaultProject }}",
           {{- if .Values.yorkie.args.snapshotInterval }}
           "--backend-snapshot-interval",
           "{{ .Values.yorkie.args.snapshotInterval }}",

@@ -10,9 +10,9 @@ yorkie:
   image:
     repository: yorkieteam/yorkie
     pullPolicy: IfNotPresent
-    tag: ""
 
   args:
+    useDefaultProject: false
     dbConnectionUri: mongodb://mongodb.mongodb.svc.cluster.local:27017/yorkie-meta
     dbName: yorkie-meta
 
