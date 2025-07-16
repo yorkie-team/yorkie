@@ -54,8 +54,14 @@ type Element interface {
 	// MovedAt returns the move time of this element.
 	MovedAt() *time.Ticket
 
+	// MovedFrom returns the previous element before the element moved.
+	MovedFrom() Element
+
 	// SetMovedAt sets the move time of this element.
 	SetMovedAt(*time.Ticket)
+
+	// SetMovedFrom sets the previous element before the element moved.
+	SetMovedFrom(Element)
 
 	// RemovedAt returns the removal time of this element.
 	RemovedAt() *time.Ticket

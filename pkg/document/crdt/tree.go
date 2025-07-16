@@ -569,6 +569,7 @@ type Tree struct {
 
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
+	movedFrom Element
 	removedAt *time.Ticket
 }
 
@@ -725,9 +726,19 @@ func (t *Tree) MovedAt() *time.Ticket {
 	return t.movedAt
 }
 
+// MovedFrom returns the previous element before the element moved.
+func (t *Tree) MovedFrom() Element {
+	return t.movedFrom
+}
+
 // SetMovedAt sets the move time of this Text.
 func (t *Tree) SetMovedAt(movedAt *time.Ticket) {
 	t.movedAt = movedAt
+}
+
+// SetMovedFrom sets the previous element before the element moved.
+func (t *Tree) SetMovedFrom(movedFrom Element) {
+	t.movedFrom = movedFrom
 }
 
 // SetRemovedAt sets the removal time of this array.

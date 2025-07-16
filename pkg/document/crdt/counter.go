@@ -56,6 +56,7 @@ type Counter struct {
 	value     interface{}
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
+	movedFrom Element
 	removedAt *time.Ticket
 }
 
@@ -153,9 +154,19 @@ func (p *Counter) MovedAt() *time.Ticket {
 	return p.movedAt
 }
 
+// MovedFrom returns the previous element before the element moved.
+func (p *Counter) MovedFrom() Element {
+	return p.movedFrom
+}
+
 // SetMovedAt sets the move time of this element.
 func (p *Counter) SetMovedAt(movedAt *time.Ticket) {
 	p.movedAt = movedAt
+}
+
+// SetMovedFrom sets the previous element before the element moved.
+func (p *Counter) SetMovedFrom(movedFrom Element) {
+	p.movedFrom = movedFrom
 }
 
 // RemovedAt returns the removal time of this element.

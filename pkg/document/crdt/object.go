@@ -27,6 +27,7 @@ type Object struct {
 	memberNodes *ElementRHT
 	createdAt   *time.Ticket
 	movedAt     *time.Ticket
+	movedFrom   Element
 	removedAt   *time.Ticket
 }
 
@@ -149,9 +150,19 @@ func (o *Object) MovedAt() *time.Ticket {
 	return o.movedAt
 }
 
+// MovedFrom returns the previous element before the element moved.
+func (o *Object) MovedFrom() Element {
+	return o.movedFrom
+}
+
 // SetMovedAt sets the move time of this object.
 func (o *Object) SetMovedAt(movedAt *time.Ticket) {
 	o.movedAt = movedAt
+}
+
+// SetMovedFrom sets the previous element before the element moved.
+func (o *Object) SetMovedFrom(movedFrom Element) {
+	o.movedFrom = movedFrom
 }
 
 // RemovedAt returns the removal time of this object.

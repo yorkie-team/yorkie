@@ -161,6 +161,7 @@ type Text struct {
 	rgaTreeSplit *RGATreeSplit[*TextValue]
 	createdAt    *time.Ticket
 	movedAt      *time.Ticket
+	movedFrom    Element
 	removedAt    *time.Ticket
 }
 
@@ -293,9 +294,19 @@ func (t *Text) MovedAt() *time.Ticket {
 	return t.movedAt
 }
 
+// MovedFrom returns the previous element before the element moved.
+func (t *Text) MovedFrom() Element {
+	return t.movedFrom
+}
+
 // SetMovedAt sets the move time of this Text.
 func (t *Text) SetMovedAt(movedAt *time.Ticket) {
 	t.movedAt = movedAt
+}
+
+// SetMovedFrom sets the previous element before the element moved.
+func (t *Text) SetMovedFrom(movedFrom Element) {
+	t.movedFrom = movedFrom
 }
 
 // SetRemovedAt sets the removal time of this array.
