@@ -198,7 +198,7 @@ func (s *clusterServer) GetDocument(
 		AccessedAt: docInfo.AccessedAt,
 		UpdatedAt:  docInfo.UpdatedAt,
 		SchemaKey:  docInfo.Schema,
-		Snapshot:   "",
+		Root:   "",
 		Presences:  nil,
 	}
 
@@ -212,7 +212,7 @@ func (s *clusterServer) GetDocument(
 
 		// Set snapshot if requested
 		if req.Msg.IncludeRoot {
-			summary.Snapshot = doc.Marshal()
+			summary.Root = doc.Marshal()
 		}
 
 		// Set presences if requested

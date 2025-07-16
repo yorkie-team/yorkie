@@ -25,8 +25,8 @@ type DocumentSummary struct {
 	// UpdatedAt is the time when the document is updated.
 	UpdatedAt time.Time
 
-	// Snapshot is the string representation of the document.
-	Snapshot string
+	// Root is the root object of the document.
+	Root string
 
 	// AttachedClients is the count of clients attached to the document.
 	AttachedClients int

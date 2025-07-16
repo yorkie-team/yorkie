@@ -41,9 +41,9 @@ import (
 	yschema "github.com/yorkie-team/yorkie/pkg/schema"
 )
 
-// SnapshotMaxLen is the maximum length of the document snapshot in the
+// RootMaxLen is the maximum length of the document snapshot in the
 // document summary.
-const SnapshotMaxLen = 50
+const RootMaxLen = 50
 
 // pageSizeLimit is the limit of the pagination size of documents.
 const pageSizeLimit = 101
@@ -131,7 +131,7 @@ func CreateDocument(
 		CreatedAt:       docInfo.CreatedAt,
 		AccessedAt:      docInfo.AccessedAt,
 		UpdatedAt:       docInfo.UpdatedAt,
-		Snapshot:        newDoc.Marshal(),
+		Root:            newDoc.Marshal(),
 		DocSize:         newDoc.DocSize(),
 		SchemaKey:       docInfo.Schema,
 	}, nil
@@ -176,12 +176,12 @@ func ListDocumentSummaries(
 				return nil, err
 			}
 
-			snapshot := doc.Marshal()
-			if len(snapshot) > SnapshotMaxLen {
-				snapshot = snapshot[:SnapshotMaxLen] + "..."
+			root := doc.Marshal()
+			if len(root) > RootMaxLen {
+				root = root[:RootMaxLen] + "..."
 			}
 
-			summary.Snapshot = snapshot
+			summary.Root = root
 			summary.DocSize = doc.DocSize()
 		}
 
@@ -220,7 +220,7 @@ func GetDocumentSummary(
 		CreatedAt:       info.CreatedAt,
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
-		Snapshot:        doc.Marshal(),
+		Root:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       info.Schema,
 	}, nil
@@ -250,12 +250,12 @@ func GetDocumentSummaries(
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
 			SchemaKey:  docInfo.Schema,
-			Snapshot:   "",
+			Root:   "",
 			Presences:  nil,
 		}
 	}
 
-	// If snapshot or presences are needed, use cluster API to fill additional fields
+	// If root or presences are needed, use cluster API to fill additional fields
 	if includeRoot || includePresences {
 		var wg stdSync.WaitGroup
 		errChan := make(chan error, len(docInfos))
@@ -280,9 +280,8 @@ func GetDocumentSummaries(
 					return
 				}
 
-				// Update summaries - no mutex needed since each goroutine accesses different index
 				if includeRoot {
-					summaries[idx].Snapshot = summary.Snapshot
+					summaries[idx].Root = summary.Root
 				}
 				if includePresences {
 					summaries[idx].Presences = summary.Presences
@@ -500,7 +499,7 @@ func UpdateDocument(
 		CreatedAt:       docInfo.CreatedAt,
 		AccessedAt:      docInfo.AccessedAt,
 		UpdatedAt:       docInfo.UpdatedAt,
-		Snapshot:        doc.Marshal(),
+		Root:        doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       docInfo.Schema,
 	}, nil

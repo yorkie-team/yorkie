@@ -104,7 +104,7 @@ func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 		CreatedAt:       timestamppb.New(summary.CreatedAt),
 		AccessedAt:      timestamppb.New(summary.AccessedAt),
 		UpdatedAt:       timestamppb.New(summary.UpdatedAt),
-		Snapshot:        summary.Snapshot,
+		Root:            summary.Root,
 		AttachedClients: int32(summary.AttachedClients),
 		DocumentSize:    ToDocSize(summary.DocSize),
 		SchemaKey:       summary.SchemaKey,

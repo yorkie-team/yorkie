@@ -100,7 +100,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 		CreatedAt:       pbSummary.CreatedAt.AsTime(),
 		AccessedAt:      pbSummary.AccessedAt.AsTime(),
 		UpdatedAt:       pbSummary.UpdatedAt.AsTime(),
-		Snapshot:        pbSummary.Snapshot,
+		Root:            pbSummary.Root,
 		DocSize:         FromDocSize(pbSummary.DocumentSize),
 	}
 

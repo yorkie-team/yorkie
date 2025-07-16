@@ -1216,15 +1216,15 @@ components:
           description: ""
           title: presences
           type: object
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
         schemaKey:
           additionalProperties: false
           description: ""
           title: schema_key
-          type: string
-        snapshot:
-          additionalProperties: false
-          description: ""
-          title: snapshot
           type: string
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'

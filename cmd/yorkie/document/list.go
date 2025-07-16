@@ -108,7 +108,7 @@ func printDocuments(cmd *cobra.Command, output string, documents []*types.Docume
 				units.HumanDuration(time.Now().UTC().Sub(document.CreatedAt)),
 				units.HumanDuration(time.Now().UTC().Sub(document.AccessedAt)),
 				units.HumanDuration(time.Now().UTC().Sub(document.UpdatedAt)),
-				document.Snapshot,
+				document.Root,
 			})
 		}
 		cmd.Printf("%s\n", tw.Render())
