@@ -41,7 +41,7 @@ import (
 	yschema "github.com/yorkie-team/yorkie/pkg/schema"
 )
 
-// RootMaxLen is the maximum length of the document snapshot in the
+// RootMaxLen is the maximum length of the document root in the
 // document summary.
 const RootMaxLen = 50
 
@@ -282,6 +282,7 @@ func GetDocumentSummaries(
 
 				if includeRoot {
 					summaries[idx].Root = summary.Root
+					summaries[idx].DocSize = summary.DocSize
 				}
 				if includePresences {
 					summaries[idx].Presences = summary.Presences
