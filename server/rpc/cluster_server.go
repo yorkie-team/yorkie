@@ -198,7 +198,7 @@ func (s *clusterServer) GetDocument(
 		AccessedAt: docInfo.AccessedAt,
 		UpdatedAt:  docInfo.UpdatedAt,
 		SchemaKey:  docInfo.Schema,
-		Root:   "",
+		Root:       "",
 		Presences:  nil,
 	}
 

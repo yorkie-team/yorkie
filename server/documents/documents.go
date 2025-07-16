@@ -220,7 +220,7 @@ func GetDocumentSummary(
 		CreatedAt:       info.CreatedAt,
 		AccessedAt:      info.AccessedAt,
 		UpdatedAt:       info.UpdatedAt,
-		Root:        doc.Marshal(),
+		Root:            doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       info.Schema,
 	}, nil
@@ -250,7 +250,7 @@ func GetDocumentSummaries(
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
 			SchemaKey:  docInfo.Schema,
-			Root:   "",
+			Root:       "",
 			Presences:  nil,
 		}
 	}
@@ -499,7 +499,7 @@ func UpdateDocument(
 		CreatedAt:       docInfo.CreatedAt,
 		AccessedAt:      docInfo.AccessedAt,
 		UpdatedAt:       docInfo.UpdatedAt,
-		Root:        doc.Marshal(),
+		Root:            doc.Marshal(),
 		DocSize:         doc.DocSize(),
 		SchemaKey:       docInfo.Schema,
 	}, nil
