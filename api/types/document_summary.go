@@ -3,6 +3,7 @@ package types
 import (
 	"time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/resource"
 )
@@ -24,8 +25,8 @@ type DocumentSummary struct {
 	// UpdatedAt is the time when the document is updated.
 	UpdatedAt time.Time
 
-	// Snapshot is the string representation of the document.
-	Snapshot string
+	// Root is the root object of the document.
+	Root string
 
 	// AttachedClients is the count of clients attached to the document.
 	AttachedClients int
@@ -35,4 +36,7 @@ type DocumentSummary struct {
 
 	// SchemaKey is the key of the schema of the document.
 	SchemaKey string
+
+	// Presences is the presence information of all clients.
+	Presences map[string]innerpresence.Presence
 }

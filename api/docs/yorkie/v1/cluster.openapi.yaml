@@ -34,6 +34,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/GetDocument:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/PurgeDocument:
     post:
       description: ""
@@ -65,6 +77,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest'
       required: true
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
       content:
@@ -102,6 +123,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse'
       description: ""
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
       content:
@@ -293,6 +323,45 @@ components:
       description: ""
       title: ClusterServiceDetachDocumentResponse
       type: object
+    yorkie.v1.ClusterServiceGetDocumentRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        includePresences:
+          additionalProperties: false
+          description: ""
+          title: include_presences
+          type: boolean
+        includeRoot:
+          additionalProperties: false
+          description: ""
+          title: include_root
+          type: boolean
+        project:
+          $ref: '#/components/schemas/yorkie.v1.Project'
+          additionalProperties: false
+          description: ""
+          title: project
+          type: object
+      title: ClusterServiceGetDocumentRequest
+      type: object
+    yorkie.v1.ClusterServiceGetDocumentResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: ClusterServiceGetDocumentResponse
+      type: object
     yorkie.v1.ClusterServicePurgeDocumentRequest:
       additionalProperties: false
       description: ""
@@ -318,6 +387,144 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServicePurgeDocumentResponse
+      type: object
+    yorkie.v1.DataSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: integer
+        meta:
+          additionalProperties: false
+          description: ""
+          title: meta
+          type: integer
+      title: DataSize
+      type: object
+    yorkie.v1.DocSize:
+      additionalProperties: false
+      description: ""
+      properties:
+        gc:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: gc
+          type: object
+        live:
+          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          additionalProperties: false
+          description: ""
+          title: live
+          type: object
+      title: DocSize
+      type: object
+    yorkie.v1.DocumentSummary:
+      additionalProperties: false
+      description: ""
+      properties:
+        accessedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: accessed_at
+          type: object
+        attachedClients:
+          additionalProperties: false
+          description: ""
+          title: attached_clients
+          type: integer
+        createdAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        documentSize:
+          $ref: '#/components/schemas/yorkie.v1.DocSize'
+          additionalProperties: false
+          description: ""
+          title: document_size
+          type: object
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        presences:
+          additionalProperties: false
+          description: ""
+          title: presences
+          type: object
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
+        schemaKey:
+          additionalProperties: false
+          description: ""
+          title: schema_key
+          type: string
+        updatedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: updated_at
+          type: object
+      title: DocumentSummary
+      type: object
+    yorkie.v1.DocumentSummary.PresencesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.Presence'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: PresencesEntry
+      type: object
+    yorkie.v1.Presence:
+      additionalProperties: false
+      description: ""
+      properties:
+        data:
+          additionalProperties: false
+          description: ""
+          title: data
+          type: object
+      title: Presence
+      type: object
+    yorkie.v1.Presence.DataEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: DataEntry
       type: object
     yorkie.v1.Project:
       additionalProperties: false

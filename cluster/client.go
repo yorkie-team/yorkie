@@ -174,6 +174,30 @@ func (c *Client) PurgeDocument(
 	return nil
 }
 
+// GetDocument gets the document for a single document.
+func (c *Client) GetDocument(
+	ctx context.Context,
+	project *types.Project,
+	documentKey string,
+	includeRoot bool,
+	includePresences bool,
+) (*types.DocumentSummary, error) {
+	response, err := c.client.GetDocument(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ClusterServiceGetDocumentRequest{
+			Project:          converter.ToProject(project),
+			DocumentKey:      documentKey,
+			IncludeRoot:      includeRoot,
+			IncludePresences: includePresences,
+		}), project.PublicKey, documentKey),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummary(response.Msg.Document), nil
+}
+
 /**
 * withShardKey returns a context with the given shard key in metadata.
  */

@@ -354,7 +354,8 @@ func (s *adminServer) GetDocuments(
 		s.backend,
 		project,
 		keys,
-		req.Msg.IncludeSnapshot,
+		req.Msg.IncludeRoot,
+		req.Msg.IncludePresences,
 	)
 	if err != nil {
 		return nil, err
@@ -424,7 +425,7 @@ func (s *adminServer) ListDocuments(
 			PageSize:  int(req.Msg.PageSize),
 			IsForward: req.Msg.IsForward,
 		},
-		req.Msg.IncludeSnapshot,
+		req.Msg.IncludeRoot,
 	)
 	if err != nil {
 		return nil, err

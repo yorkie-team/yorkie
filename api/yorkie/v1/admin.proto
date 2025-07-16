@@ -160,7 +160,7 @@ message ListDocumentsRequest {
   string previous_id = 2;
   int32 page_size = 3;
   bool is_forward = 4;
-  bool include_snapshot = 5;
+  bool include_root = 5;
 }
 
 message ListDocumentsResponse {
@@ -179,7 +179,8 @@ message GetDocumentResponse {
 message GetDocumentsRequest {
   string project_name = 1;
   repeated string document_keys = 2;
-  bool include_snapshot = 3;
+  bool include_root = 3;
+  bool include_presences = 4;
 }
 
 message GetDocumentsResponse {

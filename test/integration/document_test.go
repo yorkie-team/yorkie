@@ -825,11 +825,11 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		docs, err := adminCli.ListDocuments(ctx, "default", "", 0, true, false)
 		assert.NoError(t, err)
-		assert.Equal(t, "", docs[0].Snapshot)
+		assert.Equal(t, "", docs[0].Root)
 
 		docs, err = adminCli.ListDocuments(ctx, "default", "", 0, true, true)
 		assert.NoError(t, err)
-		assert.NotEqual(t, 0, len(docs[0].Snapshot))
+		assert.NotEqual(t, 0, len(docs[0].Root))
 	})
 }
 

@@ -271,16 +271,16 @@ func (c *Client) ListDocuments(
 	previousID string,
 	pageSize int32,
 	isForward bool,
-	includeSnapshot bool,
+	includeRoot bool,
 ) ([]*types.DocumentSummary, error) {
 	response, err := c.client.ListDocuments(
 		ctx,
 		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName:     projectName,
-			PreviousId:      previousID,
-			PageSize:        pageSize,
-			IsForward:       isForward,
-			IncludeSnapshot: includeSnapshot,
+			ProjectName: projectName,
+			PreviousId:  previousID,
+			PageSize:    pageSize,
+			IsForward:   isForward,
+			IncludeRoot: includeRoot,
 		},
 		))
 	if err != nil {

@@ -29,6 +29,7 @@ service ClusterService {
   rpc DetachDocument (ClusterServiceDetachDocumentRequest) returns (ClusterServiceDetachDocumentResponse) {}
   rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
   rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
+  rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
 }
 
 message ClusterServiceDetachDocumentRequest {
@@ -55,3 +56,14 @@ message ClusterServicePurgeDocumentRequest {
 }
 
 message ClusterServicePurgeDocumentResponse {}
+
+message ClusterServiceGetDocumentRequest {
+  Project project = 1;
+  string document_key = 2;
+  bool include_root = 3;
+  bool include_presences = 4;
+}
+
+message ClusterServiceGetDocumentResponse {
+  DocumentSummary document = 1;
+}
