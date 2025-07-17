@@ -342,7 +342,7 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	// `opName` represents the parameter of operation selected as `oneIdx'.
 	// `otherIdxs` ensures that indexs other than `oneIdx` are not duplicated.
 	operations := []arrayOp{
-		// insert
+		// // insert
 		{"insert.prev", func(a *json.Array, cid int) {
 			a.InsertIntegerAfter(oneIdx, newValues[cid])
 		}},

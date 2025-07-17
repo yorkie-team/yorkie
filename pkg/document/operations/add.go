@@ -65,7 +65,7 @@ func (o *Add) Execute(root *crdt.Root, _ time.VersionVector) error {
 		return err
 	}
 
-	if err = obj.InsertAfter(o.prevCreatedAt, value); err != nil {
+	if err = obj.InsertAfter(o.prevCreatedAt, value, o.executedAt); err != nil {
 		return err
 	}
 
