@@ -87,7 +87,7 @@ func NewTicket(
 // for debugging purpose.
 func (t *Ticket) ToTestString() string {
 	return fmt.Sprintf(
-		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
+		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.StringBase64()[14:16],
 	)
 }
 
@@ -123,7 +123,7 @@ func (t *Ticket) ActorID() ActorID {
 // ActorIDHex returns the actorID's hex value.
 func (t *Ticket) ActorIDHex() string {
 	if t.cachedActorIDHex == "" {
-		t.cachedActorIDHex = t.actorID.String()
+		t.cachedActorIDHex = t.actorID.StringBase64()
 	}
 
 	return t.cachedActorIDHex
