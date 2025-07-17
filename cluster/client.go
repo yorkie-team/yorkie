@@ -185,7 +185,7 @@ func (c *Client) GetDocument(
 	response, err := c.client.GetDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceGetDocumentRequest{
-			ProjectName:      project.Name,
+			Project:          converter.ToProject(project),
 			DocumentKey:      documentKey,
 			IncludeRoot:      includeRoot,
 			IncludePresences: includePresences,

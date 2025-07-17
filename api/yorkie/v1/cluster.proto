@@ -58,7 +58,7 @@ message ClusterServicePurgeDocumentRequest {
 message ClusterServicePurgeDocumentResponse {}
 
 message ClusterServiceGetDocumentRequest {
-  string project_name = 1;
+  Project project = 1;
   string document_key = 2;
   bool include_root = 3;
   bool include_presences = 4;

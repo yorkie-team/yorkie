@@ -34,7 +34,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
-	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 // clusterServer is a server that provides the internal Yorkie cluster service.
@@ -176,11 +175,7 @@ func (s *clusterServer) GetDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceGetDocumentRequest],
 ) (*connect.Response[api.ClusterServiceGetDocumentResponse], error) {
-	project, err := projects.GetProject(ctx, s.backend, "", req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
-
+	project := converter.FromProject(req.Msg.Project)
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
 		s.backend,

@@ -342,11 +342,12 @@ components:
           description: ""
           title: include_root
           type: boolean
-        projectName:
+        project:
+          $ref: '#/components/schemas/yorkie.v1.Project'
           additionalProperties: false
           description: ""
-          title: project_name
-          type: string
+          title: project
+          type: object
       title: ClusterServiceGetDocumentRequest
       type: object
     yorkie.v1.ClusterServiceGetDocumentResponse:
