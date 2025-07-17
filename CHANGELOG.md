@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.20] - 2025-07-17
+
+### Added
+
+- Add gRPC stream load test for presence using k6 by @kokodak in https://github.com/yorkie-team/yorkie/pull/1366
+- Add include_presences option to GetDocuments API by @kokodak https://github.com/yorkie-team/yorkie/pull/1391
+
+### Changed
+
+- Update shardKeys for document-wide collections to hashed by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1323
+- Reflect recent updates to MongoDB Sharding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1378
+- Reflect recent updates to the locking document by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1379
+
+### Fixed
+
+- Fix the 'Pushing Changes to Server' link in document-editing.md by @jojaeng2 in https://github.com/yorkie-team/yorkie/pull/1380
+- Fix the code link and description in pub-sub.md by @jojaeng2 in https://github.com/yorkie-team/yorkie/pull/1386
+- Restrict Default Project Usage in Cluster Mode by @raararaara in https://github.com/yorkie-team/yorkie/pull/1390
+
 ## [v0.6.19] - 2025-07-09
 
 ### Added
