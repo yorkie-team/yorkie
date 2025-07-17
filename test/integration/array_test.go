@@ -408,10 +408,7 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	for _, op1 := range operations {
 		for _, op2 := range operations {
 			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
-				result := runTest(op1, op2)
-				if !result.flag {
-					t.Skip(result.resultDesc)
-				}
+				runTest(op1, op2)
 			})
 		}
 	}

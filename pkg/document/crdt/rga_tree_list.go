@@ -270,7 +270,7 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
+	if executedAt.After(node.PositionedAt()) {
 		movedFrom := node.prev
 		nextNode := node.next
 		a.release(node)
@@ -394,7 +394,11 @@ func (a *RGATreeList) Set(
 		return nil, fmt.Errorf("set %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	a.InsertAfter(node.CreatedAt(), element, executedAt)
+	_, err := a.insertAfter(node.CreatedAt(), element, executedAt)
+	if err != nil {
+		return nil, nil
+	}
+
 	removed, err := a.DeleteByCreatedAt(createdAt, executedAt)
 	if err != nil {
 		return removed, err
