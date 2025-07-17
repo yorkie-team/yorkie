@@ -98,7 +98,7 @@ func (t *Ticket) Key() string {
 			":" +
 			strconv.FormatInt(int64(t.delimiter), 10) +
 			":" +
-			t.actorID.String()
+			t.actorID.StringBase64()
 
 	}
 
