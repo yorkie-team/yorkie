@@ -44,7 +44,64 @@ const (
 	otherOwnerID              = types.ID("000000000000000000000001")
 	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
+
+	nodeID1       = "node1"
+	nodeID2       = "node2"
+	leaseToken1   = "token1"
+	leaseToken2   = "token2"
+	leaseDuration = 10 * gotime.Second
 )
+
+func TestClientTryLeadership(t *testing.T, db database.Database) {
+	t.Run("acquire leadership for the first time", func(t *testing.T) {
+		ctx := context.Background()
+		leadership, err := db.TryLeadership(ctx, nodeID1, leaseToken1, leaseDuration)
+		assert.NoError(t, err)
+		assert.NotNil(t, leadership)
+		assert.Equal(t, nodeID1, leadership.NodeID)
+		assert.Equal(t, leaseToken1, leadership.LeaseToken)
+		assert.True(t, leadership.ExpiresAt.After(gotime.Now()))
+	})
+
+	t.Run("renew leadership by same node", func(t *testing.T) {
+		ctx := context.Background()
+		// Try to renew leadership
+		leadership, err := db.TryLeadership(ctx, nodeID1, leaseToken1, leaseDuration)
+		assert.NoError(t, err)
+		assert.NotNil(t, leadership)
+		assert.Equal(t, nodeID1, leadership.NodeID)
+		assert.Equal(t, leaseToken1, leadership.LeaseToken)
+	})
+
+	t.Run("fail to acquire leadership by different node", func(t *testing.T) {
+		ctx := context.Background()
+		// Another node tries to acquire leadership
+		_, err := db.TryLeadership(ctx, nodeID2, leaseToken2, leaseDuration)
+		assert.Error(t, err)
+		assert.Equal(t, database.ErrLeadershipNotAcquired, err)
+	})
+
+	t.Run("acquire leadership after expiration", func(t *testing.T) {
+		ctx := context.Background()
+		// Wait for leadership to expire (use very short duration)
+		shortDuration := 1 * gotime.Millisecond
+
+		// First, let node1 acquire with short duration
+		leadership, err := db.TryLeadership(ctx, nodeID1, leaseToken1, shortDuration)
+		assert.NoError(t, err)
+		assert.Equal(t, nodeID1, leadership.NodeID)
+
+		// Wait for expiration
+		gotime.Sleep(10 * gotime.Millisecond)
+
+		// Now node2 should be able to acquire
+		leadership, err = db.TryLeadership(ctx, nodeID2, leaseToken2, leaseDuration)
+		assert.NoError(t, err)
+		assert.NotNil(t, leadership)
+		assert.Equal(t, nodeID2, leadership.NodeID)
+		assert.Equal(t, leaseToken2, leadership.LeaseToken)
+	})
+}
 
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.
 func RunFindDocInfoTest(

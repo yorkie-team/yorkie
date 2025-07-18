@@ -19,6 +19,7 @@ package memory
 import "github.com/hashicorp/go-memdb"
 
 var (
+	tblLeadership     = "leaderships"
 	tblProjects       = "projects"
 	tblUsers          = "users"
 	tblClients        = "clients"

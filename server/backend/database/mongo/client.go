@@ -130,9 +130,75 @@ func (c *Client) Close() error {
 	}
 
 	c.docCache.Purge()
+	c.changeCache.Purge()
 	c.vectorCache.Purge()
 
 	return nil
+}
+
+// TryLeadership attempts to acquire or renew leadership with the given lease duration.
+func (c *Client) TryLeadership(
+	ctx context.Context,
+	nodeID,
+	leaseToken string,
+	leaseDuration gotime.Duration,
+) (*database.LeadershipInfo, error) {
+	// Use a fixed document ID to ensure only one leadership document exists
+	leadershipID := "singleton"
+
+	// Try to acquire or renew leadership atomically
+	result := c.collection(ColLeaderships).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"_id": leadershipID,
+			"$or": []bson.M{
+				// Case 1: Current node is the leader (renewal)
+				{"nodeID": nodeID},
+				// Case 2: Leadership has expired (takeover)
+				{"expiresAt": bson.M{"$lt": "$$NOW"}},
+			},
+		},
+		mongo.Pipeline{
+			{{Key: "$set", Value: bson.M{
+				"nodeID":     nodeID,
+				"leaseToken": leaseToken,
+				"expiresAt": bson.M{
+					"$dateAdd": bson.M{
+						"startDate": "$$NOW",
+						"unit":      "millisecond",
+						"amount":    int64(leaseDuration.Milliseconds()),
+					},
+				},
+			}}},
+		},
+		options.FindOneAndUpdate().
+			SetUpsert(true).
+			SetReturnDocument(options.After),
+	)
+
+	if err := result.Err(); err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrLeadershipNotAcquired
+		}
+
+		if err == mongo.ErrNoDocuments {
+			// Leadership is held by another node and not expired
+			return nil, database.ErrLeadershipNotAcquired
+		}
+		return nil, fmt.Errorf("update leadership: %w", err)
+	}
+
+	var info database.LeadershipInfo
+	if err := result.Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode leadership: %w", err)
+	}
+
+	// Verify that we actually acquired the leadership
+	if info.NodeID != nodeID {
+		return nil, database.ErrLeadershipNotAcquired
+	}
+
+	return &info, nil
 }
 
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
@@ -706,6 +772,7 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
+		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
 	return &clientInfo, nil
@@ -824,6 +891,11 @@ func (c *Client) FindCompactionCandidatesPerProject(
 
 	var infos []*database.DocInfo
 	for cursor.Next(ctx) {
+		// Check for context cancellation
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		var info database.DocInfo
 		if err := cursor.Decode(&info); err != nil {
 			return nil, fmt.Errorf("decode document: %w", err)
@@ -1022,7 +1094,11 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) error {
+	// Clear all related caches
 	c.docCache.Remove(refKey)
+	c.changeCache.Remove(refKey)
+	c.vectorCache.Remove(refKey)
+
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
@@ -1098,7 +1174,7 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 	return count, nil
 }
 
-// CreateChangeInfos stores the given changes and doc info.
+// CreateChangeInfos creates or updates change infos for the given document.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,

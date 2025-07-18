@@ -58,6 +58,30 @@ func (d *DB) Close() error {
 	return nil
 }
 
+// TryLeadership attempts to acquire or renew leadership with the given lease duration.
+func (d *DB) TryLeadership(
+	ctx context.Context,
+	nodeID,
+	leaseToken string,
+	leaseDuration gotime.Duration,
+) (*database.LeadershipInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	info := &database.LeadershipInfo{
+		NodeID:     nodeID,
+		LeaseToken: leaseToken,
+		ExpiresAt:  gotime.Now().Add(leaseDuration),
+	}
+	if err := txn.Insert(tblLeadership, info); err != nil {
+		return nil, fmt.Errorf("insert leadership info: %w", err)
+	}
+
+	txn.Commit()
+
+	return info, nil
+}
+
 // FindProjectInfoByPublicKey returns a project by public key.
 func (d *DB) FindProjectInfoByPublicKey(
 	_ context.Context,
