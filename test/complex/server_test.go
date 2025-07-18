@@ -33,6 +33,10 @@ func TestSDKRPCServerBackendWithShardedDB(t *testing.T) {
 		testcases.RunAttachAndDetachDocumentTest(t, testClient)
 	})
 
+	t.Run("client deactivation detaches documents test", func(t *testing.T) {
+		testcases.RunClientDeactivationDetachesDocumentsTest(t, testClient)
+	})
+
 	t.Run("attach/detach on removed document test", func(t *testing.T) {
 		testcases.RunAttachAndDetachRemovedDocumentTest(t, testClient)
 	})
@@ -90,7 +94,7 @@ func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
 	t.Run("admin update project test", func(t *testing.T) {
 		testcases.RunAdminUpdateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
 	})
-
+	
 	t.Run("admin list documents test", func(t *testing.T) {
 		testcases.RunAdminListDocumentsTest(t, testAdminClient, testAdminAuthInterceptor)
 	})

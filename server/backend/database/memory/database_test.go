@@ -96,6 +96,10 @@ func TestDB(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, db, projectID)
 	})
 
+	t.Run("ClientDeactivationDetachesDocuments test", func(t *testing.T) {
+		testcases.RunClientDeactivationDetachesDocumentsTest(t, db, projectID)
+	})
+
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		testcases.RunUpdateProjectInfoTest(t, db)
 	})
