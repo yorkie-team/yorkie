@@ -194,24 +194,24 @@ func BenchmarkDocument(b *testing.B) {
 			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				text := root.GetText("k1")
 				assert.Equal(b,
-					`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {} "A"][1:3:AA:0 {} "12"]{1:2:AA:1 {} "BC"}[1:2:AA:3 {} "D"]`,
 					text.ToTestString(),
 				)
 
 				from, _ := text.CreateRange(0, 0)
-				assert.Equal(b, "0:0:00:0:0", from.ToTestString())
+				assert.Equal(b, "0:0:AA:0:0", from.ToTestString())
 
 				from, _ = text.CreateRange(1, 1)
-				assert.Equal(b, "1:2:00:0:1", from.ToTestString())
+				assert.Equal(b, "1:2:AA:0:1", from.ToTestString())
 
 				from, _ = text.CreateRange(2, 2)
-				assert.Equal(b, "1:3:00:0:1", from.ToTestString())
+				assert.Equal(b, "1:3:AA:0:1", from.ToTestString())
 
 				from, _ = text.CreateRange(3, 3)
-				assert.Equal(b, "1:3:00:0:2", from.ToTestString())
+				assert.Equal(b, "1:3:AA:0:2", from.ToTestString())
 
 				from, _ = text.CreateRange(4, 4)
-				assert.Equal(b, "1:2:00:3:1", from.ToTestString())
+				assert.Equal(b, "1:2:AA:3:1", from.ToTestString())
 				return nil
 			})
 			assert.NoError(b, err)
@@ -247,7 +247,7 @@ func BenchmarkDocument(b *testing.B) {
 				text.Edit(0, 0, "Hello world", nil)
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {} "Hello world"]`,
 					text.ToTestString(),
 				)
 				return nil
@@ -259,7 +259,7 @@ func BenchmarkDocument(b *testing.B) {
 				text := root.GetText("k1")
 				text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {"b":"1"} "Hello"][1:2:AA:5 {} " world"]`,
 					text.ToTestString(),
 				)
 				return nil
@@ -276,14 +276,14 @@ func BenchmarkDocument(b *testing.B) {
 				text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {"b":"1"} "Hello"][1:2:AA:5 {} " world"]`,
 					text.ToTestString(),
 				)
 
 				text.Style(3, 5, map[string]string{"i": "1"})
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {"b":"1"} "Hel"][1:2:AA:3 {"b":"1","i":"1"} "lo"][1:2:AA:5 {} " world"]`,
 					text.ToTestString(),
 				)
 				return nil
@@ -300,8 +300,8 @@ func BenchmarkDocument(b *testing.B) {
 				text.Edit(5, 11, " Yorkie", nil)
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
-						`[4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {"b":"1"} "Hel"][1:2:AA:3 {"b":"1","i":"1"} "lo"]`+
+						`[4:1:AA:0 {} " Yorkie"]{1:2:AA:5 {} " world"}`,
 					text.ToTestString(),
 				)
 				return nil
@@ -318,7 +318,7 @@ func BenchmarkDocument(b *testing.B) {
 				text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+					`[0:0:AA:0 {} ""][1:2:AA:0 {"b":"1"} "Hel"][1:2:AA:3 {"b":"1","i":"1"} "lo"][5:1:AA:0 {"list":"true"} "\n"][4:1:AA:0 {} " Yorkie"]{1:2:AA:5 {} " world"}`,
 					text.ToTestString(),
 				)
 				return nil
