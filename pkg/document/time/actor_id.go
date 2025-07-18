@@ -50,6 +50,9 @@ var (
 	// ErrInvalidHexString is returned when the given string is not valid hex.
 	ErrInvalidHexString = errors.New("invalid hex string")
 
+	// ErrInvalidBase64String is returned when the given string is not valid base64.
+	ErrInvalidBase64String = errors.New("invalid base64 string")
+
 	// ErrInvalidActorID is returned when the given ID is not valid.
 	ErrInvalidActorID = errors.New("invalid actor id")
 )
@@ -91,14 +94,15 @@ func ActorIDFromBytes(bytes []byte) (ActorID, error) {
 	return ActorID(bytes[:]), nil
 }
 
+// ActorIDFromBase64 returns the bytes represented by the base64 string str.
 func ActorIDFromBase64(str string) (ActorID, error) {
 	if str == "" {
-		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidBase64String)
 	}
 
-	decoded, err := base64.RawURLEncoding.DecodeString(str)
+	decoded, err := base64.RawStdEncoding.DecodeString(str)
 	if err != nil {
-		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return ActorID{}, fmt.Errorf("%s: %w", str, ErrInvalidBase64String)
 	}
 
 	if len(decoded) != actorIDSize {
@@ -114,15 +118,12 @@ func ActorIDFromBase64(str string) (ActorID, error) {
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
 func (id ActorID) String() string {
-	encoded := hex.EncodeToString(id[:])
-	return encoded
-	//return hex.EncodeToString(id[:])
+	return hex.EncodeToString(id[:])
 }
 
+// StringBase64 returns the base64 encoding of ActorID.
 func (id ActorID) StringBase64() string {
-	encoded := base64.RawURLEncoding.EncodeToString(id[:])
-	return encoded
-	//return base64.RawURLEncoding.EncodeToString(id[:])
+	return base64.RawStdEncoding.EncodeToString(id[:])
 }
 
 // Bytes returns the bytes of ActorID itself.
