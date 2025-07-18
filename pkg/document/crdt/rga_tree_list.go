@@ -28,6 +28,7 @@ import (
 type RGATreeListNode struct {
 	indexNode *splay.Node[*RGATreeListNode]
 	elem      Element
+	movedFrom *RGATreeListNode
 
 	prev *RGATreeListNode
 	next *RGATreeListNode
@@ -75,6 +76,16 @@ func (n *RGATreeListNode) PositionedAt() *time.Ticket {
 	}
 
 	return n.elem.CreatedAt()
+}
+
+// MovedFrom returns the previous element before the element moved.
+func (a *RGATreeListNode) MovedFrom() *RGATreeListNode {
+	return a.movedFrom
+}
+
+// SetMovedFrom sets the previous element before the element moved.
+func (a *RGATreeListNode) SetMovedFrom(movedFrom *RGATreeListNode) {
+	a.movedFrom = movedFrom
 }
 
 // Len returns the length of this node.
@@ -152,7 +163,7 @@ func (a *RGATreeList) Marshal() string {
 
 // Add adds the given element at the last.
 func (a *RGATreeList) Add(elem Element) error {
-	return a.insertAfter(a.last.CreatedAt(), elem, elem.CreatedAt())
+	return a.InsertAfter(a.last.CreatedAt(), elem, nil)
 }
 
 // Nodes returns an array of elements contained in this RGATreeList.
@@ -177,8 +188,12 @@ func (a *RGATreeList) LastCreatedAt() *time.Ticket {
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) error {
-	return a.insertAfter(prevCreatedAt, elem, elem.CreatedAt())
+func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element, executedAt *time.Ticket) error {
+	if executedAt == nil {
+		executedAt = elem.CreatedAt()
+	}
+	_, err := a.insertAfter(prevCreatedAt, elem, executedAt)
+	return err
 }
 
 // Get returns the element of the given index.
@@ -255,12 +270,30 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
+	if executedAt.After(node.PositionedAt()) {
+		movedFrom := node.prev
+		nextNode := node.next
 		a.release(node)
-		if err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt); err != nil {
+		node, err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt)
+		if err != nil {
 			return err
 		}
 		node.elem.SetMovedAt(executedAt)
+		node.SetMovedFrom(movedFrom)
+
+		for nextNode != nil && nextNode.PositionedAt().After(executedAt) {
+			prevNode = node
+			node = nextNode
+			nextNode = node.next
+
+			a.release(node)
+			node, err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt)
+			if err != nil {
+				return err
+			}
+			node.elem.SetMovedAt(executedAt)
+			node.SetMovedFrom(movedFrom)
+		}
 	}
 	return nil
 }
@@ -304,6 +337,10 @@ func (a *RGATreeList) findNextBeforeExecutedAt(
 		return nil, fmt.Errorf("findNextBeforeExecutedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
+	for node.elem.MovedAt() != nil && node.elem.MovedAt().After(executedAt) && node.movedFrom != nil {
+		node = node.movedFrom
+	}
+
 	for node.next != nil && node.next.PositionedAt().After(executedAt) {
 		node = node.next
 	}
@@ -330,10 +367,10 @@ func (a *RGATreeList) insertAfter(
 	prevCreatedAt *time.Ticket,
 	value Element,
 	executedAt *time.Ticket,
-) error {
+) (*RGATreeListNode, error) {
 	prevNode, err := a.findNextBeforeExecutedAt(prevCreatedAt, executedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	newNode := newRGATreeListNodeAfter(prevNode, value)
@@ -343,7 +380,7 @@ func (a *RGATreeList) insertAfter(
 
 	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, newNode.indexNode)
 	a.nodeMapByCreatedAt[value.CreatedAt().Key()] = newNode
-	return nil
+	return newNode, nil
 }
 
 // Set sets the given element at the given creation time.
@@ -357,15 +394,15 @@ func (a *RGATreeList) Set(
 		return nil, fmt.Errorf("set %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	var removed *RGATreeListNode
-	// TODO(junseo): Replace `MovedAt()` with `UpdatedAt()`
-	// because `movedAt` is related to convergence of positional operations (Insert, Move).
-	// In the current implementation, concurrent Set and Insert operations do not converge.
-	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
-		removed = newRGATreeListNode(node.elem)
-
-		node.elem = element
-		node.elem.SetMovedAt(executedAt)
+	_, err := a.insertAfter(node.CreatedAt(), element, executedAt)
+	if err != nil {
+		return nil, nil
 	}
+
+	removed, err := a.DeleteByCreatedAt(createdAt, executedAt)
+	if err != nil {
+		return removed, err
+	}
+
 	return removed, nil
 }

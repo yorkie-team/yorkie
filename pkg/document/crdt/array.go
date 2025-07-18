@@ -34,7 +34,7 @@ type Array struct {
 func NewArray(elements *RGATreeList, createdAt *time.Ticket, value ...[]Element) *Array {
 	if len(value) == 1 {
 		for _, v := range value[0] {
-			_ = elements.InsertAfter(elements.LastCreatedAt(), v)
+			_ = elements.InsertAfter(elements.LastCreatedAt(), v, nil)
 		}
 	}
 	return &Array{
@@ -189,8 +189,8 @@ func (a *Array) LastCreatedAt() *time.Ticket {
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) error {
-	return a.elements.InsertAfter(prevCreatedAt, element)
+func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element, executedAt *time.Ticket) error {
+	return a.elements.InsertAfter(prevCreatedAt, element, executedAt)
 }
 
 // DeleteByCreatedAt deletes the given element.

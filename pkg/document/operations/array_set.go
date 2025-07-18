@@ -64,7 +64,11 @@ func (o *ArraySet) Execute(root *crdt.Root, _ time.VersionVector) error {
 		return err
 	}
 
-	_, err = obj.Set(o.createdAt, value, o.executedAt)
+	if err := obj.InsertAfter(o.createdAt, value, o.executedAt); err != nil {
+		return err
+	}
+
+	_, err = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
 	if err != nil {
 		return err
 	}
