@@ -20,6 +20,7 @@ package database
 import (
 	"context"
 	"errors"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -67,12 +68,23 @@ var (
 
 	// ErrSchemaAlreadyExists is returned when the schema already exists.
 	ErrSchemaAlreadyExists = errors.New("schema already exists")
+
+	// ErrInvalidLeaseToken is returned when the provided token is invalid.
+	ErrInvalidLeaseToken = errors.New("invalid lease token")
 )
 
 // Database represents database which reads or saves Yorkie data.
 type Database interface {
 	// Close all resources of this database.
 	Close() error
+
+	// TryLeadership attempts to acquire or renew leadership with the given lease duration.
+	// If leaseToken is empty, it attempts to acquire new leadership.
+	// If leaseToken is provided, it attempts to renew the existing lease.
+	TryLeadership(ctx context.Context, nodeID, leaseToken string, leaseDuration gotime.Duration) (*LeadershipInfo, error)
+
+	// FindLeadership returns the current leadership information.
+	FindLeadership(ctx context.Context) (*LeadershipInfo, error)
 
 	// FindProjectInfoByPublicKey returns a project by public key.
 	FindProjectInfoByPublicKey(

@@ -42,6 +42,8 @@ const (
 	ColVersionVectors = "versionvectors"
 	// ColSchemas represents the schemas collection in the database.
 	ColSchemas = "schemas"
+	// ColLeaderships represents the leadership collection in the database.
+	ColLeaderships = "leaderships"
 )
 
 // Collections represents the list of all collections in the database.
@@ -53,6 +55,7 @@ var Collections = []string{
 	ColChanges,
 	ColSnapshots,
 	ColSchemas,
+	ColLeaderships,
 }
 
 type collectionInfo struct {
@@ -164,6 +167,14 @@ var collectionInfos = []collectionInfo{
 				{Key: "version", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: ColLeaderships,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "elected_at", Value: int32(1)},
+			},
 		}},
 	},
 }
