@@ -81,7 +81,7 @@ func TestRESTAPI(t *testing.T) {
 		assert.Len(t, summaries.Documents, 2)
 	})
 
-	t.Run("bulk document retrieval test", func(t *testing.T) {
+	t.Run("bulk document retrieval with options test", func(t *testing.T) {
 		numDocs, clientsPerDoc := 3, 1
 
 		testCases := []struct {
