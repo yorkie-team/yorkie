@@ -1271,6 +1271,71 @@ func RunAdminGetDocumentTest(
 	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
 }
 
+// RunAdminGetDocumentsTest runs the GetDocuments test in admin.
+func RunAdminGetDocumentsTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	testDocumentKey := helper.TestDocKey(t).String()
+
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	activateResp, err := testClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+	assert.NoError(t, err)
+
+	packWithNoChanges := &api.ChangePack{
+		DocumentKey: testDocumentKey,
+		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+	}
+
+	_, err = testClient.AttachDocument(
+		context.Background(),
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   activateResp.Msg.ClientId,
+			ChangePack: packWithNoChanges,
+		},
+		))
+	assert.NoError(t, err)
+
+	resp1, err := testAdminClient.GetDocuments(
+		context.Background(),
+		connect.NewRequest(&api.GetDocumentsRequest{
+			ProjectName:      defaultProjectName,
+			DocumentKeys:     []string{testDocumentKey},
+			IncludeRoot:      true,
+			IncludePresences: true,
+		},
+		))
+	assert.NoError(t, err)
+	assert.Len(t, resp1.Msg.Documents, 1)
+
+	// try to get documents including non-existing document name
+	resp2, err := testAdminClient.GetDocuments(
+		context.Background(),
+		connect.NewRequest(&api.GetDocumentsRequest{
+			ProjectName:      defaultProjectName,
+			DocumentKeys:     []string{testDocumentKey, invalidChangePack.DocumentKey},
+			IncludeRoot:      true,
+			IncludePresences: true,
+		},
+		))
+	assert.NoError(t, err)
+	assert.Len(t, resp2.Msg.Documents, 1)
+}
+
 // RunAdminListChangesTest runs the ListChanges test in admin.
 func RunAdminListChangesTest(
 	t *testing.T,
