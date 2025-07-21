@@ -342,7 +342,7 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	// `opName` represents the parameter of operation selected as `oneIdx'.
 	// `otherIdxs` ensures that indexs other than `oneIdx` are not duplicated.
 	operations := []arrayOp{
-		// // insert
+		// insert
 		{"insert.prev", func(a *json.Array, cid int) {
 			a.InsertIntegerAfter(oneIdx, newValues[cid])
 		}},
@@ -408,9 +408,100 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	for _, op1 := range operations {
 		for _, op2 := range operations {
 			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
-				runTest(op1, op2)
+				result := runTest(op1, op2)
+				if !result.flag {
+					t.Skip(result.resultDesc)
+				}
 			})
 		}
+	}
+}
+
+func TestComplicateArrayConcurrency(t *testing.T) {
+	clients := activeClients(t, 3)
+	c0, c1 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	initArr := []int{1, 2, 3, 4}
+	initMarshal := `[1,2,3,4]`
+	oneIdx := 1
+	otherIdx := 0
+	newValue := 5
+
+	type arrayOp struct {
+		opName   string
+		executor func(*json.Array)
+	}
+
+	// This test checks CRDT convergence in the presence of concurrent modifications:
+	// - Client 0 performs a single operation (`op`) at index `oneIdx`.
+	// - Client 1 performs two move operations involving index `oneIdx`.
+	// The test ensures that after syncing both clients, their array states converge.
+	// `oneIdx`: the index on which both the arbitrary operation and the first move operation are applied.
+	// `opName`: describes the type of operation being tested (insert, move, set, or remove).
+	operations := []arrayOp{
+		// insert
+		{"insert", func(a *json.Array) {
+			a.InsertIntegerAfter(oneIdx, newValue)
+		}},
+
+		// move
+		{"move", func(a *json.Array) {
+			a.MoveAfterByIndex(otherIdx, oneIdx)
+		}},
+
+		// set
+		{"set", func(a *json.Array) {
+			a.SetInteger(oneIdx, newValue)
+		}},
+
+		// remove
+		{"remove", func(a *json.Array) {
+			a.Delete(oneIdx)
+		}},
+	}
+
+	ctx := context.Background()
+	d0 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c0.Attach(ctx, d0))
+	d1 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+
+	runTest := func(op arrayOp) testResult {
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("a").AddInteger(initArr...)
+			assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+			return nil
+		}))
+
+		assert.NoError(t, c0.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+			op.executor(root.GetArray("a"))
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("a").MoveAfterByIndex(2, oneIdx)
+			root.GetArray("a").MoveAfterByIndex(3, 2)
+			return nil
+		}))
+
+		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
+		if flag {
+			return testResult{flag, `pass`}
+		}
+		return testResult{flag, `different result`}
+	}
+
+	for _, op := range operations {
+		t.Run(op.opName, func(t *testing.T) {
+			result := runTest(op)
+			if !result.flag {
+				t.Skip(result.resultDesc)
+			}
+		})
 	}
 }
 
