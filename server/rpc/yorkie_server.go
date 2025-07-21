@@ -149,6 +149,8 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	logging.From(ctx).Errorf("attach document: %s", actorID)
+
 	project := projects.From(ctx)
 
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
