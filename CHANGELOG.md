@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.21] - 2025-07-23
+
+### Changed
+
+- Allow additional API host by @raararaara in https://github.com/yorkie-team/yorkie/pull/1396
+- Remove gopkg.in/yaml.v2 and unify YAML usage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1403
+
+### Fixed
+
+- Add feature to filter out stale presences by @kokodak in https://github.com/yorkie-team/yorkie/pull/1402
+- Resolve convergence issues in Array.Move and Array.Set by @KMSstudio in https://github.com/yorkie-team/yorkie/pull/1395
+
 ## [v0.6.20] - 2025-07-17
 
 ### Added
