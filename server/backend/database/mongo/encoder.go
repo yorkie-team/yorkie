@@ -19,20 +19,20 @@ package mongo
 import (
 	"fmt"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-func encodeActorID(id time.ActorID) primitive.ObjectID {
-	objectID := primitive.ObjectID{}
+func encodeActorID(id time.ActorID) bson.ObjectID {
+	objectID := bson.ObjectID{}
 	copy(objectID[:], id.Bytes())
 	return objectID
 }
 
-func encodeID(id types.ID) (primitive.ObjectID, error) {
-	objectID, err := primitive.ObjectIDFromHex(id.String())
+func encodeID(id types.ID) (bson.ObjectID, error) {
+	objectID, err := bson.ObjectIDFromHex(id.String())
 	if err != nil {
 		return objectID, fmt.Errorf("%s: %w", id, types.ErrInvalidID)
 	}

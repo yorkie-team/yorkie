@@ -18,14 +18,10 @@ package mongo
 
 import (
 	"bytes"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/bsoncodec"
-	"go.mongodb.org/mongo-driver/bson/bsonrw"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -34,27 +30,36 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	registry := NewRegistryBuilder().Build()
+	registry := NewRegistryBuilder()
 
 	t.Run("types.ID test", func(t *testing.T) {
-		id := types.ID(primitive.NewObjectID().Hex())
-		data, err := bson.MarshalWithRegistry(registry, bson.M{
+		id := types.ID(bson.NewObjectID().Hex())
+
+		buf := new(bytes.Buffer)
+		encoder := bson.NewEncoder(bson.NewDocumentWriter(buf))
+		encoder.SetRegistry(registry)
+		err := encoder.Encode(bson.M{
 			"_id": id,
 		})
 		assert.NoError(t, err)
 
 		info := database.ClientInfo{}
-		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
+		decoder.SetRegistry(registry)
+		assert.NoError(t, decoder.Decode(&info))
 		assert.Equal(t, id, info.ID)
 	})
 
 	t.Run("versionVector test", func(t *testing.T) {
 		vector := time.NewVersionVector()
-		actorID, err := time.ActorIDFromHex(primitive.NewObjectID().Hex())
+		actorID, err := time.ActorIDFromHex(bson.NewObjectID().Hex())
 		assert.NoError(t, err)
 		vector.Set(actorID, 1)
 
-		data, err := bson.MarshalWithRegistry(registry, bson.M{
+		buf := new(bytes.Buffer)
+		encoder := bson.NewEncoder(bson.NewDocumentWriter(buf))
+		encoder.SetRegistry(registry)
+		err = encoder.Encode(bson.M{
 			"version_vector": vector,
 		})
 		assert.NoError(t, err)
@@ -62,7 +67,9 @@ func TestRegistry(t *testing.T) {
 		info := struct {
 			VersionVector time.VersionVector `bson:"version_vector"`
 		}{}
-		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
+		decoder.SetRegistry(registry)
+		assert.NoError(t, decoder.Decode(&info))
 		assert.Equal(t, vector, info.VersionVector)
 	})
 
@@ -74,7 +81,10 @@ func TestRegistry(t *testing.T) {
 			Presence:   presence,
 		}
 
-		data, err := bson.MarshalWithRegistry(registry, bson.M{
+		buf := new(bytes.Buffer)
+		encoder := bson.NewEncoder(bson.NewDocumentWriter(buf))
+		encoder.SetRegistry(registry)
+		err := encoder.Encode(bson.M{
 			"presence_change": presenceChange,
 		})
 		assert.NoError(t, err)
@@ -82,7 +92,9 @@ func TestRegistry(t *testing.T) {
 		info := struct {
 			PresenceChange *innerpresence.Change `bson:"presence_change"`
 		}{}
-		assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
+		decoder.SetRegistry(registry)
+		assert.NoError(t, decoder.Decode(&info))
 
 		assert.Equal(t, presenceChange, info.PresenceChange)
 	})
@@ -90,41 +102,39 @@ func TestRegistry(t *testing.T) {
 
 func TestEncoder(t *testing.T) {
 	t.Run("idEncoder test", func(t *testing.T) {
+		registry := NewRegistryBuilder()
 		field := "id"
-		id := types.ID(primitive.NewObjectID().Hex())
+		id := types.ID(bson.NewObjectID().Hex())
 
 		buf := new(bytes.Buffer)
-		vw, err := bsonrw.NewBSONValueWriter(buf)
-		assert.NoError(t, err)
-		dw, err := vw.WriteDocument()
-		assert.NoError(t, err)
-		vw, err = dw.WriteDocumentElement(field)
+		encoder := bson.NewEncoder(bson.NewDocumentWriter(buf))
+		encoder.SetRegistry(registry)
+		err := encoder.Encode(bson.M{field: id})
 		assert.NoError(t, err)
 
-		assert.NoError(t, idEncoder(bsoncodec.EncodeContext{}, vw, reflect.ValueOf(id)))
-		assert.NoError(t, dw.WriteDocumentEnd())
 		result := make(map[string]string)
-		assert.NoError(t, bson.Unmarshal(buf.Bytes(), &result))
+		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
+		decoder.ObjectIDAsHexString()
+		assert.NoError(t, decoder.Decode(&result))
 		assert.Equal(t, id.String(), result[field])
 	})
 
 	t.Run("actorIDEncoder test", func(t *testing.T) {
+		registry := NewRegistryBuilder()
 		field := "actor_id"
-		actorID, err := time.ActorIDFromHex(primitive.NewObjectID().Hex())
+		actorID, err := time.ActorIDFromHex(bson.NewObjectID().Hex())
 		assert.NoError(t, err)
 
 		buf := new(bytes.Buffer)
-		vw, err := bsonrw.NewBSONValueWriter(buf)
-		assert.NoError(t, err)
-		dw, err := vw.WriteDocument()
-		assert.NoError(t, err)
-		vw, err = dw.WriteDocumentElement(field)
+		encoder := bson.NewEncoder(bson.NewDocumentWriter(buf))
+		encoder.SetRegistry(registry)
+		err = encoder.Encode(bson.M{field: actorID})
 		assert.NoError(t, err)
 
-		assert.NoError(t, actorIDEncoder(bsoncodec.EncodeContext{}, vw, reflect.ValueOf(actorID)))
-		assert.NoError(t, dw.WriteDocumentEnd())
 		result := make(map[string]string)
-		assert.NoError(t, bson.Unmarshal(buf.Bytes(), &result))
+		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
+		decoder.ObjectIDAsHexString()
+		assert.NoError(t, decoder.Decode(&result))
 		assert.Equal(t, actorID.String(), result[field])
 	})
 }

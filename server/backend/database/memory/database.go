@@ -24,7 +24,7 @@ import (
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -1872,7 +1872,7 @@ func (d *DB) purgeDocumentInternals(
 }
 
 func newID() types.ID {
-	return types.ID(primitive.NewObjectID().Hex())
+	return types.ID(bson.NewObjectID().Hex())
 }
 
 // RotateProjectKeys rotates the API keys of the project.

@@ -31,10 +31,10 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	gomongo "go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	gomongo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 	"go.uber.org/zap"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
@@ -433,10 +433,9 @@ func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 	defer cancel()
 
 	client, err := gomongo.Connect(
-		ctx,
 		options.Client().
 			ApplyURI(conf.ConnectionURI).
-			SetRegistry(mongo.NewRegistryBuilder().Build()),
+			SetRegistry(mongo.NewRegistryBuilder()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to mongo: %w", err)
