@@ -211,7 +211,15 @@ func (s *clusterServer) GetDocument(
 
 		// Set presences if requested
 		if req.Msg.IncludePresences {
-			summary.Presences = doc.AllPresences()
+			summary.Presences = make(map[string]innerpresence.Presence)
+			clientIDs := s.backend.PubSub.ClientIDs(docInfo.RefKey())
+			presences := doc.AllPresences()
+
+			for _, id := range clientIDs {
+				if presence, ok := presences[id.String()]; ok {
+					summary.Presences[id.String()] = presence
+				}
+			}
 		}
 	}
 

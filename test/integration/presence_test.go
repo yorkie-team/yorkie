@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -718,5 +719,82 @@ func TestPresence(t *testing.T) {
 		wgEvents.Wait()
 
 		assert.Equal(t, expected, responsePairs)
+	})
+
+	t.Run("GetDocument presence filtering test", func(t *testing.T) {
+		// 01. Get admin client and default project
+		ctx := context.Background()
+
+		adminCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		_, err = adminCli.LogIn(ctx, "admin", "admin")
+		assert.NoError(t, err)
+		defer func() {
+			adminCli.Close()
+		}()
+
+		project, err := adminCli.GetProject(ctx, "default")
+		assert.NoError(t, err)
+
+		// 02. Create two document instances with the same key and attach clients
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()}), client.WithRealtimeSync()))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()}), client.WithRealtimeSync()))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+
+		// 03. Subscribe both clients to the document
+		_, cancel1, err := c1.Subscribe(d1)
+		assert.NoError(t, err)
+		defer cancel1()
+		_, cancel2, err := c2.Subscribe(d2)
+		assert.NoError(t, err)
+
+		// Wait for subscription events to be processed on the server
+		time.Sleep(100 * time.Millisecond)
+
+		// 04. Sync clients to ensure presence information is updated
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		// 05. Call GetDocuments API and verify both presences are included
+		resBody := post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
+			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
+		)
+
+		summaries := &documentSummaries{}
+		gojson.Unmarshal(resBody, summaries)
+		assert.Equal(t, 1, len(summaries.Documents))
+
+		presences := summaries.Documents[0].Presences
+		assert.Equal(t, 2, len(presences), "should include presences of both subscribed clients")
+		assert.Contains(t, presences, c1.ID().String())
+		assert.Contains(t, presences, c2.ID().String())
+
+		// 06. Unsubscribe c2 from the document
+		cancel2()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// 07. Call GetDocuments API again and verify c2's presence is filtered out
+		resBody = post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
+			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
+		)
+
+		summaries = &documentSummaries{}
+		gojson.Unmarshal(resBody, summaries)
+		assert.Equal(t, 1, len(summaries.Documents))
+
+		presences = summaries.Documents[0].Presences
+		assert.Equal(t, 1, len(presences), "should only include presence of subscribed client")
+		assert.Contains(t, presences, c1.ID().String())
+		assert.NotContains(t, presences, c2.ID().String(), "c2's presence should be filtered out")
 	})
 }
