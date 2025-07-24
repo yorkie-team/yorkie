@@ -295,7 +295,7 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
     { "x-shard-key": `${API_KEY}/${docKey}` }
   );
 
-  if (resp && resp.changePack && resp.changePack.versionVector) {
+  if (resp.changePack.versionVector) {
     knownVersionVector = { ...knownVersionVector, ...resp.changePack.versionVector };
   }
 
@@ -341,7 +341,7 @@ function pushpullChanges(
     { "x-shard-key": `${API_KEY}/${docKey}` }
   );
 
-  if (resp && resp.changePack && resp.changePack.versionVector) {
+  if (resp.changePack.versionVector) {
     knownVersionVector = { ...knownVersionVector, ...resp.changePack.versionVector };
   }
 
