@@ -62,6 +62,17 @@ make lint
 > [!NOTE]  
 > If you have an old version of `golangci-lint` installed locally, running `make lint` may fail—especially if the linter doesn't support the newer version of Go. It's recommended to run `make tools` periodically to keep your tools up to date.
 
+### Setting for VSCode
+If you are using VSCode, add the following in your `.vscode/settings.json` so that proper language features work correctly in test files
+with build tag `integration`, `bench`, or `complex`.
+```json
+{
+  "gopls": {
+    "build.buildFlags": ["-tags=integration,bench,complex"]
+  }
+}
+```
+
 ## Design Documents
 
 For developers, [design documents](design/README.md) about core features are provided. You can refer to the docs for understanding the overall structure of Yorkie.
