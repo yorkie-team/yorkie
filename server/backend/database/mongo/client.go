@@ -25,11 +25,10 @@ import (
 	gotime "time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -64,7 +63,7 @@ func Dial(conf *Config) (*Client, error) {
 
 	clientOptions := options.Client().
 		ApplyURI(conf.ConnectionURI).
-		SetRegistry(NewRegistryBuilder().Build())
+		SetRegistry(NewRegistryBuilder())
 
 	if conf.MonitoringEnabled {
 		threshold, err := gotime.ParseDuration(conf.MonitoringSlowQueryThreshold)
@@ -80,7 +79,9 @@ func Dial(conf *Config) (*Client, error) {
 		clientOptions.SetMonitor(monitor.CreateCommandMonitor())
 	}
 
-	client, err := mongo.Connect(ctx, clientOptions)
+	client, err := mongo.Connect(
+		clientOptions,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("connect to mongo: %w", err)
 	}
@@ -179,7 +180,7 @@ func (c *Client) ensureDefaultUserInfo(
 			"hashed_password": candidate.HashedPassword,
 			"created_at":      candidate.CreatedAt,
 		},
-	}, options.Update().SetUpsert(true))
+	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return nil, fmt.Errorf("upsert default user info: %w", err)
 	}
@@ -222,7 +223,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"secret_key":                   candidate.SecretKey,
 			"created_at":                   candidate.CreatedAt,
 		},
-	}, options.Update().SetUpsert(true))
+	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return nil, fmt.Errorf("create default project: %w", err)
 	}
@@ -267,7 +268,7 @@ func (c *Client) CreateProjectInfo(
 		return nil, fmt.Errorf("create project info: %w", err)
 	}
 
-	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
 	return info, nil
 }
 
@@ -500,7 +501,7 @@ func (c *Client) CreateUserInfo(
 		return nil, fmt.Errorf("create user info: %w", err)
 	}
 
-	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
 	return info, nil
 }
 
@@ -637,7 +638,7 @@ func (c *Client) ActivateClient(
 			StatusKey:    database.ClientActivated,
 			"updated_at": now,
 		},
-	}, options.Update().SetUpsert(true))
+	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return nil, fmt.Errorf("upsert client: %w", err)
 	}
@@ -1555,7 +1556,7 @@ func (c *Client) updateVersionVector(
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
 			"client_id":  clientInfo.ID,
-		}, options.Delete()); err != nil {
+		}, options.DeleteOne()); err != nil {
 			return fmt.Errorf("delete version vector: %w", err)
 		}
 		return nil
@@ -1569,7 +1570,7 @@ func (c *Client) updateVersionVector(
 		"$set": bson.M{
 			"version_vector": vector,
 		},
-	}, options.Update().SetUpsert(true))
+	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return fmt.Errorf("update version vector: %w", err)
 	}
@@ -1630,7 +1631,7 @@ func (c *Client) FindDocInfosByQuery(
 ) (*types.SearchResult[*database.DocInfo], error) {
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": projectID,
-		"key": bson.M{"$regex": primitive.Regex{
+		"key": bson.M{"$regex": bson.Regex{
 			Pattern: "^" + escapeRegex(query),
 		}},
 		"removed_at": bson.M{
@@ -1705,7 +1706,7 @@ func (c *Client) CreateSchemaInfo(
 	}
 
 	return &database.SchemaInfo{
-		ID:        types.ID(result.InsertedID.(primitive.ObjectID).Hex()),
+		ID:        types.ID(result.InsertedID.(bson.ObjectID).Hex()),
 		ProjectID: projectID,
 		Name:      name,
 		Version:   version,
@@ -1883,7 +1884,7 @@ func (c *Client) purgeDocumentInternals(
 
 func (c *Client) collection(
 	name string,
-	opts ...*options.CollectionOptions,
+	opts ...options.Lister[options.CollectionOptions],
 ) *mongo.Collection {
 	return c.client.
 		Database(c.config.YorkieDatabase).

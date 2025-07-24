@@ -20,7 +20,7 @@ import (
 	"context"
 	"time"
 
-	"go.mongodb.org/mongo-driver/event"
+	"go.mongodb.org/mongo-driver/v2/event"
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/server/logging"

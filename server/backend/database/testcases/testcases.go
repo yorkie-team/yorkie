@@ -26,7 +26,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
-	mongodb "go.mongodb.org/mongo-driver/mongo"
+	mongodb "go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"

@@ -20,10 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/bsoncodec"
-	"go.mongodb.org/mongo-driver/bson/bsonoptions"
-	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -36,34 +33,52 @@ var tActorID = reflect.TypeOf(time.ActorID{})
 var tVersionVector = reflect.TypeOf(time.VersionVector{})
 var tPresenceChange = reflect.TypeOf(&innerpresence.Change{})
 
-// NewRegistryBuilder returns a new registry builder with the default encoder and decoder.
-func NewRegistryBuilder() *bsoncodec.RegistryBuilder {
-	rb := bsoncodec.NewRegistryBuilder()
-
-	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
-	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
-	bson.PrimitiveCodecs{}.RegisterPrimitiveCodecs(rb)
+// NewRegistryBuilder returns a new registry with the default encoder and decoder.
+func NewRegistryBuilder() *bson.Registry {
+	registry := bson.NewRegistry()
 
 	// Register the decoders for types.ID.
-	rb.RegisterCodec(
-		tID,
-		bsoncodec.NewStringCodec(bsonoptions.StringCodec().SetDecodeObjectIDAsHex(true)),
-	)
-	rb.RegisterTypeDecoder(tVersionVector, bsoncodec.ValueDecoderFunc(versionVectorDecoder))
-	rb.RegisterTypeDecoder(tPresenceChange, bsoncodec.ValueDecoderFunc(presenceChangeDecoder))
+	registry.RegisterTypeDecoder(tID, bson.ValueDecoderFunc(idDecoder))
+	registry.RegisterTypeDecoder(tVersionVector, bson.ValueDecoderFunc(versionVectorDecoder))
+	registry.RegisterTypeDecoder(tPresenceChange, bson.ValueDecoderFunc(presenceChangeDecoder))
 
 	// Register the encoders for types.ID and time.ActorID.
-	rb.RegisterTypeEncoder(tID, bsoncodec.ValueEncoderFunc(idEncoder))
-	rb.RegisterTypeEncoder(tActorID, bsoncodec.ValueEncoderFunc(actorIDEncoder))
-	rb.RegisterTypeEncoder(tVersionVector, bsoncodec.ValueEncoderFunc(versionVectorEncoder))
-	rb.RegisterTypeEncoder(tPresenceChange, bsoncodec.ValueEncoderFunc(presenceChangeEncoder))
+	registry.RegisterTypeEncoder(tID, bson.ValueEncoderFunc(idEncoder))
+	registry.RegisterTypeEncoder(tActorID, bson.ValueEncoderFunc(actorIDEncoder))
+	registry.RegisterTypeEncoder(tVersionVector, bson.ValueEncoderFunc(versionVectorEncoder))
+	registry.RegisterTypeEncoder(tPresenceChange, bson.ValueEncoderFunc(presenceChangeEncoder))
 
-	return rb
+	return registry
 }
 
-func idEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+func idDecoder(dc bson.DecodeContext, vr bson.ValueReader, val reflect.Value) error {
+	if val.Type() != tID {
+		return bson.ValueDecoderError{Name: "idDecoder", Types: []reflect.Type{tID}, Received: val}
+	}
+
+	switch vrType := vr.Type(); vrType {
+	case bson.TypeObjectID:
+		objectID, err := vr.ReadObjectID()
+		if err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+		val.Set(reflect.ValueOf(types.ID(objectID.Hex())))
+	case bson.TypeString:
+		str, err := vr.ReadString()
+		if err != nil {
+			return fmt.Errorf("decode error: %w", err)
+		}
+		val.Set(reflect.ValueOf(types.ID(str)))
+	default:
+		return fmt.Errorf("unsupported type: %v", vr.Type())
+	}
+
+	return nil
+}
+
+func idEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflect.Value) error {
 	if !val.IsValid() || val.Type() != tID {
-		return bsoncodec.ValueEncoderError{Name: "idEncoder", Types: []reflect.Type{tID}, Received: val}
+		return bson.ValueEncoderError{Name: "idEncoder", Types: []reflect.Type{tID}, Received: val}
 	}
 	objectID, err := encodeID(val.Interface().(types.ID))
 	if err != nil {
@@ -75,9 +90,9 @@ func idEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Val
 	return nil
 }
 
-func actorIDEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+func actorIDEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflect.Value) error {
 	if !val.IsValid() || val.Type() != tActorID {
-		return bsoncodec.ValueEncoderError{Name: "actorIDEncoder", Types: []reflect.Type{tActorID}, Received: val}
+		return bson.ValueEncoderError{Name: "actorIDEncoder", Types: []reflect.Type{tActorID}, Received: val}
 	}
 	objectID := encodeActorID(val.Interface().(time.ActorID))
 	if err := vw.WriteObjectID(objectID); err != nil {
@@ -86,9 +101,9 @@ func actorIDEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflec
 	return nil
 }
 
-func versionVectorEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+func versionVectorEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflect.Value) error {
 	if !val.IsValid() || val.Type() != tVersionVector {
-		return bsoncodec.ValueEncoderError{Name: "versionVectorEncoder", Types: []reflect.Type{tVersionVector}, Received: val}
+		return bson.ValueEncoderError{Name: "versionVectorEncoder", Types: []reflect.Type{tVersionVector}, Received: val}
 	}
 
 	vector := val.Interface().(time.VersionVector)
@@ -104,9 +119,9 @@ func versionVectorEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val 
 	return nil
 }
 
-func versionVectorDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+func versionVectorDecoder(_ bson.DecodeContext, vr bson.ValueReader, val reflect.Value) error {
 	if val.Type() != tVersionVector {
-		return bsoncodec.ValueDecoderError{Name: "versionVectorDecoder", Types: []reflect.Type{tVersionVector}, Received: val}
+		return bson.ValueDecoderError{Name: "versionVectorDecoder", Types: []reflect.Type{tVersionVector}, Received: val}
 	}
 
 	switch vrType := vr.Type(); vrType {
@@ -129,9 +144,9 @@ func versionVectorDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val 
 	return nil
 }
 
-func presenceChangeEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+func presenceChangeEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflect.Value) error {
 	if !val.IsValid() || val.Type() != tPresenceChange {
-		return bsoncodec.ValueEncoderError{
+		return bson.ValueEncoderError{
 			Name: "presenceChangeEncoder", Types: []reflect.Type{tPresenceChange}, Received: val}
 	}
 
@@ -155,9 +170,9 @@ func presenceChangeEncoder(_ bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val
 	return nil
 }
 
-func presenceChangeDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+func presenceChangeDecoder(_ bson.DecodeContext, vr bson.ValueReader, val reflect.Value) error {
 	if val.Type() != tPresenceChange {
-		return bsoncodec.ValueDecoderError{
+		return bson.ValueDecoderError{
 			Name: "presenceChangeDecoder", Types: []reflect.Type{tPresenceChange}, Received: val}
 	}
 
