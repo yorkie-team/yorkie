@@ -66,8 +66,8 @@ type Ticket struct {
 	// cachedKey is the cache of the string representation of the ticket.
 	cachedKey string
 
-	// cachedActorIDHex is the cache of the hex representation of the actorID.
-	cachedActorIDHex string
+	// cachedActorIDBase64 is the cache of the base64 representation of the actorID.
+	cachedActorIDBase64 string
 }
 
 // NewTicket creates an instance of Ticket.
@@ -87,7 +87,7 @@ func NewTicket(
 // for debugging purpose.
 func (t *Ticket) ToTestString() string {
 	return fmt.Sprintf(
-		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
+		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.StringBase64()[14:16],
 	)
 }
 
@@ -98,7 +98,7 @@ func (t *Ticket) Key() string {
 			":" +
 			strconv.FormatInt(int64(t.delimiter), 10) +
 			":" +
-			t.actorID.String()
+			t.actorID.StringBase64()
 
 	}
 
@@ -120,13 +120,12 @@ func (t *Ticket) ActorID() ActorID {
 	return t.actorID
 }
 
-// ActorIDHex returns the actorID's hex value.
-func (t *Ticket) ActorIDHex() string {
-	if t.cachedActorIDHex == "" {
-		t.cachedActorIDHex = t.actorID.String()
+// ActorIDBase64 returns the actorID's base64 value.
+func (t *Ticket) ActorIDBase64() string {
+	if t.cachedActorIDBase64 == "" {
+		t.cachedActorIDBase64 = t.actorID.StringBase64()
 	}
-
-	return t.cachedActorIDHex
+	return t.cachedActorIDBase64
 }
 
 // ActorIDBytes returns the actorID's bytes value.
