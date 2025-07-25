@@ -380,7 +380,7 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	node := s.findFloorNode(id)
 	if node == nil {
-		return nil, fmt.Errorf("the node of the given id should be found: " + s.ToTestString())
+		return nil, fmt.Errorf("the node of the given id should be found: %s", s.ToTestString())
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
@@ -401,7 +401,7 @@ func (s *RGATreeSplit[V]) splitNode(
 	var diff resource.DataSize
 
 	if offset > node.contentLen() {
-		return nil, diff, fmt.Errorf("offset should be less than or equal to length: " + s.ToTestString())
+		return nil, diff, fmt.Errorf("offset should be less than or equal to length: %s", s.ToTestString())
 	}
 
 	if offset == 0 {

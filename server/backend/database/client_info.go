@@ -144,7 +144,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 // DetachDocument detaches the given document from this client.
 func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
-		return err
+		return fmt.Errorf("detach document %s: %w", docID, err)
 	}
 
 	i.Documents[docID].Status = DocumentDetached
@@ -158,7 +158,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 // RemoveDocument removes the given document from this client.
 func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
-		return err
+		return fmt.Errorf("remove document %s: %w", docID, err)
 	}
 
 	i.Documents[docID].Status = DocumentRemoved
@@ -172,8 +172,7 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 // IsAttached returns whether the given document is attached to this client.
 func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 	if !i.hasDocument(docID) {
-		return false, fmt.Errorf("check %s is attached: %w",
-			docID, ErrDocumentNeverAttached)
+		return false, fmt.Errorf("check %s is attached: %w", docID, ErrDocumentNeverAttached)
 	}
 
 	return i.Documents[docID].Status == DocumentAttached, nil
@@ -228,13 +227,11 @@ func (i *ClientInfo) EnsureActivated() error {
 // EnsureDocumentAttached ensures the given document is attached.
 func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("ensure attached %s in client(%s): %w",
-			docID, i.ID, ErrClientNotActivated)
+		return fmt.Errorf("ensure attached %s in client(%s): %w", docID, i.ID, ErrClientNotActivated)
 	}
 
 	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
-		return fmt.Errorf("ensure attached %s in client(%s): %w",
-			docID, i.ID, ErrDocumentNotAttached)
+		return fmt.Errorf("ensure attached %s in client(%s): %w", docID, i.ID, ErrDocumentNotAttached)
 	}
 
 	return nil

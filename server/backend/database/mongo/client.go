@@ -145,12 +145,12 @@ func (c *Client) EnsureDefaultUserAndProject(
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("ensure default user info: %w", err)
 	}
 
 	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("ensure default project info: %w", err)
 	}
 
 	return userInfo, projectInfo, nil
@@ -164,7 +164,7 @@ func (c *Client) ensureDefaultUserInfo(
 ) (*database.UserInfo, error) {
 	hashedPassword, err := database.HashedPassword(password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
 	candidate := database.NewUserInfo(
@@ -235,9 +235,9 @@ func (c *Client) ensureDefaultProjectInfo(
 	info := database.ProjectInfo{}
 	if err := result.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("default: %w", database.ErrProjectNotFound)
+			return nil, fmt.Errorf("find default project: %w", database.ErrProjectNotFound)
 		}
-		return nil, fmt.Errorf("decode project info: %w", err)
+		return nil, fmt.Errorf("find default project: %w", err)
 	}
 
 	return &info, nil
@@ -348,7 +348,7 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
 		}
-		return nil, fmt.Errorf("decode project info: %w", err)
+		return nil, fmt.Errorf("find project info by public key %s: %w", publicKey, err)
 	}
 
 	return &projectInfo, nil
@@ -402,9 +402,9 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 	projectInfo := database.ProjectInfo{}
 	if err := result.Decode(&projectInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+			return nil, fmt.Errorf("find project info %s: %w", id, database.ErrProjectNotFound)
 		}
-		return nil, fmt.Errorf("decode project info: %w", err)
+		return nil, fmt.Errorf("find project info %s: %w", id, err)
 	}
 
 	return &projectInfo, nil
@@ -438,10 +438,10 @@ func (c *Client) UpdateProjectInfo(
 	info := database.ProjectInfo{}
 	if err := res.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+			return nil, fmt.Errorf("update project info %s: %w", id, database.ErrProjectNotFound)
 		}
 		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("update project info %s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 		}
 		return nil, fmt.Errorf("decode project info: %w", err)
 	}
@@ -640,7 +640,7 @@ func (c *Client) ActivateClient(
 		},
 	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
-		return nil, fmt.Errorf("upsert client: %w", err)
+		return nil, fmt.Errorf("upsert client (%s, %s): %w", projectID, key, err)
 	}
 
 	var result *mongo.SingleResult
@@ -662,7 +662,7 @@ func (c *Client) ActivateClient(
 
 	clientInfo := database.ClientInfo{}
 	if err = result.Decode(&clientInfo); err != nil {
-		return nil, fmt.Errorf("decode client info: %w", err)
+		return nil, fmt.Errorf("find and update client info (%s, %s): %w", projectID, key, err)
 	}
 
 	return &clientInfo, nil
@@ -683,9 +683,9 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
+			return nil, fmt.Errorf("find and update client info %s: %w", refKey, database.ErrClientNotFound)
 		}
-		return nil, fmt.Errorf("decode client info: %w", err)
+		return nil, fmt.Errorf("find and update client info %s: %w", refKey, err)
 	}
 
 	return &clientInfo, nil
@@ -705,7 +705,7 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
+			return nil, fmt.Errorf("find and update client info %s: %w", refKey, database.ErrClientNotFound)
 		}
 	}
 
@@ -726,7 +726,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("is attached %s: %w", docInfo.ID, err)
 	}
 
 	var updater bson.M
@@ -767,7 +767,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return fmt.Errorf("update client info: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
+		return fmt.Errorf("update client info %s: %w", clientInfo.Key, database.ErrClientNotFound)
 	}
 
 	return nil
@@ -1188,11 +1188,11 @@ func (c *Client) CreateChangeInfos(
 	})
 	if err != nil {
 		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document %s: %w", refKey, err)
 	}
 	if res.MatchedCount == 0 {
 		c.docCache.Remove(refKey)
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("update document %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	if isRemoved {
@@ -1261,7 +1261,7 @@ func (c *Client) CompactChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %s: %w", docInfo.ProjectID, docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("update document %s: %w", docInfo.RefKey(), database.ErrConflictOnUpdate)
 	}
 
 	return nil
