@@ -159,7 +159,16 @@ func TestClientInfo(t *testing.T) {
 
 		clientInfo.Deactivate()
 
+		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.False(t, isAttached)
+
+		assert.Equal(t, database.DocumentDetached, clientInfo.Documents[dummyDocID].Status)
+
+		assert.Equal(t, int64(0), clientInfo.Documents[dummyDocID].ServerSeq)
+		assert.Equal(t, uint32(0), clientInfo.Documents[dummyDocID].ClientSeq)
+
 		err = clientInfo.EnsureDocumentsNotAttachedWhenDeactivated()
-		assert.Equal(t, database.ErrAttachedDocumentExists, err)
+		assert.NoError(t, err)
 	})
 }

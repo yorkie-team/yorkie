@@ -138,6 +138,10 @@ func TestClient(t *testing.T) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("ClientDeactivationDetachesDocuments test", func(t *testing.T) {
+		testcases.RunClientDeactivationDetachesDocumentsTest(t, cli, dummyProjectID)
+	})
 }
 
 func TestClient_RotateProjectKeys(t *testing.T) {
