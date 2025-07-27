@@ -1,0 +1,59 @@
+- name: "bug 🐞"
+  color: "d73a4a"
+  description: "Something isn't working"
+
+- name: "cleanup 🧹"
+  color: "0e8a16"
+  description: "Paying off technical debt"
+
+- name: "critical 🚨"
+  color: "fbca04"
+  description: "Event that must be dealt with to ensure the system"
+
+- name: "dependencies"
+  color: "0366d6"
+  description: "Pull requests that update a dependency file"
+
+- name: "discussion 🗣️"
+  color: "d876e3"
+  description: "Need to be discussed"
+
+- name: "documentation 📔"
+  color: "0075ca"
+  description: "Improvements or additions to documentation"
+
+- name: "duplicate 🧬"
+  color: "cfd3d7"
+  description: "This issue or pull request already exists"
+
+- name: "enhancement 🌟"
+  color: "a2eeef"
+  description: "New feature or request"
+
+- name: "good first issue 🟣"
+  color: "7057ff"
+  description: "Good for newcomers"
+
+- name: "hacktoberfest-accepted"
+  color: "8f3f47"
+  description: "Accept for hacktoberfest, will merge later"
+
+- name: "hard 🧠"
+  color: "e4e669"
+  description: "Difficult to deal with or require research"
+
+- name: "help wanted 🦄"
+  color: "008672"
+  description: "Extra attention is needed"
+
+- name: "protocol changed 📝"
+  color: "ff0000"
+  description: "Whether the protocol has changed"
+
+- name: "question 💭"
+  color: "cc317c"
+  description: "Further information is requested"
+
+- name: "sdk ⚒️"
+  color: "4d2c0b"
+  description: "SDK-related changes"

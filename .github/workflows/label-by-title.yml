@@ -1,0 +1,65 @@
+name: Label by Title Keyword
+
+on:
+  issues:
+    types: [opened, edited]
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  labeling:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label issue or PR based on title keywords
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GH_TOKEN_WITH_WORKFLOW }}
+          script: |
+            const rules = {
+              "bug 🐞": ["bug", "fix", "error", "fail", "crash", "exception", "not working", "hotfix"],
+              "enhancement 🌟": ["enhancement", "feature", "feat", "improve", "add", "implement", "request", "support"],
+              "documentation 📔": ["documentation", "docs", "readme", "guide", "example", "tutorial", "swagger"],
+              "cleanup 🧹": ["cleanup", "refactor", "style", "chore", "test", "tidy", "debt", "organize", "format", "lint"],
+              "question 💭": ["question", "help", "how to", "what is", "why", "assist"],
+              "discussion 🗣️": ["discussion", "propose", "idea", "feedback", "suggestion", "opinion"],
+              "protocol changed 📝": ["protocol", "api change", "breaking change", "spec", "interface"],
+              "sdk ⚒️": ["sdk", "client", "library", "package"],
+              "critical 🚨": ["critical", "urgent", "blocker", "severe", "fatal", "breakdown"],
+              "dependencies": ["dependency", "dependencies", "bump", "upgrade"],
+              "duplicate 🧬": ["duplicate", "already exists", "same issue"],
+              "good first issue 🟣": ["good first issue", "easy", "entry-level"],
+              "hacktoberfest-accepted": ["hacktoberfest", "accepted", "contribute"],
+              "hard 🧠": ["hard", "difficult", "tricky", "challenging"],
+              "help wanted 🦄": ["help wanted", "assistance", "support needed"]
+            };
+
+            const payload = context.payload;
+            const title = payload.issue?.title || payload.pull_request?.title || '';
+            const number = payload.issue?.number || payload.pull_request?.number;
+            const existingLabels = (payload.issue?.labels || payload.pull_request?.labels || []).map(l => l.name);
+            const labelsToAdd = [];
+
+            for (const [label, keywords] of Object.entries(rules)) {
+              if (keywords.some(kw => title.toLowerCase().includes(kw.toLowerCase()))) {
+                if (!existingLabels.includes(label)) {
+                  labelsToAdd.push(label);
+                }
+              }
+            }
+
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: number,
+                labels: labelsToAdd,
+              });
+              core.info(`Labels added: ${labelsToAdd.join(', ')}`);
+            } else {
+              core.info("No matching labels found.");
+            }
