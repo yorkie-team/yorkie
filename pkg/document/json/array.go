@@ -453,7 +453,7 @@ func (p *Array) insertAfterInternal(
 		ticket,
 	))
 
-	if err = p.InsertAfter(prevCreatedAt, value); err != nil {
+	if err = p.InsertAfter(prevCreatedAt, value, nil); err != nil {
 		panic(err)
 	}
 	p.context.RegisterElement(value)
@@ -501,9 +501,7 @@ func (p *Array) setByIndexInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
 	ticket := p.context.IssueTimeTicket()
-	// NOTE(junseo): It uses `creator(createdAt)` instead of `creator(ticket)`
-	// because the new element must have the same `createdAt` as the old element.
-	elem := creator(createdAt)
+	elem := creator(ticket)
 	value := toOriginal(elem)
 
 	copiedValue, err := value.DeepCopy()

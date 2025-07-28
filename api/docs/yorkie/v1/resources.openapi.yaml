@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.19
+  version: v0.6.21
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -431,15 +431,20 @@ components:
           description: ""
           title: key
           type: string
+        presences:
+          additionalProperties: false
+          description: ""
+          title: presences
+          type: object
+        root:
+          additionalProperties: false
+          description: ""
+          title: root
+          type: string
         schemaKey:
           additionalProperties: false
           description: ""
           title: schema_key
-          type: string
-        snapshot:
-          additionalProperties: false
-          description: ""
-          title: snapshot
           type: string
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
@@ -448,6 +453,23 @@ components:
           title: updated_at
           type: object
       title: DocumentSummary
+      type: object
+    yorkie.v1.DocumentSummary.PresencesEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.Presence'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: PresencesEntry
       type: object
     yorkie.v1.JSONElement:
       additionalProperties: false

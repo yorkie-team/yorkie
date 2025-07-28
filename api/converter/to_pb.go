@@ -98,17 +98,23 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSumm
 
 // ToDocumentSummary converts the given model to Protobuf format.
 func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
-	return &api.DocumentSummary{
+	pbSummary := &api.DocumentSummary{
 		Id:              summary.ID.String(),
 		Key:             summary.Key.String(),
 		CreatedAt:       timestamppb.New(summary.CreatedAt),
 		AccessedAt:      timestamppb.New(summary.AccessedAt),
 		UpdatedAt:       timestamppb.New(summary.UpdatedAt),
-		Snapshot:        summary.Snapshot,
+		Root:            summary.Root,
 		AttachedClients: int32(summary.AttachedClients),
 		DocumentSize:    ToDocSize(summary.DocSize),
 		SchemaKey:       summary.SchemaKey,
 	}
+
+	if summary.Presences != nil {
+		pbSummary.Presences = ToPresences(summary.Presences)
+	}
+
+	return pbSummary
 }
 
 // ToPresences converts the given model to Protobuf format.
@@ -207,7 +213,7 @@ func ToVersionVector(vector time.VersionVector) (*api.VersionVector, error) {
 			return nil, err
 		}
 
-		pbVersionVector[id.String()] = clock
+		pbVersionVector[id.StringBase64()] = clock
 	}
 
 	return &api.VersionVector{

@@ -169,3 +169,61 @@ func (s *clusterServer) PurgeDocument(
 
 	return connect.NewResponse(&api.ClusterServicePurgeDocumentResponse{}), nil
 }
+
+// GetDocument gets the document for a single document.
+func (s *clusterServer) GetDocument(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceGetDocumentRequest],
+) (*connect.Response[api.ClusterServiceGetDocumentResponse], error) {
+	project := converter.FromProject(req.Msg.Project)
+	docInfo, err := documents.FindDocInfoByKey(
+		ctx,
+		s.backend,
+		project,
+		key.Key(req.Msg.DocumentKey),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := &types.DocumentSummary{
+		ID:         docInfo.ID,
+		Key:        docInfo.Key,
+		CreatedAt:  docInfo.CreatedAt,
+		AccessedAt: docInfo.AccessedAt,
+		UpdatedAt:  docInfo.UpdatedAt,
+		SchemaKey:  docInfo.Schema,
+		Root:       "",
+		Presences:  nil,
+	}
+
+	// If root or presences are requested, we need to build the internal document
+	if req.Msg.IncludeRoot || req.Msg.IncludePresences {
+		doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set root if requested
+		if req.Msg.IncludeRoot {
+			summary.Root = doc.Marshal()
+		}
+
+		// Set presences if requested
+		if req.Msg.IncludePresences {
+			summary.Presences = make(map[string]innerpresence.Presence)
+			clientIDs := s.backend.PubSub.ClientIDs(docInfo.RefKey())
+			presences := doc.AllPresences()
+
+			for _, id := range clientIDs {
+				if presence, ok := presences[id.String()]; ok {
+					summary.Presences[id.String()] = presence
+				}
+			}
+		}
+	}
+
+	return connect.NewResponse(&api.ClusterServiceGetDocumentResponse{
+		Document: converter.ToDocumentSummary(summary),
+	}), nil
+}
