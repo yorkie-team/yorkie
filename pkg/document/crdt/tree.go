@@ -239,6 +239,11 @@ func (n *TreeNode) Attributes() string {
 	return " " + sb.String()
 }
 
+// ClearChildren clears the children.
+func (n *TreeNode) ClearChildren() error {
+	return n.Index.SetChildren(nil)
+}
+
 // Append appends the given node to the end of the children.
 func (n *TreeNode) Append(newNodes ...*TreeNode) error {
 	indexNodes := make([]*index.Node[*TreeNode], len(newNodes))
@@ -594,6 +599,14 @@ func (t *Tree) Marshal() string {
 	return builder.String()
 }
 
+// Marshal returns the JSON encoding of this Tree.
+func (n *TreeNode) Marshal() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf(`%s:`, n.id.CreatedAt.ToTestString()))
+	marshal(builder, n)
+	return builder.String()
+}
+
 // Purge physically purges the given node.
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
@@ -779,6 +792,7 @@ func (t *Tree) EditT(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 ) error {
+	fmt.Printf("exe:ExitT start=%d end=%d\n", start, end)
 	fromPos, err := t.FindPos(start)
 	if err != nil {
 		return err
@@ -837,6 +851,14 @@ func (t *Tree) Edit(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
+	// fmt.Printf("exec:Edit (from=%s,to=%s), (splitLv=%d), editAt=%s\n", from.ParentID.CreatedAt.ToTestString(), to.ParentID.CreatedAt.ToTestString(), splitLevel, editedAt.ToTestString())
+	// parentNode, childNode := t.ToTreeNodes(from)
+	// fmt.Printf("exec:Edit FromparentNode = %s\n", parentNode.Marshal())
+	// fmt.Printf("exec:Edit FromchildNode  = %s\n", childNode.Marshal())
+	// parentNode, childNode = t.ToTreeNodes(to)
+	// fmt.Printf("exec:Edit ToparentNode   = %s\n", parentNode.Marshal())
+	// fmt.Printf("exec:Edit TochildNode    = %s\n", childNode.Marshal())
+	// fmt.Printf("exec:Edit leftChild  = %s:%s\n", leftChild.Type(), EscapeString(leftChild.Value))
 	var diff resource.DataSize
 
 	// 01. find nodes from the given range and split nodes.
@@ -851,17 +873,17 @@ func (t *Tree) Edit(
 
 	diff.Add(diffFrom, diffTo)
 
-	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
-		fromParent, fromLeft, toParent, toLeft,
-		editedAt, versionVector,
-	)
+	removes, merges, err := t.collectDeleteAndMerge(fromParent, fromLeft, toParent, toLeft)
 	if err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
-	for _, node := range toBeRemoveds {
+	for _, node := range removes {
+		if node.id.CreatedAt.After(editedAt) {
+			continue
+		}
 		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
@@ -871,11 +893,16 @@ func (t *Tree) Edit(
 	}
 
 	// 03. Merge: move the nodes that are marked as moved.
-	for _, node := range toBeMovedToFromParents {
-		if node.removedAt == nil {
-			if err := fromParent.Append(node); err != nil {
-				return nil, resource.DataSize{}, err
-			}
+	for _, node := range merges {
+		removed, err := t.Merge(node, editedAt)
+		if err != nil {
+			return nil, resource.DataSize{}, err
+		}
+		if removed != nil {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  removed,
+			})
 		}
 	}
 
@@ -992,6 +1019,73 @@ func (t *Tree) collectBetween(
 	return toBeRemoveds, toBeMovedToFromParents, nil
 }
 
+func (t *Tree) collectDeleteAndMerge(fromParent, fromLeft, toParent, toLeft *TreeNode) ([]*TreeNode, []*TreeNode, error) {
+	var removes []*TreeNode
+	var merges []*TreeNode
+	var stack []*TreeNodeID
+
+	if fromParent == nil || fromLeft == nil || toParent == nil || toLeft == nil {
+		return nil, nil, fmt.Errorf("invalid TreePos: cannot resolve nodes")
+	}
+
+	err := traverseInTreePos(fromParent, fromLeft, toParent, toLeft, func(parent, left *TreeNode) error {
+		if left.IsText() {
+			removes = append(removes, left)
+			return nil
+		}
+
+		if parent == left {
+			// push
+			stack = append(stack, left.ID())
+		} else {
+			// pop
+			if len(stack) > 0 && stack[len(stack)-1].Equals(left.ID()) {
+				stack = stack[:len(stack)-1]
+				removes = append(removes, left)
+			} else {
+				merges = append(merges, left)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return removes, merges, nil
+}
+
+func (t *Tree) Merge(node *TreeNode, editedAt *time.Ticket) (*TreeNode, error) {
+	parent := node.Index.Parent
+	if parent == nil {
+		return nil, nil // no siblings
+	}
+
+	siblings := parent.Children(true) // include removed
+	idx := parent.OffsetOfChild(node.Index)
+
+	for i := idx + 1; i < len(siblings); i++ {
+		right := siblings[i].Value
+		if right.removedAt == nil || right.removedAt.After(editedAt) {
+			children := right.Children()
+			if len(children) > 0 {
+				if err := right.ClearChildren(); err != nil {
+					return nil, err
+				}
+				if err := node.Append(children...); err != nil {
+					return nil, err
+				}
+			}
+			if right.remove(editedAt) {
+				return right, nil
+			}
+			return nil, nil
+		}
+	}
+
+	return nil, nil
+}
+
 func (t *Tree) split(
 	fromParent *TreeNode,
 	fromLeft *TreeNode,
@@ -1040,6 +1134,64 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 	}
 
 	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback)
+}
+
+func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
+	callback func(parent *TreeNode, left *TreeNode) error,
+) error {
+	isEnd := func(p1, l1, p2, l2 *TreeNode) bool {
+		return p1.ID().Equals(p2.ID()) && l1.ID().Equals(l2.ID())
+	}
+
+	var ok bool
+	for {
+		if isEnd(fromParent, fromLeft, toParent, toLeft) {
+			break
+		}
+		if fromParent, fromLeft, ok = nextTreePos(fromParent, fromLeft); !ok {
+			break
+		}
+		if err := callback(fromParent, fromLeft); err != nil {
+			break
+		}
+	}
+	return nil
+}
+
+func nextTreePos(parent, left *TreeNode) (*TreeNode, *TreeNode, bool) {
+	// CASE 1, 2: parent == left
+	if parent == left {
+		children := parent.Index.Children(true)
+		if len(children) > 0 {
+			leftMostChild := children[0].Value
+			if leftMostChild.IsText() {
+				return parent, leftMostChild, true
+			} else {
+				return leftMostChild, leftMostChild, true
+			}
+		}
+		if parent.Index.Parent == nil {
+			return nil, nil, false
+		}
+		return parent.Index.Parent.Value, parent, true
+	}
+
+	// CASE 3, 4: parent != left
+	siblings := parent.Index.Children(true)
+	idx := parent.Index.OffsetOfChild(left.Index)
+	if idx+1 < len(siblings) {
+		next := siblings[idx+1]
+		if next.IsText() {
+			return parent, next.Value, true
+		} else {
+			return next.Value, next.Value, true
+		}
+	}
+
+	if parent.Index.Parent == nil {
+		return nil, nil, false
+	}
+	return parent.Index.Parent.Value, parent, true
 }
 
 // StyleByIndex applies the given attributes of the given range.
