@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.22] - 2025-07-28
+
+### Added
+
+- Add VSCode setting guide in CONTRIBUTING.md for test files by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1406
+
+### Changed
+
+- Migrate MongoDB Go driver from v1.17 to v2.2 by @krapie in https://github.com/yorkie-team/yorkie/pull/1405
+- Refactor actorID encoding from hex to Base64 for efficiency by @mnnseong in https://github.com/yorkie-team/yorkie/pull/1388
+
 ## [v0.6.21] - 2025-07-23
 
 ### Changed
