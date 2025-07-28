@@ -318,7 +318,7 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 // SetChildren sets the children of the given node.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
-	if n.IsText() {
+	if n.IsText() && children != nil {
 		return ErrInvalidMethodCallForTextNode
 	}
 
