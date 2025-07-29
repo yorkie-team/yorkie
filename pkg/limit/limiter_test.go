@@ -358,7 +358,7 @@ func TestBatchExpiration(t *testing.T) {
 	)
 
 	// Enhanced callback with completion tracking
-	createCallbackWithTracking := func(o *occurs, 	 chan struct{}) func() {
+	createCallbackWithTracking := func(o *occurs, completionChan chan struct{}) func() {
 		return func() {
 			o.add(1)
 			select {
@@ -373,7 +373,7 @@ func TestBatchExpiration(t *testing.T) {
 		o := occurs{
 			array: make([]int, 0, totalKeys*2),
 		}
-		
+
 		// Channel to track callback completions
 		completionChan := make(chan struct{}, totalKeys*2)
 		callback := createCallbackWithTracking(&o, completionChan)
@@ -390,7 +390,7 @@ func TestBatchExpiration(t *testing.T) {
 		}
 
 		assert.Equal(t, totalKeys, o.len())
-		
+
 		// Wait for immediate callbacks to be processed
 		for i := 0; i < totalKeys; i++ {
 			select {
@@ -401,11 +401,11 @@ func TestBatchExpiration(t *testing.T) {
 		}
 
 		time.Sleep(expireInterval / 2)
-		
+
 		// Wait for each batch with both count checking and completion tracking
 		for i := range batchNum {
 			expectedCount := totalKeys + expireBatchSize*(i+1)
-			
+
 			// First, wait for the callbacks to actually execute
 			for j := 0; j < expireBatchSize; j++ {
 				select {
@@ -414,11 +414,11 @@ func TestBatchExpiration(t *testing.T) {
 					t.Fatalf("Timeout waiting for batch %d callback %d", i+1, j+1)
 				}
 			}
-			
+
 			// Then verify the count (should be immediate now)
 			assert.Equal(t, expectedCount, o.len(), "Batch %d should be complete", i+1)
 		}
-		
+
 		assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
 		lim.Close()
 		assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
