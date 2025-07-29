@@ -617,7 +617,9 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 	}
 
 	// Check if document is not already attached
-	if clientInfo.Documents != nil && clientInfo.Documents[docID] != nil && clientInfo.Documents[docID].Status == database.DocumentAttached {
+	if clientInfo.Documents != nil &&
+		clientInfo.Documents[docID] != nil &&
+		clientInfo.Documents[docID].Status == database.DocumentAttached {
 		return nil, fmt.Errorf("client(%s) document(%s) is already attached", refKey.ClientID, docID)
 	}
 

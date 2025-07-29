@@ -668,15 +668,19 @@ func (c *Client) ActivateClient(
 }
 
 // TryAttaching atomically checks if client is activated and document is not attached, then sets document to attaching.
-func (c *Client) TryAttaching(ctx context.Context, refKey types.ClientRefKey, docID types.ID) (*database.ClientInfo, error) {
+func (c *Client) TryAttaching(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+	docID types.ID,
+) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	
+
 	// Build filter: client must be activated and document must not be attached
 	docStatusField := clientDocInfoKey(docID, StatusKey)
 	filter := bson.M{
-		"project_id": refKey.ProjectID,
-		"_id":        refKey.ClientID,
-		"status":     database.ClientActivated,
+		"project_id":   refKey.ProjectID,
+		"_id":          refKey.ClientID,
+		"status":       database.ClientActivated,
 		docStatusField: bson.M{"$ne": database.DocumentAttached},
 	}
 
@@ -686,7 +690,7 @@ func (c *Client) TryAttaching(ctx context.Context, refKey types.ClientRefKey, do
 			clientDocInfoKey(docID, StatusKey):    database.DocumentAttaching,
 			clientDocInfoKey(docID, "server_seq"): int64(0),
 			clientDocInfoKey(docID, "client_seq"): uint32(0),
-			"updated_at": now,
+			"updated_at":                          now,
 		},
 	}
 
@@ -700,7 +704,11 @@ func (c *Client) TryAttaching(ctx context.Context, refKey types.ClientRefKey, do
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("client(%s) cannot attach document(%s): not activated or document already attached", refKey.ClientID, docID)
+			return nil, fmt.Errorf(
+				"client(%s) cannot attach document(%s): not activated or document already attached",
+				refKey.ClientID,
+				docID,
+			)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
@@ -711,7 +719,7 @@ func (c *Client) TryAttaching(ctx context.Context, refKey types.ClientRefKey, do
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	
+
 	// Build filter: client must exist, not be deactivated, and no documents should be in attaching state
 	filter := bson.M{
 		"project_id": refKey.ProjectID,
