@@ -62,6 +62,9 @@ func (s *clusterServer) DetachDocument(
 	docID := types.ID(req.Msg.DocumentId)
 	docKey := key.Key(req.Msg.DocumentKey)
 
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, key.Key(req.Msg.DocumentKey)))
+	defer locker.Unlock()
+
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),

@@ -170,6 +170,14 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	clientInfo, err = s.backend.DB.TryAttaching(ctx, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	}, docInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
 		return nil, err
 	}

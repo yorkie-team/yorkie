@@ -585,6 +585,65 @@ func (d *DB) ActivateClient(
 	return clientInfo, nil
 }
 
+// TryAttaching atomically checks if client is activated and document is not attached, then sets document to attaching.
+func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID types.ID) (*database.ClientInfo, error) {
+	if err := refKey.ClientID.Validate(); err != nil {
+		return nil, err
+	}
+	if err := docID.Validate(); err != nil {
+		return nil, err
+	}
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find client by id: %w", err)
+	}
+
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", refKey.ClientID, database.ErrClientNotFound)
+	}
+
+	clientInfo := raw.(*database.ClientInfo)
+	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
+		return nil, err
+	}
+
+	// Check if client is activated
+	if clientInfo.Status != database.ClientActivated {
+		return nil, fmt.Errorf("client(%s) is not activated", refKey.ClientID)
+	}
+
+	// Check if document is not already attached
+	if clientInfo.Documents != nil && clientInfo.Documents[docID] != nil && clientInfo.Documents[docID].Status == database.DocumentAttached {
+		return nil, fmt.Errorf("client(%s) document(%s) is already attached", refKey.ClientID, docID)
+	}
+
+	// DeepCopy to avoid modifying the original object
+	clientInfo = clientInfo.DeepCopy()
+
+	// Set document to attaching state
+	if clientInfo.Documents == nil {
+		clientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+	}
+
+	clientInfo.Documents[docID] = &database.ClientDocInfo{
+		Status:    database.DocumentAttaching,
+		ServerSeq: 0,
+		ClientSeq: 0,
+	}
+	clientInfo.UpdatedAt = gotime.Now()
+
+	if err := txn.Insert(tblClients, clientInfo); err != nil {
+		return nil, fmt.Errorf("update client: %w", err)
+	}
+
+	txn.Commit()
+	return clientInfo, nil
+}
+
 // DeactivateClient deactivates a client.
 func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
@@ -606,6 +665,18 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	clientInfo := raw.(*database.ClientInfo)
 	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
 		return nil, err
+	}
+
+	// Check if client is not already deactivated
+	if clientInfo.Status == database.ClientDeactivated {
+		return nil, fmt.Errorf("client(%s) is already deactivated", refKey.ClientID)
+	}
+
+	// Check if any document is currently attaching
+	for _, docInfo := range clientInfo.Documents {
+		if docInfo.Status == database.DocumentAttaching {
+			return nil, fmt.Errorf("client(%s) cannot be deactivated: has documents in attaching state", refKey.ClientID)
+		}
 	}
 
 	// NOTE(hackerwins): When retrieving objects from go-memdb, references to

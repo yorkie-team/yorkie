@@ -667,22 +667,94 @@ func (c *Client) ActivateClient(
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
-func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+// TryAttaching atomically checks if client is activated and document is not attached, then sets document to attaching.
+func (c *Client) TryAttaching(ctx context.Context, refKey types.ClientRefKey, docID types.ID) (*database.ClientInfo, error) {
+	now := gotime.Now()
+	
+	// Build filter: client must be activated and document must not be attached
+	docStatusField := clientDocInfoKey(docID, StatusKey)
+	filter := bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
+		"status":     database.ClientActivated,
+		docStatusField: bson.M{"$ne": database.DocumentAttached},
+	}
+
+	// Build update: set document status to attaching
+	update := bson.M{
 		"$set": bson.M{
-			"status":     database.ClientDeactivated,
-			"updated_at": gotime.Now(),
+			clientDocInfoKey(docID, StatusKey):    database.DocumentAttaching,
+			clientDocInfoKey(docID, "server_seq"): int64(0),
+			clientDocInfoKey(docID, "client_seq"): uint32(0),
+			"updated_at": now,
 		},
-	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+	}
+
+	result := c.collection(ColClients).FindOneAndUpdate(
+		ctx,
+		filter,
+		update,
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
 
 	clientInfo := database.ClientInfo{}
-	if err := res.Decode(&clientInfo); err != nil {
+	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
+			return nil, fmt.Errorf("client(%s) cannot attach document(%s): not activated or document already attached", refKey.ClientID, docID)
+		}
+		return nil, fmt.Errorf("decode client info: %w", err)
+	}
+
+	return &clientInfo, nil
+}
+
+// DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
+func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+	now := gotime.Now()
+	
+	// Build filter: client must exist, not be deactivated, and no documents should be in attaching state
+	filter := bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
+		"status":     database.ClientActivated,
+		"$expr": bson.M{
+			"$not": bson.M{
+				"$anyElementTrue": bson.M{
+					"$map": bson.M{
+						"input": bson.M{
+							"$ifNull": []interface{}{
+								bson.M{"$objectToArray": "$documents"},
+								[]interface{}{},
+							},
+						},
+						"as": "doc",
+						"in": bson.M{
+							"$eq": []interface{}{"$$doc.v.status", database.DocumentAttaching},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"status":     database.ClientDeactivated,
+			"updated_at": now,
+		},
+	}
+
+	result := c.collection(ColClients).FindOneAndUpdate(
+		ctx,
+		filter,
+		update,
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+
+	clientInfo := database.ClientInfo{}
+	if err := result.Decode(&clientInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("already deactivated, or has attaching documents: %w", err)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}

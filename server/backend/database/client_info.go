@@ -45,9 +45,10 @@ const (
 
 // Below are statuses of the document.
 const (
-	DocumentAttached = "attached"
-	DocumentDetached = "detached"
-	DocumentRemoved  = "removed"
+	DocumentAttaching = "attaching"
+	DocumentAttached  = "attached"
+	DocumentDetached  = "detached"
+	DocumentRemoved   = "removed"
 )
 
 // ClientDocInfo is a structure representing information of the document
