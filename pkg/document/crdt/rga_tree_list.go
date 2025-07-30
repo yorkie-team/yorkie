@@ -223,6 +223,15 @@ func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
 	return node, nil
 }
 
+// GetByCreatedAt returns the element of the given createdAt
+func (a *RGATreeList) GetByCreatedAt(createdAt *time.Ticket) (*RGATreeListNode, error) {
+	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		return nil, fmt.Errorf("DeleteByCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
+	}
+	return node, nil
+}
+
 // DeleteByCreatedAt deletes the given element.
 func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (*RGATreeListNode, error) {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
@@ -268,6 +277,10 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
+	}
+
+	if prevCreatedAt == createdAt {
+		return nil
 	}
 
 	if executedAt.After(node.PositionedAt()) {
