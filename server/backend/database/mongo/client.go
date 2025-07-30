@@ -136,6 +136,159 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// TryLeadership attempts to acquire or renew leadership with the given lease duration.
+// If leaseToken is empty, it attempts to acquire new leadership.
+// If leaseToken is provided, it attempts to renew the existing lease.
+func (c *Client) TryLeadership(
+	ctx context.Context,
+	hostname,
+	leaseToken string,
+	leaseDuration gotime.Duration,
+) (*database.LeadershipInfo, error) {
+	now := gotime.Now()
+	expiresAt := now.Add(leaseDuration)
+
+	if leaseToken == "" {
+		return c.tryAcquireLeadership(ctx, hostname, expiresAt, now)
+	}
+
+	return c.tryRenewLeadership(ctx, hostname, leaseToken, expiresAt, now)
+}
+
+// FindLeadership returns the current leadership information.
+func (c *Client) FindLeadership(
+	ctx context.Context,
+) (*database.LeadershipInfo, error) {
+	result := c.collection(ColLeaderships).FindOne(ctx, bson.M{"singleton": 1})
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find leadership: %w", result.Err())
+	}
+
+	var info database.LeadershipInfo
+	if err := result.Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode leadership info: %w", err)
+	}
+
+	// Check if leadership has expired
+	if info.IsExpired() {
+		return nil, nil
+	}
+
+	return &info, nil
+}
+
+// tryAcquireLeadership attempts to acquire new leadership
+func (c *Client) tryAcquireLeadership(
+	ctx context.Context,
+	hostname string,
+	expiresAt gotime.Time,
+	now gotime.Time,
+) (*database.LeadershipInfo, error) {
+	// Generate a new lease token
+	token, err := database.GenerateLeaseToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate lease token: %w", err)
+	}
+
+	// Try to acquire leadership using atomic upsert.
+	result := c.collection(ColLeaderships).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"$or": []bson.M{
+				{"expires_at": bson.M{"$lt": now}}, // Document is expired
+				{"term": bson.M{"$exists": false}}, // No document exists
+			},
+		},
+		bson.M{
+			"$set": bson.M{
+				"hostname":    hostname,
+				"lease_token": token,
+				"elected_at":  now,
+				"expires_at":  expiresAt,
+				"renewed_at":  now,
+				"singleton":   1,
+			},
+			"$inc": bson.M{"term": 1},
+		},
+		options.FindOneAndUpdate().
+			SetUpsert(true).
+			SetReturnDocument(options.After),
+	)
+
+	var info database.LeadershipInfo
+	if err := result.Decode(&info); err != nil {
+		// If the error is due to a duplicate key, it means another node has
+		// already acquired leadership.
+		if mongo.IsDuplicateKeyError(err) {
+			return c.FindLeadership(ctx)
+		}
+
+		return nil, fmt.Errorf("decode new leadership: %w", err)
+	}
+
+	// Successfully acquired leadership
+	return &info, nil
+}
+
+// tryRenewLeadership attempts to renew existing leadership
+func (c *Client) tryRenewLeadership(
+	ctx context.Context,
+	hostname string,
+	leaseToken string,
+	expiresAt gotime.Time,
+	now gotime.Time,
+) (*database.LeadershipInfo, error) {
+	// Generate a new lease token for renewal
+	newLeaseToken, err := database.GenerateLeaseToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate lease token: %w", err)
+	}
+
+	// Try to update the existing leadership with the correct token and hostname.
+	result := c.collection(ColLeaderships).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"singleton":   1,
+			"hostname":    hostname,
+			"lease_token": leaseToken,
+		},
+		bson.M{
+			"$set": bson.M{
+				"lease_token": newLeaseToken,
+				"expires_at":  expiresAt,
+				"renewed_at":  now,
+			},
+		},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("invalid token or node: %w", database.ErrInvalidLeaseToken)
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("renew leadership: %w", result.Err())
+	}
+
+	var info database.LeadershipInfo
+	if err := result.Decode(&info); err != nil {
+		return nil, fmt.Errorf("decode leadership info: %w", err)
+	}
+
+	return &info, nil
+}
+
+// ClearLeadership removes the current leadership information for testing purposes.
+func (c *Client) ClearLeadership(ctx context.Context) error {
+	_, err := c.collection(ColLeaderships).DeleteMany(ctx, bson.M{})
+	if err != nil {
+		return fmt.Errorf("clear leadership: %w", err)
+	}
+	return nil
+}
+
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
 func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,

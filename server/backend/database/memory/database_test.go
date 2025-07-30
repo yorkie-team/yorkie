@@ -36,6 +36,10 @@ func TestDB(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
+	t.Run("RunLeadership Test", func(t *testing.T) {
+		testcases.RunLeadershipTest(t, db)
+	})
+
 	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
 	})
