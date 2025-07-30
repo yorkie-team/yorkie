@@ -792,7 +792,6 @@ func (t *Tree) EditT(
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 ) error {
-	fmt.Printf("exe:ExitT start=%d end=%d\n", start, end)
 	fromPos, err := t.FindPos(start)
 	if err != nil {
 		return err
@@ -860,7 +859,6 @@ func (t *Tree) Edit(
 	// fmt.Printf("exec:Edit TochildNode    = %s\n", childNode.Marshal())
 	// fmt.Printf("exec:Edit leftChild  = %s:%s\n", leftChild.Type(), EscapeString(leftChild.Value))
 	var diff resource.DataSize
-
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -881,20 +879,21 @@ func (t *Tree) Edit(
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
 	for _, node := range removes {
-		if node.id.CreatedAt.After(editedAt) {
-			continue
+		removed, err := t.RemoveNode(node, editedAt, versionVector)
+		if err != nil {
+			return nil, resource.DataSize{}, err
 		}
-		if node.remove(editedAt) {
+		if removed != nil {
 			pairs = append(pairs, GCPair{
 				Parent: t,
-				Child:  node,
+				Child:  removed,
 			})
 		}
 	}
 
 	// 03. Merge: move the nodes that are marked as moved.
 	for _, node := range merges {
-		removed, err := t.Merge(node, editedAt)
+		removed, err := t.MergeNode(node, editedAt, versionVector)
 		if err != nil {
 			return nil, resource.DataSize{}, err
 		}
@@ -1052,10 +1051,45 @@ func (t *Tree) collectDeleteAndMerge(fromParent, fromLeft, toParent, toLeft *Tre
 		return nil, nil, err
 	}
 
+	slices.Reverse(merges)
 	return removes, merges, nil
 }
 
-func (t *Tree) Merge(node *TreeNode, editedAt *time.Ticket) (*TreeNode, error) {
+func (t *Tree) RemoveNode(node *TreeNode, editedAt *time.Ticket, versionVector time.VersionVector) (*TreeNode, error) {
+	actorID := node.id.CreatedAt.ActorID()
+
+	if len(versionVector) == 0 {
+		if node.remove(editedAt) {
+			return node, nil
+		}
+	}
+	clientLamportAtChange, ok := versionVector.Get(actorID)
+	if !ok {
+		return nil, nil
+	}
+
+	if node.canDelete(editedAt, clientLamportAtChange) {
+		if node.remove(editedAt) {
+			return node, nil
+		}
+	}
+	return nil, nil
+}
+
+func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector time.VersionVector) (*TreeNode, error) {
+	actorID := node.id.CreatedAt.ActorID()
+
+	var clientLamportAtChange int64
+	if len(versionVector) == 0 {
+		clientLamportAtChange = time.MaxLamport
+	} else {
+		var ok bool
+		clientLamportAtChange, ok = versionVector.Get(actorID)
+		if !ok {
+			return nil, nil
+		}
+	}
+
 	parent := node.Index.Parent
 	if parent == nil {
 		return nil, nil // no siblings
@@ -1066,7 +1100,7 @@ func (t *Tree) Merge(node *TreeNode, editedAt *time.Ticket) (*TreeNode, error) {
 
 	for i := idx + 1; i < len(siblings); i++ {
 		right := siblings[i].Value
-		if right.removedAt == nil || right.removedAt.After(editedAt) {
+		if right.canDelete(editedAt, clientLamportAtChange) {
 			children := right.Children()
 			if len(children) > 0 {
 				if err := right.ClearChildren(); err != nil {
