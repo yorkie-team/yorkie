@@ -119,6 +119,10 @@ func TestClient(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("TryAttachingAndDeactivateClient test", func(t *testing.T) {
+		testcases.RunTryAttachingAndDeactivateClientTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		testcases.RunUpdateProjectInfoTest(t, cli)
 	})

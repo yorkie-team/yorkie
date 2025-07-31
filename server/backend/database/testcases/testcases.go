@@ -869,11 +869,82 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 
-		// try to deactivate the client twice.
-		clientInfo, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		// already deactivated
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.ErrorIs(t, err, database.ErrClientNotFound)
+	})
+}
+
+// RunTryAttachingAndDeactivateClientTest runs the TryAttaching and DeactivateClient tests for the given db.
+func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("TryAttaching test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. activate a client
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
 		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
+
+		// 02. create a document
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())))
+		assert.NoError(t, err)
+
+		// 03. success case: client is activated, and document is not attached
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+
+		// 04. success case: client is activated, and document is already attaching
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+
+		// 05. failure case: client is activated, but document is already attached
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.Error(t, err)
+
+		// 06. failure case: client is deactivated
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.Error(t, err)
+	})
+
+	t.Run("DeactivateClient test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. success case: client is activated
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+
+		// 02. failure case: client has attaching document
+		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())))
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
+
+		// 03. failure case: client has attached document
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
+
+		// 04. failure case: client is already deactivated
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
 	})
 }
 

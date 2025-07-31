@@ -186,6 +186,10 @@ type Database interface {
 	// DeactivateClient deactivates the client of the given refKey.
 	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 
+	// TryAttaching updates the status of the document to Attaching to prevent
+	// deactivating the client while the document is being attached.
+	TryAttaching(ctx context.Context, refKey types.ClientRefKey, docID types.ID) (*ClientInfo, error)
+
 	// FindClientInfoByRefKey finds the client of the given refKey.
 	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 

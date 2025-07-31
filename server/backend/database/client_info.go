@@ -45,9 +45,10 @@ const (
 
 // Below are statuses of the document.
 const (
-	DocumentAttached = "attached"
-	DocumentDetached = "detached"
-	DocumentRemoved  = "removed"
+	DocumentAttaching = "attaching"
+	DocumentAttached  = "attached"
+	DocumentDetached  = "detached"
+	DocumentRemoved   = "removed"
 )
 
 // ClientDocInfo is a structure representing information of the document
@@ -121,7 +122,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 		i.Documents = make(map[types.ID]*ClientDocInfo)
 	}
 
-	if alreadyAttached && i.hasDocument(docID) && i.Documents[docID].Status == DocumentDetached {
+	if i.IsAlreadyDetached(docID, alreadyAttached) {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrDocumentAlreadyDetached)
 	}
@@ -139,6 +140,22 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 	i.UpdatedAt = gotime.Now()
 
 	return nil
+}
+
+// IsAlreadyDetached checks if the document is already detached.
+func (i *ClientInfo) IsAlreadyDetached(docID types.ID, alreadyAttached bool) bool {
+	if alreadyAttached && i.hasDocument(docID) && i.Documents[docID].Status == DocumentDetached {
+		return true
+	}
+	return false
+}
+
+// IsAttaching checks if the document is attaching.
+func (i *ClientInfo) IsAttaching(docID types.ID) bool {
+	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttaching {
+		return true
+	}
+	return false
 }
 
 // DetachDocument detaches the given document from this client.
