@@ -438,11 +438,41 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 	return nil, nil
 }
 
+// nextSibling returns the next sibling of the node, even if the sibling is
+func (n *Node[V]) NextSiblingExtended() (*Node[V], error) {
+	parent := n.Parent
+	if parent == nil {
+		return nil, nil
+	}
+
+	offset, err := parent.FindOffset(n, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(parent.children) > offset+1 {
+		sibling := n.Parent.children[offset+1]
+		return sibling, nil
+	}
+
+	for parent, err = parent.NextSiblingExtended(); parent != nil; parent, err = parent.NextSiblingExtended() {
+		if err != nil {
+			return nil, err
+		}
+		if len(parent.children) > 0 {
+			return parent.children[0], nil
+		}
+	}
+	return nil, err
+}
+
 // FindOffset returns the offset of the given node in the children.
-func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
+func (n *Node[V]) FindOffset(node *Node[V], includeRemovedNode ...bool) (int, error) {
 	if n.IsText() {
 		return 0, ErrInvalidMethodCallForTextNode
 	}
+
+	include := len(includeRemovedNode) > 0 && includeRemovedNode[0]
 
 	// If nodes are removed, the offset of the removed node is the number of
 	// nodes before the node excluding the removed nodes.
@@ -451,7 +481,7 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 		if child == node {
 			return offset, nil
 		}
-		if !child.Value.IsRemoved() {
+		if include || !child.Value.IsRemoved() {
 			offset++
 		}
 	}
