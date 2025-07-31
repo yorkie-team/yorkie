@@ -115,7 +115,7 @@ func TestArray(t *testing.T) {
 	t.Run("can push object element after delete operation", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		// Step 1: 초기 배열 ["1", "2", "3"]
+		// Step 1: ["1", "2", "3"]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("k1")
 			arr.AddString("1", "2", "3")
@@ -123,7 +123,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}, "set [1,2,3]"))
 
-		// Step 2: "2" 삭제, "4" 추가
+		// Step 2: delete "2", then push "4"
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("k1")
 			_ = arr.Delete(1)
@@ -131,7 +131,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}, "delete '2' and push '4'"))
 
-		// Step 3: 객체 {"a":"a", "b":"b"} 추가
+		// Step 3: push object {"a":"a", "b":"b"}
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			obj := root.GetArray("k1").AddNewObject()
 			obj.SetString("a", "a")
@@ -140,21 +140,20 @@ func TestArray(t *testing.T) {
 			return nil
 		}, "push object"))
 
-		// 최종 확인
 		assert.Equal(t, `{"k1":["1","3","4",{"a":"a","b":"b"}]}`, doc.Marshal())
 	})
 
 	t.Run("can push array (document-based)", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		// 초기 상태: [1,2,3]
+		// Step 1: [1,2,3]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("arr")
 			arr.AddInteger(1, 2, 3)
 			return nil
 		}))
 
-		// 중첩 배열 [4,5,6] 추가
+		// Step 2: push nested array [4,5,6]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			sub := root.GetArray("arr").AddNewArray()
 			sub.AddInteger(4, 5, 6)
@@ -168,7 +167,7 @@ func TestArray(t *testing.T) {
 	t.Run("can push element then delete it by ID in array (document-based)", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		// 초기 상태: [4,3,2,1]
+		// Step 1: [4,3,2,1]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(4, 3, 2, 1)
@@ -176,7 +175,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		// 삭제: 2
+		// Step 2: delete "2"
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("list")
 			_ = arr.Delete(2)
@@ -184,7 +183,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		// 다시 push 2
+		// Step 3: push 2
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("list")
 			arr.AddInteger(2)
@@ -198,7 +197,7 @@ func TestArray(t *testing.T) {
 	t.Run("can insert an element after the given element in array (document-based)", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		// Step 1: 초기 배열 [1,2,4], prev = 2의 ID
+		// Step 1: [1,2,4]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(1, 2, 4)
@@ -206,7 +205,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		// Step 2: prev(2) 뒤에 3 삽입 => [1,2,3,4]
+		// Step 2: push 3 after 1 => [1,2,3,4]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("list")
 			arr.InsertIntegerAfter(1, 3)
@@ -214,7 +213,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		// Step 3: index 1 (2) 삭제 => [1,3,4]
+		// Step 3: delete "2" => [1,3,4]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("list")
 			arr.Delete(1)
@@ -222,13 +221,12 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		// Step 4: index 0 (1)의 뒤에 2 삽입 => [1,2,3,4]
+		// Step 4: push 2 after index 0 (1) => [1,2,3,4]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.GetArray("list")
 			arr.InsertIntegerAfter(0, 2)
 			assert.Equal(t, `{"list":[1,2,3,4]}`, root.Marshal())
 
-			// 마지막 검증: 값 검증
 			for i := 0; i < arr.Len(); i++ {
 				elem := arr.Get(i)
 				prim := elem.(*crdt.Primitive).Value()
@@ -242,7 +240,7 @@ func TestArray(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		var prevID, targetID *time.Ticket
 
-		// Step 1: 초기 배열 [0,1,2]
+		// Step 1: [0,1,2]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(0, 1, 2)
@@ -278,7 +276,7 @@ func TestArray(t *testing.T) {
 	t.Run("can move an element after the given element in array (document-based)", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		// Step 1: 초기 배열 [0,1,2]
+		// Step 1: [0,1,2]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(0, 1, 2)
@@ -307,7 +305,7 @@ func TestArray(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		var targetID *time.Ticket
 
-		// Step 1: 초기 배열 [0,1,2]
+		// Step 1: [0,1,2]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(0, 1, 2)
@@ -347,7 +345,7 @@ func TestArray(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		var targetID *time.Ticket
 
-		// Step 1: 초기 배열 [0,1,2]
+		// Step 1: [0,1,2]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("list")
 			arr.AddInteger(0, 1, 2)
