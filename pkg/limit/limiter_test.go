@@ -407,7 +407,7 @@ func TestBatchExpiration(t *testing.T) {
 			expectedCount := totalKeys + expireBatchSize*(i+1)
 
 			// First, wait for the callbacks to actually execute
-			for j := 0; j < expireBatchSize; j++ {
+			for j := range expireBatchSize {
 				select {
 				case <-completionChan:
 				case <-time.After(expireInterval * 2):
