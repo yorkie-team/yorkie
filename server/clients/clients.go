@@ -109,10 +109,12 @@ func AttachDocument(
 			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
 	}
 
-	var err error
-	clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
-	if err != nil {
-		return nil, err
+	if !clientInfo.IsAttaching(docInfo.ID) {
+		var err error
+		clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := clientInfo.AttachDocument(docInfo.ID, isAttached); err != nil {

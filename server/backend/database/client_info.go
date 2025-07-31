@@ -150,6 +150,14 @@ func (i *ClientInfo) IsAlreadyDetached(docID types.ID, alreadyAttached bool) boo
 	return false
 }
 
+// IsAttaching checks if the document is attaching.
+func (i *ClientInfo) IsAttaching(docID types.ID) bool {
+	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttaching {
+		return true
+	}
+	return false
+}
+
 // DetachDocument detaches the given document from this client.
 func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
