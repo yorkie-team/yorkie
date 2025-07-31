@@ -20,6 +20,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -88,6 +89,31 @@ func Deactivate(
 	}
 
 	return be.DB.DeactivateClient(ctx, refKey)
+}
+
+// AttachDocument attaches the given document to the client.
+func AttachDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+	isAttached bool,
+) (*database.ClientInfo, error) {
+	if clientInfo.IsAlreadyDetached(docInfo.ID, isAttached) {
+		return nil, fmt.Errorf("client(%s) attaches %s: %w",
+			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
+	}
+
+	clientInfo, err := be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached); err != nil {
+		return nil, err
+	}
+
+	return clientInfo, nil
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.

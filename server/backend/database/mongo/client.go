@@ -705,9 +705,8 @@ func (c *Client) TryAttaching(
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf(
-				"client(%s) cannot attach document(%s): not activated or document already attached",
-				refKey.ClientID,
-				docID,
+				"conditions not satisfied to attach document: %w",
+				database.ErrClientNotFound,
 			)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
@@ -717,10 +716,13 @@ func (c *Client) TryAttaching(
 }
 
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
-func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+func (c *Client) DeactivateClient(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
 	now := gotime.Now()
 
-	// Build filter: client must exist, not be deactivated, and no documents should be in attaching state
+	// Build filter: client must exist, be activated, and have no documents in attaching or attached state
 	filter := bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
@@ -737,7 +739,10 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 						},
 						"as": "doc",
 						"in": bson.M{
-							"$eq": []interface{}{"$$doc.v.status", database.DocumentAttaching},
+							"$or": []interface{}{
+								bson.M{"$eq": []interface{}{"$$doc.v.status", database.DocumentAttaching}},
+								bson.M{"$eq": []interface{}{"$$doc.v.status", database.DocumentAttached}},
+							},
 						},
 					},
 				},
@@ -762,7 +767,10 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("already deactivated, or has attaching documents: %w", err)
+			return nil, fmt.Errorf(
+				"conditions not satisfied to deactivate client: %w",
+				database.ErrClientNotFound,
+			)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}

@@ -613,14 +613,20 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 
 	// Check if client is activated
 	if clientInfo.Status != database.ClientActivated {
-		return nil, fmt.Errorf("client(%s) is not activated", refKey.ClientID)
+		return nil, fmt.Errorf(
+			"conditions not satisfied to attach document: %w",
+			database.ErrClientNotFound,
+		)
 	}
 
 	// Check if document is not already attached
 	if clientInfo.Documents != nil &&
 		clientInfo.Documents[docID] != nil &&
 		clientInfo.Documents[docID].Status == database.DocumentAttached {
-		return nil, fmt.Errorf("client(%s) document(%s) is already attached", refKey.ClientID, docID)
+		return nil, fmt.Errorf(
+			"conditions not satisfied to attach document: %w",
+			database.ErrClientNotFound,
+		)
 	}
 
 	// DeepCopy to avoid modifying the original object
@@ -671,13 +677,20 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 
 	// Check if client is not already deactivated
 	if clientInfo.Status == database.ClientDeactivated {
-		return nil, fmt.Errorf("client(%s) is already deactivated", refKey.ClientID)
+		return nil, fmt.Errorf(
+			"conditions not satisfied to deactivate client: %w",
+			database.ErrClientNotFound,
+		)
 	}
 
-	// Check if any document is currently attaching
+	// Check if any document is currently attaching or attached
 	for _, docInfo := range clientInfo.Documents {
-		if docInfo.Status == database.DocumentAttaching {
-			return nil, fmt.Errorf("client(%s) cannot be deactivated: has documents in attaching state", refKey.ClientID)
+		if docInfo.Status == database.DocumentAttaching ||
+			docInfo.Status == database.DocumentAttached {
+			return nil, fmt.Errorf(
+				"conditions not satisfied to deactivate client: %w",
+				database.ErrClientNotFound,
+			)
 		}
 	}
 

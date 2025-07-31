@@ -147,8 +147,8 @@ func RunAttachAndDetachDocumentTest(
 			ChangePack: packWithNoChanges,
 		},
 		))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentAlreadyAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
 
 	// try to attach invalid change pack
 	_, err = testClient.AttachDocument(
