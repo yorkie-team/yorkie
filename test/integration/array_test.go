@@ -321,7 +321,7 @@ func TestArray(t *testing.T) {
 	})
 }
 
-func TestArrayConcurrencyTable(t *testing.T) {
+func TestArrayConcurrency(t *testing.T) {
 	clients := activeClients(t, 2)
 	c0, c1 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
@@ -378,46 +378,35 @@ func TestArrayConcurrencyTable(t *testing.T) {
 	d1 := document.New(helper.TestDocKey(t))
 	assert.NoError(t, c1.Attach(ctx, d1))
 
-	runTest := func(op1, op2 arrayOp) testResult {
-		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("a").AddInteger(initArr...)
-			assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
-			return nil
-		}))
-
-		assert.NoError(t, c0.Sync(ctx))
-		assert.NoError(t, c1.Sync(ctx))
-
-		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
-			op1.executor(root.GetArray("a"), 0)
-			return nil
-		}))
-
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			op2.executor(root.GetArray("a"), 1)
-			return nil
-		}))
-
-		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
-		if flag {
-			return testResult{flag, `pass`}
-		}
-		return testResult{flag, `different result`}
-	}
-
 	for _, op1 := range operations {
 		for _, op2 := range operations {
 			t.Run(op1.opName+" vs "+op2.opName, func(t *testing.T) {
-				result := runTest(op1, op2)
-				if !result.flag {
-					t.Skip(result.resultDesc)
-				}
+				assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewArray("a").AddInteger(initArr...)
+					assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+					return nil
+				}))
+
+				assert.NoError(t, c0.Sync(ctx))
+				assert.NoError(t, c1.Sync(ctx))
+
+				assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+					op1.executor(root.GetArray("a"), 0)
+					return nil
+				}))
+
+				assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+					op2.executor(root.GetArray("a"), 1)
+					return nil
+				}))
+
+				syncClientsThenAssertEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
 			})
 		}
 	}
 }
 
-func TestComplicateArrayConcurrency(t *testing.T) {
+func TestComplicatedArrayConcurrency(t *testing.T) {
 	clients := activeClients(t, 3)
 	c0, c1 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
@@ -441,24 +430,16 @@ func TestComplicateArrayConcurrency(t *testing.T) {
 	// `opName`: describes the type of operation being tested (insert, move, set, or remove).
 	operations := []arrayOp{
 		// insert
-		{"insert", func(a *json.Array) {
-			a.InsertIntegerAfter(oneIdx, newValue)
-		}},
+		{"insert", func(a *json.Array) { a.InsertIntegerAfter(oneIdx, newValue) }},
 
 		// move
-		{"move", func(a *json.Array) {
-			a.MoveAfterByIndex(otherIdx, oneIdx)
-		}},
+		{"move", func(a *json.Array) { a.MoveAfterByIndex(otherIdx, oneIdx) }},
 
 		// set
-		{"set", func(a *json.Array) {
-			a.SetInteger(oneIdx, newValue)
-		}},
+		{"set", func(a *json.Array) { a.SetInteger(oneIdx, newValue) }},
 
 		// remove
-		{"remove", func(a *json.Array) {
-			a.Delete(oneIdx)
-		}},
+		{"remove", func(a *json.Array) { a.Delete(oneIdx) }},
 	}
 
 	ctx := context.Background()
@@ -467,39 +448,30 @@ func TestComplicateArrayConcurrency(t *testing.T) {
 	d1 := document.New(helper.TestDocKey(t))
 	assert.NoError(t, c1.Attach(ctx, d1))
 
-	runTest := func(op arrayOp) testResult {
-		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("a").AddInteger(initArr...)
-			assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
-			return nil
-		}))
-
-		assert.NoError(t, c0.Sync(ctx))
-		assert.NoError(t, c1.Sync(ctx))
-
-		assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
-			op.executor(root.GetArray("a"))
-			return nil
-		}))
-
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetArray("a").MoveAfterByIndex(2, oneIdx)
-			root.GetArray("a").MoveAfterByIndex(3, 2)
-			return nil
-		}))
-
-		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
-		if flag {
-			return testResult{flag, `pass`}
-		}
-		return testResult{flag, `different result`}
-	}
-
 	for _, op := range operations {
 		t.Run(op.opName, func(t *testing.T) {
-			result := runTest(op)
-			if !result.flag {
-				t.Skip(result.resultDesc)
+			assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewArray("a").AddInteger(initArr...)
+				assert.Equal(t, initMarshal, root.GetArray("a").Marshal())
+				return nil
+			}))
+
+			assert.NoError(t, c0.Sync(ctx))
+			assert.NoError(t, c1.Sync(ctx))
+
+			assert.NoError(t, d0.Update(func(root *json.Object, p *presence.Presence) error {
+				op.executor(root.GetArray("a"))
+				return nil
+			}))
+
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetArray("a").MoveAfterByIndex(2, oneIdx)
+				root.GetArray("a").MoveAfterByIndex(3, 2)
+				return nil
+			}))
+
+			if !syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}}) {
+				t.Skipf("convergence failed for operation %s", op.opName)
 			}
 		})
 	}
