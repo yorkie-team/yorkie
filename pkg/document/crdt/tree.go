@@ -864,6 +864,7 @@ func (t *Tree) Edit(
 	if err != nil {
 		return nil, diff, err
 	}
+
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return nil, diff, err
@@ -1090,16 +1091,13 @@ func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector ti
 		}
 	}
 
-	parent := node.Index.Parent
-	if parent == nil {
-		return nil, nil // no siblings
-	}
+	nodeIdx := node.Index
+	for nodeIdx, err := nodeIdx.NextSiblingExtended(); nodeIdx != nil; nodeIdx, err = nodeIdx.NextSiblingExtended() {
+		if err != nil {
+			return nil, err
+		}
+		right := nodeIdx.Value
 
-	siblings := parent.Children(true) // include removed
-	idx := parent.OffsetOfChild(node.Index)
-
-	for i := idx + 1; i < len(siblings); i++ {
-		right := siblings[i].Value
 		if right.canDelete(editedAt, clientLamportAtChange) {
 			children := right.Children()
 			if len(children) > 0 {
@@ -1116,6 +1114,8 @@ func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector ti
 			return nil, nil
 		}
 	}
+
+	fmt.Printf("FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!\n")
 
 	return nil, nil
 }
