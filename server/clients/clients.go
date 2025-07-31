@@ -99,12 +99,18 @@ func AttachDocument(
 	docInfo *database.DocInfo,
 	isAttached bool,
 ) (*database.ClientInfo, error) {
+	// NOTE(kokodak): Reattaching a document that has been detached is not allowed.
+	// This check is necessary because TryAttaching does not validate this case.
+	// If reattaching is allowed in the future, this IsAlreadyDetached check should be removed.
+	// For more details on reattachment context, see:
+	// https://github.com/yorkie-team/yorkie-js-sdk/pull/996#issuecomment-3023329082
 	if clientInfo.IsAlreadyDetached(docInfo.ID, isAttached) {
 		return nil, fmt.Errorf("client(%s) attaches %s: %w",
 			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
 	}
 
-	clientInfo, err := be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+	var err error
+	clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
 	if err != nil {
 		return nil, err
 	}
