@@ -585,7 +585,8 @@ func (d *DB) ActivateClient(
 	return clientInfo, nil
 }
 
-// TryAttaching atomically checks if client is activated and document is not attached, then sets document to attaching.
+// TryAttaching updates the status of the document to Attaching to prevent
+// deactivating the client while the document is being attached.
 func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID types.ID) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
