@@ -686,7 +686,7 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 	builder.WriteString(`]`)
 
 	if node.Attrs != nil && node.Attrs.Len() > 0 {
-		builder.WriteString(fmt.Sprintf(`,"attributes":`))
+		builder.WriteString(`,"attributes":`)
 		builder.WriteString(node.Attrs.Marshal())
 	}
 
@@ -1114,8 +1114,6 @@ func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector ti
 			return nil, nil
 		}
 	}
-
-	fmt.Printf("FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!FUCK!!!!!\n")
 
 	return nil, nil
 }
