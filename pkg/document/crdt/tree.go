@@ -1011,7 +1011,9 @@ func (t *Tree) collectBetween(
 	return toBeRemoveds, toBeMovedToFromParents, nil
 }
 
-func (t *Tree) collectDeleteAndMerge(fromParent, fromLeft, toParent, toLeft *TreeNode) ([]*TreeNode, []*TreeNode, error) {
+func (t *Tree) collectDeleteAndMerge(
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
+) ([]*TreeNode, []*TreeNode, error) {
 	var removes []*TreeNode
 	var merges []*TreeNode
 	var stack []*TreeNodeID
