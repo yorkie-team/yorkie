@@ -1027,6 +1027,9 @@ func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector ti
 		right := nodeIdx.Value
 
 		if right.canDelete(editedAt, clientLamportAtChange) {
+			if node.Type() != right.Type() {
+				return nil, nil
+			}
 			children := right.Children(true)
 			if len(children) > 0 {
 				if err := right.ClearChildren(); err != nil {
