@@ -10,17 +10,20 @@ We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in G
 
 ## 2025
 
-Yorkie v0.6 focuses on improving support for collaborative editing.
+Yorkie v0.6 focuses on enhancing collaboration efficiency and scalability.
 
-- Support ProseMirror [#257](https://github.com/yorkie-team/yorkie-js-sdk/issues/257)
+- Performance improvements through caching and optimized VersionVector
+- Yorkie Analytics including MAU tracking [#1197](https://github.com/yorkie-team/yorkie/pull/1197)
+- Document Compaction and YSON [#1241](https://github.com/yorkie-team/yorkie/pull/1241)
+- Version Management & Schema Validation [#971](https://github.com/yorkie-team/yorkie/issues/971)
 - Multi-User Undo/Redo [#652](https://github.com/yorkie-team/yorkie/issues/652)
-- History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
+- Time Travel [#52](https://github.com/yorkie-team/yorkie/issues/52)
 
 ## 2024
 
 Yorkie v0.5 focuses on improving the reliability and performance.
 
-- Version Vector Introduction and GC Enhancement: [#723](https://github.com/yorkie-team/yorkie-js-sdk/issues/723)
+- VersionVector Introduction and GC Enhancement: [#723](https://github.com/yorkie-team/yorkie-js-sdk/issues/723)
 - Concurrent Editing Performance Enhancement: [#1501](https://github.com/yorkie-team/yorkie/pull/1051)
 - Introduce broadcast API for event sharing: [#628](https://github.com/yorkie-team/yorkie/pull/628)
 
