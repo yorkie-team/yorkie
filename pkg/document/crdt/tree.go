@@ -151,8 +151,8 @@ type TreeNode struct {
 }
 
 // Children returns the children of this node.
-func (n *TreeNode) Children() []*TreeNode {
-	children := n.Index.Children()
+func (n *TreeNode) Children(includeRemovedNode ...bool) []*TreeNode {
+	children := n.Index.Children(len(includeRemovedNode) > 0 && includeRemovedNode[0])
 	nodes := make([]*TreeNode, len(children))
 	for i, child := range children {
 		nodes[i] = child.Value
@@ -945,72 +945,6 @@ func (t *Tree) Edit(
 	return pairs, diff, nil
 }
 
-// collectBetween collects nodes that are marked as removed or moved.
-func (t *Tree) collectBetween(
-	fromParent *TreeNode, fromLeft *TreeNode,
-	toParent *TreeNode, toLeft *TreeNode,
-	editedAt *time.Ticket,
-	versionVector time.VersionVector,
-) ([]*TreeNode, []*TreeNode, error) {
-	var toBeRemoveds []*TreeNode
-	var toBeMovedToFromParents []*TreeNode
-	isVersionVectorEmpty := len(versionVector) == 0
-
-	if err := t.traverseInPosRange(
-		fromParent, fromLeft,
-		toParent, toLeft,
-		func(token index.TreeToken[*TreeNode], ended bool) {
-			node, tokenType := token.Node, token.TokenType
-			// NOTE(hackerwins): If the node overlaps as a start token with the
-			// range then we need to move the remaining children to fromParent.
-			if tokenType == index.Start && !ended {
-				// TODO(hackerwins): Define more clearly merge-able rules
-				// between two parents. For now, we only merge two parents are
-				// both element nodes having text children.
-				// e.g. <p>a|b</p><p>c|d</p> -> <p>a|d</p>
-				// if !fromParent.Index.HasTextChild() ||
-				// 	!toParent.Index.HasTextChild() {
-				// 	return
-				// }
-
-				for _, child := range node.Index.Children() {
-					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
-				}
-			}
-
-			actorID := node.id.CreatedAt.ActorID()
-			var clientLamportAtChange int64
-			if isVersionVectorEmpty {
-				// Case 1: local editing from json package
-				clientLamportAtChange = time.MaxLamport
-			} else {
-				// Case 2: from operation with version vector(After v0.5.7)
-				lamport, ok := versionVector.Get(actorID)
-				if ok {
-					clientLamportAtChange = lamport
-				} else {
-					clientLamportAtChange = 0
-				}
-			}
-
-			// NOTE(sejongk): If the node is removable or its parent is going to
-			// be removed, then this node should be removed.
-			if node.canDelete(editedAt, clientLamportAtChange) ||
-				slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
-				// NOTE(hackerwins): If the node overlaps as an end token with the
-				// range then we need to keep the node.
-				if tokenType == index.Text || tokenType == index.Start {
-					toBeRemoveds = append(toBeRemoveds, node)
-				}
-			}
-		},
-	); err != nil {
-		return nil, nil, err
-	}
-
-	return toBeRemoveds, toBeMovedToFromParents, nil
-}
-
 func (t *Tree) collectDeleteAndMerge(
 	fromParent, fromLeft, toParent, toLeft *TreeNode,
 ) ([]*TreeNode, []*TreeNode, error) {
@@ -1093,7 +1027,7 @@ func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector ti
 		right := nodeIdx.Value
 
 		if right.canDelete(editedAt, clientLamportAtChange) {
-			children := right.Children()
+			children := right.Children(true)
 			if len(children) > 0 {
 				if err := right.ClearChildren(); err != nil {
 					return nil, err
