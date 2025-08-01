@@ -293,7 +293,7 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	n.children = append(n.children, newNodes...)
 	for _, newNode := range newNodes {
 		newNode.Parent = n
-		newNode.UpdateAncestorsSize()
+		newNode.UpdateAncestorsSizeByAppend()
 	}
 
 	return nil
@@ -345,6 +345,22 @@ func (n *Node[V]) UpdateAncestorsSize() {
 			break
 		}
 
+		parent = parent.Parent
+	}
+}
+
+// UpdateAncestorsSizeByAppend updates the size of ancestors.
+// For the scenario that append removed node.
+func (n *Node[V]) UpdateAncestorsSizeByAppend() {
+	parent := n.Parent
+	if n.Value.IsRemoved() {
+		return
+	}
+	for parent != nil {
+		parent.Length += n.PaddedLength()
+		if parent.Value.IsRemoved() {
+			break
+		}
 		parent = parent.Parent
 	}
 }
