@@ -850,14 +850,6 @@ func (t *Tree) Edit(
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
-	// fmt.Printf("exec:Edit (from=%s,to=%s), (splitLv=%d), editAt=%s\n", from.ParentID.CreatedAt.ToTestString(), to.ParentID.CreatedAt.ToTestString(), splitLevel, editedAt.ToTestString())
-	// parentNode, childNode := t.ToTreeNodes(from)
-	// fmt.Printf("exec:Edit FromparentNode = %s\n", parentNode.Marshal())
-	// fmt.Printf("exec:Edit FromchildNode  = %s\n", childNode.Marshal())
-	// parentNode, childNode = t.ToTreeNodes(to)
-	// fmt.Printf("exec:Edit ToparentNode   = %s\n", parentNode.Marshal())
-	// fmt.Printf("exec:Edit TochildNode    = %s\n", childNode.Marshal())
-	// fmt.Printf("exec:Edit leftChild  = %s:%s\n", leftChild.Type(), EscapeString(leftChild.Value))
 	var diff resource.DataSize
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
