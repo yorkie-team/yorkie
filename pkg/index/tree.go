@@ -454,7 +454,9 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 	return nil, nil
 }
 
-// nextSibling returns the next sibling of the node, even if the sibling is
+// NextSiblingExtended returns the next sibling of the node, including removed nodes.
+// If no immediate sibling exists, it traverses up the tree to find the next node
+// by checking parent's siblings and their children.
 func (n *Node[V]) NextSiblingExtended() (*Node[V], error) {
 	parent := n.Parent
 	if parent == nil {
