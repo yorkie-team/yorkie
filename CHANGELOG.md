@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.23] - 2025-08-01
+
+### Added
+
+- Add MongoDB-based leader election mechanism by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1373
+- Add MoveFront/MoveLast and port array tests from JS SDK by @KMSstudio in https://github.com/yorkie-team/yorkie/pull/1415
+
+### Fixed
+
+- Fix race condition between Attach/PushPull and Deactivation by @kokodak in https://github.com/yorkie-team/yorkie/pull/1414
+- Remove deprecated SelectOperation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1417
+- Fix garbage collection design document typo by @kokodak in https://github.com/yorkie-team/yorkie/pull/1421
+
+### Removed
+
 ## [v0.6.22] - 2025-07-28
 
 ### Added
