@@ -79,9 +79,7 @@ In the initial state, both clients have `"ab"`.
 
 ![garbage-collection-2](media/garbage-collection-2.png)
 
-_NOTE: In the State 3 figure image, client b's change `2b` is a typo for `3b`._
-
-`Client a` deletes `"b"`, which is recorded as a change with versionVector `{b:1}`. The text node of `"b"` can be referenced by remote, so it is only marked as tombstone. And the `Client a` sends change `3a` to server through PushPull API and receives as a response that `minVersionVector` is `{a:1, b:2}`. Since all clients did not receive the deletion `change 3a`, the text node is not purged by garbage collection.
+`Client a` deletes `"b"`, which is recorded as a change with versionVector `{b:1}`. The text node of `"b"` can be referenced by remote, so it is only marked as tombstone. And the `Client a` sends change `3a` to server through PushPull API and receives as a response that `minVersionVector` is `{a:1, b:1}`. Since all clients did not receive the deletion `change 3a`, the text node is not purged by garbage collection.
 
 Meanwhile, `client b` inserts `"c"` after textnode `"b"` and it has not been sent (pushpull) to server yet.
 
@@ -89,7 +87,7 @@ Meanwhile, `client b` inserts `"c"` after textnode `"b"` and it has not been sen
 
 ![garbage-collection-3](media/garbage-collection-3.png)
 
-`Client b` pushes change `3b` to server and receives as a response that `minVersionVector` is `{a:1, b:1}`. After the client applies change `4`, the contents of document are changed to `ac`. This time, all clients have received change `3a`. Since node "b" is removed at `3a`, it's still marked as tombstone for every clients, because `minVersionVector[a] = 1 < 3`
+`Client b` pushes change `3b` to server and receives as a response that `minVersionVector` is `{a:1, b:1}`. After the client applies change `3a`, the contents of document are changed to `ac`. This time, all clients have received change `3a`. Since node "b" is removed at `3a`, it's still marked as tombstone for every clients, because `minVersionVector[a] = 1 < 3`
 
 ### State 4
 
