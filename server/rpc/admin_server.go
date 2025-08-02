@@ -831,21 +831,22 @@ func (s *adminServer) GetProjectWithAuth(
 ) (*types.Project, error) {
 	user := users.From(ctx)
 
-	// If access scope is project, verify the project from context
-	if user.AccessScope == types.AccessScopeProject {
+	switch user.AccessScope {
+	case types.AccessScopeProject:
+		// Verify project from context for project scope
 		ctxProject := projects.From(ctx)
 		if ctxProject.Name != projectName {
 			return nil, fmt.Errorf("project mismatch: key is for %s, got %s", ctxProject.Name, projectName)
 		}
-
 		return ctxProject, nil
+	case types.AccessScopeAdmin:
+		// Fetch project for admin scope
+		project, err := projects.GetProject(ctx, s.backend, user.ID, projectName)
+		if err != nil {
+			return nil, err
+		}
+		return project, nil
+	default:
+		return nil, fmt.Errorf("invalid access scope: %s", user.AccessScope)
 	}
-
-	// For admin scope, fetch the project
-	project, err := projects.GetProject(ctx, s.backend, user.ID, projectName)
-	if err != nil {
-		return nil, err
-	}
-
-	return project, nil
 }
