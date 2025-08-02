@@ -159,11 +159,11 @@ func (i *AdminServiceInterceptor) buildContext(
 	header http.Header,
 ) (context.Context, error) {
 	if isRequiredAuth(procedure) {
-		user, err := i.authenticate(ctx, header)
+		newContext, err := i.authenticate(ctx, header)
 		if err != nil {
 			return nil, err
 		}
-		ctx = users.With(ctx, user)
+		ctx = newContext
 	}
 
 	ctx = logging.With(ctx, logging.New(i.requestID.next()))
@@ -175,7 +175,7 @@ func (i *AdminServiceInterceptor) buildContext(
 func (i *AdminServiceInterceptor) authenticate(
 	ctx context.Context,
 	header http.Header,
-) (*types.User, error) {
+) (context.Context, error) {
 	// NOTE(hackerwins): The token can be provided by the Authorization header or cookie.
 	token := header.Get(types.AuthorizationKey)
 	if token == "" {
@@ -197,7 +197,9 @@ func (i *AdminServiceInterceptor) authenticate(
 	if err == nil {
 		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
 		if err == nil {
-			return user, nil
+			user.AccessScope = types.AccessScopeAdmin
+			ctx = users.With(ctx, user)
+			return ctx, nil
 		}
 	}
 
@@ -209,7 +211,10 @@ func (i *AdminServiceInterceptor) authenticate(
 	if err == nil {
 		user, err := users.GetUserByID(ctx, i.backend, project.Owner)
 		if err == nil {
-			return user, nil
+			user.AccessScope = types.AccessScopeProject
+			ctx = users.With(ctx, user)
+			ctx = projects.With(ctx, project)
+			return ctx, nil
 		}
 	}
 
