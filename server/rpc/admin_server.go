@@ -836,7 +836,7 @@ func (s *adminServer) GetProjectWithAuth(
 		// Verify project from context for project scope
 		ctxProject := projects.From(ctx)
 		if ctxProject.Name != projectName {
-			return nil, fmt.Errorf("project mismatch: key is for %s, got %s", ctxProject.Name, projectName)
+			return nil, fmt.Errorf("project mismatch: key is for %s, got %s: %w", ctxProject.Name, projectName, interceptors.ErrUnauthenticated)
 		}
 		return ctxProject, nil
 	case types.AccessScopeAdmin:
