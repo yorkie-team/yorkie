@@ -400,7 +400,6 @@ func TestBatchExpiration(t *testing.T) {
 			}
 		}
 
-		time.Sleep(expireInterval / 2)
 
 		// Wait for each batch with both count checking and completion tracking
 		for i := range batchNum {
