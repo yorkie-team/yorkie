@@ -400,7 +400,6 @@ func TestBatchExpiration(t *testing.T) {
 			}
 		}
 
-
 		// Wait for each batch with both count checking and completion tracking
 		for i := range batchNum {
 			expectedCount := totalKeys + expireBatchSize*(i+1)
