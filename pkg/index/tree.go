@@ -315,6 +315,11 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
+// Children returns the children of the given node.
+func (n *Node[V]) GetChildren() []*Node[V] {
+	return n.children
+}
+
 // SetChildren sets the children of the given node.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {

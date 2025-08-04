@@ -1099,6 +1099,7 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback)
 }
 
+// callback must not modify the tree by `pkg/index/tree.go L256`
 func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
 	callback func(parent *TreeNode, left *TreeNode) error,
 ) error {
@@ -1124,7 +1125,7 @@ func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
 func nextTreePos(parent, left *TreeNode) (*TreeNode, *TreeNode, bool) {
 	// CASE 1, 2: parent == left
 	if parent == left {
-		children := parent.Index.Children(true)
+		children := parent.Index.GetChildren()
 		if len(children) > 0 {
 			leftMostChild := children[0].Value
 			if leftMostChild.IsText() {
@@ -1140,7 +1141,7 @@ func nextTreePos(parent, left *TreeNode) (*TreeNode, *TreeNode, bool) {
 	}
 
 	// CASE 3, 4: parent != left
-	siblings := parent.Index.Children(true)
+	siblings := parent.Index.GetChildren()
 	idx := parent.Index.OffsetOfChild(left.Index)
 	if idx+1 < len(siblings) {
 		next := siblings[idx+1]
