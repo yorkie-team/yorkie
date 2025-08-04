@@ -149,7 +149,7 @@ func (c *Client) TryLeadership(
 	expiresAt := now.Add(leaseDuration)
 
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, expiresAt, now)
+		return c.tryAcquireLeadership(ctx, hostname, leaseDuration)
 	}
 
 	return c.tryRenewLeadership(ctx, hostname, leaseToken, expiresAt, now)
@@ -180,40 +180,49 @@ func (c *Client) FindLeadership(
 	return &info, nil
 }
 
-// tryAcquireLeadership attempts to acquire new leadership
+// tryAcquireLeadership attempts to acquire new leadership.
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
 	hostname string,
-	expiresAt gotime.Time,
-	now gotime.Time,
+	leaseDuration gotime.Duration,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token
 	token, err := database.GenerateLeaseToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
+	leaseMS := leaseDuration.Milliseconds()
 
 	// Try to acquire leadership using atomic upsert.
+	expired := bson.D{{"$lt", bson.A{"$expires_at", "$$NOW"}}}
 	result := c.collection(ColLeaderships).FindOneAndUpdate(
 		ctx,
-		bson.M{
-			"$or": []bson.M{
-				{"expires_at": bson.M{"$lt": now}}, // Document is expired
-				{"term": bson.M{"$exists": false}}, // No document exists
-			},
+		bson.D{
+			{"singleton", 1},
 		},
-		bson.M{
-			"$set": bson.M{
-				"hostname":    hostname,
-				"lease_token": token,
-				"elected_at":  now,
-				"expires_at":  expiresAt,
-				"renewed_at":  now,
-				"singleton":   1,
-			},
-			"$inc": bson.M{"term": 1},
-		},
-		options.FindOneAndUpdate().
+		mongo.Pipeline{
+			{{"$replaceWith", bson.D{
+				{"$cond", bson.A{
+					expired,
+					// if expired
+					bson.D{{"$mergeObjects", bson.A{
+						"$$ROOT",
+						bson.D{
+							{"expires_at", bson.D{{"$add", bson.A{"$$NOW", leaseMS}}}},
+							{"lease_token", token},
+							{"term", bson.D{{"$add", bson.A{
+								bson.D{{"$ifNull", bson.A{"$term", 0}}}, 1}}},
+							},
+							{"hostname", hostname},
+							{"renewed_at", "$$NOW"},
+							{"elected_at", bson.D{{"$ifNull", bson.A{"$elected_at", "$$NOW"}}}},
+							{"singleton", 1},
+						},
+					}}},
+					"$$ROOT", // else
+				}},
+			}}},
+		}, options.FindOneAndUpdate().
 			SetUpsert(true).
 			SetReturnDocument(options.After),
 	)
