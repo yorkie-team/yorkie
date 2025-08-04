@@ -125,16 +125,9 @@ func Dial(conf *Config) (*Client, error) {
 	}
 
 	// Create client info cache with client reference
-	clientInfoCache := NewClientInfoCache(nil, clientInstance)
+	clientInstance.clientInfoCache = NewClientInfoCache(nil, clientInstance)
 
-	return &Client{
-		config:          conf,
-		client:          client,
-		docCache:        docCache,
-		changeCache:     changeCache,
-		vectorCache:     vectorCache,
-		clientInfoCache: clientInfoCache,
-	}, nil
+	return clientInstance, nil
 }
 
 // Close all resources of this client.
@@ -804,14 +797,7 @@ func (c *Client) ActivateClient(
 	now := gotime.Now()
 
 	// 1. Check cache first for existing client
-	// Try to find existing client by key in cache
-	var existingClient *database.ClientInfo
-	for refKey, cached := range c.clientInfoCache.cache {
-		if refKey.ProjectID == projectID && cached.ClientInfo.Key == key {
-			existingClient = cached.ClientInfo
-			break
-		}
-	}
+	existingClient := c.clientInfoCache.GetByKey(projectID, key)
 
 	if existingClient != nil {
 		// If cache has dirty data, flush it first to ensure consistency
@@ -825,7 +811,9 @@ func (c *Client) ActivateClient(
 		existingClient.Status = database.ClientActivated
 		existingClient.UpdatedAt = now
 		existingClient.Metadata = metadata
-		c.clientInfoCache.UpdateClientInfo(existingClient.RefKey(), existingClient)
+		if err := c.clientInfoCache.UpdateClientInfo(existingClient.RefKey(), existingClient); err != nil {
+			return nil, fmt.Errorf("update client info in cache: %w", err)
+		}
 
 		// Flush immediately for activation
 		if err := c.clientInfoCache.FlushToDB(); err != nil {
@@ -873,7 +861,9 @@ func (c *Client) ActivateClient(
 	}
 
 	// Invalidate cache for this client
-	c.clientInfoCache.Invalidate(clientInfo.RefKey())
+	if err := c.clientInfoCache.Invalidate(clientInfo.RefKey()); err != nil {
+		return nil, fmt.Errorf("invalidate client cache: %w", err)
+	}
 
 	return &clientInfo, nil
 }
@@ -901,7 +891,7 @@ func (c *Client) TryAttaching(
 
 		// Check if document is already attached
 		if docInfo, exists := cached.Documents[docID]; exists && docInfo.Status == database.DocumentAttached {
-			return nil, fmt.Errorf("try to attach document: %w", database.ErrDocumentAlreadyAttached)
+			return nil, fmt.Errorf("conditions not satisfied to attach document: %w", database.ErrClientNotFound)
 		}
 
 		// Update document status in cache
@@ -914,7 +904,9 @@ func (c *Client) TryAttaching(
 			ClientSeq: 0,
 		}
 		cached.UpdatedAt = gotime.Now()
-		c.clientInfoCache.UpdateClientInfo(refKey, cached)
+		if err := c.clientInfoCache.UpdateClientInfo(refKey, cached); err != nil {
+			return nil, fmt.Errorf("update client info in cache: %w", err)
+		}
 
 		// Flush immediately for attachment
 		if err := c.clientInfoCache.FlushToDB(); err != nil {
@@ -954,7 +946,9 @@ func (c *Client) TryAttaching(
 	}
 
 	// Update cache with the new client info
-	c.clientInfoCache.Set(refKey, info)
+	if err := c.clientInfoCache.Set(refKey, info); err != nil {
+		return nil, fmt.Errorf("set client info in cache: %w", err)
+	}
 
 	return info, nil
 }
@@ -996,7 +990,9 @@ func (c *Client) DeactivateClient(
 		// Update client status in cache
 		cached.Status = database.ClientDeactivated
 		cached.UpdatedAt = now
-		c.clientInfoCache.UpdateClientInfo(refKey, cached)
+		if err := c.clientInfoCache.UpdateClientInfo(refKey, cached); err != nil {
+			return nil, fmt.Errorf("update client info in cache: %w", err)
+		}
 
 		// Flush immediately for deactivation
 		if err := c.clientInfoCache.FlushToDB(); err != nil {
@@ -1043,7 +1039,9 @@ func (c *Client) DeactivateClient(
 	}
 
 	// Invalidate cache for this client
-	c.clientInfoCache.Invalidate(refKey)
+	if err := c.clientInfoCache.Invalidate(refKey); err != nil {
+		return nil, fmt.Errorf("invalidate client cache: %w", err)
+	}
 
 	return &info, nil
 }
@@ -1112,7 +1110,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	// Update cache only - write-back strategy maintains performance
-	c.clientInfoCache.UpdateClientInfo(clientInfo.RefKey(), clientInfo)
+	if err := c.clientInfoCache.UpdateClientInfo(clientInfo.RefKey(), clientInfo); err != nil {
+		return fmt.Errorf("update client info in cache: %w", err)
+	}
 
 	// For critical operations that need immediate consistency,
 	// flush dirty data to ensure subsequent operations see the latest state
@@ -1392,9 +1392,21 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 		return fmt.Errorf("update document info status to removed: %w", result.Err())
 	}
 
-	// Invalidate all client caches that might have this document attached
-	// This is a conservative approach - we could be more selective but it's safer
-	c.clientInfoCache.InvalidateAll()
+	// Invalidate only clients attached to this document
+	attachedClients, err := c.FindAttachedClientInfosByRefKey(ctx, refKey)
+	if err == nil {
+		for _, client := range attachedClients {
+			if err := c.clientInfoCache.Invalidate(client.RefKey()); err != nil {
+				logging.DefaultLogger().Errorf("failed to invalidate client cache for %s: %v", client.RefKey(), err)
+			}
+		}
+	} else {
+		logging.DefaultLogger().Warnf("failed to find attached clients for %s, falling back to full cache invalidation: %v", refKey, err)
+		// Fallback to full invalidation if we can't find attached clients
+		if err := c.clientInfoCache.InvalidateAll(); err != nil {
+			return fmt.Errorf("invalidate all client caches: %w", err)
+		}
+	}
 
 	return nil
 }
@@ -2197,8 +2209,21 @@ func (c *Client) PurgeDocument(
 		return nil, fmt.Errorf("delete document: %w", err)
 	}
 
-	// Invalidate all client caches since the document is completely removed
-	c.clientInfoCache.InvalidateAll()
+	// Invalidate only clients attached to this document
+	attachedClients, err := c.FindAttachedClientInfosByRefKey(ctx, docRefKey)
+	if err == nil {
+		for _, client := range attachedClients {
+			if err := c.clientInfoCache.Invalidate(client.RefKey()); err != nil {
+				logging.DefaultLogger().Errorf("failed to invalidate client cache for %s: %v", client.RefKey(), err)
+			}
+		}
+	} else {
+		logging.DefaultLogger().Warnf("failed to find attached clients for %s, falling back to full cache invalidation: %v", docRefKey, err)
+		// Fallback to full invalidation if we can't find attached clients
+		if err := c.clientInfoCache.InvalidateAll(); err != nil {
+			return nil, fmt.Errorf("invalidate all client caches: %w", err)
+		}
+	}
 
 	return res, nil
 }

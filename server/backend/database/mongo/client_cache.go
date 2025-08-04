@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // CacheConfig defines configuration parameters for the cache
@@ -131,8 +132,21 @@ func (c *ClientInfoCache) Get(refKey types.ClientRefKey) *database.ClientInfo {
 	return nil
 }
 
+// GetByKey finds a client by project ID and key
+func (c *ClientInfoCache) GetByKey(projectID types.ID, key string) *database.ClientInfo {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for refKey, cached := range c.cache {
+		if refKey.ProjectID == projectID && cached.ClientInfo.Key == key {
+			return cached.ClientInfo
+		}
+	}
+	return nil
+}
+
 // Set stores a ClientInfo in the cache
-func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.ClientInfo) {
+func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.ClientInfo) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -147,12 +161,15 @@ func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.Cl
 
 	// Evict oldest if cache is full
 	if len(c.cache) > c.config.MaxCacheSize {
-		c.evictOldest()
+		if err := c.evictOldest(); err != nil {
+			return fmt.Errorf("failed to evict oldest entry: %w", err)
+		}
 	}
+	return nil
 }
 
 // UpdateClientInfo updates an existing ClientInfo in the cache, marking it as dirty
-func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo *database.ClientInfo) {
+func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo *database.ClientInfo) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -164,9 +181,23 @@ func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo
 		cached.UpdatedAt = time.Now()
 		cached.ExpiresAt = time.Now().Add(c.config.TTL)
 	} else {
-		// Add new entry
-		c.Set(refKey, clientInfo)
+		// Add new entry without recursive call
+		now := time.Now()
+		c.cache[refKey] = &CachedClientInfo{
+			ClientInfo: clientInfo.DeepCopy(),
+			UpdatedAt:  now,
+			Dirty:      true, // Mark as dirty for new entries
+			LastFlush:  now,
+			ExpiresAt:  now.Add(c.config.TTL),
+		}
+		// Evict oldest if cache is full
+		if len(c.cache) > c.config.MaxCacheSize {
+			if err := c.evictOldest(); err != nil {
+				return fmt.Errorf("failed to evict oldest entry: %w", err)
+			}
+		}
 	}
+	return nil
 }
 
 // mergeClientInfo merges two ClientInfo objects, applying $max logic for sequence numbers
@@ -209,7 +240,7 @@ func (c *ClientInfoCache) mergeClientInfo(existing, new *database.ClientInfo) *d
 }
 
 // Invalidate removes an entry from the cache
-func (c *ClientInfoCache) Invalidate(refKey types.ClientRefKey) {
+func (c *ClientInfoCache) Invalidate(refKey types.ClientRefKey) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -217,25 +248,25 @@ func (c *ClientInfoCache) Invalidate(refKey types.ClientRefKey) {
 		// Force flush if entry is dirty before removal
 		if entry.Dirty {
 			if err := c.flushSingleToDB(refKey, entry.ClientInfo); err != nil {
-				// Log error but continue with invalidation
-				// TODO: Add proper logging
+				return fmt.Errorf("failed to flush dirty entry: %w", err)
 			}
 		}
 		delete(c.cache, refKey)
 	}
+	return nil
 }
 
 // InvalidateAll clears all entries from the cache
-func (c *ClientInfoCache) InvalidateAll() {
+func (c *ClientInfoCache) InvalidateAll() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Force flush all dirty entries before clearing
 	if err := c.FlushToDB(); err != nil {
-		// Log error but continue with invalidation
-		// TODO: Add proper logging
+		return fmt.Errorf("failed to flush all dirty entries: %w", err)
 	}
 	c.cache = make(map[types.ClientRefKey]*CachedClientInfo)
+	return nil
 }
 
 // IsDirty checks if an entry needs flushing to DB
@@ -250,7 +281,7 @@ func (c *ClientInfoCache) IsDirty(refKey types.ClientRefKey) bool {
 }
 
 // evictOldest removes the oldest entry from the cache
-func (c *ClientInfoCache) evictOldest() {
+func (c *ClientInfoCache) evictOldest() error {
 	var oldestKey types.ClientRefKey
 	var oldestTime time.Time
 	var oldestEntry *CachedClientInfo
@@ -267,12 +298,12 @@ func (c *ClientInfoCache) evictOldest() {
 		// Force flush if oldest entry is dirty before eviction
 		if oldestEntry.Dirty {
 			if err := c.flushSingleToDB(oldestKey, oldestEntry.ClientInfo); err != nil {
-				// Log error but continue with eviction
-				// TODO: Add proper logging
+				return fmt.Errorf("failed to flush oldest dirty entry: %w", err)
 			}
 		}
 		delete(c.cache, oldestKey)
 	}
+	return nil
 }
 
 // adaptiveFlush runs background goroutine for periodic flushing
@@ -351,7 +382,10 @@ func (c *ClientInfoCache) cleanupExpiredEntries() {
 	for {
 		select {
 		case <-ticker.C:
-			c.cleanupExpired()
+			if err := c.cleanupExpired(); err != nil {
+				logging.DefaultLogger().Errorf("cleanup expired entries failed: %v", err)
+				// Continue to prevent blocking the cleanup goroutine
+			}
 		case <-c.stopCh:
 			return
 		}
@@ -359,7 +393,7 @@ func (c *ClientInfoCache) cleanupExpiredEntries() {
 }
 
 // cleanupExpired removes expired entries from the cache
-func (c *ClientInfoCache) cleanupExpired() {
+func (c *ClientInfoCache) cleanupExpired() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -371,7 +405,7 @@ func (c *ClientInfoCache) cleanupExpired() {
 			// Force flush if expired entry is dirty before removal
 			if entry.Dirty {
 				if err := c.flushSingleToDB(refKey, entry.ClientInfo); err != nil {
-					// TODO: Add proper logging
+					return fmt.Errorf("failed to flush expired dirty entry: %w", err)
 				}
 			}
 			delete(c.cache, refKey)
@@ -380,8 +414,9 @@ func (c *ClientInfoCache) cleanupExpired() {
 	}
 
 	if expiredCount > 0 {
-		// TODO: Add logging for expired entries count
+		logging.DefaultLogger().Infof("cleaned up %d expired cache entries", expiredCount)
 	}
+	return nil
 }
 
 // ExtendTTL extends the TTL for a specific cached entry
