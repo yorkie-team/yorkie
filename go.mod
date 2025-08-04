@@ -9,7 +9,7 @@ require (
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.26.0
-	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/btree v1.1.3
 	github.com/hashicorp/go-memdb v1.3.5
 	github.com/jedib0t/go-pretty/v6 v6.6.7
