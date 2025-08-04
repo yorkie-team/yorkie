@@ -145,14 +145,11 @@ func (c *Client) TryLeadership(
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.LeadershipInfo, error) {
-	now := gotime.Now()
-	expiresAt := now.Add(leaseDuration)
-
 	if leaseToken == "" {
 		return c.tryAcquireLeadership(ctx, hostname, leaseDuration)
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, expiresAt, now)
+	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseDuration)
 }
 
 // FindLeadership returns the current leadership information.
@@ -247,14 +244,14 @@ func (c *Client) tryRenewLeadership(
 	ctx context.Context,
 	hostname string,
 	leaseToken string,
-	expiresAt gotime.Time,
-	now gotime.Time,
+	leaseDuration gotime.Duration,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
+	leaseMS := leaseDuration.Milliseconds()
 
 	// Try to update the existing leadership with the correct token and hostname.
 	result := c.collection(ColLeaderships).FindOneAndUpdate(
@@ -264,12 +261,12 @@ func (c *Client) tryRenewLeadership(
 			"hostname":    hostname,
 			"lease_token": leaseToken,
 		},
-		bson.M{
-			"$set": bson.M{
-				"lease_token": newLeaseToken,
-				"expires_at":  expiresAt,
-				"renewed_at":  now,
-			},
+		mongo.Pipeline{
+			{{"$set", bson.D{
+				{"lease_token", newLeaseToken},
+				{"expires_at", bson.D{{"$add", bson.A{"$$NOW", leaseMS}}}},
+				{"renewed_at", "$$NOW"},
+			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
