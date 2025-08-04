@@ -191,29 +191,29 @@ func (c *Client) tryAcquireLeadership(
 	leaseMS := leaseDuration.Milliseconds()
 
 	// Try to acquire leadership using atomic upsert.
-	expired := bson.D{{"$lt", bson.A{"$expires_at", "$$NOW"}}}
+	expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
 	result := c.collection(ColLeaderships).FindOneAndUpdate(
 		ctx,
 		bson.D{
-			{"singleton", 1},
+			{Key: "singleton", Value: 1},
 		},
 		mongo.Pipeline{
-			{{"$replaceWith", bson.D{
-				{"$cond", bson.A{
+			{{Key: "$replaceWith", Value: bson.D{
+				{Key: "$cond", Value: bson.A{
 					expired,
 					// if expired
-					bson.D{{"$mergeObjects", bson.A{
+					bson.D{{Key: "$mergeObjects", Value: bson.A{
 						"$$ROOT",
 						bson.D{
-							{"expires_at", bson.D{{"$add", bson.A{"$$NOW", leaseMS}}}},
-							{"lease_token", token},
-							{"term", bson.D{{"$add", bson.A{
-								bson.D{{"$ifNull", bson.A{"$term", 0}}}, 1}}},
+							{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+							{Key: "lease_token", Value: token},
+							{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
+								bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
 							},
-							{"hostname", hostname},
-							{"renewed_at", "$$NOW"},
-							{"elected_at", bson.D{{"$ifNull", bson.A{"$elected_at", "$$NOW"}}}},
-							{"singleton", 1},
+							{Key: "hostname", Value: hostname},
+							{Key: "renewed_at", Value: "$$NOW"},
+							{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
+							{Key: "singleton", Value: 1},
 						},
 					}}},
 					"$$ROOT", // else
@@ -262,10 +262,10 @@ func (c *Client) tryRenewLeadership(
 			"lease_token": leaseToken,
 		},
 		mongo.Pipeline{
-			{{"$set", bson.D{
-				{"lease_token", newLeaseToken},
-				{"expires_at", bson.D{{"$add", bson.A{"$$NOW", leaseMS}}}},
-				{"renewed_at", "$$NOW"},
+			{{Key: "$set", Value: bson.D{
+				{Key: "lease_token", Value: newLeaseToken},
+				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+				{Key: "renewed_at", Value: "$$NOW"},
 			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
