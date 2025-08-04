@@ -1129,47 +1129,29 @@ func nextTreePos(parent, left *TreeNode, stk *[]*index.Node[*TreeNode]) (*TreeNo
 	if parent == left {
 		children := slices.Clone(parent.Index.GetChildren())
 		*stk = append(children, (*stk)...)
-		if len(*stk) != 0 {
-			nextNode = (*stk)[0].Value
-		}
-
-		if nextNode != nil && nextNode.Index.Parent == parent.Index {
-			*stk = (*stk)[1:]
-			if nextNode.IsText() {
-				return parent, nextNode, true
-			} else {
-				return nextNode, nextNode, true
-			}
-		}
-		if parent.Index.Parent == nil {
-			return nil, nil, false
-		}
-		return parent.Index.Parent.Value, parent, true
+	} else if len(*stk) == 0 {
+		offset := parent.Index.OffsetOfChild(left.Index)
+		children := slices.Clone(parent.Index.GetChildren()[offset+1:])
+		*stk = append(children, (*stk)...)
 	}
 
 	if len(*stk) != 0 {
 		nextNode = (*stk)[0].Value
-	} else {
-		offset := parent.Index.OffsetOfChild(left.Index)
-		children := slices.Clone(parent.Index.GetChildren()[offset+1:])
-		*stk = append(children, (*stk)...)
-		if len(*stk) != 0 {
-			nextNode = (*stk)[0].Value
-		}
 	}
 
-	if nextNode != nil && nextNode.Index.Parent == parent.Index {
+	if nextNode != nil && (*stk)[0].Parent == parent.Index {
 		*stk = (*stk)[1:]
 		if nextNode.IsText() {
 			return parent, nextNode, true
 		} else {
 			return nextNode, nextNode, true
 		}
+	} else {
+		if parent.Index.Parent == nil {
+			return nil, nil, false
+		}
+		return parent.Index.Parent.Value, parent, true
 	}
-	if parent.Index.Parent == nil {
-		return nil, nil, false
-	}
-	return parent.Index.Parent.Value, parent, true
 }
 
 // StyleByIndex applies the given attributes of the given range.
