@@ -1078,7 +1078,9 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 	}
 
 	// 3. Store in cache
-	c.clientInfoCache.Set(refKey, &clientInfo)
+	if err := c.clientInfoCache.Set(refKey, &clientInfo); err != nil {
+		return nil, fmt.Errorf("set client info in cache: %w", err)
+	}
 
 	return &clientInfo, nil
 }
@@ -1401,7 +1403,9 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 			}
 		}
 	} else {
-		logging.DefaultLogger().Warnf("failed to find attached clients for %s, falling back to full cache invalidation: %v", refKey, err)
+		logging.DefaultLogger().Warnf(
+			"failed to find attached clients for %s, falling back to full cache invalidation: %v",
+			refKey, err)
 		// Fallback to full invalidation if we can't find attached clients
 		if err := c.clientInfoCache.InvalidateAll(); err != nil {
 			return fmt.Errorf("invalidate all client caches: %w", err)
@@ -2218,7 +2222,9 @@ func (c *Client) PurgeDocument(
 			}
 		}
 	} else {
-		logging.DefaultLogger().Warnf("failed to find attached clients for %s, falling back to full cache invalidation: %v", docRefKey, err)
+		logging.DefaultLogger().Warnf(
+			"failed to find attached clients for %s, falling back to full cache invalidation: %v",
+			docRefKey, err)
 		// Fallback to full invalidation if we can't find attached clients
 		if err := c.clientInfoCache.InvalidateAll(); err != nil {
 			return nil, fmt.Errorf("invalidate all client caches: %w", err)
