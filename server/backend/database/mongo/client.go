@@ -145,11 +145,13 @@ func (c *Client) TryLeadership(
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.LeadershipInfo, error) {
+	leaseMS := leaseDuration.Milliseconds()
+
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, leaseDuration)
+		return c.tryAcquireLeadership(ctx, hostname, leaseMS)
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseDuration)
+	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
 }
 
 // FindLeadership returns the current leadership information.
@@ -181,14 +183,13 @@ func (c *Client) FindLeadership(
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
 	hostname string,
-	leaseDuration gotime.Duration,
+	leaseMS int64,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token
 	token, err := database.GenerateLeaseToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
-	leaseMS := leaseDuration.Milliseconds()
 
 	// Try to acquire leadership using atomic upsert.
 	expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
@@ -244,14 +245,13 @@ func (c *Client) tryRenewLeadership(
 	ctx context.Context,
 	hostname string,
 	leaseToken string,
-	leaseDuration gotime.Duration,
+	leaseMS int64,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
-	leaseMS := leaseDuration.Milliseconds()
 
 	// Try to update the existing leadership with the correct token and hostname.
 	result := c.collection(ColLeaderships).FindOneAndUpdate(
