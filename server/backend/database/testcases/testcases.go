@@ -126,8 +126,11 @@ func RunLeadershipTest(
 
 		assert.Equal(t, nodeIDOne, renewedInfo.Hostname)
 		assert.NotEqual(t, info.LeaseToken, renewedInfo.LeaseToken) // Token should change
-		assert.True(t, renewedInfo.ExpiresAt.After(info.ExpiresAt)) // Expiry should extend
-		assert.Equal(t, info.Term, renewedInfo.Term)                // Term should stay same
+		// NOTE(raararaara): Because expires_at is based on MongoDB server time ($$NOW),
+		// and renewal requests can occur within the same millisecond,
+		// expires_at may not strictly increase. Token change confirms renewal.
+		assert.True(t, renewedInfo.ExpiresAt.Compare(info.ExpiresAt) >= 0) // Expiry should extend
+		assert.Equal(t, info.Term, renewedInfo.Term)                       // Term should stay same
 	})
 
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {

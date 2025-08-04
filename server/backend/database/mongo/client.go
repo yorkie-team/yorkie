@@ -145,14 +145,13 @@ func (c *Client) TryLeadership(
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.LeadershipInfo, error) {
-	now := gotime.Now()
-	expiresAt := now.Add(leaseDuration)
+	leaseMS := leaseDuration.Milliseconds()
 
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, expiresAt, now)
+		return c.tryAcquireLeadership(ctx, hostname, leaseMS)
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, expiresAt, now)
+	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
 }
 
 // FindLeadership returns the current leadership information.
@@ -180,12 +179,11 @@ func (c *Client) FindLeadership(
 	return &info, nil
 }
 
-// tryAcquireLeadership attempts to acquire new leadership
+// tryAcquireLeadership attempts to acquire new leadership.
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
 	hostname string,
-	expiresAt gotime.Time,
-	now gotime.Time,
+	leaseMS int64,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token
 	token, err := database.GenerateLeaseToken()
@@ -194,26 +192,35 @@ func (c *Client) tryAcquireLeadership(
 	}
 
 	// Try to acquire leadership using atomic upsert.
+	expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
 	result := c.collection(ColLeaderships).FindOneAndUpdate(
 		ctx,
-		bson.M{
-			"$or": []bson.M{
-				{"expires_at": bson.M{"$lt": now}}, // Document is expired
-				{"term": bson.M{"$exists": false}}, // No document exists
-			},
+		bson.D{
+			{Key: "singleton", Value: 1},
 		},
-		bson.M{
-			"$set": bson.M{
-				"hostname":    hostname,
-				"lease_token": token,
-				"elected_at":  now,
-				"expires_at":  expiresAt,
-				"renewed_at":  now,
-				"singleton":   1,
-			},
-			"$inc": bson.M{"term": 1},
-		},
-		options.FindOneAndUpdate().
+		mongo.Pipeline{
+			{{Key: "$replaceWith", Value: bson.D{
+				{Key: "$cond", Value: bson.A{
+					expired,
+					// if expired
+					bson.D{{Key: "$mergeObjects", Value: bson.A{
+						"$$ROOT",
+						bson.D{
+							{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+							{Key: "lease_token", Value: token},
+							{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
+								bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
+							},
+							{Key: "hostname", Value: hostname},
+							{Key: "renewed_at", Value: "$$NOW"},
+							{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
+							{Key: "singleton", Value: 1},
+						},
+					}}},
+					"$$ROOT", // else
+				}},
+			}}},
+		}, options.FindOneAndUpdate().
 			SetUpsert(true).
 			SetReturnDocument(options.After),
 	)
@@ -238,8 +245,7 @@ func (c *Client) tryRenewLeadership(
 	ctx context.Context,
 	hostname string,
 	leaseToken string,
-	expiresAt gotime.Time,
-	now gotime.Time,
+	leaseMS int64,
 ) (*database.LeadershipInfo, error) {
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
@@ -255,12 +261,12 @@ func (c *Client) tryRenewLeadership(
 			"hostname":    hostname,
 			"lease_token": leaseToken,
 		},
-		bson.M{
-			"$set": bson.M{
-				"lease_token": newLeaseToken,
-				"expires_at":  expiresAt,
-				"renewed_at":  now,
-			},
+		mongo.Pipeline{
+			{{Key: "$set", Value: bson.D{
+				{Key: "lease_token", Value: newLeaseToken},
+				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+				{Key: "renewed_at", Value: "$$NOW"},
+			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
