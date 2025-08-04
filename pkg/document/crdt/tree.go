@@ -1108,11 +1108,12 @@ func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
 	}
 
 	var ok bool
+	stk := []*index.Node[*TreeNode]{}
 	for {
 		if isEnd(fromParent, fromLeft, toParent, toLeft) {
 			break
 		}
-		if fromParent, fromLeft, ok = nextTreePos(fromParent, fromLeft); !ok {
+		if fromParent, fromLeft, ok = nextTreePos(fromParent, fromLeft, &stk); !ok {
 			break
 		}
 		if err := callback(fromParent, fromLeft); err != nil {
@@ -1122,16 +1123,22 @@ func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
 	return nil
 }
 
-func nextTreePos(parent, left *TreeNode) (*TreeNode, *TreeNode, bool) {
-	// CASE 1, 2: parent == left
+func nextTreePos(parent, left *TreeNode, stk *[]*index.Node[*TreeNode]) (*TreeNode, *TreeNode, bool) {
+	var nextNode *TreeNode = nil
+
 	if parent == left {
-		children := parent.Index.GetChildren()
-		if len(children) > 0 {
-			leftMostChild := children[0].Value
-			if leftMostChild.IsText() {
-				return parent, leftMostChild, true
+		children := slices.Clone(parent.Index.GetChildren())
+		*stk = append(children, (*stk)...)
+		if len(*stk) != 0 {
+			nextNode = (*stk)[0].Value
+		}
+
+		if nextNode != nil && nextNode.Index.Parent == parent.Index {
+			*stk = (*stk)[1:]
+			if nextNode.IsText() {
+				return parent, nextNode, true
 			} else {
-				return leftMostChild, leftMostChild, true
+				return nextNode, nextNode, true
 			}
 		}
 		if parent.Index.Parent == nil {
@@ -1140,18 +1147,25 @@ func nextTreePos(parent, left *TreeNode) (*TreeNode, *TreeNode, bool) {
 		return parent.Index.Parent.Value, parent, true
 	}
 
-	// CASE 3, 4: parent != left
-	siblings := parent.Index.GetChildren()
-	idx := parent.Index.OffsetOfChild(left.Index)
-	if idx+1 < len(siblings) {
-		next := siblings[idx+1]
-		if next.IsText() {
-			return parent, next.Value, true
-		} else {
-			return next.Value, next.Value, true
+	if len(*stk) != 0 {
+		nextNode = (*stk)[0].Value
+	} else {
+		offset := parent.Index.OffsetOfChild(left.Index)
+		children := slices.Clone(parent.Index.GetChildren()[offset+1:])
+		*stk = append(children, (*stk)...)
+		if len(*stk) != 0 {
+			nextNode = (*stk)[0].Value
 		}
 	}
 
+	if nextNode != nil && nextNode.Index.Parent == parent.Index {
+		*stk = (*stk)[1:]
+		if nextNode.IsText() {
+			return parent, nextNode, true
+		} else {
+			return nextNode, nextNode, true
+		}
+	}
 	if parent.Index.Parent == nil {
 		return nil, nil, false
 	}
