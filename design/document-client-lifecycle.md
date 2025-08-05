@@ -21,8 +21,6 @@ In the Yorkie system, a document begins in the `Detached` state, transitions thr
 
 * The implementation details of hard deletion (physical removal) are not covered.
 
----
-
 ## State Transition Diagram
 
 The following is a diagram illustrating the state transitions of clients and documents.
@@ -34,8 +32,6 @@ This diagram consists of the following elements:
 * States are composed of **Document** and **Client** states respectively.
 * Green represents active clients, red represents deactivated clients, and gray represents the initial state.
 * Arrows indicate possible transitions, each requiring specific conditions and operations.
-
----
 
 ## State Definitions and Transitions
 
@@ -91,8 +87,6 @@ This diagram consists of the following elements:
 * After a certain period, the document is permanently deleted by a background process.
 * Even in this state, the client can be deactivated via `Deactivate()`.
 
----
-
 ## Client Deactivated States
 
 From any document state, if the client is deactivated via `Deactivate()`, the system enters the following state:
@@ -101,8 +95,6 @@ From any document state, if the client is deactivated via `Deactivate()`, the sy
 
   * The document may be unlinked (`nil`, `Detached`) or already deleted (`Removed`).
   * The client has terminated its connection and can be reactivated via `Activate()`.
-
----
 
 ## Document Deletion (Remove) Behavior
 
@@ -116,13 +108,9 @@ Documents can only be deleted in the `Attached` state. Deletion is soft and proc
 > [!NOTE]
 > 📌 Documents cannot be removed from the `Detached` state. Deletion requests must be made only in the `Attached` state.
 
----
-
 ### Key - ID Mapping Changes
 
 Before the document deletion feature was introduced, the `Key - ID` relationship was 1:1. Now, with support for recreating documents after deletion, the `Key - ID` relationship has changed to 1\:N. This means that multiple documents with the same `Key` can exist, and identifying documents by `ID` is now essential.
-
----
 
 ## Recap
 
