@@ -9,7 +9,7 @@ target-version: 0.6.23
 
 ## Summary
 
-In the Yorkie system, a document begins in the `Detached` state, transitions through `Attached`, `Detached`, and `Removed` states, and is eventually deleted. Each state described in this document represents the activity status, connection status, and deletion status of the document and client. This document explains the state transitions and the available actions in each state, especially including the `Removed` state, to help understand the full lifecycle of documents and clients.
+In the Yorkie system, a document life-cycle starts in the **nil** state, transitions through `Attached`, `Detached`, and `Removed` states, and is eventually deleted. Each state described in this document represents the activity status, connection status, and deletion status of the document and client. This document explains the state transitions and the available actions in each state, especially including the `Removed` state, to help understand the full lifecycle of documents and clients.
 
 ## Goals
 
