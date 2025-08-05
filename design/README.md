@@ -4,8 +4,8 @@
 
 ### Document
 
+- [Document-Client Lifecycle](document-client-lifecycle.md): States and transitions of documents and clients
 - [Document Editing](document-editing.md): Local and remote document editing mechanism
-- [Document Removal](document-removal.md): Soft deletion of documents
 - [Data Structure](data-structure.md): Data structures for root in document
 - [Presence](presence.md): Real-time presence in document
 
