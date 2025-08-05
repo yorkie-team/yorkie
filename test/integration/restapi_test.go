@@ -27,7 +27,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -123,7 +122,6 @@ func TestRESTAPI(t *testing.T) {
 					assert.NoError(t, cli.Close())
 				}()
 
-				gotime.Sleep(100 * gotime.Millisecond)
 				assert.NoError(t, cli.Sync(ctx))
 				res := post(
 					t,

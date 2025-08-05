@@ -1322,18 +1322,18 @@ func RunAdminGetDocumentsTest(
 	assert.NoError(t, err)
 	assert.Len(t, resp1.Msg.Documents, 1)
 
-	// try to get documents including non-existing document name
+	// try to get document with non-existing document name
 	resp2, err := testAdminClient.GetDocuments(
 		context.Background(),
 		connect.NewRequest(&api.GetDocumentsRequest{
 			ProjectName:      defaultProjectName,
-			DocumentKeys:     []string{testDocumentKey, invalidChangePack.DocumentKey},
+			DocumentKeys:     []string{invalidChangePack.DocumentKey},
 			IncludeRoot:      true,
 			IncludePresences: true,
 		},
 		))
 	assert.NoError(t, err)
-	assert.Len(t, resp2.Msg.Documents, 1)
+	assert.Len(t, resp2.Msg.Documents, 0)
 }
 
 // RunAdminListChangesTest runs the ListChanges test in admin.
