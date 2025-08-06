@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.24] - 2025-08-06
+
+### Added
+
+- Add Document-Client Lifecycle Design Document by @kokodak in https://github.com/yorkie-team/yorkie/pull/1431
+- Add functionality and benchmark test for GetDocuments API by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1427
+
+### Fixed
+
+- Prevent project secret key from granting full user access by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1425
+- Resolve flaky TestBatchExpiration/Process_Expire_Batch test by @minwoo1999 in https://github.com/yorkie-team/yorkie/pull/1413
+- Use MongoDB time for lease expiration to avoid clock skew by @raararaara in https://github.com/yorkie-team/yorkie/pull/1426
+
 ## [v0.6.23] - 2025-08-01
 
 ### Added
