@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -62,6 +63,7 @@ func TestRESTAPI(t *testing.T) {
 		summary := &documentSummary{}
 		assert.NoError(t, gojson.Unmarshal(res, summary))
 		assert.Equal(t, docs[0].Key(), summary.Document.Key)
+		assert.Nil(t, summary.Document.Presences)
 	})
 
 	t.Run("bulk document retrieval test", func(t *testing.T) {
@@ -76,6 +78,79 @@ func TestRESTAPI(t *testing.T) {
 		summaries := &documentSummaries{}
 		assert.NoError(t, gojson.Unmarshal(res, summaries))
 		assert.Len(t, summaries.Documents, 2)
+	})
+
+	t.Run("bulk document retrieval with options test", func(t *testing.T) {
+		numDocs, clientsPerDoc := 3, 1
+
+		testCases := []struct {
+			name             string
+			includeRoot      bool
+			includePresences bool
+		}{
+			{"include_root=0,include_presences=0", false, false},
+			{"include_root=1,include_presences=0", true, false},
+			{"include_root=0,include_presences=1", false, true},
+			{"include_root=1,include_presences=1", true, true},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx := context.Background()
+				project, err := defaultServer.CreateProject(ctx, t.Name())
+				assert.NoError(t, err)
+
+				cli, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
+				assert.NoError(t, err)
+				assert.NoError(t, cli.Activate(ctx))
+
+				var docs []*document.Document
+				for i := range numDocs {
+					doc := document.New(helper.TestDocKey(t, i))
+					assert.NoError(t, cli.Attach(ctx, doc,
+						client.WithInitialRoot(yson.ParseObject(`{"counter": Counter(Long(0))}`)),
+						client.WithPresence(innerpresence.Presence{"key": cli.Key()}),
+						client.WithRealtimeSync()))
+
+					docs = append(docs, doc)
+				}
+
+				defer func() {
+					for _, doc := range docs {
+						assert.NoError(t, cli.Detach(ctx, doc))
+					}
+					assert.NoError(t, cli.Close())
+				}()
+
+				assert.NoError(t, cli.Sync(ctx))
+				res := post(
+					t,
+					project,
+					fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
+					fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s", "%s", "%s"], "include_root": %t, "include_presences": %t}`,
+						project.Name, docs[0].Key(), docs[1].Key(), docs[2].Key(), tc.includeRoot, tc.includePresences),
+				)
+
+				summaries := &documentSummaries{}
+				gojson.Unmarshal(res, summaries)
+				assert.Len(t, summaries.Documents, numDocs)
+
+				for _, docSummary := range summaries.Documents {
+					if tc.includeRoot {
+						assert.Equal(t, `{"counter":0}`, docSummary.Root)
+					} else {
+						assert.Empty(t, docSummary.Root)
+					}
+
+					if tc.includePresences {
+						assert.Len(t, docSummary.Presences, clientsPerDoc)
+						assert.Contains(t, docSummary.Presences, cli.ID().String())
+					} else {
+						assert.Nil(t, docSummary.Presences)
+					}
+				}
+			})
+		}
 	})
 
 	t.Run("list documents test", func(t *testing.T) {
