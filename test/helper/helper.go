@@ -93,6 +93,7 @@ var (
 	EventWebhookCacheTTL        = 10 * gotime.Second
 	ProjectCacheSize            = 256
 	ProjectCacheTTL             = 5 * gotime.Second
+	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
 
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
