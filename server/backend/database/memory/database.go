@@ -744,7 +744,7 @@ func (d *DB) ActivateClient(
 	}
 
 	txn.Commit()
-	return clientInfo, nil
+	return clientInfo.DeepCopy(), nil
 }
 
 // TryAttaching updates the status of the document to Attaching to prevent
@@ -812,7 +812,7 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 	}
 
 	txn.Commit()
-	return clientInfo, nil
+	return clientInfo.DeepCopy(), nil
 }
 
 // DeactivateClient deactivates a client.
