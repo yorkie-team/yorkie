@@ -30,6 +30,23 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+// CacheMetrics tracks performance metrics for the cache
+type CacheMetrics struct {
+	// Overall cache performance
+	TotalHits   int64
+	TotalMisses int64
+
+	// Operation-specific hit rates
+	ActivateClientHits     int64
+	ActivateClientMisses   int64
+	DeactivateClientHits   int64
+	DeactivateClientMisses int64
+	TryAttachingHits       int64
+	TryAttachingMisses     int64
+	FindClientInfoHits     int64
+	FindClientInfoMisses   int64
+}
+
 // CacheConfig defines configuration parameters for the cache
 type CacheConfig struct {
 	// BaseFlushInterval is the base interval for flushing cache to DB
@@ -38,29 +55,26 @@ type CacheConfig struct {
 	MaxFlushInterval time.Duration
 	// MinFlushInterval is the minimum interval for flushing cache to DB
 	MinFlushInterval time.Duration
-	// TTL is the time-to-live for cached entries
-	TTL time.Duration
-	// CleanupInterval is the interval for cleaning up expired entries
-	CleanupInterval time.Duration
 	// MaxCacheSize is the maximum number of cached entries
 	MaxCacheSize int
 	// WritePressureThreshold is the threshold for write pressure detection
 	WritePressureThreshold int
 	// PressureCheckInterval is the interval for checking write pressure
 	PressureCheckInterval time.Duration
+	// EnableFlushCleanup enables cache cleanup after flush
+	EnableFlushCleanup bool
 }
 
 // DefaultCacheConfig returns default cache configuration
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
-		BaseFlushInterval:      5 * time.Second,
-		MaxFlushInterval:       30 * time.Second,
-		MinFlushInterval:       1 * time.Second,
-		TTL:                    10 * time.Minute,
-		CleanupInterval:        1 * time.Minute,
-		MaxCacheSize:           1000,
-		WritePressureThreshold: 100,
-		PressureCheckInterval:  5 * time.Second,
+		BaseFlushInterval:      10 * time.Second,
+		MaxFlushInterval:       60 * time.Second,
+		MinFlushInterval:       5 * time.Second,
+		MaxCacheSize:           20000,
+		WritePressureThreshold: 500,
+		PressureCheckInterval:  10 * time.Second,
+		EnableFlushCleanup:     true,
 	}
 }
 
@@ -70,7 +84,6 @@ type CachedClientInfo struct {
 	UpdatedAt  time.Time
 	Dirty      bool
 	LastFlush  time.Time
-	ExpiresAt  time.Time
 }
 
 // WritePressure tracks write pressure metrics for adaptive flushing
@@ -92,6 +105,8 @@ type ClientInfoCache struct {
 	client        *Client // Reference to MongoDB client for DB operations
 	writePressure *WritePressure
 	pressureMu    sync.RWMutex
+	metrics       *CacheMetrics
+	metricsMu     sync.RWMutex
 }
 
 // NewClientInfoCache creates a new ClientInfoCache instance
@@ -107,11 +122,14 @@ func NewClientInfoCache(config *CacheConfig, client *Client) *ClientInfoCache {
 		config:        config,
 		client:        client,
 		writePressure: &WritePressure{},
+		metrics:       &CacheMetrics{},
 	}
 
 	// Start background goroutines
 	go cache.adaptiveFlush()
-	go cache.cleanupExpiredEntries()
+
+	// Start metrics logging
+	cache.StartMetricsLogging()
 
 	return cache
 }
@@ -122,27 +140,42 @@ func (c *ClientInfoCache) Get(refKey types.ClientRefKey) *database.ClientInfo {
 	defer c.mu.RUnlock()
 
 	if cached, exists := c.cache[refKey]; exists {
-		// Check if entry has expired
-		if time.Now().After(cached.ExpiresAt) {
-			return nil
-		}
-		return cached.ClientInfo
+		c.recordHit()
+		return cached.ClientInfo.DeepCopy()
 	}
 
+	c.recordMiss()
 	return nil
 }
 
-// GetByKey finds a client by project ID and key
+// GetByKey retrieves a ClientInfo from the cache by project ID and key
 func (c *ClientInfoCache) GetByKey(projectID types.ID, key string) *database.ClientInfo {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	for refKey, cached := range c.cache {
 		if refKey.ProjectID == projectID && cached.ClientInfo.Key == key {
-			return cached.ClientInfo
+			c.recordHit()
+			return cached.ClientInfo.DeepCopy()
 		}
 	}
+
+	c.recordMiss()
 	return nil
+}
+
+// GetByProject retrieves all ClientInfo for a specific project from the cache
+func (c *ClientInfoCache) GetByProject(projectID types.ID) []*database.ClientInfo {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var clients []*database.ClientInfo
+	for refKey, cached := range c.cache {
+		if refKey.ProjectID == projectID {
+			clients = append(clients, cached.ClientInfo.DeepCopy())
+		}
+	}
+	return clients
 }
 
 // Set stores a ClientInfo in the cache
@@ -156,7 +189,6 @@ func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.Cl
 		UpdatedAt:  now,
 		Dirty:      false, // Initially clean
 		LastFlush:  now,
-		ExpiresAt:  now.Add(c.config.TTL),
 	}
 
 	// Evict oldest if cache is full
@@ -168,7 +200,7 @@ func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.Cl
 	return nil
 }
 
-// UpdateClientInfo updates an existing ClientInfo in the cache, marking it as dirty
+// UpdateClientInfo updates an existing cached ClientInfo with new data
 func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo *database.ClientInfo) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -179,23 +211,15 @@ func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo
 		cached.ClientInfo = merged
 		cached.Dirty = true
 		cached.UpdatedAt = time.Now()
-		cached.ExpiresAt = time.Now().Add(c.config.TTL)
-	} else {
-		// Add new entry without recursive call
-		now := time.Now()
-		c.cache[refKey] = &CachedClientInfo{
-			ClientInfo: clientInfo.DeepCopy(),
-			UpdatedAt:  now,
-			Dirty:      true, // Mark as dirty for new entries
-			LastFlush:  now,
-			ExpiresAt:  now.Add(c.config.TTL),
-		}
-		// Evict oldest if cache is full
-		if len(c.cache) > c.config.MaxCacheSize {
-			if err := c.evictOldest(); err != nil {
-				return fmt.Errorf("failed to evict oldest entry: %w", err)
-			}
-		}
+		return nil
+	}
+
+	now := time.Now()
+	c.cache[refKey] = &CachedClientInfo{
+		ClientInfo: clientInfo.DeepCopy(),
+		UpdatedAt:  now,
+		Dirty:      true,
+		LastFlush:  now,
 	}
 	return nil
 }
@@ -234,6 +258,7 @@ func (c *ClientInfoCache) mergeClientInfo(existing, new *database.ClientInfo) *d
 	}
 
 	// Update other fields
+	merged.Status = new.Status
 	merged.UpdatedAt = new.UpdatedAt
 
 	return merged
@@ -306,6 +331,32 @@ func (c *ClientInfoCache) evictOldest() error {
 	return nil
 }
 
+// cleanupAfterFlush removes flushed entries from cache
+func (c *ClientInfoCache) cleanupAfterFlush() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Remove entries that were just flushed (Dirty = false and recently flushed)
+	removedCount := 0
+	now := time.Now()
+
+	for refKey, entry := range c.cache {
+		// Remove entries that were just flushed (not dirty and recently flushed)
+		if !entry.Dirty && now.Sub(entry.LastFlush) < time.Second {
+			delete(c.cache, refKey)
+			removedCount++
+		}
+	}
+
+	// Log cleanup metrics
+	if removedCount > 0 {
+		logging.DefaultLogger().Infof(
+			"Cache cleanup after flush: removed %d flushed entries",
+			removedCount,
+		)
+	}
+}
+
 // adaptiveFlush runs background goroutine for periodic flushing
 func (c *ClientInfoCache) adaptiveFlush() {
 	ticker := time.NewTicker(c.config.PressureCheckInterval)
@@ -318,7 +369,7 @@ func (c *ClientInfoCache) adaptiveFlush() {
 			interval := c.calculateFlushInterval()
 			if c.shouldFlush(interval) {
 				if err := c.FlushToDB(); err != nil {
-					// TODO: Add proper logging
+					logging.DefaultLogger().Error("flush to db: " + err.Error())
 				}
 			}
 		case <-c.stopCh:
@@ -374,72 +425,6 @@ func (c *ClientInfoCache) shouldFlush(interval time.Duration) bool {
 	return time.Since(lastFlush) >= interval
 }
 
-// cleanupExpiredEntries runs background goroutine for periodic cleanup
-func (c *ClientInfoCache) cleanupExpiredEntries() {
-	ticker := time.NewTicker(c.config.CleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := c.cleanupExpired(); err != nil {
-				logging.DefaultLogger().Errorf("cleanup expired entries failed: %v", err)
-				// Continue to prevent blocking the cleanup goroutine
-			}
-		case <-c.stopCh:
-			return
-		}
-	}
-}
-
-// cleanupExpired removes expired entries from the cache
-func (c *ClientInfoCache) cleanupExpired() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	expiredCount := 0
-
-	for refKey, entry := range c.cache {
-		if now.After(entry.ExpiresAt) {
-			// Force flush if expired entry is dirty before removal
-			if entry.Dirty {
-				if err := c.flushSingleToDB(refKey, entry.ClientInfo); err != nil {
-					return fmt.Errorf("failed to flush expired dirty entry: %w", err)
-				}
-			}
-			delete(c.cache, refKey)
-			expiredCount++
-		}
-	}
-
-	if expiredCount > 0 {
-		logging.DefaultLogger().Infof("cleaned up %d expired cache entries", expiredCount)
-	}
-	return nil
-}
-
-// ExtendTTL extends the TTL for a specific cached entry
-func (c *ClientInfoCache) ExtendTTL(refKey types.ClientRefKey) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if cached, exists := c.cache[refKey]; exists {
-		cached.ExpiresAt = time.Now().Add(c.config.TTL)
-	}
-}
-
-// GetExpirationTime returns the expiration time for a cached entry
-func (c *ClientInfoCache) GetExpirationTime(refKey types.ClientRefKey) (time.Time, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if cached, exists := c.cache[refKey]; exists {
-		return cached.ExpiresAt, true
-	}
-	return time.Time{}, false
-}
-
 // FlushToDB flushes dirty entries to the database
 func (c *ClientInfoCache) FlushToDB() error {
 	c.mu.Lock()
@@ -477,6 +462,12 @@ func (c *ClientInfoCache) FlushToDB() error {
 	c.pressureMu.Lock()
 	c.writePressure.LastFlushTime = time.Now()
 	c.pressureMu.Unlock()
+
+	// Cleanup cache after successful flush
+	// Temporarily disabled to prevent "client not found" errors in housekeeping
+	// if c.config.EnableFlushCleanup {
+	// 	c.cleanupAfterFlush()
+	// }
 
 	return nil
 }
@@ -534,4 +525,169 @@ func (c *ClientInfoCache) Close() error {
 
 	// Flush any remaining dirty entries
 	return c.FlushToDB()
+}
+
+// StartMetricsLogging starts periodic metrics logging
+func (c *ClientInfoCache) StartMetricsLogging() {
+	go c.periodicMetricsLogging()
+}
+
+// periodicMetricsLogging logs metrics periodically
+func (c *ClientInfoCache) periodicMetricsLogging() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.LogMetrics()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+// Metrics recording functions
+func (c *ClientInfoCache) recordHit() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.TotalHits++
+}
+
+func (c *ClientInfoCache) recordMiss() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.TotalMisses++
+}
+
+func (c *ClientInfoCache) recordActivateClientMiss() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.ActivateClientMisses++
+	c.metrics.TotalMisses++
+}
+
+func (c *ClientInfoCache) recordDeactivateClientHit() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.DeactivateClientHits++
+	c.metrics.TotalHits++
+}
+
+func (c *ClientInfoCache) recordDeactivateClientMiss() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.DeactivateClientMisses++
+	c.metrics.TotalMisses++
+}
+
+func (c *ClientInfoCache) recordTryAttachingHit() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.TryAttachingHits++
+	c.metrics.TotalHits++
+}
+
+func (c *ClientInfoCache) recordTryAttachingMiss() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.TryAttachingMisses++
+	c.metrics.TotalMisses++
+}
+
+func (c *ClientInfoCache) recordFindClientInfoHit() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.FindClientInfoHits++
+	c.metrics.TotalHits++
+}
+
+func (c *ClientInfoCache) recordFindClientInfoMiss() {
+	c.metricsMu.Lock()
+	defer c.metricsMu.Unlock()
+	c.metrics.FindClientInfoMisses++
+	c.metrics.TotalMisses++
+}
+
+// GetMetrics returns current cache metrics
+func (c *ClientInfoCache) GetMetrics() *CacheMetrics {
+	c.metricsMu.RLock()
+	defer c.metricsMu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	return &CacheMetrics{
+		TotalHits:              c.metrics.TotalHits,
+		TotalMisses:            c.metrics.TotalMisses,
+		ActivateClientHits:     c.metrics.ActivateClientHits,
+		ActivateClientMisses:   c.metrics.ActivateClientMisses,
+		DeactivateClientHits:   c.metrics.DeactivateClientHits,
+		DeactivateClientMisses: c.metrics.DeactivateClientMisses,
+		TryAttachingHits:       c.metrics.TryAttachingHits,
+		TryAttachingMisses:     c.metrics.TryAttachingMisses,
+		FindClientInfoHits:     c.metrics.FindClientInfoHits,
+		FindClientInfoMisses:   c.metrics.FindClientInfoMisses,
+	}
+}
+
+// LogMetrics logs current cache metrics
+func (c *ClientInfoCache) LogMetrics() {
+	metrics := c.GetMetrics()
+
+	// Calculate overall hit rate
+	totalRequests := metrics.TotalHits + metrics.TotalMisses
+	overallHitRate := 0.0
+	if totalRequests > 0 {
+		overallHitRate = float64(metrics.TotalHits) / float64(totalRequests) * 100
+	}
+
+	// Calculate operation-specific hit rates
+	activateTotal := metrics.ActivateClientHits + metrics.ActivateClientMisses
+	activateHitRate := 0.0
+	if activateTotal > 0 {
+		activateHitRate = float64(metrics.ActivateClientHits) / float64(activateTotal) * 100
+	}
+
+	deactivateTotal := metrics.DeactivateClientHits + metrics.DeactivateClientMisses
+	deactivateHitRate := 0.0
+	if deactivateTotal > 0 {
+		deactivateHitRate = float64(metrics.DeactivateClientHits) / float64(deactivateTotal) * 100
+	}
+
+	tryAttachingTotal := metrics.TryAttachingHits + metrics.TryAttachingMisses
+	tryAttachingHitRate := 0.0
+	if tryAttachingTotal > 0 {
+		tryAttachingHitRate = float64(metrics.TryAttachingHits) / float64(tryAttachingTotal) * 100
+	}
+
+	findClientTotal := metrics.FindClientInfoHits + metrics.FindClientInfoMisses
+	findClientHitRate := 0.0
+	if findClientTotal > 0 {
+		findClientHitRate = float64(metrics.FindClientInfoHits) / float64(findClientTotal) * 100
+	}
+
+	// Calculate cache usage ratio
+	c.mu.RLock()
+	currentCacheSize := len(c.cache)
+	maxCacheSize := c.config.MaxCacheSize
+	cacheUsageRatio := 0.0
+	if maxCacheSize > 0 {
+		cacheUsageRatio = float64(currentCacheSize) / float64(maxCacheSize) * 100
+	}
+	c.mu.RUnlock()
+
+	logging.DefaultLogger().Infof(
+		"Cache Metrics - Overall Hit Rate: %.2f%% (%d/%d), Cache Usage: %.2f%% (%d/%d)",
+		overallHitRate, metrics.TotalHits, totalRequests,
+		cacheUsageRatio, currentCacheSize, maxCacheSize,
+	)
+
+	logging.DefaultLogger().Infof(
+		"Operation Hit Rates - ActivateClient: %.2f%% (%d/%d), "+
+			"DeactivateClient: %.2f%% (%d/%d), TryAttaching: %.2f%% (%d/%d), "+
+			"FindClientInfo: %.2f%% (%d/%d)",
+		activateHitRate, metrics.ActivateClientHits, activateTotal,
+		deactivateHitRate, metrics.DeactivateClientHits, deactivateTotal,
+		tryAttachingHitRate, metrics.TryAttachingHits, tryAttachingTotal,
+		findClientHitRate, metrics.FindClientInfoHits, findClientTotal,
+	)
 }

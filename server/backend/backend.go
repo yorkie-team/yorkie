@@ -228,6 +228,12 @@ func (b *Backend) Shutdown() error {
 	b.EventWebhookManager.Close()
 	b.ClusterClient.Close()
 
+	if mongoClient, ok := b.DB.(*mongo.Client); ok {
+		if err := mongoClient.CloseClientInfoCache(); err != nil {
+			logging.DefaultLogger().Error("close client info cache: " + err.Error())
+		}
+	}
+
 	if err := b.MsgBroker.Close(); err != nil {
 		logging.DefaultLogger().Error(err)
 	}
