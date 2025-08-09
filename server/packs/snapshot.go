@@ -103,16 +103,16 @@ func BuildInternalDocForServerSeq(
 	}
 
 	chunk := be.Config.SnapshotChangesChunkSize
-	for start := doc.Checkpoint().ServerSeq + 1; start <= serverSeq; start += chunk + 1 {
-		end := start + chunk
-		if end > serverSeq {
-			end = serverSeq
+	for from := doc.Checkpoint().ServerSeq + 1; from <= serverSeq; from += chunk + 1 {
+		to := from + chunk
+		if to > serverSeq {
+			to = serverSeq
 		}
 		changes, err := be.DB.FindChangesBetweenServerSeqs(
 			ctx,
 			docKey,
-			start,
-			end,
+			from,
+			to,
 		)
 		if err != nil {
 			return nil, err
@@ -197,18 +197,7 @@ func storeSnapshot(
 		return nil
 	}
 
-	// 02. retrieve the changes between last snapshot and current docInfo
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docRefKey,
-		info.ServerSeq+1,
-		docInfo.ServerSeq,
-	)
-	if err != nil {
-		return err
-	}
-
-	// 03. Fetch the snapshot info including its snapshot.
+	// 02. Fetch the snapshot info including its snapshot.
 	if info.ID != "" {
 		info, err = be.DB.FindSnapshotInfo(ctx, info.DocRefKey(), info.ServerSeq)
 		if err != nil {
@@ -227,16 +216,35 @@ func storeSnapshot(
 		return err
 	}
 
-	pack := change.NewPack(
-		docInfo.Key,
-		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
-		changes,
-		nil,
-		nil,
-	)
+	chunk := be.Config.SnapshotChangesChunkSize
+	for from := info.ServerSeq + 1; from <= docInfo.ServerSeq; from += chunk + 1 {
+		to := from + chunk
+		if to > docInfo.ServerSeq {
+			to = docInfo.ServerSeq
+		}
 
-	if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
-		return err
+		// 03. retrieve the changes between last snapshot and current docInfo
+		changes, err := be.DB.FindChangesBetweenServerSeqs(
+			ctx,
+			docRefKey,
+			info.ServerSeq+1,
+			docInfo.ServerSeq,
+		)
+		if err != nil {
+			return err
+		}
+
+		pack := change.NewPack(
+			docInfo.Key,
+			change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+			changes,
+			nil,
+			nil,
+		)
+
+		if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
+			return err
+		}
 	}
 
 	// 05. save the snapshot of the docInfo
