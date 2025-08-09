@@ -236,7 +236,7 @@ func storeSnapshot(
 
 		pack := change.NewPack(
 			docInfo.Key,
-			change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+			change.InitialCheckpoint.NextServerSeq(to),
 			changes,
 			nil,
 			nil,
