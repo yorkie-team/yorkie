@@ -227,8 +227,8 @@ func storeSnapshot(
 		changes, err := be.DB.FindChangesBetweenServerSeqs(
 			ctx,
 			docRefKey,
-			info.ServerSeq+1,
-			docInfo.ServerSeq,
+			from,
+			to,
 		)
 		if err != nil {
 			return err
