@@ -102,50 +102,57 @@ func BuildInternalDocForServerSeq(
 		}
 	}
 
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docKey,
-		doc.Checkpoint().ServerSeq+1,
-		serverSeq,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := doc.ApplyChangePack(change.NewPack(
-		docInfo.Key,
-		change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changes,
-		nil,
-		nil,
-	), be.Config.SnapshotDisableGC); err != nil {
-		return nil, err
-	}
-	if !be.Config.SnapshotDisableGC {
-		vector, err := be.DB.GetMinVersionVector(
+	chunk := be.Config.SnapshotChangesChunkSize
+	for start := doc.Checkpoint().ServerSeq + 1; start <= serverSeq; start += chunk + 1 {
+		end := start + chunk
+		if end > serverSeq {
+			end = serverSeq
+		}
+		changes, err := be.DB.FindChangesBetweenServerSeqs(
 			ctx,
 			docKey,
-			doc.VersionVector(),
+			start,
+			end,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := doc.GarbageCollect(vector); err != nil {
+
+		if err := doc.ApplyChangePack(change.NewPack(
+			docInfo.Key,
+			change.InitialCheckpoint.NextServerSeq(serverSeq),
+			changes,
+			nil,
+			nil,
+		), be.Config.SnapshotDisableGC); err != nil {
 			return nil, err
 		}
-	}
+		if !be.Config.SnapshotDisableGC {
+			vector, err := be.DB.GetMinVersionVector(
+				ctx,
+				docKey,
+				doc.VersionVector(),
+			)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := doc.GarbageCollect(vector); err != nil {
+				return nil, err
+			}
+		}
 
-	// NOTE(hackerwins): Store the last accessed document in the cache.
-	be.Cache.Snapshot.Add(docKey, doc)
+		// NOTE(hackerwins): Store the last accessed document in the cache.
+		be.Cache.Snapshot.Add(docKey, doc)
 
-	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			"after apply %d changes: elements: %d removeds: %d, %s",
-			len(changes),
-			doc.Root().ElementMapLen(),
-			doc.Root().GarbageElementLen(),
-			doc.RootObject().Marshal(),
-		)
+		if logging.Enabled(zap.DebugLevel) {
+			logging.From(ctx).Debugf(
+				"after apply %d changes: elements: %d removeds: %d, %s",
+				len(changes),
+				doc.Root().ElementMapLen(),
+				doc.Root().GarbageElementLen(),
+				doc.RootObject().Marshal(),
+			)
+		}
 	}
 
 	clone, err := doc.DeepCopy()
