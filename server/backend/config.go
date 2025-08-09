@@ -55,6 +55,9 @@ type Config struct {
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
 	SnapshotDisableGC bool
 
+	// SnapshotChangesChunkSize is the chunk size of changes to load gradually when creating a snapshot.
+	SnapshotChangesChunkSize int64 `yaml:"SnapshotChangesChunkSize"`
+
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
 

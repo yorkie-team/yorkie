@@ -72,6 +72,7 @@ const (
 	DefaultSnapshotInterval          = 500
 	DefaultSnapshotDisableGC         = false
 	DefaultSnapshotCacheSize         = 1000
+	DefaultSnapshotChangesChunkSize  = 100
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
@@ -199,6 +200,9 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.SnapshotCacheSize == 0 {
 		c.Backend.SnapshotCacheSize = DefaultSnapshotCacheSize
 	}
+	if c.Backend.SnapshotChangesChunkSize == 0 {
+		c.Backend.SnapshotChangesChunkSize = DefaultSnapshotChangesChunkSize
+	}
 
 	if c.Backend.AuthWebhookCacheSize == 0 {
 		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
@@ -282,6 +286,7 @@ func newConfig(port int, profilingPort int) *Config {
 			ClientDeactivateThreshold: DefaultClientDeactivateThreshold,
 			SnapshotThreshold:         DefaultSnapshotThreshold,
 			SnapshotInterval:          DefaultSnapshotInterval,
+			SnapshotChangesChunkSize:  DefaultSnapshotChangesChunkSize,
 		},
 	}
 }
