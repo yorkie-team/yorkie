@@ -294,6 +294,7 @@ func TestConfig() *server.Config {
 			SnapshotInterval:            10,
 			SnapshotThreshold:           SnapshotThreshold,
 			SnapshotCacheSize:           SnapshotCacheSize,
+			SnapshotChangesChunkSize:    server.DefaultSnapshotChangesChunkSize,
 			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
 			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
