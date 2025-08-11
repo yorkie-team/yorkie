@@ -124,15 +124,6 @@ func (id ID) SyncClocks(other ID) ID {
 // given from the server.
 func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {
 	lamport := max(id.lamport, otherLamport) + 1
-
-	// NOTE(chacha912): Documents created by server may have an InitialActorID
-	// in their version vector. Although server is not an actual client, it
-	// generates document snapshots from changes by participating with an
-	// InitialActorID during document instance creation and accumulating stored
-	// changes in DB.
-	// Semantically, including a non-client actor in version vector is
-	// problematic. To address this, we remove the InitialActorID from snapshots.
-	vector.Unset(time.InitialActorID)
 	id.versionVector.Max(&vector)
 
 	newID := NewID(id.clientSeq, id.serverSeq, lamport, id.actorID, id.versionVector)
