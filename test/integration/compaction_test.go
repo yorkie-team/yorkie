@@ -73,9 +73,11 @@ func TestDocumentCompaction(t *testing.T) {
 		docC := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, docC))
 		assert.NoError(t, docC.Update(func(r *json.Object, p *presence.Presence) error {
-			r.GetText("text").Edit(7, 7+snapshotThreshold, "")
+			r.GetText("text").Edit(0, len("initial"), "")
 			return nil
 		}))
-		assert.Equal(t, `[{"val":"initial"}]`, docC.Root().GetText("text").Marshal())
+		cloneRootText := docC.Root().GetText("text").Marshal()
+		rootText := docC.InternalDocument().RootObject().Get("text").Marshal()
+		assert.NotEqual(t, len(cloneRootText), len(rootText))
 	})
 }
