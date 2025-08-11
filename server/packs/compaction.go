@@ -46,9 +46,6 @@ func Compact(
 	projectID types.ID,
 	docInfo *database.DocInfo,
 ) error {
-	// 0. Invalidate snapshot cache.
-	be.Cache.Snapshot.Remove(docInfo.RefKey())
-
 	// 1. Check if the document is attached.
 	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
 		ProjectID: projectID,
@@ -101,7 +98,10 @@ func Compact(
 		return fmt.Errorf("content mismatch after rebuild: %s", docInfo.ID)
 	}
 
-	// 4. Store compacted changes and metadata in the database.
+	// 4. Invalidate snapshot cache.
+	be.Cache.Snapshot.Remove(docInfo.RefKey())
+
+	// 5. Store compacted changes and metadata in the database.
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		docInfo,
