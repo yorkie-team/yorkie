@@ -464,10 +464,9 @@ func (c *ClientInfoCache) FlushToDB() error {
 	c.pressureMu.Unlock()
 
 	// Cleanup cache after successful flush
-	// Temporarily disabled to prevent "client not found" errors in housekeeping
-	// if c.config.EnableFlushCleanup {
-	// 	c.cleanupAfterFlush()
-	// }
+	if c.config.EnableFlushCleanup {
+		c.cleanupAfterFlush()
+	}
 
 	return nil
 }

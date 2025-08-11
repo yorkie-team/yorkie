@@ -805,11 +805,11 @@ func (c *Client) ActivateClient(
 	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"metadata":   metadata,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
 			"updated_at": now,
+			"metadata":   metadata,
 		},
 	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
@@ -1014,15 +1014,11 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		return cached, nil
 	}
 
-	// 2. If not in cache, get from database
+	// 2. If not in cache, get from database (read-only)
 	c.clientInfoCache.recordFindClientInfoMiss()
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	result := c.collection(ColClients).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
-		"$set": bson.M{
-			"updated_at": gotime.Now(),
-		},
 	})
 
 	clientInfo := database.ClientInfo{}
