@@ -220,6 +220,31 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 	return nil
 }
 
+// FindActiveClusterNodes returns the active cluster nodes.
+func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClusterNodes, "id")
+	if err != nil {
+		return nil, fmt.Errorf("fetch cluster nodes: %w", err)
+	}
+	var infos []*database.ClusterNodeInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClusterNodeInfo)
+		infos = append(infos, info)
+	}
+
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].IsLeader != infos[j].IsLeader {
+			return infos[i].IsLeader && !infos[j].IsLeader
+		}
+		return infos[i].RenewedAt.After(infos[j].RenewedAt)
+	})
+
+	return infos, nil
+}
+
 // FindProjectInfoByPublicKey returns a project by public key.
 func (d *DB) FindProjectInfoByPublicKey(
 	_ context.Context,

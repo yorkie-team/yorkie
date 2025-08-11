@@ -28,6 +28,7 @@ var (
 	tblVersionVectors = "versionvectors"
 	tblSchemas        = "schemas"
 	tblLeaderships    = "leaderships"
+	tblClusterNodes   = "clusternodes"
 )
 
 var schema = &memdb.DBSchema{
@@ -295,6 +296,26 @@ var schema = &memdb.DBSchema{
 					Name:    "id",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+			},
+		},
+		tblClusterNodes: {
+			Name: tblClusterNodes,
+			Indexes: map[string]*memdb.IndexSchema{
+				"rpcAddr": {
+					Name:    "rpcAddr",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "RPCAddr"},
+				},
+				"is_leader": {
+					Name:    "is_leader",
+					Unique:  false,
+					Indexer: &memdb.BoolFieldIndex{Field: "IsLeader"},
+				},
+				"renewed_at": {
+					Name:    "renewed_at",
+					Unique:  false,
+					Indexer: &memdb.IntFieldIndex{Field: "RenewedAtUnix"},
 				},
 			},
 		},

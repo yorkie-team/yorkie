@@ -148,10 +148,36 @@ func (c *Client) TryLeadership(
 	leaseMS := leaseDuration.Milliseconds()
 
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, leaseMS)
+		info, err := c.tryAcquireLeadership(ctx, hostname, leaseMS)
+		if err != nil {
+			_ = c.upsertSelfAsFollower(ctx, hostname)
+			return nil, err
+		}
+		c.writeClusterState(ctx, hostname, info)
+
+		return info, nil
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
+	info, err := c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
+	if err != nil {
+		_ = c.upsertSelfAsFollower(ctx, hostname)
+		return nil, err
+	}
+	c.writeClusterState(ctx, hostname, info)
+
+	return info, nil
+}
+
+func isSelfLeader(info *database.LeadershipInfo, hostname string) bool {
+	return info != nil && !info.IsExpired() && info.Hostname == hostname
+}
+
+func (c *Client) writeClusterState(ctx context.Context, hostname string, info *database.LeadershipInfo) {
+	if isSelfLeader(info, hostname) {
+		_ = c.upsertClusterNodeFromLeadership(ctx, info)
+		return
+	}
+	_ = c.upsertSelfAsFollower(ctx, hostname)
 }
 
 // FindLeadership returns the current leadership information.
@@ -293,6 +319,99 @@ func (c *Client) ClearLeadership(ctx context.Context) error {
 		return fmt.Errorf("clear leadership: %w", err)
 	}
 	return nil
+}
+
+// FindActiveClusterNodes returns all nodes currently tracked in clusternodes.
+// Order: leader first, then by renewed_at desc.
+func (c *Client) FindActiveClusterNodes(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+	// NOTE(raararaara): Assumes TTL on renewed_at cleans out stale entries.
+
+	cursor, err := c.collection(ColClusterNodes).Find(
+		ctx,
+		bson.D{},
+		options.Find().SetSort(bson.D{
+			{Key: "is_leader", Value: -1},
+			{Key: "renewed_at", Value: -1},
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find clusternodes: %w", err)
+	}
+
+	var nodes []*database.ClusterNodeInfo
+	for cursor.Next(ctx) {
+		var n database.ClusterNodeInfo
+		if err := cursor.Decode(&n); err != nil {
+			return nil, fmt.Errorf("decode clusternode: %w", err)
+		}
+		nodes = append(nodes, &n)
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+	return nodes, nil
+}
+
+func (c *Client) upsertClusterNodeFromLeadership(ctx context.Context, info *database.LeadershipInfo) error {
+	if info == nil {
+		return fmt.Errorf("nil leadership info")
+	}
+	rpcAddr := podRPCAddr(info.Hostname)
+	col := c.collection(ColClusterNodes)
+	log := logging.From(ctx)
+
+	if _, err := col.UpdateMany(
+		ctx,
+		bson.M{"is_leader": true, "rpcAddr": bson.M{"$ne": rpcAddr}},
+		bson.M{"$set": bson.M{"is_leader": false}},
+	); err != nil {
+		if log != nil {
+			log.Warn("demote others failed", "rpcAddr", rpcAddr, "err", err)
+		}
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"rpcAddr":     rpcAddr,
+			"is_leader":   true,
+			"lease_token": info.LeaseToken,
+			"term":        info.Term,
+			"expires_at":  info.ExpiresAt,
+			"renewed_at":  info.RenewedAt,
+		},
+		"$setOnInsert": bson.M{
+			"elected_at": info.ElectedAt,
+		},
+	}
+	_, err := col.UpdateOne(
+		ctx,
+		bson.M{"rpcAddr": rpcAddr},
+		update,
+		options.UpdateOne().SetUpsert(true),
+	)
+	if err != nil {
+		return fmt.Errorf("promote self: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) upsertSelfAsFollower(ctx context.Context, hostname string) error {
+	rpcAddr := podRPCAddr(hostname)
+
+	_, err := c.collection(ColClusterNodes).UpdateOne(ctx,
+		bson.M{"rpcAddr": rpcAddr},
+		bson.M{
+			"$set": bson.M{
+				"rpcAddr":   rpcAddr,
+				"is_leader": false,
+			},
+			"$currentDate": bson.M{
+				"renewed_at": true,
+			},
+		},
+		options.UpdateOne().SetUpsert(true),
+	)
+	return err
 }
 
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
@@ -2131,6 +2250,10 @@ func escapeRegex(str string) string {
 // clientDocInfoKey returns the key for the client document info.
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
+}
+
+func podRPCAddr(hostname string) string {
+	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
 }
 
 // IsSchemaAttached returns true if the schema is being used by any documents.
