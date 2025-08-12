@@ -57,7 +57,7 @@ func Compact(
 	if isAttached {
 		// TODO(hackerwins): ErrDocumentNotAttached exists in documents package,
 		// but it can not be here because of the circular dependency.
-		return fmt.Errorf("document is attached")
+		return fmt.Errorf("compact document %s: document is attached", docInfo.ID)
 	}
 
 	// 2. Build compacted changes and check if the content is the same.
@@ -130,7 +130,7 @@ func Purge(
 
 	// 1. Check if the document is removed.
 	if !docInfo.IsRemoved() {
-		return fmt.Errorf("document %s is not removed: %w", docInfo.ID, ErrDocumentNotRemoved)
+		return fmt.Errorf("purge document %s: %w", docInfo.ID, ErrDocumentNotRemoved)
 	}
 
 	// 2. Purge the document from the database.
