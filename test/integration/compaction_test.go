@@ -79,9 +79,6 @@ func TestDocumentCompaction(t *testing.T) {
 
 		cloneRootText := docC.Root().GetText("text").Marshal()
 		rootText := docC.InternalDocument().RootObject().Get("text").Marshal()
-
-		// TODO(hackerwins): We need to ensure that the cloned root text and the
-		// original root text are equal.
-		assert.NotEqual(t, len(cloneRootText), len(rootText))
+		assert.Equal(t, len(cloneRootText), len(rootText))
 	})
 }
