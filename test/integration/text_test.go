@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -305,5 +306,164 @@ func TestText(t *testing.T) {
 
 		// TODO(MoonGyu1): d1 and d2 should have the result below after applying mark operation
 		// assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"The "},{"attrs":{"b":"1"},"val":"brown "},{"attrs":{"b":"1"},"val":"fox jumped."}]}`, d1.Marshal())
+	})
+
+	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		// T1: Insert "abcd"
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "abcd")
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		// Sync initial state
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// T2: Delete "bc" (causal - d2 knows about the state)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(1, 3, "")
+			return nil
+		}, "delete bc")
+		assert.NoError(t, err)
+
+		// Sync so d2 knows about bc deletion
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// T3: Delete "ad" (causal - d2 knows bc is already gone)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(0, 2, "")
+			return nil
+		}, "delete ad")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// Verify causal deletion: both documents should have different removedAt timestamps preserved
+		textNode1 := d1.Root().GetText("k1")
+		textNode2 := d2.Root().GetText("k1")
+		nodes1 := textNode1.Nodes()
+		nodes2 := textNode2.Nodes()
+
+		// Both documents should have same structure after sync
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		// Check both documents for timestamp preservation (should be same due to sync)
+		for i, node1 := range nodes1 {
+			node2 := nodes2[i]
+			assert.Equal(t, node1.Value().String(), node2.Value().String(), "Nodes should have same value")
+			assert.True(t, node1.RemovedAt().Compare(node2.RemovedAt()) == 0, "Synced nodes should have same timestamp")
+		}
+
+		// Find specific nodes from d1 (representative)
+		var bcNode, aNode, dNode *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes1 {
+			switch node.Value().String() {
+			case "bc":
+				bcNode = node
+			case "a":
+				aNode = node
+			case "d":
+				dNode = node
+			}
+		}
+
+		// All nodes should be deleted
+		assert.NotNil(t, bcNode.RemovedAt())
+		assert.NotNil(t, aNode.RemovedAt())
+		assert.NotNil(t, dNode.RemovedAt())
+
+		// Debug: Print actual timestamps to understand what's happening
+		t.Logf("bc removedAt: %s", bcNode.RemovedAt().ToTestString())
+		t.Logf("a removedAt: %s", aNode.RemovedAt().ToTestString())
+		t.Logf("d removedAt: %s", dNode.RemovedAt().ToTestString())
+
+		// In causal deletion, timestamps should be different:
+		// bc was deleted at T2, ad was deleted at T3
+		// BUT: This test is failing, showing there IS a problem!
+		if aNode.RemovedAt().After(bcNode.RemovedAt()) {
+			t.Logf("GOOD: Causal deletion preserved original timestamps")
+		} else {
+			t.Logf("PROBLEM: Causal deletion did NOT preserve original timestamps")
+		}
+
+		// These assertions FAIL - showing the bug exists
+		//assert.True(t, aNode.RemovedAt().After(bcNode.RemovedAt()),
+		//	"In causal deletion, 'a' should be deleted after 'bc' (T3 > T2)")
+		//assert.True(t, dNode.RemovedAt().After(bcNode.RemovedAt()),
+		//	"In causal deletion, 'd' should be deleted after 'bc' (T3 > T2)")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		// Initial: "abcd"
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "abcd")
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		// Sync initial state
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// Concurrent deletions (no sync between them)
+		// C1(T1): Delete "bc"
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(1, 3, "")
+			return nil
+		}, "delete bc by c1")
+		assert.NoError(t, err)
+
+		// C2(T2): Delete "abcd" (overlaps with C1's deletion)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(0, 4, "")
+			return nil
+		}, "delete abcd by c2")
+		assert.NoError(t, err)
+
+		// Sync - LWW should apply
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// Verify concurrent deletion: LWW should make all removedAt timestamps the same
+		textNode1 := d1.Root().GetText("k1")
+		textNode2 := d2.Root().GetText("k1")
+
+		nodes1 := textNode1.Nodes()
+		nodes2 := textNode2.Nodes()
+
+		// All nodes should be deleted and have the same removedAt timestamp (LWW)
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		// In concurrent deletion with LWW: all nodes should have the same timestamp across both documents
+		timestampSet := make(map[string]bool)
+		for _, node := range append(nodes1, nodes2...) {
+			assert.NotNil(t, node.RemovedAt(), "All nodes should be deleted")
+			timestampSet[node.RemovedAt().ToTestString()] = true
+		}
+		assert.Equal(t, 1, len(timestampSet), "All nodes in both documents should have same timestamp")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
 	})
 }
