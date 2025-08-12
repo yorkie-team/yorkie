@@ -7,6 +7,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.25] - 2025-08-12
+
+### Fixed
+
+- Add missing deepcopy in TryAttaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1433
+- Fix incorrect SnapshotCache removal timing by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1436
+- Fix incorrect deletion of compacted documents by @kokodak in https://github.com/yorkie-team/yorkie/pull/1437
+
 ## [v0.6.24] - 2025-08-06
 
 ### Added
