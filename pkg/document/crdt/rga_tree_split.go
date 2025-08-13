@@ -206,6 +206,11 @@ func (s *RGATreeSplitNode[V]) RemovedAt() *time.Ticket {
 	return s.removedAt
 }
 
+// SetRemovedAt sets the removal time of this node.
+func (s *RGATreeSplitNode[V]) SetRemovedAt(removedAt *time.Ticket) {
+	s.removedAt = removedAt
+}
+
 // Marshal returns the JSON encoding of this node.
 func (s *RGATreeSplitNode[V]) Marshal() string {
 	return s.value.Marshal()
@@ -275,17 +280,26 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChange int64) bool {
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChange int64, forceLWW bool) bool {
 	justRemoved := s.removedAt == nil
 	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
 
-	if nodeExisted &&
-		(s.removedAt == nil || removedAt.After(s.removedAt)) {
-		s.removedAt = removedAt
-		return justRemoved
+	if !nodeExisted {
+		return false
 	}
 
-	return false
+	// Determine whether to update timestamp
+	// Only update if:
+	// 1. Node was not previously deleted (justRemoved), OR
+	// 2. forceLWW is true AND the new timestamp is later
+	shouldUpdateTimestamp := justRemoved || (forceLWW && removedAt.After(s.removedAt))
+	if shouldUpdateTimestamp {
+		s.removedAt = removedAt
+	}
+
+	// Return true if node should be included in removedNodeMap
+	// (either just removed or already removed but in deletion range)
+	return justRemoved || s.removedAt != nil
 }
 
 // canStyle checks if node is able to set style.
@@ -579,7 +593,23 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			}
 		}
 
-		if node.Remove(editedAt, clientLamportAtChange) {
+		forceLWW := true
+
+		if node.removedAt != nil {
+			if !isVersionVectorEmpty {
+				nodeDeletedActorID := node.removedAt.ActorID()
+				knownLamport, exists := vector.Get(nodeDeletedActorID)
+				if exists && knownLamport >= node.removedAt.Lamport() {
+					forceLWW = false
+				}
+			} else {
+				// For local operations (empty version vector), default to preserving
+				// timestamps for already-deleted nodes (causal behavior)
+				forceLWW = false
+			}
+		}
+
+		if node.Remove(editedAt, clientLamportAtChange, forceLWW) {
 			removedNodeMap[node.id.key()] = node
 		} else {
 			nodesToKeep = append(nodesToKeep, node)
