@@ -336,29 +336,19 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("k1").Edit(0, 2, "")
 			return nil
 		}, "delete ad")
 		assert.NoError(t, err)
-
-		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		textNode1 := d1.Root().GetText("k1")
 		textNode2 := d2.Root().GetText("k1")
 		nodes1 := textNode1.Nodes()
 		nodes2 := textNode2.Nodes()
 
-		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
-
-		for i, node1 := range nodes1 {
-			node2 := nodes2[i]
-			assert.Equal(t, node1.Value().String(), node2.Value().String(), "Nodes should have same value")
-			assert.True(t, node1.RemovedAt().Compare(node2.RemovedAt()) == 0, "Synced nodes should have same timestamp")
-		}
-
 		var bcNode, aNode, dNode *crdt.RGATreeSplitNode[*crdt.TextValue]
-		for _, node := range nodes1 {
+		for _, node := range nodes2 {
 			switch node.Value().String() {
 			case "bc":
 				bcNode = node
@@ -373,11 +363,31 @@ func TestText(t *testing.T) {
 		assert.NotNil(t, aNode.RemovedAt())
 		assert.NotNil(t, dNode.RemovedAt())
 
-		// These assertions FAIL - showing the bug exists
 		assert.True(t, aNode.RemovedAt().After(bcNode.RemovedAt()),
 			"In causal deletion, 'a' should be deleted after 'bc' (T3 > T2)")
 		assert.True(t, dNode.RemovedAt().After(bcNode.RemovedAt()),
 			"In causal deletion, 'd' should be deleted after 'bc' (T3 > T2)")
+
+		// Debug logging
+		t.Logf("d1 nodes count: %d", len(nodes1))
+		for i, node := range nodes1 {
+			t.Logf("d1[%d]: value='%s', removed=%v", i, node.Value().String(), node.RemovedAt() != nil)
+		}
+
+		t.Logf("d2 nodes count: %d", len(nodes2))
+		for i, node := range nodes2 {
+			t.Logf("d2[%d]: value='%s', removed=%v", i, node.Value().String(), node.RemovedAt() != nil)
+		}
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		for i, node1 := range nodes1 {
+			node2 := nodes2[i]
+			assert.Equal(t, node1.Value().String(), node2.Value().String(), "Nodes should have same value")
+			assert.True(t, node1.RemovedAt().Compare(node2.RemovedAt()) == 0, "Synced nodes should have same timestamp")
+		}
 
 		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
 	})

@@ -297,9 +297,8 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChan
 		s.removedAt = removedAt
 	}
 
-	// Return true if node should be included in removedNodeMap
-	// (either just removed or already removed but in deletion range)
-	return justRemoved || s.removedAt != nil
+	// Return true only for newly removed nodes (for GC registration)
+	return justRemoved
 }
 
 // canStyle checks if node is able to set style.
@@ -607,10 +606,10 @@ func (s *RGATreeSplit[V]) deleteNodes(
 				// timestamps for already-deleted nodes (causal behavior)
 				forceLWW = false
 			}
-			// For local operations (empty version vector), default to LWW
 		}
 
-		if node.Remove(editedAt, clientLamportAtChange, forceLWW) {
+		isNewlyRemoved := node.Remove(editedAt, clientLamportAtChange, forceLWW)
+		if isNewlyRemoved {
 			removedNodeMap[node.id.key()] = node
 		} else {
 			nodesToKeep = append(nodesToKeep, node)
