@@ -607,6 +607,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 				// timestamps for already-deleted nodes (causal behavior)
 				forceLWW = false
 			}
+			// For local operations (empty version vector), default to LWW
 		}
 
 		if node.Remove(editedAt, clientLamportAtChange, forceLWW) {
