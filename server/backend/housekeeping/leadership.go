@@ -30,13 +30,13 @@ import (
 // LeadershipManager manages leader election and lease renewal.
 type LeadershipManager struct {
 	database        database.Database
-	hostname        string
+	rpcAddr         string
 	leaseDuration   time.Duration
 	renewalInterval time.Duration
 
 	// State management
 	isLeader     atomic.Bool
-	currentLease atomic.Pointer[database.LeadershipInfo]
+	currentLease atomic.Pointer[database.ClusterNodeInfo]
 	stopCh       chan struct{}
 	wg           sync.WaitGroup
 	mutex        sync.RWMutex
@@ -59,7 +59,7 @@ func DefaultLeadershipConfig() *LeadershipConfig {
 // NewLeadershipManager creates a new leadership manager.
 func NewLeadershipManager(db database.Database, hostname string, conf *LeadershipConfig) *LeadershipManager {
 	if hostname == "" {
-		panic("hostname must not be empty")
+		panic("rpcAddr must not be empty")
 	}
 
 	if conf == nil {
@@ -68,7 +68,7 @@ func NewLeadershipManager(db database.Database, hostname string, conf *Leadershi
 
 	return &LeadershipManager{
 		database:        db,
-		hostname:        hostname,
+		rpcAddr:         hostname,
 		leaseDuration:   conf.LeaseDuration,
 		renewalInterval: conf.RenewalInterval,
 		stopCh:          make(chan struct{}),
@@ -85,7 +85,7 @@ func (lm *LeadershipManager) Start(ctx context.Context) error {
 	go lm.leadershipLoop(ctx)
 
 	if logger := logging.From(ctx); logger != nil {
-		logger.Infof("leadership manager started: %s", lm.hostname)
+		logger.Infof("leadership manager started: %s", lm.rpcAddr)
 	}
 	return nil
 }
@@ -105,12 +105,12 @@ func (lm *LeadershipManager) IsLeader() bool {
 }
 
 // Leader returns the current leader information.
-func (lm *LeadershipManager) Leader(ctx context.Context) (*database.LeadershipInfo, error) {
+func (lm *LeadershipManager) Leader(ctx context.Context) (*database.ClusterNodeInfo, error) {
 	return lm.database.FindLeadership(ctx)
 }
 
 // CurrentLease returns the current lease information if this node is the leader.
-func (lm *LeadershipManager) CurrentLease() *database.LeadershipInfo {
+func (lm *LeadershipManager) CurrentLease() *database.ClusterNodeInfo {
 	return lm.currentLease.Load()
 }
 
@@ -157,12 +157,12 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 
 // tryAcquireLeadership attempts to acquire leadership.
 func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
-	lease, err := lm.database.TryLeadership(ctx, lm.hostname, "", lm.leaseDuration)
+	lease, err := lm.database.TryLeadership(ctx, lm.rpcAddr, "", lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
 
-	if lease.Hostname == lm.hostname {
+	if lease.RPCAddr == lm.rpcAddr {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
 			logger.Infof("leadership acquired term: %d, expires_at: %s", lease.Term, lease.ExpiresAt)
@@ -179,7 +179,7 @@ func (lm *LeadershipManager) renewLease(ctx context.Context) error {
 		return fmt.Errorf("no current lease to renew")
 	}
 
-	lease, err := lm.database.TryLeadership(ctx, lm.hostname, currentLease.LeaseToken, lm.leaseDuration)
+	lease, err := lm.database.TryLeadership(ctx, lm.rpcAddr, currentLease.LeaseToken, lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("renew leadership: %w", err)
 	}
@@ -193,7 +193,7 @@ func (lm *LeadershipManager) renewLease(ctx context.Context) error {
 }
 
 // becomeLeader transitions to leader state.
-func (lm *LeadershipManager) becomeLeader(lease *database.LeadershipInfo) {
+func (lm *LeadershipManager) becomeLeader(lease *database.ClusterNodeInfo) {
 	lm.isLeader.Store(true)
 	lm.currentLease.Store(lease)
 }

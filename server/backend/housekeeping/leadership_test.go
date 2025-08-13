@@ -62,7 +62,7 @@ func TestLeadershipManager(t *testing.T) {
 		// Verify leadership info
 		lease := manager.CurrentLease()
 		require.NotNil(t, lease)
-		assert.Equal(t, "node-1", lease.Hostname)
+		assert.Equal(t, "node-1.yorkie.yorkie.svc.cluster.local", lease.RPCAddr)
 	})
 
 	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
@@ -149,7 +149,7 @@ func TestLeadershipConcurrency(t *testing.T) {
 
 			for range 50 {
 				info, err := db.TryLeadership(ctx, nodeID, "", leaseDuration)
-				if err == nil && info.Hostname == nodeID {
+				if err == nil && info.RPCAddr == database.PodRPCAddr(nodeID) {
 					acquiredCount[id]++
 
 					// Hold leadership briefly then let it expire

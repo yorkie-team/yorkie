@@ -17,6 +17,9 @@
 package database
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -39,4 +42,18 @@ func (li *ClusterNodeInfo) IsExpired() bool {
 // TimeUntilExpiry returns the duration until the lease expires.
 func (li *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
 	return time.Until(li.ExpiresAt)
+}
+
+// GenerateLeaseToken generates a cryptographically secure random token
+func GenerateLeaseToken() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// PodRPCAddr returns TODO(raa).
+func PodRPCAddr(hostname string) string {
+	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
 }

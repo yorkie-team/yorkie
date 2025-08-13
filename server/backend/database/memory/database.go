@@ -58,10 +58,14 @@ func (d *DB) Close() error {
 	return nil
 }
 
-// leadershipRecord wraps LeadershipInfo with an ID for memory database storage.
-type leadershipRecord struct {
-	ID   string                   `json:"id"`
-	Info *database.LeadershipInfo `json:"info"`
+// clusterNodeRecord wraps LeadershipInfo with an ID for memory database storage.
+type clusterNodeRecord struct {
+	ID   string                    `json:"id"`
+	Info *database.ClusterNodeInfo `json:"info"`
+}
+
+func podRPCAddr(hostname string) string {
+	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
 }
 
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
@@ -72,7 +76,7 @@ func (d *DB) TryLeadership(
 	hostname string,
 	leaseToken string,
 	leaseDuration gotime.Duration,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -85,10 +89,12 @@ func (d *DB) TryLeadership(
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
 
-	var existing *database.LeadershipInfo
+	var existing *database.ClusterNodeInfo
 	if raw != nil {
-		existing = raw.(*leadershipRecord).Info
+		existing = raw.(*clusterNodeRecord).Info
 	}
+
+	rpcAddr := podRPCAddr(hostname)
 
 	if leaseToken == "" {
 		// Attempting to acquire new leadership
@@ -107,8 +113,8 @@ func (d *DB) TryLeadership(
 		}
 
 		// Create or update leadership entry
-		newLeadership := &database.LeadershipInfo{
-			Hostname:   hostname,
+		newLeadership := &database.ClusterNodeInfo{
+			RPCAddr:    rpcAddr,
 			LeaseToken: newToken,
 			ElectedAt:  now,
 			ExpiresAt:  expiresAt,
@@ -120,7 +126,7 @@ func (d *DB) TryLeadership(
 			newLeadership.Term = existing.Term + 1
 		}
 
-		record := &leadershipRecord{
+		record := &clusterNodeRecord{
 			ID:   "leadership",
 			Info: newLeadership,
 		}
@@ -144,7 +150,7 @@ func (d *DB) TryLeadership(
 	}
 
 	// Check if the node is the current leader
-	if existing.Hostname != hostname {
+	if existing.RPCAddr != rpcAddr {
 		return nil, database.ErrInvalidLeaseToken
 	}
 
@@ -160,8 +166,8 @@ func (d *DB) TryLeadership(
 	}
 
 	// Update with new token and expiry
-	renewedLeadership := &database.LeadershipInfo{
-		Hostname:   existing.Hostname,
+	renewedLeadership := &database.ClusterNodeInfo{
+		RPCAddr:    existing.RPCAddr,
 		LeaseToken: newToken,
 		ElectedAt:  existing.ElectedAt,
 		ExpiresAt:  expiresAt,
@@ -169,7 +175,7 @@ func (d *DB) TryLeadership(
 		Term:       existing.Term, // Keep the same term for renewal
 	}
 
-	record := &leadershipRecord{
+	record := &clusterNodeRecord{
 		ID:   "leadership",
 		Info: renewedLeadership,
 	}
@@ -183,7 +189,7 @@ func (d *DB) TryLeadership(
 }
 
 // FindLeadership returns the current leadership information.
-func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, error) {
+func (d *DB) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -195,7 +201,7 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, erro
 		return nil, nil
 	}
 
-	leadershipInfo := raw.(*leadershipRecord).Info
+	leadershipInfo := raw.(*clusterNodeRecord).Info
 
 	// Check if leadership has expired
 	if leadershipInfo.IsExpired() {

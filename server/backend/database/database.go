@@ -86,10 +86,10 @@ type Database interface {
 		hostname string,
 		leaseToken string,
 		leaseDuration gotime.Duration,
-	) (*LeadershipInfo, error)
+	) (*ClusterNodeInfo, error)
 
 	// FindLeadership returns the current leadership information.
-	FindLeadership(ctx context.Context) (*LeadershipInfo, error)
+	FindLeadership(ctx context.Context) (*ClusterNodeInfo, error)
 
 	// ClearLeadership removes the current leadership information for testing purposes.
 	ClearLeadership(ctx context.Context) error
