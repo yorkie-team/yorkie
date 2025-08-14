@@ -33,8 +33,6 @@ linters-settings:
     ignoreSigRegexps:
       - github.com/yorkie-team/yorkie # Ignore all methods in internal package
       - context.Context # Ignore all methods in context package
-  gocyclo:
-      min-complexity: 40
 
 issues:
   exclude-use-default: false

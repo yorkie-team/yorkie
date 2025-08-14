@@ -102,57 +102,50 @@ func BuildInternalDocForServerSeq(
 		}
 	}
 
-	chunk := be.Config.SnapshotChangesChunkSize
-	for from := doc.Checkpoint().ServerSeq + 1; from <= serverSeq; from += chunk + 1 {
-		to := from + chunk
-		if to > serverSeq {
-			to = serverSeq
-		}
-		changes, err := be.DB.FindChangesBetweenServerSeqs(
+	changes, err := be.DB.FindChangesBetweenServerSeqs(
+		ctx,
+		docKey,
+		doc.Checkpoint().ServerSeq+1,
+		serverSeq,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := doc.ApplyChangePack(change.NewPack(
+		docInfo.Key,
+		change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changes,
+		nil,
+		nil,
+	), be.Config.SnapshotDisableGC); err != nil {
+		return nil, err
+	}
+	if !be.Config.SnapshotDisableGC {
+		vector, err := be.DB.GetMinVersionVector(
 			ctx,
 			docKey,
-			from,
-			to,
+			doc.VersionVector(),
 		)
 		if err != nil {
 			return nil, err
 		}
-
-		if err := doc.ApplyChangePack(change.NewPack(
-			docInfo.Key,
-			change.InitialCheckpoint.NextServerSeq(serverSeq),
-			changes,
-			nil,
-			nil,
-		), be.Config.SnapshotDisableGC); err != nil {
+		if _, err := doc.GarbageCollect(vector); err != nil {
 			return nil, err
 		}
-		if !be.Config.SnapshotDisableGC {
-			vector, err := be.DB.GetMinVersionVector(
-				ctx,
-				docKey,
-				doc.VersionVector(),
-			)
-			if err != nil {
-				return nil, err
-			}
-			if _, err := doc.GarbageCollect(vector); err != nil {
-				return nil, err
-			}
-		}
+	}
 
-		// NOTE(hackerwins): Store the last accessed document in the cache.
-		be.Cache.Snapshot.Add(docKey, doc)
+	// NOTE(hackerwins): Store the last accessed document in the cache.
+	be.Cache.Snapshot.Add(docKey, doc)
 
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(
-				"after apply %d changes: elements: %d removeds: %d, %s",
-				len(changes),
-				doc.Root().ElementMapLen(),
-				doc.Root().GarbageElementLen(),
-				doc.RootObject().Marshal(),
-			)
-		}
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			"after apply %d changes: elements: %d removeds: %d, %s",
+			len(changes),
+			doc.Root().ElementMapLen(),
+			doc.Root().GarbageElementLen(),
+			doc.RootObject().Marshal(),
+		)
 	}
 
 	clone, err := doc.DeepCopy()
@@ -197,7 +190,18 @@ func storeSnapshot(
 		return nil
 	}
 
-	// 02. Fetch the snapshot info including its snapshot.
+	// 02. retrieve the changes between last snapshot and current docInfo
+	changes, err := be.DB.FindChangesBetweenServerSeqs(
+		ctx,
+		docRefKey,
+		info.ServerSeq+1,
+		docInfo.ServerSeq,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 03. Fetch the snapshot info including its snapshot.
 	if info.ID != "" {
 		info, err = be.DB.FindSnapshotInfo(ctx, info.DocRefKey(), info.ServerSeq)
 		if err != nil {
@@ -216,35 +220,16 @@ func storeSnapshot(
 		return err
 	}
 
-	chunk := be.Config.SnapshotChangesChunkSize
-	for from := info.ServerSeq + 1; from <= docInfo.ServerSeq; from += chunk + 1 {
-		to := from + chunk
-		if to > docInfo.ServerSeq {
-			to = docInfo.ServerSeq
-		}
+	pack := change.NewPack(
+		docInfo.Key,
+		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+		changes,
+		nil,
+		nil,
+	)
 
-		// 03. retrieve the changes between last snapshot and current docInfo
-		changes, err := be.DB.FindChangesBetweenServerSeqs(
-			ctx,
-			docRefKey,
-			from,
-			to,
-		)
-		if err != nil {
-			return err
-		}
-
-		pack := change.NewPack(
-			docInfo.Key,
-			change.InitialCheckpoint.NextServerSeq(to),
-			changes,
-			nil,
-			nil,
-		)
-
-		if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
-			return err
-		}
+	if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
+		return err
 	}
 
 	// 05. save the snapshot of the docInfo

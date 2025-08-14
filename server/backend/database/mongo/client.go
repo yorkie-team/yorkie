@@ -1571,23 +1571,35 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 
 	// Calculate missing ranges and fetch them in a single operation
 	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
-		cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"server_seq": bson.M{
-				"$gte": from,
-				"$lte": to,
-			},
-		}, options.Find())
-		if err != nil {
-			return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
-		}
-
+		// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
+		const chunkSize int64 = 1000
 		var infos []*database.ChangeInfo
-		if err := cursor.All(ctx, &infos); err != nil {
-			return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
+		current := from
+		for current <= to {
+			filter := bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"server_seq": bson.M{"$gte": current, "$lte": to},
+			}
+			opts := options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}).SetLimit(chunkSize)
+			cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
+			if err != nil {
+				return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
+			}
+			var chunk []*database.ChangeInfo
+			if err := cursor.All(ctx, &chunk); err != nil {
+				return nil, fmt.Errorf("fetch changes of %s: %w", docRefKey, err)
+			}
+			if len(chunk) == 0 {
+				break
+			}
+			infos = append(infos, chunk...)
+			last := chunk[len(chunk)-1].ServerSeq
+			if last >= to || int64(len(chunk)) < chunkSize {
+				break
+			}
+			current = last + 1
 		}
-
 		return infos, nil
 	}); err != nil {
 		return nil, err

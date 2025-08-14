@@ -38,7 +38,6 @@ func TestNewConfigFromFile(t *testing.T) {
 
 		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
-		assert.Equal(t, conf.Backend.SnapshotChangesChunkSize, int64(server.DefaultSnapshotChangesChunkSize))
 	})
 
 	t.Run("read config file test", func(t *testing.T) {
@@ -61,7 +60,6 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, pingTimeout, server.DefaultMongoPingTimeout)
 		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
-		assert.Equal(t, conf.Backend.SnapshotChangesChunkSize, int64(server.DefaultSnapshotChangesChunkSize))
 		assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(server.DefaultAuthWebhookMaxRetries))
 		assert.Equal(t, conf.Backend.EventWebhookMaxRetries, uint64(server.DefaultEventWebhookMaxRetries))
 

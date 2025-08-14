@@ -56,9 +56,6 @@ Backend:
   # SnapshotInterval is the number of changes to create a snapshot.
   SnapshotInterval: 500
 
-  # SnapshotChangesChunkSize is the number of changes to send in a single
-  SnapshotChangesChunkSize: 100
-
   # AuthWebhookURL is the URL to send authorization requests to.
   AuthWebhookURL: ""
 

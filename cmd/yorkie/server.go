@@ -425,12 +425,6 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
-	cmd.Flags().Int64Var(
-		&conf.Backend.SnapshotChangesChunkSize,
-		"snapshot-changes-chunk-size",
-		server.DefaultSnapshotChangesChunkSize,
-		"The chunk size of changes to load gradually when creating a snapshot.",
-	)
 	cmd.Flags().DurationVar(
 		&authWebhookRequestTimeout,
 		"auth-webhook-request-timeout",
