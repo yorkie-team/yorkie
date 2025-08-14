@@ -58,10 +58,10 @@ func (d *DB) Close() error {
 	return nil
 }
 
-// leadershipRecord wraps LeadershipInfo with an ID for memory database storage.
-type leadershipRecord struct {
-	ID   string                   `json:"id"`
-	Info *database.LeadershipInfo `json:"info"`
+// clusterNodeRecord wraps LeadershipInfo with an ID for memory database storage.
+type clusterNodeRecord struct {
+	ID   string                    `json:"id"`
+	Info *database.ClusterNodeInfo `json:"info"`
 }
 
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
@@ -72,7 +72,7 @@ func (d *DB) TryLeadership(
 	hostname string,
 	leaseToken string,
 	leaseDuration gotime.Duration,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -85,10 +85,12 @@ func (d *DB) TryLeadership(
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
 
-	var existing *database.LeadershipInfo
+	var existing *database.ClusterNodeInfo
 	if raw != nil {
-		existing = raw.(*leadershipRecord).Info
+		existing = raw.(*clusterNodeRecord).Info
 	}
+
+	rpcAddr := database.PodRPCAddr(hostname)
 
 	if leaseToken == "" {
 		// Attempting to acquire new leadership
@@ -107,12 +109,14 @@ func (d *DB) TryLeadership(
 		}
 
 		// Create or update leadership entry
-		newLeadership := &database.LeadershipInfo{
-			Hostname:   hostname,
+		newLeadership := &database.ClusterNodeInfo{
+			RPCAddr:    rpcAddr,
 			LeaseToken: newToken,
 			ElectedAt:  now,
 			ExpiresAt:  expiresAt,
 			Term:       1, // Start with term 1 for new leadership
+			RenewedAt:  now,
+			IsLeader:   true,
 		}
 
 		if existing != nil {
@@ -120,7 +124,7 @@ func (d *DB) TryLeadership(
 			newLeadership.Term = existing.Term + 1
 		}
 
-		record := &leadershipRecord{
+		record := &clusterNodeRecord{
 			ID:   "leadership",
 			Info: newLeadership,
 		}
@@ -144,7 +148,7 @@ func (d *DB) TryLeadership(
 	}
 
 	// Check if the node is the current leader
-	if existing.Hostname != hostname {
+	if existing.RPCAddr != rpcAddr {
 		return nil, database.ErrInvalidLeaseToken
 	}
 
@@ -160,8 +164,8 @@ func (d *DB) TryLeadership(
 	}
 
 	// Update with new token and expiry
-	renewedLeadership := &database.LeadershipInfo{
-		Hostname:   existing.Hostname,
+	renewedLeadership := &database.ClusterNodeInfo{
+		RPCAddr:    existing.RPCAddr,
 		LeaseToken: newToken,
 		ElectedAt:  existing.ElectedAt,
 		ExpiresAt:  expiresAt,
@@ -169,7 +173,7 @@ func (d *DB) TryLeadership(
 		Term:       existing.Term, // Keep the same term for renewal
 	}
 
-	record := &leadershipRecord{
+	record := &clusterNodeRecord{
 		ID:   "leadership",
 		Info: renewedLeadership,
 	}
@@ -183,7 +187,7 @@ func (d *DB) TryLeadership(
 }
 
 // FindLeadership returns the current leadership information.
-func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, error) {
+func (d *DB) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -195,7 +199,7 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, erro
 		return nil, nil
 	}
 
-	leadershipInfo := raw.(*leadershipRecord).Info
+	leadershipInfo := raw.(*clusterNodeRecord).Info
 
 	// Check if leadership has expired
 	if leadershipInfo.IsExpired() {
@@ -218,6 +222,31 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 
 	txn.Commit()
 	return nil
+}
+
+// FindActiveClusterNodes returns the active cluster nodes.
+func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClusterNodes, "id")
+	if err != nil {
+		return nil, fmt.Errorf("fetch cluster nodes: %w", err)
+	}
+	var infos []*database.ClusterNodeInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClusterNodeInfo)
+		infos = append(infos, info)
+	}
+
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].IsLeader != infos[j].IsLeader {
+			return infos[i].IsLeader && !infos[j].IsLeader
+		}
+		return infos[i].RenewedAt.After(infos[j].RenewedAt)
+	})
+
+	return infos, nil
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.

@@ -28,6 +28,8 @@ import (
 const (
 	// ColLeaderships represents the leadership collection in the database.
 	ColLeaderships = "leaderships"
+	// ColClusterNodes represents the cluster nodes collection in the database.
+	ColClusterNodes = "clusternodes"
 	// ColProjects represents the projects collection in the database.
 	ColProjects = "projects"
 	// ColUsers represents the users collection in the database.
@@ -72,6 +74,28 @@ var collectionInfos = []collectionInfo{
 			Keys:    bson.D{{Key: "singleton", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
+	},
+	{
+		name: ColClusterNodes,
+		indexes: []mongo.IndexModel{
+			{
+				Keys:    bson.D{{Key: "rpcAddr", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			},
+			{
+				Keys: bson.D{{Key: "is_leader", Value: 1}},
+				Options: options.Index().
+					SetUnique(true).
+					SetPartialFilterExpression(bson.M{"is_leader": true}).
+					SetName("is_leader_true_unique"),
+			},
+			{
+				Keys: bson.D{{Key: "renewed_at", Value: 1}},
+				Options: options.Index().
+					SetExpireAfterSeconds(60).
+					SetName("ttl_renewed_at"),
+			},
+		},
 	},
 	{
 		name: ColUsers,

@@ -25,18 +25,18 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-func TestLeadershipInfo(t *testing.T) {
+func TestClusterNodeInfo(t *testing.T) {
 	now := time.Now()
 
 	t.Run("IsExpired should return false for future expiry", func(t *testing.T) {
-		info := &database.LeadershipInfo{
+		info := &database.ClusterNodeInfo{
 			ExpiresAt: now.Add(10 * time.Second),
 		}
 		assert.False(t, info.IsExpired())
 	})
 
 	t.Run("IsExpired should return true for past expiry", func(t *testing.T) {
-		info := &database.LeadershipInfo{
+		info := &database.ClusterNodeInfo{
 			ExpiresAt: now.Add(-10 * time.Second),
 		}
 		assert.True(t, info.IsExpired())
@@ -44,7 +44,7 @@ func TestLeadershipInfo(t *testing.T) {
 
 	t.Run("TimeUntilExpiry should return correct duration", func(t *testing.T) {
 		future := now.Add(30 * time.Second)
-		info := &database.LeadershipInfo{
+		info := &database.ClusterNodeInfo{
 			ExpiresAt: future,
 		}
 
