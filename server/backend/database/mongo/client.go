@@ -221,9 +221,6 @@ func (c *Client) tryAcquireLeadership(
 					{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
 					{Key: "lease_token", Value: token},
 					{Key: "term", Value: newTerm},
-					//{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
-					//	bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
-					//},
 					{Key: "rpcAddr", Value: rpcAddr},
 					{Key: "renewed_at", Value: "$$NOW"},
 					{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
@@ -234,10 +231,6 @@ func (c *Client) tryAcquireLeadership(
 				SetUpsert(true).
 				SetReturnDocument(options.After),
 		)
-
-		//if err = res.Err(); err != nil {
-		//	return nil, err
-		//}
 
 		var out database.ClusterNodeInfo
 		if err = res.Decode(&out); err != nil {
@@ -273,54 +266,6 @@ func (c *Client) tryAcquireLeadership(
 		return c.FindLeadership(ctx)
 	}
 	return nil, fmt.Errorf("promote after demote-expired: %w", err)
-
-	// Try to acquire leadership using atomic upsert.
-	//expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
-	//result := c.collection(ColLeaderships).FindOneAndUpdate(
-	//	ctx,
-	//	bson.D{
-	//		{Key: "singleton", Value: 1},
-	//	},
-	//	mongo.Pipeline{
-	//		{{Key: "$replaceWith", Value: bson.D{
-	//			{Key: "$cond", Value: bson.A{
-	//				expired,
-	//				// if expired
-	//				bson.D{{Key: "$mergeObjects", Value: bson.A{
-	//					"$$ROOT",
-	//					bson.D{
-	//						{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-	//						{Key: "lease_token", Value: token},
-	//						{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
-	//							bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
-	//						},
-	//						{Key: "rpcAddr", Value: rpcAddr},
-	//						{Key: "renewed_at", Value: "$$NOW"},
-	//						{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
-	//						{Key: "singleton", Value: 1},
-	//					},
-	//				}}},
-	//				"$$ROOT", // else
-	//			}},
-	//		}}},
-	//	}, options.FindOneAndUpdate().
-	//		SetUpsert(true).
-	//		SetReturnDocument(options.After),
-	//)
-	//
-	//var info database.LeadershipInfo
-	//if err := result.Decode(&info); err != nil {
-	//	// If the error is due to a duplicate key, it means another node has
-	//	// already acquired leadership.
-	//	if mongo.IsDuplicateKeyError(err) {
-	//		return c.FindLeadership(ctx)
-	//	}
-	//
-	//	return nil, fmt.Errorf("decode new leadership: %w", err)
-	//}
-	//
-	//// Successfully acquired leadership
-	//return &info, nil
 }
 
 // tryRenewLeadership attempts to renew existing leadership

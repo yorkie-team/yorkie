@@ -53,7 +53,7 @@ func GenerateLeaseToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// PodRPCAddr returns TODO(raa).
+// PodRPCAddr returns the RPC address of the pod.
 func PodRPCAddr(hostname string) string {
 	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
 }
