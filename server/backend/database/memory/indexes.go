@@ -302,6 +302,11 @@ var schema = &memdb.DBSchema{
 		tblClusterNodes: {
 			Name: tblClusterNodes,
 			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
 				"rpcAddr": {
 					Name:    "rpcAddr",
 					Unique:  true,

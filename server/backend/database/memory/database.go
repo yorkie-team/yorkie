@@ -64,10 +64,6 @@ type clusterNodeRecord struct {
 	Info *database.ClusterNodeInfo `json:"info"`
 }
 
-func podRPCAddr(hostname string) string {
-	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
-}
-
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
 // If leaseToken is empty, it attempts to acquire new leadership.
 // If leaseToken is provided, it attempts to renew the existing lease.
@@ -94,7 +90,7 @@ func (d *DB) TryLeadership(
 		existing = raw.(*clusterNodeRecord).Info
 	}
 
-	rpcAddr := podRPCAddr(hostname)
+	rpcAddr := database.PodRPCAddr(hostname)
 
 	if leaseToken == "" {
 		// Attempting to acquire new leadership
@@ -119,6 +115,8 @@ func (d *DB) TryLeadership(
 			ElectedAt:  now,
 			ExpiresAt:  expiresAt,
 			Term:       1, // Start with term 1 for new leadership
+			RenewedAt:  now,
+			IsLeader:   true,
 		}
 
 		if existing != nil {

@@ -147,7 +147,7 @@ func (c *Client) TryLeadership(
 ) (*database.ClusterNodeInfo, error) {
 	leaseMS := leaseDuration.Milliseconds()
 
-	rpcAddr := podRPCAddr(hostname)
+	rpcAddr := database.PodRPCAddr(hostname)
 	if leaseToken == "" {
 		return c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
 	}
@@ -2191,10 +2191,6 @@ func escapeRegex(str string) string {
 // clientDocInfoKey returns the key for the client document info.
 func clientDocInfoKey(docID types.ID, prefix string) string {
 	return fmt.Sprintf("documents.%s.%s", docID, prefix)
-}
-
-func podRPCAddr(hostname string) string {
-	return fmt.Sprintf("%s.yorkie.yorkie.svc.cluster.local", hostname)
 }
 
 // IsSchemaAttached returns true if the schema is being used by any documents.

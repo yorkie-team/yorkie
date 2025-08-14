@@ -62,7 +62,7 @@ func TestLeadershipManager(t *testing.T) {
 		// Verify leadership info
 		lease := manager.CurrentLease()
 		require.NotNil(t, lease)
-		assert.Equal(t, "node-1.yorkie.yorkie.svc.cluster.local", lease.RPCAddr)
+		assert.Equal(t, database.PodRPCAddr("node-1"), lease.RPCAddr)
 	})
 
 	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
