@@ -122,6 +122,18 @@ func TestRESTAPI(t *testing.T) {
 		assert.Len(t, summaries.Documents, 0)
 	})
 
+	t.Run("broadcast test", func(t *testing.T) {
+		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 3)
+		res := post(
+			t,
+			project,
+			fmt.Sprintf("http://%s/yorkie.v1.AdminService/BroadcastByAdmin", defaultServer.RPCAddr()),
+			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
+		)
+		summaries := &documentSummaries{}
+		assert.NoError(t, gojson.Unmarshal(res, summaries))
+	})
+
 	t.Run("concurrent document retrieval test", func(t *testing.T) {
 		project, docs := helper.CreateProjectAndDocuments(t, defaultServer, 1)
 
