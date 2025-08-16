@@ -35,11 +35,7 @@ import (
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort                  = 8080
-	DefaultRPCMaxRequestsBytes      = 4 * 1024 * 1024 // 4MiB
-	DefaultRPCMaxConnectionAge      = 0 * time.Second
-	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
-
+	DefaultRPCPort       = 8080
 	DefaultProfilingPort = 8081
 
 	DefaultHousekeepingInterval                  = 30 * time.Second
@@ -67,7 +63,7 @@ const (
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
 	DefaultUseDefaultProject         = true
-	DefaultClientDeactivateThreshold = "24h"
+	DefaultClientDeactivateThreshold = 24 * time.Hour
 	DefaultSnapshotThreshold         = 500
 	DefaultSnapshotInterval          = 500
 	DefaultSnapshotDisableGC         = false
@@ -75,14 +71,14 @@ const (
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
-	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookMaxWaitInterval = 3 * time.Second
 	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 
 	DefaultEventWebhookRequestTimeout  = 3 * time.Second
 	DefaultEventWebhookMaxRetries      = 10
-	DefaultEventWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultEventWebhookMaxWaitInterval = 3 * time.Second
 	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
 
 	DefaultProjectCacheSize = 256
@@ -163,16 +159,62 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ensureDefaultValue sets the value of the option to which the default value
-// should be applied when the user does not input it.
-func (c *Config) ensureDefaultValue() {
+// ensureRPCDefaultValue set the default rpc.Config value
+func (c *Config) ensureRPCDefaultValue() {
+	if c.RPC == nil {
+		c.RPC = &rpc.Config{}
+	}
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
+	}
+	if c.RPC.Auth.GitHubAuthURL == "" {
+		c.RPC.Auth.GitHubAuthURL = DefaultGitHubAuthURL
+	}
+	if c.RPC.Auth.GitHubTokenURL == "" {
+		c.RPC.Auth.GitHubTokenURL = DefaultGitHubTokenURL
+	}
+	if c.RPC.Auth.GitHubDeviceAuthURL == "" {
+		c.RPC.Auth.GitHubDeviceAuthURL = DefaultGitHubDeviceAuthURL
+	}
+	if c.RPC.Auth.GitHubUserURL == "" {
+		c.RPC.Auth.GitHubUserURL = DefaultGitHubUserURL
+	}
+}
+
+// ensureProfilingDefaultValue set the default profiling.Config value
+func (c *Config) ensureProfilingDefaultValue() {
+	if c.Profiling == nil {
+		c.Profiling = &profiling.Config{}
 	}
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
 	}
+}
 
+// ensureHouseKeepingDefaultValue set the default housekeeping.Config value
+func (c *Config) ensureHouseKeepingDefaultValue() {
+	if c.Housekeeping == nil {
+		c.Housekeeping = &housekeeping.Config{}
+	}
+	if c.Housekeeping.Interval == "" {
+		c.Housekeeping.Interval = DefaultHousekeepingInterval.String()
+	}
+	if c.Housekeeping.CandidatesLimitPerProject == 0 {
+		c.Housekeeping.CandidatesLimitPerProject = DefaultHousekeepingCandidatesLimitPerProject
+	}
+	if c.Housekeeping.ProjectFetchSize == 0 {
+		c.Housekeeping.ProjectFetchSize = DefaultHousekeepingProjectFetchSize
+	}
+	if c.Housekeeping.CompactionMinChanges == 0 {
+		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
+	}
+}
+
+// ensureBackendDefaultValue set the default backend.Config value
+func (c *Config) ensureBackendDefaultValue() {
+	if c.Backend == nil {
+		c.Backend = &backend.Config{}
+	}
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser
 	}
@@ -187,7 +229,7 @@ func (c *Config) ensureDefaultValue() {
 	}
 
 	if c.Backend.ClientDeactivateThreshold == "" {
-		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold
+		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold.String()
 	}
 
 	if c.Backend.SnapshotThreshold == 0 {
@@ -238,29 +280,61 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.ProjectCacheTTL == "" {
 		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}
+	if c.Backend.GatewayAddr == "" {
+		c.Backend.GatewayAddr = DefaultGatewayAddr
+	}
+}
+
+// ensureMongoDefaultValue set the default mongo.Config value
+func (c *Config) ensureMongoDefaultValue() {
+	if c.Mongo == nil {
+		c.Mongo = &mongo.Config{}
+	}
+	if c.Mongo.ConnectionURI == "" {
+		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
+	}
+	if c.Mongo.ConnectionTimeout == "" {
+		c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
+	}
+	if c.Mongo.YorkieDatabase == "" {
+		c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
+	}
+	if c.Mongo.PingTimeout == "" {
+		c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+	}
+	if c.Mongo.MonitoringEnabled {
+		if c.Mongo.MonitoringSlowQueryThreshold == "" {
+			c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
+		}
+	}
+}
+
+// ensureKafkaDefaultValue set the default messagebroker.Config value
+func (c *Config) ensureKafkaDefaultValue() {
+	if c.Kafka == nil {
+		c.Kafka = &messagebroker.Config{}
+	}
+	if c.Kafka.Topic == "" {
+		c.Kafka.Topic = DefaultKafkaTopic
+	}
+	if c.Kafka.WriteTimeout == "" {
+		c.Kafka.WriteTimeout = DefaultKafkaWriteTimeout.String()
+	}
+}
+
+// ensureDefaultValue sets the value of the option to which the default value
+// should be applied when the user does not input it.
+func (c *Config) ensureDefaultValue() {
+	c.ensureRPCDefaultValue()
+	c.ensureProfilingDefaultValue()
+	c.ensureHouseKeepingDefaultValue()
+	c.ensureBackendDefaultValue()
 
 	if c.Mongo != nil {
-		if c.Mongo.ConnectionURI == "" {
-			c.Mongo.ConnectionURI = DefaultMongoConnectionURI
-		}
-
-		if c.Mongo.ConnectionTimeout == "" {
-			c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
-		}
-
-		if c.Mongo.YorkieDatabase == "" {
-			c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
-		}
-
-		if c.Mongo.PingTimeout == "" {
-			c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
-		}
-
-		if c.Mongo.MonitoringEnabled {
-			if c.Mongo.MonitoringSlowQueryThreshold == "" {
-				c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
-			}
-		}
+		c.ensureMongoDefaultValue()
+	}
+	if c.Kafka != nil && c.Kafka.Addresses != "" {
+		c.ensureKafkaDefaultValue()
 	}
 }
 
@@ -279,7 +353,7 @@ func newConfig(port int, profilingPort int) *Config {
 			CompactionMinChanges:      DefaultHousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			ClientDeactivateThreshold: DefaultClientDeactivateThreshold,
+			ClientDeactivateThreshold: DefaultClientDeactivateThreshold.String(),
 			SnapshotThreshold:         DefaultSnapshotThreshold,
 			SnapshotInterval:          DefaultSnapshotInterval,
 		},

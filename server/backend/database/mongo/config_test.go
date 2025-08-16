@@ -42,4 +42,14 @@ func TestConfig(t *testing.T) {
 		config.PingTimeout = "5"
 		assert.Error(t, config.Validate())
 	})
+
+	t.Run("parse monitoring test", func(t *testing.T) {
+		config := &mongo.Config{
+			MonitoringEnabled:            true,
+			MonitoringSlowQueryThreshold: "100ms",
+		}
+		monitorConfig := config.ParseMonitoringConfig()
+		assert.Equal(t, true, monitorConfig.Enabled)
+		assert.Equal(t, "100ms", monitorConfig.SlowQueryThreshold.String())
+	})
 }
