@@ -66,7 +66,7 @@ Housekeeping:
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # AdminUser is the name of the default admin user who has full permissions.
-	# Set once on first-run. (default: admin).
+  # Set once on first-run. (default: admin).
   AdminUser: "admin"
 
   # AdminPassword is the password of the default admin. (default: admin).
@@ -160,7 +160,7 @@ Mongo:
   MonitoringEnabled: true
 
   # MonitoringSlowQueryThreshold is the threshold in milliseconds to log slow queries.
-  MongoMonitoringSlowQueryThreshold: "100ms"
+  MonitoringSlowQueryThreshold: "100ms"
 
 # Kafka is the yorkie analytics message broker configuration (Optional).
 Kafka:

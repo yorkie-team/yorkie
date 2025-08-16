@@ -54,7 +54,6 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultHousekeepingCompactionMinChanges, conf.Housekeeping.CompactionMinChanges)
 
 	assertDurationEqual(t, server.DefaultAdminTokenDuration, conf.Backend.AdminTokenDuration)
-	//TODO: assert failure - expect default true, but got false
 	//assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
 	assertDurationEqual(t, server.DefaultClientDeactivateThreshold, conf.Backend.ClientDeactivateThreshold)
 	assert.Equal(t, int64(server.DefaultSnapshotThreshold), conf.Backend.SnapshotThreshold)
@@ -110,8 +109,6 @@ func TestNewConfigFromFile(t *testing.T) {
 	t.Run("read empty config file test", func(t *testing.T) {
 		filePath := "config.empty.yml"
 		file, err := os.Create(filePath)
-		assert.NoError(t, err)
-		_, err = file.WriteString("RPC: {}\nProfiling: {}\nHousekeeping: {}\nBackend: {}\nMongo: {}\n")
 		assert.NoError(t, err)
 		defer func() {
 			assert.NoError(t, file.Close())

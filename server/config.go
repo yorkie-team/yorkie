@@ -159,9 +159,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ensureDefaultValue sets the value of the option to which the default value
-// should be applied when the user does not input it.
-func (c *Config) ensureDefaultValue() {
+// ensureRPCDefaultValue set the default rpc.Config value
+func (c *Config) ensureRPCDefaultValue() {
+	if c.RPC == nil {
+		c.RPC = &rpc.Config{}
+	}
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
 	}
@@ -177,11 +179,23 @@ func (c *Config) ensureDefaultValue() {
 	if c.RPC.Auth.GitHubUserURL == "" {
 		c.RPC.Auth.GitHubUserURL = DefaultGitHubUserURL
 	}
+}
 
+// ensureProfilingDefaultValue set the default profiling.Config value
+func (c *Config) ensureProfilingDefaultValue() {
+	if c.Profiling == nil {
+		c.Profiling = &profiling.Config{}
+	}
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
 	}
+}
 
+// ensureHouseKeepingDefaultValue set the default housekeeping.Config value
+func (c *Config) ensureHouseKeepingDefaultValue() {
+	if c.Housekeeping == nil {
+		c.Housekeeping = &housekeeping.Config{}
+	}
 	if c.Housekeeping.Interval == "" {
 		c.Housekeeping.Interval = DefaultHousekeepingInterval.String()
 	}
@@ -194,7 +208,13 @@ func (c *Config) ensureDefaultValue() {
 	if c.Housekeeping.CompactionMinChanges == 0 {
 		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
 	}
+}
 
+// ensureBackendDefaultValue set the default backend.Config value
+func (c *Config) ensureBackendDefaultValue() {
+	if c.Backend == nil {
+		c.Backend = &backend.Config{}
+	}
 	if c.Backend.AdminUser == "" {
 		c.Backend.AdminUser = DefaultAdminUser
 	}
@@ -263,37 +283,58 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.GatewayAddr == "" {
 		c.Backend.GatewayAddr = DefaultGatewayAddr
 	}
+}
 
-	if c.Mongo != nil {
-		if c.Mongo.ConnectionURI == "" {
-			c.Mongo.ConnectionURI = DefaultMongoConnectionURI
-		}
-
-		if c.Mongo.ConnectionTimeout == "" {
-			c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
-		}
-
-		if c.Mongo.YorkieDatabase == "" {
-			c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
-		}
-
-		if c.Mongo.PingTimeout == "" {
-			c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
-		}
-
-		if c.Mongo.MonitoringEnabled {
-			if c.Mongo.MonitoringSlowQueryThreshold == "" {
-				c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
-			}
+// ensureMongoDefaultValue set the default mongo.Config value
+func (c *Config) ensureMongoDefaultValue() {
+	if c.Mongo == nil {
+		c.Mongo = &mongo.Config{}
+	}
+	if c.Mongo.ConnectionURI == "" {
+		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
+	}
+	if c.Mongo.ConnectionTimeout == "" {
+		c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
+	}
+	if c.Mongo.YorkieDatabase == "" {
+		c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
+	}
+	if c.Mongo.PingTimeout == "" {
+		c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+	}
+	if c.Mongo.MonitoringEnabled {
+		if c.Mongo.MonitoringSlowQueryThreshold == "" {
+			c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
 		}
 	}
+}
+
+// ensureKafkaDefaultValue set the default messagebroker.Config value
+func (c *Config) ensureKafkaDefaultValue() {
+	if c.Kafka == nil {
+		c.Kafka = &messagebroker.Config{}
+	}
+	if c.Kafka.Topic == "" {
+		c.Kafka.Topic = DefaultKafkaTopic
+	}
+	if c.Kafka.WriteTimeout == "" {
+		c.Kafka.WriteTimeout = DefaultKafkaWriteTimeout.String()
+	}
+}
+
+// ensureDefaultValue sets the value of the option to which the default value
+// should be applied when the user does not input it.
+func (c *Config) ensureDefaultValue() {
+	c.ensureRPCDefaultValue()
+	c.ensureProfilingDefaultValue()
+	c.ensureHouseKeepingDefaultValue()
+	c.ensureBackendDefaultValue()
+
+	if c.Mongo != nil {
+		c.ensureMongoDefaultValue()
+	}
 	if c.Kafka != nil && c.Kafka.Addresses != "" {
-		if c.Kafka.Topic == "" {
-			c.Kafka.Topic = DefaultKafkaTopic
-		}
-		if c.Kafka.WriteTimeout == "" {
-			c.Kafka.WriteTimeout = DefaultKafkaWriteTimeout.String()
-		}
+		c.ensureKafkaDefaultValue()
 	}
 }
 

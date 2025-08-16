@@ -55,14 +55,17 @@ func TestConfig(t *testing.T) {
 		conf5.LeadershipLeaseDuration = "5d"
 		err := conf5.Validate()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-lease-duration"`, conf5.LeadershipLeaseDuration))
+		assert.Contains(t, err.Error(),
+			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-lease-duration"`, conf5.LeadershipLeaseDuration))
 
 		conf6 := validConf
 		conf6.LeadershipRenewalInterval = "5"
 		err = conf6.Validate()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-renewal-interval"`, conf6.LeadershipRenewalInterval))
+		assert.Contains(t, err.Error(),
+			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-renewal-interval"`, conf6.LeadershipRenewalInterval))
 	})
+
 	t.Run("parse test", func(t *testing.T) {
 		validConf := housekeeping.Config{
 			Interval: "50s",

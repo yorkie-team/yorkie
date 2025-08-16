@@ -76,6 +76,7 @@ func TestConfig(t *testing.T) {
 		conf9.EventWebhookRequestTimeout = "1"
 		assert.Error(t, conf9.Validate())
 	})
+
 	t.Run("parse test", func(t *testing.T) {
 		validConf := backend.Config{
 			AdminTokenDuration:          "24h",
