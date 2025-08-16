@@ -861,8 +861,8 @@ func (s *adminServer) BroadcastByAdmin(
 	ctx context.Context,
 	req *connect.Request[api.BroadcastRequestByAdmin],
 ) (*connect.Response[api.BroadcastResponseByAdmin], error) {
-	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
+
 	if err != nil {
 		return nil, err
 	}
