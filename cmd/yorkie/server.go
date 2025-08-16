@@ -70,7 +70,6 @@ var (
 	eventWebhookMaxWaitInterval time.Duration
 	eventWebhookMinWaitInterval time.Duration
 	eventWebhookRequestTimeout  time.Duration
-	eventWebhookCacheTTL        time.Duration
 
 	projectCacheTTL time.Duration
 
