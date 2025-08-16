@@ -10,6 +10,18 @@ servers:
 - description: Local server
   url: http://localhost:8080
 paths:
+  /yorkie.v1.AdminService/BroadcastByAdmin:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastRequestByAdmin'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastResponseByAdmin'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ChangePassword:
     post:
       description: ""
@@ -312,6 +324,15 @@ paths:
       - yorkie.v1.AdminService
 components:
   requestBodies:
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastRequestByAdmin:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastRequestByAdmin'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastRequestByAdmin'
+      required: true
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest:
       content:
         application/json:
@@ -546,6 +567,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/connect.error'
+      description: ""
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastResponseByAdmin:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastResponseByAdmin'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.BroadcastResponseByAdmin'
       description: ""
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse:
       content:
@@ -923,6 +953,27 @@ components:
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
       type: string
+    yorkie.v1.BroadcastRequestByAdmin:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+      title: BroadcastRequestByAdmin
+      type: object
+    yorkie.v1.BroadcastResponseByAdmin:
+      additionalProperties: false
+      description: ""
+      title: BroadcastResponseByAdmin
+      type: object
     yorkie.v1.Change:
       additionalProperties: false
       description: ""
