@@ -20,6 +20,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -88,6 +89,39 @@ func Deactivate(
 	}
 
 	return be.DB.DeactivateClient(ctx, refKey)
+}
+
+// AttachDocument attaches the given document to the client.
+func AttachDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+	isAttached bool,
+) (*database.ClientInfo, error) {
+	// NOTE(kokodak): Reattaching a document that has been detached is not allowed.
+	// This check is necessary because TryAttaching does not validate this case.
+	// If reattaching is allowed in the future, this IsAlreadyDetached check should be removed.
+	// For more details on reattachment context, see:
+	// https://github.com/yorkie-team/yorkie-js-sdk/pull/996#issuecomment-3023329082
+	if clientInfo.IsAlreadyDetached(docInfo.ID, isAttached) {
+		return nil, fmt.Errorf("client(%s) attaches %s: %w",
+			clientInfo.ID, docInfo.ID, database.ErrDocumentAlreadyDetached)
+	}
+
+	if !clientInfo.IsAttaching(docInfo.ID) {
+		var err error
+		clientInfo, err = be.DB.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached); err != nil {
+		return nil, err
+	}
+
+	return clientInfo, nil
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.

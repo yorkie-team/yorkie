@@ -53,6 +53,10 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 func TestClient(t *testing.T) {
 	cli := setupTestWithDummyData(t)
 
+	t.Run("RunLeadership Test", func(t *testing.T) {
+		testcases.RunLeadershipTest(t, cli)
+	})
+
 	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
 	})
@@ -113,6 +117,10 @@ func TestClient(t *testing.T) {
 
 	t.Run("ActivateClientDeactivateClient test", func(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, cli, dummyProjectID)
+	})
+
+	t.Run("TryAttachingAndDeactivateClient test", func(t *testing.T) {
+		testcases.RunTryAttachingAndDeactivateClientTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {

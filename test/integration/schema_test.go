@@ -420,7 +420,7 @@ func TestDocumentSchema(t *testing.T) {
 			schemaName3+"@1",
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+		assert.Contains(t, err.Error(), "expected integer at path $.title")
 
 		cli.Deactivate(ctx)
 	})
@@ -516,7 +516,7 @@ func TestDocumentSchema(t *testing.T) {
 			schemaName3+"@1",
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+		assert.Contains(t, err.Error(), "expected integer at path $.title")
 
 		// Attach compatible schema
 		_, err = adminCli.UpdateDocument(
@@ -571,7 +571,7 @@ func TestDocumentSchema(t *testing.T) {
 			schemaName3+"@1",
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Expected integer at path $.title")
+		assert.Contains(t, err.Error(), "expected integer at path $.title")
 
 		cli.Deactivate(ctx)
 	})
@@ -637,7 +637,7 @@ func TestDocumentSchema(t *testing.T) {
 			"",
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Expected string at path $.title")
+		assert.Contains(t, err.Error(), "expected string at path $.title")
 
 		// Update root with valid type for attached schema
 		_, err = adminCli.UpdateDocument(

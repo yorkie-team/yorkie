@@ -26,6 +26,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	mongodb "go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -44,7 +45,149 @@ const (
 	otherOwnerID              = types.ID("000000000000000000000001")
 	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
+
+	nodeIDOne = "node-1"
+	nodeIDTwo = "node-2"
 )
+
+func RunLeadershipTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("TryLeadership should work for new leadership", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+		assert.Equal(t, nodeIDOne, info.Hostname)
+		assert.NotEmpty(t, info.LeaseToken)
+		assert.Equal(t, int64(1), info.Term)
+		assert.False(t, info.IsExpired())
+	})
+
+	t.Run("TryLeadership should return existing leader when valid", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		// First node acquires leadership
+		leaseDuration := 30 * gotime.Second
+
+		info1, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Second node tries to acquire leadership
+		info2, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Should return the first node's leadership
+		assert.Equal(t, nodeIDOne, info2.Hostname)
+		assert.Equal(t, info1.LeaseToken, info2.LeaseToken)
+	})
+
+	t.Run("TryLeadership should allow takeover after expiry", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		// First node acquires leadership with short lease
+		shortLease := 100 * gotime.Millisecond
+
+		_, err := db.TryLeadership(ctx, nodeIDOne, "", shortLease)
+		require.NoError(t, err)
+
+		// Wait for lease to expire
+		gotime.Sleep(150 * gotime.Millisecond)
+
+		// Second node acquires leadership
+		leaseDuration := 30 * gotime.Second
+
+		info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
+		require.NoError(t, err)
+
+		assert.Equal(t, nodeIDTwo, info.Hostname)
+		assert.Equal(t, int64(2), info.Term) // Term should increment
+	})
+
+	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		// Acquire leadership
+		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Renew leadership
+		renewedInfo, err := db.TryLeadership(ctx, nodeIDOne, info.LeaseToken, leaseDuration)
+		require.NoError(t, err)
+
+		assert.Equal(t, nodeIDOne, renewedInfo.Hostname)
+		assert.NotEqual(t, info.LeaseToken, renewedInfo.LeaseToken) // Token should change
+		// NOTE(raararaara): Because expires_at is based on MongoDB server time ($$NOW),
+		// and renewal requests can occur within the same millisecond,
+		// expires_at may not strictly increase. Token change confirms renewal.
+		assert.True(t, renewedInfo.ExpiresAt.Compare(info.ExpiresAt) >= 0) // Expiry should extend
+		assert.Equal(t, info.Term, renewedInfo.Term)                       // Term should stay same
+	})
+
+	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		// Acquire leadership
+		_, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Try to renew with invalid token
+		_, err = db.TryLeadership(ctx, nodeIDOne, "invalid-token", leaseDuration)
+		assert.ErrorIs(t, err, database.ErrInvalidLeaseToken)
+	})
+
+	t.Run("TryLeadership should fail for wrong node with token", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		// Acquire leadership
+		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Try to renew from different node
+		_, err = db.TryLeadership(ctx, nodeIDTwo, info.LeaseToken, leaseDuration)
+		assert.ErrorIs(t, err, database.ErrInvalidLeaseToken)
+	})
+
+	t.Run("FindLeadership should return current leader", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		// No leadership initially
+		info, err := db.FindLeadership(ctx)
+		require.NoError(t, err)
+		assert.Nil(t, info)
+
+		// Acquire leadership
+		leaseDuration := 30 * gotime.Second
+
+		acquired, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+
+		// Get leadership should return the same info
+		info, err = db.FindLeadership(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+
+		assert.Equal(t, acquired.Hostname, info.Hostname)
+		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
+		assert.Equal(t, acquired.Term, info.Term)
+	})
+}
 
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.
 func RunFindDocInfoTest(
@@ -729,11 +872,82 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 
-		// try to deactivate the client twice.
-		clientInfo, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		// already deactivated
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.ErrorIs(t, err, database.ErrClientNotFound)
+	})
+}
+
+// RunTryAttachingAndDeactivateClientTest runs the TryAttaching and DeactivateClient tests for the given db.
+func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("TryAttaching test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. activate a client
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
 		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
+
+		// 02. create a document
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())))
+		assert.NoError(t, err)
+
+		// 03. success case: client is activated, and document is not attached
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+
+		// 04. success case: client is activated, and document is already attaching
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+
+		// 05. failure case: client is activated, but document is already attached
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.Error(t, err)
+
+		// 06. failure case: client is deactivated
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.Error(t, err)
+	})
+
+	t.Run("DeactivateClient test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. success case: client is activated
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+
+		// 02. failure case: client has attaching document
+		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), key.Key(fmt.Sprintf("tests$%s", t.Name())))
+		assert.NoError(t, err)
+		_, err = db.TryAttaching(ctx, clientInfo.RefKey(), docInfo.ID)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
+
+		// 03. failure case: client has attached document
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
+
+		// 04. failure case: client is already deactivated
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.NoError(t, err)
+		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		assert.Error(t, err)
 	})
 }
 

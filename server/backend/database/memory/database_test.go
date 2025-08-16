@@ -36,6 +36,10 @@ func TestDB(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
+	t.Run("RunLeadership Test", func(t *testing.T) {
+		testcases.RunLeadershipTest(t, db)
+	})
+
 	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
 	})
@@ -94,6 +98,10 @@ func TestDB(t *testing.T) {
 
 	t.Run("ActivateClientDeactivateClient test", func(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, db, projectID)
+	})
+
+	t.Run("TryAttachingAndDeactivateClient test", func(t *testing.T) {
+		testcases.RunTryAttachingAndDeactivateClientTest(t, db, projectID)
 	})
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {

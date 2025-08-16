@@ -170,7 +170,8 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.ID, pack.IsAttached()); err != nil {
+	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached())
+	if err != nil {
 		return nil, err
 	}
 

@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.21
+  version: v0.6.25
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -826,12 +826,6 @@ components:
           description: ""
           title: remove
           type: object
-        select:
-          $ref: '#/components/schemas/yorkie.v1.Operation.Select'
-          additionalProperties: false
-          description: ""
-          title: select
-          type: object
         set:
           $ref: '#/components/schemas/yorkie.v1.Operation.Set'
           additionalProperties: false
@@ -1073,40 +1067,6 @@ components:
           title: parent_created_at
           type: object
       title: Remove
-      type: object
-    yorkie.v1.Operation.Select:
-      additionalProperties: false
-      description: |-
-        NOTE(hackerwins): Select Operation is not used in the current version.
-         In the previous version, it was used to represent selection of Text.
-         However, it has been replaced by Presence now. It is retained for backward
-         compatibility purposes.
-      properties:
-        executedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: executed_at
-          type: object
-        from:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
-          additionalProperties: false
-          description: ""
-          title: from
-          type: object
-        parentCreatedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: parent_created_at
-          type: object
-        to:
-          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
-          additionalProperties: false
-          description: ""
-          title: to
-          type: object
-      title: Select
       type: object
     yorkie.v1.Operation.Set:
       additionalProperties: false

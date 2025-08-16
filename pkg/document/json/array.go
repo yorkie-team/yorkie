@@ -496,6 +496,14 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 	}
 }
 
+func (p *Array) MoveFront(createdAt *time.Ticket) {
+	p.moveBeforeInternal(p.Get(0).CreatedAt(), createdAt)
+}
+
+func (p *Array) MoveLast(createdAt *time.Ticket) {
+	p.moveAfterInternal(p.LastCreatedAt(), createdAt)
+}
+
 func (p *Array) setByIndexInternal(
 	createdAt *time.Ticket,
 	creator func(ticket *time.Ticket) crdt.Element,

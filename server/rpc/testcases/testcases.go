@@ -147,8 +147,8 @@ func RunAttachAndDetachDocumentTest(
 			ChangePack: packWithNoChanges,
 		},
 		))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentAlreadyAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
 
 	// try to attach invalid change pack
 	_, err = testClient.AttachDocument(
@@ -1269,6 +1269,71 @@ func RunAdminGetDocumentTest(
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
+}
+
+// RunAdminGetDocumentsTest runs the GetDocuments test in admin.
+func RunAdminGetDocumentsTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	testDocumentKey := helper.TestDocKey(t).String()
+
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	activateResp, err := testClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+	assert.NoError(t, err)
+
+	packWithNoChanges := &api.ChangePack{
+		DocumentKey: testDocumentKey,
+		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+	}
+
+	_, err = testClient.AttachDocument(
+		context.Background(),
+		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId:   activateResp.Msg.ClientId,
+			ChangePack: packWithNoChanges,
+		},
+		))
+	assert.NoError(t, err)
+
+	resp1, err := testAdminClient.GetDocuments(
+		context.Background(),
+		connect.NewRequest(&api.GetDocumentsRequest{
+			ProjectName:      defaultProjectName,
+			DocumentKeys:     []string{testDocumentKey},
+			IncludeRoot:      true,
+			IncludePresences: true,
+		},
+		))
+	assert.NoError(t, err)
+	assert.Len(t, resp1.Msg.Documents, 1)
+
+	// try to get document with non-existing document name
+	resp2, err := testAdminClient.GetDocuments(
+		context.Background(),
+		connect.NewRequest(&api.GetDocumentsRequest{
+			ProjectName:      defaultProjectName,
+			DocumentKeys:     []string{invalidChangePack.DocumentKey},
+			IncludeRoot:      true,
+			IncludePresences: true,
+		},
+		))
+	assert.NoError(t, err)
+	assert.Len(t, resp2.Msg.Documents, 0)
 }
 
 // RunAdminListChangesTest runs the ListChanges test in admin.

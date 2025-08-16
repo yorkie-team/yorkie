@@ -7,6 +7,53 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.25] - 2025-08-12
+
+### Fixed
+
+- Add missing deepcopy in TryAttaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1433
+- Fix incorrect SnapshotCache removal timing by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1436
+- Fix incorrect deletion of compacted documents by @kokodak in https://github.com/yorkie-team/yorkie/pull/1437
+
+## [v0.6.24] - 2025-08-06
+
+### Added
+
+- Add Document-Client Lifecycle Design Document by @kokodak in https://github.com/yorkie-team/yorkie/pull/1431
+- Add functionality and benchmark test for GetDocuments API by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1427
+
+### Fixed
+
+- Prevent project secret key from granting full user access by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1425
+- Resolve flaky TestBatchExpiration/Process_Expire_Batch test by @minwoo1999 in https://github.com/yorkie-team/yorkie/pull/1413
+- Use MongoDB time for lease expiration to avoid clock skew by @raararaara in https://github.com/yorkie-team/yorkie/pull/1426
+
+## [v0.6.23] - 2025-08-01
+
+### Added
+
+- Add MongoDB-based leader election mechanism by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1373
+- Add MoveFront/MoveLast and port array tests from JS SDK by @KMSstudio in https://github.com/yorkie-team/yorkie/pull/1415
+
+### Fixed
+
+- Fix race condition between Attach/PushPull and Deactivation by @kokodak in https://github.com/yorkie-team/yorkie/pull/1414
+- Remove deprecated SelectOperation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1417
+- Fix garbage collection design document typo by @kokodak in https://github.com/yorkie-team/yorkie/pull/1421
+
+### Removed
+
+## [v0.6.22] - 2025-07-28
+
+### Added
+
+- Add VSCode setting guide in CONTRIBUTING.md for test files by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1406
+
+### Changed
+
+- Migrate MongoDB Go driver from v1.17 to v2.2 by @krapie in https://github.com/yorkie-team/yorkie/pull/1405
+- Refactor actorID encoding from hex to Base64 for efficiency by @mnnseong in https://github.com/yorkie-team/yorkie/pull/1388
+
 ## [v0.6.21] - 2025-07-23
 
 ### Changed

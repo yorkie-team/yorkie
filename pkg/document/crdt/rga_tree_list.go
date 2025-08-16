@@ -270,6 +270,10 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
+	if prevCreatedAt == createdAt {
+		return nil
+	}
+
 	if executedAt.After(node.PositionedAt()) {
 		movedFrom := node.prev
 		nextNode := node.next

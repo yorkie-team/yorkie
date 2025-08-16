@@ -114,14 +114,7 @@ func New(
 	// manage background tasks.
 	bg := background.New(metrics)
 
-	// 04. Create the housekeeping instance. The housekeeping is used
-	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf)
-	if err != nil {
-		return nil, err
-	}
-
-	// 05. Create webhook clients and cluster client.
+	// 04. Create webhook clients and cluster client.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
 		pkgwebhook.Options{
 			MaxRetries:      conf.AuthWebhookMaxRetries,
@@ -143,7 +136,7 @@ func New(
 		return nil, err
 	}
 
-	// 06. Create the database instance. If the MongoDB configuration is given,
+	// 05. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var db database.Database
 	if mongoConf != nil {
@@ -156,6 +149,13 @@ func New(
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// 06. Create the housekeeping instance. The housekeeping is used
+	// to manage housekeeper tasks such as deactivating inactive clients.
+	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.Hostname)
+	if err != nil {
+		return nil, err
 	}
 
 	// 07. Create the message broker instance.
@@ -208,8 +208,8 @@ func New(
 }
 
 // Start starts the backend.
-func (b *Backend) Start() error {
-	if err := b.Housekeeping.Start(); err != nil {
+func (b *Backend) Start(ctx context.Context) error {
+	if err := b.Housekeeping.Start(ctx); err != nil {
 		return err
 	}
 

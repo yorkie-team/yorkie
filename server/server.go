@@ -103,7 +103,7 @@ func (r *Yorkie) Start() error {
 		return err
 	}
 
-	if err := r.backend.Start(); err != nil {
+	if err := r.backend.Start(context.Background()); err != nil {
 		return err
 	}
 

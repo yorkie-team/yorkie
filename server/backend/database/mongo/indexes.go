@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	// ColLeaderships represents the leadership collection in the database.
+	ColLeaderships = "leaderships"
 	// ColProjects represents the projects collection in the database.
 	ColProjects = "projects"
 	// ColUsers represents the users collection in the database.
@@ -34,25 +36,27 @@ const (
 	ColClients = "clients"
 	// ColDocuments represents the documents collection in the database.
 	ColDocuments = "documents"
+	// ColSchemas represents the schemas collection in the database.
+	ColSchemas = "schemas"
 	// ColChanges represents the changes collection in the database.
 	ColChanges = "changes"
 	// ColSnapshots represents the snapshots collection in the database.
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
-	// ColSchemas represents the schemas collection in the database.
-	ColSchemas = "schemas"
 )
 
 // Collections represents the list of all collections in the database.
 var Collections = []string{
+	ColLeaderships,
 	ColProjects,
 	ColUsers,
 	ColClients,
 	ColDocuments,
+	ColSchemas,
 	ColChanges,
 	ColSnapshots,
-	ColSchemas,
+	ColVersionVectors,
 }
 
 type collectionInfo struct {
@@ -62,6 +66,20 @@ type collectionInfo struct {
 
 // Below are names and indexes information of Collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
+	{
+		name: ColLeaderships,
+		indexes: []mongo.IndexModel{{
+			Keys:    bson.D{{Key: "singleton", Value: int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: ColUsers,
+		indexes: []mongo.IndexModel{{
+			Keys:    bson.D{{Key: "username", Value: int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
 	{
 		name: ColProjects,
 		indexes: []mongo.IndexModel{{
@@ -75,13 +93,6 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys:    bson.D{{Key: "secret_key", Value: int32(1)}},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: ColUsers,
-		indexes: []mongo.IndexModel{{
-			Keys:    bson.D{{Key: "username", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},
@@ -116,7 +127,19 @@ var collectionInfos = []collectionInfo{
 			},
 			Options: options.Index().SetUnique(true),
 		}},
-	}, {
+	},
+	{
+		name: ColSchemas,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "name", Value: int32(1)},
+				{Key: "version", Value: int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
 		name: ColChanges,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
@@ -155,24 +178,13 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}},
 	},
-	{
-		name: ColSchemas,
-		indexes: []mongo.IndexModel{{
-			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
-				{Key: "name", Value: int32(1)},
-				{Key: "version", Value: int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
 }
 
 func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	for _, info := range collectionInfos {
 		_, err := db.Collection(info.name).Indexes().CreateMany(ctx, info.indexes)
 		if err != nil {
-			return fmt.Errorf("create indexes: %w", err)
+			return fmt.Errorf("create indexes for %s: %w", info.name, err)
 		}
 	}
 	return nil
