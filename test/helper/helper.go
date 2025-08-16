@@ -289,7 +289,7 @@ func TestConfig() *server.Config {
 			SecretKey:                   server.DefaultSecretKey,
 			AdminTokenDuration:          server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:           true,
-			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
+			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold.String(),
 			SnapshotInterval:            10,
 			SnapshotThreshold:           SnapshotThreshold,
 			SnapshotCacheSize:           SnapshotCacheSize,

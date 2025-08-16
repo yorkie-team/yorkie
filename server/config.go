@@ -63,7 +63,7 @@ const (
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
 	DefaultUseDefaultProject         = true
-	DefaultClientDeactivateThreshold = "24h"
+	DefaultClientDeactivateThreshold = 24 * time.Hour
 	DefaultSnapshotThreshold         = 500
 	DefaultSnapshotInterval          = 500
 	DefaultSnapshotDisableGC         = false
@@ -71,14 +71,14 @@ const (
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
-	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookMaxWaitInterval = 3 * time.Second
 	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheTTL        = 10 * time.Second
 
 	DefaultEventWebhookRequestTimeout  = 3 * time.Second
 	DefaultEventWebhookMaxRetries      = 10
-	DefaultEventWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultEventWebhookMaxWaitInterval = 3 * time.Second
 	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
 
 	DefaultProjectCacheSize = 256
@@ -183,7 +183,7 @@ func (c *Config) ensureDefaultValue() {
 	}
 
 	if c.Backend.ClientDeactivateThreshold == "" {
-		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold
+		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold.String()
 	}
 
 	if c.Backend.SnapshotThreshold == 0 {
@@ -275,7 +275,7 @@ func newConfig(port int, profilingPort int) *Config {
 			CompactionMinChanges:      DefaultHousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			ClientDeactivateThreshold: DefaultClientDeactivateThreshold,
+			ClientDeactivateThreshold: DefaultClientDeactivateThreshold.String(),
 			SnapshotThreshold:         DefaultSnapshotThreshold,
 			SnapshotInterval:          DefaultSnapshotInterval,
 		},

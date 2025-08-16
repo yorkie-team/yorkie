@@ -51,7 +51,7 @@ var (
 	authGitHubDeviceAuthURL       string
 
 	housekeepingInterval      time.Duration
-	clientDeactivateThreshold string
+	clientDeactivateThreshold time.Duration
 
 	mongoConnectionURI                string
 	mongoConnectionTimeout            time.Duration
@@ -100,7 +100,7 @@ func newServerCmd() *cobra.Command {
 			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
-			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
+			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
@@ -393,7 +393,7 @@ func init() {
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
 	)
-	cmd.Flags().StringVar(
+	cmd.Flags().DurationVar(
 		&clientDeactivateThreshold,
 		"client-deactivate-threshold",
 		server.DefaultClientDeactivateThreshold,
