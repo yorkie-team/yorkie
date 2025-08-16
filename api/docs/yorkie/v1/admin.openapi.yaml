@@ -14,10 +14,10 @@ paths:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastRequestByAdmin'
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminRequest'
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastResponseByAdmin'
+          $ref: '#/components/responses/yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -324,14 +324,14 @@ paths:
       - yorkie.v1.AdminService
 components:
   requestBodies:
-    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastRequestByAdmin:
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequestByAdmin'
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminRequest'
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastRequestByAdmin'
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminRequest'
       required: true
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordRequest:
       content:
@@ -568,14 +568,14 @@ components:
           schema:
             $ref: '#/components/schemas/connect.error'
       description: ""
-    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastResponseByAdmin:
+    yorkie.v1.AdminService.BroadcastByAdmin.yorkie.v1.BroadcastByAdminResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponseByAdmin'
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminResponse'
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.BroadcastResponseByAdmin'
+            $ref: '#/components/schemas/yorkie.v1.BroadcastByAdminResponse'
       description: ""
     yorkie.v1.AdminService.ChangePassword.yorkie.v1.ChangePasswordResponse:
       content:
@@ -953,7 +953,7 @@ components:
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
       type: string
-    yorkie.v1.BroadcastRequestByAdmin:
+    yorkie.v1.BroadcastByAdminRequest:
       additionalProperties: false
       description: ""
       properties:
@@ -967,12 +967,12 @@ components:
           description: ""
           title: project_name
           type: string
-      title: BroadcastRequestByAdmin
+      title: BroadcastByAdminRequest
       type: object
-    yorkie.v1.BroadcastResponseByAdmin:
+    yorkie.v1.BroadcastByAdminResponse:
       additionalProperties: false
       description: ""
-      title: BroadcastResponseByAdmin
+      title: BroadcastByAdminResponse
       type: object
     yorkie.v1.Change:
       additionalProperties: false

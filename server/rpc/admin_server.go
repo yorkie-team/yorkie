@@ -859,8 +859,8 @@ func (s *adminServer) GetProjectWithAuth(
 // BroadcastByAdmin sends the given payload to all clients watching the document.
 func (s *adminServer) BroadcastByAdmin(
 	ctx context.Context,
-	req *connect.Request[api.BroadcastRequestByAdmin],
-) (*connect.Response[api.BroadcastResponseByAdmin], error) {
+	req *connect.Request[api.BroadcastByAdminRequest],
+) (*connect.Response[api.BroadcastByAdminResponse], error) {
 	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
 
 	if err != nil {
@@ -891,5 +891,5 @@ func (s *adminServer) BroadcastByAdmin(
 		fmt.Sprintf("document broadcast success(projectID: %s, docKey: %s)", project.ID, req.Msg.DocumentKey),
 	)
 
-	return connect.NewResponse(&api.BroadcastResponseByAdmin{}), nil
+	return connect.NewResponse(&api.BroadcastByAdminResponse{}), nil
 }

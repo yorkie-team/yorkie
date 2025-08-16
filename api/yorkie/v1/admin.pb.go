@@ -2762,7 +2762,7 @@ func (x *RotateProjectKeysResponse) GetProject() *Project {
 	return nil
 }
 
-type BroadcastRequestByAdmin struct {
+type BroadcastByAdminRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -2771,8 +2771,8 @@ type BroadcastRequestByAdmin struct {
 	DocumentKey string `protobuf:"bytes,2,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
 }
 
-func (x *BroadcastRequestByAdmin) Reset() {
-	*x = BroadcastRequestByAdmin{}
+func (x *BroadcastByAdminRequest) Reset() {
+	*x = BroadcastByAdminRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_yorkie_v1_admin_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2780,13 +2780,13 @@ func (x *BroadcastRequestByAdmin) Reset() {
 	}
 }
 
-func (x *BroadcastRequestByAdmin) String() string {
+func (x *BroadcastByAdminRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BroadcastRequestByAdmin) ProtoMessage() {}
+func (*BroadcastByAdminRequest) ProtoMessage() {}
 
-func (x *BroadcastRequestByAdmin) ProtoReflect() protoreflect.Message {
+func (x *BroadcastByAdminRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_yorkie_v1_admin_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2798,33 +2798,33 @@ func (x *BroadcastRequestByAdmin) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BroadcastRequestByAdmin.ProtoReflect.Descriptor instead.
-func (*BroadcastRequestByAdmin) Descriptor() ([]byte, []int) {
+// Deprecated: Use BroadcastByAdminRequest.ProtoReflect.Descriptor instead.
+func (*BroadcastByAdminRequest) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{50}
 }
 
-func (x *BroadcastRequestByAdmin) GetProjectName() string {
+func (x *BroadcastByAdminRequest) GetProjectName() string {
 	if x != nil {
 		return x.ProjectName
 	}
 	return ""
 }
 
-func (x *BroadcastRequestByAdmin) GetDocumentKey() string {
+func (x *BroadcastByAdminRequest) GetDocumentKey() string {
 	if x != nil {
 		return x.DocumentKey
 	}
 	return ""
 }
 
-type BroadcastResponseByAdmin struct {
+type BroadcastByAdminResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *BroadcastResponseByAdmin) Reset() {
-	*x = BroadcastResponseByAdmin{}
+func (x *BroadcastByAdminResponse) Reset() {
+	*x = BroadcastByAdminResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_yorkie_v1_admin_proto_msgTypes[51]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2832,13 +2832,13 @@ func (x *BroadcastResponseByAdmin) Reset() {
 	}
 }
 
-func (x *BroadcastResponseByAdmin) String() string {
+func (x *BroadcastByAdminResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BroadcastResponseByAdmin) ProtoMessage() {}
+func (*BroadcastByAdminResponse) ProtoMessage() {}
 
-func (x *BroadcastResponseByAdmin) ProtoReflect() protoreflect.Message {
+func (x *BroadcastByAdminResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_yorkie_v1_admin_proto_msgTypes[51]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2850,8 +2850,8 @@ func (x *BroadcastResponseByAdmin) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BroadcastResponseByAdmin.ProtoReflect.Descriptor instead.
-func (*BroadcastResponseByAdmin) Descriptor() ([]byte, []int) {
+// Deprecated: Use BroadcastByAdminResponse.ProtoReflect.Descriptor instead.
+func (*BroadcastByAdminResponse) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{51}
 }
 
@@ -3155,14 +3155,14 @@ var file_yorkie_v1_admin_proto_rawDesc = []byte{
 	0x6f, 0x6a, 0x65, 0x63, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x79, 0x6f,
 	0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x52,
 	0x07, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x22, 0x5f, 0x0a, 0x17, 0x42, 0x72, 0x6f, 0x61,
-	0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64,
-	0x6d, 0x69, 0x6e, 0x12, 0x21, 0x0a, 0x0c, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x5f, 0x6e,
+	0x64, 0x63, 0x61, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x5f, 0x6e,
 	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x70, 0x72, 0x6f, 0x6a, 0x65,
 	0x63, 0x74, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x21, 0x0a, 0x0c, 0x64, 0x6f, 0x63, 0x75, 0x6d, 0x65,
 	0x6e, 0x74, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x64, 0x6f,
 	0x63, 0x75, 0x6d, 0x65, 0x6e, 0x74, 0x4b, 0x65, 0x79, 0x22, 0x1a, 0x0a, 0x18, 0x42, 0x72, 0x6f,
-	0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x79,
-	0x41, 0x64, 0x6d, 0x69, 0x6e, 0x32, 0xb2, 0x11, 0x0a, 0x0c, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x53,
+	0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xb2, 0x11, 0x0a, 0x0c, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x53,
 	0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x3f, 0x0a, 0x06, 0x53, 0x69, 0x67, 0x6e, 0x55, 0x70,
 	0x12, 0x18, 0x2e, 0x79, 0x6f, 0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x69, 0x67,
 	0x6e, 0x55, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x19, 0x2e, 0x79, 0x6f, 0x72,
@@ -3256,10 +3256,10 @@ var file_yorkie_v1_admin_proto_rawDesc = []byte{
 	0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x5d, 0x0a,
 	0x10, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64, 0x6d, 0x69,
 	0x6e, 0x12, 0x22, 0x2e, 0x79, 0x6f, 0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x72,
-	0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x42, 0x79,
-	0x41, 0x64, 0x6d, 0x69, 0x6e, 0x1a, 0x23, 0x2e, 0x79, 0x6f, 0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76,
-	0x31, 0x2e, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x42, 0x79, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x22, 0x00, 0x12, 0x4e, 0x0a, 0x0b,
+	0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x23, 0x2e, 0x79, 0x6f, 0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76,
+	0x31, 0x2e, 0x42, 0x72, 0x6f, 0x61, 0x64, 0x63, 0x61, 0x73, 0x74, 0x42, 0x79, 0x41, 0x64, 0x6d,
+	0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x4e, 0x0a, 0x0b,
 	0x4c, 0x69, 0x73, 0x74, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x1d, 0x2e, 0x79, 0x6f,
 	0x72, 0x6b, 0x69, 0x65, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x43, 0x68, 0x61, 0x6e,
 	0x67, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x79, 0x6f, 0x72,
@@ -3375,8 +3375,8 @@ var file_yorkie_v1_admin_proto_goTypes = []interface{}{
 	(*GetServerVersionResponse)(nil),      // 48: yorkie.v1.GetServerVersionResponse
 	(*RotateProjectKeysRequest)(nil),      // 49: yorkie.v1.RotateProjectKeysRequest
 	(*RotateProjectKeysResponse)(nil),     // 50: yorkie.v1.RotateProjectKeysResponse
-	(*BroadcastRequestByAdmin)(nil),       // 51: yorkie.v1.BroadcastRequestByAdmin
-	(*BroadcastResponseByAdmin)(nil),      // 52: yorkie.v1.BroadcastResponseByAdmin
+	(*BroadcastByAdminRequest)(nil),       // 51: yorkie.v1.BroadcastByAdminRequest
+	(*BroadcastByAdminResponse)(nil),      // 52: yorkie.v1.BroadcastByAdminResponse
 	(*User)(nil),                          // 53: yorkie.v1.User
 	(*Project)(nil),                       // 54: yorkie.v1.Project
 	(*UpdatableProjectFields)(nil),        // 55: yorkie.v1.UpdatableProjectFields
@@ -3427,7 +3427,7 @@ var file_yorkie_v1_admin_proto_depIdxs = []int32{
 	29, // 36: yorkie.v1.AdminService.RemoveDocumentByAdmin:input_type -> yorkie.v1.RemoveDocumentByAdminRequest
 	31, // 37: yorkie.v1.AdminService.GetSnapshotMeta:input_type -> yorkie.v1.GetSnapshotMetaRequest
 	33, // 38: yorkie.v1.AdminService.SearchDocuments:input_type -> yorkie.v1.SearchDocumentsRequest
-	51, // 39: yorkie.v1.AdminService.BroadcastByAdmin:input_type -> yorkie.v1.BroadcastRequestByAdmin
+	51, // 39: yorkie.v1.AdminService.BroadcastByAdmin:input_type -> yorkie.v1.BroadcastByAdminRequest
 	35, // 40: yorkie.v1.AdminService.ListChanges:input_type -> yorkie.v1.ListChangesRequest
 	37, // 41: yorkie.v1.AdminService.CreateSchema:input_type -> yorkie.v1.CreateSchemaRequest
 	39, // 42: yorkie.v1.AdminService.ListSchemas:input_type -> yorkie.v1.ListSchemasRequest
@@ -3453,7 +3453,7 @@ var file_yorkie_v1_admin_proto_depIdxs = []int32{
 	30, // 62: yorkie.v1.AdminService.RemoveDocumentByAdmin:output_type -> yorkie.v1.RemoveDocumentByAdminResponse
 	32, // 63: yorkie.v1.AdminService.GetSnapshotMeta:output_type -> yorkie.v1.GetSnapshotMetaResponse
 	34, // 64: yorkie.v1.AdminService.SearchDocuments:output_type -> yorkie.v1.SearchDocumentsResponse
-	52, // 65: yorkie.v1.AdminService.BroadcastByAdmin:output_type -> yorkie.v1.BroadcastResponseByAdmin
+	52, // 65: yorkie.v1.AdminService.BroadcastByAdmin:output_type -> yorkie.v1.BroadcastByAdminResponse
 	36, // 66: yorkie.v1.AdminService.ListChanges:output_type -> yorkie.v1.ListChangesResponse
 	38, // 67: yorkie.v1.AdminService.CreateSchema:output_type -> yorkie.v1.CreateSchemaResponse
 	40, // 68: yorkie.v1.AdminService.ListSchemas:output_type -> yorkie.v1.ListSchemasResponse
@@ -4077,7 +4077,7 @@ func file_yorkie_v1_admin_proto_init() {
 			}
 		}
 		file_yorkie_v1_admin_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BroadcastRequestByAdmin); i {
+			switch v := v.(*BroadcastByAdminRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4089,7 +4089,7 @@ func file_yorkie_v1_admin_proto_init() {
 			}
 		}
 		file_yorkie_v1_admin_proto_msgTypes[51].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BroadcastResponseByAdmin); i {
+			switch v := v.(*BroadcastByAdminResponse); i {
 			case 0:
 				return &v.state
 			case 1:

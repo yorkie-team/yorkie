@@ -142,7 +142,7 @@ type AdminServiceClient interface {
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
-	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastRequestByAdmin]) (*connect.Response[v1.BroadcastResponseByAdmin], error)
+	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
@@ -248,7 +248,7 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceSearchDocumentsProcedure,
 			opts...,
 		),
-		broadcastByAdmin: connect.NewClient[v1.BroadcastRequestByAdmin, v1.BroadcastResponseByAdmin](
+		broadcastByAdmin: connect.NewClient[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse](
 			httpClient,
 			baseURL+AdminServiceBroadcastByAdminProcedure,
 			opts...,
@@ -315,7 +315,7 @@ type adminServiceClient struct {
 	removeDocumentByAdmin *connect.Client[v1.RemoveDocumentByAdminRequest, v1.RemoveDocumentByAdminResponse]
 	getSnapshotMeta       *connect.Client[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse]
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
-	broadcastByAdmin      *connect.Client[v1.BroadcastRequestByAdmin, v1.BroadcastResponseByAdmin]
+	broadcastByAdmin      *connect.Client[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse]
 	listChanges           *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
 	createSchema          *connect.Client[v1.CreateSchemaRequest, v1.CreateSchemaResponse]
 	listSchemas           *connect.Client[v1.ListSchemasRequest, v1.ListSchemasResponse]
@@ -412,7 +412,7 @@ func (c *adminServiceClient) SearchDocuments(ctx context.Context, req *connect.R
 }
 
 // BroadcastByAdmin calls yorkie.v1.AdminService.BroadcastByAdmin.
-func (c *adminServiceClient) BroadcastByAdmin(ctx context.Context, req *connect.Request[v1.BroadcastRequestByAdmin]) (*connect.Response[v1.BroadcastResponseByAdmin], error) {
+func (c *adminServiceClient) BroadcastByAdmin(ctx context.Context, req *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error) {
 	return c.broadcastByAdmin.CallUnary(ctx, req)
 }
 
@@ -475,7 +475,7 @@ type AdminServiceHandler interface {
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
-	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastRequestByAdmin]) (*connect.Response[v1.BroadcastResponseByAdmin], error)
+	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
@@ -753,7 +753,7 @@ func (UnimplementedAdminServiceHandler) SearchDocuments(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.SearchDocuments is not implemented"))
 }
 
-func (UnimplementedAdminServiceHandler) BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastRequestByAdmin]) (*connect.Response[v1.BroadcastResponseByAdmin], error) {
+func (UnimplementedAdminServiceHandler) BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.BroadcastByAdmin is not implemented"))
 }
 
