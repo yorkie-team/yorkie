@@ -26,6 +26,27 @@ import (
 )
 
 func TestConfig(t *testing.T) {
+	t.Run("validate test", func(t *testing.T) {
+		validConf := messagebroker.Config{
+			Addresses:    "localhost:8080",
+			Topic:        "yorkie",
+			WriteTimeout: "1s",
+		}
+		assert.NoError(t, validConf.Validate())
+
+		conf1 := validConf
+		conf1.Addresses = ""
+		assert.Error(t, conf1.Validate())
+
+		conf2 := validConf
+		conf2.Topic = ""
+		assert.Error(t, conf2.Validate())
+
+		conf3 := validConf
+		conf3.WriteTimeout = "invalid"
+		assert.Error(t, conf3.Validate())
+	})
+
 	t.Run("test split addresses", func(t *testing.T) {
 		c := &messagebroker.Config{
 			Addresses: "localhost:8080,localhost:8081",
