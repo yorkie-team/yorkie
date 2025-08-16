@@ -165,8 +165,34 @@ func (c *Config) ensureDefaultValue() {
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
 	}
+	if c.RPC.Auth.GitHubAuthURL == "" {
+		c.RPC.Auth.GitHubAuthURL = DefaultGitHubAuthURL
+	}
+	if c.RPC.Auth.GitHubTokenURL == "" {
+		c.RPC.Auth.GitHubTokenURL = DefaultGitHubTokenURL
+	}
+	if c.RPC.Auth.GitHubDeviceAuthURL == "" {
+		c.RPC.Auth.GitHubDeviceAuthURL = DefaultGitHubDeviceAuthURL
+	}
+	if c.RPC.Auth.GitHubUserURL == "" {
+		c.RPC.Auth.GitHubUserURL = DefaultGitHubUserURL
+	}
+
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
+	}
+
+	if c.Housekeeping.Interval == "" {
+		c.Housekeeping.Interval = DefaultHousekeepingInterval.String()
+	}
+	if c.Housekeeping.CandidatesLimitPerProject == 0 {
+		c.Housekeeping.CandidatesLimitPerProject = DefaultHousekeepingCandidatesLimitPerProject
+	}
+	if c.Housekeeping.ProjectFetchSize == 0 {
+		c.Housekeeping.ProjectFetchSize = DefaultHousekeepingProjectFetchSize
+	}
+	if c.Housekeeping.CompactionMinChanges == 0 {
+		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
 	}
 
 	if c.Backend.AdminUser == "" {
@@ -234,6 +260,9 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.ProjectCacheTTL == "" {
 		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
 	}
+	if c.Backend.GatewayAddr == "" {
+		c.Backend.GatewayAddr = DefaultGatewayAddr
+	}
 
 	if c.Mongo != nil {
 		if c.Mongo.ConnectionURI == "" {
@@ -256,6 +285,14 @@ func (c *Config) ensureDefaultValue() {
 			if c.Mongo.MonitoringSlowQueryThreshold == "" {
 				c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
 			}
+		}
+	}
+	if c.Kafka != nil && c.Kafka.Addresses != "" {
+		if c.Kafka.Topic == "" {
+			c.Kafka.Topic = DefaultKafkaTopic
+		}
+		if c.Kafka.WriteTimeout == "" {
+			c.Kafka.WriteTimeout = DefaultKafkaWriteTimeout.String()
 		}
 	}
 }
