@@ -218,7 +218,13 @@ func (s *adminServer) UpdateProject(
 	if err != nil {
 		return nil, err
 	}
-	if err = fields.Validate(); err != nil {
+
+	projectInfo, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.Id))
+	if err != nil {
+		return nil, err
+	}
+
+	if err = fields.Validate(projectInfo.Name); err != nil {
 		return nil, err
 	}
 
