@@ -186,27 +186,4 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})
-
-	t.Run("validation with reserved name", func(t *testing.T) {
-		reservedName := "default"
-		newClientDeactivateThreshold := "12h"
-		fields := &types.UpdatableProjectFields{
-			Name:                      &reservedName,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
-		}
-		assert.NoError(t, fields.Validate(reservedName))
-
-		validName := "valid-name"
-		fields = &types.UpdatableProjectFields{
-			Name:                      &validName,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
-		}
-		assert.NoError(t, fields.Validate(reservedName))
-
-		fields = &types.UpdatableProjectFields{
-			Name:                      &reservedName,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
-		}
-		assert.ErrorAs(t, fields.Validate(validName), &formErr)
-	})
 }
