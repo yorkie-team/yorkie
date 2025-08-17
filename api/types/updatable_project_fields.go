@@ -88,12 +88,9 @@ func (i *UpdatableProjectFields) Validate(currentName ...string) error {
 
 	// If the project name is not changing
 	// skip reserved name validation by temporarily removing the name field
-	originalName := i.Name
-	i.Name = nil
-	err := validation.ValidateStruct(i)
-	i.Name = originalName
-
-	return err
+	tmp := *i
+	tmp.Name = nil
+	return validation.ValidateStruct(&tmp)
 }
 
 func init() {
