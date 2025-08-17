@@ -39,12 +39,17 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf
-		conf2.Topic = ""
+		conf2.Addresses = "localhost:8080,"
 		assert.Error(t, conf2.Validate())
+		assert.Contains(t, conf2.Validate().Error(), conf2.Addresses)
 
 		conf3 := validConf
-		conf3.WriteTimeout = "invalid"
+		conf3.Topic = ""
 		assert.Error(t, conf3.Validate())
+
+		conf4 := validConf
+		conf4.WriteTimeout = "invalid"
+		assert.Error(t, conf4.Validate())
 	})
 
 	t.Run("test split addresses", func(t *testing.T) {

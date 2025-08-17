@@ -91,5 +91,23 @@ func TestConfig(t *testing.T) {
 		duration, err = validConf.ParseLeadershipRenewalInterval()
 		assert.NoError(t, err)
 		assert.Equal(t, "3s", duration.String())
+
+		conf1 := validConf
+		conf1.Interval = "1 hour"
+		_, err = conf1.ParseInterval()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse interval")
+
+		conf2 := validConf
+		conf2.LeadershipLeaseDuration = "5"
+		_, err = conf2.ParseLeadershipLeaseDuration()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse leadership lease duration")
+
+		conf3 := validConf
+		conf3.LeadershipRenewalInterval = "3"
+		_, err = conf3.ParseLeadershipRenewalInterval()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse leadership renewal interval")
 	})
 }
