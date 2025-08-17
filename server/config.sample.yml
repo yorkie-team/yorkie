@@ -18,10 +18,10 @@ RPC:
     GitHubClientSecret: ""
 
     # GitHubRedirectURL is GitHub OAuth callback URL.
-    GitHubRedirectURL: ""
+    GitHubRedirectURL: "http://localhost:8080/auth/github/callback"
 
     # GitHubCallbackRedirectURL is GitHub OAuth callback redirect URL.
-    GitHubCallbackRedirectURL: ""
+    GitHubCallbackRedirectURL: "http://localhost:5173/dashboard"
 
     # GitHubAuthURL is GitHub OAuth2 authorization URL.
     GitHubAuthURL: "https://github.com/login/oauth/authorize"
@@ -165,7 +165,7 @@ Mongo:
 # Kafka is the yorkie analytics message broker configuration (Optional).
 Kafka:
   # Addresses is the URI to connect to message broker.
-  Addresses: "localhost:9092,localhost:9093"
+  Addresses: "localhost:29092,localhost:29093"
 
   # Topic is the message broker topic to use.
   Topic: "user-events"
@@ -173,5 +173,7 @@ Kafka:
   # WriteTimeout is the timeout for writing to the message broker.
   WriteTimeout: "5s"
 
+# StarRocks is the warehouse that stores data in StarRocks configuration (Optional).
 StarRocks:
+  # DSN is StarRocks DSN for the analytics.
   DSN: ""

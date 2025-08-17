@@ -287,9 +287,6 @@ func (c *Config) ensureBackendDefaultValue() {
 
 // ensureMongoDefaultValue set the default mongo.Config value
 func (c *Config) ensureMongoDefaultValue() {
-	if c.Mongo == nil {
-		c.Mongo = &mongo.Config{}
-	}
 	if c.Mongo.ConnectionURI == "" {
 		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
 	}
@@ -311,9 +308,6 @@ func (c *Config) ensureMongoDefaultValue() {
 
 // ensureKafkaDefaultValue set the default messagebroker.Config value
 func (c *Config) ensureKafkaDefaultValue() {
-	if c.Kafka == nil {
-		c.Kafka = &messagebroker.Config{}
-	}
 	if c.Kafka.Topic == "" {
 		c.Kafka.Topic = DefaultKafkaTopic
 	}
