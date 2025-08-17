@@ -64,7 +64,7 @@ type UpdatableProjectFields struct {
 }
 
 // Validate validates the UpdatableProjectFields.
-func (i *UpdatableProjectFields) Validate() error {
+func (i *UpdatableProjectFields) Validate(currentName ...string) error {
 	if i.Name == nil &&
 		i.AuthWebhookURL == nil &&
 		i.AuthWebhookMethods == nil &&
@@ -77,7 +77,23 @@ func (i *UpdatableProjectFields) Validate() error {
 		return ErrEmptyProjectFields
 	}
 
-	return validation.ValidateStruct(i)
+	if len(currentName) == 0 {
+		return validation.ValidateStruct(i)
+	}
+
+	isNameChanging := i.Name != nil && *i.Name != currentName[0]
+	if isNameChanging {
+		return validation.ValidateStruct(i)
+	}
+
+	// If the project name is not changing
+	// skip reserved name validation by temporarily removing the name field
+	originalName := i.Name
+	i.Name = nil
+	err := validation.ValidateStruct(i)
+	i.Name = originalName
+
+	return err
 }
 
 func init() {
