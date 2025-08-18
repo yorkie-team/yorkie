@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: CI target check by path
         uses: dorny/paths-filter@v3
@@ -77,7 +77,7 @@ jobs:
           github_token: ${{ github.token }}
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get tools dependencies
         run: make tools
@@ -120,12 +120,12 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Checkout current repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: repo
 
       - name: Checkout benchmark branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: yorkie-ci-benchmark
           path: benchmark-repo
@@ -229,7 +229,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check Docker Compose Version
         run: docker compose --version
@@ -271,14 +271,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Checkout current repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: repo
       - name: Stack
         run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
 
       - name: Checkout load branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: yorkie-ci-load
           path: load-repo
