@@ -206,6 +206,11 @@ func (s *RGATreeSplitNode[V]) RemovedAt() *time.Ticket {
 	return s.removedAt
 }
 
+// SetRemovedAt sets the removal time of this node.
+func (s *RGATreeSplitNode[V]) SetRemovedAt(removedAt *time.Ticket) {
+	s.removedAt = removedAt
+}
+
 // Marshal returns the JSON encoding of this node.
 func (s *RGATreeSplitNode[V]) Marshal() string {
 	return s.value.Marshal()
@@ -275,16 +280,23 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, clientLamportAtChange int64) bool {
-	justRemoved := s.removedAt == nil
-	nodeExisted := s.createdAt().Lamport() <= clientLamportAtChange
-
-	if nodeExisted &&
-		(s.removedAt == nil || removedAt.After(s.removedAt)) {
-		s.removedAt = removedAt
-		return justRemoved
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool, tombstoneKnown bool) bool {
+	// NOTE(hackerwins): Skip if the node's creation was not visible to this
+	// operation.
+	if !creationKnown {
+		return false
 	}
 
+	if s.removedAt == nil {
+		s.removedAt = removedAt
+		return true
+	}
+
+	// NOTE(hackerwins): Overwrite only if prior tombstone was not known
+	// (concurrent or unseen) and newer.
+	if !tombstoneKnown && removedAt.After(s.removedAt) {
+		s.removedAt = removedAt
+	}
 	return false
 }
 
@@ -548,47 +560,46 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	editedAt *time.Ticket,
 	vector time.VersionVector,
 ) map[string]*RGATreeSplitNode[V] {
-	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
-	isVersionVectorEmpty := len(vector) == 0
-
+	removed := make(map[string]*RGATreeSplitNode[V])
 	if len(candidates) == 0 {
-		return removedNodeMap
+		return removed
 	}
 
-	// There are 2 types of nodes in `candidates`: should delete, should not delete.
-	// `nodesToKeep` contains nodes should not delete,
-	// then is used to find the boundary of the range to be deleted.
 	var nodesToKeep []*RGATreeSplitNode[V]
 	leftEdge, rightEdge := s.findEdgesOfCandidates(candidates)
 	nodesToKeep = append(nodesToKeep, leftEdge)
 
-	for _, node := range candidates {
-		actorID := node.createdAt().ActorID()
+	isLocal := len(vector) == 0
+	for _, n := range candidates {
+		// NOTE(hackerwins): Determine if the node's creation event was visible.
+		creationKnown := false
+		if isLocal {
+			creationKnown = true
+		} else if l, ok := vector.Get(n.createdAt().ActorID()); ok && l >= n.createdAt().Lamport() {
+			creationKnown = true
+		}
 
-		var clientLamportAtChange int64
-		if isVersionVectorEmpty {
-			// Case 1: local editing from json package
-			clientLamportAtChange = time.MaxLamport
-		} else {
-			// Case 2: from operation with version vector(After v0.5.7)
-			lamport, ok := vector.Get(actorID)
-			if ok {
-				clientLamportAtChange = lamport
-			} else {
-				clientLamportAtChange = 0
+		// NOTE(hackerwins): Determine if existing tombstone was already causally known.
+		tombstoneKnown := false
+		if n.removedAt != nil {
+			if isLocal {
+				tombstoneKnown = true
+			} else if l, ok := vector.Get(n.removedAt.ActorID()); ok && l >= n.removedAt.Lamport() {
+				tombstoneKnown = true
 			}
 		}
 
-		if node.Remove(editedAt, clientLamportAtChange) {
-			removedNodeMap[node.id.key()] = node
+		if n.Remove(editedAt, creationKnown, tombstoneKnown) {
+			removed[n.id.key()] = n
 		} else {
-			nodesToKeep = append(nodesToKeep, node)
+			nodesToKeep = append(nodesToKeep, n)
 		}
 	}
+
 	nodesToKeep = append(nodesToKeep, rightEdge)
 	s.deleteIndexNodes(nodesToKeep)
 
-	return removedNodeMap
+	return removed
 }
 
 // findEdgesOfCandidates finds the edges outside `candidates`,
