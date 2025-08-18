@@ -91,6 +91,58 @@ func Deactivate(
 	return be.DB.DeactivateClient(ctx, refKey)
 }
 
+// DeactivateForHousekeeping deactivates the given client for housekeeping purposes.
+// This function doesn't require the client to be activated and handles already deactivated clients.
+func DeactivateForHousekeeping(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	info, err := FindClientInfoForDeactivation(ctx, be, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// If client is already deactivated, return the info without further processing
+	if info.Status == database.ClientDeactivated {
+		return info, nil
+	}
+
+	// Process attached documents
+	for docID, clientDocInfo := range info.Documents {
+		if clientDocInfo.Status != database.DocumentAttached {
+			continue
+		}
+
+		// TODO(hackerwins): Solve N+1
+		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
+			ProjectID: project.ID,
+			DocID:     docID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		actorID, err := info.ID.ToActorID()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := be.ClusterClient.DetachDocument(
+			ctx,
+			project,
+			actorID,
+			docID,
+			docInfo.Key,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	return be.DB.DeactivateClientForHousekeeping(ctx, refKey)
+}
+
 // AttachDocument attaches the given document to the client.
 func AttachDocument(
 	ctx context.Context,
@@ -136,6 +188,21 @@ func FindActiveClientInfo(
 	}
 
 	if err := info.EnsureActivated(); err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+// FindClientInfoForDeactivation finds the client info for deactivation.
+// This function is used by housekeeping and doesn't require the client to be activated.
+func FindClientInfoForDeactivation(
+	ctx context.Context,
+	be *backend.Backend,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	if err != nil {
 		return nil, err
 	}
 

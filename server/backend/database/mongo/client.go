@@ -1006,6 +1006,48 @@ func (c *Client) DeactivateClient(
 	return &info, nil
 }
 
+// DeactivateClientForHousekeeping deactivates the client for housekeeping purposes.
+// This method bypasses cache and directly updates the database.
+func (c *Client) DeactivateClientForHousekeeping(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	now := gotime.Now()
+
+	// Direct DB operation without cache checks
+	result := c.collection(ColClients).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.ClientID,
+			"status":     database.ClientActivated,
+		},
+		bson.M{
+			"$set": bson.M{
+				"status":     database.ClientDeactivated,
+				"updated_at": now,
+			},
+		},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	)
+
+	info := database.ClientInfo{}
+	if err := result.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			// Client not found or already deactivated, return nil to indicate no action needed
+			return nil, nil
+		}
+		return nil, fmt.Errorf("decode client info: %w", err)
+	}
+
+	// Update cache with the deactivated client info
+	if err := c.clientInfoCache.Set(refKey, &info); err != nil {
+		return nil, fmt.Errorf("set client info in cache: %w", err)
+	}
+
+	return &info, nil
+}
+
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	// 1. Try to get from cache first

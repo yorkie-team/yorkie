@@ -871,6 +871,44 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	return clientInfo, nil
 }
 
+// DeactivateClientForHousekeeping deactivates the client for housekeeping purposes.
+// This method bypasses cache and directly updates the database.
+func (d *DB) DeactivateClientForHousekeeping(
+	_ context.Context,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find client by id: %w", err)
+	}
+	if raw == nil {
+		return nil, nil // Client not found, return nil to indicate no action needed
+	}
+
+	clientInfo := raw.(*database.ClientInfo).DeepCopy()
+	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
+		return nil, nil // Client not in project, return nil to indicate no action needed
+	}
+
+	// Only deactivate if currently activated
+	if clientInfo.Status != database.ClientActivated {
+		return clientInfo, nil // Already deactivated, return current state
+	}
+
+	clientInfo.Status = database.ClientDeactivated
+	clientInfo.UpdatedAt = gotime.Now()
+
+	if err := txn.Insert(tblClients, clientInfo); err != nil {
+		return nil, fmt.Errorf("update client: %w", err)
+	}
+	txn.Commit()
+
+	return clientInfo, nil
+}
+
 // FindClientInfoByRefKey finds a client by the given refKey.
 func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {

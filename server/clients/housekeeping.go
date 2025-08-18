@@ -59,7 +59,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, pair := range candidates {
-		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
+		if _, err := DeactivateForHousekeeping(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
 			return database.DefaultProjectID, err
 		}
 

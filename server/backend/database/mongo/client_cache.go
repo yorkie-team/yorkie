@@ -20,12 +20,14 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -106,7 +108,6 @@ type ClientInfoCache struct {
 	writePressure *WritePressure
 	pressureMu    sync.RWMutex
 	metrics       *CacheMetrics
-	metricsMu     sync.RWMutex
 }
 
 // NewClientInfoCache creates a new ClientInfoCache instance
@@ -548,83 +549,62 @@ func (c *ClientInfoCache) periodicMetricsLogging() {
 
 // Metrics recording functions
 func (c *ClientInfoCache) recordHit() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.TotalHits++
+	atomic.AddInt64(&c.metrics.TotalHits, 1)
 }
 
 func (c *ClientInfoCache) recordMiss() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.TotalMisses++
+	atomic.AddInt64(&c.metrics.TotalMisses, 1)
 }
 
 func (c *ClientInfoCache) recordActivateClientMiss() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.ActivateClientMisses++
-	c.metrics.TotalMisses++
+	atomic.AddInt64(&c.metrics.ActivateClientMisses, 1)
+	atomic.AddInt64(&c.metrics.TotalMisses, 1)
 }
 
 func (c *ClientInfoCache) recordDeactivateClientHit() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.DeactivateClientHits++
-	c.metrics.TotalHits++
+	atomic.AddInt64(&c.metrics.DeactivateClientHits, 1)
+	atomic.AddInt64(&c.metrics.TotalHits, 1)
 }
 
 func (c *ClientInfoCache) recordDeactivateClientMiss() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.DeactivateClientMisses++
-	c.metrics.TotalMisses++
+	atomic.AddInt64(&c.metrics.DeactivateClientMisses, 1)
+	atomic.AddInt64(&c.metrics.TotalMisses, 1)
 }
 
 func (c *ClientInfoCache) recordTryAttachingHit() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.TryAttachingHits++
-	c.metrics.TotalHits++
+	atomic.AddInt64(&c.metrics.TryAttachingHits, 1)
+	atomic.AddInt64(&c.metrics.TotalHits, 1)
 }
 
 func (c *ClientInfoCache) recordTryAttachingMiss() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.TryAttachingMisses++
-	c.metrics.TotalMisses++
+	atomic.AddInt64(&c.metrics.TryAttachingMisses, 1)
+	atomic.AddInt64(&c.metrics.TotalMisses, 1)
 }
 
 func (c *ClientInfoCache) recordFindClientInfoHit() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.FindClientInfoHits++
-	c.metrics.TotalHits++
+	atomic.AddInt64(&c.metrics.FindClientInfoHits, 1)
+	atomic.AddInt64(&c.metrics.TotalHits, 1)
 }
 
 func (c *ClientInfoCache) recordFindClientInfoMiss() {
-	c.metricsMu.Lock()
-	defer c.metricsMu.Unlock()
-	c.metrics.FindClientInfoMisses++
-	c.metrics.TotalMisses++
+	atomic.AddInt64(&c.metrics.FindClientInfoMisses, 1)
+	atomic.AddInt64(&c.metrics.TotalMisses, 1)
 }
 
 // GetMetrics returns current cache metrics
 func (c *ClientInfoCache) GetMetrics() *CacheMetrics {
-	c.metricsMu.RLock()
-	defer c.metricsMu.RUnlock()
-
-	// Return a copy to avoid race conditions
+	// Use atomic loads to read metrics without locking
 	return &CacheMetrics{
-		TotalHits:              c.metrics.TotalHits,
-		TotalMisses:            c.metrics.TotalMisses,
-		ActivateClientHits:     c.metrics.ActivateClientHits,
-		ActivateClientMisses:   c.metrics.ActivateClientMisses,
-		DeactivateClientHits:   c.metrics.DeactivateClientHits,
-		DeactivateClientMisses: c.metrics.DeactivateClientMisses,
-		TryAttachingHits:       c.metrics.TryAttachingHits,
-		TryAttachingMisses:     c.metrics.TryAttachingMisses,
-		FindClientInfoHits:     c.metrics.FindClientInfoHits,
-		FindClientInfoMisses:   c.metrics.FindClientInfoMisses,
+		TotalHits:              atomic.LoadInt64(&c.metrics.TotalHits),
+		TotalMisses:            atomic.LoadInt64(&c.metrics.TotalMisses),
+		ActivateClientHits:     atomic.LoadInt64(&c.metrics.ActivateClientHits),
+		ActivateClientMisses:   atomic.LoadInt64(&c.metrics.ActivateClientMisses),
+		DeactivateClientHits:   atomic.LoadInt64(&c.metrics.DeactivateClientHits),
+		DeactivateClientMisses: atomic.LoadInt64(&c.metrics.DeactivateClientMisses),
+		TryAttachingHits:       atomic.LoadInt64(&c.metrics.TryAttachingHits),
+		TryAttachingMisses:     atomic.LoadInt64(&c.metrics.TryAttachingMisses),
+		FindClientInfoHits:     atomic.LoadInt64(&c.metrics.FindClientInfoHits),
+		FindClientInfoMisses:   atomic.LoadInt64(&c.metrics.FindClientInfoMisses),
 	}
 }
 
@@ -689,4 +669,230 @@ func (c *ClientInfoCache) LogMetrics() {
 		tryAttachingHitRate, metrics.TryAttachingHits, tryAttachingTotal,
 		findClientHitRate, metrics.FindClientInfoHits, findClientTotal,
 	)
+}
+
+// UpdateCheckpoint updates only the checkpoint (ServerSeq, ClientSeq) for a specific document
+// This uses Write-back strategy with max operator for consistency
+func (c *ClientInfoCache) UpdateCheckpoint(refKey types.ClientRefKey, docID types.ID, cp change.Checkpoint) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cached, exists := c.cache[refKey]; exists {
+		// Update checkpoint in cache with max operator
+		if cached.ClientInfo.Documents == nil {
+			cached.ClientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+		}
+
+		if docInfo, exists := cached.ClientInfo.Documents[docID]; exists {
+			// Apply max operator for sequence numbers
+			if cp.ServerSeq > docInfo.ServerSeq {
+				docInfo.ServerSeq = cp.ServerSeq
+			}
+			if cp.ClientSeq > docInfo.ClientSeq {
+				docInfo.ClientSeq = cp.ClientSeq
+			}
+		} else {
+			// Create new document info
+			cached.ClientInfo.Documents[docID] = &database.ClientDocInfo{
+				Status:    database.DocumentAttached,
+				ServerSeq: cp.ServerSeq,
+				ClientSeq: cp.ClientSeq,
+			}
+		}
+
+		cached.Dirty = true
+		cached.UpdatedAt = time.Now()
+		return nil
+	}
+
+	// Cache miss - load from DB and update
+	clientInfo, err := c.loadClientInfoFromDB(refKey)
+	if err != nil {
+		return fmt.Errorf("load client info from DB: %w", err)
+	}
+
+	// Update checkpoint
+	if clientInfo.Documents == nil {
+		clientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+	}
+
+	if docInfo, exists := clientInfo.Documents[docID]; exists {
+		if cp.ServerSeq > docInfo.ServerSeq {
+			docInfo.ServerSeq = cp.ServerSeq
+		}
+		if cp.ClientSeq > docInfo.ClientSeq {
+			docInfo.ClientSeq = cp.ClientSeq
+		}
+	} else {
+		clientInfo.Documents[docID] = &database.ClientDocInfo{
+			Status:    database.DocumentAttached,
+			ServerSeq: cp.ServerSeq,
+			ClientSeq: cp.ClientSeq,
+		}
+	}
+
+	// Store in cache
+	now := time.Now()
+	c.cache[refKey] = &CachedClientInfo{
+		ClientInfo: clientInfo,
+		UpdatedAt:  now,
+		Dirty:      true,
+		LastFlush:  now,
+	}
+	return nil
+}
+
+// UpdateStatus updates the client status using CAS Write-through strategy
+func (c *ClientInfoCache) UpdateStatus(refKey types.ClientRefKey, status string) error {
+	// Check if update is needed by comparing with cache first
+	c.mu.Lock()
+	if cached, exists := c.cache[refKey]; exists {
+		if cached.ClientInfo.Status == status {
+			// No change needed, skip database update
+			c.mu.Unlock()
+			return nil
+		}
+	}
+	c.mu.Unlock()
+
+	// Update in DB (Write-through)
+	if err := c.updateStatusInDB(refKey, status); err != nil {
+		return fmt.Errorf("update status in DB: %w", err)
+	}
+
+	// Then update cache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cached, exists := c.cache[refKey]; exists {
+		cached.ClientInfo.Status = status
+		cached.UpdatedAt = time.Now()
+		// Not dirty since already written to DB
+		cached.Dirty = false
+	}
+	return nil
+}
+
+// UpdateDocumentStatus updates the document status using CAS Write-through strategy
+func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID types.ID, status string) error {
+	// Check if update is needed by comparing with cache first
+	c.mu.Lock()
+	if cached, exists := c.cache[refKey]; exists {
+		if cached.ClientInfo.Documents != nil {
+			if docInfo, exists := cached.ClientInfo.Documents[docID]; exists {
+				if docInfo.Status == status {
+					// No change needed, skip database update
+					c.mu.Unlock()
+					return nil
+				}
+			}
+		}
+	}
+	c.mu.Unlock()
+
+	// Update in DB (Write-through)
+	if err := c.updateDocumentStatusInDB(refKey, docID, status); err != nil {
+		return fmt.Errorf("update document status in DB: %w", err)
+	}
+
+	// Then update cache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cached, exists := c.cache[refKey]; exists {
+		if cached.ClientInfo.Documents == nil {
+			cached.ClientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+		}
+
+		if docInfo, exists := cached.ClientInfo.Documents[docID]; exists {
+			docInfo.Status = status
+			// Reset sequence numbers for detached/removed documents
+			if status == database.DocumentDetached || status == database.DocumentRemoved {
+				docInfo.ServerSeq = 0
+				docInfo.ClientSeq = 0
+			}
+		} else {
+			cached.ClientInfo.Documents[docID] = &database.ClientDocInfo{
+				Status:    status,
+				ServerSeq: 0,
+				ClientSeq: 0,
+			}
+		}
+
+		cached.UpdatedAt = time.Now()
+		// Not dirty since already written to DB
+		cached.Dirty = false
+	}
+	return nil
+}
+
+// loadClientInfoFromDB loads client info from database
+func (c *ClientInfoCache) loadClientInfoFromDB(refKey types.ClientRefKey) (*database.ClientInfo, error) {
+	result := c.client.collection(ColClients).FindOne(context.Background(), bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
+	})
+
+	if result.Err() != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", refKey.ClientID, database.ErrClientNotFound)
+		}
+		return nil, fmt.Errorf("find client by id: %w", result.Err())
+	}
+
+	var clientInfo database.ClientInfo
+	if err := result.Decode(&clientInfo); err != nil {
+		return nil, fmt.Errorf("decode client info: %w", err)
+	}
+
+	return &clientInfo, nil
+}
+
+// updateStatusInDB updates client status in database
+func (c *ClientInfoCache) updateStatusInDB(refKey types.ClientRefKey, status string) error {
+	_, err := c.client.collection(ColClients).UpdateOne(
+		context.Background(),
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.ClientID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"status":     status,
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	return err
+}
+
+// updateDocumentStatusInDB updates document status in database
+func (c *ClientInfoCache) updateDocumentStatusInDB(refKey types.ClientRefKey, docID types.ID, status string) error {
+	updateDoc := bson.M{
+		"$set": bson.M{
+			"updated_at": time.Now(),
+		},
+	}
+
+	// Add document-specific updates
+	docKey := clientDocInfoKey(docID, StatusKey)
+	updateDoc["$set"].(bson.M)[docKey] = status
+
+	// Reset sequence numbers for detached/removed documents
+	if status == database.DocumentDetached || status == database.DocumentRemoved {
+		serverSeqKey := clientDocInfoKey(docID, "server_seq")
+		clientSeqKey := clientDocInfoKey(docID, "client_seq")
+		updateDoc["$set"].(bson.M)[serverSeqKey] = int64(0)
+		updateDoc["$set"].(bson.M)[clientSeqKey] = uint32(0)
+	}
+
+	_, err := c.client.collection(ColClients).UpdateOne(
+		context.Background(),
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.ClientID,
+		},
+		updateDoc,
+	)
+	return err
 }
