@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
@@ -59,6 +60,7 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
+		start := gotime.Now()
 		if !isYorkieService(req.Spec().Procedure) {
 			return next(ctx, req)
 		}
@@ -85,6 +87,13 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 				split[1],
 				split[2],
 				connecthelper.ToRPCCodeString(err),
+			)
+			i.backend.Metrics.ObserveServerHandledResponseSeconds(
+				"unary",
+				split[1],
+				split[2],
+				connecthelper.ToRPCCodeString(err),
+				gotime.Since(start).Seconds(),
 			)
 		}
 

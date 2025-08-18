@@ -53,8 +53,9 @@ var (
 type Metrics struct {
 	registry *prometheus.Registry
 
-	serverVersion        *prometheus.GaugeVec
-	serverHandledCounter *prometheus.CounterVec
+	serverVersion                *prometheus.GaugeVec
+	serverHandledCounter         *prometheus.CounterVec
+	serverHandledResponseSeconds *prometheus.HistogramVec
 
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    *prometheus.CounterVec
@@ -97,6 +98,12 @@ func NewMetrics() (*Metrics, error) {
 			Subsystem: "rpc",
 			Name:      "server_handled_total",
 			Help:      "Total number of RPCs completed on the server, regardless of success or failure.",
+		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
+		serverHandledResponseSeconds: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: "rpc",
+			Name:      "server_handled_response_seconds",
+			Help:      "The response time of RPCs completed on the server.",
 		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
 		pushPullResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
@@ -316,6 +323,16 @@ func (m *Metrics) AddServerHandledCounter(
 		"rpc_method":  rpcMethod,
 		"rpc_code":    rpcCode,
 	}).Inc()
+}
+
+// ObserveServerHandledResponseSeconds adds an observation for response time of RPCs completed on the server.
+func (m *Metrics) ObserveServerHandledResponseSeconds(rpcType, rpcService, rpcMethod, rpcCode string, seconds float64) {
+	m.serverHandledResponseSeconds.With(prometheus.Labels{
+		"rpc_type":    rpcType,
+		"rpc_service": rpcService,
+		"rpc_method":  rpcMethod,
+		"rpc_code":    rpcCode,
+	}).Observe(seconds)
 }
 
 // AddBackgroundGoroutines adds the number of goroutines attached by a particular background task.
