@@ -24,19 +24,23 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
+func newValidBackendConf() backend.Config {
+	return backend.Config{
+		AdminTokenDuration:          "24h",
+		ClientDeactivateThreshold:   "1h",
+		AuthWebhookMaxWaitInterval:  "0ms",
+		AuthWebhookMinWaitInterval:  "0ms",
+		AuthWebhookRequestTimeout:   "0ms",
+		AuthWebhookCacheTTL:         "10s",
+		ProjectCacheTTL:             "10m",
+		EventWebhookMaxWaitInterval: "0ms",
+		EventWebhookMinWaitInterval: "0ms",
+		EventWebhookRequestTimeout:  "0ms",
+	}
+}
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
-		validConf := backend.Config{
-			ClientDeactivateThreshold:   "1h",
-			AuthWebhookMaxWaitInterval:  "0ms",
-			AuthWebhookMinWaitInterval:  "0ms",
-			AuthWebhookRequestTimeout:   "0ms",
-			AuthWebhookCacheTTL:         "10s",
-			ProjectCacheTTL:             "10m",
-			EventWebhookMaxWaitInterval: "0ms",
-			EventWebhookMinWaitInterval: "0ms",
-			EventWebhookRequestTimeout:  "0ms",
-		}
+		validConf := newValidBackendConf()
 		assert.NoError(t, validConf.Validate())
 
 		conf1 := validConf
@@ -74,5 +78,19 @@ func TestConfig(t *testing.T) {
 		conf9 := validConf
 		conf9.EventWebhookRequestTimeout = "1"
 		assert.Error(t, conf9.Validate())
+	})
+
+	t.Run("parse test", func(t *testing.T) {
+		validConf := newValidBackendConf()
+
+		assert.Equal(t, "24h0m0s", validConf.ParseAdminTokenDuration().String())
+		assert.Equal(t, "0s", validConf.ParseAuthWebhookMaxWaitInterval().String())
+		assert.Equal(t, "0s", validConf.ParseAuthWebhookMinWaitInterval().String())
+		assert.Equal(t, "0s", validConf.ParseAuthWebhookRequestTimeout().String())
+		assert.Equal(t, "10s", validConf.ParseAuthWebhookCacheTTL().String())
+		assert.Equal(t, "10m0s", validConf.ParseProjectCacheTTL().String())
+		assert.Equal(t, "0s", validConf.ParseEventWebhookMaxWaitInterval().String())
+		assert.Equal(t, "0s", validConf.ParseEventWebhookMinWaitInterval().String())
+		assert.Equal(t, "0s", validConf.ParseEventWebhookRequestTimeout().String())
 	})
 }
