@@ -57,14 +57,14 @@ func TestRulesetValidator(t *testing.T) {
 		result = schema.ValidateYorkieRuleset(doc.RootObject(), ruleset)
 		assert.False(t, result.Valid)
 		assert.Equal(t, []schema.ValidationError{
-			{Path: "$.field1", Message: "Expected null at path $.field1"},
-			{Path: "$.field2", Message: "Expected boolean at path $.field2"},
-			{Path: "$.field3", Message: "Expected integer at path $.field3"},
-			{Path: "$.field4", Message: "Expected double at path $.field4"},
-			{Path: "$.field5", Message: "Expected long at path $.field5"},
-			{Path: "$.field6", Message: "Expected string at path $.field6"},
-			{Path: "$.field7", Message: "Expected date at path $.field7"},
-			{Path: "$.field8", Message: "Expected bytes at path $.field8"},
+			{Path: "$.field1", Message: "expected null at path $.field1"},
+			{Path: "$.field2", Message: "expected boolean at path $.field2"},
+			{Path: "$.field3", Message: "expected integer at path $.field3"},
+			{Path: "$.field4", Message: "expected double at path $.field4"},
+			{Path: "$.field5", Message: "expected long at path $.field5"},
+			{Path: "$.field6", Message: "expected string at path $.field6"},
+			{Path: "$.field7", Message: "expected date at path $.field7"},
+			{Path: "$.field8", Message: "expected bytes at path $.field8"},
 		}, result.Errors)
 	})
 
@@ -89,7 +89,7 @@ func TestRulesetValidator(t *testing.T) {
 		assert.False(t, result.Valid)
 		assert.Equal(t, []schema.ValidationError{{
 			Path:    "$.user",
-			Message: "Expected object at path $.user",
+			Message: "expected object at path $.user",
 		}}, result.Errors)
 	})
 
@@ -112,7 +112,7 @@ func TestRulesetValidator(t *testing.T) {
 		assert.False(t, result.Valid)
 		assert.Equal(t, []schema.ValidationError{{
 			Path:    "$.items",
-			Message: "Expected array at path $.items",
+			Message: "expected array at path $.items",
 		}}, result.Errors)
 	})
 
@@ -140,7 +140,7 @@ func TestRulesetValidator(t *testing.T) {
 		assert.False(t, result.Valid)
 		assert.Equal(t, []schema.ValidationError{{
 			Path:    "$.user.name",
-			Message: "Expected string at path $.user.name",
+			Message: "expected string at path $.user.name",
 		}}, result.Errors)
 	})
 
@@ -173,15 +173,15 @@ func TestRulesetValidator(t *testing.T) {
 		assert.Equal(t, []schema.ValidationError{
 			{
 				Path:    "$.text",
-				Message: "Expected yorkie.Text at path $.text",
+				Message: "expected yorkie.Text at path $.text",
 			},
 			{
 				Path:    "$.tree",
-				Message: "Expected yorkie.Tree at path $.tree",
+				Message: "expected yorkie.Tree at path $.tree",
 			},
 			{
 				Path:    "$.counter",
-				Message: "Expected yorkie.Counter at path $.counter",
+				Message: "expected yorkie.Counter at path $.counter",
 			},
 		}, result.Errors)
 	})

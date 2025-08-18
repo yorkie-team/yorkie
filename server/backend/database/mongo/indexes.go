@@ -208,7 +208,7 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	for _, info := range collectionInfos {
 		_, err := db.Collection(info.name).Indexes().CreateMany(ctx, info.indexes)
 		if err != nil {
-			return fmt.Errorf("create indexes: %w", err)
+			return fmt.Errorf("create indexes for %s: %w", info.name, err)
 		}
 	}
 	return nil

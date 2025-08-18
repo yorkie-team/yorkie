@@ -429,11 +429,9 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 
 func (n *TreeNode) canDelete(removedAt *time.Ticket, clientLamportAtChange int64) bool {
 	nodeExisted := n.id.CreatedAt.Lamport() <= clientLamportAtChange
-	if nodeExisted &&
-		(n.removedAt == nil || n.removedAt.Compare(removedAt) > 0) {
-		return true
-	}
-	return false
+
+	return nodeExisted &&
+		(n.removedAt == nil || removedAt.After(n.removedAt))
 }
 
 func (n *TreeNode) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {

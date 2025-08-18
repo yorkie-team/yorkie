@@ -625,6 +625,45 @@ func (d *DB) UpdateProjectInfo(
 	return info, nil
 }
 
+// RotateProjectKeys rotates the API keys of the project.
+func (d *DB) RotateProjectKeys(
+	_ context.Context,
+	owner types.ID,
+	id types.ID,
+	publicKey string,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Find project by ID and owner
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	project := raw.(*database.ProjectInfo).DeepCopy()
+	if project.Owner != owner {
+		return nil, database.ErrProjectNotFound
+	}
+
+	// Update project keys
+	project.PublicKey = publicKey
+	project.SecretKey = secretKey
+	project.UpdatedAt = gotime.Now()
+
+	// Save updated project
+	if err := txn.Insert(tblProjects, project); err != nil {
+		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
+	}
+
+	txn.Commit()
+	return project, nil
+}
+
 // CreateUserInfo creates a new user.
 func (d *DB) CreateUserInfo(
 	_ context.Context,
@@ -636,16 +675,16 @@ func (d *DB) CreateUserInfo(
 
 	existing, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, fmt.Errorf("find user by username: %w", err)
+		return nil, fmt.Errorf("create user %s: %w", username, err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAlreadyExists)
+		return nil, fmt.Errorf("create user %s: %w", username, database.ErrUserAlreadyExists)
 	}
 
 	info := database.NewUserInfo(username, hashedPassword)
 	info.ID = newID()
 	if err := txn.Insert(tblUsers, info); err != nil {
-		return nil, fmt.Errorf("insert user: %w", err)
+		return nil, fmt.Errorf("create user %s: %w", username, err)
 	}
 	txn.Commit()
 
@@ -662,7 +701,7 @@ func (d *DB) GetOrCreateUserInfoByGitHubID(
 
 	raw, err := txn.First(tblUsers, "username", githubID)
 	if err != nil {
-		return nil, fmt.Errorf("find user by github id: %w", err)
+		return nil, fmt.Errorf("find user %s: %w", githubID, err)
 	}
 
 	now := gotime.Now()
@@ -677,13 +716,13 @@ func (d *DB) GetOrCreateUserInfoByGitHubID(
 			AccessedAt:   now,
 		}
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("create user: %w", err)
+			return nil, fmt.Errorf("create user %s: %w", githubID, err)
 		}
 	} else {
 		info = raw.(*database.UserInfo).DeepCopy()
 		info.AccessedAt = now
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("update user: %w", err)
+			return nil, fmt.Errorf("update user %s: %w", githubID, err)
 		}
 	}
 
@@ -706,7 +745,7 @@ func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
 
 	info := raw.(*database.UserInfo).DeepCopy()
 	if err = txn.Delete(tblUsers, info); err != nil {
-		return fmt.Errorf("delete account %s: %w", info.ID, err)
+		return fmt.Errorf("delete user %s: %w", username, err)
 	}
 
 	txn.Commit()
@@ -720,7 +759,7 @@ func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword s
 
 	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return fmt.Errorf("find user by username: %w", err)
+		return fmt.Errorf("change password of %s: %w", username, err)
 	}
 	if raw == nil {
 		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
@@ -729,7 +768,7 @@ func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword s
 	info := raw.(*database.UserInfo).DeepCopy()
 	info.HashedPassword = hashedNewPassword
 	if err := txn.Insert(tblUsers, info); err != nil {
-		return fmt.Errorf("change password user: %w", err)
+		return fmt.Errorf("change password %s: %w", username, err)
 	}
 
 	txn.Commit()
@@ -738,16 +777,16 @@ func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword s
 }
 
 // FindUserInfoByID finds a user by the given ID.
-func (d *DB) FindUserInfoByID(_ context.Context, clientID types.ID) (*database.UserInfo, error) {
+func (d *DB) FindUserInfoByID(_ context.Context, userID types.ID) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "id", clientID.String())
+	raw, err := txn.First(tblUsers, "id", userID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find user by id: %w", err)
+		return nil, fmt.Errorf("find user %s: %w", userID, err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
+		return nil, fmt.Errorf("find user %s: %w", userID, database.ErrUserNotFound)
 	}
 
 	return raw.(*database.UserInfo).DeepCopy(), nil
@@ -760,10 +799,10 @@ func (d *DB) FindUserInfoByName(_ context.Context, username string) (*database.U
 
 	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, fmt.Errorf("find user by username: %w", err)
+		return nil, fmt.Errorf("find user %s: %w", username, err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+		return nil, fmt.Errorf("find user %s: %w", username, database.ErrUserNotFound)
 	}
 
 	return raw.(*database.UserInfo).DeepCopy(), nil
@@ -776,7 +815,7 @@ func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 
 	iter, err := txn.Get(tblUsers, "id")
 	if err != nil {
-		return nil, fmt.Errorf("fetch users: %w", err)
+		return nil, fmt.Errorf("list all users: %w", err)
 	}
 
 	var infos []*database.UserInfo
@@ -803,7 +842,7 @@ func (d *DB) ActivateClient(
 
 	raw, err := txn.First(tblClients, "project_id_key", projectID.String(), key)
 	if err != nil {
-		return nil, fmt.Errorf("find client by project id and key: %w", err)
+		return nil, fmt.Errorf("activate client of %s: %w", key, err)
 	}
 
 	now := gotime.Now()
@@ -826,7 +865,7 @@ func (d *DB) ActivateClient(
 	}
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, fmt.Errorf("insert client: %w", err)
+		return nil, fmt.Errorf("activate client of %s: %w", key, err)
 	}
 
 	txn.Commit()
@@ -848,7 +887,7 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 
 	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find client by id: %w", err)
+		return nil, fmt.Errorf("try attaching %s to %s: %w", docID, refKey.ClientID, err)
 	}
 
 	if raw == nil {
@@ -863,8 +902,8 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 	// Check if client is activated
 	if clientInfo.Status != database.ClientActivated {
 		return nil, fmt.Errorf(
-			"conditions not satisfied to attach document: %w",
-			database.ErrClientNotFound,
+			"try attaching %s to %s: %w",
+			docID, refKey.ClientID, database.ErrClientNotFound,
 		)
 	}
 
@@ -873,8 +912,8 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 		clientInfo.Documents[docID] != nil &&
 		clientInfo.Documents[docID].Status == database.DocumentAttached {
 		return nil, fmt.Errorf(
-			"conditions not satisfied to attach document: %w",
-			database.ErrClientNotFound,
+			"try attaching %s to %s: %w",
+			docID, refKey.ClientID, database.ErrClientNotFound,
 		)
 	}
 
@@ -894,7 +933,7 @@ func (d *DB) TryAttaching(_ context.Context, refKey types.ClientRefKey, docID ty
 	clientInfo.UpdatedAt = gotime.Now()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, fmt.Errorf("update client: %w", err)
+		return nil, fmt.Errorf("try attaching %s to %s: %w", docID, refKey.ClientID, err)
 	}
 
 	txn.Commit()
@@ -912,7 +951,7 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 
 	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find client by id: %w", err)
+		return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, err)
 	}
 
 	if raw == nil {
@@ -927,7 +966,8 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	// Check if client is not already deactivated
 	if clientInfo.Status == database.ClientDeactivated {
 		return nil, fmt.Errorf(
-			"conditions not satisfied to deactivate client: %w",
+			"deactivate client of %s: already deactivated: %w",
+			refKey.ClientID,
 			database.ErrClientNotFound,
 		)
 	}
@@ -937,7 +977,8 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 		if docInfo.Status == database.DocumentAttaching ||
 			docInfo.Status == database.DocumentAttached {
 			return nil, fmt.Errorf(
-				"conditions not satisfied to deactivate client: %w",
+				"deactivate client of %s: has attached documents: %w",
+				refKey.ClientID,
 				database.ErrClientNotFound,
 			)
 		}
@@ -950,7 +991,7 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	clientInfo.Deactivate()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, fmt.Errorf("update client: %w", err)
+		return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, err)
 	}
 
 	txn.Commit()
@@ -968,7 +1009,7 @@ func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey
 
 	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find client by id: %w", err)
+		return nil, fmt.Errorf("find client of %s: %w", refKey, err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", refKey.ClientID, database.ErrClientNotFound)
@@ -1001,10 +1042,10 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	raw, err := txn.First(tblClients, "id", clientInfo.ID.String())
 	if err != nil {
-		return fmt.Errorf("find client by id: %w", err)
+		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", clientInfo.ID, database.ErrClientNotFound)
+		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, database.ErrClientNotFound)
 	}
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
@@ -1031,7 +1072,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	}
 
 	if err := txn.Insert(tblClients, loaded); err != nil {
-		return fmt.Errorf("update client: %w", err)
+		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, err)
 	}
 	txn.Commit()
 
@@ -1063,7 +1104,7 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 		offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch deactivated clients: %w", err)
+		return nil, fmt.Errorf("find deactivated candidates of %s: %w", project.ID, err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -1095,7 +1136,7 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	var infos []*database.DocInfo
 	iterator, err := txn.Get(tblDocuments, "project_id", project.ID.String())
 	if err != nil {
-		return nil, fmt.Errorf("fetch documents: %w", err)
+		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -1136,7 +1177,7 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 
 	iter, err := txn.Get(tblClients, "project_id", docRefKey.ProjectID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find client infos by attached doc ref key: %w", err)
+		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
 	var infos []*database.ClientInfo
@@ -1154,12 +1195,12 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 func (d *DB) FindOrCreateDocInfo(
 	_ context.Context,
 	clientRefKey types.ClientRefKey,
-	key key.Key,
+	docKey key.Key,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	info, err := d.findDocInfoByKey(txn, clientRefKey.ProjectID, key)
+	info, err := d.findDocInfoByKey(txn, clientRefKey.ProjectID, docKey)
 	if err != nil {
 		return info, err
 	}
@@ -1169,7 +1210,7 @@ func (d *DB) FindOrCreateDocInfo(
 		info = &database.DocInfo{
 			ID:         newID(),
 			ProjectID:  clientRefKey.ProjectID,
-			Key:        key,
+			Key:        docKey,
 			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
 			Schema:     "",
@@ -1178,7 +1219,7 @@ func (d *DB) FindOrCreateDocInfo(
 			AccessedAt: now,
 		}
 		if err := txn.Insert(tblDocuments, info); err != nil {
-			return nil, fmt.Errorf("create document: %w", err)
+			return nil, fmt.Errorf("find or create document of %s: %w", docKey, err)
 		}
 		txn.Commit()
 	}
@@ -1187,7 +1228,7 @@ func (d *DB) FindOrCreateDocInfo(
 }
 
 // findDocInfoByKey finds the document of the given key.
-func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, key key.Key) (*database.DocInfo, error) {
+func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, docKey key.Key) (*database.DocInfo, error) {
 	// TODO(hackerwins): Removed documents should be filtered out by the query, but
 	// somehow it does not work. This is a workaround.
 	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
@@ -1195,11 +1236,11 @@ func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, key key.Key) (
 		tblDocuments,
 		"project_id_key_removed_at",
 		projectID.String(),
-		key.String(),
+		docKey.String(),
 		gotime.Time{},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find doc info by key: %w", err)
+		return nil, fmt.Errorf("find document of %s: %w", docKey, err)
 	}
 	var docInfo *database.DocInfo
 	for val := iter.Next(); val != nil; val = iter.Next() {
@@ -1222,7 +1263,7 @@ func (d *DB) FindDocInfoByKey(
 
 	info, err := d.findDocInfoByKey(txn, projectID, key)
 	if err != nil {
-		return nil, fmt.Errorf("find doc info by key: %w", err)
+		return nil, fmt.Errorf("find document of %s: %w", key, err)
 	}
 	if info == nil {
 		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
@@ -1244,7 +1285,7 @@ func (d *DB) FindDocInfosByKeys(
 	for _, k := range keys {
 		info, err := d.findDocInfoByKey(txn, projectID, k)
 		if err != nil {
-			return nil, fmt.Errorf("find doc info by key: %w", err)
+			return nil, fmt.Errorf("find documents of %v: %w", keys, err)
 		}
 		if info == nil {
 			continue
@@ -1266,16 +1307,16 @@ func (d *DB) FindDocInfoByRefKey(
 
 	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find document by id: %w", err)
+		return nil, fmt.Errorf("find document of %s: %w", refKey, err)
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != refKey.ProjectID {
-		return nil, fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("find document of %s: %w", refKey.DocID, database.ErrDocumentNotFound)
 	}
 
 	return docInfo.DeepCopy(), nil
@@ -1291,25 +1332,25 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 
 	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
 	if err != nil {
-		return fmt.Errorf("find document by id: %w", err)
+		return fmt.Errorf("update %s to removed: %w", refKey, err)
 	}
 
 	if raw == nil {
-		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return fmt.Errorf("update %s to removed: %w", refKey.DocID, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != refKey.ProjectID {
-		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return fmt.Errorf("update %s to removed: %w", refKey.DocID, database.ErrDocumentNotFound)
 	}
 
 	docInfo.RemovedAt = gotime.Now()
 
 	if err := txn.Delete(tblDocuments, docInfo); err != nil {
-		return fmt.Errorf("delete document: %w", err)
+		return fmt.Errorf("update %s to removed: %w", refKey, err)
 	}
 	if err := txn.Insert(tblDocuments, docInfo); err != nil {
-		return fmt.Errorf("insert document: %w", err)
+		return fmt.Errorf("update %s to removed: %w", refKey, err)
 	}
 
 	txn.Commit()
@@ -1328,22 +1369,22 @@ func (d *DB) UpdateDocInfoSchema(
 
 	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
 	if err != nil {
-		return fmt.Errorf("find document by id: %w", err)
+		return fmt.Errorf("update schema %s of %s: %w", schemaKey, refKey, err)
 	}
 
 	if raw == nil {
-		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return fmt.Errorf("update schema %s of %s: %w", schemaKey, refKey, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo).DeepCopy()
 	if docInfo.ProjectID != refKey.ProjectID {
-		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.DocID, database.ErrDocumentNotFound)
+		return fmt.Errorf("update schema %s of %s: %w", schemaKey, refKey, database.ErrDocumentNotFound)
 	}
 
 	docInfo.Schema = schemaKey
 
 	if err := txn.Insert(tblDocuments, docInfo); err != nil {
-		return fmt.Errorf("update document schema: %w", err)
+		return fmt.Errorf("update schema %s of %s: %w", schemaKey, refKey, database.ErrDocumentNotFound)
 	}
 
 	txn.Commit()
@@ -1360,7 +1401,7 @@ func (d *DB) GetDocumentsCount(
 
 	iter, err := txn.Get(tblDocuments, "project_id", projectID.String())
 	if err != nil {
-		return 0, fmt.Errorf("fetch documents: %w", err)
+		return 0, fmt.Errorf("count documents of %s: %w", projectID, err)
 	}
 
 	count := int64(0)
@@ -1382,7 +1423,7 @@ func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, er
 
 	iter, err := txn.Get(tblClients, "project_id", projectID.String())
 	if err != nil {
-		return 0, fmt.Errorf("fetch clients: %w", err)
+		return 0, fmt.Errorf("count clients of %s: %w", projectID, err)
 	}
 
 	count := int64(0)
@@ -1411,15 +1452,15 @@ func (d *DB) CreateChangeInfos(
 
 	raw, err := txn.First(tblDocuments, "id", refKey.DocID.String())
 	if err != nil {
-		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 	}
 	if raw == nil {
-		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo).DeepCopy()
 	if docInfo.ProjectID != refKey.ProjectID {
-		return nil, change.InitialCheckpoint, fmt.Errorf("find document by id: %w", database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	initialServerSeq := docInfo.ServerSeq
 
@@ -1442,7 +1483,7 @@ func (d *DB) CreateChangeInfos(
 			Operations:     cn.Operations,
 			PresenceChange: cn.PresenceChange,
 		}); err != nil {
-			return nil, change.InitialCheckpoint, fmt.Errorf("create change: %w", err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 		}
 	}
 
@@ -1453,14 +1494,14 @@ func (d *DB) CreateChangeInfos(
 		docInfo.ID.String(),
 	)
 	if err != nil {
-		return nil, change.InitialCheckpoint, fmt.Errorf("find document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 	}
 	if raw == nil {
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return nil, change.InitialCheckpoint, fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
 	now := gotime.Now()
@@ -1477,7 +1518,7 @@ func (d *DB) CreateChangeInfos(
 		loadedDocInfo.RemovedAt = now
 	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return nil, change.InitialCheckpoint, fmt.Errorf("update document: %w", err)
+		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 	}
 	txn.Commit()
 
@@ -1511,14 +1552,14 @@ func (d *DB) CompactChangeInfos(
 		docInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("find document: %w", err)
+		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
+		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != lastServerSeq {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), database.ErrConflictOnUpdate)
 	}
 
 	if len(changes) == 0 {
@@ -1526,7 +1567,7 @@ func (d *DB) CompactChangeInfos(
 	} else if len(changes) == 1 {
 		loadedDocInfo.ServerSeq = 1
 	} else {
-		return fmt.Errorf("invalid number of changes: %d", len(changes))
+		return fmt.Errorf("compact document of %s: invalid changes size %d", docInfo.RefKey(), len(changes))
 	}
 
 	for _, cn := range changes {
@@ -1548,7 +1589,7 @@ func (d *DB) CompactChangeInfos(
 			Operations:     encodedOperations,
 			PresenceChange: cn.PresenceChange(),
 		}); err != nil {
-			return fmt.Errorf("store change: %w", err)
+			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 		}
 	}
 
@@ -1556,7 +1597,7 @@ func (d *DB) CompactChangeInfos(
 	now := gotime.Now()
 	loadedDocInfo.CompactedAt = now
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return fmt.Errorf("update document: %w", err)
+		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 	}
 
 	txn.Commit()
@@ -1581,7 +1622,7 @@ func (d *DB) FindLatestChangeInfoByActor(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch changes of %s: %w", actorID, err)
+		return nil, fmt.Errorf("find the last change of %s: %w", actorID, err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -1641,7 +1682,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 		from,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch changes from %d: %w", from, err)
+		return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -1678,7 +1719,7 @@ func (d *DB) CreateSnapshotInfo(
 		Snapshot:      snapshot,
 		CreatedAt:     gotime.Now(),
 	}); err != nil {
-		return fmt.Errorf("create snapshot: %w", err)
+		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
 	}
 	txn.Commit()
 	return nil
@@ -1723,7 +1764,7 @@ func (d *DB) FindClosestSnapshotInfo(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch snapshots before %d: %w", serverSeq, err)
+		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
 	}
 
 	var snapshotInfo *database.SnapshotInfo
@@ -1777,7 +1818,7 @@ func (d *DB) updateVersionVector(
 			docRefKey.DocID.String(),
 			clientInfo.ID.String(),
 		); err != nil {
-			return fmt.Errorf("delete version vector of %s: %w", docRefKey.DocID, err)
+			return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
 		}
 
 		txn.Commit()
@@ -1791,7 +1832,7 @@ func (d *DB) updateVersionVector(
 		clientInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("fetch version vector of %s: %w", docRefKey.DocID, err)
+		return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
 	}
 
 	versionVectorInfo := &database.VersionVectorInfo{
@@ -1806,7 +1847,7 @@ func (d *DB) updateVersionVector(
 	}
 
 	if err := txn.Insert(tblVersionVectors, versionVectorInfo); err != nil {
-		return fmt.Errorf("insert version vector of %s: %w", docRefKey.DocID, err)
+		return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
 	}
 
 	txn.Commit()
@@ -1843,7 +1884,7 @@ func (d *DB) GetMinVersionVector(
 	defer txn.Abort()
 	iterator, err := txn.Get(tblVersionVectors, "doc_id", docRefKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find all version vectors: %w", err)
+		return nil, fmt.Errorf("find min version vector: %w", err)
 	}
 
 	var infos []database.VersionVectorInfo
@@ -1893,7 +1934,7 @@ func (d *DB) FindDocInfosByPaging(
 		)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("fetch documents of %s: %w", projectID, err)
+		return nil, fmt.Errorf("find documents of %s: %w", projectID, err)
 	}
 
 	var docInfos []*database.DocInfo
@@ -1929,7 +1970,7 @@ func (d *DB) FindDocInfosByQuery(
 
 	iterator, err := txn.Get(tblDocuments, "project_id_key_prefix", projectID.String(), query)
 	if err != nil {
-		return nil, fmt.Errorf("find docInfos by query: %w", err)
+		return nil, fmt.Errorf("find documents by query %s: %w", query, err)
 	}
 
 	var docInfos []*database.DocInfo
@@ -2006,10 +2047,10 @@ func (d *DB) CreateSchemaInfo(
 		version,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find schema: %w", err)
+		return nil, fmt.Errorf("create schema of %s: %w", name, err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaAlreadyExists)
+		return nil, fmt.Errorf("create schema of %s: %w", name, database.ErrSchemaAlreadyExists)
 	}
 
 	info := &database.SchemaInfo{
@@ -2046,10 +2087,10 @@ func (d *DB) GetSchemaInfo(
 		version,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find schema: %w", err)
+		return nil, fmt.Errorf("find schema of %s@%d: %w", name, version, err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+		return nil, fmt.Errorf("find schema of %s@%d: %w", name, version, database.ErrSchemaNotFound)
 	}
 
 	return raw.(*database.SchemaInfo).DeepCopy(), nil
@@ -2081,7 +2122,7 @@ func (d *DB) GetSchemaInfos(
 	})
 
 	if len(infos) == 0 {
-		return nil, fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+		return nil, fmt.Errorf("find schemas of %s: %w", name, database.ErrSchemaNotFound)
 	}
 	return infos, nil
 }
@@ -2095,7 +2136,7 @@ func (d *DB) ListSchemaInfos(
 
 	iter, err := txn.Get(tblSchemas, "project_id", projectID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find schema: %w", err)
+		return nil, fmt.Errorf("list schemas of %s: %w", projectID, err)
 	}
 
 	schemaMap := make(map[string]*database.SchemaInfo)
@@ -2131,15 +2172,15 @@ func (d *DB) RemoveSchemaInfo(
 		version,
 	)
 	if err != nil {
-		return fmt.Errorf("find schema: %w", err)
+		return fmt.Errorf("remove schema %s@%d: %w", name, version, err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", name, database.ErrSchemaNotFound)
+		return fmt.Errorf("remove schema %s@%d: %w", name, version, database.ErrSchemaNotFound)
 	}
 
 	schemaInfo := raw.(*database.SchemaInfo)
 	if err := txn.Delete(tblSchemas, schemaInfo); err != nil {
-		return fmt.Errorf("delete schema: %w", err)
+		return fmt.Errorf("remove schema %s@%d: %w", name, version, err)
 	}
 
 	txn.Commit()
@@ -2156,12 +2197,12 @@ func (d *DB) PurgeDocument(
 
 	raw, err := txn.First(tblDocuments, "id", docRefKey.DocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find document by id: %w", err)
+		return nil, fmt.Errorf("purge document of %s: %w", docRefKey, err)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != docRefKey.ProjectID {
-		return nil, fmt.Errorf("finding doc info by ID(%s): %w", docRefKey.DocID, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("purge document of %s: %w", docRefKey, database.ErrDocumentNotFound)
 	}
 
 	res, err := d.purgeDocumentInternals(ctx, docRefKey.ProjectID, docRefKey.DocID, txn)
@@ -2170,7 +2211,7 @@ func (d *DB) PurgeDocument(
 	}
 
 	if err := txn.Delete(tblDocuments, docInfo); err != nil {
-		return nil, fmt.Errorf("delete document: %w", err)
+		return nil, fmt.Errorf("purge document of %s: %w", docRefKey, err)
 	}
 
 	txn.Commit()
@@ -2187,19 +2228,19 @@ func (d *DB) purgeDocumentInternals(
 
 	count, err := txn.DeleteAll(tblChanges, "doc_id", docID.String())
 	if err != nil {
-		return nil, fmt.Errorf("purge changes: %w", err)
+		return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
 	}
 	counts[tblChanges] = int64(count)
 
 	count, err = txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
 	if err != nil {
-		return nil, fmt.Errorf("purge snapshots: %w", err)
+		return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
 	}
 	counts[tblSnapshots] = int64(count)
 
 	count, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
 	if err != nil {
-		return nil, fmt.Errorf("purge version vectors: %w", err)
+		return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
 	}
 	counts[tblVersionVectors] = int64(count)
 
@@ -2208,45 +2249,6 @@ func (d *DB) purgeDocumentInternals(
 
 func newID() types.ID {
 	return types.ID(bson.NewObjectID().Hex())
-}
-
-// RotateProjectKeys rotates the API keys of the project.
-func (d *DB) RotateProjectKeys(
-	_ context.Context,
-	owner types.ID,
-	id types.ID,
-	publicKey string,
-	secretKey string,
-) (*database.ProjectInfo, error) {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
-	// Find project by ID and owner
-	raw, err := txn.First(tblProjects, "id", id.String())
-	if err != nil {
-		return nil, fmt.Errorf("find project by id: %w", err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
-	}
-
-	project := raw.(*database.ProjectInfo).DeepCopy()
-	if project.Owner != owner {
-		return nil, database.ErrProjectNotFound
-	}
-
-	// Update project keys
-	project.PublicKey = publicKey
-	project.SecretKey = secretKey
-	project.UpdatedAt = gotime.Now()
-
-	// Save updated project
-	if err := txn.Insert(tblProjects, project); err != nil {
-		return nil, fmt.Errorf("update project: %w", err)
-	}
-
-	txn.Commit()
-	return project, nil
 }
 
 // IsSchemaAttached returns true if the schema is being used by any documents.
@@ -2264,7 +2266,7 @@ func (d *DB) IsSchemaAttached(
 		projectID.String(),
 	)
 	if err != nil {
-		return false, fmt.Errorf("find documents by project id: %w", err)
+		return false, fmt.Errorf("check if schema %s is attached: %w", schema, err)
 	}
 
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {

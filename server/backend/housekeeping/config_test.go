@@ -17,6 +17,7 @@
 package housekeeping_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,5 +50,64 @@ func TestConfig(t *testing.T) {
 		conf4 := validConf
 		conf4.CompactionMinChanges = 0
 		assert.Error(t, conf4.Validate())
+
+		conf5 := validConf
+		conf5.LeadershipLeaseDuration = "5d"
+		err := conf5.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(),
+			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-lease-duration"`, conf5.LeadershipLeaseDuration))
+
+		conf6 := validConf
+		conf6.LeadershipRenewalInterval = "5"
+		err = conf6.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(),
+			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-renewal-interval"`, conf6.LeadershipRenewalInterval))
+	})
+
+	t.Run("parse test", func(t *testing.T) {
+		validConf := housekeeping.Config{
+			Interval: "50s",
+		}
+		duration, err := validConf.ParseInterval()
+		assert.NoError(t, err)
+		assert.Equal(t, "50s", duration.String())
+
+		duration, err = validConf.ParseLeadershipLeaseDuration()
+		assert.NoError(t, err)
+		assert.Equal(t, "15s", duration.String())
+
+		duration, err = validConf.ParseLeadershipRenewalInterval()
+		assert.NoError(t, err)
+		assert.Equal(t, "5s", duration.String())
+
+		validConf.LeadershipLeaseDuration = "10s"
+		duration, err = validConf.ParseLeadershipLeaseDuration()
+		assert.NoError(t, err)
+		assert.Equal(t, "10s", duration.String())
+
+		validConf.LeadershipRenewalInterval = "3s"
+		duration, err = validConf.ParseLeadershipRenewalInterval()
+		assert.NoError(t, err)
+		assert.Equal(t, "3s", duration.String())
+
+		conf1 := validConf
+		conf1.Interval = "1 hour"
+		_, err = conf1.ParseInterval()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse interval")
+
+		conf2 := validConf
+		conf2.LeadershipLeaseDuration = "5"
+		_, err = conf2.ParseLeadershipLeaseDuration()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse leadership lease duration")
+
+		conf3 := validConf
+		conf3.LeadershipRenewalInterval = "3"
+		_, err = conf3.ParseLeadershipRenewalInterval()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "parse leadership renewal interval")
 	})
 }

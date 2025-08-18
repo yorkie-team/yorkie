@@ -329,12 +329,13 @@ func fromTextNode(
 		id,
 		crdt.NewTextValue(pbNode.Value, attrs),
 	)
+
 	if pbNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 		if err != nil {
 			return nil, err
 		}
-		textNode.Remove(removedAt, time.MaxLamport)
+		textNode.SetRemovedAt(removedAt)
 	}
 	return textNode, nil
 }
