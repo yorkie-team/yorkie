@@ -137,6 +137,8 @@ func (lm *LeadershipManager) leadershipLoop(ctx context.Context) {
 
 // handleLeadershipCycle handles one cycle of leadership management.
 func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
+	rpcAddr := database.PodRPCAddr(lm.hostname)
+
 	if lm.isLeader.Load() {
 		// We are the leader, try to renew the lease
 		if err := lm.renewLease(ctx); err != nil {
@@ -144,10 +146,11 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 				logger.Warn("failed to renew leadership lease", "error", err)
 			}
 			lm.becomeFollower()
+			_ = lm.database.UpsertClusterFollower(ctx, rpcAddr)
 		}
 	} else {
 		// We are not the leader, try to acquire leadership
-		if err := lm.tryAcquireLeadership(ctx); err != nil {
+		if err := lm.tryAcquireLeadership(ctx, rpcAddr); err != nil {
 			if logger := logging.From(ctx); logger != nil {
 				logger.Debug("failed to acquire leadership", "error", err)
 			}
@@ -156,17 +159,23 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 }
 
 // tryAcquireLeadership attempts to acquire leadership.
-func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
+func (lm *LeadershipManager) tryAcquireLeadership(
+	ctx context.Context,
+	rpcAddr string,
+) error {
 	lease, err := lm.database.TryLeadership(ctx, lm.hostname, "", lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
 
-	if lease.RPCAddr == database.PodRPCAddr(lm.hostname) {
+	if lease.RPCAddr == rpcAddr {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
 			logger.Infof("leadership acquired term: %d, expires_at: %s", lease.Term, lease.ExpiresAt)
 		}
+	} else {
+		lm.becomeFollower()
+		_ = lm.database.UpsertClusterFollower(ctx, database.PodRPCAddr(lm.hostname))
 	}
 
 	return nil

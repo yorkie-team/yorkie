@@ -180,6 +180,24 @@ func (c *Client) FindLeadership(
 	return &info, nil
 }
 
+// UpsertClusterFollower upserts the given node as follower.
+func (c *Client) UpsertClusterFollower(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).UpdateOne(
+		ctx,
+		bson.M{
+			"rpcAddr":   rpcAddr,
+			"is_leader": bson.M{"$ne": true},
+		},
+		bson.M{
+			"$set":         bson.M{"rpcAddr": rpcAddr},
+			"$currentDate": bson.M{"renewed_at": true},
+			"$setOnInsert": bson.M{"is_leader": false},
+		},
+		options.UpdateOne().SetUpsert(true),
+	)
+	return err
+}
+
 // tryAcquireLeadership attempts to acquire new leadership.
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
@@ -241,11 +259,9 @@ func (c *Client) tryAcquireLeadership(
 	}
 
 	// 1) Promote first
-	info, err := promote()
-	if err == nil {
+	if info, err := promote(); err == nil {
 		return info, nil
-	}
-	if !mongo.IsDuplicateKeyError(err) {
+	} else if !mongo.IsDuplicateKeyError(err) {
 		return nil, fmt.Errorf("promote self: %w", err)
 	}
 
@@ -258,11 +274,9 @@ func (c *Client) tryAcquireLeadership(
 		},
 		bson.M{"$set": bson.M{"is_leader": false}},
 	)
-	info, err = promote()
-	if err == nil {
+	if info, err := promote(); err == nil {
 		return info, nil
-	}
-	if mongo.IsDuplicateKeyError(err) {
+	} else if mongo.IsDuplicateKeyError(err) {
 		return c.FindLeadership(ctx)
 	}
 	return nil, fmt.Errorf("promote after demote-expired: %w", err)

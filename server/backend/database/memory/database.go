@@ -249,6 +249,43 @@ func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeI
 	return infos, nil
 }
 
+// UpsertClusterFollower upserts the given node as follower.
+func (d *DB) UpsertClusterFollower(_ context.Context, rpcAddr string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	now := gotime.Now()
+
+	raw, err := txn.First(tblClusterNodes, "rpcAddr", rpcAddr)
+	if err != nil {
+		return fmt.Errorf("upsert cluster follower: %w", err)
+	}
+
+	if raw == nil {
+		n := &database.ClusterNodeInfo{
+			RPCAddr:   rpcAddr,
+			IsLeader:  false,
+			RenewedAt: now,
+		}
+		if err := txn.Insert(tblClusterNodes, n); err != nil {
+			return fmt.Errorf("insert cluster follower: %w", err)
+		}
+		txn.Commit()
+		return nil
+	}
+
+	old := raw.(*database.ClusterNodeInfo)
+	n := *old
+
+	n.RenewedAt = now
+
+	if err := txn.Insert(tblClusterNodes, &n); err != nil {
+		return fmt.Errorf("update cluster follower: %w", err)
+	}
+	txn.Commit()
+	return nil
+}
+
 // FindProjectInfoByPublicKey returns a project by public key.
 func (d *DB) FindProjectInfoByPublicKey(
 	_ context.Context,

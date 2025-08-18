@@ -97,6 +97,9 @@ type Database interface {
 	// FindActiveClusterNodes returns the active cluster nodes.
 	FindActiveClusterNodes(ctx context.Context) ([]*ClusterNodeInfo, error)
 
+	// UpsertClusterFollower upserts the given node as follower.
+	UpsertClusterFollower(ctx context.Context, rpcAddr string) error
+
 	// FindProjectInfoByPublicKey returns a project by public key.
 	FindProjectInfoByPublicKey(
 		ctx context.Context,
