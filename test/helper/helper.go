@@ -90,7 +90,6 @@ var (
 	EventWebhookMinWaitInterval = 3 * gotime.Millisecond
 	EventWebhookRequestTimeout  = 100 * gotime.Millisecond
 	EventWebhookSize            = 100
-	EventWebhookCacheTTL        = 10 * gotime.Second
 	ProjectCacheSize            = 256
 	ProjectCacheTTL             = 5 * gotime.Second
 	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
@@ -290,7 +289,7 @@ func TestConfig() *server.Config {
 			SecretKey:                   server.DefaultSecretKey,
 			AdminTokenDuration:          server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:           true,
-			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
+			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold.String(),
 			SnapshotInterval:            10,
 			SnapshotThreshold:           SnapshotThreshold,
 			SnapshotCacheSize:           SnapshotCacheSize,

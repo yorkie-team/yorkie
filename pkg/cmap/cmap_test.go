@@ -163,7 +163,7 @@ func TestConcurrentMap(t *testing.T) {
 
 		expectedLen := numRoutines * numOperations
 		if m.Len() != expectedLen {
-			t.Errorf("Expected map length %d, but got %d", expectedLen, m.Len())
+			t.Errorf("expected map length %d, but got %d", expectedLen, m.Len())
 		}
 	})
 
