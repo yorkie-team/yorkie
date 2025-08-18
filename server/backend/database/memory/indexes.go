@@ -317,11 +317,6 @@ var schema = &memdb.DBSchema{
 					Unique:  false,
 					Indexer: &memdb.BoolFieldIndex{Field: "IsLeader"},
 				},
-				"renewed_at": {
-					Name:    "renewed_at",
-					Unique:  false,
-					Indexer: &memdb.IntFieldIndex{Field: "RenewedAtUnix"},
-				},
 			},
 		},
 	},

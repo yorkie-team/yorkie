@@ -95,6 +95,10 @@ func TestLeadershipManager(t *testing.T) {
 			leaders++
 		}
 		assert.Equal(t, 1, leaders)
+
+		nodes, err := db.FindActiveClusterNodes(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(nodes))
 	})
 
 	t.Run("Leadership should transfer after lease expires", func(t *testing.T) {
@@ -170,4 +174,35 @@ func TestLeadershipConcurrency(t *testing.T) {
 	}
 
 	assert.Greater(t, totalAcquisitions, 0, "At least some leadership acquisitions should have occurred")
+}
+
+func TestAcquire_Concurrent_NoSplitBrain(t *testing.T) {
+	ctx := context.Background()
+	db := newDatabase()
+
+	lease := 30 * time.Second
+	addr1 := database.PodRPCAddr("node-1")
+	addr2 := database.PodRPCAddr("node-2")
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var r1, r2 *database.ClusterNodeInfo
+	var e1, e2 error
+
+	go func() {
+		defer wg.Done()
+		r1, e1 = db.TryLeadership(ctx, addr1, "", lease)
+	}()
+	go func() {
+		defer wg.Done()
+		r2, e2 = db.TryLeadership(ctx, addr2, "", lease)
+	}()
+	wg.Wait()
+
+	assert.NoError(t, e1)
+	assert.NoError(t, e2)
+	require.NotNil(t, r1)
+	require.NotNil(t, r2)
+
+	assert.Equal(t, r1.RPCAddr, r2.RPCAddr)
 }

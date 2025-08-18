@@ -58,10 +58,10 @@ func (d *DB) Close() error {
 	return nil
 }
 
-// clusterNodeRecord wraps LeadershipInfo with an ID for memory database storage.
+// clusterNodeRecord wraps ClusterNodeInfo with an ID for memory database storage.
 type clusterNodeRecord struct {
-	ID   string                    `json:"id"`
-	Info *database.ClusterNodeInfo `json:"info"`
+	ID                        string `json:"id"`
+	*database.ClusterNodeInfo `json:"info"`
 }
 
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
@@ -78,19 +78,23 @@ func (d *DB) TryLeadership(
 
 	now := gotime.Now()
 	expiresAt := now.Add(leaseDuration)
+	rpcAddr := database.PodRPCAddr(hostname)
 
 	// Find existing leadership
-	raw, err := txn.First(tblLeaderships, "id", "leadership")
+	it, err := txn.Get(tblClusterNodes, "is_leader", true)
 	if err != nil {
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
+	if it == nil {
+		return nil, nil
+	}
+
+	raw := it.Next()
 
 	var existing *database.ClusterNodeInfo
 	if raw != nil {
-		existing = raw.(*clusterNodeRecord).Info
+		existing = raw.(*clusterNodeRecord).ClusterNodeInfo
 	}
-
-	rpcAddr := database.PodRPCAddr(hostname)
 
 	if leaseToken == "" {
 		// Attempting to acquire new leadership
@@ -125,12 +129,12 @@ func (d *DB) TryLeadership(
 		}
 
 		record := &clusterNodeRecord{
-			ID:   "leadership",
-			Info: newLeadership,
+			ID:              "clusternode",
+			ClusterNodeInfo: newLeadership,
 		}
 
-		if err := txn.Insert(tblLeaderships, record); err != nil {
-			return nil, fmt.Errorf("insert leadership: %w", err)
+		if err := txn.Insert(tblClusterNodes, record); err != nil {
+			return nil, fmt.Errorf("insert clusternode: %w", err)
 		}
 
 		txn.Commit()
@@ -174,11 +178,11 @@ func (d *DB) TryLeadership(
 	}
 
 	record := &clusterNodeRecord{
-		ID:   "leadership",
-		Info: renewedLeadership,
+		ID:              "clusterNode",
+		ClusterNodeInfo: renewedLeadership,
 	}
 
-	if err := txn.Insert(tblLeaderships, record); err != nil {
+	if err := txn.Insert(tblClusterNodes, record); err != nil {
 		return nil, fmt.Errorf("update leadership: %w", err)
 	}
 
@@ -191,15 +195,20 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, err
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblLeaderships, "id", "leadership")
+	it, err := txn.Get(tblClusterNodes, "is_leader", true)
 	if err != nil {
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
+	if it == nil {
+		return nil, nil
+	}
+
+	raw := it.Next()
 	if raw == nil {
 		return nil, nil
 	}
 
-	leadershipInfo := raw.(*clusterNodeRecord).Info
+	leadershipInfo := raw.(*clusterNodeRecord).ClusterNodeInfo
 
 	// Check if leadership has expired
 	if leadershipInfo.IsExpired() {
@@ -215,7 +224,7 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 	defer txn.Abort()
 
 	// Delete the leadership record if it exists
-	_, err := txn.DeleteAll(tblLeaderships, "id", "leadership")
+	_, err := txn.DeleteAll(tblClusterNodes, "id", "clusternode")
 	if err != nil {
 		return fmt.Errorf("clear leadership: %w", err)
 	}
@@ -235,7 +244,7 @@ func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeI
 	}
 	var infos []*database.ClusterNodeInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		info := raw.(*database.ClusterNodeInfo)
+		info := raw.(*clusterNodeRecord).ClusterNodeInfo
 		infos = append(infos, info)
 	}
 
@@ -267,19 +276,30 @@ func (d *DB) UpsertClusterFollower(_ context.Context, rpcAddr string) error {
 			IsLeader:  false,
 			RenewedAt: now,
 		}
-		if err := txn.Insert(tblClusterNodes, n); err != nil {
-			return fmt.Errorf("insert cluster follower: %w", err)
+		record := &clusterNodeRecord{
+			ID:              "clusterNode",
+			ClusterNodeInfo: n,
 		}
+
+		if err := txn.Insert(tblClusterNodes, record); err != nil {
+			return fmt.Errorf("insert leadership: %w", err)
+		}
+
 		txn.Commit()
 		return nil
 	}
 
-	old := raw.(*database.ClusterNodeInfo)
+	old := raw.(*clusterNodeRecord).ClusterNodeInfo
 	n := *old
 
 	n.RenewedAt = now
 
-	if err := txn.Insert(tblClusterNodes, &n); err != nil {
+	record := &clusterNodeRecord{
+		ID:              "clusterNode",
+		ClusterNodeInfo: &n,
+	}
+
+	if err := txn.Insert(tblClusterNodes, record); err != nil {
 		return fmt.Errorf("update cluster follower: %w", err)
 	}
 	txn.Commit()
