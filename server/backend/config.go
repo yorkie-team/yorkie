@@ -53,7 +53,7 @@ type Config struct {
 	SnapshotInterval int64 `yaml:"SnapshotInterval"`
 
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
-	SnapshotDisableGC bool
+	SnapshotDisableGC bool `yaml:"SnapshotDisableGC"`
 
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`

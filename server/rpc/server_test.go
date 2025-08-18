@@ -85,6 +85,7 @@ func TestMain(m *testing.M) {
 		ProjectCacheSize:            helper.ProjectCacheSize,
 		ProjectCacheTTL:             helper.ProjectCacheTTL.String(),
 		AdminTokenDuration:          helper.AdminTokenDuration,
+		GatewayAddr:                 helper.GatewayAddr,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),
@@ -229,6 +230,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin get document test", func(t *testing.T) {
 		testcases.RunAdminGetDocumentTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
+
+	t.Run("admin get documents test", func(t *testing.T) {
+		testcases.RunAdminGetDocumentsTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
 
 	t.Run("admin list changes test", func(t *testing.T) {

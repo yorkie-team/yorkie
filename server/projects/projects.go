@@ -148,8 +148,8 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 	return info.ToProject(), nil
 }
 
-// GetProjectFromSecretKey returns a project from a secret key.
-func GetProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
+// ProjectFromSecretKey returns a project from a secret key.
+func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	info, err := be.DB.FindProjectInfoBySecretKey(ctx, secretKey)
 	if err != nil {
 		return nil, err

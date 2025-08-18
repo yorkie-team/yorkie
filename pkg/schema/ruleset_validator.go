@@ -86,7 +86,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 				Valid: false,
 				Errors: []ValidationError{{
 					Path:    rule.Path,
-					Message: fmt.Sprintf("Expected object at path %s", rule.Path),
+					Message: fmt.Sprintf("expected object at path %s", rule.Path),
 				}},
 			}
 		}
@@ -96,7 +96,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 				Valid: false,
 				Errors: []ValidationError{{
 					Path:    rule.Path,
-					Message: fmt.Sprintf("Expected array at path %s", rule.Path),
+					Message: fmt.Sprintf("expected array at path %s", rule.Path),
 				}},
 			}
 		}
@@ -106,7 +106,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 				Valid: false,
 				Errors: []ValidationError{{
 					Path:    rule.Path,
-					Message: fmt.Sprintf("Expected yorkie.Text at path %s", rule.Path),
+					Message: fmt.Sprintf("expected yorkie.Text at path %s", rule.Path),
 				}},
 			}
 		}
@@ -116,7 +116,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 				Valid: false,
 				Errors: []ValidationError{{
 					Path:    rule.Path,
-					Message: fmt.Sprintf("Expected yorkie.Tree at path %s", rule.Path),
+					Message: fmt.Sprintf("expected yorkie.Tree at path %s", rule.Path),
 				}},
 			}
 		}
@@ -126,7 +126,7 @@ func validateValue(value interface{}, rule types.Rule) ValidationResult {
 				Valid: false,
 				Errors: []ValidationError{{
 					Path:    rule.Path,
-					Message: fmt.Sprintf("Expected yorkie.Counter at path %s", rule.Path),
+					Message: fmt.Sprintf("expected yorkie.Counter at path %s", rule.Path),
 				}},
 			}
 		}
@@ -180,7 +180,7 @@ func validatePrimitiveValue(value interface{}, rule types.Rule) ValidationResult
 		Valid: false,
 		Errors: []ValidationError{{
 			Path:    rule.Path,
-			Message: fmt.Sprintf("Expected %s at path %s", rule.Type, rule.Path),
+			Message: fmt.Sprintf("expected %s at path %s", rule.Type, rule.Path),
 		}},
 	}
 }

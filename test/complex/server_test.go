@@ -99,6 +99,10 @@ func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
 		testcases.RunAdminGetDocumentTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
 
+	t.Run("admin get documents test", func(t *testing.T) {
+		testcases.RunAdminGetDocumentsTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
+	})
+
 	t.Run("admin list changes test", func(t *testing.T) {
 		testcases.RunAdminListChangesTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})

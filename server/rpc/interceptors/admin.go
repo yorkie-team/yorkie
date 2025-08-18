@@ -159,11 +159,11 @@ func (i *AdminServiceInterceptor) buildContext(
 	header http.Header,
 ) (context.Context, error) {
 	if isRequiredAuth(procedure) {
-		user, err := i.authenticate(ctx, header)
+		newContext, err := i.authenticate(ctx, header)
 		if err != nil {
 			return nil, err
 		}
-		ctx = users.With(ctx, user)
+		ctx = newContext
 	}
 
 	ctx = logging.With(ctx, logging.New(i.requestID.next()))
@@ -175,7 +175,7 @@ func (i *AdminServiceInterceptor) buildContext(
 func (i *AdminServiceInterceptor) authenticate(
 	ctx context.Context,
 	header http.Header,
-) (*types.User, error) {
+) (context.Context, error) {
 	// NOTE(hackerwins): The token can be provided by the Authorization header or cookie.
 	token := header.Get(types.AuthorizationKey)
 	if token == "" {
@@ -191,25 +191,29 @@ func (i *AdminServiceInterceptor) authenticate(
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
-	// NOTE(raararaara): If the token is access token, return the user of the token.
-	// This is used for the case where the user uses dashboard or CLI.
 	claims, err := i.tokenManager.Verify(token)
+
+	// NOTE(hackerwins): If the token is valid, we extract the user information
+	// and set it in the context with the admin access scope.
 	if err == nil {
 		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
 		if err == nil {
-			return user, nil
+			user.AccessScope = types.AccessScopeAdmin
+			ctx = users.With(ctx, user)
+			return ctx, nil
 		}
 	}
 
-	// NOTE(raararaara): If the token is secret key, return the owner of the project.
-	// This is used for the case where the user uses REST API.
-	// TODO(hackerwins): In this case, attacker can hijack the project owner's identity.
-	// We need to separate project-wide API and user-wide API from AdminService.
-	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, token)
+	// NOTE(hackerwins): If the token is a project secret key, we extract the project
+	// information and set it in the context with the project access scope.
+	project, err := projects.ProjectFromSecretKey(ctx, i.backend, token)
 	if err == nil {
 		user, err := users.GetUserByID(ctx, i.backend, project.Owner)
 		if err == nil {
-			return user, nil
+			user.AccessScope = types.AccessScopeProject
+			ctx = users.With(ctx, user)
+			ctx = projects.With(ctx, project)
+			return ctx, nil
 		}
 	}
 
