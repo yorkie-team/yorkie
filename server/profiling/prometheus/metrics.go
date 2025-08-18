@@ -62,6 +62,7 @@ type Metrics struct {
 	pushPullSentChangesTotal        *prometheus.CounterVec
 	pushPullReceivedOperationsTotal *prometheus.CounterVec
 	pushPullSentOperationsTotal     *prometheus.CounterVec
+	pushPullErrorsTotal             *prometheus.CounterVec
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      *prometheus.CounterVec
 
@@ -146,6 +147,16 @@ func NewMetrics() (*Metrics, error) {
 			Subsystem: "pushpull",
 			Name:      "sent_operations_total",
 			Help:      "The total count of operations included in response packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+		}),
+		pushPullErrorsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "pushpull",
+			Name:      "errors_total",
+			Help:      "The total count of errors in PushPull.",
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
@@ -267,6 +278,15 @@ func (m *Metrics) AddPushPullReceivedOperations(hostname string, project *types.
 // included in the response pack of PushPull.
 func (m *Metrics) AddPushPullSentOperations(hostname string, project *types.Project, count int) {
 	m.pushPullSentOperationsTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
+}
+
+// AddPushPullErrors adds the number of errors in PushPull.
+func (m *Metrics) AddPushPullErrors(hostname string, project *types.Project, count int) {
+	m.pushPullErrorsTotal.With(prometheus.Labels{
 		projectIDLabel:   project.ID.String(),
 		projectNameLabel: project.Name,
 		hostnameLabel:    hostname,

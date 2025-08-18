@@ -81,16 +81,19 @@ func PushPull(
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	start := gotime.Now()
+	hostname := be.Config.Hostname
 
 	// 01. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
 	// 02. pull the pack from the database.
 	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts)
 	if err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
@@ -109,7 +112,6 @@ func PushPull(
 		)
 	}
 
-	hostname := be.Config.Hostname
 	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
 	be.Metrics.AddPushPullSentChanges(hostname, project, resPack.ChangesLen())
