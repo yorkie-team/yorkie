@@ -149,10 +149,18 @@ func (c *Client) TryLeadership(
 
 	rpcAddr := database.PodRPCAddr(hostname)
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
+		res, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
+		if err == nil && res.RPCAddr != rpcAddr {
+			_ = c.upsertClusterFollower(ctx, rpcAddr)
+		}
+		return res, err
 	}
 
-	return c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
+	res, err := c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
+	if err == nil && res.RPCAddr != rpcAddr {
+		_ = c.upsertClusterFollower(ctx, rpcAddr)
+	}
+	return res, err
 }
 
 // FindLeadership returns the current leadership information.
@@ -180,8 +188,8 @@ func (c *Client) FindLeadership(
 	return &info, nil
 }
 
-// UpsertClusterFollower upserts the given node as follower.
-func (c *Client) UpsertClusterFollower(ctx context.Context, rpcAddr string) error {
+// upsertClusterFollower upserts the given node as follower.
+func (c *Client) upsertClusterFollower(ctx context.Context, rpcAddr string) error {
 	_, err := c.collection(ColClusterNodes).UpdateOne(
 		ctx,
 		bson.M{

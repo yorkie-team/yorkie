@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	gotime "time"
 
@@ -102,6 +103,7 @@ func (d *DB) TryLeadership(
 			// Check if current leadership has expired
 			if existing.ExpiresAt.After(now) {
 				// Leadership is still valid, return existing leadership
+				_ = d.upsertClusterFollower(txn, rpcAddr)
 				return existing, nil
 			}
 		}
@@ -129,7 +131,7 @@ func (d *DB) TryLeadership(
 		}
 
 		record := &clusterNodeRecord{
-			ID:              "clusternode",
+			ID:              rpcAddr,
 			ClusterNodeInfo: newLeadership,
 		}
 
@@ -178,7 +180,7 @@ func (d *DB) TryLeadership(
 	}
 
 	record := &clusterNodeRecord{
-		ID:              "clusterNode",
+		ID:              rpcAddr,
 		ClusterNodeInfo: renewedLeadership,
 	}
 
@@ -224,7 +226,7 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 	defer txn.Abort()
 
 	// Delete the leadership record if it exists
-	_, err := txn.DeleteAll(tblClusterNodes, "id", "clusternode")
+	_, err := txn.DeleteAll(tblClusterNodes, "id")
 	if err != nil {
 		return fmt.Errorf("clear leadership: %w", err)
 	}
@@ -269,11 +271,8 @@ func (d *DB) FindActiveClusterNodes(
 	return infos, nil
 }
 
-// UpsertClusterFollower upserts the given node as follower.
-func (d *DB) UpsertClusterFollower(_ context.Context, rpcAddr string) error {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
-
+// upsertClusterFollower upserts the given node as follower.
+func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	now := gotime.Now()
 
 	raw, err := txn.First(tblClusterNodes, "rpcAddr", rpcAddr)
@@ -288,7 +287,7 @@ func (d *DB) UpsertClusterFollower(_ context.Context, rpcAddr string) error {
 			RenewedAt: now,
 		}
 		record := &clusterNodeRecord{
-			ID:              "clusterNode",
+			ID:              rpcAddr,
 			ClusterNodeInfo: n,
 		}
 
@@ -315,6 +314,23 @@ func (d *DB) UpsertClusterFollower(_ context.Context, rpcAddr string) error {
 	}
 	txn.Commit()
 	return nil
+}
+
+func (d *DB) Foo(_ context.Context) {
+	txn := d.db.Txn(false) // read-only
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClusterNodes, "id")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	count := 0
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		count++
+	}
+
+	fmt.Println("total count:", count)
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.

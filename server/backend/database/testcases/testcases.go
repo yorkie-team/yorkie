@@ -187,6 +187,39 @@ func RunLeadershipTest(
 		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
 		assert.Equal(t, acquired.Term, info.Term)
 	})
+
+	t.Run("Leader should be only one", func(t *testing.T) {
+		//t.Skip("TODO(raararaara): Need to resolve in case of memDB.")
+		ctx := context.Background()
+		require.NoError(t, db.ClearLeadership(ctx))
+
+		const numNodes = 3
+		const leaseDuration = 30 * gotime.Second
+		const renewalInterval = 5 * gotime.Second
+
+		for i := range numNodes {
+			_, err := db.TryLeadership(ctx, fmt.Sprintf("node-%d", i), "", leaseDuration)
+			require.NoError(t, err)
+		}
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			return numNodes == len(res)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
+
+		infos, err := db.FindActiveClusterNodes(ctx, renewalInterval)
+		require.NoError(t, err)
+		require.Equal(t, numNodes, len(infos))
+
+		var leaderCount = 0
+		for _, info := range infos {
+			if info.IsLeader == true {
+				leaderCount++
+			}
+		}
+		assert.Equal(t, 1, leaderCount)
+	})
 }
 
 // RunFindDocInfoTest runs the FindDocInfo test for the given db.

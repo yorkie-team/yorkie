@@ -100,9 +100,6 @@ type Database interface {
 		renewalInterval gotime.Duration,
 	) ([]*ClusterNodeInfo, error)
 
-	// UpsertClusterFollower upserts the given node as follower.
-	UpsertClusterFollower(ctx context.Context, rpcAddr string) error
-
 	// FindProjectInfoByPublicKey returns a project by public key.
 	FindProjectInfoByPublicKey(
 		ctx context.Context,
