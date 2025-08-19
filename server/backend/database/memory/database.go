@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	gotime "time"
 
@@ -85,9 +84,6 @@ func (d *DB) TryLeadership(
 	it, err := txn.Get(tblClusterNodes, "is_leader", true)
 	if err != nil {
 		return nil, fmt.Errorf("find leadership: %w", err)
-	}
-	if it == nil {
-		return nil, nil
 	}
 
 	raw := it.Next()
@@ -305,7 +301,7 @@ func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	n.RenewedAt = now
 
 	record := &clusterNodeRecord{
-		ID:              "clusterNode",
+		ID:              rpcAddr,
 		ClusterNodeInfo: &n,
 	}
 
@@ -314,23 +310,6 @@ func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	}
 	txn.Commit()
 	return nil
-}
-
-func (d *DB) Foo(_ context.Context) {
-	txn := d.db.Txn(false) // read-only
-	defer txn.Abort()
-
-	it, err := txn.Get(tblClusterNodes, "id")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	count := 0
-	for obj := it.Next(); obj != nil; obj = it.Next() {
-		count++
-	}
-
-	fmt.Println("total count:", count)
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.

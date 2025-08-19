@@ -25,7 +25,7 @@ import (
 
 // ClusterNodeInfo represents the information of a node in the Yorkie cluster.
 type ClusterNodeInfo struct {
-	RPCAddr    string    `bson:"rpcAddr"`
+	RPCAddr    string    `bson:"rpc_addr"`
 	LeaseToken string    `bson:"lease_token"`
 	ElectedAt  time.Time `bson:"elected_at"`
 	ExpiresAt  time.Time `bson:"expires_at"`

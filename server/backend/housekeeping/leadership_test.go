@@ -210,8 +210,8 @@ func TestAcquire_Concurrent_NoSplitBrain(t *testing.T) {
 	db := newDatabase()
 
 	lease := 30 * time.Second
-	addr1 := database.PodRPCAddr("node-1")
-	addr2 := database.PodRPCAddr("node-2")
+	host1 := "node-1"
+	host2 := "node-2"
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -220,11 +220,11 @@ func TestAcquire_Concurrent_NoSplitBrain(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		r1, e1 = db.TryLeadership(ctx, addr1, "", lease)
+		r1, e1 = db.TryLeadership(ctx, host1, "", lease)
 	}()
 	go func() {
 		defer wg.Done()
-		r2, e2 = db.TryLeadership(ctx, addr2, "", lease)
+		r2, e2 = db.TryLeadership(ctx, host2, "", lease)
 	}()
 	wg.Wait()
 

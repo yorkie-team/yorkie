@@ -261,7 +261,6 @@ func (c *Client) tryAcquireLeadership(
 		var out database.ClusterNodeInfo
 		if err = res.Decode(&out); err != nil {
 			return nil, fmt.Errorf("decode new leadership: %w", err)
-			//return nil, err
 		}
 		return &out, nil
 	}
