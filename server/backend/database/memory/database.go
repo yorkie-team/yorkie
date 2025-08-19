@@ -233,18 +233,30 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 	return nil
 }
 
-// FindActiveClusterNodes returns the active cluster nodes.
-func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeInfo, error) {
+// FindActiveClusterNodes returns nodes whose renewed_at >= now - leaseDuration.
+// Order: leader first, then by renewed_at desc.
+func (d *DB) FindActiveClusterNodes(
+	_ context.Context,
+	renewalInterval gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
+
+	now := gotime.Now()
+	cutoff := now.Add(-renewalInterval * 2)
 
 	iter, err := txn.Get(tblClusterNodes, "id")
 	if err != nil {
 		return nil, fmt.Errorf("fetch cluster nodes: %w", err)
 	}
+
 	var infos []*database.ClusterNodeInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*clusterNodeRecord).ClusterNodeInfo
+
+		if info.RenewedAt.IsZero() || info.RenewedAt.Before(cutoff) {
+			continue
+		}
 		infos = append(infos, info)
 	}
 
@@ -254,7 +266,6 @@ func (d *DB) FindActiveClusterNodes(_ context.Context) ([]*database.ClusterNodeI
 		}
 		return infos[i].RenewedAt.After(infos[j].RenewedAt)
 	})
-
 	return infos, nil
 }
 

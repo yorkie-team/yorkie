@@ -95,7 +95,10 @@ type Database interface {
 	ClearLeadership(ctx context.Context) error
 
 	// FindActiveClusterNodes returns the active cluster nodes.
-	FindActiveClusterNodes(ctx context.Context) ([]*ClusterNodeInfo, error)
+	FindActiveClusterNodes(
+		ctx context.Context,
+		renewalInterval gotime.Duration,
+	) ([]*ClusterNodeInfo, error)
 
 	// UpsertClusterFollower upserts the given node as follower.
 	UpsertClusterFollower(ctx context.Context, rpcAddr string) error

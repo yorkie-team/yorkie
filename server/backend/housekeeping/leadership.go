@@ -145,8 +145,12 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 			if logger := logging.From(ctx); logger != nil {
 				logger.Warn("failed to renew leadership lease", "error", err)
 			}
+
 			lm.becomeFollower()
-			_ = lm.database.UpsertClusterFollower(ctx, rpcAddr)
+			err = lm.database.UpsertClusterFollower(ctx, rpcAddr)
+			if logger := logging.From(ctx); logger != nil {
+				logger.Warn("failed to become follower", err)
+			}
 		}
 	} else {
 		// We are not the leader, try to acquire leadership
@@ -175,7 +179,7 @@ func (lm *LeadershipManager) tryAcquireLeadership(
 		}
 	} else {
 		lm.becomeFollower()
-		_ = lm.database.UpsertClusterFollower(ctx, database.PodRPCAddr(lm.hostname))
+		return lm.database.UpsertClusterFollower(ctx, rpcAddr)
 	}
 
 	return nil

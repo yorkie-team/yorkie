@@ -239,7 +239,7 @@ func (c *Client) tryAcquireLeadership(
 					{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
 					{Key: "lease_token", Value: token},
 					{Key: "term", Value: newTerm},
-					{Key: "rpcAddr", Value: rpcAddr},
+					{Key: "rpc_addr", Value: rpcAddr},
 					{Key: "renewed_at", Value: "$$NOW"},
 					{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
 					{Key: "is_leader", Value: true},
@@ -340,12 +340,23 @@ func (c *Client) ClearLeadership(ctx context.Context) error {
 
 // FindActiveClusterNodes returns all nodes currently tracked in clusternodes.
 // Order: leader first, then by renewed_at desc.
-func (c *Client) FindActiveClusterNodes(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+func (c *Client) FindActiveClusterNodes(
+	ctx context.Context,
+	renewalInterval gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
 	// NOTE(raararaara): Assumes TTL on renewed_at cleans out stale entries.
+	leaseMS := renewalInterval.Milliseconds()
 
 	cursor, err := c.collection(ColClusterNodes).Find(
 		ctx,
-		bson.D{},
+		bson.M{
+			"$expr": bson.M{
+				"$gte": bson.A{
+					"$renewed_at",
+					bson.D{{Key: "$add", Value: bson.A{"$$NOW", -leaseMS * 2}}},
+				},
+			},
+		},
 		options.Find().SetSort(bson.D{
 			{Key: "is_leader", Value: -1},
 			{Key: "renewed_at", Value: -1},

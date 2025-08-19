@@ -95,10 +95,6 @@ func TestLeadershipManager(t *testing.T) {
 			leaders++
 		}
 		assert.Equal(t, 1, leaders)
-
-		nodes, err := db.FindActiveClusterNodes(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, len(nodes))
 	})
 
 	t.Run("Leadership should transfer after lease expires", func(t *testing.T) {
@@ -129,6 +125,39 @@ func TestLeadershipManager(t *testing.T) {
 		// Manager2 should eventually become leader
 		assert.Eventually(t, func() bool {
 			return manager2.IsLeader()
+		}, 1*time.Second, 50*time.Millisecond)
+	})
+
+	t.Run("FindActiveClusterNodes should return active cluster nodes", func(t *testing.T) {
+		db := newDatabase()
+		conf := DefaultLeadershipConfig()
+		conf.LeaseDuration = 200 * time.Millisecond
+		conf.RenewalInterval = 50 * time.Millisecond
+
+		manager1 := NewLeadershipManager(db, "node-1", conf)
+		manager2 := NewLeadershipManager(db, "node-2", conf)
+
+		err := manager1.Start(ctx)
+		require.NoError(t, err)
+
+		err = manager2.Start(ctx)
+		require.NoError(t, err)
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, conf.RenewalInterval)
+			assert.NoError(t, err)
+			return 2 == len(res)
+		}, 1*time.Second, 50*time.Millisecond)
+
+		manager1.Stop()
+		manager2.Stop()
+
+		time.Sleep(100 * time.Millisecond)
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, conf.RenewalInterval)
+			assert.NoError(t, err)
+			return 0 == len(res)
 		}, 1*time.Second, 50*time.Millisecond)
 	})
 }
