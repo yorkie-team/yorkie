@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.26] - 2025-08-20
+
+### Changed
+
+- Improve error for better context in DB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1445
+- Improve changes fetching with database-level pagination by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1448
+
+### Fixed
+
+- Fix incorrect tombstone in Tree.Remove for overlapping ranges by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1435
+- Refine server configuration defaults and tests by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1450
+- Fix removedAt timestamp handling in text deletions by @sigmaith in https://github.com/yorkie-team/yorkie/pull/1447
+
 ## [v0.6.25] - 2025-08-12
 
 ### Fixed
