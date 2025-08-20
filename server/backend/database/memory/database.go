@@ -913,11 +913,17 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 }
 
 // DeactivateClientForHousekeeping deactivates the client for housekeeping purposes.
-// This method bypasses cache and directly updates the database.
+// This method bypasses any in-memory cache and directly updates the database.
+// Returns (nil, nil) if the client does not exist, is not in the given project,
+// or is already deactivated (i.e., no state change was performed).
 func (d *DB) DeactivateClientForHousekeeping(
 	_ context.Context,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
+	if err := refKey.ClientID.Validate(); err != nil {
+		return nil, err
+	}
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -925,22 +931,27 @@ func (d *DB) DeactivateClientForHousekeeping(
 	if err != nil {
 		return nil, fmt.Errorf("find client by id: %w", err)
 	}
+
+	// Client not found, return nil to indicate no action needed
 	if raw == nil {
-		return nil, nil // Client not found, return nil to indicate no action needed
+		return nil, nil
 	}
 
+	// Client not in project, return nil to indicate no action needed
 	clientInfo := raw.(*database.ClientInfo).DeepCopy()
 	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
-		return nil, nil // Client not in project, return nil to indicate no action needed
+		return nil, nil
 	}
 
 	// Only deactivate if currently activated
 	if clientInfo.Status != database.ClientActivated {
-		return clientInfo, nil // Already deactivated, return current state
+		return nil, nil
 	}
 
-	clientInfo.Status = database.ClientDeactivated
-	clientInfo.UpdatedAt = gotime.Now()
+	// clientInfo.Status = database.ClientDeactivated
+	// clientInfo.UpdatedAt = gotime.Now()
+
+	clientInfo.Deactivate()
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, fmt.Errorf("update client: %w", err)

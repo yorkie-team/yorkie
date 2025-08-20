@@ -1075,7 +1075,6 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("find client of %s: %w", refKey, database.ErrClientNotFound)
 		}
-		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
 	if err := c.clientInfoCache.Set(refKey, &clientInfo); err != nil {
@@ -1120,7 +1119,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, database.ErrClientNotFound)
 		}
 		if result.Err() != nil {
-			return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, err)
+			return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, result.Err())
 		}
 
 		if err := c.clientInfoCache.Set(clientInfo.RefKey(), clientInfo); err != nil {

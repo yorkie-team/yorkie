@@ -104,6 +104,11 @@ func DeactivateForHousekeeping(
 		return nil, err
 	}
 
+	// The client may have disappeared between candidate selection and now.
+	if info == nil {
+		return nil, nil
+	}
+
 	// If client is already deactivated, return the info without further processing
 	if info.Status == database.ClientDeactivated {
 		return info, nil
@@ -203,6 +208,10 @@ func FindClientInfoForDeactivation(
 ) (*database.ClientInfo, error) {
 	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
+		// Treat missing client as no-op for housekeeping
+		if errors.Is(err, database.ErrClientNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 

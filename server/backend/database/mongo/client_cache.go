@@ -104,7 +104,7 @@ type ClientInfoCache struct {
 	flushCh       chan struct{}
 	stopCh        chan struct{}
 	config        *CacheConfig
-	client        *Client // Reference to MongoDB client for DB operations
+	client        *Client
 	writePressure *WritePressure
 	pressureMu    sync.RWMutex
 	metrics       *CacheMetrics
@@ -188,7 +188,7 @@ func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.Cl
 	c.cache[refKey] = &CachedClientInfo{
 		ClientInfo: clientInfo.DeepCopy(),
 		UpdatedAt:  now,
-		Dirty:      false, // Initially clean
+		Dirty:      false,
 		LastFlush:  now,
 	}
 
