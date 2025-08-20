@@ -58,6 +58,7 @@ var (
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
+	testBackend              *backend.Backend
 )
 
 func TestMain(m *testing.M) {
@@ -104,6 +105,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	testBackend = be
 
 	project, err := be.DB.FindProjectInfoByID(
 		context.Background(),
