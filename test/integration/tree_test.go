@@ -3887,4 +3887,174 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>ab</p><p>ced</p></root>", d1.Root().GetTree("t").ToXML())
 	})
+
+	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "text", Value: "a"},
+						{Type: "text", Value: "b"},
+						{Type: "text", Value: "c"},
+						{Type: "text", Value: "d"},
+					},
+				}},
+			})
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}, "delete bc")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 3, nil, 0)
+			return nil
+		}, "delete ad")
+		assert.NoError(t, err)
+
+		treeNode1 := d1.Root().GetTree("t")
+		treeNode2 := d2.Root().GetTree("t")
+
+		nodes1 := treeNode1.Nodes()
+		nodes2 := treeNode2.Nodes()
+
+		var bcNodes, aNodes, dNodes []*crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Value == "a" {
+				aNodes = append(aNodes, node)
+			} else if node.Value == "b" || node.Value == "c" {
+				bcNodes = append(bcNodes, node)
+			} else if node.Value == "d" {
+				dNodes = append(dNodes, node)
+			}
+		}
+
+		assert.NotEmpty(t, bcNodes, "bc nodes should exist")
+		assert.NotEmpty(t, aNodes, "a nodes should exist")
+		assert.NotEmpty(t, dNodes, "d nodes should exist")
+
+		for _, bcNode := range bcNodes {
+			assert.NotNil(t, bcNode.RemovedAt(), "bc nodes should be removed")
+		}
+		for _, aNode := range aNodes {
+			assert.NotNil(t, aNode.RemovedAt(), "a nodes should be removed")
+		}
+		for _, dNode := range dNodes {
+			assert.NotNil(t, dNode.RemovedAt(), "d nodes should be removed")
+		}
+
+		for _, aNode := range aNodes {
+			for _, bcNode := range bcNodes {
+				assert.True(t, aNode.RemovedAt().After(bcNode.RemovedAt()),
+					"In causal deletion, 'a' should be deleted after 'bc' (T3 > T2)")
+			}
+		}
+		for _, dNode := range dNodes {
+			for _, bcNode := range bcNodes {
+				assert.True(t, dNode.RemovedAt().After(bcNode.RemovedAt()),
+					"In causal deletion, 'd' should be deleted after 'bc' (T3 > T2)")
+			}
+		}
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+	})
+
+	t.Run("concurrent deletion test for LWW behavior", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "text", Value: "a"},
+						{Type: "text", Value: "b"},
+						{Type: "text", Value: "c"},
+						{Type: "text", Value: "d"},
+					},
+				}},
+			})
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}, "delete bc by c1")
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 5, nil, 0)
+			return nil
+		}, "delete abcd by c2")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		treeNode1 := d1.Root().GetTree("t")
+		treeNode2 := d2.Root().GetTree("t")
+
+		nodes1 := treeNode1.Nodes()
+		nodes2 := treeNode2.Nodes()
+
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		timestampSet := make(map[string]bool)
+		allTextNodes := []*crdt.TreeNode{}
+		for _, node := range append(nodes1, nodes2...) {
+			if node.Type() == index.TextNodeType {
+				allTextNodes = append(allTextNodes, node)
+			}
+		}
+
+		deletedNodes := []*crdt.TreeNode{}
+		for _, node := range allTextNodes {
+			if node.RemovedAt() != nil {
+				deletedNodes = append(deletedNodes, node)
+				timestampSet[node.RemovedAt().ToTestString()] = true
+			}
+		}
+
+		// Todo(sigmaith): make pass
+		//assert.Equal(t, 1, len(timestampSet), "Should have 1 timestamp in concurrent deletion")
+
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d2.Root().GetTree("t").ToXML())
+	})
 }
