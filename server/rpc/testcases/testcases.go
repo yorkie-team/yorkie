@@ -33,10 +33,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
@@ -1501,4 +1503,60 @@ func RunAdminRotateProjectKeysTest(
 		}),
 	)
 	assert.NoError(t, err)
+}
+
+// RunDeactivateClientWithAttachingDocumentTest ensures that even if a client has
+// a document in attaching state, deactivation succeeds and the document becomes detached.
+func RunDeactivateClientWithAttachingDocumentTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	be *backend.Backend,
+) {
+	ctx := context.Background()
+
+	// 01. Activate a client via RPC
+	activateResp, err := testClient.ActivateClient(
+		ctx,
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}),
+	)
+	assert.NoError(t, err)
+
+	// 02. Prepare an attaching state via DB
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+	assert.NoError(t, err)
+
+	actorID, err := time.ActorIDFromHex(activateResp.Msg.ClientId)
+	assert.NoError(t, err)
+	refKey := types.ClientRefKey{
+		ProjectID: projectInfo.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	}
+
+	docKey := helper.TestDocKey(t)
+	docInfo, err := be.DB.FindOrCreateDocInfo(ctx, refKey, docKey)
+	assert.NoError(t, err)
+
+	_, err = be.DB.TryAttaching(ctx, refKey, docInfo.ID)
+	assert.NoError(t, err)
+
+	ci, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	if assert.NotNil(t, ci.Documents[docInfo.ID]) {
+		assert.Equal(t, database.DocumentAttaching, ci.Documents[docInfo.ID].Status)
+	}
+
+	// 03. Deactivate via RPC
+	_, err = testClient.DeactivateClient(
+		ctx,
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}),
+	)
+	assert.NoError(t, err)
+
+	// 04. Verify client is deactivated and doc is detached
+	ci2, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	assert.Equal(t, database.ClientDeactivated, ci2.Status)
+	if assert.NotNil(t, ci2.Documents[docInfo.ID]) {
+		assert.Equal(t, database.DocumentDetached, ci2.Documents[docInfo.ID].Status)
+	}
 }

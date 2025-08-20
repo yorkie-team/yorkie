@@ -54,6 +54,7 @@ var (
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
+	testBackend              *backend.Backend
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: "invalid",
@@ -99,6 +100,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	testBackend = be
 
 	project, err := be.DB.FindProjectInfoByID(
 		context.Background(),
@@ -152,6 +155,10 @@ func TestMain(m *testing.M) {
 func TestSDKRPCServerBackend(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		testcases.RunActivateAndDeactivateClientTest(t, testClient)
+	})
+
+	t.Run("deactivate with attaching document test", func(t *testing.T) {
+		testcases.RunDeactivateClientWithAttachingDocumentTest(t, testClient, testBackend)
 	})
 
 	t.Run("attach/detach document test", func(t *testing.T) {

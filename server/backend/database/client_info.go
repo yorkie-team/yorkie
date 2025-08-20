@@ -160,7 +160,7 @@ func (i *ClientInfo) IsAttaching(docID types.ID) bool {
 
 // DetachDocument detaches the given document from this client.
 func (i *ClientInfo) DetachDocument(docID types.ID) error {
-	if err := i.EnsureDocumentAttached(docID); err != nil {
+	if err := i.EnsureDocumentAttachedOrAttaching(docID); err != nil {
 		return err
 	}
 
@@ -251,6 +251,18 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 
 	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
 		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			docID, i.ID, ErrDocumentNotAttached)
+	}
+
+	return nil
+}
+
+// EnsureDocumentAttachedOrAttaching ensures the given document is attached or attaching.
+func (i *ClientInfo) EnsureDocumentAttachedOrAttaching(docID types.ID) error {
+	if !i.hasDocument(docID) ||
+		(i.Documents[docID].Status != DocumentAttached &&
+			i.Documents[docID].Status != DocumentAttaching) {
+		return fmt.Errorf("ensure attached or attaching %s in client(%s): %w",
 			docID, i.ID, ErrDocumentNotAttached)
 	}
 
