@@ -259,6 +259,11 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 
 // EnsureDocumentAttachedOrAttaching ensures the given document is attached or attaching.
 func (i *ClientInfo) EnsureDocumentAttachedOrAttaching(docID types.ID) error {
+	if i.Status != ClientActivated {
+		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			docID, i.ID, ErrClientNotActivated)
+	}
+
 	if !i.hasDocument(docID) ||
 		(i.Documents[docID].Status != DocumentAttached &&
 			i.Documents[docID].Status != DocumentAttaching) {
