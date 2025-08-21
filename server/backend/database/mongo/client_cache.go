@@ -959,7 +959,8 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 		if docInfo, exists := cached.ClientInfo.Documents[docID]; exists {
 			docInfo.Status = status
 			// Reset sequence numbers for detached/removed/attaching documents
-			if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
+			if status == database.DocumentDetached || status == database.DocumentRemoved ||
+				status == database.DocumentAttaching {
 				docInfo.ServerSeq = 0
 				docInfo.ClientSeq = 0
 			}
@@ -983,7 +984,9 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 			if strings.Contains(err.Error(), "client not found") {
 				// For new document attachments, we'll create a minimal cache entry
 				// The actual client info will be loaded when needed
-				logging.DefaultLogger().Warnf("Client not found in DB for document attachment, creating minimal cache entry: %v", err)
+				logging.DefaultLogger().Warnf(
+					"Client not found in DB for document attachment, creating minimal cache entry: %v", err,
+				)
 				return nil
 			}
 			return fmt.Errorf("load client info from DB: %w", err)
@@ -997,7 +1000,8 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 		if docInfo, exists := clientInfo.Documents[docID]; exists {
 			docInfo.Status = status
 			// Reset sequence numbers for detached/removed/attaching documents
-			if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
+			if status == database.DocumentDetached || status == database.DocumentRemoved ||
+				status == database.DocumentAttaching {
 				docInfo.ServerSeq = 0
 				docInfo.ClientSeq = 0
 			}

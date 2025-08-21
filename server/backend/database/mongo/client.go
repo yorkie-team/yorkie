@@ -1131,7 +1131,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		// Update document status using write-through strategy
 		if clientDocInfo, exists := clientInfo.Documents[docInfo.ID]; exists {
 			if cachedDocInfo, exists := cached.Documents[docInfo.ID]; !exists || cachedDocInfo.Status != clientDocInfo.Status {
-				if err := c.clientInfoCache.UpdateDocumentStatus(clientInfo.RefKey(), docInfo.ID, clientDocInfo.Status); err != nil {
+				if err := c.clientInfoCache.UpdateDocumentStatus(
+					clientInfo.RefKey(), docInfo.ID, clientDocInfo.Status,
+				); err != nil {
 					return fmt.Errorf("update document status in cache: %w", err)
 				}
 			}
