@@ -557,7 +557,9 @@ func (c *ClientInfoCache) FlushToDB() error {
 
 	for refKey, cached := range c.cache {
 		if cached.Dirty {
-			dirtyClients[refKey] = cached.ClientInfo
+			// Take a deep copy snapshot to avoid data races with concurrent updates
+			// after releasing the lock.
+			dirtyClients[refKey] = cached.ClientInfo.DeepCopy()
 			cached.Dirty = false
 			cached.LastFlush = time.Now()
 		}
