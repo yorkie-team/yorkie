@@ -21,6 +21,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
@@ -74,6 +75,7 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 			return next(ctx, req)
 		}
 
+		start := gotime.Now()
 		ctx, err := i.buildContext(ctx, req.Spec().Procedure, req.Header())
 		if err != nil {
 			return nil, err
@@ -91,11 +93,14 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 		)
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
-			i.backend.Metrics.AddServerHandledCounter(
+			code := connecthelper.ToRPCCodeString(err)
+			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
+			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				code,
+				gotime.Since(start).Seconds(),
 			)
 		}
 

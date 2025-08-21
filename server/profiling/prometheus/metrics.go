@@ -53,14 +53,16 @@ var (
 type Metrics struct {
 	registry *prometheus.Registry
 
-	serverVersion        *prometheus.GaugeVec
-	serverHandledCounter *prometheus.CounterVec
+	serverVersion                *prometheus.GaugeVec
+	serverHandledCounter         *prometheus.CounterVec
+	serverHandledResponseSeconds *prometheus.HistogramVec
 
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    *prometheus.CounterVec
 	pushPullSentChangesTotal        *prometheus.CounterVec
 	pushPullReceivedOperationsTotal *prometheus.CounterVec
 	pushPullSentOperationsTotal     *prometheus.CounterVec
+	pushPullErrorsTotal             *prometheus.CounterVec
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      *prometheus.CounterVec
 
@@ -97,6 +99,12 @@ func NewMetrics() (*Metrics, error) {
 			Subsystem: "rpc",
 			Name:      "server_handled_total",
 			Help:      "Total number of RPCs completed on the server, regardless of success or failure.",
+		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
+		serverHandledResponseSeconds: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: "rpc",
+			Name:      "server_handled_response_seconds",
+			Help:      "The response time of RPCs completed on the server.",
 		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
 		pushPullResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
@@ -139,6 +147,16 @@ func NewMetrics() (*Metrics, error) {
 			Subsystem: "pushpull",
 			Name:      "sent_operations_total",
 			Help:      "The total count of operations included in response packs in PushPull.",
+		}, []string{
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+		}),
+		pushPullErrorsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "pushpull",
+			Name:      "errors_total",
+			Help:      "The total count of errors in PushPull.",
 		}, []string{
 			projectIDLabel,
 			projectNameLabel,
@@ -266,6 +284,15 @@ func (m *Metrics) AddPushPullSentOperations(hostname string, project *types.Proj
 	}).Add(float64(count))
 }
 
+// AddPushPullErrors adds the number of errors in PushPull.
+func (m *Metrics) AddPushPullErrors(hostname string, project *types.Project, count int) {
+	m.pushPullErrorsTotal.With(prometheus.Labels{
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Add(float64(count))
+}
+
 // ObservePushPullSnapshotDurationSeconds adds an observation
 // for creating snapshot for the response pack.
 func (m *Metrics) ObservePushPullSnapshotDurationSeconds(seconds float64) {
@@ -316,6 +343,16 @@ func (m *Metrics) AddServerHandledCounter(
 		"rpc_method":  rpcMethod,
 		"rpc_code":    rpcCode,
 	}).Inc()
+}
+
+// ObserveServerHandledResponseSeconds adds an observation for response time of RPCs completed on the server.
+func (m *Metrics) ObserveServerHandledResponseSeconds(rpcType, rpcService, rpcMethod, rpcCode string, seconds float64) {
+	m.serverHandledResponseSeconds.With(prometheus.Labels{
+		"rpc_type":    rpcType,
+		"rpc_service": rpcService,
+		"rpc_method":  rpcMethod,
+		"rpc_code":    rpcCode,
+	}).Observe(seconds)
 }
 
 // AddBackgroundGoroutines adds the number of goroutines attached by a particular background task.
