@@ -151,14 +151,14 @@ func (c *Client) TryLeadership(
 	if leaseToken == "" {
 		res, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
 		if err == nil && res.RPCAddr != rpcAddr {
-			_ = c.upsertClusterFollower(ctx, rpcAddr)
+			_ = c.updateClusterFollower(ctx, rpcAddr)
 		}
 		return res, err
 	}
 
 	res, err := c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
 	if err == nil && res.RPCAddr != rpcAddr {
-		_ = c.upsertClusterFollower(ctx, rpcAddr)
+		_ = c.updateClusterFollower(ctx, rpcAddr)
 	}
 	return res, err
 }
@@ -188,8 +188,8 @@ func (c *Client) FindLeadership(
 	return &info, nil
 }
 
-// upsertClusterFollower upserts the given node as follower.
-func (c *Client) upsertClusterFollower(ctx context.Context, rpcAddr string) error {
+// updateClusterFollower updates the given node as follower.
+func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) error {
 	_, err := c.collection(ColClusterNodes).UpdateOne(
 		ctx,
 		bson.M{
@@ -203,6 +203,9 @@ func (c *Client) upsertClusterFollower(ctx context.Context, rpcAddr string) erro
 		},
 		options.UpdateOne().SetUpsert(true),
 	)
+	if mongo.IsDuplicateKeyError(err) {
+		return nil
+	}
 	return err
 }
 

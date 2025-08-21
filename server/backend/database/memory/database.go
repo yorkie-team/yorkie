@@ -99,7 +99,7 @@ func (d *DB) TryLeadership(
 			// Check if current leadership has expired
 			if existing.ExpiresAt.After(now) {
 				// Leadership is still valid, return existing leadership
-				_ = d.upsertClusterFollower(txn, rpcAddr)
+				_ = d.updateClusterFollower(txn, rpcAddr)
 				return existing, nil
 			}
 		}
@@ -108,6 +108,20 @@ func (d *DB) TryLeadership(
 		newToken, err := database.GenerateLeaseToken()
 		if err != nil {
 			return nil, fmt.Errorf("generate lease token: %w", err)
+		}
+
+		// demote expired leader before inserting a new leader
+		if existing != nil && existing.ExpiresAt.After(now) {
+			demoted := *existing
+			demoted.IsLeader = false
+			demoted.UpdatedAt = now
+
+			if err := txn.Insert(tblClusterNodes, &clusterNodeRecord{
+				ID:              demoted.RPCAddr,
+				ClusterNodeInfo: &demoted,
+			}); err != nil {
+				return nil, fmt.Errorf("demote expired leader: %w", err)
+			}
 		}
 
 		// Create or update leadership entry
@@ -260,13 +274,13 @@ func (d *DB) FindActiveClusterNodes(
 	return infos, nil
 }
 
-// upsertClusterFollower upserts the given node as follower.
-func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
+// updateClusterFollower upserts the given node as follower.
+func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	now := gotime.Now()
 
 	raw, err := txn.First(tblClusterNodes, "rpc_addr", rpcAddr)
 	if err != nil {
-		return fmt.Errorf("upsert cluster follower: %w", err)
+		return fmt.Errorf("update cluster follower: %w", err)
 	}
 
 	if raw == nil {

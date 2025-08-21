@@ -307,8 +307,8 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"rpcAddr": {
-					Name:    "rpcAddr",
+				"rpc_addr": {
+					Name:    "rpc_addr",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "RPCAddr"},
 				},
