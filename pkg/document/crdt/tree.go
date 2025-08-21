@@ -420,6 +420,8 @@ func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown 
 	}
 
 	if n.removedAt == nil {
+		n.removedAt = removedAt
+		n.Index.UpdateAncestorsSize()
 		return true
 	}
 
@@ -427,7 +429,6 @@ func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown 
 	// (concurrent or unseen) and newer.
 	if !tombstoneKnown && removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
-		n.Index.UpdateAncestorsSize()
 		return true
 	}
 	return false
