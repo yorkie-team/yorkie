@@ -213,7 +213,7 @@ func TestClusterRoutingWithMongoDB(t *testing.T) {
 		_, err = backendA.DB.DeactivateClient(ctx, clientInfoA.RefKey())
 		assert.NoError(t, err)
 		// Small delay to work ttl cleanup
-		time.Sleep(4500 * time.Millisecond)
+		time.Sleep(11 * time.Second)
 
 		// t3: Check if backend B can see the deactivated client (cache miss -> DB lookup)
 		clientInfoBAfterDeactivate, err := backendB.DB.FindClientInfoByRefKey(ctx, clientInfoA.RefKey())
@@ -242,7 +242,7 @@ func TestClusterRoutingWithMongoDB(t *testing.T) {
 		clientInfoA, err = backendA.DB.TryAttaching(ctx, clientInfoA.RefKey(), docInfoA.ID)
 		assert.NoError(t, err)
 		// Small delay to work ttl cleanup
-		time.Sleep(4500 * time.Millisecond)
+		time.Sleep(11 * time.Second)
 
 		// t3: Check if backend B can see the attached document (cache miss -> DB lookup)
 		clientInfoB, err := backendB.DB.FindClientInfoByRefKey(ctx, clientInfoA.RefKey())
@@ -260,7 +260,7 @@ func TestClusterRoutingWithMongoDB(t *testing.T) {
 		_, err = backendB.DB.DeactivateClientForHousekeeping(ctx, clientInfoA.RefKey())
 		assert.NoError(t, err)
 		// Small delay to work ttl cleanup
-		time.Sleep(4500 * time.Millisecond)
+		time.Sleep(11 * time.Second)
 
 		// t2: Check if backend A can see the deactivated client (cache miss -> DB lookup)
 		clientInfoAAfterHousekeeping, err := backendA.DB.FindClientInfoByRefKey(ctx, clientInfoA.RefKey())

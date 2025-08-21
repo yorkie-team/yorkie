@@ -78,13 +78,13 @@ type CacheConfig struct {
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
 		BaseFlushInterval:      10 * time.Second,
-		MaxFlushInterval:       60 * time.Second,
+		MaxFlushInterval:       7 * time.Second,
 		MinFlushInterval:       5 * time.Second,
 		MaxCacheSize:           20000,
 		WritePressureThreshold: 500,
 		PressureCheckInterval:  10 * time.Second,
 		EnableFlushCleanup:     true,
-		TTL:                    3 * time.Second,
+		TTL:                    10 * time.Second,
 	}
 }
 
