@@ -59,7 +59,8 @@ func Deactivate(
 	}
 
 	for docID, clientDocInfo := range info.Documents {
-		if clientDocInfo.Status != database.DocumentAttached {
+		if clientDocInfo.Status != database.DocumentAttached &&
+			clientDocInfo.Status != database.DocumentAttaching {
 			continue
 		}
 
