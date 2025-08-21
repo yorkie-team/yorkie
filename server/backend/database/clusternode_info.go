@@ -27,10 +27,8 @@ import (
 type ClusterNodeInfo struct {
 	RPCAddr    string    `bson:"rpc_addr"`
 	LeaseToken string    `bson:"lease_token"`
-	ElectedAt  time.Time `bson:"elected_at"`
 	ExpiresAt  time.Time `bson:"expires_at"`
-	RenewedAt  time.Time `bson:"renewed_at"`
-	Term       int64     `bson:"term"`
+	UpdatedAt  time.Time `bson:"updated_at"`
 	IsLeader   bool      `bson:"is_leader"`
 }
 

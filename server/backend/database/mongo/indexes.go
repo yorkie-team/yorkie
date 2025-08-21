@@ -69,17 +69,10 @@ type collectionInfo struct {
 // Below are names and indexes information of Collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
 	{
-		name: ColLeaderships,
-		indexes: []mongo.IndexModel{{
-			Keys:    bson.D{{Key: "singleton", Value: int32(1)}},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
 		name: ColClusterNodes,
 		indexes: []mongo.IndexModel{
 			{
-				Keys:    bson.D{{Key: "rpcAddr", Value: 1}},
+				Keys:    bson.D{{Key: "rpc_addr", Value: 1}},
 				Options: options.Index().SetUnique(true),
 			},
 			{
@@ -90,10 +83,10 @@ var collectionInfos = []collectionInfo{
 					SetName("is_leader_true_unique"),
 			},
 			{
-				Keys: bson.D{{Key: "renewed_at", Value: 1}},
+				Keys: bson.D{{Key: "updated_at", Value: 1}},
 				Options: options.Index().
 					SetExpireAfterSeconds(60).
-					SetName("ttl_renewed_at"),
+					SetName("ttl_updated_at"),
 			},
 		},
 	},

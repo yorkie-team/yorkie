@@ -175,7 +175,7 @@ func (lm *LeadershipManager) tryAcquireLeadership(
 	if lease.RPCAddr == rpcAddr {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
-			logger.Infof("leadership acquired term: %d, expires_at: %s", lease.Term, lease.ExpiresAt)
+			logger.Infof("leadership acquired, expires_at: %s", lease.ExpiresAt)
 		}
 	} else {
 		lm.becomeFollower()

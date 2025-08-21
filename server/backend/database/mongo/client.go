@@ -193,12 +193,12 @@ func (c *Client) upsertClusterFollower(ctx context.Context, rpcAddr string) erro
 	_, err := c.collection(ColClusterNodes).UpdateOne(
 		ctx,
 		bson.M{
-			"rpcAddr":   rpcAddr,
+			"rpc_addr":  rpcAddr,
 			"is_leader": bson.M{"$ne": true},
 		},
 		bson.M{
-			"$set":         bson.M{"rpcAddr": rpcAddr},
-			"$currentDate": bson.M{"renewed_at": true},
+			"$set":         bson.M{"rpc_addr": rpcAddr},
+			"$currentDate": bson.M{"updated_at": true},
 			"$setOnInsert": bson.M{"is_leader": false},
 		},
 		options.UpdateOne().SetUpsert(true),
@@ -218,26 +218,6 @@ func (c *Client) tryAcquireLeadership(
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
 
-	col := c.collection(ColClusterNodes)
-
-	var prevTerm int64
-	cur, err := col.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$group", Value: bson.D{
-			{Key: "_id", Value: nil},
-			{Key: "maxTerm", Value: bson.D{{Key: "$max", Value: "$term"}}},
-		}}},
-	})
-	if err == nil && cur.Next(ctx) {
-		var agg struct {
-			MaxTerm *int64 `bson:"maxTerm"`
-		}
-		if decErr := cur.Decode(&agg); decErr == nil && agg.MaxTerm != nil {
-			prevTerm = *agg.MaxTerm
-		}
-	}
-	_ = cur.Close(ctx)
-	newTerm := prevTerm + 1
-
 	promote := func() (*database.ClusterNodeInfo, error) {
 		res := c.collection(ColClusterNodes).FindOneAndUpdate(
 			ctx,
@@ -246,10 +226,8 @@ func (c *Client) tryAcquireLeadership(
 				{{Key: "$set", Value: bson.D{
 					{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
 					{Key: "lease_token", Value: token},
-					{Key: "term", Value: newTerm},
 					{Key: "rpc_addr", Value: rpcAddr},
-					{Key: "renewed_at", Value: "$$NOW"},
-					{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
+					{Key: "updated_at", Value: "$$NOW"},
 					{Key: "is_leader", Value: true},
 				}}},
 			},
@@ -315,7 +293,7 @@ func (c *Client) tryRenewLeadership(
 			{{Key: "$set", Value: bson.D{
 				{Key: "lease_token", Value: newLeaseToken},
 				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-				{Key: "renewed_at", Value: "$$NOW"},
+				{Key: "updated_at", Value: "$$NOW"},
 			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
@@ -345,28 +323,28 @@ func (c *Client) ClearLeadership(ctx context.Context) error {
 	return nil
 }
 
-// FindActiveClusterNodes returns all nodes currently tracked in clusternodes.
-// Order: leader first, then by renewed_at desc.
+// FindActiveClusterNodes returns nodes considered active within the given time window.
+// A node is active if updated_at >= NOW - renewalInterval * 2.
+// Results are sorted with the leader first, then by updated_at descending.
 func (c *Client) FindActiveClusterNodes(
 	ctx context.Context,
 	renewalInterval gotime.Duration,
 ) ([]*database.ClusterNodeInfo, error) {
-	// NOTE(raararaara): Assumes TTL on renewed_at cleans out stale entries.
-	leaseMS := renewalInterval.Milliseconds()
+	intervalMS := renewalInterval.Milliseconds()
 
 	cursor, err := c.collection(ColClusterNodes).Find(
 		ctx,
 		bson.M{
 			"$expr": bson.M{
 				"$gte": bson.A{
-					"$renewed_at",
-					bson.D{{Key: "$add", Value: bson.A{"$$NOW", -leaseMS * 2}}},
+					"$updated_at",
+					bson.D{{Key: "$add", Value: bson.A{"$$NOW", -intervalMS * 2}}},
 				},
 			},
 		},
 		options.Find().SetSort(bson.D{
 			{Key: "is_leader", Value: -1},
-			{Key: "renewed_at", Value: -1},
+			{Key: "updated_at", Value: -1},
 		}),
 	)
 	if err != nil {
