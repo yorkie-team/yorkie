@@ -413,25 +413,42 @@ func (n *TreeNode) SplitElement(
 }
 
 // remove marks the node as removed.
-func (n *TreeNode) remove(removedAt *time.Ticket) bool {
-	justRemoved := n.removedAt == nil
-
-	if n.removedAt == nil || n.removedAt.Compare(removedAt) > 0 {
-		n.removedAt = removedAt
-		if justRemoved {
-			n.Index.UpdateAncestorsSize()
-		}
-		return justRemoved
+func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
+	// NOTE(sigmaith): Skip if the node's creation was not visible to this operation.
+	if !creationKnown {
+		return false
 	}
 
+	if n.removedAt == nil {
+		return true
+	}
+
+	// NOTE(sigmaith): Overwrite only if prior tombstone was not known
+	// (concurrent or unseen) and newer.
+	if !tombstoneKnown && removedAt.After(n.removedAt) {
+		n.removedAt = removedAt
+		n.Index.UpdateAncestorsSize()
+		return true
+	}
 	return false
 }
 
-func (n *TreeNode) canDelete(removedAt *time.Ticket, clientLamportAtChange int64) bool {
-	nodeExisted := n.id.CreatedAt.Lamport() <= clientLamportAtChange
+func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
+	// NOTE(sigmaith): Skip if the node's creation was not visible to this operation.
+	if !creationKnown {
+		return false
+	}
 
-	return nodeExisted &&
-		(n.removedAt == nil || removedAt.After(n.removedAt))
+	if n.removedAt == nil {
+		return true
+	}
+
+	// NOTE(sigmaith): Overwrite only if prior tombstone was not known
+	// (concurrent or unseen) and newer.
+	if !tombstoneKnown && removedAt.After(n.removedAt) {
+		return true
+	}
+	return false
 }
 
 func (n *TreeNode) canStyle(editedAt *time.Ticket, clientLamportAtChange int64) bool {
@@ -860,7 +877,28 @@ func (t *Tree) Edit(
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
-		if node.remove(editedAt) {
+
+		isLocal := len(versionVector) == 0
+
+		// NOTE(sigmaith): Determine if the node's creation event was visible.
+		creationKnown := false
+		if isLocal {
+			creationKnown = true
+		} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
+			creationKnown = true
+		}
+
+		// NOTE(sigmaith): Determine if existing tombstone was already causally known.
+		tombstoneKnown := false
+		if node.removedAt != nil {
+			if isLocal {
+				tombstoneKnown = true
+			} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
+				tombstoneKnown = true
+			}
+		}
+
+		if node.remove(editedAt, creationKnown, tombstoneKnown) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
 				Child:  node,
@@ -907,7 +945,7 @@ func (t *Tree) Edit(
 				// if insertion happens during concurrent editing and parent node has been removed,
 				// make new nodes as tombstone immediately
 				if fromParent.IsRemoved() {
-					node.Value.remove(editedAt)
+					node.Value.remove(editedAt, true, false)
 					pairs = append(pairs, GCPair{
 						Parent: t,
 						Child:  node.Value,
@@ -933,7 +971,7 @@ func (t *Tree) collectBetween(
 ) ([]*TreeNode, []*TreeNode, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
-	isVersionVectorEmpty := len(versionVector) == 0
+	isLocal := len(versionVector) == 0
 
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
@@ -957,24 +995,27 @@ func (t *Tree) collectBetween(
 				}
 			}
 
-			actorID := node.id.CreatedAt.ActorID()
-			var clientLamportAtChange int64
-			if isVersionVectorEmpty {
-				// Case 1: local editing from json package
-				clientLamportAtChange = time.MaxLamport
-			} else {
-				// Case 2: from operation with version vector(After v0.5.7)
-				lamport, ok := versionVector.Get(actorID)
-				if ok {
-					clientLamportAtChange = lamport
-				} else {
-					clientLamportAtChange = 0
+			// NOTE(sigmaith): Determine if the node's creation event was visible.
+			creationKnown := false
+			if isLocal {
+				creationKnown = true
+			} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
+				creationKnown = true
+			}
+
+			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
+			tombstoneKnown := false
+			if node.removedAt != nil {
+				if isLocal {
+					tombstoneKnown = true
+				} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
+					tombstoneKnown = true
 				}
 			}
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
-			if node.canDelete(editedAt, clientLamportAtChange) ||
+			if node.canDelete(editedAt, creationKnown, tombstoneKnown) ||
 				slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
 				// NOTE(hackerwins): If the node overlaps as an end token with the
 				// range then we need to keep the node.
