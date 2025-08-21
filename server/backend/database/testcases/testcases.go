@@ -64,7 +64,6 @@ func RunLeadershipTest(
 		require.NoError(t, err)
 		assert.Equal(t, database.PodRPCAddr(nodeIDOne), info.RPCAddr)
 		assert.NotEmpty(t, info.LeaseToken)
-		assert.Equal(t, int64(1), info.Term)
 		assert.False(t, info.IsExpired())
 	})
 
@@ -107,7 +106,6 @@ func RunLeadershipTest(
 		require.NoError(t, err)
 
 		assert.Equal(t, database.PodRPCAddr(nodeIDTwo), info.RPCAddr)
-		assert.Equal(t, int64(2), info.Term) // Term should increment
 	})
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
@@ -130,7 +128,6 @@ func RunLeadershipTest(
 		// and renewal requests can occur within the same millisecond,
 		// expires_at may not strictly increase. Token change confirms renewal.
 		assert.True(t, renewedInfo.ExpiresAt.Compare(info.ExpiresAt) >= 0) // Expiry should extend
-		assert.Equal(t, info.Term, renewedInfo.Term)                       // Term should stay same
 	})
 
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
@@ -185,7 +182,6 @@ func RunLeadershipTest(
 
 		assert.Equal(t, acquired.RPCAddr, info.RPCAddr)
 		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
-		assert.Equal(t, acquired.Term, info.Term)
 	})
 
 	t.Run("Leader should be only one", func(t *testing.T) {

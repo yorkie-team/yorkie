@@ -114,16 +114,9 @@ func (d *DB) TryLeadership(
 		newLeadership := &database.ClusterNodeInfo{
 			RPCAddr:    rpcAddr,
 			LeaseToken: newToken,
-			ElectedAt:  now,
 			ExpiresAt:  expiresAt,
-			Term:       1, // Start with term 1 for new leadership
-			RenewedAt:  now,
+			UpdatedAt:  now,
 			IsLeader:   true,
-		}
-
-		if existing != nil {
-			// Update existing entry with new term
-			newLeadership.Term = existing.Term + 1
 		}
 
 		record := &clusterNodeRecord{
@@ -169,10 +162,9 @@ func (d *DB) TryLeadership(
 	renewedLeadership := &database.ClusterNodeInfo{
 		RPCAddr:    existing.RPCAddr,
 		LeaseToken: newToken,
-		ElectedAt:  existing.ElectedAt,
 		ExpiresAt:  expiresAt,
-		RenewedAt:  now,
-		Term:       existing.Term, // Keep the same term for renewal
+		UpdatedAt:  now,
+		IsLeader:   true,
 	}
 
 	record := &clusterNodeRecord{
@@ -231,8 +223,9 @@ func (d *DB) ClearLeadership(ctx context.Context) error {
 	return nil
 }
 
-// FindActiveClusterNodes returns nodes whose renewed_at >= now - leaseDuration.
-// Order: leader first, then by renewed_at desc.
+// FindActiveClusterNodes returns nodes considered active within the given time window.
+// A node is active if updated_at >= NOW - renewalInterval * 2.
+// Results are sorted with the leader first, then by updated_at descending.
 func (d *DB) FindActiveClusterNodes(
 	_ context.Context,
 	renewalInterval gotime.Duration,
@@ -252,7 +245,7 @@ func (d *DB) FindActiveClusterNodes(
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*clusterNodeRecord).ClusterNodeInfo
 
-		if info.RenewedAt.IsZero() || info.RenewedAt.Before(cutoff) {
+		if info.UpdatedAt.IsZero() || info.UpdatedAt.Before(cutoff) {
 			continue
 		}
 		infos = append(infos, info)
@@ -262,7 +255,7 @@ func (d *DB) FindActiveClusterNodes(
 		if infos[i].IsLeader != infos[j].IsLeader {
 			return infos[i].IsLeader && !infos[j].IsLeader
 		}
-		return infos[i].RenewedAt.After(infos[j].RenewedAt)
+		return infos[i].UpdatedAt.After(infos[j].UpdatedAt)
 	})
 	return infos, nil
 }
@@ -271,7 +264,7 @@ func (d *DB) FindActiveClusterNodes(
 func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	now := gotime.Now()
 
-	raw, err := txn.First(tblClusterNodes, "rpcAddr", rpcAddr)
+	raw, err := txn.First(tblClusterNodes, "rpc_addr", rpcAddr)
 	if err != nil {
 		return fmt.Errorf("upsert cluster follower: %w", err)
 	}
@@ -280,7 +273,7 @@ func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 		n := &database.ClusterNodeInfo{
 			RPCAddr:   rpcAddr,
 			IsLeader:  false,
-			RenewedAt: now,
+			UpdatedAt: now,
 		}
 		record := &clusterNodeRecord{
 			ID:              rpcAddr,
@@ -298,7 +291,7 @@ func (d *DB) upsertClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	old := raw.(*clusterNodeRecord).ClusterNodeInfo
 	n := *old
 
-	n.RenewedAt = now
+	n.UpdatedAt = now
 
 	record := &clusterNodeRecord{
 		ID:              rpcAddr,
