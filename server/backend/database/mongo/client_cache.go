@@ -77,8 +77,8 @@ type CacheConfig struct {
 // DefaultCacheConfig returns default cache configuration
 func DefaultCacheConfig() *CacheConfig {
 	return &CacheConfig{
-		BaseFlushInterval:      10 * time.Second,
-		MaxFlushInterval:       7 * time.Second,
+		BaseFlushInterval:      7 * time.Second,
+		MaxFlushInterval:       10 * time.Second,
 		MinFlushInterval:       5 * time.Second,
 		MaxCacheSize:           20000,
 		WritePressureThreshold: 500,
@@ -579,9 +579,16 @@ func (c *ClientInfoCache) FlushToDB() error {
 
 	// Execute bulk update
 	if len(updates) > 0 {
-		_, err := c.client.collection(ColClients).BulkWrite(context.Background(), updates)
+		result, err := c.client.collection(ColClients).BulkWrite(context.Background(), updates)
 		if err != nil {
-			return fmt.Errorf("bulk write client info: %w", err)
+			return fmt.Errorf("bulk write client info (%d operations): %w", len(updates), err)
+		}
+
+		if result.ModifiedCount != int64(len(updates)) {
+			logging.DefaultLogger().Warnf(
+				"Bulk write partial success: expected %d modifications, got %d",
+				len(updates), result.ModifiedCount,
+			)
 		}
 	}
 
@@ -984,12 +991,8 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 			// If client not found in DB, this might be a new document attachment
 			// In this case, we need to create a minimal client info structure
 			if strings.Contains(err.Error(), "client not found") {
-				// For new document attachments, we'll create a minimal cache entry
-				// The actual client info will be loaded when needed
-				logging.DefaultLogger().Warnf(
-					"Client not found in DB for document attachment, creating minimal cache entry: %v", err,
-				)
-				return nil
+				return fmt.Errorf("cannot update document status for non-existent client %s: %w",
+					refKey.ClientID, err)
 			}
 			return fmt.Errorf("load client info from DB: %w", err)
 		}
