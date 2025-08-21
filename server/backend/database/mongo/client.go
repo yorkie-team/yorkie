@@ -872,7 +872,7 @@ func (c *Client) TryAttaching(
 			return nil, fmt.Errorf("conditions not satisfied to attach document: %w", database.ErrClientNotFound)
 		}
 
-		// Create a new ClientInfo with updated document status
+		// Update document status in cache and DB
 		updatedClientInfo := cached.DeepCopy()
 		if updatedClientInfo.Documents == nil {
 			updatedClientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
@@ -884,7 +884,13 @@ func (c *Client) TryAttaching(
 		}
 		updatedClientInfo.UpdatedAt = gotime.Now()
 
-		if err := c.clientInfoCache.UpdateClientInfo(refKey, updatedClientInfo); err != nil {
+		// Update in DB first (write-through)
+		if err := c.updateDocumentStatusInDBDirect(refKey, docID, database.DocumentAttaching); err != nil {
+			return nil, fmt.Errorf("update document status in DB: %w", err)
+		}
+
+		// Then update cache
+		if err := c.clientInfoCache.Set(refKey, updatedClientInfo); err != nil {
 			return nil, fmt.Errorf("update client info in cache: %w", err)
 		}
 
@@ -957,11 +963,18 @@ func (c *Client) DeactivateClient(
 			}
 		}
 
-		// Create a new ClientInfo with updated status
+		// Update client status in cache and DB
 		updatedClientInfo := cached.DeepCopy()
 		updatedClientInfo.Status = database.ClientDeactivated
 		updatedClientInfo.UpdatedAt = now
-		if err := c.clientInfoCache.UpdateClientInfo(refKey, updatedClientInfo); err != nil {
+
+		// Update in DB first (write-through)
+		if err := c.updateStatusInDBDirect(refKey, database.ClientDeactivated); err != nil {
+			return nil, fmt.Errorf("update client status in DB: %w", err)
+		}
+
+		// Then update cache
+		if err := c.clientInfoCache.Set(refKey, updatedClientInfo); err != nil {
 			return nil, fmt.Errorf("update client info in cache: %w", err)
 		}
 
@@ -1104,13 +1117,49 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
+	// Get cached client info if available
 	cached := c.clientInfoCache.Get(clientInfo.RefKey())
 
 	if cached != nil {
-		if err := c.clientInfoCache.UpdateClientInfo(clientInfo.RefKey(), clientInfo); err != nil {
-			return fmt.Errorf("update client info in cache: %w", err)
+		// Update status using write-through strategy
+		if cached.Status != clientInfo.Status {
+			if err := c.clientInfoCache.UpdateStatus(clientInfo.RefKey(), clientInfo.Status); err != nil {
+				return fmt.Errorf("update client status in cache: %w", err)
+			}
+		}
+
+		// Update document status using write-through strategy
+		if clientDocInfo, exists := clientInfo.Documents[docInfo.ID]; exists {
+			if cachedDocInfo, exists := cached.Documents[docInfo.ID]; !exists || cachedDocInfo.Status != clientDocInfo.Status {
+				if err := c.clientInfoCache.UpdateDocumentStatus(clientInfo.RefKey(), docInfo.ID, clientDocInfo.Status); err != nil {
+					return fmt.Errorf("update document status in cache: %w", err)
+				}
+			}
+		}
+
+		// Update checkpoint using write-back strategy
+		if clientDocInfo, exists := clientInfo.Documents[docInfo.ID]; exists {
+			checkpoint := change.Checkpoint{
+				ServerSeq: clientDocInfo.ServerSeq,
+				ClientSeq: clientDocInfo.ClientSeq,
+			}
+			if err := c.clientInfoCache.UpdateCheckpoint(clientInfo.RefKey(), docInfo.ID, checkpoint); err != nil {
+				return fmt.Errorf("update checkpoint in cache: %w", err)
+			}
 		}
 	} else {
+		// If not in cache, update status and document status using write-through
+		if err := c.clientInfoCache.UpdateStatus(clientInfo.RefKey(), clientInfo.Status); err != nil {
+			return fmt.Errorf("update client status in cache: %w", err)
+		}
+
+		if clientDocInfo, exists := clientInfo.Documents[docInfo.ID]; exists {
+			if err := c.clientInfoCache.UpdateDocumentStatus(clientInfo.RefKey(), docInfo.ID, clientDocInfo.Status); err != nil {
+				return fmt.Errorf("update document status in cache: %w", err)
+			}
+		}
+
+		// Load full client info from DB and cache it
 		result := c.collection(ColClients).FindOne(ctx, bson.M{
 			"project_id": clientInfo.ProjectID,
 			"_id":        clientInfo.ID,
@@ -1122,7 +1171,29 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, result.Err())
 		}
 
-		if err := c.clientInfoCache.Set(clientInfo.RefKey(), clientInfo); err != nil {
+		var dbClientInfo database.ClientInfo
+		if err := result.Decode(&dbClientInfo); err != nil {
+			return fmt.Errorf("decode client info: %w", err)
+		}
+
+		// Update checkpoint in the loaded client info
+		if clientDocInfo, exists := clientInfo.Documents[docInfo.ID]; exists {
+			if dbClientInfo.Documents == nil {
+				dbClientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+			}
+			if dbDocInfo, exists := dbClientInfo.Documents[docInfo.ID]; exists {
+				dbDocInfo.ServerSeq = clientDocInfo.ServerSeq
+				dbDocInfo.ClientSeq = clientDocInfo.ClientSeq
+			} else {
+				dbClientInfo.Documents[docInfo.ID] = &database.ClientDocInfo{
+					Status:    clientDocInfo.Status,
+					ServerSeq: clientDocInfo.ServerSeq,
+					ClientSeq: clientDocInfo.ClientSeq,
+				}
+			}
+		}
+
+		if err := c.clientInfoCache.Set(clientInfo.RefKey(), &dbClientInfo); err != nil {
 			return fmt.Errorf("set client info in cache: %w", err)
 		}
 	}
@@ -2391,4 +2462,53 @@ func (c *Client) LogClientInfoCacheMetrics() {
 		return
 	}
 	c.clientInfoCache.LogMetrics()
+}
+
+// updateDocumentStatusInDBDirect updates document status in database directly
+func (c *Client) updateDocumentStatusInDBDirect(refKey types.ClientRefKey, docID types.ID, status string) error {
+	updateDoc := bson.M{
+		"$set": bson.M{
+			"updated_at": gotime.Now(),
+		},
+	}
+
+	// Add document-specific updates
+	docKey := clientDocInfoKey(docID, StatusKey)
+	updateDoc["$set"].(bson.M)[docKey] = status
+
+	// Reset sequence numbers for detached/removed/attaching documents
+	if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
+		serverSeqKey := clientDocInfoKey(docID, "server_seq")
+		clientSeqKey := clientDocInfoKey(docID, "client_seq")
+		updateDoc["$set"].(bson.M)[serverSeqKey] = int64(0)
+		updateDoc["$set"].(bson.M)[clientSeqKey] = uint32(0)
+	}
+
+	_, err := c.collection(ColClients).UpdateOne(
+		context.Background(),
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.ClientID,
+		},
+		updateDoc,
+	)
+	return err
+}
+
+// updateStatusInDBDirect updates client status in database directly
+func (c *Client) updateStatusInDBDirect(refKey types.ClientRefKey, status string) error {
+	_, err := c.collection(ColClients).UpdateOne(
+		context.Background(),
+		bson.M{
+			"project_id": refKey.ProjectID,
+			"_id":        refKey.ClientID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"status":     status,
+				"updated_at": gotime.Now(),
+			},
+		},
+	)
+	return err
 }

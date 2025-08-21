@@ -19,6 +19,7 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,6 +48,10 @@ type CacheMetrics struct {
 	TryAttachingMisses     int64
 	FindClientInfoHits     int64
 	FindClientInfoMisses   int64
+
+	// TTL-related metrics
+	TTLExpirations int64
+	TTLFlushErrors int64
 }
 
 // CacheConfig defines configuration parameters for the cache
@@ -65,6 +70,8 @@ type CacheConfig struct {
 	PressureCheckInterval time.Duration
 	// EnableFlushCleanup enables cache cleanup after flush
 	EnableFlushCleanup bool
+	// TTL is the time-to-live for cached entries
+	TTL time.Duration
 }
 
 // DefaultCacheConfig returns default cache configuration
@@ -77,6 +84,7 @@ func DefaultCacheConfig() *CacheConfig {
 		WritePressureThreshold: 500,
 		PressureCheckInterval:  10 * time.Second,
 		EnableFlushCleanup:     true,
+		TTL:                    3 * time.Second,
 	}
 }
 
@@ -86,6 +94,7 @@ type CachedClientInfo struct {
 	UpdatedAt  time.Time
 	Dirty      bool
 	LastFlush  time.Time
+	ExpiresAt  time.Time
 }
 
 // WritePressure tracks write pressure metrics for adaptive flushing
@@ -128,11 +137,45 @@ func NewClientInfoCache(config *CacheConfig, client *Client) *ClientInfoCache {
 
 	// Start background goroutines
 	go cache.adaptiveFlush()
+	go cache.ttlCleanup()
 
 	// Start metrics logging
 	cache.StartMetricsLogging()
 
 	return cache
+}
+
+// handleExpiredEntry processes an expired cache entry
+// Status information is discarded, checkpoint information is flushed to DB using max operator
+func (c *ClientInfoCache) handleExpiredEntry(refKey types.ClientRefKey, cached *CachedClientInfo) {
+	atomic.AddInt64(&c.metrics.TTLExpirations, 1)
+
+	// Create a copy of client info with only checkpoint information
+	checkpointInfo := &database.ClientInfo{
+		ID:        cached.ClientInfo.ID,
+		ProjectID: cached.ClientInfo.ProjectID,
+		Key:       cached.ClientInfo.Key,
+		Status:    cached.ClientInfo.Status,
+		Documents: make(map[types.ID]*database.ClientDocInfo),
+		Metadata:  cached.ClientInfo.Metadata,
+		CreatedAt: cached.ClientInfo.CreatedAt,
+		UpdatedAt: cached.ClientInfo.UpdatedAt,
+	}
+
+	// Copy only checkpoint information (ServerSeq, ClientSeq) from documents
+	for docID, docInfo := range cached.ClientInfo.Documents {
+		checkpointInfo.Documents[docID] = &database.ClientDocInfo{
+			ServerSeq: docInfo.ServerSeq,
+			ClientSeq: docInfo.ClientSeq,
+			Status:    docInfo.Status,
+		}
+	}
+
+	// Flush checkpoint information to DB using max operator
+	if err := c.flushSingleToDB(refKey, checkpointInfo); err != nil {
+		atomic.AddInt64(&c.metrics.TTLFlushErrors, 1)
+		logging.DefaultLogger().Errorf("Failed to flush expired entry checkpoint to DB: %v", err)
+	}
 }
 
 // Get retrieves a ClientInfo from the cache
@@ -141,12 +184,31 @@ func (c *ClientInfoCache) Get(refKey types.ClientRefKey) *database.ClientInfo {
 	defer c.mu.RUnlock()
 
 	if cached, exists := c.cache[refKey]; exists {
+		// Check if entry has expired
+		if time.Now().After(cached.ExpiresAt) {
+			// Schedule expiration handling in background
+			go c.handleExpiration(refKey)
+			c.recordMiss()
+			return nil
+		}
+
 		c.recordHit()
 		return cached.ClientInfo.DeepCopy()
 	}
 
 	c.recordMiss()
 	return nil
+}
+
+// handleExpiration handles expired entry cleanup in background
+func (c *ClientInfoCache) handleExpiration(refKey types.ClientRefKey) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if cached, exists := c.cache[refKey]; exists && time.Now().After(cached.ExpiresAt) {
+		c.handleExpiredEntry(refKey, cached)
+		delete(c.cache, refKey)
+	}
 }
 
 // GetByKey retrieves a ClientInfo from the cache by project ID and key
@@ -156,6 +218,14 @@ func (c *ClientInfoCache) GetByKey(projectID types.ID, key string) *database.Cli
 
 	for refKey, cached := range c.cache {
 		if refKey.ProjectID == projectID && cached.ClientInfo.Key == key {
+			// Check if entry has expired
+			if time.Now().After(cached.ExpiresAt) {
+				// Schedule expiration handling in background
+				go c.handleExpiration(refKey)
+				c.recordMiss()
+				return nil
+			}
+
 			c.recordHit()
 			return cached.ClientInfo.DeepCopy()
 		}
@@ -171,12 +241,40 @@ func (c *ClientInfoCache) GetByProject(projectID types.ID) []*database.ClientInf
 	defer c.mu.RUnlock()
 
 	var clients []*database.ClientInfo
+	var expiredKeys []types.ClientRefKey
+
+	now := time.Now()
 	for refKey, cached := range c.cache {
 		if refKey.ProjectID == projectID {
+			// Check if entry has expired
+			if now.After(cached.ExpiresAt) {
+				expiredKeys = append(expiredKeys, refKey)
+				continue
+			}
 			clients = append(clients, cached.ClientInfo.DeepCopy())
 		}
 	}
+
+	// Handle expired entries in background if any found
+	if len(expiredKeys) > 0 {
+		go c.handleBatchExpiration(expiredKeys)
+	}
+
 	return clients
+}
+
+// handleBatchExpiration handles multiple expired entries in batch
+func (c *ClientInfoCache) handleBatchExpiration(refKeys []types.ClientRefKey) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	for _, refKey := range refKeys {
+		if cached, exists := c.cache[refKey]; exists && now.After(cached.ExpiresAt) {
+			c.handleExpiredEntry(refKey, cached)
+			delete(c.cache, refKey)
+		}
+	}
 }
 
 // Set stores a ClientInfo in the cache
@@ -190,6 +288,7 @@ func (c *ClientInfoCache) Set(refKey types.ClientRefKey, clientInfo *database.Cl
 		UpdatedAt:  now,
 		Dirty:      false,
 		LastFlush:  now,
+		ExpiresAt:  now.Add(c.config.TTL),
 	}
 
 	// Evict oldest if cache is full
@@ -212,6 +311,7 @@ func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo
 		cached.ClientInfo = merged
 		cached.Dirty = true
 		cached.UpdatedAt = time.Now()
+		cached.ExpiresAt = time.Now().Add(c.config.TTL)
 		return nil
 	}
 
@@ -221,6 +321,7 @@ func (c *ClientInfoCache) UpdateClientInfo(refKey types.ClientRefKey, clientInfo
 		UpdatedAt:  now,
 		Dirty:      true,
 		LastFlush:  now,
+		ExpiresAt:  now.Add(c.config.TTL),
 	}
 	return nil
 }
@@ -373,6 +474,29 @@ func (c *ClientInfoCache) adaptiveFlush() {
 					logging.DefaultLogger().Error("flush to db: " + err.Error())
 				}
 			}
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+// ttlCleanup runs background goroutine for periodic TTL cleanup
+func (c *ClientInfoCache) ttlCleanup() {
+	ticker := time.NewTicker(c.config.TTL)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.mu.Lock()
+			now := time.Now()
+			for refKey, cached := range c.cache {
+				if now.After(cached.ExpiresAt) {
+					c.handleExpiredEntry(refKey, cached)
+					delete(c.cache, refKey)
+				}
+			}
+			c.mu.Unlock()
 		case <-c.stopCh:
 			return
 		}
@@ -605,6 +729,8 @@ func (c *ClientInfoCache) GetMetrics() *CacheMetrics {
 		TryAttachingMisses:     atomic.LoadInt64(&c.metrics.TryAttachingMisses),
 		FindClientInfoHits:     atomic.LoadInt64(&c.metrics.FindClientInfoHits),
 		FindClientInfoMisses:   atomic.LoadInt64(&c.metrics.FindClientInfoMisses),
+		TTLExpirations:         atomic.LoadInt64(&c.metrics.TTLExpirations),
+		TTLFlushErrors:         atomic.LoadInt64(&c.metrics.TTLFlushErrors),
 	}
 }
 
@@ -669,6 +795,11 @@ func (c *ClientInfoCache) LogMetrics() {
 		tryAttachingHitRate, metrics.TryAttachingHits, tryAttachingTotal,
 		findClientHitRate, metrics.FindClientInfoHits, findClientTotal,
 	)
+
+	logging.DefaultLogger().Infof(
+		"TTL Metrics - Expirations: %d, Flush Errors: %d",
+		metrics.TTLExpirations, metrics.TTLFlushErrors,
+	)
 }
 
 // UpdateCheckpoint updates only the checkpoint (ServerSeq, ClientSeq) for a specific document
@@ -702,6 +833,7 @@ func (c *ClientInfoCache) UpdateCheckpoint(refKey types.ClientRefKey, docID type
 
 		cached.Dirty = true
 		cached.UpdatedAt = time.Now()
+		cached.ExpiresAt = time.Now().Add(c.config.TTL)
 		return nil
 	}
 
@@ -738,6 +870,7 @@ func (c *ClientInfoCache) UpdateCheckpoint(refKey types.ClientRefKey, docID type
 		UpdatedAt:  now,
 		Dirty:      true,
 		LastFlush:  now,
+		ExpiresAt:  now.Add(c.config.TTL),
 	}
 	return nil
 }
@@ -769,11 +902,30 @@ func (c *ClientInfoCache) UpdateStatus(refKey types.ClientRefKey, status string)
 		cached.UpdatedAt = time.Now()
 		// Not dirty since already written to DB
 		cached.Dirty = false
+	} else {
+		// If not in cache, load from DB and cache it
+		clientInfo, err := c.loadClientInfoFromDB(refKey)
+		if err != nil {
+			return fmt.Errorf("load client info from DB: %w", err)
+		}
+
+		// Update the status in the loaded client info
+		clientInfo.Status = status
+
+		now := time.Now()
+		c.cache[refKey] = &CachedClientInfo{
+			ClientInfo: clientInfo,
+			UpdatedAt:  now,
+			Dirty:      false,
+			LastFlush:  now,
+			ExpiresAt:  now.Add(c.config.TTL),
+		}
 	}
 	return nil
 }
 
 // UpdateDocumentStatus updates the document status using CAS Write-through strategy
+// For DocumentAttaching status, it also resets ServerSeq and ClientSeq to 0
 func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID types.ID, status string) error {
 	// Check if update is needed by comparing with cache first
 	c.mu.Lock()
@@ -806,8 +958,8 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 
 		if docInfo, exists := cached.ClientInfo.Documents[docID]; exists {
 			docInfo.Status = status
-			// Reset sequence numbers for detached/removed documents
-			if status == database.DocumentDetached || status == database.DocumentRemoved {
+			// Reset sequence numbers for detached/removed/attaching documents
+			if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
 				docInfo.ServerSeq = 0
 				docInfo.ClientSeq = 0
 			}
@@ -822,6 +974,49 @@ func (c *ClientInfoCache) UpdateDocumentStatus(refKey types.ClientRefKey, docID 
 		cached.UpdatedAt = time.Now()
 		// Not dirty since already written to DB
 		cached.Dirty = false
+	} else {
+		// If not in cache, try to load from DB first
+		clientInfo, err := c.loadClientInfoFromDB(refKey)
+		if err != nil {
+			// If client not found in DB, this might be a new document attachment
+			// In this case, we need to create a minimal client info structure
+			if strings.Contains(err.Error(), "client not found") {
+				// For new document attachments, we'll create a minimal cache entry
+				// The actual client info will be loaded when needed
+				logging.DefaultLogger().Warnf("Client not found in DB for document attachment, creating minimal cache entry: %v", err)
+				return nil
+			}
+			return fmt.Errorf("load client info from DB: %w", err)
+		}
+
+		// Update the document status in the loaded client info
+		if clientInfo.Documents == nil {
+			clientInfo.Documents = make(map[types.ID]*database.ClientDocInfo)
+		}
+
+		if docInfo, exists := clientInfo.Documents[docID]; exists {
+			docInfo.Status = status
+			// Reset sequence numbers for detached/removed/attaching documents
+			if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
+				docInfo.ServerSeq = 0
+				docInfo.ClientSeq = 0
+			}
+		} else {
+			clientInfo.Documents[docID] = &database.ClientDocInfo{
+				Status:    status,
+				ServerSeq: 0,
+				ClientSeq: 0,
+			}
+		}
+
+		now := time.Now()
+		c.cache[refKey] = &CachedClientInfo{
+			ClientInfo: clientInfo,
+			UpdatedAt:  now,
+			Dirty:      false,
+			LastFlush:  now,
+			ExpiresAt:  now.Add(c.config.TTL),
+		}
 	}
 	return nil
 }
@@ -878,8 +1073,8 @@ func (c *ClientInfoCache) updateDocumentStatusInDB(refKey types.ClientRefKey, do
 	docKey := clientDocInfoKey(docID, StatusKey)
 	updateDoc["$set"].(bson.M)[docKey] = status
 
-	// Reset sequence numbers for detached/removed documents
-	if status == database.DocumentDetached || status == database.DocumentRemoved {
+	// Reset sequence numbers for detached/removed/attaching documents
+	if status == database.DocumentDetached || status == database.DocumentRemoved || status == database.DocumentAttaching {
 		serverSeqKey := clientDocInfoKey(docID, "server_seq")
 		clientSeqKey := clientDocInfoKey(docID, "client_seq")
 		updateDoc["$set"].(bson.M)[serverSeqKey] = int64(0)
