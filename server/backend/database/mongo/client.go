@@ -291,7 +291,7 @@ func (c *Client) tryRenewLeadership(
 	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"rpcAddr":     rpcAddr,
+			"rpc_addr":    rpcAddr,
 			"is_leader":   true,
 			"lease_token": leaseToken,
 			"$expr":       bson.M{"$gte": bson.A{"$expires_at", "$$NOW"}},
