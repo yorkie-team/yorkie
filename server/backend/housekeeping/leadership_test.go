@@ -62,7 +62,7 @@ func TestLeadershipManager(t *testing.T) {
 		// Verify leadership info
 		lease := manager.CurrentLease()
 		require.NotNil(t, lease)
-		assert.Equal(t, "node-1", lease.Hostname)
+		assert.Equal(t, database.PodRPCAddr("node-1"), lease.RPCAddr)
 	})
 
 	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
@@ -127,6 +127,39 @@ func TestLeadershipManager(t *testing.T) {
 			return manager2.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 	})
+
+	t.Run("FindActiveClusterNodes should return active cluster nodes", func(t *testing.T) {
+		db := newDatabase()
+		conf := DefaultLeadershipConfig()
+		conf.LeaseDuration = 200 * time.Millisecond
+		conf.RenewalInterval = 50 * time.Millisecond
+
+		manager1 := NewLeadershipManager(db, "node-1", conf)
+		manager2 := NewLeadershipManager(db, "node-2", conf)
+
+		err := manager1.Start(ctx)
+		require.NoError(t, err)
+
+		err = manager2.Start(ctx)
+		require.NoError(t, err)
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, conf.RenewalInterval)
+			assert.NoError(t, err)
+			return 2 == len(res)
+		}, 1*time.Second, 50*time.Millisecond)
+
+		manager1.Stop()
+		manager2.Stop()
+
+		time.Sleep(100 * time.Millisecond)
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, conf.RenewalInterval)
+			assert.NoError(t, err)
+			return 0 == len(res)
+		}, 1*time.Second, 50*time.Millisecond)
+	})
 }
 
 func TestLeadershipConcurrency(t *testing.T) {
@@ -149,7 +182,7 @@ func TestLeadershipConcurrency(t *testing.T) {
 
 			for range 50 {
 				info, err := db.TryLeadership(ctx, nodeID, "", leaseDuration)
-				if err == nil && info.Hostname == nodeID {
+				if err == nil && info.RPCAddr == database.PodRPCAddr(nodeID) {
 					acquiredCount[id]++
 
 					// Hold leadership briefly then let it expire
@@ -170,4 +203,35 @@ func TestLeadershipConcurrency(t *testing.T) {
 	}
 
 	assert.Greater(t, totalAcquisitions, 0, "At least some leadership acquisitions should have occurred")
+}
+
+func TestAcquire_Concurrent_NoSplitBrain(t *testing.T) {
+	ctx := context.Background()
+	db := newDatabase()
+
+	lease := 30 * time.Second
+	host1 := "node-1"
+	host2 := "node-2"
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var r1, r2 *database.ClusterNodeInfo
+	var e1, e2 error
+
+	go func() {
+		defer wg.Done()
+		r1, e1 = db.TryLeadership(ctx, host1, "", lease)
+	}()
+	go func() {
+		defer wg.Done()
+		r2, e2 = db.TryLeadership(ctx, host2, "", lease)
+	}()
+	wg.Wait()
+
+	assert.NoError(t, e1)
+	assert.NoError(t, e2)
+	require.NotNil(t, r1)
+	require.NotNil(t, r2)
+
+	assert.Equal(t, r1.RPCAddr, r2.RPCAddr)
 }
