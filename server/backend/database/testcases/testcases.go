@@ -56,7 +56,7 @@ func RunLeadershipTest(
 ) {
 	t.Run("TryLeadership should work for new leadership", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -69,7 +69,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should return existing leader when valid", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// First node acquires leadership
 		leaseDuration := 30 * gotime.Second
@@ -88,7 +88,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should allow takeover after expiry", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// First node acquires leadership with short lease
 		shortLease := 100 * gotime.Millisecond
@@ -110,7 +110,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -132,7 +132,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -147,7 +147,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should fail for wrong node with token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -162,7 +162,7 @@ func RunLeadershipTest(
 
 	t.Run("FindLeadership should return current leader", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// No leadership initially
 		info, err := db.FindLeadership(ctx)
@@ -185,9 +185,8 @@ func RunLeadershipTest(
 	})
 
 	t.Run("Leader should be only one", func(t *testing.T) {
-		//t.Skip("TODO(raararaara): Need to resolve in case of memDB.")
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		const numNodes = 3
 		const leaseDuration = 30 * gotime.Second

@@ -91,8 +91,8 @@ type Database interface {
 	// FindLeadership returns the current leadership information.
 	FindLeadership(ctx context.Context) (*ClusterNodeInfo, error)
 
-	// ClearLeadership removes the current leadership information for testing purposes.
-	ClearLeadership(ctx context.Context) error
+	// ClearClusterNodes removes the current clusternode information for testing purposes.
+	ClearClusterNodes(ctx context.Context) error
 
 	// FindActiveClusterNodes returns the active cluster nodes.
 	FindActiveClusterNodes(

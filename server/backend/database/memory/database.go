@@ -99,8 +99,23 @@ func (d *DB) TryLeadership(
 			// Check if current leadership has expired
 			if existing.ExpiresAt.After(now) {
 				// Leadership is still valid, return existing leadership
-				_ = d.updateClusterFollower(txn, rpcAddr)
+				if err = d.updateClusterFollower(txn, rpcAddr); err != nil {
+					return nil, err
+				}
+				txn.Commit()
 				return existing, nil
+			} else {
+				// demote expired leader before inserting a new leader
+				demoted := *existing
+				demoted.IsLeader = false
+				demoted.UpdatedAt = now
+
+				if err := txn.Insert(tblClusterNodes, &clusterNodeRecord{
+					ID:              demoted.RPCAddr,
+					ClusterNodeInfo: &demoted,
+				}); err != nil {
+					return nil, fmt.Errorf("demote expired leader: %w", err)
+				}
 			}
 		}
 
@@ -108,20 +123,6 @@ func (d *DB) TryLeadership(
 		newToken, err := database.GenerateLeaseToken()
 		if err != nil {
 			return nil, fmt.Errorf("generate lease token: %w", err)
-		}
-
-		// demote expired leader before inserting a new leader
-		if existing != nil && existing.ExpiresAt.After(now) {
-			demoted := *existing
-			demoted.IsLeader = false
-			demoted.UpdatedAt = now
-
-			if err := txn.Insert(tblClusterNodes, &clusterNodeRecord{
-				ID:              demoted.RPCAddr,
-				ClusterNodeInfo: &demoted,
-			}); err != nil {
-				return nil, fmt.Errorf("demote expired leader: %w", err)
-			}
 		}
 
 		// Create or update leadership entry
@@ -222,15 +223,15 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, err
 	return leadershipInfo, nil
 }
 
-// ClearLeadership removes the current leadership information for testing purposes.
-func (d *DB) ClearLeadership(ctx context.Context) error {
+// ClearClusterNodes removes the current clusternode information for testing purposes.
+func (d *DB) ClearClusterNodes(ctx context.Context) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// Delete the leadership record if it exists
+	// Delete the clusternode record if it exists
 	_, err := txn.DeleteAll(tblClusterNodes, "id")
 	if err != nil {
-		return fmt.Errorf("clear leadership: %w", err)
+		return fmt.Errorf("clear clusternode: %w", err)
 	}
 
 	txn.Commit()
@@ -262,7 +263,8 @@ func (d *DB) FindActiveClusterNodes(
 		if info.UpdatedAt.IsZero() || info.UpdatedAt.Before(cutoff) {
 			continue
 		}
-		infos = append(infos, info)
+		cpy := *info
+		infos = append(infos, &cpy)
 	}
 
 	sort.Slice(infos, func(i, j int) bool {
@@ -295,7 +297,7 @@ func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 		}
 
 		if err := txn.Insert(tblClusterNodes, record); err != nil {
-			return fmt.Errorf("insert leadership: %w", err)
+			return fmt.Errorf("insert cluster follower: %w", err)
 		}
 
 		txn.Commit()
@@ -315,7 +317,6 @@ func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	if err := txn.Insert(tblClusterNodes, record); err != nil {
 		return fmt.Errorf("update cluster follower: %w", err)
 	}
-	txn.Commit()
 	return nil
 }
 

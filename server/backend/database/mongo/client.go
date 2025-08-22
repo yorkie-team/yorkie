@@ -151,14 +151,18 @@ func (c *Client) TryLeadership(
 	if leaseToken == "" {
 		res, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
 		if err == nil && res.RPCAddr != rpcAddr {
-			_ = c.updateClusterFollower(ctx, rpcAddr)
+			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
+				return nil, err
+			}
 		}
 		return res, err
 	}
 
 	res, err := c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
 	if err == nil && res.RPCAddr != rpcAddr {
-		_ = c.updateClusterFollower(ctx, rpcAddr)
+		if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
+			return nil, err
+		}
 	}
 	return res, err
 }
@@ -317,8 +321,8 @@ func (c *Client) tryRenewLeadership(
 	return &info, nil
 }
 
-// ClearLeadership removes the current leadership information for testing purposes.
-func (c *Client) ClearLeadership(ctx context.Context) error {
+// ClearClusterNodes removes the current clusternode information for testing purposes.
+func (c *Client) ClearClusterNodes(ctx context.Context) error {
 	_, err := c.collection(ColClusterNodes).DeleteMany(ctx, bson.M{})
 	if err != nil {
 		return fmt.Errorf("clear leadership: %w", err)
