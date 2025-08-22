@@ -3900,15 +3900,13 @@ func TestTree(t *testing.T) {
 				Children: []json.TreeNode{{
 					Type: "p",
 					Children: []json.TreeNode{
-						{Type: "text", Value: "a"},
-						{Type: "text", Value: "b"},
-						{Type: "text", Value: "c"},
-						{Type: "text", Value: "d"},
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 					},
 				}},
 			})
 			return nil
-		}, "insert abcd")
+		}, "insert <b>ab</b><i>cd</i>")
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
@@ -3920,17 +3918,17 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(2, 4, nil, 0)
+			root.GetTree("t").Edit(4, 7, nil, 0) // <i>cd</i> 삭제
 			return nil
-		}, "delete bc")
+		}, "delete <i>cd</i>")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 3, nil, 0)
+			root.GetTree("t").Edit(1, 7, nil, 0) // <b>ab</b><i>cd</i> 전체 삭제
 			return nil
-		}, "delete ad")
+		}, "delete <b>ab</b><i>cd</i>")
 		assert.NoError(t, err)
 
 		treeNode1 := d1.Root().GetTree("t")
@@ -3939,44 +3937,23 @@ func TestTree(t *testing.T) {
 		nodes1 := treeNode1.Nodes()
 		nodes2 := treeNode2.Nodes()
 
-		var bcNodes, aNodes, dNodes []*crdt.TreeNode
+		var bNode, iNode *crdt.TreeNode
 		for _, node := range nodes2 {
-			if node.Value == "a" {
-				aNodes = append(aNodes, node)
-			} else if node.Value == "b" || node.Value == "c" {
-				bcNodes = append(bcNodes, node)
-			} else if node.Value == "d" {
-				dNodes = append(dNodes, node)
+			if node.Type() == "b" {
+				bNode = node
+			} else if node.Type() == "i" {
+				iNode = node
 			}
 		}
 
-		assert.NotEmpty(t, bcNodes, "bc nodes should exist")
-		assert.NotEmpty(t, aNodes, "a nodes should exist")
-		assert.NotEmpty(t, dNodes, "d nodes should exist")
+		assert.NotEmpty(t, bNode, "b node should exist")
+		assert.NotEmpty(t, iNode, "i node should exist")
 
-		for _, bcNode := range bcNodes {
-			assert.NotNil(t, bcNode.RemovedAt(), "bc nodes should be removed")
-		}
-		for _, aNode := range aNodes {
-			assert.NotNil(t, aNode.RemovedAt(), "a nodes should be removed")
-		}
-		for _, dNode := range dNodes {
-			assert.NotNil(t, dNode.RemovedAt(), "d nodes should be removed")
-		}
-
-		for _, aNode := range aNodes {
-			for _, bcNode := range bcNodes {
-				assert.True(t, aNode.RemovedAt().After(bcNode.RemovedAt()),
-					"In causal deletion, 'a' should be deleted after 'bc' (T3 > T2)")
-			}
-		}
-		for _, dNode := range dNodes {
-			for _, bcNode := range bcNodes {
-				assert.True(t, dNode.RemovedAt().After(bcNode.RemovedAt()),
-					"In causal deletion, 'd' should be deleted after 'bc' (T3 > T2)")
-			}
-		}
-
+		bRemovedAt := bNode.RemovedAt()
+		iRemovedAt := iNode.RemovedAt()
+		assert.NotNil(t, bRemovedAt, "b node removedAt should not be nil")
+		assert.NotNil(t, iRemovedAt, "i node removedAt should not be nil")
+		assert.True(t, bRemovedAt.After(iRemovedAt))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
@@ -3994,15 +3971,13 @@ func TestTree(t *testing.T) {
 				Children: []json.TreeNode{{
 					Type: "p",
 					Children: []json.TreeNode{
-						{Type: "text", Value: "a"},
-						{Type: "text", Value: "b"},
-						{Type: "text", Value: "c"},
-						{Type: "text", Value: "d"},
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 					},
 				}},
 			})
 			return nil
-		}, "insert abcd")
+		}, "insert <b>ab</b><i>cd</i>")
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
@@ -4014,15 +3989,15 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(2, 4, nil, 0)
+			root.GetTree("t").Edit(4, 7, nil, 0)
 			return nil
-		}, "delete bc by c1")
+		}, "delete <i>cd</i> by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 5, nil, 0)
+			root.GetTree("t").Edit(1, 7, nil, 0)
 			return nil
-		}, "delete abcd by c2")
+		}, "delete <b>ab</b><i>cd</i> by c2")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -4032,6 +4007,24 @@ func TestTree(t *testing.T) {
 
 		nodes1 := treeNode1.Nodes()
 		nodes2 := treeNode2.Nodes()
+
+		t.Logf("DEBUG: d1 nodes count=%d, d2 nodes count=%d", len(nodes1), len(nodes2))
+
+		for i, node := range nodes1 {
+			t.Logf("  d1[%d]: value='%s', type='%s', removed=%v",
+				i, node.Value, node.Type(), node.RemovedAt() != nil)
+			if node.RemovedAt() != nil {
+				t.Logf("    removedAt=%s", node.RemovedAt().ToTestString())
+			}
+		}
+
+		for i, node := range nodes2 {
+			t.Logf("  d2[%d]: value='%s', type='%s', removed=%v",
+				i, node.Value, node.Type(), node.RemovedAt() != nil)
+			if node.RemovedAt() != nil {
+				t.Logf("    removedAt=%s", node.RemovedAt().ToTestString())
+			}
+		}
 
 		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
 
@@ -4043,16 +4036,25 @@ func TestTree(t *testing.T) {
 			}
 		}
 
+		t.Logf("DEBUG: Total text nodes: %d", len(allTextNodes))
+
 		deletedNodes := []*crdt.TreeNode{}
 		for _, node := range allTextNodes {
 			if node.RemovedAt() != nil {
 				deletedNodes = append(deletedNodes, node)
-				timestampSet[node.RemovedAt().ToTestString()] = true
+				timestamp := node.RemovedAt().ToTestString()
+				timestampSet[timestamp] = true
+				t.Logf("  deleted node: value='%s', removedAt=%s", node.Value, timestamp)
 			}
 		}
 
+		t.Logf("DEBUG: Deleted nodes: %d, Unique timestamps: %d", len(deletedNodes), len(timestampSet))
+		for ts := range timestampSet {
+			t.Logf("  timestamp: %s", ts)
+		}
+
 		// Todo(sigmaith): make pass
-		//assert.Equal(t, 1, len(timestampSet), "Should have 1 timestamp in concurrent deletion")
+		assert.Equal(t, 1, len(timestampSet), "Should have 1 timestamp in concurrent deletion")
 
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p></p></root>", d2.Root().GetTree("t").ToXML())
