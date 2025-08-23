@@ -40,19 +40,22 @@ func benchmarkDeactivate(
 	b.StopTimer()
 	c, err := client.Dial(svr.RPCAddr())
 	assert.NoError(b, err)
+	defer c.Close()
+
 	err = c.Activate(ctx)
 	assert.NoError(b, err)
 	for i := range totalDocCount {
 		d := document.New(helper.TestDocKey(b, i))
-		err := c.Attach(ctx, d)
+		err = c.Attach(ctx, d)
 		assert.NoError(b, err)
 		if i >= attachedDocCount {
-			err := c.Detach(ctx, d)
+			err = c.Detach(ctx, d)
 			assert.NoError(b, err)
 		}
 	}
+
 	b.StartTimer()
-	err = svr.DeactivateClient(ctx, c)
+	err = c.Deactivate(ctx)
 	b.StopTimer()
 	assert.NoError(b, err)
 }

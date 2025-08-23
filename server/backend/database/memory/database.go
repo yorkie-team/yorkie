@@ -1166,16 +1166,16 @@ func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, docKey key.Key
 	return docInfo, nil
 }
 
-// findDocInfoById finds the document of the given id.
-func (d *DB) findDocInfoById(txn *memdb.Txn, projectID types.ID, docId types.ID) (*database.DocInfo, error) {
+// findDocInfoByID finds the document of the given id.
+func (d *DB) findDocInfoByID(txn *memdb.Txn, projectID types.ID, docID types.ID) (*database.DocInfo, error) {
 	iter, err := txn.Get(
 		tblDocuments,
 		"project_id_id",
 		projectID.String(),
-		docId.String(),
+		docID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find document of %s: %w", docId, err)
+		return nil, fmt.Errorf("find document of %s: %w", docID, err)
 	}
 	var docInfo *database.DocInfo
 	for val := iter.Next(); val != nil; val = iter.Next() {
@@ -1243,7 +1243,7 @@ func (d *DB) FindDocInfosByIDs(
 
 	var infos []*database.DocInfo
 	for _, id := range docIDs {
-		info, err := d.findDocInfoById(txn, projectID, id)
+		info, err := d.findDocInfoByID(txn, projectID, id)
 		if err != nil {
 			return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
 		}

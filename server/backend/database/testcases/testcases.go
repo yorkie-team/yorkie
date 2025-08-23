@@ -257,8 +257,8 @@ func RunFindDocInfosByKeysAndIDsTest(
 		docIDs := make([]types.ID, 0)
 		for _, docKey := range docKeys {
 			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
-			docIDs = append(docIDs, docInfo.ID)
 			assert.NoError(t, err)
+			docIDs = append(docIDs, docInfo.ID)
 		}
 
 		// 02. Find documents by keys
@@ -324,8 +324,8 @@ func RunFindDocInfosByKeysAndIDsTest(
 		docIDs := make([]types.ID, 0)
 		for _, docKey := range docKeys {
 			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
-			docIDs = append(docIDs, docInfo.ID)
 			assert.NoError(t, err)
+			docIDs = append(docIDs, docInfo.ID)
 		}
 
 		// 02. append a key and id that does not exist
