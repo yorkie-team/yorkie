@@ -429,7 +429,6 @@ func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown 
 	// (concurrent or unseen) and newer.
 	if !tombstoneKnown && removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
-		return true
 	}
 	return false
 }
@@ -446,9 +445,9 @@ func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKno
 
 	// NOTE(sigmaith): Overwrite only if prior tombstone was not known
 	// (concurrent or unseen) and newer.
-	if !tombstoneKnown && removedAt.After(n.removedAt) {
-		return true
-	}
+	// if !tombstoneKnown && removedAt.After(n.removedAt) {
+	// return true
+	// }
 	return false
 }
 
@@ -876,8 +875,54 @@ func (t *Tree) Edit(
 	}
 
 	// 02. Delete: delete the nodes that are marked as removed.
+	// Also process nodes that are already deleted but need LWW updates.
 	var pairs []GCPair
-	for _, node := range toBeRemoveds {
+
+	// IMPORTANT: Check ALL nodes in the tree for potential LWW updates
+	// This is necessary because deleted nodes might be outside the current range
+	var additionalNodes []*TreeNode
+	for _, node := range t.Nodes() {
+		// Skip if already in toBeRemoveds
+		if slices.Contains(toBeRemoveds, node) {
+			continue
+		}
+
+		// Check if this is a deleted node that needs LWW processing
+		if node.removedAt != nil {
+			isLocal := len(versionVector) == 0
+
+			// Check if we know about the creation
+			creationKnown := false
+			if isLocal {
+				creationKnown = true
+			} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
+				creationKnown = true
+			}
+
+			// Only process if creation was known (otherwise we can't delete it)
+			if !creationKnown {
+				continue
+			}
+
+			// Check if the tombstone is known
+			tombstoneKnown := false
+			if isLocal {
+				tombstoneKnown = true
+			} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
+				tombstoneKnown = true
+			}
+
+			// If tombstone is not known and new deletion is later, include it for LWW
+			if !tombstoneKnown && editedAt.After(node.removedAt) {
+				additionalNodes = append(additionalNodes, node)
+			}
+		}
+	}
+
+	// Combine toBeRemoveds with additionalNodes
+	allNodesToProcess := append(toBeRemoveds, additionalNodes...)
+
+	for _, node := range allNodesToProcess {
 
 		isLocal := len(versionVector) == 0
 
@@ -899,7 +944,9 @@ func (t *Tree) Edit(
 			}
 		}
 
-		if node.remove(editedAt, creationKnown, tombstoneKnown) {
+		removed := node.remove(editedAt, creationKnown, tombstoneKnown)
+
+		if removed {
 			pairs = append(pairs, GCPair{
 				Parent: t,
 				Child:  node,
