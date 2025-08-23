@@ -58,37 +58,39 @@ func Deactivate(
 		return nil, err
 	}
 
+	docIDs := make([]types.ID, 0)
 	for docID, clientDocInfo := range info.Documents {
 		if clientDocInfo.Status != database.DocumentAttached &&
 			clientDocInfo.Status != database.DocumentAttaching {
 			continue
 		}
-
-		// TODO(hackerwins): Solve N+1
-		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docID,
-		})
+		docIDs = append(docIDs, docID)
+	}
+	if len(docIDs) > 0 {
+		docInfos, err := be.DB.FindDocInfosByIDs(ctx, project.ID, docIDs)
 		if err != nil {
 			return nil, err
 		}
-
+		if len(docInfos) != len(docIDs) {
+			return nil, fmt.Errorf("failed to find all documents; expected: %d, actual: %d",
+				len(docIDs), len(docInfos))
+		}
 		actorID, err := info.ID.ToActorID()
 		if err != nil {
 			return nil, err
 		}
-
-		if err := be.ClusterClient.DetachDocument(
-			ctx,
-			project,
-			actorID,
-			docID,
-			docInfo.Key,
-		); err != nil {
-			return nil, err
+		for _, docInfo := range docInfos {
+			if err := be.ClusterClient.DetachDocument(
+				ctx,
+				project,
+				actorID,
+				docInfo.ID,
+				docInfo.Key,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
-
 	return be.DB.DeactivateClient(ctx, refKey)
 }
 

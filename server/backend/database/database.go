@@ -236,6 +236,13 @@ type Database interface {
 		docKeys []key.Key,
 	) ([]*DocInfo, error)
 
+	// FindDocInfosByIDs finds the documents of the given IDs.
+	FindDocInfosByIDs(
+		ctx context.Context,
+		projectID types.ID,
+		docIDs []types.ID,
+	) ([]*DocInfo, error)
+
 	// FindOrCreateDocInfo finds the document or creates it if it does not exist.
 	FindOrCreateDocInfo(
 		ctx context.Context,
