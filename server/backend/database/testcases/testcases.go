@@ -306,7 +306,7 @@ func RunFindDocInfosByKeysAndIDsTest(
 		assert.NoError(t, err)
 		assert.Len(t, infos, 0)
 
-		// 03. Find documents by empty ids
+		// 03. Find documents by empty id
 		infos, err = db.FindDocInfosByIDs(ctx, projectID, nil)
 		assert.NoError(t, err)
 		assert.Len(t, infos, 0)

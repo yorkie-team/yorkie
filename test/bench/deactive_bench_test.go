@@ -73,9 +73,9 @@ func BenchmarkDeactivate(b *testing.B) {
 	})
 
 	ctx := context.Background()
-	b.Run("deactivate with 100 total 10 attached", func(b *testing.B) {
+	b.Run("deactivate with 100 total 50 attached", func(b *testing.B) {
 		for range b.N {
-			benchmarkDeactivate(b, ctx, svr, 100, 10)
+			benchmarkDeactivate(b, ctx, svr, 100, 50)
 		}
 	})
 
