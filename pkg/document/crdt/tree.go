@@ -874,7 +874,6 @@ func (t *Tree) Edit(
 		return nil, resource.DataSize{}, err
 	}
 
-
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
@@ -1039,12 +1038,12 @@ func (t *Tree) collectBetween(
 		if slices.Contains(toBeRemoveds, node) {
 			continue
 		}
-		
+
 		// Skip if not deleted
 		if node.removedAt == nil {
 			continue
 		}
-		
+
 		// Check if we know about the creation
 		creationKnown := false
 		if isLocal {
@@ -1052,11 +1051,11 @@ func (t *Tree) collectBetween(
 		} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
 			creationKnown = true
 		}
-		
+
 		if !creationKnown {
 			continue
 		}
-		
+
 		// Check if the tombstone is known
 		tombstoneKnown := false
 		if isLocal {
@@ -1064,7 +1063,7 @@ func (t *Tree) collectBetween(
 		} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
 			tombstoneKnown = true
 		}
-		
+
 		// If this node needs LWW processing, add it to toBeRemoveds
 		if node.canDelete(editedAt, creationKnown, tombstoneKnown) {
 			toBeRemoveds = append(toBeRemoveds, node)
