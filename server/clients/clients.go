@@ -72,7 +72,7 @@ func Deactivate(
 			return nil, err
 		}
 		if len(docInfos) != len(docIDs) {
-			return nil, fmt.Errorf("failed to find all documents; expected: %d, actual: %d",
+			return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
 				len(docIDs), len(docInfos))
 		}
 		actorID, err := info.ID.ToActorID()
