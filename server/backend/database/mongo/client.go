@@ -1217,6 +1217,35 @@ func (c *Client) FindDocInfosByKeys(
 	return docInfos, nil
 }
 
+// FindDocInfosByIDs finds the documents of the given ids.
+func (c *Client) FindDocInfosByIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) ([]*database.DocInfo, error) {
+	if len(docIDs) == 0 {
+		return nil, nil
+	}
+	filter := bson.M{
+		"project_id": projectID,
+		"_id": bson.M{
+			"$in": docIDs,
+		},
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
+	}
+
+	var docInfos []*database.DocInfo
+	if err := cursor.All(ctx, &docInfos); err != nil {
+		return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
+	}
+
+	return docInfos, nil
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,

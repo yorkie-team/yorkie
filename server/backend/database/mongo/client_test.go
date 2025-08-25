@@ -69,8 +69,8 @@ func TestClient(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
-		testcases.RunFindDocInfosByKeysTest(t, cli, dummyProjectID)
+	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysAndIDsTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {

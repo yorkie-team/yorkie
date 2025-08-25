@@ -233,18 +233,18 @@ func RunFindDocInfoTest(
 		assert.NoError(t, err)
 
 		// 03. Find the document
-		info, err = db.FindDocInfoByKey(ctx, projectID, docKey)
+		_, err = db.FindDocInfoByKey(ctx, projectID, docKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 }
 
-// RunFindDocInfosByKeysTest runs the FindDocInfosByKeys test for the given db.
-func RunFindDocInfosByKeysTest(
+// RunFindDocInfosByKeysAndIDsTest runs the FindDocInfosByKeys and FindDocInfosByIDs test for the given db.
+func RunFindDocInfosByKeysAndIDsTest(
 	t *testing.T,
 	db database.Database,
 	projectID types.ID,
 ) {
-	t.Run("find docInfos by keys test", func(t *testing.T) {
+	t.Run("find docInfos by keys and ids test", func(t *testing.T) {
 		ctx := context.Background()
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
@@ -254,12 +254,14 @@ func RunFindDocInfosByKeysTest(
 			"test", "test$3", "test123", "test$0",
 			"search$test", "abcde", "test abc",
 		}
+		docIDs := make([]types.ID, 0)
 		for _, docKey := range docKeys {
-			_, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 			assert.NoError(t, err)
+			docIDs = append(docIDs, docInfo.ID)
 		}
 
-		// 02. Find documents
+		// 02. Find documents by keys
 		infos, err := db.FindDocInfosByKeys(ctx, projectID, docKeys)
 		assert.NoError(t, err)
 
@@ -270,9 +272,21 @@ func RunFindDocInfosByKeysTest(
 
 		assert.ElementsMatch(t, docKeys, actualKeys)
 		assert.Len(t, infos, len(docKeys))
+
+		// 03. Find documents by ids
+		infos, err = db.FindDocInfosByIDs(ctx, projectID, docIDs)
+		assert.NoError(t, err)
+
+		actualIDs := make([]types.ID, len(infos))
+		for i, info := range infos {
+			actualIDs[i] = info.ID
+		}
+
+		assert.ElementsMatch(t, docIDs, actualIDs)
+		assert.Len(t, infos, len(docIDs))
 	})
 
-	t.Run("find docInfos by empty key slice test", func(t *testing.T) {
+	t.Run("find docInfos by empty key and id slice test", func(t *testing.T) {
 		ctx := context.Background()
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
@@ -287,13 +301,18 @@ func RunFindDocInfosByKeysTest(
 			assert.NoError(t, err)
 		}
 
-		// 02. Find documents
+		// 02. Find documents by empty key
 		infos, err := db.FindDocInfosByKeys(ctx, projectID, nil)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 0)
+
+		// 03. Find documents by empty id
+		infos, err = db.FindDocInfosByIDs(ctx, projectID, nil)
 		assert.NoError(t, err)
 		assert.Len(t, infos, 0)
 	})
 
-	t.Run("find docInfos by keys where some keys are not found test", func(t *testing.T) {
+	t.Run("find docInfos by keys and ids where some are not found test", func(t *testing.T) {
 		ctx := context.Background()
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
@@ -302,15 +321,18 @@ func RunFindDocInfosByKeysTest(
 		docKeys := []key.Key{
 			"exist-key1", "exist-key2", "exist-key3",
 		}
+		docIDs := make([]types.ID, 0)
 		for _, docKey := range docKeys {
-			_, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 			assert.NoError(t, err)
+			docIDs = append(docIDs, docInfo.ID)
 		}
 
-		// 02. append a key that does not exist
+		// 02. append a key and id that does not exist
 		docKeysWithNonExistKey := append(docKeys, "non-exist-key")
+		docIDsWithNonExistID := append(docIDs, types.ID("000000000000000000000000"))
 
-		// 03. Find documents
+		// 03. Find documents by keys
 		infos, err := db.FindDocInfosByKeys(ctx, projectID, docKeysWithNonExistKey)
 		assert.NoError(t, err)
 
@@ -321,6 +343,18 @@ func RunFindDocInfosByKeysTest(
 
 		assert.ElementsMatch(t, docKeys, actualKeys)
 		assert.Len(t, infos, len(docKeys))
+
+		// 04. Find documents by ids
+		infos, err = db.FindDocInfosByIDs(ctx, projectID, docIDsWithNonExistID)
+		assert.NoError(t, err)
+
+		actualIDs := make([]types.ID, len(infos))
+		for i, info := range infos {
+			actualIDs[i] = info.ID
+		}
+
+		assert.ElementsMatch(t, docIDs, actualIDs)
+		assert.Len(t, infos, len(docIDs))
 	})
 }
 
@@ -1909,7 +1943,7 @@ func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 		// 02. Purge the document and check the document is purged.
 		counts, err := db.PurgeDocument(ctx, docRefKey)
 		assert.NoError(t, err)
-		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
+		_, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 		// NOTE(raararaara): This test is only checking the document is purged.

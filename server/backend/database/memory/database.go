@@ -1166,6 +1166,27 @@ func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, docKey key.Key
 	return docInfo, nil
 }
 
+// findDocInfoByID finds the document of the given id.
+func (d *DB) findDocInfoByID(txn *memdb.Txn, projectID types.ID, docID types.ID) (*database.DocInfo, error) {
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find document of %s: %w", docID, err)
+	}
+	var docInfo *database.DocInfo
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if info := val.(*database.DocInfo); info.RemovedAt.IsZero() {
+			docInfo = info
+		}
+	}
+
+	return docInfo, nil
+}
+
 // FindDocInfoByKey finds the document of the given key.
 func (d *DB) FindDocInfoByKey(
 	_ context.Context,
@@ -1200,6 +1221,31 @@ func (d *DB) FindDocInfosByKeys(
 		info, err := d.findDocInfoByKey(txn, projectID, k)
 		if err != nil {
 			return nil, fmt.Errorf("find documents of %v: %w", keys, err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
+// FindDocInfosByIDs finds the documents of the given ids.
+func (d *DB) FindDocInfosByIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, id := range docIDs {
+		info, err := d.findDocInfoByID(txn, projectID, id)
+		if err != nil {
+			return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
 		}
 		if info == nil {
 			continue
