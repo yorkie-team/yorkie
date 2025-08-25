@@ -1034,53 +1034,40 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	candidatesLimit int,
 	compactionMinChanges int,
 ) ([]*database.DocInfo, error) {
-	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"project_id": project.ID,
-	}, options.Find().SetLimit(int64(candidatesLimit*2)))
+	result, err := c.collection(ColDocuments).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"project_id": project.ID,
+			"server_seq": bson.M{"$gte": compactionMinChanges},
+		}}},
+		// Exclude documents attached to any client
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from": ColClients,
+			"let":  bson.M{"docId": "$_id", "projectId": "$project_id"},
+			"pipeline": []bson.M{
+				{"$match": bson.M{
+					"$expr": bson.M{
+						"$and": bson.A{
+							bson.M{"$eq": bson.A{"$project_id", "$$projectId"}},
+							bson.M{"$in": bson.A{"$$docId", bson.M{"$ifNull": bson.A{"$attached_docs", bson.A{}}}}},
+						},
+					},
+				}},
+			},
+			"as": "clients",
+		}}},
+		bson.D{{Key: "$match", Value: bson.M{"clients": bson.M{"$eq": bson.A{}}}}},
+		bson.D{{Key: "$project", Value: bson.M{"clients": 0}}},
+		bson.D{{Key: "$limit", Value: candidatesLimit}},
+	})
+
 	if err != nil {
 		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
 	}
-	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	var infos []*database.DocInfo
-	for cursor.Next(ctx) {
-		var info database.DocInfo
-		if err := cursor.Decode(&info); err != nil {
-			return nil, fmt.Errorf("decode document: %w", err)
-		}
-
-		if candidatesLimit <= len(infos) {
-			break
-		}
-
-		// 1. Check if the document is attached to a client.
-		// TODO(chacha912): Resolve the N+1 problem.
-		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     info.ID,
-		}, "")
-		if err != nil {
-			return nil, err
-		}
-		if isAttached {
-			continue
-		}
-
-		// 2. Check if the document has enough changes to compact.
-		if info.ServerSeq < int64(compactionMinChanges) {
-			continue
-		}
-
-		infos = append(infos, &info)
+	if err := result.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("iterate compaction candidates: %w", err)
 	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %w", err)
-	}
-
 	return infos, nil
 }
 

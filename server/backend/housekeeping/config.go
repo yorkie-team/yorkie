@@ -57,7 +57,7 @@ func (c *Config) Validate() error {
 	if c.CandidatesLimitPerProject <= 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
-			c.ProjectFetchSize,
+			c.CandidatesLimitPerProject,
 		)
 	}
 

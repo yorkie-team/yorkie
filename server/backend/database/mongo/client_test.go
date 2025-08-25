@@ -61,6 +61,10 @@ func TestClient(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
 	})
 
+	t.Run("FindCompactionCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindCompactionCandidatesPerProjectTest(t, cli)
+	})
+
 	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
 		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
 	})

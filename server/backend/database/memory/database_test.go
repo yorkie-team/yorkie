@@ -44,6 +44,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
 	})
 
+	t.Run("FindCompactionCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindCompactionCandidatesPerProjectTest(t, db)
+	})
+
 	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
 		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
 	})

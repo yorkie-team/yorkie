@@ -1885,6 +1885,76 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunFindCompactionCandidatesPerProjectTest runs the FindCompactionCandidatesPerProject tests for the given db.
+func RunFindCompactionCandidatesPerProjectTest(t *testing.T, db database.Database) {
+	t.Run("FindCompactionCandidatesPerProject candidate search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		documentCnt := 10
+		p, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-RunFindCompactionCandidatesPerProject", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+		clientInfo1, err := db.ActivateClient(ctx, p.ID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		assert.NoError(t, err)
+		clientInfo2, err := db.ActivateClient(ctx, p.ID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		assert.NoError(t, err)
+
+		clientCountInDB, err := db.GetClientsCount(ctx, p.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), clientCountInDB)
+
+		docInfos := make([]*database.DocInfo, 0, documentCnt)
+		for i := range documentCnt {
+			docKey := key.Key(fmt.Sprintf("tests$%s-%d", t.Name(), i))
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey)
+			assert.NoError(t, err)
+			docInfos = append(docInfos, docInfo)
+
+			// Set server_seq=1 via executing CompactChangeInfos
+			changes := make([]*change.Change, 0, 1)
+			changes = append(changes, change.New(change.InitialID(), "test-message", nil, nil))
+			err = db.CompactChangeInfos(ctx, docInfo, 0, changes)
+			assert.NoError(t, err)
+		}
+		docCountInDB, err := db.GetDocumentsCount(ctx, p.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(documentCnt), docCountInDB)
+
+		{ // candidatesLimit=10, compactionMinChanges=1
+			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, documentCnt, len(docInfos))
+		}
+		{ // candidatesLimit=5, compactionMinChanges=1
+			candidatesLimit := 5
+			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, candidatesLimit, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, candidatesLimit, len(docInfos))
+		}
+		{ // candidatesLimit=10, compactionMinChanges=2
+			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 2)
+			assert.NoError(t, err)
+			assert.Equal(t, 0, len(docInfos))
+		}
+		{ // Attach some documents in clientInfo1 and clientInfo2
+			attachCnt := 3
+			for i := range attachCnt {
+				assert.NoError(t, clientInfo1.AttachDocument(docInfos[i].ID, false))
+				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfos[i]))
+				assert.NoError(t, clientInfo2.AttachDocument(docInfos[i+attachCnt].ID, false))
+				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfos[i+attachCnt]))
+			}
+			docInfos, err = db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, documentCnt-2*attachCnt, len(docInfos))
+		}
+	})
+}
+
 // RunFindClientInfosByAttachedDocRefKeyTest runs the FindClientInfosByAttachedDocRefKey tests for the given db.
 func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
