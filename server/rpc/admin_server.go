@@ -855,3 +855,41 @@ func (s *adminServer) GetProjectWithAuth(
 		return nil, fmt.Errorf("invalid access scope: %s", user.AccessScope)
 	}
 }
+
+// BroadcastByAdmin sends the given payload to all clients watching the document.
+func (s *adminServer) BroadcastByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.BroadcastByAdminRequest],
+) (*connect.Response[api.BroadcastByAdminResponse], error) {
+	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
+	publisherID := time.InitialActorID
+	s.backend.PubSub.Publish(
+		ctx,
+		publisherID,
+		events.DocEvent{
+			Type:      events.DocBroadcast,
+			Publisher: publisherID,
+			DocRefKey: docInfo.RefKey(),
+		},
+	)
+
+	logging.DefaultLogger().Info(
+		fmt.Sprintf("document broadcast success(projectID: %s, docKey: %s)", project.ID, req.Msg.DocumentKey),
+	)
+
+	return connect.NewResponse(&api.BroadcastByAdminResponse{}), nil
+}
