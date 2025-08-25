@@ -20,7 +20,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.48
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/undefinedlabs/go-mpatch v1.0.7
 	go.mongodb.org/mongo-driver/v2 v2.2.0
 	go.uber.org/zap v1.27.0
