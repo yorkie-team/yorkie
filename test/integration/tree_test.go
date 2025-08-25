@@ -3918,7 +3918,7 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(4, 7, nil, 0) // <i>cd</i> 삭제
+			root.GetTree("t").Edit(4, 7, nil, 0)
 			return nil
 		}, "delete <i>cd</i>")
 		assert.NoError(t, err)
@@ -3926,7 +3926,7 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 7, nil, 0) // <b>ab</b><i>cd</i> 전체 삭제
+			root.GetTree("t").Edit(1, 7, nil, 0)
 			return nil
 		}, "delete <b>ab</b><i>cd</i>")
 		assert.NoError(t, err)
@@ -4053,7 +4053,6 @@ func TestTree(t *testing.T) {
 			t.Logf("  timestamp: %s", ts)
 		}
 
-		// Todo(sigmaith): make pass
 		assert.Equal(t, 1, len(timestampSet), "Should have 1 timestamp in concurrent deletion")
 
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
