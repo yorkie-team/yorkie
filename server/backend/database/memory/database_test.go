@@ -132,6 +132,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, db, projectID)
 	})
 
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		testcases.RunFindAttachedClientCountsByDocIDsTest(t, db, projectID)
+	})
+
 	t.Run("RunPurgeDocument test", func(t *testing.T) {
 		testcases.RunPurgeDocument(t, db, projectID)
 	})

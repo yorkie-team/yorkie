@@ -150,6 +150,10 @@ func TestClient(t *testing.T) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		testcases.RunFindAttachedClientCountsByDocIDsTest(t, cli, dummyProjectID)
+	})
 }
 
 func TestClient_RotateProjectKeys(t *testing.T) {

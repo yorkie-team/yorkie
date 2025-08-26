@@ -1071,7 +1071,7 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
@@ -1093,6 +1093,49 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	}
 
 	return clientInfos, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents.
+func (c *Client) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	cursor, err := c.collection(ColClients).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"project_id": projectID,
+			"status":     database.ClientActivated,
+			"attached_docs": bson.M{
+				"$in": docIDs,
+			},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$attached_docs"}},
+		bson.D{{Key: "$match", Value: bson.M{"attached_docs": bson.M{"$in": docIDs}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":   "$attached_docs",
+			"count": bson.M{"$sum": 1},
+		}}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts by docIDs of %s: %w", docIDs, err)
+	}
+
+	var results = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		results[docID] = 0
+	}
+
+	for cursor.Next(ctx) {
+		var cliCnt struct {
+			ID    types.ID `bson:"_id"`
+			Count int      `bson:"count"`
+		}
+		if err := cursor.Decode(&cliCnt); err != nil {
+			return nil, err
+		}
+		results[cliCnt.ID] = cliCnt.Count
+	}
+	return results, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.

@@ -1997,6 +1997,53 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 	})
 }
 
+func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		docKey1, docKey2 := key.Key(fmt.Sprintf("tests$%s-1", t.Name())), key.Key(fmt.Sprintf("tests$%s-2", t.Name()))
+		docInfo1, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey1)
+		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo2.RefKey(), docKey2)
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo1.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 2)
+			assert.Equal(t, 2, attachedMap[docInfo1.ID])
+			assert.Equal(t, 1, attachedMap[docInfo2.ID])
+		}
+		assert.NoError(t, clientInfo1.DetachDocument(docInfo1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 1)
+			assert.Equal(t, 1, attachedMap[docInfo1.ID])
+		}
+		assert.NoError(t, clientInfo2.DetachDocument(docInfo1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 2)
+			assert.Equal(t, 0, attachedMap[docInfo1.ID])
+			assert.Equal(t, 1, attachedMap[docInfo2.ID])
+		}
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 0)
+		}
+	})
+}
+
 // RunPurgeDocument runs the RunPurgeDocument tests for the given db.
 func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("PurgeDocument test", func(t *testing.T) {

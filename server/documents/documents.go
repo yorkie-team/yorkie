@@ -153,17 +153,21 @@ func ListDocumentSummaries(
 	}
 
 	var summaries []*types.DocumentSummary
+	docIDs := make([]types.ID, 0, len(infos))
 	for _, info := range infos {
-		// TODO(hackerwins): Resolve the N+1 problem.
-		clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
-		if err != nil {
-			return nil, err
-		}
+		docIDs = append(docIDs, info.ID)
+	}
 
+	attachedClientCounts, err := be.DB.FindAttachedClientCountsByDocIDs(ctx, project.ID, docIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, info := range infos {
 		summary := &types.DocumentSummary{
 			ID:              info.ID,
 			Key:             info.Key,
-			AttachedClients: len(clientInfos),
+			AttachedClients: attachedClientCounts[info.ID],
 			CreatedAt:       info.CreatedAt,
 			AccessedAt:      info.AccessedAt,
 			UpdatedAt:       info.UpdatedAt,
