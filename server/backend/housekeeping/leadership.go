@@ -147,7 +147,6 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 			}
 
 			lm.becomeFollower()
-			//err = lm.database.upsertClusterFollower(ctx, rpcAddr)
 			if logger := logging.From(ctx); logger != nil {
 				logger.Warn("failed to become follower", err)
 			}
@@ -179,7 +178,6 @@ func (lm *LeadershipManager) tryAcquireLeadership(
 		}
 	} else {
 		lm.becomeFollower()
-		//return lm.database.upsertClusterFollower(ctx, rpcAddr)
 	}
 
 	return nil

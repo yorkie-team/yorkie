@@ -26,8 +26,6 @@ import (
 )
 
 const (
-	// ColLeaderships represents the leadership collection in the database.
-	ColLeaderships = "leaderships"
 	// ColClusterNodes represents the cluster nodes collection in the database.
 	ColClusterNodes = "clusternodes"
 	// ColProjects represents the projects collection in the database.
@@ -50,7 +48,6 @@ const (
 
 // Collections represents the list of all collections in the database.
 var Collections = []string{
-	ColLeaderships,
 	ColProjects,
 	ColUsers,
 	ColClients,
