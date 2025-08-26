@@ -3918,7 +3918,7 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(4, 7, nil, 0)
+			root.GetTree("t").Edit(5, 9, nil, 0)
 			return nil
 		}, "delete <i>cd</i>")
 		assert.NoError(t, err)
@@ -3926,7 +3926,7 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 7, nil, 0)
+			root.GetTree("t").Edit(1, 5, nil, 0)
 			return nil
 		}, "delete <b>ab</b><i>cd</i>")
 		assert.NoError(t, err)
@@ -3989,13 +3989,13 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(4, 8, nil, 0)
+			root.GetTree("t").Edit(5, 9, nil, 0)
 			return nil
 		}, "delete <i>cd</i> by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 8, nil, 0)
+			root.GetTree("t").Edit(1, 9, nil, 0)
 			return nil
 		}, "delete <b>ab</b><i>cd</i> by c2")
 		assert.NoError(t, err)
