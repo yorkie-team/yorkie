@@ -1119,19 +1119,19 @@ func (d *DB) FindAttachedClientCountsByDocIDs(
 		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
 	}
 
-	var results = make(map[types.ID]int)
+	var attachedClientMap = make(map[types.ID]int)
 	for _, docID := range docIDs {
-		results[docID] = 0
+		attachedClientMap[docID] = 0
 	}
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
 		for _, docID := range docIDs {
 			if info.Documents[docID] != nil && info.Documents[docID].Status == database.DocumentAttached {
-				results[docID]++
+				attachedClientMap[docID]++
 			}
 		}
 	}
-	return results, nil
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
