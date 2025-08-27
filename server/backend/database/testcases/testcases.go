@@ -1925,20 +1925,20 @@ func RunFindCompactionCandidatesPerProjectTest(t *testing.T, db database.Databas
 		assert.Equal(t, int64(documentCnt), docCountInDB)
 
 		{ // candidatesLimit=10, compactionMinChanges=1
-			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
 			assert.NoError(t, err)
-			assert.Equal(t, documentCnt, len(docInfos))
+			assert.Equal(t, documentCnt, len(cands))
 		}
 		{ // candidatesLimit=5, compactionMinChanges=1
 			candidatesLimit := 5
-			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, candidatesLimit, 1)
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, candidatesLimit, 1)
 			assert.NoError(t, err)
-			assert.Equal(t, candidatesLimit, len(docInfos))
+			assert.Equal(t, candidatesLimit, len(cands))
 		}
 		{ // candidatesLimit=10, compactionMinChanges=2
-			docInfos, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 2)
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 2)
 			assert.NoError(t, err)
-			assert.Equal(t, 0, len(docInfos))
+			assert.Equal(t, 0, len(cands))
 		}
 		{ // Attach some documents in clientInfo1 and clientInfo2
 			attachCnt := 3
@@ -1948,9 +1948,9 @@ func RunFindCompactionCandidatesPerProjectTest(t *testing.T, db database.Databas
 				assert.NoError(t, clientInfo2.AttachDocument(docInfos[i+attachCnt].ID, false))
 				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfos[i+attachCnt]))
 			}
-			docInfos, err = db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
 			assert.NoError(t, err)
-			assert.Equal(t, documentCnt-2*attachCnt, len(docInfos))
+			assert.Equal(t, documentCnt-2*attachCnt, len(cands))
 		}
 	})
 }
@@ -2040,6 +2040,13 @@ func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database,
 			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{})
 			assert.NoError(t, err)
 			assert.Len(t, attachedMap, 0)
+		}
+		{
+			unknown := types.ID("000000000000000000000000")
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{unknown})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 1)
+			assert.Equal(t, 0, attachedMap[unknown])
 		}
 	})
 }

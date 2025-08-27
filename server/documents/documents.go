@@ -157,6 +157,9 @@ func ListDocumentSummaries(
 	for _, info := range infos {
 		docIDs = append(docIDs, info.ID)
 	}
+	if len(docIDs) == 0 {
+		return summaries, nil
+	}
 
 	attachedClientCounts, err := be.DB.FindAttachedClientCountsByDocIDs(ctx, project.ID, docIDs)
 	if err != nil {

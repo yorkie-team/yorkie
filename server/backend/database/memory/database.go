@@ -1105,7 +1105,7 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 	return infos, nil
 }
 
-// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents.
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 func (d *DB) FindAttachedClientCountsByDocIDs(
 	ctx context.Context,
 	projectID types.ID,

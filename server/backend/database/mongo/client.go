@@ -1095,12 +1095,15 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	return clientInfos, nil
 }
 
-// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents.
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 func (c *Client) FindAttachedClientCountsByDocIDs(
 	ctx context.Context,
 	projectID types.ID,
 	docIDs []types.ID,
 ) (map[types.ID]int, error) {
+	if len(docIDs) == 0 {
+		return map[types.ID]int{}, nil
+	}
 	cursor, err := c.collection(ColClients).Aggregate(ctx, mongo.Pipeline{
 		bson.D{{Key: "$match", Value: bson.M{
 			"project_id": projectID,
@@ -1117,7 +1120,7 @@ func (c *Client) FindAttachedClientCountsByDocIDs(
 		}}},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("find attached client counts by docIDs of %s: %w", docIDs, err)
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
 	}
 
 	var results = make(map[types.ID]int)
@@ -1126,14 +1129,14 @@ func (c *Client) FindAttachedClientCountsByDocIDs(
 	}
 
 	for cursor.Next(ctx) {
-		var cliCnt struct {
+		var attachedInfo struct {
 			ID    types.ID `bson:"_id"`
 			Count int      `bson:"count"`
 		}
-		if err := cursor.Decode(&cliCnt); err != nil {
-			return nil, err
+		if err := cursor.Decode(&attachedInfo); err != nil {
+			return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
 		}
-		results[cliCnt.ID] = cliCnt.Count
+		results[attachedInfo.ID] = attachedInfo.Count
 	}
 	return results, nil
 }

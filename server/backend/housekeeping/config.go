@@ -63,7 +63,7 @@ func (c *Config) Validate() error {
 
 	if c.ProjectFetchSize <= 0 {
 		return fmt.Errorf(
-			`invalid argument %d for "--housekeeping-project-fetc-size" flag`,
+			`invalid argument %d for "--housekeeping-project-fetch-size" flag`,
 			c.ProjectFetchSize,
 		)
 	}

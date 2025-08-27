@@ -200,7 +200,7 @@ type Database interface {
 	// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
 
-	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents.
+	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
