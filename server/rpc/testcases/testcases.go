@@ -1,17 +1,17 @@
 /*
- * Copyright 2023 The Yorkie Authors. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+* Copyright 2023 The Yorkie Authors. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
  */
 
 // Package testcases contains testcases for server
@@ -21,6 +21,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -36,7 +38,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -1194,23 +1195,21 @@ func RunAdminListDocumentsTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
-	_, err = testAdminClient.ListDocuments(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
-		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName: defaultProjectName,
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
 		},
 		))
 	assert.NoError(t, err)
 
-	// try to list documents with non-existing project name
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
 	_, err = testAdminClient.ListDocuments(
-		context.Background(),
-		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName: invalidSlugName,
-		},
-		))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrProjectNotFound), converter.ErrorCodeOf(err))
+		ctx,
+		connect.NewRequest(&api.ListDocumentsRequest{}))
+	assert.NoError(t, err)
 }
 
 // RunAdminGetDocumentTest runs the GetDocument test in admin.
@@ -1252,10 +1251,20 @@ func RunAdminGetDocumentTest(
 		))
 	assert.NoError(t, err)
 
-	_, err = testAdminClient.GetDocument(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	_, err = testAdminClient.GetDocument(
+		ctx,
 		connect.NewRequest(&api.GetDocumentRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: testDocumentKey,
 		},
 		))
@@ -1263,9 +1272,8 @@ func RunAdminGetDocumentTest(
 
 	// try to get document with non-existing document name
 	_, err = testAdminClient.GetDocument(
-		context.Background(),
+		ctx,
 		connect.NewRequest(&api.GetDocumentRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: invalidChangePack.DocumentKey,
 		},
 		))
@@ -1312,30 +1320,39 @@ func RunAdminGetDocumentsTest(
 		))
 	assert.NoError(t, err)
 
-	resp1, err := testAdminClient.GetDocuments(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	resp2, err := testAdminClient.GetDocuments(
+		ctx,
 		connect.NewRequest(&api.GetDocumentsRequest{
-			ProjectName:      defaultProjectName,
 			DocumentKeys:     []string{testDocumentKey},
 			IncludeRoot:      true,
 			IncludePresences: true,
 		},
 		))
 	assert.NoError(t, err)
-	assert.Len(t, resp1.Msg.Documents, 1)
+	assert.Len(t, resp2.Msg.Documents, 1)
 
 	// try to get document with non-existing document name
-	resp2, err := testAdminClient.GetDocuments(
-		context.Background(),
+	resp3, err := testAdminClient.GetDocuments(
+		ctx,
 		connect.NewRequest(&api.GetDocumentsRequest{
-			ProjectName:      defaultProjectName,
 			DocumentKeys:     []string{invalidChangePack.DocumentKey},
 			IncludeRoot:      true,
 			IncludePresences: true,
 		},
 		))
 	assert.NoError(t, err)
-	assert.Len(t, resp2.Msg.Documents, 0)
+	assert.Len(t, resp3.Msg.Documents, 0)
 }
 
 // RunAdminListChangesTest runs the ListChanges test in admin.
@@ -1377,10 +1394,20 @@ func RunAdminListChangesTest(
 		))
 	assert.NoError(t, err)
 
-	_, err = testAdminClient.ListChanges(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	_, err = testAdminClient.ListChanges(
+		ctx,
 		connect.NewRequest(&api.ListChangesRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: testDocumentKey,
 		},
 		))
@@ -1388,9 +1415,8 @@ func RunAdminListChangesTest(
 
 	// try to list changes with non-existing document name
 	_, err = testAdminClient.ListChanges(
-		context.Background(),
+		ctx,
 		connect.NewRequest(&api.ListChangesRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: invalidChangePack.DocumentKey,
 		}),
 	)
