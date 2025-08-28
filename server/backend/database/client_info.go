@@ -55,7 +55,8 @@ const (
 // attached to the client.
 type ClientDocInfo struct {
 	Status    string `bson:"status"`
-	ServerSeq int64  `bson:"server_seq"`
+	OpSeq     int64  `bson:"op_seq"`
+	PrSeq     int64  `bson:"pr_seq"`
 	ClientSeq uint32 `bson:"client_seq"`
 }
 
@@ -134,7 +135,8 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 
 	i.Documents[docID] = &ClientDocInfo{
 		Status:    DocumentAttached,
-		ServerSeq: 0,
+		OpSeq:     0,
+		PrSeq:     0,
 		ClientSeq: 0,
 	}
 	i.UpdatedAt = gotime.Now()
@@ -166,7 +168,8 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
-	i.Documents[docID].ServerSeq = 0
+	i.Documents[docID].OpSeq = 0
+	i.Documents[docID].PrSeq = 0
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -180,7 +183,8 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 
 	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
-	i.Documents[docID].ServerSeq = 0
+	i.Documents[docID].OpSeq = 0
+	i.Documents[docID].PrSeq = 0
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -203,7 +207,7 @@ func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
 		return change.InitialCheckpoint
 	}
 
-	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
+	return change.NewCheckpoint(change.NewServerSeq(clientDocInfo.OpSeq, clientDocInfo.PrSeq), clientDocInfo.ClientSeq)
 }
 
 // UpdateCheckpoint updates the checkpoint of the given document.
@@ -215,7 +219,8 @@ func (i *ClientInfo) UpdateCheckpoint(
 		return fmt.Errorf("update checkpoint in %s: %w", docID, ErrDocumentNeverAttached)
 	}
 
-	i.Documents[docID].ServerSeq = cp.ServerSeq
+	i.Documents[docID].OpSeq = cp.ServerSeq.OpSeq
+	i.Documents[docID].PrSeq = cp.ServerSeq.PrSeq
 	i.Documents[docID].ClientSeq = cp.ClientSeq
 	i.UpdatedAt = gotime.Now()
 
@@ -230,7 +235,8 @@ func (i *ClientInfo) ServerSeq(
 		return 0, fmt.Errorf("document not found %s: %w", docID, ErrDocumentNotFound)
 	}
 
-	return i.Documents[docID].ServerSeq, nil
+	clientDocInfo := i.Documents[docID]
+	return max(clientDocInfo.OpSeq, clientDocInfo.PrSeq), nil
 }
 
 // EnsureActivated ensures the client is activated.
@@ -288,7 +294,8 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	for docID, docInfo := range i.Documents {
 		documents[docID] = &ClientDocInfo{
 			Status:    docInfo.Status,
-			ServerSeq: docInfo.ServerSeq,
+			OpSeq:     docInfo.OpSeq,
+			PrSeq:     docInfo.PrSeq,
 			ClientSeq: docInfo.ClientSeq,
 		}
 	}

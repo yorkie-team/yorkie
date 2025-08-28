@@ -83,13 +83,13 @@ func PushPull(
 	start := gotime.Now()
 
 	// 01. push the change pack to the database.
-	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
+	pushedChanges, docInfo, initialServerSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
 		return nil, err
 	}
 
 	// 02. pull the pack from the database.
-	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts)
+	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -164,11 +164,12 @@ func pushPack(
 	clientInfo *database.ClientInfo,
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
-) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
+) ([]*change.Change, *database.DocInfo, change.ServerSeq, change.Checkpoint, error) {
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
 	// 01. Filter out changes that are already pushed.
-	var pushables []*database.ChangeInfo
+	var pushables []*change.Change
+	var opCount, prCount int64
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
 			logging.From(ctx).Warnf(
@@ -178,12 +179,14 @@ func pushPack(
 			)
 			continue
 		}
-		info, err := database.NewFromChange(docKey, cn)
-		if err != nil {
-			return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
-		}
 
-		pushables = append(pushables, info)
+		if len(cn.Operations()) > 0 {
+			opCount++
+		}
+		if cn.PresenceChange() != nil {
+			prCount++
+		}
+		pushables = append(pushables, cn)
 	}
 
 	// 02. Push the changes to the database.
@@ -199,19 +202,21 @@ func pushPack(
 		reqPack.IsRemoved,
 	)
 	if err != nil {
-		return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+		return nil, nil, change.NewServerSeq(0, 0), change.InitialCheckpoint, err
 	}
-
-	initialSeq := docInfo.ServerSeq - int64(len(pushables))
+	
+	// Calculate initial ServerSeq by subtracting counts from current sequences
+	initialSeq := change.NewServerSeq(docInfo.OpSeq-opCount, docInfo.PrSeq-prCount)
+	
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Debugf(
-			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
+			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %s -> %s, cp: %s",
 			clientInfo.Key,
 			len(pushables),
 			docInfo.Key,
 			len(reqPack.Changes)-len(pushables),
 			initialSeq,
-			docInfo.ServerSeq,
+			docInfo.GetServerSeq(),
 			cpAfterPush,
 		)
 	}
@@ -226,7 +231,7 @@ func pullPack(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialSeq int64,
+	initialSeq change.ServerSeq,
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	// 01. pull changes or a snapshot from the database and create a response pack.
@@ -266,7 +271,7 @@ func preparePack(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq int64,
+	initialServerSeq change.ServerSeq,
 	mode types.SyncMode,
 ) (*ServerPack, error) {
 	// NOTE(hackerwins): If the client is push-only, it does not need to pull changes.
@@ -278,9 +283,9 @@ func preparePack(
 		}, nil, nil), nil
 	}
 
-	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
+	if reqPack.Checkpoint.ServerSeq.GreaterThan(initialServerSeq) {
 		return nil, fmt.Errorf(
-			"serverSeq(%d) of request greater than serverSeq(%d) of ClientInfo: %w",
+			"serverSeq(%s) of request greater than serverSeq(%s) of ClientInfo: %w",
 			reqPack.Checkpoint.ServerSeq,
 			initialServerSeq,
 			ErrInvalidServerSeq,
@@ -288,8 +293,9 @@ func preparePack(
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
-	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
-		cpAfterPull, pulledChanges, err := pullChangeInfos(
+	// TODO(kokodak): Consider another value instead of Max().
+	if initialServerSeq.Max()-reqPack.Checkpoint.ServerSeq.Max() < be.Config.SnapshotThreshold {
+		cpAfterPull, pulledOpInfos, pulledPrInfos, err := pullChangeInfos(
 			ctx,
 			be,
 			clientInfo,
@@ -298,6 +304,11 @@ func preparePack(
 			cpAfterPush,
 			initialServerSeq,
 		)
+		if err != nil {
+			return nil, err
+		}
+
+		pulledChanges, err := CombineChangeInfos(pulledOpInfos, pulledPrInfos)
 		if err != nil {
 			return nil, err
 		}
@@ -318,7 +329,7 @@ func pullSnapshot(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq int64,
+	initialServerSeq change.ServerSeq,
 ) (*ServerPack, error) {
 	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
@@ -330,7 +341,7 @@ func pullSnapshot(
 	if reqPack.HasChanges() {
 		if err := doc.ApplyChangePack(change.NewPack(
 			docInfo.Key,
-			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
+			doc.Checkpoint().NextServerSeq(docInfo.GetServerSeq()),
 			reqPack.Changes,
 			nil,
 			nil,
@@ -339,7 +350,7 @@ func pullSnapshot(
 		}
 	}
 
-	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
+	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.GetServerSeq())
 
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
@@ -347,9 +358,9 @@ func pullSnapshot(
 	}
 
 	logging.From(ctx).Debugf(
-		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
+		"PULL: '%s' build snapshot with changes(%s~%s) from '%s', cp: %s",
 		clientInfo.Key,
-		reqPack.Checkpoint.ServerSeq+1,
+		change.NewServerSeq(reqPack.Checkpoint.ServerSeq.OpSeq+1, reqPack.Checkpoint.ServerSeq.PrSeq+1),
 		initialServerSeq,
 		docInfo.Key,
 		cpAfterPull,
@@ -367,16 +378,18 @@ func pullChangeInfos(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq int64,
-) (change.Checkpoint, []*database.ChangeInfo, error) {
-	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
+	initialServerSeq change.ServerSeq,
+) (change.Checkpoint, []*database.OperationChangeInfo, []*database.PresenceChangeInfo, error) {
+	from := change.NewServerSeq(reqPack.Checkpoint.ServerSeq.OpSeq+1, reqPack.Checkpoint.ServerSeq.PrSeq+1)
+	to := initialServerSeq
+	pulledOpInfos, pulledPrInfos, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.RefKey(),
-		reqPack.Checkpoint.ServerSeq+1,
-		initialServerSeq,
+		from,
+		to,
 	)
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
+		return change.InitialCheckpoint, nil, nil, err
 	}
 
 	// NOTE(hackerwins, humdrum): Remove changes from the pulled if the client already has them.
@@ -386,28 +399,49 @@ func pullChangeInfos(
 	//
 	// See the following test case for more details:
 	//   "sync option with mixed mode test" in integration/client_test.go
-	var filteredChanges []*database.ChangeInfo
-	for _, pulledChange := range pulledChanges {
-		if clientInfo.ID == pulledChange.ActorID && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
+	var filteredOpInfos []*database.OperationChangeInfo
+	for _, pulledOpInfo := range pulledOpInfos {
+		if clientInfo.ID == pulledOpInfo.ActorID && cpAfterPush.ClientSeq >= pulledOpInfo.ClientSeq {
 			continue
 		}
-		filteredChanges = append(filteredChanges, pulledChange)
+		filteredOpInfos = append(filteredOpInfos, pulledOpInfo)
 	}
 
-	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
+	var filteredPrInfos []*database.PresenceChangeInfo
+	for _, pulledPrInfo := range pulledPrInfos {
+		if clientInfo.ID == pulledPrInfo.ActorID && cpAfterPush.ClientSeq >= pulledPrInfo.ClientSeq {
+			continue
+		}
+		filteredPrInfos = append(filteredPrInfos, pulledPrInfo)
+	}
 
-	if len(pulledChanges) > 0 {
+	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.GetServerSeq())
+
+	if len(pulledOpInfos) > 0 {
 		logging.From(ctx).Debugf(
-			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s, filtered changes: %d",
+			"PULL: '%s' pulls %d operations(%d~%d) from '%s', cp: %s, filtered operations: %d",
 			clientInfo.Key,
-			len(pulledChanges),
-			pulledChanges[0].ServerSeq,
-			pulledChanges[len(pulledChanges)-1].ServerSeq,
+			len(pulledOpInfos),
+			pulledOpInfos[0].OpSeq,
+			pulledOpInfos[len(pulledOpInfos)-1].OpSeq,
 			docInfo.Key,
 			cpAfterPull,
-			len(filteredChanges),
+			len(filteredOpInfos),
 		)
 	}
 
-	return cpAfterPull, filteredChanges, nil
+	if len(pulledPrInfos) > 0 {
+		logging.From(ctx).Debugf(
+			"PULL: '%s' pulls %d presences(%d~%d) from '%s', cp: %s, filtered presences: %d",
+			clientInfo.Key,
+			len(pulledPrInfos),
+			pulledPrInfos[0].PrSeq,
+			pulledPrInfos[len(pulledPrInfos)-1].PrSeq,
+			docInfo.Key,
+			cpAfterPull,
+			len(filteredPrInfos),
+		)
+	}
+
+	return cpAfterPull, filteredOpInfos, filteredPrInfos, nil
 }

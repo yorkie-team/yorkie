@@ -81,8 +81,18 @@ func (c *Change) Operations() []operations.Operation {
 }
 
 // ServerSeq returns the serverSeq of this change.
-func (c *Change) ServerSeq() int64 {
+func (c *Change) ServerSeq() ServerSeq {
 	return c.id.ServerSeq()
+}
+
+// OpSeq returns the operation sequence of this change.
+func (c *Change) OpSeq() int64 {
+	return c.id.OpSeq()
+}
+
+// PrSeq returns the presence sequence of this change.
+func (c *Change) PrSeq() int64 {
+	return c.id.PrSeq()
 }
 
 // ClientSeq returns the clientSeq of this change.
@@ -91,7 +101,7 @@ func (c *Change) ClientSeq() uint32 {
 }
 
 // SetServerSeq sets the given serverSeq.
-func (c *Change) SetServerSeq(serverSeq int64) {
+func (c *Change) SetServerSeq(serverSeq ServerSeq) {
 	c.id = c.id.SetServerSeq(serverSeq)
 }
 

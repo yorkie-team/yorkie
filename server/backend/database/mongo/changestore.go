@@ -40,14 +40,14 @@ type ChangeRange struct {
 // ChangeStore manages individual document changes using B-tree
 type ChangeStore struct {
 	mu   sync.RWMutex
-	tree *btree.BTreeG[*database.ChangeInfo]
+	tree *btree.BTreeG[*database.OperationChangeInfo]
 }
 
 // NewChangeStore creates a new instance of ChangeStore.
 func NewChangeStore() *ChangeStore {
 	return &ChangeStore{
-		tree: btree.NewG(32, func(a, b *database.ChangeInfo) bool {
-			return a.ServerSeq < b.ServerSeq
+		tree: btree.NewG(32, func(a, b *database.OperationChangeInfo) bool {
+			return a.OpSeq < b.OpSeq
 		}),
 	}
 }
@@ -56,7 +56,7 @@ func NewChangeStore() *ChangeStore {
 func (s *ChangeStore) EnsureChanges(
 	from,
 	to int64,
-	fetcher func(from, to int64) ([]*database.ChangeInfo, error),
+	fetcher func(from, to int64) ([]*database.OperationChangeInfo, error),
 ) error {
 	if from > to {
 		return fmt.Errorf("from (%d) > to (%d): %w", from, to, ErrInvalidServerSeq)
@@ -88,7 +88,7 @@ func (s *ChangeStore) EnsureChanges(
 }
 
 // ChangesInRange retrieves all changes within the specified range
-func (s *ChangeStore) ChangesInRange(from, to int64) []*database.ChangeInfo {
+func (s *ChangeStore) ChangesInRange(from, to int64) []*database.OperationChangeInfo {
 	if from > to {
 		return nil
 	}
@@ -101,17 +101,17 @@ func (s *ChangeStore) ChangesInRange(from, to int64) []*database.ChangeInfo {
 		return nil
 	}
 
-	var result []*database.ChangeInfo
+	var result []*database.OperationChangeInfo
 
 	// Create a dummy change with the minimum sequence as search key
-	searchKey := &database.ChangeInfo{ServerSeq: from}
+	searchKey := &database.OperationChangeInfo{OpSeq: from}
 
 	// Define a callback function to process each change in the range
-	s.tree.AscendGreaterOrEqual(searchKey, func(item *database.ChangeInfo) bool {
+	s.tree.AscendGreaterOrEqual(searchKey, func(item *database.OperationChangeInfo) bool {
 		change := item
 
 		// Stop iteration when we've passed the end of our target range
-		if change.ServerSeq > to {
+		if change.OpSeq > to {
 			return false
 		}
 
@@ -139,10 +139,10 @@ func (s *ChangeStore) calcMissingRanges(from, to int64) []ChangeRange {
 	}
 
 	// Mark which sequences we already have
-	searchKey := &database.ChangeInfo{ServerSeq: from}
-	s.tree.AscendGreaterOrEqual(searchKey, func(item *database.ChangeInfo) bool {
+	searchKey := &database.OperationChangeInfo{OpSeq: from}
+	s.tree.AscendGreaterOrEqual(searchKey, func(item *database.OperationChangeInfo) bool {
 		change := item
-		seq := change.ServerSeq
+		seq := change.OpSeq
 
 		// Stop if we've gone past our target range
 		if seq > to {

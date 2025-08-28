@@ -51,9 +51,10 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
-	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
-	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	docCache        *lru.Cache[types.DocRefKey, *database.DocInfo]
+	changeCache     *lru.Cache[types.DocRefKey, *ChangeStore]
+	vectorCache     *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	presenceStorage *database.PresenceStorage
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -116,11 +117,12 @@ func Dial(conf *Config) (*Client, error) {
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:      conf,
-		client:      client,
-		docCache:    docCache,
-		changeCache: changeCache,
-		vectorCache: vectorCache,
+		config:          conf,
+		client:          client,
+		docCache:        docCache,
+		changeCache:     changeCache,
+		vectorCache:     vectorCache,
+		presenceStorage: database.NewPresenceStorage(),
 	}, nil
 }
 
@@ -956,7 +958,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if attached {
 		updater = bson.M{
 			"$max": bson.M{
-				clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
+				clientDocInfoKey(docInfo.ID, "op_seq"):     clientDocInfo.OpSeq,
+				clientDocInfoKey(docInfo.ID, "pr_seq"):     clientDocInfo.PrSeq,
 				clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
 			},
 			"$set": bson.M{
@@ -1071,7 +1074,8 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		}
 
 		// 2. Check if the document has enough changes to compact.
-		if info.ServerSeq < int64(compactionMinChanges) {
+		// TODO(kokodak): Consider another value instead of Max().
+		if info.GetServerSeq().Max() < int64(compactionMinChanges) { 
 			continue
 		}
 
@@ -1322,12 +1326,12 @@ func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64
 	return count, nil
 }
 
-// CreateChangeInfos stores the given changes and doc info.
+// CreateChangeInfos stores the given changes and doc info with operation and presence separation.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	refKey types.DocRefKey,
 	checkpoint change.Checkpoint,
-	changes []*database.ChangeInfo,
+	changes []*change.Change,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
 	cached, ok := c.docCache.Get(refKey)
@@ -1346,52 +1350,103 @@ func (c *Client) CreateChangeInfos(
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Optimized batch processing
-	initialServerSeq := docInfo.ServerSeq
+	initialOpSeq := docInfo.OpSeq
+	initialPrSeq := docInfo.PrSeq
+
+	// 02. Separate operations and presences from changes and store them appropriately
 	now := gotime.Now()
-
-	// Pre-allocate models slice to avoid dynamic allocations
-	models := make([]mongo.WriteModel, 0, len(changes))
+	
+	// Pre-allocate slices for separated data
+	var opModels []mongo.WriteModel
+	var prCIs []*database.PresenceChangeInfo
 	hasOperations := false
-
+	
+	// Process each change and separate operations from presences
 	for _, cn := range changes {
-		serverSeq := docInfo.IncreaseServerSeq()
-		checkpoint = checkpoint.NextServerSeq(serverSeq)
-		cn.ServerSeq = serverSeq
-		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
+		hasOp := len(cn.Operations()) > 0
+		hasPr := cn.PresenceChange() != nil
 
-		if len(cn.Operations) > 0 {
-			hasOperations = true
+		var opSeq, prSeq int64
+
+		if hasOp && hasPr {
+			// Both operations and presence
+			opSeq = docInfo.IncreaseOpSeq()
+			prSeq = docInfo.IncreasePrSeq()
+		} else if hasOp {
+			// Only operations
+			opSeq = docInfo.IncreaseOpSeq()
+			prSeq = docInfo.PrSeq
+		} else if hasPr {
+			// Only presence
+			opSeq = docInfo.OpSeq
+			prSeq = docInfo.IncreasePrSeq()
+		} else {
+			// Empty change
+			opSeq = docInfo.OpSeq
+			prSeq = docInfo.PrSeq
 		}
 
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq,
-		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        cn.ActorID,
-			"client_seq":      cn.ClientSeq,
-			"lamport":         cn.Lamport,
-			"version_vector":  cn.VersionVector,
-			"message":         cn.Message,
-			"operations":      cn.Operations,
-			"presence_change": cn.PresenceChange,
-		}}).SetUpsert(true))
+		// Update checkpoint with new sequences
+		newServerSeq := change.NewServerSeq(opSeq, prSeq)
+		checkpoint = checkpoint.NextServerSeq(newServerSeq)
+		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
+
+		// Store operations
+		if hasOp {
+			hasOperations = true
+			
+			// Create OperationChangeInfo for MongoDB storage
+			opCI, err := database.NewOperationChangeInfo(refKey, cn, opSeq, prSeq)
+			if err != nil {
+				return nil, change.InitialCheckpoint, fmt.Errorf("create operation change info: %w", err)
+			}
+			
+			opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
+				"project_id": refKey.ProjectID,
+				"doc_id":     refKey.DocID,
+				"op_seq":     opCI.OpSeq,
+				"pr_seq":     opCI.PrSeq,
+			}).SetUpdate(bson.M{"$set": bson.M{
+				"actor_id":       opCI.ActorID,
+				"client_seq":     opCI.ClientSeq,
+				"lamport":        opCI.Lamport,
+				"version_vector": opCI.VersionVector,
+				"message":        opCI.Message,
+				"operations":     opCI.Operations,
+			}}).SetUpsert(true))
+		}
+
+		// Store presences
+		if hasPr {
+			prCI := database.NewPresenceChangeInfo(refKey, cn, opSeq, prSeq)
+			if prCI != nil {
+				prCIs = append(prCIs, prCI)
+			}
+		}
 	}
 
-	if len(changes) > 0 {
+	// 03. Store operations
+	if len(opModels) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
-			models,
+			opModels,
 			options.BulkWrite().SetOrdered(false),
 		); err != nil {
-			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
+			return nil, change.InitialCheckpoint, fmt.Errorf("create operation changes of %s: %w", refKey, err)
 		}
 	}
 
-	// 03. Update the document info with the given changes.
+	// 04. Store presences
+	if len(prCIs) > 0 {
+		if err := c.presenceStorage.StorePresences(prCIs); err != nil {
+			return nil, change.InitialCheckpoint, fmt.Errorf("create presence changes of %s: %w", refKey, err)
+		}
+	}
+
+	// 05. Update the document info with the given changes.
 	updateFields := bson.M{
-		"server_seq": docInfo.ServerSeq,
+		"op_seq": docInfo.OpSeq,
+		"pr_seq": docInfo.PrSeq,
 	}
 
 	if hasOperations {
@@ -1405,7 +1460,8 @@ func (c *Client) CreateChangeInfos(
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
-		"server_seq": initialServerSeq,
+		"op_seq":     initialOpSeq,
+		"pr_seq":     initialPrSeq,
 	}, bson.M{
 		"$set": updateFields,
 	})
@@ -1430,7 +1486,7 @@ func (c *Client) CreateChangeInfos(
 func (c *Client) CompactChangeInfos(
 	ctx context.Context,
 	docInfo *database.DocInfo,
-	lastServerSeq int64,
+	lastServerSeq change.ServerSeq,
 	changes []*change.Change,
 ) error {
 	// 1. Purge the resources of the document.
@@ -1439,9 +1495,9 @@ func (c *Client) CompactChangeInfos(
 	}
 
 	// 2. Store compacted change and update document
-	newServerSeq := 1
+	newOpSeq := 1
 	if len(changes) == 0 {
-		newServerSeq = 0
+		newOpSeq = 0
 	} else if len(changes) != 1 {
 		return fmt.Errorf("compact document of %s: invalid change size %d", docInfo.RefKey(), len(changes))
 	}
@@ -1453,16 +1509,16 @@ func (c *Client) CompactChangeInfos(
 		}
 
 		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
-			"project_id":      docInfo.ProjectID,
-			"doc_id":          docInfo.ID,
-			"server_seq":      newServerSeq,
-			"client_seq":      cn.ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"actor_id":        types.ID(cn.ID().ActorID().String()),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
+			"project_id":     docInfo.ProjectID,
+			"doc_id":         docInfo.ID,
+			"op_seq":         newOpSeq,
+			"pr_seq":         0,
+			"client_seq":     cn.ClientSeq(),
+			"lamport":        cn.ID().Lamport(),
+			"actor_id":       types.ID(cn.ID().ActorID().String()),
+			"version_vector": cn.ID().VersionVector(),
+			"message":        cn.Message(),
+			"operations":     encodedOperations,
 		}); err != nil {
 			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
 		}
@@ -1472,11 +1528,13 @@ func (c *Client) CompactChangeInfos(
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
-		"_id":        docInfo.ID,
-		"server_seq": lastServerSeq,
+		"_id":    docInfo.ID,
+		"op_seq": lastServerSeq.OpSeq,
+		"pr_seq": lastServerSeq.PrSeq,
 	}, bson.M{
 		"$set": bson.M{
-			"server_seq":   newServerSeq,
+			"op_seq":       newOpSeq,
+			"pr_seq":       newOpSeq,
 			"compacted_at": gotime.Now(),
 		},
 	})
@@ -1495,22 +1553,22 @@ func (c *Client) FindLatestChangeInfoByActor(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 	actorID types.ID,
-	serverSeq int64,
-) (*database.ChangeInfo, error) {
+	serverSeq change.ServerSeq,
+) (*database.OperationChangeInfo, error) {
 	option := options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
+		"op_seq": -1,
 	})
 
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 		"actor_id":   actorID,
-		"server_seq": bson.M{
+		"op_seq": bson.M{
 			"$lte": serverSeq,
 		},
 	}, option)
 
-	changeInfo := &database.ChangeInfo{}
+	changeInfo := &database.OperationChangeInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
 		return changeInfo, nil
 	}
@@ -1549,63 +1607,88 @@ func (c *Client) FindChangesBetweenServerSeqs(
 	return changes, nil
 }
 
-// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
+// FindChangeInfosBetweenServerSeqs returns the operation and presence changeInfos between two server sequences.
 func (c *Client) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-	from int64,
-	to int64,
+	from change.ServerSeq,
+	to change.ServerSeq,
 ) ([]*database.ChangeInfo, error) {
-	if from > to {
-		return nil, nil
-	}
+	hasOp := from.OpSeq <= to.OpSeq
+	hasPr := from.PrSeq <= to.PrSeq
 
-	// Get or create a change range store for this document
-	var store *ChangeStore
-	if cached, ok := c.changeCache.Get(docRefKey); ok {
-		store = cached
-	} else {
-		store = NewChangeStore()
-		c.changeCache.Add(docRefKey, store)
-	}
+	var opInfos []*database.OperationChangeInfo
+	var prInfos []*database.PresenceChangeInfo
 
-	// Calculate missing ranges and fetch them in a single operation
-	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
-		// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
-		const chunkSize int64 = 1000
-		var infos []*database.ChangeInfo
-		current := from
-		for current <= to {
-			filter := bson.M{
-				"project_id": docRefKey.ProjectID,
-				"doc_id":     docRefKey.DocID,
-				"server_seq": bson.M{"$gte": current, "$lte": to},
-			}
-			opts := options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}).SetLimit(chunkSize)
-			cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
-			if err != nil {
-				return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
-			}
-			var chunk []*database.ChangeInfo
-			if err := cursor.All(ctx, &chunk); err != nil {
-				return nil, fmt.Errorf("fetch changes of %s: %w", docRefKey, err)
-			}
-			if len(chunk) == 0 {
-				break
-			}
-			infos = append(infos, chunk...)
-			last := chunk[len(chunk)-1].ServerSeq
-			if last >= to || int64(len(chunk)) < chunkSize {
-				break
-			}
-			current = last + 1
+	// If there are operation changes, fetch them
+	if hasOp {
+		// Get or create a change range store for this document
+		var store *ChangeStore
+		if cached, ok := c.changeCache.Get(docRefKey); ok {
+			store = cached
+		} else {
+			store = NewChangeStore()
+			c.changeCache.Add(docRefKey, store)
 		}
-		return infos, nil
-	}); err != nil {
+
+		// Calculate missing ranges and fetch them in a single operation
+		if err := store.EnsureChanges(from.OpSeq, to.OpSeq, func(from, to int64) ([]*database.OperationChangeInfo, error) {
+			// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
+			const chunkSize int64 = 1000
+			var opInfos []*database.OperationChangeInfo
+			current := from
+			for current <= to {
+				filter := bson.M{
+					"project_id": docRefKey.ProjectID,
+					"doc_id":     docRefKey.DocID,
+					"op_seq": bson.M{"$gte": current, "$lte": to},
+				}
+				opts := options.Find().SetSort(bson.D{{Key: "op_seq", Value: 1}}).SetLimit(chunkSize)
+				cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
+				if err != nil {
+					return nil, fmt.Errorf("find operation changes of %s: %w", docRefKey, err)
+				}
+				var chunk []*database.OperationChangeInfo
+				if err := cursor.All(ctx, &chunk); err != nil {
+					return nil, fmt.Errorf("fetch operation changes of %s: %w", docRefKey, err)
+				}
+				if len(chunk) == 0 {
+					break
+				}
+				opInfos = append(opInfos, chunk...)
+				last := chunk[len(chunk)-1].OpSeq
+				if last >= to || int64(len(chunk)) < chunkSize {
+					break
+				}
+				current = last + 1
+			}
+			return opInfos, nil
+		}); err != nil {
+			return nil, err
+		}
+		
+		opInfos = store.ChangesInRange(from.OpSeq, to.OpSeq)
+	}
+
+	// If there are presence changes, fetch them
+	if hasPr {
+		var err error
+		prInfos, err = c.FindPresenceChangeInfosBetweenPrSeqs(
+			docRefKey,
+			from.PrSeq,
+			to.PrSeq,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("fetch presence changes of %s: %w", docRefKey, err)
+		}
+	}
+
+	changeInfos, err := packs.CombineChangeInfos(opInfos, prInfos)
+	if err != nil {
 		return nil, err
 	}
 
-	return store.ChangesInRange(from, to), nil
+	return changeInfos, nil
 }
 
 // CreateSnapshotInfo stores the snapshot of the given document.
@@ -1622,7 +1705,8 @@ func (c *Client) CreateSnapshotInfo(
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
 		"project_id":     docRefKey.ProjectID,
 		"doc_id":         docRefKey.DocID,
-		"server_seq":     doc.Checkpoint().ServerSeq,
+		"op_seq":     doc.Checkpoint().ServerSeq.OpSeq,
+		"pr_seq":     doc.Checkpoint().ServerSeq.PrSeq,
 		"lamport":        doc.Lamport(),
 		"version_vector": doc.VersionVector(),
 		"snapshot":       snapshot,
@@ -1638,12 +1722,13 @@ func (c *Client) CreateSnapshotInfo(
 func (c *Client) FindSnapshotInfo(
 	ctx context.Context,
 	docKey types.DocRefKey,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 ) (*database.SnapshotInfo, error) {
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
 		"project_id": docKey.ProjectID,
 		"doc_id":     docKey.DocID,
-		"server_seq": serverSeq,
+		"op_seq": serverSeq.OpSeq,
+		"pr_seq": serverSeq.PrSeq,
 	})
 
 	snapshotInfo := &database.SnapshotInfo{}
@@ -1665,11 +1750,12 @@ func (c *Client) FindSnapshotInfo(
 func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	option := options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
+		"op_seq": -1,
+		"pr_seq": -1,
 	})
 
 	if !includeSnapshot {
@@ -1679,8 +1765,11 @@ func (c *Client) FindClosestSnapshotInfo(
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
-			"$lte": serverSeq,
+		"op_seq": bson.M{
+			"$lte": serverSeq.OpSeq,
+		},
+		"pr_seq": bson.M{
+			"$lte": serverSeq.PrSeq,
 		},
 	}, option)
 
@@ -2115,6 +2204,25 @@ func (c *Client) purgeDocumentInternals(
 	counts[ColVersionVectors] = res.DeletedCount
 
 	return counts, nil
+}
+
+// StorePresenceChangeInfo stores a presence change info in the presence storage.
+func (c *Client) StorePresenceChangeInfo(prCI *database.PresenceChangeInfo) error {
+	return c.presenceStorage.StorePresence(prCI)
+}
+
+// StorePresenceChangeInfos stores multiple presence change infos in the presence storage.
+func (c *Client) StorePresenceChangeInfos(prCIs []*database.PresenceChangeInfo) error {
+	return c.presenceStorage.StorePresences(prCIs)
+}
+
+// FindPresenceChangeInfosBetweenPrSeqs returns the presence change infos between two presence sequences.
+func (c *Client) FindPresenceChangeInfosBetweenPrSeqs(
+	docRefKey types.DocRefKey,
+	from int64,
+	to int64,
+) ([]*database.PresenceChangeInfo, error) {
+	return c.presenceStorage.GetPresencesInRange(docRefKey, from, to)
 }
 
 func (c *Client) collection(

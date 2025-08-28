@@ -229,7 +229,7 @@ func RunFindDocInfoTest(
 		assert.Equal(t, docKey, info.Key)
 
 		// 02. Remove the document
-		_, _, err = db.CreateChangeInfos(ctx, info.RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, info.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Find the document
@@ -474,7 +474,7 @@ func RunFindChangesBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
@@ -510,17 +510,17 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		updatedClientInfo, _ := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 
 		// Record the serverSeq value at the time the PushPull request came in.
-		initialServerSeq := docInfo.ServerSeq
+		initialServerSeq := docInfo.GetServerSeq().Max() // TODO: Should not use Max()
 
 		// The serverSeq of the checkpoint that the server has should always be the same as
 		// the serverSeq of the user's checkpoint that came in as a request, if no other user interfered.
 		reqPackCheckpointServerSeq := updatedClientInfo.Checkpoint(docInfo.ID).ServerSeq
 
-		changeInfos, err := db.FindChangeInfosBetweenServerSeqs(
+		changeInfos, _, err := db.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			docInfo.RefKey(),
-			reqPackCheckpointServerSeq+1,
-			initialServerSeq,
+			change.NewServerSeq(reqPackCheckpointServerSeq.Max()+1, reqPackCheckpointServerSeq.Max()+1), // TODO: Should not use Max()
+			change.NewServerSeq(initialServerSeq, initialServerSeq),
 		)
 
 		assert.NoError(t, err)
@@ -560,18 +560,18 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
 
 		// 02. Create a snapshot that reflect the latest doc info
 		updatedDocInfo, _ := db.FindDocInfoByRefKey(ctx, refKey)
-		assert.Equal(t, int64(6), updatedDocInfo.ServerSeq)
+		assert.Equal(t, int64(6), updatedDocInfo.GetServerSeq().Max()) // TODO: Should not use Max()
 
 		pack = change.NewPack(
 			updatedDocInfo.Key,
-			change.InitialCheckpoint.NextServerSeq(updatedDocInfo.ServerSeq),
+			change.InitialCheckpoint.NextServerSeq(updatedDocInfo.GetServerSeq()),
 			nil,
 			doc.VersionVector(),
 			nil,
@@ -585,15 +585,15 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		snapshotInfo, _ := db.FindClosestSnapshotInfo(
 			ctx,
 			refKey,
-			updatedDocInfo.ServerSeq,
+			updatedDocInfo.GetServerSeq(),
 			false,
 		)
 
-		changeInfos, _ := db.FindChangeInfosBetweenServerSeqs(
+		changeInfos, _, _ := db.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			refKey,
-			snapshotInfo.ServerSeq+1,
-			updatedDocInfo.ServerSeq,
+			change.NewServerSeq(snapshotInfo.ServerSeq+1, snapshotInfo.ServerSeq+1),
+			updatedDocInfo.GetServerSeq(),
 		)
 
 		assert.Len(t, changeInfos, 0)
@@ -631,26 +631,26 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
 
 		// 02. Find changes
-		changeInfos, err := db.FindChangeInfosBetweenServerSeqs(
+		changeInfos, _, err := db.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			refKey,
-			1,
-			6,
+			change.NewServerSeq(1, 1),
+			change.NewServerSeq(6, 6),
 		)
 		assert.NoError(t, err)
 		assert.Len(t, changeInfos, 6)
 
-		changeInfos, err = db.FindChangeInfosBetweenServerSeqs(
+		changeInfos, _, err = db.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			refKey,
-			3,
-			3,
+			change.NewServerSeq(3, 3),
+			change.NewServerSeq(3, 3),
 		)
 		assert.NoError(t, err)
 		assert.Len(t, changeInfos, 1)
@@ -699,7 +699,7 @@ func RunFindLatestChangeInfoTest(t *testing.T,
 			ctx,
 			docInfo.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
@@ -750,21 +750,21 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
-		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, doc.VersionVector(), nil)
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(change.NewServerSeq(1, 1)), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
-		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, doc.VersionVector(), nil)
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(change.NewServerSeq(2, 2)), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), snapshot.ServerSeq)
 
-		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, 1, true)
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.NewServerSeq(1, 1), true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
@@ -1285,9 +1285,9 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		AssertKeys(t, docKeysInReverse, result)
 
 		// 03. Remove some documents.
-		_, _, err = db.CreateChangeInfos(ctx, docInfos[1].RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[1].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
-		_, _, err = db.CreateChangeInfos(ctx, docInfos[3].RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err = db.CreateChangeInfos(ctx, docInfos[3].RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
@@ -1315,7 +1315,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -1335,7 +1335,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// 02. Remove the document.
 		assert.NoError(t, clientInfo1.RemoveDocument(docRefKey1.DocID))
-		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo1.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 03. Create a document with same key and check they have same key but different id.
@@ -1359,7 +1359,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*database.ChangeInfo{}, true)
+		_, _, err := db.CreateChangeInfos(ctx, docInfo.RefKey(), change.InitialCheckpoint, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
@@ -1403,7 +1403,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 			ctx,
 			docInfo1.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
@@ -1422,7 +1422,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 			ctx,
 			docInfo2.RefKey(),
 			pack.Checkpoint,
-			toChangeInfos(t, refKey, pack.Changes),
+			pack.Changes,
 			false,
 		)
 		assert.NoError(t, err)
@@ -1463,7 +1463,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(0))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(0))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(0))
 		assert.NoError(t, err)
 	})
@@ -1477,35 +1477,35 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, err)
 
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-		clientInfo.Documents[docInfo.ID].ServerSeq = 1
+		clientInfo.Documents[docInfo.ID].OpSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(1))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
 		assert.NoError(t, err)
 
 		// update with larger seq
-		clientInfo.Documents[docInfo.ID].ServerSeq = 3
+		clientInfo.Documents[docInfo.ID].OpSeq = 3
 		clientInfo.Documents[docInfo.ID].ClientSeq = 5
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err = db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(3))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(3))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(5))
 		assert.NoError(t, err)
 
 		// update with smaller seq(should be ignored)
-		clientInfo.Documents[docInfo.ID].ServerSeq = 2
+		clientInfo.Documents[docInfo.ID].OpSeq = 2
 		clientInfo.Documents[docInfo.ID].ClientSeq = 3
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err = db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(3))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(3))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(5))
 		assert.NoError(t, err)
 	})
@@ -1519,13 +1519,13 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, err)
 
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-		clientInfo.Documents[docInfo.ID].ServerSeq = 1
+		clientInfo.Documents[docInfo.ID].OpSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(1))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
 		assert.NoError(t, err)
 
@@ -1534,7 +1534,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		result, err = db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentDetached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(0))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(0))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(0))
 		assert.NoError(t, err)
 	})
@@ -1548,13 +1548,13 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, err)
 
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-		clientInfo.Documents[docInfo.ID].ServerSeq = 1
+		clientInfo.Documents[docInfo.ID].OpSeq = 1
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(1))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
 		assert.NoError(t, err)
 
@@ -1563,7 +1563,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		result, err = db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentRemoved)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(0))
+		assert.Equal(t, max(result.Documents[docInfo.ID].OpSeq, result.Documents[docInfo.ID].PrSeq), int64(0))
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(0))
 		assert.NoError(t, err)
 	})
@@ -1928,10 +1928,12 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Change) []*database.ChangeInfo {
-	changeInfos := make([]*database.ChangeInfo, len(changes))
+func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Change) []*database.OperationChangeInfo {
+	changeInfos := make([]*database.OperationChangeInfo, len(changes))
 	for i, cn := range changes {
-		info, err := database.NewFromChange(docKey, cn)
+		opSeq := int64(i + 1)
+		prSeq := int64(i + 1)
+		info, err := database.NewOperationChangeInfo(docKey, cn, opSeq, prSeq)
 		assert.NoError(t, err)
 		changeInfos[i] = info
 	}

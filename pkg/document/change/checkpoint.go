@@ -36,18 +36,18 @@ const (
 )
 
 // InitialCheckpoint is the initial value of Checkpoint.
-var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq)
+var InitialCheckpoint = NewCheckpoint(NewServerSeq(InitialServerSeq, InitialServerSeq), InitialClientSeq)
 
 // MaxCheckpoint is the maximum value of Checkpoint.
-var MaxCheckpoint = NewCheckpoint(MaxServerSeq, MaxClientSeq)
+var MaxCheckpoint = NewCheckpoint(NewServerSeq(MaxServerSeq, MaxServerSeq), MaxClientSeq)
 
 // Checkpoint is used to determine the client received changes.
 // It is not meant to be used to determine the logical order of changes.
 type Checkpoint struct {
-	// serverSeq is the sequence of the change on the server. We can find the
-	// change with serverSeq and documentID in the server. If the change is not
-	// stored on the server, serverSeq is 0.
-	ServerSeq int64
+	// serverSeq contains operation and presence sequence numbers on the server.
+	// We can find the change with serverSeq and documentID in the server.
+	// If the change is not stored on the server, both sequences are 0.
+	ServerSeq ServerSeq
 
 	// clientSeq is the sequence of the change within the client that made the
 	// change.
@@ -55,7 +55,7 @@ type Checkpoint struct {
 }
 
 // NewCheckpoint creates a new instance of Checkpoint.
-func NewCheckpoint(serverSeq int64, clientSeq uint32) Checkpoint {
+func NewCheckpoint(serverSeq ServerSeq, clientSeq uint32) Checkpoint {
 	return Checkpoint{
 		ServerSeq: serverSeq,
 		ClientSeq: clientSeq,
@@ -63,12 +63,24 @@ func NewCheckpoint(serverSeq int64, clientSeq uint32) Checkpoint {
 }
 
 // NextServerSeq creates a new instance with next server sequence.
-func (cp Checkpoint) NextServerSeq(serverSeq int64) Checkpoint {
-	if cp.ServerSeq == serverSeq {
+func (cp Checkpoint) NextServerSeq(serverSeq ServerSeq) Checkpoint {
+	if cp.ServerSeq.OpSeq == serverSeq.OpSeq && cp.ServerSeq.PrSeq == serverSeq.PrSeq {
 		return cp
 	}
 
 	return NewCheckpoint(serverSeq, cp.ClientSeq)
+}
+
+// NextOpSeq creates a new instance with next operation sequence.
+func (cp Checkpoint) NextOpSeq(opSeq int64) Checkpoint {
+	newServerSeq := NewServerSeq(opSeq, cp.ServerSeq.PrSeq)
+	return NewCheckpoint(newServerSeq, cp.ClientSeq)
+}
+
+// NextPrSeq creates a new instance with next presence sequence.
+func (cp Checkpoint) NextPrSeq(prSeq int64) Checkpoint {
+	newServerSeq := NewServerSeq(cp.ServerSeq.OpSeq, prSeq)
+	return NewCheckpoint(newServerSeq, cp.ClientSeq)
 }
 
 // NextClientSeq creates a new instance with next client sequence.
@@ -101,7 +113,9 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 		return cp
 	}
 
-	maxServerSeq := max(cp.ServerSeq, other.ServerSeq)
+	maxOpSeq := max(cp.ServerSeq.OpSeq, other.ServerSeq.OpSeq)
+	maxPrSeq := max(cp.ServerSeq.PrSeq, other.ServerSeq.PrSeq)
+	maxServerSeq := NewServerSeq(maxOpSeq, maxPrSeq)
 
 	maxClientSeq := max(cp.ClientSeq, other.ClientSeq)
 
@@ -110,11 +124,14 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 
 // Equals returns whether the given checkpoint is equal to this checkpoint or not.
 func (cp Checkpoint) Equals(other Checkpoint) bool {
-	return cp.ServerSeq == other.ServerSeq &&
+	return cp.ServerSeq.OpSeq == other.ServerSeq.OpSeq &&
+		cp.ServerSeq.PrSeq == other.ServerSeq.PrSeq &&
 		cp.ClientSeq == other.ClientSeq
 }
 
 // String returns the string of information about this checkpoint.
 func (cp Checkpoint) String() string {
-	return fmt.Sprintf("serverSeq=%d, clientSeq=%d", cp.ServerSeq, cp.ClientSeq)
+	return fmt.Sprintf("opSeq=%d, prSeq=%d, clientSeq=%d", cp.ServerSeq.OpSeq, cp.ServerSeq.PrSeq, cp.ClientSeq)
 }
+
+

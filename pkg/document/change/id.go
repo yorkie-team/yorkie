@@ -20,6 +20,43 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ServerSeq represents operation and presence sequence numbers on the server.
+type ServerSeq struct {
+	// opSeq is the sequence of operation changes on the server.
+	OpSeq int64
+
+	// prSeq is the sequence of presence changes on the server.
+	PrSeq int64
+}
+
+// NewServerSeq creates a new instance of ServerSeq.
+func NewServerSeq(opSeq, prSeq int64) ServerSeq {
+	return ServerSeq{
+		OpSeq: opSeq,
+		PrSeq: prSeq,
+	}
+}
+
+// IsZero returns true if both sequences are zero.
+func (ss ServerSeq) IsZero() bool {
+	return ss.OpSeq == 0 && ss.PrSeq == 0
+}
+
+// Max returns the maximum sequence number between OpSeq and PrSeq.
+func (ss ServerSeq) Max() int64 {
+	return max(ss.OpSeq, ss.PrSeq)
+}
+
+// GreaterThan returns true if this ServerSeq is greater than other.
+func (ss ServerSeq) GreaterThan(other ServerSeq) bool {
+	return (ss.OpSeq >= other.OpSeq && ss.PrSeq >= other.PrSeq) && !ss.EqualWith(other)
+}
+
+// EqualWith returns true if both ServerSeq have the same OpSeq and PrSeq.
+func (ss ServerSeq) EqualWith(other ServerSeq) bool {
+	return ss.OpSeq == other.OpSeq && ss.PrSeq == other.PrSeq
+}
+
 // ID represents the identifier of the change. It is used to identify the
 // change and to order the changes. It is also used to detect the relationship
 // between changes whether they are causally related or concurrent.
@@ -28,10 +65,10 @@ type ID struct {
 	// change.
 	clientSeq uint32
 
-	// serverSeq is the sequence of the change on the server. We can find the
-	// change with serverSeq and documentID in the server. If the change is not
-	// stored on the server, serverSeq is 0.
-	serverSeq int64
+	// serverSeq contains operation and presence sequence numbers on the server.
+	// We can find the change with serverSeq and documentID in the server.
+	// If the change is not stored on the server, both sequences are 0.
+	serverSeq ServerSeq
 
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
@@ -50,7 +87,7 @@ type ID struct {
 // NewID creates a new instance of ID.
 func NewID(
 	clientSeq uint32,
-	serverSeq int64,
+	serverSeq ServerSeq,
 	lamport int64,
 	actorID time.ActorID,
 	versionVector time.VersionVector,
@@ -67,7 +104,7 @@ func NewID(
 // InitialID creates an initial state ID. Usually this is used to
 // represent a state where nothing has been edited.
 func InitialID() ID {
-	return NewID(InitialClientSeq, InitialServerSeq, time.InitialLamport, time.InitialActorID, time.NewVersionVector())
+	return NewID(InitialClientSeq, NewServerSeq(InitialServerSeq, InitialServerSeq), time.InitialLamport, time.InitialActorID, time.NewVersionVector())
 }
 
 // Next creates a next ID of this ID.
@@ -115,7 +152,7 @@ func (id ID) SyncClocks(other ID) ID {
 
 	id.versionVector.Max(&other.versionVector)
 
-	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector)
+	newID := NewID(id.clientSeq, NewServerSeq(InitialServerSeq, InitialServerSeq), lamport, id.actorID, id.versionVector)
 	newID.versionVector.Set(id.actorID, lamport)
 	return newID
 }
@@ -140,11 +177,11 @@ func (id ID) SetVersionVector(vector time.VersionVector) ID {
 // SetActor sets actorID.
 func (id ID) SetActor(actor time.ActorID) ID {
 	// TODO(hackerwins): We need to update version vector as well.
-	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor, id.versionVector)
+	return NewID(id.clientSeq, NewServerSeq(InitialServerSeq, InitialServerSeq), id.lamport, actor, id.versionVector)
 }
 
 // SetServerSeq sets server sequence of this ID.
-func (id ID) SetServerSeq(serverSeq int64) ID {
+func (id ID) SetServerSeq(serverSeq ServerSeq) ID {
 	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID, id.versionVector)
 }
 
@@ -154,8 +191,18 @@ func (id ID) ClientSeq() uint32 {
 }
 
 // ServerSeq returns the server sequence of this ID.
-func (id ID) ServerSeq() int64 {
+func (id ID) ServerSeq() ServerSeq {
 	return id.serverSeq
+}
+
+// OpSeq returns the operation sequence of this ID.
+func (id ID) OpSeq() int64 {
+	return id.serverSeq.OpSeq
+}
+
+// PrSeq returns the presence sequence of this ID.
+func (id ID) PrSeq() int64 {
+	return id.serverSeq.PrSeq
 }
 
 // Lamport returns the lamport clock of this ID.
