@@ -1031,11 +1031,6 @@ components:
           description: ""
           title: initial_root
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: CreateDocumentRequest
       type: object
     yorkie.v1.CreateDocumentResponse:
@@ -1077,11 +1072,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         rules:
           additionalProperties: false
           description: ""
@@ -1260,11 +1250,6 @@ components:
           description: ""
           title: document_key
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetDocumentRequest
       type: object
     yorkie.v1.GetDocumentResponse:
@@ -1300,11 +1285,6 @@ components:
           description: ""
           title: include_root
           type: boolean
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetDocumentsRequest
       type: object
     yorkie.v1.GetDocumentsResponse:
@@ -1353,11 +1333,6 @@ components:
           additionalProperties: false
           description: ""
           title: date_range
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetProjectStatsRequest
       type: object
     yorkie.v1.GetProjectStatsRequest.DateRange:
@@ -1412,11 +1387,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -1445,11 +1415,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -1505,11 +1470,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_key
-          type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
           type: string
         serverSeq:
           additionalProperties: false
@@ -1606,11 +1566,6 @@ components:
           - type: string
           - type: number
           title: previous_seq
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListChangesRequest
       type: object
     yorkie.v1.ListChangesResponse:
@@ -1651,11 +1606,6 @@ components:
           description: ""
           title: previous_id
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListDocumentsRequest
       type: object
     yorkie.v1.ListDocumentsResponse:
@@ -1695,11 +1645,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListSchemasRequest
       type: object
     yorkie.v1.ListSchemasResponse:
@@ -2472,11 +2417,6 @@ components:
           description: ""
           title: force
           type: boolean
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: RemoveDocumentByAdminRequest
       type: object
     yorkie.v1.RemoveDocumentByAdminResponse:
@@ -2488,11 +2428,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -2598,11 +2533,6 @@ components:
           description: ""
           title: page_size
           type: integer
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         query:
           additionalProperties: false
           description: ""
@@ -2932,11 +2862,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_key
-          type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
           type: string
         root:
           additionalProperties: false
