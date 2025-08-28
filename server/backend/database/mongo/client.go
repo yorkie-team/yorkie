@@ -228,7 +228,7 @@ func (c *Client) tryAcquireLeadership(
 	promote := func() (*database.ClusterNodeInfo, error) {
 		res := c.collection(ColClusterNodes).FindOneAndUpdate(
 			ctx,
-			bson.M{"rpcAddr": rpcAddr},
+			bson.M{"rpc_addr": rpcAddr},
 			mongo.Pipeline{
 				{{Key: "$set", Value: bson.D{
 					{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
@@ -359,16 +359,10 @@ func (c *Client) FindActiveClusterNodes(
 	}
 
 	var nodes []*database.ClusterNodeInfo
-	for cursor.Next(ctx) {
-		var n database.ClusterNodeInfo
-		if err := cursor.Decode(&n); err != nil {
-			return nil, fmt.Errorf("decode clusternode: %w", err)
-		}
-		nodes = append(nodes, &n)
+	if err = cursor.All(ctx, &nodes); err != nil {
+		return nil, fmt.Errorf("decode clusternodes: %w", err)
 	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %w", err)
-	}
+
 	return nodes, nil
 }
 

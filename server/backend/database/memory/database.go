@@ -300,7 +300,6 @@ func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 			return fmt.Errorf("insert cluster follower: %w", err)
 		}
 
-		txn.Commit()
 		return nil
 	}
 
