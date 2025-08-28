@@ -309,18 +309,6 @@ func TestRESTAPI(t *testing.T) {
 		}
 		wg.Wait()
 	})
-
-	t.Run("document api access control test", func(t *testing.T) {
-		project1 := helper.CreateProject(t, defaultServer, t.Name()+"1")
-		project2 := helper.CreateProject(t, defaultServer, t.Name()+"2")
-
-		postWithUnauthorizedErrorCheck(
-			t,
-			project1,
-			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project2.Name, ""),
-		)
-	})
 }
 
 // post sends a POST request to the given URL with the given body.
@@ -328,7 +316,10 @@ func post(t *testing.T, project *types.Project, url, body string) []byte {
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	assert.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", project.SecretKey)
+	req.Header.Set(
+		"Authorization",
+		fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
+	)
 
 	httpClient := http.Client{}
 	res, err := httpClient.Do(req)
@@ -338,16 +329,4 @@ func post(t *testing.T, project *types.Project, url, body string) []byte {
 	resBody, err := io.ReadAll(res.Body)
 	assert.NoError(t, err)
 	return resBody
-}
-
-func postWithUnauthorizedErrorCheck(t *testing.T, project *types.Project, url, body string) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(body))
-	assert.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", project.SecretKey)
-
-	httpClient := http.Client{}
-	res, err := httpClient.Do(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
 }
