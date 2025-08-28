@@ -280,7 +280,7 @@ type Database interface {
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		cpBeforePush change.Checkpoint,
-		changes []*ChangeInfo,
+		changes []*change.Change,
 		isRemoved bool,
 	) (*DocInfo, change.Checkpoint, error)
 
@@ -288,7 +288,7 @@ type Database interface {
 	CompactChangeInfos(
 		ctx context.Context,
 		docInfo *DocInfo,
-		lastServerSeq int64,
+		lastServerSeq change.ServerSeq,
 		changes []*change.Change,
 	) error
 
@@ -297,8 +297,8 @@ type Database interface {
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		actorID types.ID,
-		serverSeq int64,
-	) (*ChangeInfo, error)
+		serverSeq change.ServerSeq,
+	) (*OperationChangeInfo, error)
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
@@ -308,13 +308,26 @@ type Database interface {
 		to int64,
 	) ([]*change.Change, error)
 
-	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
+	// FindChangeInfosBetweenServerSeqs returns the operation and presence changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
+		from change.ServerSeq,
+		to change.ServerSeq,
+	) ([]*OperationChangeInfo, []*PresenceChangeInfo, error)
+
+	// StorePresenceChangeInfo stores a presence change info in the presence storage.
+	StorePresenceChangeInfo(presenceInfo *PresenceChangeInfo) error
+
+	// StorePresenceChangeInfos stores multiple presence change infos in the presence storage.
+	StorePresenceChangeInfos(presenceInfos []*PresenceChangeInfo) error
+
+	// FindPresenceChangeInfosBetweenPrSeqs returns the presence change infos between two presence sequences.
+	FindPresenceChangeInfosBetweenPrSeqs(
+		docRefKey types.DocRefKey,
 		from int64,
 		to int64,
-	) ([]*ChangeInfo, error)
+	) ([]*PresenceChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(
@@ -334,7 +347,7 @@ type Database interface {
 	FindClosestSnapshotInfo(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-		serverSeq int64,
+		serverSeq change.ServerSeq,
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 

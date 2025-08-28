@@ -202,7 +202,7 @@ func (s *clusterServer) GetDocument(
 
 	// If root or presences are requested, we need to build the internal document
 	if req.Msg.IncludeRoot || req.Msg.IncludePresences {
-		doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.ServerSeq)
+		doc, err := packs.BuildInternalDocForServerSeq(ctx, s.backend, docInfo, docInfo.GetServerSeq())
 		if err != nil {
 			return nil, err
 		}

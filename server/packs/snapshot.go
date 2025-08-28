@@ -53,7 +53,7 @@ func BuildDocForCheckpoint(
 	}
 
 	internalDoc.SetActor(actorID)
-	internalDoc.SyncCheckpoint(cp.ServerSeq, cp.ClientSeq)
+	internalDoc.SyncCheckpoint(cp.ServerSeq.Max(), cp.ClientSeq) // SyncCheckpoint still uses int64
 	return internalDoc.ToDocument(), nil
 }
 
@@ -62,7 +62,7 @@ func BuildInternalDocForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 ) (*document.InternalDocument, error) {
 	docKey := docInfo.RefKey()
 	var doc *document.InternalDocument
@@ -79,7 +79,7 @@ func BuildInternalDocForServerSeq(
 	// sequence in the cache is greater than the given server sequence, we can't
 	// build the document from the document. In this case, we need to
 	// query the database to get the closest snapshot information.
-	if doc == nil || serverSeq < doc.Checkpoint().ServerSeq {
+	if doc == nil || serverSeq.Max() < doc.Checkpoint().ServerSeq.Max() { // TODO: Should compare ServerSeq structs directly
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
 			ctx,
 			docKey,
@@ -102,11 +102,12 @@ func BuildInternalDocForServerSeq(
 		}
 	}
 
+	docServerSeqMax := doc.Checkpoint().ServerSeq.Max() // TODO: Should use ServerSeq struct
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docKey,
-		doc.Checkpoint().ServerSeq+1,
-		serverSeq,
+		docServerSeqMax+1,
+		serverSeq.Max(), // TODO: Should use ServerSeq struct
 	)
 	if err != nil {
 		return nil, err
@@ -177,16 +178,17 @@ func storeSnapshot(
 	info, err := be.DB.FindClosestSnapshotInfo(
 		ctx,
 		docRefKey,
-		docInfo.ServerSeq,
+		docInfo.GetServerSeq(),
 		false,
 	)
 	if err != nil {
 		return err
 	}
-	if info.ServerSeq == docInfo.ServerSeq {
+	docServerSeqMax := docInfo.GetServerSeq().Max() // TODO: Should not use Max()
+	if info.ServerSeq == docServerSeqMax {
 		return nil
 	}
-	if docInfo.ServerSeq-info.ServerSeq < be.Config.SnapshotInterval {
+	if docServerSeqMax-info.ServerSeq < be.Config.SnapshotInterval {
 		return nil
 	}
 
@@ -195,7 +197,7 @@ func storeSnapshot(
 		ctx,
 		docRefKey,
 		info.ServerSeq+1,
-		docInfo.ServerSeq,
+		docServerSeqMax,
 	)
 	if err != nil {
 		return err
@@ -222,7 +224,7 @@ func storeSnapshot(
 
 	pack := change.NewPack(
 		docInfo.Key,
-		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+		change.InitialCheckpoint.NextServerSeq(docInfo.GetServerSeq()),
 		changes,
 		nil,
 		nil,

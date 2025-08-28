@@ -94,7 +94,8 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			return nil, err
 		}
 
-		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID, info.VersionVector)
+		serverSeq := change.NewServerSeq(info.OpSeq, info.PrSeq)
+		changeID := change.NewID(info.ClientSeq, serverSeq, info.Lamport, actorID, info.VersionVector)
 
 		var pbOps []*api.Operation
 		for _, bytesOp := range info.Operations {

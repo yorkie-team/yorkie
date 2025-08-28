@@ -82,5 +82,5 @@ func (p *Pack) OperationsLen() int {
 
 // IsAttached returns whether the document is attached or not.
 func (p *Pack) IsAttached() bool {
-	return p.Checkpoint.ServerSeq != 0
+	return !p.Checkpoint.ServerSeq.IsZero()
 }
