@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.27] - 2025-08-29
+
+### Added
+
+- Add metrics for response latency and PushPull errors by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1459
+- Optimize Client.Deactivate by removing N+1 query by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1463
+- Optimize queries by removing N+1 problem by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1468
+
+### Fixed
+
+- Fix Housekeeping failures by allowing Deactivate in Attaching by @kokodak in https://github.com/yorkie-team/yorkie/pull/1460
+
+### Changed
+
 ## [v0.6.26] - 2025-08-20
 
 ### Changed
