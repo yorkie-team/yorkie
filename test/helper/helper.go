@@ -579,6 +579,15 @@ func WaitForServerToStart(addr string) error {
 	return fmt.Errorf("timeout for server to start: %s", addr)
 }
 
+// CreateProject creates a new project with given name.
+func CreateProject(t *testing.T, server *server.Yorkie, name string) *types.Project {
+	ctx := context.Background()
+	project, err := server.CreateProject(ctx, name)
+	assert.NoError(t, err)
+
+	return project
+}
+
 // CreateProjectAndDocuments creates a new project and documents for the given count.
 func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (*types.Project, []*document.Document) {
 	ctx := context.Background()
