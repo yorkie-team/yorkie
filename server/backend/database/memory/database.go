@@ -1081,7 +1081,7 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
@@ -1103,6 +1103,35 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 		}
 	}
 	return infos, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+func (d *DB) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+	}
+
+	var attachedClientMap = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		attachedClientMap[docID] = 0
+	}
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo)
+		for _, docID := range docIDs {
+			if info.Documents[docID] != nil && info.Documents[docID].Status == database.DocumentAttached {
+				attachedClientMap[docID]++
+			}
+		}
+	}
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.

@@ -1885,6 +1885,76 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	})
 }
 
+// RunFindCompactionCandidatesPerProjectTest runs the FindCompactionCandidatesPerProject tests for the given db.
+func RunFindCompactionCandidatesPerProjectTest(t *testing.T, db database.Database) {
+	t.Run("FindCompactionCandidatesPerProject candidate search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		documentCnt := 10
+		p, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-RunFindCompactionCandidatesPerProject", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+		clientInfo1, err := db.ActivateClient(ctx, p.ID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		assert.NoError(t, err)
+		clientInfo2, err := db.ActivateClient(ctx, p.ID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		assert.NoError(t, err)
+
+		clientCountInDB, err := db.GetClientsCount(ctx, p.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), clientCountInDB)
+
+		docInfos := make([]*database.DocInfo, 0, documentCnt)
+		for i := range documentCnt {
+			docKey := key.Key(fmt.Sprintf("tests$%s-%d", t.Name(), i))
+			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey)
+			assert.NoError(t, err)
+			docInfos = append(docInfos, docInfo)
+
+			// Set server_seq=1 via executing CompactChangeInfos
+			changes := make([]*change.Change, 0, 1)
+			changes = append(changes, change.New(change.InitialID(), "test-message", nil, nil))
+			err = db.CompactChangeInfos(ctx, docInfo, 0, changes)
+			assert.NoError(t, err)
+		}
+		docCountInDB, err := db.GetDocumentsCount(ctx, p.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(documentCnt), docCountInDB)
+
+		{ // candidatesLimit=10, compactionMinChanges=1
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, documentCnt, len(cands))
+		}
+		{ // candidatesLimit=5, compactionMinChanges=1
+			candidatesLimit := 5
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, candidatesLimit, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, candidatesLimit, len(cands))
+		}
+		{ // candidatesLimit=10, compactionMinChanges=2
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 2)
+			assert.NoError(t, err)
+			assert.Equal(t, 0, len(cands))
+		}
+		{ // Attach some documents in clientInfo1 and clientInfo2
+			attachCnt := 3
+			for i := range attachCnt {
+				assert.NoError(t, clientInfo1.AttachDocument(docInfos[i].ID, false))
+				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfos[i]))
+				assert.NoError(t, clientInfo2.AttachDocument(docInfos[i+attachCnt].ID, false))
+				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfos[i+attachCnt]))
+			}
+			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
+			assert.NoError(t, err)
+			assert.Equal(t, documentCnt-2*attachCnt, len(cands))
+		}
+	})
+}
+
 // RunFindClientInfosByAttachedDocRefKeyTest runs the FindClientInfosByAttachedDocRefKey tests for the given db.
 func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
@@ -1924,6 +1994,60 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 		clientInfos, err = db.FindAttachedClientInfosByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(clientInfos))
+	})
+}
+
+func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
+		docKey1, docKey2 := key.Key(fmt.Sprintf("tests$%s-1", t.Name())), key.Key(fmt.Sprintf("tests$%s-2", t.Name()))
+		docInfo1, _ := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey1)
+		docInfo2, _ := db.FindOrCreateDocInfo(ctx, clientInfo2.RefKey(), docKey2)
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo1.ID, false))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 2)
+			assert.Equal(t, 2, attachedMap[docInfo1.ID])
+			assert.Equal(t, 1, attachedMap[docInfo2.ID])
+		}
+		assert.NoError(t, clientInfo1.DetachDocument(docInfo1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 1)
+			assert.Equal(t, 1, attachedMap[docInfo1.ID])
+		}
+		assert.NoError(t, clientInfo2.DetachDocument(docInfo1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 2)
+			assert.Equal(t, 0, attachedMap[docInfo1.ID])
+			assert.Equal(t, 1, attachedMap[docInfo2.ID])
+		}
+		{
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 0)
+		}
+		{
+			unknown := types.ID("000000000000000000000000")
+			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{unknown})
+			assert.NoError(t, err)
+			assert.Len(t, attachedMap, 1)
+			assert.Equal(t, 0, attachedMap[unknown])
+		}
 	})
 }
 

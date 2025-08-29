@@ -1034,57 +1034,44 @@ func (c *Client) FindCompactionCandidatesPerProject(
 	candidatesLimit int,
 	compactionMinChanges int,
 ) ([]*database.DocInfo, error) {
-	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"project_id": project.ID,
-	}, options.Find().SetLimit(int64(candidatesLimit*2)))
+	result, err := c.collection(ColDocuments).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"project_id": project.ID,
+			"server_seq": bson.M{"$gte": compactionMinChanges},
+		}}},
+		// Exclude documents attached to any client
+		bson.D{{Key: "$lookup", Value: bson.M{
+			"from": ColClients,
+			"let":  bson.M{"docId": "$_id", "projectId": "$project_id"},
+			"pipeline": []bson.M{
+				{"$match": bson.M{
+					"$expr": bson.M{
+						"$and": bson.A{
+							bson.M{"$eq": bson.A{"$project_id", "$$projectId"}},
+							bson.M{"$in": bson.A{"$$docId", bson.M{"$ifNull": bson.A{"$attached_docs", bson.A{}}}}},
+						},
+					},
+				}},
+			},
+			"as": "clients",
+		}}},
+		bson.D{{Key: "$match", Value: bson.M{"clients": bson.M{"$eq": bson.A{}}}}},
+		bson.D{{Key: "$project", Value: bson.M{"clients": 0}}},
+		bson.D{{Key: "$limit", Value: candidatesLimit}},
+	})
+
 	if err != nil {
 		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
 	}
-	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	var infos []*database.DocInfo
-	for cursor.Next(ctx) {
-		var info database.DocInfo
-		if err := cursor.Decode(&info); err != nil {
-			return nil, fmt.Errorf("decode document: %w", err)
-		}
-
-		if candidatesLimit <= len(infos) {
-			break
-		}
-
-		// 1. Check if the document is attached to a client.
-		// TODO(chacha912): Resolve the N+1 problem.
-		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     info.ID,
-		}, "")
-		if err != nil {
-			return nil, err
-		}
-		if isAttached {
-			continue
-		}
-
-		// 2. Check if the document has enough changes to compact.
-		if info.ServerSeq < int64(compactionMinChanges) {
-			continue
-		}
-
-		infos = append(infos, &info)
+	if err := result.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("iterate compaction candidates: %w", err)
 	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %w", err)
-	}
-
 	return infos, nil
 }
 
-// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
@@ -1106,6 +1093,52 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	}
 
 	return clientInfos, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+func (c *Client) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	if len(docIDs) == 0 {
+		return map[types.ID]int{}, nil
+	}
+	cursor, err := c.collection(ColClients).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"project_id": projectID,
+			"status":     database.ClientActivated,
+			"attached_docs": bson.M{
+				"$in": docIDs,
+			},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$attached_docs"}},
+		bson.D{{Key: "$match", Value: bson.M{"attached_docs": bson.M{"$in": docIDs}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":   "$attached_docs",
+			"count": bson.M{"$sum": 1},
+		}}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+	}
+
+	var attachedClientMap = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		attachedClientMap[docID] = 0
+	}
+
+	for cursor.Next(ctx) {
+		var attachedInfo struct {
+			ID    types.ID `bson:"_id"`
+			Count int      `bson:"count"`
+		}
+		if err := cursor.Decode(&attachedInfo); err != nil {
+			return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+		}
+		attachedClientMap[attachedInfo.ID] = attachedInfo.Count
+	}
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
