@@ -57,7 +57,7 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		)
 
 		// If a project exists in the context, overwrite the header with the API-Key.
-		project, ok := projects.ProjectFrom(ctx)
+		project, ok := projects.TryFrom(ctx)
 		if ok {
 			req.Header().Set(
 				types.AuthorizationKey,
@@ -86,7 +86,7 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 		)
 
 		// If a project exists in the context, overwrite the header with the API-Key.
-		project, ok := projects.ProjectFrom(ctx)
+		project, ok := projects.TryFrom(ctx)
 		if ok {
 			conn.RequestHeader().Set(
 				types.AuthorizationKey,

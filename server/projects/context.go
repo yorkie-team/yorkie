@@ -35,9 +35,9 @@ func With(ctx context.Context, project *types.Project) context.Context {
 	return context.WithValue(ctx, projectKey{}, project)
 }
 
-// ProjectFrom returns the project from the context.
+// TryFrom returns the project from the context.
 // It also returns a boolean indicating whether the project was found.
-func ProjectFrom(ctx context.Context) (*types.Project, bool) {
+func TryFrom(ctx context.Context) (*types.Project, bool) {
 	project, ok := ctx.Value(projectKey{}).(*types.Project)
 	if !ok || project == nil {
 		return nil, false
