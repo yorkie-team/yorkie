@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 // Option configures Options.
@@ -244,6 +245,12 @@ func (c *Client) CreateDocument(
 	documentKey string,
 	initialRoot yson.Object,
 ) (*types.DocumentSummary, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = projects.With(ctx, project)
+
 	marshalled, err := initialRoot.Marshal()
 	if err != nil {
 		return nil, err
@@ -252,7 +259,6 @@ func (c *Client) CreateDocument(
 	response, err := c.client.CreateDocument(
 		ctx,
 		connect.NewRequest(&api.CreateDocumentRequest{
-			ProjectName: projectName,
 			DocumentKey: documentKey,
 			InitialRoot: marshalled,
 		}),
@@ -273,10 +279,15 @@ func (c *Client) ListDocuments(
 	isForward bool,
 	includeRoot bool,
 ) ([]*types.DocumentSummary, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = projects.With(ctx, project)
+
 	response, err := c.client.ListDocuments(
 		ctx,
 		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName: projectName,
 			PreviousId:  previousID,
 			PageSize:    pageSize,
 			IsForward:   isForward,
@@ -298,10 +309,15 @@ func (c *Client) UpdateDocument(
 	root string,
 	schemaKey string,
 ) (*types.DocumentSummary, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = projects.With(ctx, project)
+
 	response, err := c.client.UpdateDocument(
 		ctx,
 		connect.NewRequest(&api.UpdateDocumentRequest{
-			ProjectName: projectName,
 			DocumentKey: documentKey.String(),
 			Root:        root,
 			SchemaKey:   schemaKey,
@@ -326,11 +342,11 @@ func (c *Client) RemoveDocument(
 		return err
 	}
 	apiKey := project.PublicKey
+	ctx = projects.With(ctx, project)
 
 	_, err = c.client.RemoveDocumentByAdmin(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RemoveDocumentByAdminRequest{
-			ProjectName: projectName,
 			DocumentKey: documentKey,
 			Force:       force,
 		}), apiKey, documentKey),
@@ -347,8 +363,13 @@ func (c *Client) ListChangeSummaries(
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = projects.With(ctx, project)
+
 	resp, err := c.client.ListChanges(ctx, connect.NewRequest(&api.ListChangesRequest{
-		ProjectName: projectName,
 		DocumentKey: key.String(),
 		PreviousSeq: previousSeq,
 		PageSize:    pageSize,
@@ -372,7 +393,6 @@ func (c *Client) ListChangeSummaries(
 	seq := changes[0].ServerSeq() - 1
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, connect.NewRequest(&api.GetSnapshotMetaRequest{
-		ProjectName: projectName,
 		DocumentKey: key.String(),
 		ServerSeq:   seq,
 	}))
@@ -473,8 +493,13 @@ func (c *Client) CreateSchema(
 	schemaBody string,
 	rules []types.Rule,
 ) error {
-	_, err := c.client.CreateSchema(ctx, connect.NewRequest(&api.CreateSchemaRequest{
-		ProjectName:   projectName,
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	ctx = projects.With(ctx, project)
+
+	_, err = c.client.CreateSchema(ctx, connect.NewRequest(&api.CreateSchemaRequest{
 		SchemaName:    schemaName,
 		SchemaVersion: int32(version),
 		SchemaBody:    schemaBody,
@@ -493,11 +518,16 @@ func (c *Client) GetSchemas(
 	projectName,
 	schemaName string,
 ) ([]*types.Schema, error) {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return nil, err
+	}
+	ctx = projects.With(ctx, project)
+
 	response, err := c.client.GetSchemas(
 		ctx,
 		connect.NewRequest(&api.GetSchemasRequest{
-			ProjectName: projectName,
-			SchemaName:  schemaName,
+			SchemaName: schemaName,
 		}),
 	)
 	if err != nil {
@@ -509,10 +539,15 @@ func (c *Client) GetSchemas(
 
 // RemoveSchema removes a schema.
 func (c *Client) RemoveSchema(ctx context.Context, projectName, schemaName string, version int) error {
-	_, err := c.client.RemoveSchema(ctx, connect.NewRequest(&api.RemoveSchemaRequest{
-		ProjectName: projectName,
-		SchemaName:  schemaName,
-		Version:     int32(version),
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	ctx = projects.With(ctx, project)
+
+	_, err = c.client.RemoveSchema(ctx, connect.NewRequest(&api.RemoveSchemaRequest{
+		SchemaName: schemaName,
+		Version:    int32(version),
 	}))
 	if err != nil {
 		return err

@@ -17,6 +17,12 @@
 
 package types
 
+// AuthScheme represents the scheme of the Authorization header.
+const (
+	AuthSchemeBearer = "Bearer"
+	AuthSchemeAPIKey = "API-Key"
+)
+
 // AuthorizationKey is the key of the authorization header.
 const AuthorizationKey = "authorization"
 

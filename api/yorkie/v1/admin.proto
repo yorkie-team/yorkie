@@ -134,7 +134,7 @@ message GetProjectStatsRequest {
     DATE_RANGE_LAST_12M = 4;
   }
 
-  string project_name = 1;
+  reserved 1;
   DateRange date_range = 2;
 }
 
@@ -146,7 +146,7 @@ message GetProjectStatsResponse {
 }
 
 message CreateDocumentRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
   string initial_root = 3;
 }
@@ -156,7 +156,7 @@ message CreateDocumentResponse {
 }
 
 message ListDocumentsRequest {
-  string project_name = 1;
+  reserved 1;
   string previous_id = 2;
   int32 page_size = 3;
   bool is_forward = 4;
@@ -168,7 +168,7 @@ message ListDocumentsResponse {
 }
 
 message GetDocumentRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
 }
 
@@ -177,7 +177,7 @@ message GetDocumentResponse {
 }
 
 message GetDocumentsRequest {
-  string project_name = 1;
+  reserved 1;
   repeated string document_keys = 2;
   bool include_root = 3;
   bool include_presences = 4;
@@ -188,7 +188,7 @@ message GetDocumentsResponse {
 }
 
 message UpdateDocumentRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
   string root = 3;
   string schema_key = 4;
@@ -199,7 +199,7 @@ message UpdateDocumentResponse {
 }
 
 message RemoveDocumentByAdminRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
   bool force = 3;
 }
@@ -207,7 +207,7 @@ message RemoveDocumentByAdminRequest {
 message RemoveDocumentByAdminResponse {}
 
 message GetSnapshotMetaRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
   int64 server_seq = 3;
 }
@@ -219,7 +219,7 @@ message GetSnapshotMetaResponse {
 }
 
 message SearchDocumentsRequest {
-  string project_name = 1;
+  reserved 1;
   string query = 2;
   int32  page_size = 3; 
 }
@@ -230,7 +230,7 @@ message SearchDocumentsResponse {
 }
 
 message ListChangesRequest {
-  string project_name = 1;
+  reserved 1;
   string document_key = 2;
   int64 previous_seq = 3;
   int32  page_size = 4; 
@@ -242,7 +242,7 @@ message ListChangesResponse {
 }
 
 message CreateSchemaRequest {
-  string project_name = 1;
+  reserved 1;
   string schema_name = 2;
   int32 schema_version = 3;
   string schema_body = 4;
@@ -254,7 +254,7 @@ message CreateSchemaResponse {
 }
 
 message ListSchemasRequest {
-  string project_name = 1;
+  reserved 1;
 }
 
 message ListSchemasResponse {
@@ -262,7 +262,7 @@ message ListSchemasResponse {
 }
 
 message GetSchemaRequest {
-  string project_name = 1;
+  reserved 1;
   string schema_name = 2;
   int32 version = 3;
 }
@@ -272,7 +272,7 @@ message GetSchemaResponse {
 }
 
 message GetSchemasRequest {
-  string project_name = 1;
+  reserved 1;
   string schema_name = 2;
 }
 
@@ -281,7 +281,7 @@ message GetSchemasResponse {
 }
 
 message RemoveSchemaRequest {
-  string project_name = 1;
+  reserved 1;
   string schema_name = 2;
   int32 version = 3;
 }
