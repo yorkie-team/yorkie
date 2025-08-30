@@ -56,21 +56,20 @@ func RunLeadershipTest(
 ) {
 	t.Run("TryLeadership should work for new leadership", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
 		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
 		require.NoError(t, err)
-		assert.Equal(t, nodeIDOne, info.Hostname)
+		assert.Equal(t, database.PodRPCAddr(nodeIDOne), info.RPCAddr)
 		assert.NotEmpty(t, info.LeaseToken)
-		assert.Equal(t, int64(1), info.Term)
 		assert.False(t, info.IsExpired())
 	})
 
 	t.Run("TryLeadership should return existing leader when valid", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// First node acquires leadership
 		leaseDuration := 30 * gotime.Second
@@ -83,13 +82,13 @@ func RunLeadershipTest(
 		require.NoError(t, err)
 
 		// Should return the first node's leadership
-		assert.Equal(t, nodeIDOne, info2.Hostname)
+		assert.Equal(t, database.PodRPCAddr(nodeIDOne), info2.RPCAddr)
 		assert.Equal(t, info1.LeaseToken, info2.LeaseToken)
 	})
 
 	t.Run("TryLeadership should allow takeover after expiry", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// First node acquires leadership with short lease
 		shortLease := 100 * gotime.Millisecond
@@ -106,13 +105,12 @@ func RunLeadershipTest(
 		info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
 		require.NoError(t, err)
 
-		assert.Equal(t, nodeIDTwo, info.Hostname)
-		assert.Equal(t, int64(2), info.Term) // Term should increment
+		assert.Equal(t, database.PodRPCAddr(nodeIDTwo), info.RPCAddr)
 	})
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -124,18 +122,17 @@ func RunLeadershipTest(
 		renewedInfo, err := db.TryLeadership(ctx, nodeIDOne, info.LeaseToken, leaseDuration)
 		require.NoError(t, err)
 
-		assert.Equal(t, nodeIDOne, renewedInfo.Hostname)
+		assert.Equal(t, database.PodRPCAddr(nodeIDOne), renewedInfo.RPCAddr)
 		assert.NotEqual(t, info.LeaseToken, renewedInfo.LeaseToken) // Token should change
 		// NOTE(raararaara): Because expires_at is based on MongoDB server time ($$NOW),
 		// and renewal requests can occur within the same millisecond,
 		// expires_at may not strictly increase. Token change confirms renewal.
 		assert.True(t, renewedInfo.ExpiresAt.Compare(info.ExpiresAt) >= 0) // Expiry should extend
-		assert.Equal(t, info.Term, renewedInfo.Term)                       // Term should stay same
 	})
 
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -150,7 +147,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should fail for wrong node with token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -165,7 +162,7 @@ func RunLeadershipTest(
 
 	t.Run("FindLeadership should return current leader", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearLeadership(ctx))
+		require.NoError(t, db.ClearClusterNodes(ctx))
 
 		// No leadership initially
 		info, err := db.FindLeadership(ctx)
@@ -183,9 +180,40 @@ func RunLeadershipTest(
 		require.NoError(t, err)
 		require.NotNil(t, info)
 
-		assert.Equal(t, acquired.Hostname, info.Hostname)
+		assert.Equal(t, acquired.RPCAddr, info.RPCAddr)
 		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
-		assert.Equal(t, acquired.Term, info.Term)
+	})
+
+	t.Run("Leader should be only one", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.ClearClusterNodes(ctx))
+
+		const numNodes = 3
+		const leaseDuration = 30 * gotime.Second
+		const renewalInterval = 5 * gotime.Second
+
+		for i := range numNodes {
+			_, err := db.TryLeadership(ctx, fmt.Sprintf("node-%d", i), "", leaseDuration)
+			require.NoError(t, err)
+		}
+
+		assert.Eventually(t, func() bool {
+			res, err := db.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			return numNodes == len(res)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
+
+		infos, err := db.FindActiveClusterNodes(ctx, renewalInterval)
+		require.NoError(t, err)
+		require.Equal(t, numNodes, len(infos))
+
+		var leaderCount = 0
+		for _, info := range infos {
+			if info.IsLeader == true {
+				leaderCount++
+			}
+		}
+		assert.Equal(t, 1, leaderCount)
 	})
 }
 

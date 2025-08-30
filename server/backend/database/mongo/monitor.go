@@ -108,7 +108,7 @@ func (m *QueryMonitor) isExpectedFailure(evt *event.CommandFailedEvent) bool {
 	failureStr := evt.Failure.Error()
 
 	// Check for duplicate key errors which are expected in leadership competition
-	if strings.Contains(failureStr, "E11000 duplicate key") && strings.Contains(failureStr, "leaderships") {
+	if strings.Contains(failureStr, "E11000 duplicate key") && strings.Contains(failureStr, "clusternodes") {
 		return true
 	}
 

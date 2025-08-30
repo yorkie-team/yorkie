@@ -36,7 +36,7 @@ type LeadershipManager struct {
 
 	// State management
 	isLeader     atomic.Bool
-	currentLease atomic.Pointer[database.LeadershipInfo]
+	currentLease atomic.Pointer[database.ClusterNodeInfo]
 	stopCh       chan struct{}
 	wg           sync.WaitGroup
 	mutex        sync.RWMutex
@@ -59,7 +59,7 @@ func DefaultLeadershipConfig() *LeadershipConfig {
 // NewLeadershipManager creates a new leadership manager.
 func NewLeadershipManager(db database.Database, hostname string, conf *LeadershipConfig) *LeadershipManager {
 	if hostname == "" {
-		panic("hostname must not be empty")
+		panic("rpcAddr must not be empty")
 	}
 
 	if conf == nil {
@@ -105,12 +105,12 @@ func (lm *LeadershipManager) IsLeader() bool {
 }
 
 // Leader returns the current leader information.
-func (lm *LeadershipManager) Leader(ctx context.Context) (*database.LeadershipInfo, error) {
+func (lm *LeadershipManager) Leader(ctx context.Context) (*database.ClusterNodeInfo, error) {
 	return lm.database.FindLeadership(ctx)
 }
 
 // CurrentLease returns the current lease information if this node is the leader.
-func (lm *LeadershipManager) CurrentLease() *database.LeadershipInfo {
+func (lm *LeadershipManager) CurrentLease() *database.ClusterNodeInfo {
 	return lm.currentLease.Load()
 }
 
@@ -137,17 +137,23 @@ func (lm *LeadershipManager) leadershipLoop(ctx context.Context) {
 
 // handleLeadershipCycle handles one cycle of leadership management.
 func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
+	rpcAddr := database.PodRPCAddr(lm.hostname)
+
 	if lm.isLeader.Load() {
 		// We are the leader, try to renew the lease
 		if err := lm.renewLease(ctx); err != nil {
 			if logger := logging.From(ctx); logger != nil {
 				logger.Warn("failed to renew leadership lease", "error", err)
 			}
+
 			lm.becomeFollower()
+			if logger := logging.From(ctx); logger != nil {
+				logger.Warn("failed to become follower", err)
+			}
 		}
 	} else {
 		// We are not the leader, try to acquire leadership
-		if err := lm.tryAcquireLeadership(ctx); err != nil {
+		if err := lm.tryAcquireLeadership(ctx, rpcAddr); err != nil {
 			if logger := logging.From(ctx); logger != nil {
 				logger.Debug("failed to acquire leadership", "error", err)
 			}
@@ -156,17 +162,22 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 }
 
 // tryAcquireLeadership attempts to acquire leadership.
-func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
+func (lm *LeadershipManager) tryAcquireLeadership(
+	ctx context.Context,
+	rpcAddr string,
+) error {
 	lease, err := lm.database.TryLeadership(ctx, lm.hostname, "", lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
 
-	if lease.Hostname == lm.hostname {
+	if lease.RPCAddr == rpcAddr {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
-			logger.Infof("leadership acquired term: %d, expires_at: %s", lease.Term, lease.ExpiresAt)
+			logger.Infof("leadership acquired, expires_at: %s", lease.ExpiresAt)
 		}
+	} else {
+		lm.becomeFollower()
 	}
 
 	return nil
@@ -193,7 +204,7 @@ func (lm *LeadershipManager) renewLease(ctx context.Context) error {
 }
 
 // becomeLeader transitions to leader state.
-func (lm *LeadershipManager) becomeLeader(lease *database.LeadershipInfo) {
+func (lm *LeadershipManager) becomeLeader(lease *database.ClusterNodeInfo) {
 	lm.isLeader.Store(true)
 	lm.currentLease.Store(lease)
 }
