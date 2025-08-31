@@ -317,7 +317,7 @@ func post(t *testing.T, project *types.Project, url, body string) []byte {
 	assert.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(
-		"Authorization",
+		types.AuthorizationKey,
 		fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
 	)
 
