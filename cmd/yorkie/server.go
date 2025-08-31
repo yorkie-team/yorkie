@@ -102,7 +102,6 @@ func newServerCmd() *cobra.Command {
 			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
-			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
@@ -402,12 +401,6 @@ func init() {
 		server.DefaultUseDefaultProject,
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
-	)
-	cmd.Flags().DurationVar(
-		&clientDeactivateThreshold,
-		"client-deactivate-threshold",
-		server.DefaultClientDeactivateThreshold,
-		"Deactivate threshold of clients in specific project for housekeeping.",
 	)
 	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotThreshold,

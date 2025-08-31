@@ -54,7 +54,6 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 
 	assertDurationEqual(t, server.DefaultAdminTokenDuration, conf.Backend.AdminTokenDuration)
 	assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
-	assertDurationEqual(t, server.DefaultClientDeactivateThreshold, conf.Backend.ClientDeactivateThreshold)
 	assert.Equal(t, int64(server.DefaultSnapshotThreshold), conf.Backend.SnapshotThreshold)
 	assert.Equal(t, int64(server.DefaultSnapshotInterval), conf.Backend.SnapshotInterval)
 	assert.Equal(t, server.DefaultSnapshotDisableGC, conf.Backend.SnapshotDisableGC)

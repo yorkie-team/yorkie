@@ -61,12 +61,11 @@ const (
 	DefaultGitHubTokenURL      = "https://github.com/login/oauth/access_token" // #nosec G101
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
-	DefaultUseDefaultProject         = true
-	DefaultClientDeactivateThreshold = 24 * time.Hour
-	DefaultSnapshotThreshold         = 500
-	DefaultSnapshotInterval          = 500
-	DefaultSnapshotDisableGC         = false
-	DefaultSnapshotCacheSize         = 1000
+	DefaultUseDefaultProject = true
+	DefaultSnapshotThreshold = 500
+	DefaultSnapshotInterval  = 500
+	DefaultSnapshotDisableGC = false
+	DefaultSnapshotCacheSize = 1000
 
 	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
 	DefaultAuthWebhookMaxRetries      = 10
@@ -228,10 +227,6 @@ func (c *Config) ensureBackendDefaultValue() {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
 
-	if c.Backend.ClientDeactivateThreshold == "" {
-		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold.String()
-	}
-
 	if c.Backend.SnapshotThreshold == 0 {
 		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
 	}
@@ -346,10 +341,9 @@ func newConfig(port int, profilingPort int) *Config {
 			CompactionMinChanges: DefaultHousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			UseDefaultProject:         DefaultUseDefaultProject,
-			ClientDeactivateThreshold: DefaultClientDeactivateThreshold.String(),
-			SnapshotThreshold:         DefaultSnapshotThreshold,
-			SnapshotInterval:          DefaultSnapshotInterval,
+			UseDefaultProject: DefaultUseDefaultProject,
+			SnapshotThreshold: DefaultSnapshotThreshold,
+			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 	}
 }

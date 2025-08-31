@@ -21,12 +21,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
 // ErrEmptyProjectFields is returned when all the fields are empty.
 var ErrEmptyProjectFields = errors.New("updatable project fields are empty")
+
+const (
+	DefaultClientDeactivateThreshold = 24 * time.Hour
+)
 
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {

@@ -174,7 +174,7 @@ func New(
 			context.Background(),
 			conf.AdminUser,
 			conf.AdminPassword,
-			conf.ClientDeactivateThreshold,
+			types.DefaultClientDeactivateThreshold.String(),
 		)
 		if err != nil {
 			return nil, err
