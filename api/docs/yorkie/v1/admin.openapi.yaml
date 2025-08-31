@@ -1644,7 +1644,6 @@ components:
     yorkie.v1.ListSchemasRequest:
       additionalProperties: false
       description: ""
-      properties:
       title: ListSchemasRequest
       type: object
     yorkie.v1.ListSchemasResponse:

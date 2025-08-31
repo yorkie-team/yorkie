@@ -1,17 +1,17 @@
 /*
-* Copyright 2022 The Yorkie Authors. All rights reserved.
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package admin
@@ -50,21 +50,13 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
-		// Set the Bearer token by default.
-		req.Header().Set(
-			types.AuthorizationKey,
-			fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token),
-		)
-
-		// If a project exists in the context, overwrite the header with the API-Key.
-		project, ok := projects.TryFrom(ctx)
-		if ok {
-			req.Header().Set(
-				types.AuthorizationKey,
-				fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
-			)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		if projects.HasProject(ctx) {
+			project := projects.From(ctx)
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
 		}
 
+		req.Header().Add(types.AuthorizationKey, authHeader)
 		req.Header().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 
 		return next(ctx, req)
@@ -79,21 +71,13 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 
-		// Set the Bearer token by default.
-		conn.RequestHeader().Set(
-			types.AuthorizationKey,
-			fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token),
-		)
-
-		// If a project exists in the context, overwrite the header with the API-Key.
-		project, ok := projects.TryFrom(ctx)
-		if ok {
-			conn.RequestHeader().Set(
-				types.AuthorizationKey,
-				fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
-			)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		if projects.HasProject(ctx) {
+			project := projects.From(ctx)
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
 		}
 
+		conn.RequestHeader().Add(types.AuthorizationKey, authHeader)
 		conn.RequestHeader().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 
 		return conn

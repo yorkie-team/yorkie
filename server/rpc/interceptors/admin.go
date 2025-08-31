@@ -209,8 +209,8 @@ func (i *AdminServiceInterceptor) authenticate(
 	scheme := parts[0]
 	param := parts[1]
 
-	switch scheme {
-	case types.AuthSchemeBearer:
+	switch {
+	case strings.EqualFold(scheme, types.AuthSchemeBearer):
 		// If the scheme is Bearer, verify the token and retrieve the user.
 		claims, err := i.tokenManager.Verify(param)
 		if err == nil {
@@ -220,7 +220,7 @@ func (i *AdminServiceInterceptor) authenticate(
 				return ctx, nil
 			}
 		}
-	case types.AuthSchemeAPIKey:
+	case strings.EqualFold(scheme, types.AuthSchemeAPIKey):
 		// If the scheme is API-Key, verify the secret key and retrieve the project.
 		project, err := projects.ProjectFromSecretKey(ctx, i.backend, param)
 		if err == nil {

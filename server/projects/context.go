@@ -35,13 +35,7 @@ func With(ctx context.Context, project *types.Project) context.Context {
 	return context.WithValue(ctx, projectKey{}, project)
 }
 
-// TryFrom returns the project from the context.
-// It also returns a boolean indicating whether the project was found.
-func TryFrom(ctx context.Context) (*types.Project, bool) {
-	project, ok := ctx.Value(projectKey{}).(*types.Project)
-	if !ok || project == nil {
-		return nil, false
-	}
-
-	return project, true
+func HasProject(ctx context.Context) bool {
+	_, ok := ctx.Value(projectKey{}).(*types.Project)
+	return ok
 }
