@@ -46,7 +46,6 @@ func benchmarkGetDocuments(
 	b.StopTimer()
 	docKeys = docKeys[:cnt]
 	docRequest := &api.GetDocumentsRequest{
-		ProjectName:      "default",
 		DocumentKeys:     docKeys,
 		IncludeRoot:      includeRoot,
 		IncludePresences: includePresences,
