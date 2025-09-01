@@ -51,6 +51,7 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
+	clientCache *lru.Cache[types.ClientRefKey, *database.ClientInfo]
 	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
 	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
 	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
@@ -98,17 +99,22 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
+	clientCache, err := lru.New[types.ClientRefKey, *database.ClientInfo](10000)
+	if err != nil {
+		return nil, fmt.Errorf("initialize client cache: %w", err)
+	}
+
 	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize document cache: %w", err)
 	}
 
-	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](1000)
+	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](10000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
 
-	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](10000)
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
@@ -116,8 +122,10 @@ func Dial(conf *Config) (*Client, error) {
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
-		config:      conf,
-		client:      client,
+		config: conf,
+		client: client,
+
+		clientCache: clientCache,
 		docCache:    docCache,
 		changeCache: changeCache,
 		vectorCache: vectorCache,
@@ -130,7 +138,9 @@ func (c *Client) Close() error {
 		return fmt.Errorf("close MongoDB client: %w", err)
 	}
 
+	c.clientCache.Purge()
 	c.docCache.Purge()
+	c.changeCache.Purge()
 	c.vectorCache.Purge()
 
 	return nil
@@ -819,12 +829,15 @@ func (c *Client) ActivateClient(
 		})
 	}
 
-	clientInfo := database.ClientInfo{}
-	if err = result.Decode(&clientInfo); err != nil {
+	info := &database.ClientInfo{}
+	if err = result.Decode(info); err != nil {
 		return nil, fmt.Errorf("activate client of %s: %w", key, err)
 	}
 
-	return &clientInfo, nil
+	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
+	c.clientCache.Add(refKey, info)
+
+	return info, nil
 }
 
 // TryAttaching updates the status of the document to Attaching to prevent
@@ -861,6 +874,8 @@ func (c *Client) TryAttaching(
 		}
 		return nil, fmt.Errorf("try attaching %s to %s : %w", docID, refKey.ClientID, err)
 	}
+
+	c.clientCache.Add(refKey, info)
 
 	return info, nil
 }
@@ -908,28 +923,34 @@ func (c *Client) DeactivateClient(
 		return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, err)
 	}
 
+	c.clientCache.Add(refKey, &info)
+
 	return &info, nil
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	if cached, ok := c.clientCache.Get(refKey); ok {
+		return cached, nil
+	}
+
+	result := c.collection(ColClients).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
-		"$set": bson.M{
-			"updated_at": gotime.Now(),
-		},
 	})
 
-	clientInfo := database.ClientInfo{}
-	if err := result.Decode(&clientInfo); err != nil {
+	info := database.ClientInfo{}
+	if err := result.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("find client of %s: %w", refKey, database.ErrClientNotFound)
 		}
+
+		return nil, fmt.Errorf("find client of %s: %w", refKey, err)
 	}
 
-	return &clientInfo, nil
+	c.clientCache.Add(refKey, &info)
+
+	return &info, nil
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
@@ -939,6 +960,11 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
+	c.clientCache.Remove(types.ClientRefKey{
+		ProjectID: clientInfo.ProjectID,
+		ClientID:  clientInfo.ID,
+	})
+
 	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf(
@@ -1087,12 +1113,17 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
-	var clientInfos []*database.ClientInfo
-	if err := cursor.All(ctx, &clientInfos); err != nil {
+	var infos []*database.ClientInfo
+	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
-	return clientInfos, nil
+	for _, info := range infos {
+		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
+		c.clientCache.Add(refKey, info)
+	}
+
+	return infos, nil
 }
 
 // FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
