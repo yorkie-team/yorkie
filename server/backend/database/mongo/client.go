@@ -24,7 +24,6 @@ import (
 	"strings"
 	gotime "time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -32,6 +31,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -51,10 +51,11 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	clientCache *lru.Cache[types.ClientRefKey, *database.ClientInfo]
-	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
-	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
-	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	clientCache  *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
+	docCache     *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
+	changeCache  *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	vectorCache  *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	cacheManager *cache.Manager
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -99,37 +100,53 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	clientCache, err := lru.New[types.ClientRefKey, *database.ClientInfo](10000)
+	clientCache, err := cache.NewLRUWithStats[types.ClientRefKey, *database.ClientInfo](10000, "clients")
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
 
-	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
+	docCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.DocInfo](1000, "docs")
 	if err != nil {
 		return nil, fmt.Errorf("initialize document cache: %w", err)
 	}
 
-	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](10000)
+	changeCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](10000, "changes")
 	if err != nil {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
 
-	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](10000)
+	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](10000, "vectors")
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
 
+	// Create cache manager and register all caches
+	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
+	cacheManager.RegisterCache(clientCache)
+	cacheManager.RegisterCache(docCache)
+	cacheManager.RegisterCache(changeCache)
+	cacheManager.RegisterCache(vectorCache)
+
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
-	return &Client{
+	yorkieClient := &Client{
 		config: conf,
 		client: client,
+
+		cacheManager: cacheManager,
 
 		clientCache: clientCache,
 		docCache:    docCache,
 		changeCache: changeCache,
 		vectorCache: vectorCache,
-	}, nil
+	}
+
+	// Start cache statistics logging if enabled
+	if conf.CacheStatsEnabled {
+		go cacheManager.StartPeriodicLogging(context.Background())
+	}
+
+	return yorkieClient, nil
 }
 
 // Close all resources of this client.
@@ -137,6 +154,8 @@ func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
 		return fmt.Errorf("close MongoDB client: %w", err)
 	}
+
+	c.cacheManager.Stop()
 
 	c.clientCache.Purge()
 	c.docCache.Purge()
