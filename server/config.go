@@ -86,6 +86,7 @@ const (
 
 	DefaultHostname    = ""
 	DefaultGatewayAddr = "localhost:8080"
+	DefaultPeers       = ""
 )
 
 // Config is the configuration for creating a Yorkie instance.

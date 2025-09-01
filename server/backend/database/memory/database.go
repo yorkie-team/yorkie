@@ -69,7 +69,7 @@ type clusterNodeRecord struct {
 // If leaseToken is provided, it attempts to renew the existing lease.
 func (d *DB) TryLeadership(
 	ctx context.Context,
-	hostname string,
+	rpcAddr string,
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.ClusterNodeInfo, error) {
@@ -78,7 +78,6 @@ func (d *DB) TryLeadership(
 
 	now := gotime.Now()
 	expiresAt := now.Add(leaseDuration)
-	rpcAddr := database.PodRPCAddr(hostname)
 
 	// Find existing leadership
 	it, err := txn.Get(tblClusterNodes, "is_leader", true)

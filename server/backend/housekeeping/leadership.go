@@ -30,7 +30,7 @@ import (
 // LeadershipManager manages leader election and lease renewal.
 type LeadershipManager struct {
 	database        database.Database
-	hostname        string
+	rpcAddr         string
 	leaseDuration   time.Duration
 	renewalInterval time.Duration
 
@@ -57,8 +57,8 @@ func DefaultLeadershipConfig() *LeadershipConfig {
 }
 
 // NewLeadershipManager creates a new leadership manager.
-func NewLeadershipManager(db database.Database, hostname string, conf *LeadershipConfig) *LeadershipManager {
-	if hostname == "" {
+func NewLeadershipManager(db database.Database, rpcAddr string, conf *LeadershipConfig) *LeadershipManager {
+	if rpcAddr == "" {
 		panic("rpcAddr must not be empty")
 	}
 
@@ -68,7 +68,7 @@ func NewLeadershipManager(db database.Database, hostname string, conf *Leadershi
 
 	return &LeadershipManager{
 		database:        db,
-		hostname:        hostname,
+		rpcAddr:         rpcAddr,
 		leaseDuration:   conf.LeaseDuration,
 		renewalInterval: conf.RenewalInterval,
 		stopCh:          make(chan struct{}),
@@ -85,7 +85,7 @@ func (lm *LeadershipManager) Start(ctx context.Context) error {
 	go lm.leadershipLoop(ctx)
 
 	if logger := logging.From(ctx); logger != nil {
-		logger.Infof("leadership manager started: %s", lm.hostname)
+		logger.Infof("leadership manager started: %s", lm.rpcAddr)
 	}
 	return nil
 }
@@ -137,8 +137,6 @@ func (lm *LeadershipManager) leadershipLoop(ctx context.Context) {
 
 // handleLeadershipCycle handles one cycle of leadership management.
 func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
-	rpcAddr := database.PodRPCAddr(lm.hostname)
-
 	if lm.isLeader.Load() {
 		// We are the leader, try to renew the lease
 		if err := lm.renewLease(ctx); err != nil {
@@ -153,7 +151,7 @@ func (lm *LeadershipManager) handleLeadershipCycle(ctx context.Context) {
 		}
 	} else {
 		// We are not the leader, try to acquire leadership
-		if err := lm.tryAcquireLeadership(ctx, rpcAddr); err != nil {
+		if err := lm.tryAcquireLeadership(ctx, lm.rpcAddr); err != nil {
 			if logger := logging.From(ctx); logger != nil {
 				logger.Debug("failed to acquire leadership", "error", err)
 			}
@@ -166,7 +164,7 @@ func (lm *LeadershipManager) tryAcquireLeadership(
 	ctx context.Context,
 	rpcAddr string,
 ) error {
-	lease, err := lm.database.TryLeadership(ctx, lm.hostname, "", lm.leaseDuration)
+	lease, err := lm.database.TryLeadership(ctx, lm.rpcAddr, "", lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
@@ -190,7 +188,7 @@ func (lm *LeadershipManager) renewLease(ctx context.Context) error {
 		return fmt.Errorf("no current lease to renew")
 	}
 
-	lease, err := lm.database.TryLeadership(ctx, lm.hostname, currentLease.LeaseToken, lm.leaseDuration)
+	lease, err := lm.database.TryLeadership(ctx, lm.rpcAddr, currentLease.LeaseToken, lm.leaseDuration)
 	if err != nil {
 		return fmt.Errorf("renew leadership: %w", err)
 	}

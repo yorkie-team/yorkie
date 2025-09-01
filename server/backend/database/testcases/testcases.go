@@ -62,7 +62,7 @@ func RunLeadershipTest(
 
 		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
 		require.NoError(t, err)
-		assert.Equal(t, database.PodRPCAddr(nodeIDOne), info.RPCAddr)
+		assert.Equal(t, nodeIDOne, info.RPCAddr)
 		assert.NotEmpty(t, info.LeaseToken)
 		assert.False(t, info.IsExpired())
 	})
@@ -82,7 +82,7 @@ func RunLeadershipTest(
 		require.NoError(t, err)
 
 		// Should return the first node's leadership
-		assert.Equal(t, database.PodRPCAddr(nodeIDOne), info2.RPCAddr)
+		assert.Equal(t, nodeIDOne, info2.RPCAddr)
 		assert.Equal(t, info1.LeaseToken, info2.LeaseToken)
 	})
 
@@ -105,7 +105,7 @@ func RunLeadershipTest(
 		info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
 		require.NoError(t, err)
 
-		assert.Equal(t, database.PodRPCAddr(nodeIDTwo), info.RPCAddr)
+		assert.Equal(t, nodeIDTwo, info.RPCAddr)
 	})
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
@@ -122,7 +122,7 @@ func RunLeadershipTest(
 		renewedInfo, err := db.TryLeadership(ctx, nodeIDOne, info.LeaseToken, leaseDuration)
 		require.NoError(t, err)
 
-		assert.Equal(t, database.PodRPCAddr(nodeIDOne), renewedInfo.RPCAddr)
+		assert.Equal(t, nodeIDOne, renewedInfo.RPCAddr)
 		assert.NotEqual(t, info.LeaseToken, renewedInfo.LeaseToken) // Token should change
 		// NOTE(raararaara): Because expires_at is based on MongoDB server time ($$NOW),
 		// and renewal requests can occur within the same millisecond,

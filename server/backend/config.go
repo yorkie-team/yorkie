@@ -99,6 +99,9 @@ type Config struct {
 
 	// GatewayAddr is the address of the gateway server.
 	GatewayAddr string `yaml:"GatewayAddr"`
+
+	// Peers is the rpc address of the given server.
+	Peers string `yaml:"Peers"`
 }
 
 // Validate validates this config.

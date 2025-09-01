@@ -141,13 +141,12 @@ func (c *Client) Close() error {
 // If leaseToken is provided, it attempts to renew the existing lease.
 func (c *Client) TryLeadership(
 	ctx context.Context,
-	hostname,
+	rpcAddr,
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.ClusterNodeInfo, error) {
 	leaseMS := leaseDuration.Milliseconds()
 
-	rpcAddr := database.PodRPCAddr(hostname)
 	if leaseToken == "" {
 		res, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
 		if err == nil && res.RPCAddr != rpcAddr {
