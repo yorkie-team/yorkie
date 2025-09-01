@@ -19,17 +19,6 @@ package types
 
 import "time"
 
-// AccessScope is the scope of access for a user.
-type AccessScope string
-
-const (
-	// AccessScopeAdmin is the full administrative access scope for a user.
-	AccessScopeAdmin AccessScope = "admin"
-
-	// AccessScopeProject is the project-specific access scope for a user.
-	AccessScopeProject AccessScope = "project"
-)
-
 // User is a user that can access the project.
 type User struct {
 	// ID is the unique ID of the user.
@@ -44,7 +33,4 @@ type User struct {
 
 	// CreatedAt is the time when the user was created.
 	CreatedAt time.Time `json:"created_at"`
-
-	// AccessScope is the scope of access for the user.
-	AccessScope AccessScope `json:"access_scope"`
 }

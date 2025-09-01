@@ -26,9 +26,11 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -44,7 +46,6 @@ func benchmarkGetDocuments(
 	b.StopTimer()
 	docKeys = docKeys[:cnt]
 	docRequest := &api.GetDocumentsRequest{
-		ProjectName:      "default",
 		DocumentKeys:     docKeys,
 		IncludeRoot:      includeRoot,
 		IncludePresences: includePresences,
@@ -92,6 +93,17 @@ func BenchmarkGetDocuments(b *testing.B) {
 		))
 	assert.NoError(b, err)
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	resp1, err := testAdminClient.GetProject(
+		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: "default",
+		},
+		))
+	assert.NoError(b, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx = projects.With(context.Background(), project)
 
 	var docKeys []string
 	for i := range 1000 {

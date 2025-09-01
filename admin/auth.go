@@ -18,11 +18,13 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
+	"github.com/yorkie-team/yorkie/server/projects"
 )
 
 // AuthInterceptor is an interceptor for authentication.
@@ -48,7 +50,13 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
-		req.Header().Add(types.AuthorizationKey, i.token)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		if projects.HasProject(ctx) {
+			project := projects.From(ctx)
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
+		}
+
+		req.Header().Add(types.AuthorizationKey, authHeader)
 		req.Header().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 
 		return next(ctx, req)
@@ -63,7 +71,13 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
 
-		conn.RequestHeader().Add(types.AuthorizationKey, i.token)
+		authHeader := fmt.Sprintf("%s %s", types.AuthSchemeBearer, i.token)
+		if projects.HasProject(ctx) {
+			project := projects.From(ctx)
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey)
+		}
+
+		conn.RequestHeader().Add(types.AuthorizationKey, authHeader)
 		conn.RequestHeader().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 
 		return conn
