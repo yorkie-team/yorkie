@@ -35,6 +35,12 @@ type Config struct {
 	// MonitoringSlowQueryThreshold is the threshold in milliseconds to log slow queries.
 	// If a query takes longer than this threshold, it will be logged as a slow query.
 	MonitoringSlowQueryThreshold string `yaml:"MonitoringSlowQueryThreshold"`
+
+	// CacheStatsEnabled determines whether cache statistics logging is enabled.
+	CacheStatsEnabled bool `yaml:"CacheStatsEnabled"`
+
+	// CacheStatsInterval is the interval for logging cache statistics.
+	CacheStatsInterval string `yaml:"CacheStatsInterval"`
 }
 
 // Validate returns an error if the provided Config is invalidated.
@@ -55,6 +61,16 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if c.CacheStatsInterval != "" {
+		if _, err := time.ParseDuration(c.CacheStatsInterval); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for cache stats interval: %w`,
+				c.CacheStatsInterval,
+				err,
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -62,7 +78,7 @@ func (c *Config) Validate() error {
 func (c *Config) ParseConnectionTimeout() time.Duration {
 	result, err := time.ParseDuration(c.ConnectionTimeout)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse connection timeout: %w", err)
+		fmt.Fprintf(os.Stderr, "parse connection timeout: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -73,7 +89,22 @@ func (c *Config) ParseConnectionTimeout() time.Duration {
 func (c *Config) ParsePingTimeout() time.Duration {
 	result, err := time.ParseDuration(c.PingTimeout)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse ping timeout: %w", err)
+		fmt.Fprintf(os.Stderr, "parse ping timeout: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseCacheStatsInterval returns cache stats interval duration.
+func (c *Config) ParseCacheStatsInterval() time.Duration {
+	if c.CacheStatsInterval == "" {
+		return 30 * time.Second // default to 30 seconds
+	}
+
+	result, err := time.ParseDuration(c.CacheStatsInterval)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse cache stats interval: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -89,7 +120,7 @@ func (c *Config) ParseMonitoringConfig() *MonitorConfig {
 	if c.MonitoringSlowQueryThreshold != "" {
 		duration, err := time.ParseDuration(c.MonitoringSlowQueryThreshold)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "parse slow query threshold: %w", err)
+			fmt.Fprintf(os.Stderr, "parse slow query threshold: %v\n", err)
 			os.Exit(1)
 		}
 		conf.SlowQueryThreshold = duration
