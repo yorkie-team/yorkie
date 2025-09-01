@@ -509,9 +509,9 @@ func init() {
 		"Gateway address",
 	)
 	cmd.Flags().StringVar(
-		&conf.Backend.Peers,
+		&conf.Backend.PeerDNSSuffix,
 		"peers",
-		server.DefaultPeers,
+		server.DefaultPeerDNSSuffix,
 		"Pod RPC address",
 	)
 	cmd.Flags().StringVar(

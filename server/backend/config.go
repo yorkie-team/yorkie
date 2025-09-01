@@ -100,8 +100,8 @@ type Config struct {
 	// GatewayAddr is the address of the gateway server.
 	GatewayAddr string `yaml:"GatewayAddr"`
 
-	// Peers is the rpc address of the given server.
-	Peers string `yaml:"Peers"`
+	// PeerDNSSuffix is the DNS suffix appended to Hostname to form this pod's RPC FQDN.
+	PeerDNSSuffix string `yaml:"PeerDNSSuffix"`
 }
 
 // Validate validates this config.

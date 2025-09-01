@@ -64,7 +64,7 @@ spec:
           emptyDir: { }
       serviceAccountName: yorkie-db-provisioning-job-account
       {{ end }}
-      subdomain: yorkie-peers
+      subdomain: {{ .Values.yorkie.headlessServiceName }}
       containers:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"

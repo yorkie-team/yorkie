@@ -95,7 +95,11 @@ func New(
 		}
 		conf.Hostname = hostname
 	}
-	podRPCAddr := fmt.Sprintf("%s.%s", conf.Hostname, conf.Peers)
+
+	podRPCAddr := conf.Hostname
+	if conf.PeerDNSSuffix != "" {
+		podRPCAddr = fmt.Sprintf("%s.%s", conf.Hostname, conf.PeerDNSSuffix)
+	}
 
 	// 02. Create the cache manager, pubsub, and lockers.
 	cacheManager, err := cache.New(cache.Options{
