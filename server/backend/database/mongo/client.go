@@ -1309,6 +1309,7 @@ func (c *Client) FindDocInfosByIDs(
 	if len(docIDs) == 0 {
 		return nil, nil
 	}
+
 	filter := bson.M{
 		"project_id": projectID,
 		"_id": bson.M{

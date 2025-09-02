@@ -112,11 +112,23 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
+
+	if req.Msg.Synchronous {
+		if _, err := clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+	}
+
+	// Use DeactivateAsync to handle cases where browser window is closed
+	// and the context might be cancelled before deactivation completes
+	if err = clients.DeactivateAsync(s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 

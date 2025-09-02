@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -66,32 +67,60 @@ func Deactivate(
 		}
 		docIDs = append(docIDs, docID)
 	}
-	if len(docIDs) > 0 {
-		docInfos, err := be.DB.FindDocInfosByIDs(ctx, project.ID, docIDs)
-		if err != nil {
+
+	docInfos, err := be.DB.FindDocInfosByIDs(ctx, project.ID, docIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(docInfos) != len(docIDs) {
+		return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
+			len(docIDs), len(docInfos))
+	}
+
+	actorID, err := info.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, info := range docInfos {
+		if err := be.ClusterClient.DetachDocument(
+			ctx,
+			project,
+			actorID,
+			info.ID,
+			info.Key,
+		); err != nil {
 			return nil, err
-		}
-		if len(docInfos) != len(docIDs) {
-			return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
-				len(docIDs), len(docInfos))
-		}
-		actorID, err := info.ID.ToActorID()
-		if err != nil {
-			return nil, err
-		}
-		for _, docInfo := range docInfos {
-			if err := be.ClusterClient.DetachDocument(
-				ctx,
-				project,
-				actorID,
-				docInfo.ID,
-				docInfo.Key,
-			); err != nil {
-				return nil, err
-			}
 		}
 	}
+
 	return be.DB.DeactivateClient(ctx, refKey)
+}
+
+// DeactivateAsync deactivates the given client asynchronously.
+// This function is designed to handle browser window close scenarios
+// where the original context might be cancelled. It creates a new
+// background context to ensure the deactivation process completes
+// even if the original request context is cancelled.
+func DeactivateAsync(
+	be *backend.Backend,
+	project *types.Project,
+	refKey types.ClientRefKey,
+) error {
+	// Create a background context that won't be cancelled when the original context is cancelled
+	// This ensures deactivation completes even if the browser window is closed
+	bgCtx := context.Background()
+
+	// Start deactivation in a goroutine
+	go func() {
+		if _, err := Deactivate(bgCtx, be, project, refKey); err != nil {
+			// Log the error since we can't return it from a goroutine
+			logging.From(bgCtx).Errorf("failed to deactivate client asynchronously: %v", err)
+		}
+	}()
+
+	return nil
 }
 
 // AttachDocument attaches the given document to the client.
