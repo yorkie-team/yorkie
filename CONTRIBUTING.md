@@ -33,7 +33,7 @@ Thanks for contributing!
 
 Below are needed for developing and building Yorkie.
 
-- [Go](https://golang.org) (version 1.18+)
+- [Go](https://golang.org) (version 1.23+)
 - [Protobuf Compiler](https://github.com/protocolbuffers/protobuf/releases) (version 3.4.0+)
 - [Docker](https://www.docker.com/)
 
