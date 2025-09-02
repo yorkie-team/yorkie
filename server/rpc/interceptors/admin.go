@@ -222,7 +222,10 @@ func (i *AdminServiceInterceptor) authenticate(
 		}
 	case strings.EqualFold(scheme, types.AuthSchemeAPIKey):
 		// If the scheme is API-Key, verify the secret key and retrieve the project.
-		project, err := projects.ProjectFromSecretKey(ctx, i.backend, param)
+		if strings.TrimSpace(param) == "" && !i.backend.Config.UseDefaultProject {
+			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("secret key is not provided"))
+		}
+		project, err := projects.ProjectFromSecretKey(ctx, i.backend, strings.TrimSpace(param))
 		if err == nil {
 			ctx = projects.With(ctx, project)
 			return ctx, nil
