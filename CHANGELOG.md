@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.28] - 2025-09-02
+
+### Added
+
+- Introduce client cache for faster client retrieval by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1472
+- Enhance deactivation with asynchronous opts by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1473
+
+### Changed
+
+- Introduce auth scheme and remove projectName from API requests by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1471
+
 ## [v0.6.27] - 2025-08-29
 
 ### Added
