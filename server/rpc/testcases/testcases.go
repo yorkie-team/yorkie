@@ -72,7 +72,7 @@ func RunActivateAndDeactivateClientTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// invalid argument
@@ -84,14 +84,14 @@ func RunActivateAndDeactivateClientTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID, Synchronous: true}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(time.ErrInvalidHexString), converter.ErrorCodeOf(err))
 
 	// client not found
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID, Synchronous: true}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
 }
@@ -212,7 +212,7 @@ func RunAttachAndDetachDocumentTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to attach the document with a deactivated client
@@ -406,7 +406,7 @@ func RunPushPullChangeTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to push/pull with deactivated client
@@ -582,7 +582,7 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to remove document with a deactivated client
@@ -1574,7 +1574,7 @@ func RunDeactivateClientWithAttachingDocumentTest(
 	// 03. Deactivate via RPC
 	_, err = testClient.DeactivateClient(
 		ctx,
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}),
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}),
 	)
 	assert.NoError(t, err)
 

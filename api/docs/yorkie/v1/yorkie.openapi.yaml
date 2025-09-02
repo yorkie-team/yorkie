@@ -550,6 +550,11 @@ components:
           description: ""
           title: client_id
           type: string
+        synchronous:
+          additionalProperties: false
+          description: ""
+          title: synchronous
+          type: boolean
       title: DeactivateClientRequest
       type: object
     yorkie.v1.DeactivateClientResponse:
