@@ -9,6 +9,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Add SecretKey Fallback for UseDefaultProject by @kokodak in https://github.com/yorkie-team/yorkie/pull/1475
 - Copy deep cached client info by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1476
+- Ignore test helpers or generated files from test coverage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1479
+- Ensure deactivation by adding skipCache to FindClientInfoByRefKey by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1480
 
 ## [v0.6.28] - 2025-09-02
 
