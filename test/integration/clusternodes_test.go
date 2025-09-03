@@ -43,6 +43,9 @@ func TestClusterNodes(t *testing.T) {
 			assert.NoError(t, svr.Start())
 			return svr, conf.Backend.Hostname
 		}
+		dummy, _ := startServer("dummy")
+		assert.NoError(t, dummy.ClearClusterNodes(ctx))
+		assert.NoError(t, dummy.Shutdown(true))
 
 		svr1, hostname1 := startServer("node-1")
 		svr2, hostname2 := startServer("node-2")
@@ -52,9 +55,10 @@ func TestClusterNodes(t *testing.T) {
 		res, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(res))
-		assert.Eventually(t, func() bool {
-			return res[0].IsLeader
-		}, renewalInterval, 4*renewalInterval)
+		assert.True(t, res[0].IsLeader)
+		//assert.Eventually(t, func() bool {
+		//	return res[0].IsLeader
+		//}, renewalInterval, 4*renewalInterval)
 
 		leader := res[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
@@ -75,9 +79,10 @@ func TestClusterNodes(t *testing.T) {
 		res, err = followerSvr.FindActiveClusterNodes(ctx, renewalInterval)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(res))
-		assert.Eventually(t, func() bool {
-			return res[0].IsLeader
-		}, renewalInterval, 4*renewalInterval)
+		assert.True(t, res[0].IsLeader)
+		//assert.Eventually(t, func() bool {
+		//	return res[0].IsLeader
+		//}, renewalInterval, 4*renewalInterval)
 		assert.Equal(t, followerName, res[0].RPCAddr)
 
 		assert.NoError(t, followerSvr.Shutdown(true))

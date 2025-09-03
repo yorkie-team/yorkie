@@ -187,6 +187,11 @@ func (r *Yorkie) FindActiveClusterNodes(
 	return r.backend.DB.FindActiveClusterNodes(ctx, renewalInterval)
 }
 
+// ClearClusterNodes removes the current clusternode information for testing purposes.
+func (r *Yorkie) ClearClusterNodes(ctx context.Context) error {
+	return r.backend.DB.ClearClusterNodes(ctx)
+}
+
 // RegisterHousekeepingTasks registers housekeeping tasks.
 func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 	interval, err := be.Housekeeping.Config.ParseInterval()
