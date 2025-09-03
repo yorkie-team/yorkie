@@ -854,7 +854,7 @@ func (c *Client) ActivateClient(
 	}
 
 	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
-	c.clientCache.Add(refKey, info)
+	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
 }
@@ -894,7 +894,7 @@ func (c *Client) TryAttaching(
 		return nil, fmt.Errorf("try attaching %s to %s : %w", docID, refKey.ClientID, err)
 	}
 
-	c.clientCache.Add(refKey, info)
+	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
 }
@@ -930,8 +930,8 @@ func (c *Client) DeactivateClient(
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 
-	info := database.ClientInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf(
 				"deactivate client of %s: %w",
@@ -942,15 +942,15 @@ func (c *Client) DeactivateClient(
 		return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, err)
 	}
 
-	c.clientCache.Add(refKey, &info)
+	c.clientCache.Add(refKey, info.DeepCopy())
 
-	return &info, nil
+	return info, nil
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
 func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	if cached, ok := c.clientCache.Get(refKey); ok {
-		return cached, nil
+		return cached.DeepCopy(), nil
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, bson.M{
@@ -958,7 +958,7 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		"_id":        refKey.ClientID,
 	})
 
-	info := database.ClientInfo{}
+	info := &database.ClientInfo{}
 	if err := result.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("find client of %s: %w", refKey, database.ErrClientNotFound)
@@ -967,9 +967,9 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		return nil, fmt.Errorf("find client of %s: %w", refKey, err)
 	}
 
-	c.clientCache.Add(refKey, &info)
+	c.clientCache.Add(refKey, info.DeepCopy())
 
-	return &info, nil
+	return info, nil
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
@@ -1139,7 +1139,7 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 
 	for _, info := range infos {
 		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-		c.clientCache.Add(refKey, info)
+		c.clientCache.Add(refKey, info.DeepCopy())
 	}
 
 	return infos, nil
@@ -1443,16 +1443,18 @@ func (c *Client) CreateChangeInfos(
 	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	cached, ok := c.docCache.Get(refKey)
-	if !ok {
+	var docInfo *database.DocInfo
+	if info, ok := c.docCache.Get(refKey); ok {
+		docInfo = info.DeepCopy()
+	} else {
 		info, err := c.FindDocInfoByRefKey(ctx, refKey)
 		if err != nil {
 			return nil, change.InitialCheckpoint, err
 		}
+
 		c.docCache.Add(refKey, info)
-		cached = info
+		docInfo = info.DeepCopy()
 	}
-	docInfo := cached.DeepCopy()
 
 	// 01. Fetch the document info.
 	if len(changes) == 0 && !isRemoved {
