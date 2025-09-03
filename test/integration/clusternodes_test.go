@@ -29,53 +29,57 @@ import (
 
 func TestClusterNodes(t *testing.T) {
 	t.Run("Should handle leader graceful shutdown test", func(t *testing.T) {
-		t.Skip("TODO(raararaara): Remove this after resolving short renewalInterval issue")
 		ctx := context.Background()
 
-		renewalInterval := 5 * gotime.Second
+		renewalInterval := 100 * gotime.Millisecond
 
-		conf := helper.TestConfig()
-		svr, err := server.New(conf)
-		assert.NoError(t, err)
-		assert.NoError(t, svr.Start())
-		hostname1 := svr.Hostname()
+		startServer := func(name string) (*server.Yorkie, string) {
+			conf := helper.TestConfig()
+			conf.Backend.Hostname = name
+			conf.Housekeeping.LeadershipLeaseDuration = "300ms"
+			conf.Housekeeping.LeadershipRenewalInterval = "100ms"
+			svr, err := server.New(conf)
+			assert.NoError(t, err)
+			assert.NoError(t, svr.Start())
+			return svr, conf.Backend.Hostname
+		}
 
-		conf2 := helper.TestConfig()
-		conf2.Backend.Hostname = "node-2"
-		svr2, err := server.New(conf2)
-		assert.NoError(t, err)
-		assert.NoError(t, svr2.Start())
-		hostname2 := svr.Hostname()
+		svr1, hostname1 := startServer("node-1")
+		svr2, hostname2 := startServer("node-2")
 
-		gotime.Sleep(2 * renewalInterval)
+		gotime.Sleep(3 * renewalInterval)
 
 		res, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, len(res))
-		assert.Equal(t, true, res[0].IsLeader)
+		assert.Eventually(t, func() bool {
+			return res[0].IsLeader
+		}, renewalInterval, 4*renewalInterval)
 
-		if svr2.Hostname() == res[0].RPCAddr {
-			assert.NoError(t, svr2.Shutdown(true))
-			defer assert.NoError(t, svr2.Shutdown(true))
+		leader := res[0].RPCAddr
+		var leaderSvr, followerSvr *server.Yorkie
+		var followerName string
 
-			gotime.Sleep(1 * renewalInterval)
-
-			res, err = svr.FindActiveClusterNodes(ctx, renewalInterval)
-			assert.NoError(t, err)
-			assert.Equal(t, 2, len(res))
-			assert.Equal(t, true, res[0].IsLeader)
-			assert.Equal(t, hostname2, res[0].RPCAddr)
+		if leader == hostname1 {
+			leaderSvr, followerSvr = svr1, svr2
+			followerName = hostname2
 		} else {
-			assert.NoError(t, svr.Shutdown(true))
-			defer assert.NoError(t, svr.Shutdown(true))
-
-			gotime.Sleep(1 * renewalInterval)
-
-			res, err = svr2.FindActiveClusterNodes(ctx, renewalInterval)
-			assert.NoError(t, err)
-			assert.Equal(t, 2, len(res))
-			assert.Equal(t, true, res[0].IsLeader)
-			assert.Equal(t, hostname1, res[0].RPCAddr)
+			leaderSvr, followerSvr = svr2, svr1
+			followerName = hostname1
 		}
+
+		assert.NoError(t, leaderSvr.Shutdown(true))
+
+		gotime.Sleep(5 * renewalInterval)
+
+		res, err = followerSvr.FindActiveClusterNodes(ctx, renewalInterval)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(res))
+		assert.Eventually(t, func() bool {
+			return res[0].IsLeader
+		}, renewalInterval, 4*renewalInterval)
+		assert.Equal(t, followerName, res[0].RPCAddr)
+
+		assert.NoError(t, followerSvr.Shutdown(true))
 	})
 }

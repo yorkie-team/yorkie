@@ -187,11 +187,6 @@ func (r *Yorkie) FindActiveClusterNodes(
 	return r.backend.DB.FindActiveClusterNodes(ctx, renewalInterval)
 }
 
-// Hostname returns the name of this host. It is used for testing.
-func (r *Yorkie) Hostname() string {
-	return r.backend.Config.Hostname
-}
-
 // RegisterHousekeepingTasks registers housekeeping tasks.
 func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 	interval, err := be.Housekeeping.Config.ParseInterval()

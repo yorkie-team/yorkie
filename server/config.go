@@ -84,9 +84,8 @@ const (
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
 
-	DefaultHostname      = ""
-	DefaultGatewayAddr   = "localhost:8080"
-	DefaultPeerDNSSuffix = ""
+	DefaultHostname    = ""
+	DefaultGatewayAddr = "localhost:8080"
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -287,10 +286,6 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.GatewayAddr == "" {
 		c.Backend.GatewayAddr = DefaultGatewayAddr
-	}
-
-	if c.Backend.PeerDNSSuffix == "" {
-		c.Backend.PeerDNSSuffix = DefaultPeerDNSSuffix
 	}
 }
 

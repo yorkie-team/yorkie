@@ -64,7 +64,6 @@ spec:
           emptyDir: { }
       serviceAccountName: yorkie-db-provisioning-job-account
       {{ end }}
-      subdomain: {{ .Values.yorkie.headlessServiceName }}
       containers:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
@@ -82,8 +81,6 @@ spec:
           "{{ .Values.yorkie.ports.profilingPort }}",
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
-          "--peers",
-          "{{ .Values.yorkie.headlessServiceName }}.{{ .Values.yorkie.namespace }}.svc.cluster.local",
           "--backend-use-default-project", "{{ .Values.yorkie.args.useDefaultProject }}",
           {{- if .Values.yorkie.args.snapshotInterval }}
           "--backend-snapshot-interval",

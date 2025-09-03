@@ -509,12 +509,6 @@ func init() {
 		"Gateway address",
 	)
 	cmd.Flags().StringVar(
-		&conf.Backend.PeerDNSSuffix,
-		"peers",
-		server.DefaultPeerDNSSuffix,
-		"Pod RPC address",
-	)
-	cmd.Flags().StringVar(
 		&kafkaAddresses,
 		"kafka-addresses",
 		"",

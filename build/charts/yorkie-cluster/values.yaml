@@ -24,8 +24,6 @@ yorkie:
   mongoMonitoringEnabled: false
   mongoMonitoringSlowQueryThreshold: "100ms"
 
-  headlessServiceName: yorkie-peers
-
   resources: {}
 
 # Configuration for istio ingress gateway
