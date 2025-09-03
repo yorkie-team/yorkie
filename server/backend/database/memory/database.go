@@ -913,7 +913,11 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 }
 
 // FindClientInfoByRefKey finds a client by the given refKey.
-func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+func (d *DB) FindClientInfoByRefKey(
+	_ context.Context,
+	refKey types.ClientRefKey,
+	skipCache ...bool,
+) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
 	}

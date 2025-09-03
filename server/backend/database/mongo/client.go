@@ -948,9 +948,17 @@ func (c *Client) DeactivateClient(
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
-func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	if cached, ok := c.clientCache.Get(refKey); ok {
-		return cached.DeepCopy(), nil
+func (c *Client) FindClientInfoByRefKey(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+	skipCache ...bool,
+) (*database.ClientInfo, error) {
+	skip := len(skipCache) > 0 && skipCache[0]
+
+	if !skip {
+		if cached, ok := c.clientCache.Get(refKey); ok {
+			return cached.DeepCopy(), nil
+		}
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, bson.M{
@@ -967,7 +975,9 @@ func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.Client
 		return nil, fmt.Errorf("find client of %s: %w", refKey, err)
 	}
 
-	c.clientCache.Add(refKey, info.DeepCopy())
+	if !skip {
+		c.clientCache.Add(refKey, info.DeepCopy())
+	}
 
 	return info, nil
 }

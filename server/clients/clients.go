@@ -54,7 +54,13 @@ func Deactivate(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := FindActiveClientInfo(ctx, be, refKey)
+	// NOTE(hackerwins): In cluster using ConsistentHashing, document-specific
+	// requests are assigned to particular servers. ClientInfo is cached per
+	// server, which can lead to a situation where server executing deactivation
+	// may not have the complete attachment information in its cache.
+	// To ensure all attached documents are properly detached during client
+	// deactivation, we skip the cache and fetch ClientInfo directly from DB.
+	info, err := FindActiveClientInfo(ctx, be, refKey, true)
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +167,9 @@ func FindActiveClientInfo(
 	ctx context.Context,
 	be *backend.Backend,
 	refKey types.ClientRefKey,
+	skipCache ...bool,
 ) (*database.ClientInfo, error) {
-	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey, skipCache...)
 	if err != nil {
 		return nil, err
 	}
