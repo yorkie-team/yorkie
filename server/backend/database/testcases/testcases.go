@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	gotime "time"
 
@@ -184,31 +185,34 @@ func RunLeadershipTest(
 		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
 	})
 
-	t.Run("Leader should be only one", func(t *testing.T) {
+	t.Run("TryLeadership should handle concurrent attempts correctly", func(t *testing.T) {
 		ctx := context.Background()
 		require.NoError(t, db.ClearClusterNodes(ctx))
 
-		const numNodes = 3
-		const leaseDuration = 30 * gotime.Second
-		const renewalInterval = 5 * gotime.Second
+		numGoroutines := 10
+		leaseDuration := 30 * gotime.Second
+		renewalInterval := 5 * gotime.Second
+		var wg sync.WaitGroup
 
-		for i := range numNodes {
-			_, err := db.TryLeadership(ctx, fmt.Sprintf("node-%d", i), "", leaseDuration)
-			require.NoError(t, err)
+		for i := range numGoroutines {
+			wg.Add(1)
+			go func(id int) {
+				defer wg.Done()
+				_, err := db.TryLeadership(ctx, fmt.Sprintf("node-%d", i), "", leaseDuration)
+				require.NoError(t, err)
+			}(i)
 		}
 
-		assert.Eventually(t, func() bool {
-			res, err := db.FindActiveClusterNodes(ctx, renewalInterval)
-			require.NoError(t, err)
-			return numNodes == len(res)
-		}, 1*gotime.Second, 50*gotime.Millisecond)
+		wg.Wait()
 
-		infos, err := db.FindActiveClusterNodes(ctx, renewalInterval)
+		res, err := db.FindActiveClusterNodes(ctx, renewalInterval)
 		require.NoError(t, err)
-		require.Equal(t, numNodes, len(infos))
+
+		assert.Equal(t, numGoroutines, len(res))
+		assert.Equal(t, true, res[0].IsLeader)
 
 		var leaderCount = 0
-		for _, info := range infos {
+		for _, info := range res {
 			if info.IsLeader == true {
 				leaderCount++
 			}

@@ -96,10 +96,7 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	podRPCAddr := conf.Hostname
-	if conf.PeerDNSSuffix != "" {
-		podRPCAddr = fmt.Sprintf("%s.%s", conf.Hostname, conf.PeerDNSSuffix)
-	}
+	rpcAddr := conf.Hostname
 
 	// 02. Create the cache manager, pubsub, and lockers.
 	cacheManager, err := cache.New(cache.Options{
@@ -158,7 +155,7 @@ func New(
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf, db, podRPCAddr)
+	housekeeper, err := housekeeping.New(housekeepingConf, db, rpcAddr)
 	if err != nil {
 		return nil, err
 	}
