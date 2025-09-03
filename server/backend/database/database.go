@@ -191,7 +191,7 @@ type Database interface {
 	TryAttaching(ctx context.Context, refKey types.ClientRefKey, docID types.ID) (*ClientInfo, error)
 
 	// FindClientInfoByRefKey finds the client of the given refKey.
-	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
+	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey, skipCache ...bool) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
