@@ -96,6 +96,7 @@ func New(
 		conf.Hostname = hostname
 	}
 
+	// TODO(raararaara): Currently using Hostname as rpcAddr; should be replaced with the actual address.
 	rpcAddr := conf.Hostname
 
 	// 02. Create the cache manager, pubsub, and lockers.
