@@ -96,6 +96,9 @@ func New(
 		conf.Hostname = hostname
 	}
 
+	// TODO(raararaara): Currently using Hostname as rpcAddr; should be replaced with the actual address.
+	rpcAddr := conf.Hostname
+
 	// 02. Create the cache manager, pubsub, and lockers.
 	cacheManager, err := cache.New(cache.Options{
 		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
@@ -153,7 +156,7 @@ func New(
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.Hostname)
+	housekeeper, err := housekeeping.New(housekeepingConf, db, rpcAddr)
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,7 @@ package server
 import (
 	"context"
 	gosync "sync"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
@@ -175,6 +176,20 @@ func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key) error {
 	}
 
 	return packs.Compact(ctx, r.backend, project.ID, docInfo)
+}
+
+// FindActiveClusterNodes returns nodes considered active within the given time window.
+// It is used for testing.
+func (r *Yorkie) FindActiveClusterNodes(
+	ctx context.Context,
+	renewalInterval gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
+	return r.backend.DB.FindActiveClusterNodes(ctx, renewalInterval)
+}
+
+// ClearClusterNodes removes the current clusternode information for testing purposes.
+func (r *Yorkie) ClearClusterNodes(ctx context.Context) error {
+	return r.backend.DB.ClearClusterNodes(ctx)
 }
 
 // RegisterHousekeepingTasks registers housekeeping tasks.
