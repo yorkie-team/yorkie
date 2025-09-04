@@ -207,7 +207,7 @@ func (c *Client) FindLeadership(
 		return nil, fmt.Errorf("find leadership: %w", result.Err())
 	}
 
-	var info database.ClusterNodeInfo
+	var info *database.ClusterNodeInfo
 	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode leadership: %w", err)
 	}
@@ -341,7 +341,7 @@ func (c *Client) tryRenewLeadership(
 		return nil, fmt.Errorf("renew leadership: %w", result.Err())
 	}
 
-	var info database.ClusterNodeInfo
+	var info *database.ClusterNodeInfo
 	if err := result.Decode(&info); err != nil {
 		return nil, fmt.Errorf("decode leadership: %w", err)
 	}

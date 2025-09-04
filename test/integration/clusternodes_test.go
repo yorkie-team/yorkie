@@ -145,9 +145,6 @@ func TestClusterNodes(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			infos, err = followerSvr.FindActiveClusterNodes(ctx, renewalInterval)
 			require.NoError(t, err)
-			assert.Equal(t, 1, len(infos))
-			assert.True(t, infos[0].IsLeader)
-			assert.Equal(t, followerName, infos[0].RPCAddr)
 
 			return 1 == len(infos) && infos[0].IsLeader && followerName == infos[0].RPCAddr
 		}, 10*renewalInterval, renewalInterval)
