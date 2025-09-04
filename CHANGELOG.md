@@ -7,6 +7,49 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Add SecretKey Fallback for UseDefaultProject by @kokodak in https://github.com/yorkie-team/yorkie/pull/1475
+- Copy deep cached client info by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1476
+- Ignore test helpers or generated files from test coverage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1479
+- Ensure deactivation by adding skipCache to FindClientInfoByRefKey by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1480
+
+## [v0.6.28] - 2025-09-02
+
+### Added
+
+- Introduce client cache for faster client retrieval by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1472
+- Enhance deactivation with asynchronous opts by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1473
+
+### Changed
+
+- Introduce auth scheme and remove projectName from API requests by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1471
+
+## [v0.6.27] - 2025-08-29
+
+### Added
+
+- Add metrics for response latency and PushPull errors by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1459
+- Optimize Client.Deactivate by removing N+1 query by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1463
+- Optimize queries by removing N+1 problem by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1468
+
+### Fixed
+
+- Fix Housekeeping failures by allowing Deactivate in Attaching by @kokodak in https://github.com/yorkie-team/yorkie/pull/1460
+
+### Changed
+
+## [v0.6.26] - 2025-08-20
+
+### Changed
+
+- Improve error for better context in DB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1445
+- Improve changes fetching with database-level pagination by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1448
+
+### Fixed
+
+- Fix incorrect tombstone in Tree.Remove for overlapping ranges by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1435
+- Refine server configuration defaults and tests by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1450
+- Fix removedAt timestamp handling in text deletions by @sigmaith in https://github.com/yorkie-team/yorkie/pull/1447
+
 ## [v0.6.25] - 2025-08-12
 
 ### Fixed

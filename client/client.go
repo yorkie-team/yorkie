@@ -253,15 +253,21 @@ func (c *Client) Activate(ctx context.Context) error {
 }
 
 // Deactivate deactivates this client.
-func (c *Client) Deactivate(ctx context.Context) error {
+func (c *Client) Deactivate(ctx context.Context, options ...DeactivateOption) error {
 	if c.status == deactivated {
 		return nil
+	}
+
+	opts := &DeactivateOptions{}
+	for _, opt := range options {
+		opt(opts)
 	}
 
 	_, err := c.client.DeactivateClient(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
-			ClientId: c.id.String(),
+			ClientId:    c.id.String(),
+			Synchronous: !opts.Asynchronous,
 		}), c.options.APIKey, c.key))
 	if err != nil {
 		return err

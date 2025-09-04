@@ -59,6 +59,8 @@ var (
 	mongoPingTimeout                  time.Duration
 	mongoMonitoringEnabled            bool
 	mongoMonitoringSlowQueryThreshold string
+	mongoCacheStatsEnabled            bool
+	mongoCacheStatsInterval           time.Duration
 
 	pprofEnabled bool
 
@@ -121,6 +123,8 @@ func newServerCmd() *cobra.Command {
 					PingTimeout:                  mongoPingTimeout.String(),
 					MonitoringEnabled:            mongoMonitoringEnabled,
 					MonitoringSlowQueryThreshold: mongoMonitoringSlowQueryThreshold,
+					CacheStatsEnabled:            mongoCacheStatsEnabled,
+					CacheStatsInterval:           mongoCacheStatsInterval.String(),
 				}
 			}
 
@@ -366,6 +370,18 @@ func init() {
 		"mongo-monitoring-slow-query-threshold",
 		"100ms",
 		"Threshold for logging slow MongoDB queries (e.g. '100ms', '1s')",
+	)
+	cmd.Flags().BoolVar(
+		&mongoCacheStatsEnabled,
+		"mongo-cache-stats-enabled",
+		false,
+		"Enable MongoDB cache statistics logging",
+	)
+	cmd.Flags().DurationVar(
+		&mongoCacheStatsInterval,
+		"mongo-cache-stats-interval",
+		30*time.Second,
+		"Interval for logging MongoDB cache statistics (e.g. '30s', '1m')",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminUser,

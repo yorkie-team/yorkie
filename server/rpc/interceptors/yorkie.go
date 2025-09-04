@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
@@ -63,6 +64,7 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 			return next(ctx, req)
 		}
 
+		start := gotime.Now()
 		ctx, err := i.buildContext(ctx, req.Header())
 		if err != nil {
 			return nil, err
@@ -80,11 +82,14 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 		)
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
-			i.backend.Metrics.AddServerHandledCounter(
+			code := connecthelper.ToRPCCodeString(err)
+			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
+			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				code,
+				gotime.Since(start).Seconds(),
 			)
 		}
 

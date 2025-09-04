@@ -44,6 +44,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
 	})
 
+	t.Run("FindCompactionCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindCompactionCandidatesPerProjectTest(t, db)
+	})
+
 	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
 		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
 	})
@@ -52,8 +56,8 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
 
-	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
-		testcases.RunFindDocInfosByKeysTest(t, db, projectID)
+	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysAndIDsTest(t, db, projectID)
 	})
 
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
@@ -126,6 +130,10 @@ func TestDB(t *testing.T) {
 
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, db, projectID)
+	})
+
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		testcases.RunFindAttachedClientCountsByDocIDsTest(t, db, projectID)
 	})
 
 	t.Run("RunPurgeDocument test", func(t *testing.T) {

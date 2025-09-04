@@ -29,6 +29,10 @@ func TestSDKRPCServerBackendWithShardedDB(t *testing.T) {
 		testcases.RunActivateAndDeactivateClientTest(t, testClient)
 	})
 
+	t.Run("deactivate with attaching document test", func(t *testing.T) {
+		testcases.RunDeactivateClientWithAttachingDocumentTest(t, testClient, testBackend)
+	})
+
 	t.Run("attach/detach document test", func(t *testing.T) {
 		testcases.RunAttachAndDetachDocumentTest(t, testClient)
 	})

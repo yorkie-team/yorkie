@@ -197,14 +197,17 @@ type Database interface {
 	TryAttaching(ctx context.Context, refKey types.ClientRefKey, docID types.ID) (*ClientInfo, error)
 
 	// FindClientInfoByRefKey finds the client of the given refKey.
-	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
+	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey, skipCache ...bool) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+	// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 	FindAttachedClientInfosByRefKey(ctx context.Context, refKey types.DocRefKey) ([]*ClientInfo, error)
+
+	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
@@ -240,6 +243,13 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		docKeys []key.Key,
+	) ([]*DocInfo, error)
+
+	// FindDocInfosByIDs finds the documents of the given IDs.
+	FindDocInfosByIDs(
+		ctx context.Context,
+		projectID types.ID,
+		docIDs []types.ID,
 	) ([]*DocInfo, error)
 
 	// FindOrCreateDocInfo finds the document or creates it if it does not exist.

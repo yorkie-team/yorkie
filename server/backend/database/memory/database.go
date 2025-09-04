@@ -1011,7 +1011,11 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 }
 
 // FindClientInfoByRefKey finds a client by the given refKey.
-func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+func (d *DB) FindClientInfoByRefKey(
+	_ context.Context,
+	refKey types.ClientRefKey,
+	skipCache ...bool,
+) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -1179,7 +1183,7 @@ func (d *DB) FindCompactionCandidatesPerProject(
 	return infos, nil
 }
 
-// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
@@ -1201,6 +1205,35 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 		}
 	}
 	return infos, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+func (d *DB) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+	}
+
+	var attachedClientMap = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		attachedClientMap[docID] = 0
+	}
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo)
+		for _, docID := range docIDs {
+			if info.Documents[docID] != nil && info.Documents[docID].Status == database.DocumentAttached {
+				attachedClientMap[docID]++
+			}
+		}
+	}
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
@@ -1264,6 +1297,27 @@ func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, docKey key.Key
 	return docInfo, nil
 }
 
+// findDocInfoByID finds the document of the given id.
+func (d *DB) findDocInfoByID(txn *memdb.Txn, projectID types.ID, docID types.ID) (*database.DocInfo, error) {
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find document of %s: %w", docID, err)
+	}
+	var docInfo *database.DocInfo
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if info := val.(*database.DocInfo); info.RemovedAt.IsZero() {
+			docInfo = info
+		}
+	}
+
+	return docInfo, nil
+}
+
 // FindDocInfoByKey finds the document of the given key.
 func (d *DB) FindDocInfoByKey(
 	_ context.Context,
@@ -1298,6 +1352,31 @@ func (d *DB) FindDocInfosByKeys(
 		info, err := d.findDocInfoByKey(txn, projectID, k)
 		if err != nil {
 			return nil, fmt.Errorf("find documents of %v: %w", keys, err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
+// FindDocInfosByIDs finds the documents of the given ids.
+func (d *DB) FindDocInfosByIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, id := range docIDs {
+		info, err := d.findDocInfoByID(txn, projectID, id)
+		if err != nil {
+			return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
 		}
 		if info == nil {
 			continue
