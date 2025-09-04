@@ -41,6 +41,17 @@ func TestClusterNodes(t *testing.T) {
 		return l.Addr().(*net.TCPAddr).Port
 	}
 
+	newTestConfig := func(name string) *server.Config {
+		conf := helper.TestConfig()
+		conf.RPC.Port = getFreePort()
+		conf.Profiling.Port = getFreePort()
+		conf.Backend.Hostname = name
+		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
+		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
+
+		return conf
+	}
+
 	startServer := func(name string) (*server.Yorkie, string) {
 		conf := helper.TestConfig()
 		conf.RPC.Port = getFreePort()
@@ -69,46 +80,36 @@ func TestClusterNodes(t *testing.T) {
 		clearClusterNodes(ctx)
 
 		numGoroutines := 5
-		var wg sync.WaitGroup
-		svrCh := make(chan *server.Yorkie, numGoroutines)
 
+		svrs := make([]*server.Yorkie, numGoroutines)
 		for i := range numGoroutines {
+			svr, err := server.New(newTestConfig(fmt.Sprintf("node-%d", i)))
+			require.NoError(t, err)
+			svrs[i] = svr
+		}
+
+		var wg sync.WaitGroup
+		for _, svr := range svrs {
 			wg.Add(1)
-			go func(id int) {
+			go func(svr *server.Yorkie) {
 				defer wg.Done()
-				svr, _ := startServer(fmt.Sprintf("node-%d", id))
-				svrCh <- svr
-			}(i)
+				require.NoError(t, svr.Start())
+			}(svr)
 		}
 		wg.Wait()
-		close(svrCh)
-
-		var svrs []*server.Yorkie
-		for s := range svrCh {
-			svrs = append(svrs, s)
-		}
 		defer func() {
 			for _, s := range svrs {
-				_ = s.Shutdown(true)
+				assert.NoError(t, s.Shutdown(true))
 			}
 		}()
 
 		refSvr := svrs[0]
 
-		gotime.Sleep(3 * renewalInterval)
-
-		infos, err := refSvr.FindActiveClusterNodes(ctx, renewalInterval)
-		require.NoError(t, err)
-		assert.Equal(t, numGoroutines, len(infos))
-		assert.True(t, infos[0].IsLeader)
-
-		leaderCount := 0
-		for _, info := range infos {
-			if info.IsLeader {
-				leaderCount++
-			}
-		}
-		assert.Equal(t, 1, leaderCount)
+		assert.Eventually(t, func() bool {
+			infos, err := refSvr.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			return len(infos) == numGoroutines && infos[0].IsLeader
+		}, 10*renewalInterval, renewalInterval)
 	})
 
 	t.Run("Should handle leader graceful shutdown test", func(t *testing.T) {
@@ -120,14 +121,14 @@ func TestClusterNodes(t *testing.T) {
 		svr1, hostname1 := startServer("node-1")
 		svr2, hostname2 := startServer("node-2")
 
-		gotime.Sleep(3 * renewalInterval)
+		assert.Eventually(t, func() bool {
+			infos, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			return 2 == len(infos) && infos[0].IsLeader
+		}, 10*renewalInterval, renewalInterval)
 
-		res, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
-		require.NoError(t, err)
-		assert.Equal(t, 2, len(res))
-		assert.True(t, res[0].IsLeader)
-
-		leader := res[0].RPCAddr
+		infos, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
+		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
 		var followerName string
 
@@ -141,13 +142,15 @@ func TestClusterNodes(t *testing.T) {
 
 		require.NoError(t, leaderSvr.Shutdown(true))
 
-		gotime.Sleep(5 * renewalInterval)
+		assert.Eventually(t, func() bool {
+			infos, err = followerSvr.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			assert.Equal(t, 1, len(infos))
+			assert.True(t, infos[0].IsLeader)
+			assert.Equal(t, followerName, infos[0].RPCAddr)
 
-		res, err = followerSvr.FindActiveClusterNodes(ctx, renewalInterval)
-		require.NoError(t, err)
-		assert.Equal(t, 1, len(res))
-		assert.True(t, res[0].IsLeader)
-		assert.Equal(t, followerName, res[0].RPCAddr)
+			return 1 == len(infos) && infos[0].IsLeader && followerName == infos[0].RPCAddr
+		}, 10*renewalInterval, renewalInterval)
 
 		assert.NoError(t, followerSvr.Shutdown(true))
 	})
