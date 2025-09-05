@@ -33,9 +33,17 @@ Thanks for contributing!
 
 Below are needed for developing and building Yorkie.
 
-- [Go](https://golang.org) (version 1.18+)
+- [Go](https://golang.org) (version 1.23+)
 - [Protobuf Compiler](https://github.com/protocolbuffers/protobuf/releases) (version 3.4.0+)
 - [Docker](https://www.docker.com/)
+
+#### Using Dev Container
+Alternatively, you can use [Development Containers](https://containers.dev/). The only requirement is Docker.
+
+To use it, you can:
+
+- Use an IDE that supports Dev Containers (VS Code, GoLand, etc.)
+- Set up manually with the [CLI](https://github.com/devcontainers/cli)
 
 ### Building & Testing
 

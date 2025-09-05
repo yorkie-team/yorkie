@@ -1,0 +1,12 @@
+{
+    "name": "Yorkie",
+    "image": "mcr.microsoft.com/devcontainers/go:1.24",
+    "features": {
+        "ghcr.io/devcontainers-extra/features/protoc": "latest",
+        "ghcr.io/devcontainers/features/docker-outside-of-docker": "latest"
+    },
+    "postCreateCommand": "sh .devcontainer/setup.sh",
+    "runArgs": ["--network=host"],
+    "forwardPorts": [],
+    "customizations": {}
+}
