@@ -210,27 +210,25 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
+	infos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
+	summary, err := be.ClusterClient.GetDocument(
+		ctx,
+		project,
+		info.Key.String(),
+		true,
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &types.DocumentSummary{
-		ID:              info.ID,
-		Key:             info.Key,
-		AttachedClients: len(clientInfos),
-		CreatedAt:       info.CreatedAt,
-		AccessedAt:      info.AccessedAt,
-		UpdatedAt:       info.UpdatedAt,
-		Root:            doc.Marshal(),
-		DocSize:         doc.DocSize(),
-		SchemaKey:       info.Schema,
-	}, nil
+	summary.AttachedClients = len(infos)
+
+	return summary, nil
 }
 
 // GetDocumentSummaries returns a list of document summaries.
