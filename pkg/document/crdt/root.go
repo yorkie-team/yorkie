@@ -183,6 +183,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 				return 0, err
 			}
 
+			r.docSize.GC.Sub(pair.Child.DataSize())
 			delete(r.gcNodePairMap, pair.Child.IDString())
 			count++
 		}
