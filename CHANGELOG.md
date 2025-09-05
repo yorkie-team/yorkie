@@ -7,10 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.29] - 2025-09-05
+
+### Fixed
+
 - Add SecretKey Fallback for UseDefaultProject by @kokodak in https://github.com/yorkie-team/yorkie/pull/1475
 - Copy deep cached client info by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1476
 - Ignore test helpers or generated files from test coverage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1479
 - Ensure deactivation by adding skipCache to FindClientInfoByRefKey by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1480
+- Increase cache hit rate with refined logging and DB fixes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1482
+- Fix garbage size accounting for Text nodes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1483
+- Use ClusterClient for GetDocumentSummary by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1484
 
 ## [v0.6.28] - 2025-09-02
 
