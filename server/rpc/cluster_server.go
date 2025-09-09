@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 
@@ -137,6 +138,12 @@ func (s *clusterServer) CompactDocument(
 	}
 
 	if err := packs.Compact(ctx, s.backend, projectID, docInfo); err != nil {
+		// If the document is attached, we don't return an error.
+		// Because compaction is a best-effort operation.
+		if errors.Is(err, packs.ErrDocumentAttached) {
+			return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+		}
+
 		return nil, err
 	}
 

@@ -36,6 +36,10 @@ import (
 var (
 	// ErrDocumentNotRemoved is returned when the document is not removed yet.
 	ErrDocumentNotRemoved = errors.New("document is not removed yet")
+
+	// ErrDocumentAttached is returned when the document is attached when
+	// deleting the document.
+	ErrDocumentAttached = errors.New("document is attached")
 )
 
 // Compact compacts the given document and its metadata and stores them in the
@@ -55,9 +59,7 @@ func Compact(
 		return err
 	}
 	if isAttached {
-		// TODO(hackerwins): ErrDocumentNotAttached exists in documents package,
-		// but it can not be here because of the circular dependency.
-		return fmt.Errorf("compact document %s: document is attached", docInfo.ID)
+		return fmt.Errorf("compact document %s: %w", docInfo.ID, ErrDocumentAttached)
 	}
 
 	// 2. Build compacted changes and check if the content is the same.

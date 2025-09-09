@@ -26,6 +26,9 @@ import (
 var (
 	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
 	ErrTooManyAttachments = errors.New("attachment limit exceeded")
+
+	// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
+	ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -140,4 +143,14 @@ func (p *Project) IsAttachmentLimitExceeded(count int) error {
 	}
 
 	return nil
+}
+
+// ClientDeactivateThresholdAsTimeDuration converts ClientDeactivateThreshold string to time.Duration.
+func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
+	clientDeactivateThreshold, err := time.ParseDuration(p.ClientDeactivateThreshold)
+	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+
+	return clientDeactivateThreshold, nil
 }

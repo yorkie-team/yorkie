@@ -203,27 +203,20 @@ type Database interface {
 	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
-	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-	FindNextNCyclingProjectInfos(
+	// FindActiveClients finds active clients for deactivation checking.
+	FindActiveClients(
 		ctx context.Context,
-		pageSize int,
-		lastProjectID types.ID,
-	) ([]*ProjectInfo, error)
-
-	// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-	FindDeactivateCandidatesPerProject(
-		ctx context.Context,
-		project *ProjectInfo,
 		candidatesLimit int,
-	) ([]*ClientInfo, error)
+		lastClientID types.ID,
+	) ([]*ClientInfo, types.ID, error)
 
-	// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
-	FindCompactionCandidatesPerProject(
+	// FindCompactionCandidates finds documents that need compaction.
+	FindCompactionCandidates(
 		ctx context.Context,
-		project *ProjectInfo,
 		candidatesLimit int,
 		compactionMinChanges int,
-	) ([]*DocInfo, error)
+		lastDocID types.ID,
+	) ([]*DocInfo, types.ID, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

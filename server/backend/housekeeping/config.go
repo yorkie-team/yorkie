@@ -28,11 +28,8 @@ type Config struct {
 	// Interval is the time between housekeeping runs.
 	Interval string `yaml:"Interval"`
 
-	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
-	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
-
-	// ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
-	ProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
+	// CandidatesLimit is the maximum number of candidates to be returned in a single query.
+	CandidatesLimit int `yaml:"CandidatesLimit"`
 
 	// CompactionMinChanges is the minimum number of changes to compact a document.
 	CompactionMinChanges int `yaml:"CompactionMinChanges"`
@@ -54,17 +51,10 @@ func (c *Config) Validate() error {
 		)
 	}
 
-	if c.CandidatesLimitPerProject <= 0 {
+	if c.CandidatesLimit <= 0 {
 		return fmt.Errorf(
-			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
-			c.CandidatesLimitPerProject,
-		)
-	}
-
-	if c.ProjectFetchSize <= 0 {
-		return fmt.Errorf(
-			`invalid argument %d for "--housekeeping-project-fetch-size" flag`,
-			c.ProjectFetchSize,
+			`invalid argument %d for "--housekeeping-candidates-limit" flag`,
+			c.CandidatesLimit,
 		)
 	}
 

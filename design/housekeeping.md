@@ -52,11 +52,8 @@ Housekeeping:
   # Interval between housekeeping runs (default: 30s)
   Interval: "30s"
 
-  # Maximum number of candidates to be returned per project (default: 500)
-  CandidatesLimitPerProject: 500
-
-  # Maximum number of projects to be returned in a single run (default: 100)
-  ProjectFetchSize: 100
+  # Maximum number of candidates to be returned in a single query (default: 500)
+  CandidatesLimit: 500
 
   # Minimum number of changes required to compact a document (default: 1000)
   CompactionMinChanges: 1000
@@ -171,8 +168,7 @@ For detailed information about the garbage collection algorithm, refer to:
 ```yaml
 Housekeeping:
   Interval: "10s"
-  CandidatesLimitPerProject: 10
-  ProjectFetchSize: 5
+  CandidatesLimit: 10
   CompactionMinChanges: 100
 ```
 
@@ -181,8 +177,7 @@ Housekeeping:
 ```yaml
 Housekeeping:
   Interval: "1m"
-  CandidatesLimitPerProject: 1000
-  ProjectFetchSize: 200
+  CandidatesLimit: 1000
   CompactionMinChanges: 5000
 ```
 

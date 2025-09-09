@@ -49,8 +49,7 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultProfilingPort, conf.Profiling.Port)
 
 	assertDurationEqual(t, server.DefaultHousekeepingInterval, conf.Housekeeping.Interval)
-	assert.Equal(t, server.DefaultHousekeepingCandidatesLimitPerProject, conf.Housekeeping.CandidatesLimitPerProject)
-	assert.Equal(t, server.DefaultHousekeepingProjectFetchSize, conf.Housekeeping.ProjectFetchSize)
+	assert.Equal(t, server.DefaultHousekeepingCandidatesLimit, conf.Housekeeping.CandidatesLimit)
 	assert.Equal(t, server.DefaultHousekeepingCompactionMinChanges, conf.Housekeeping.CompactionMinChanges)
 
 	assertDurationEqual(t, server.DefaultAdminTokenDuration, conf.Backend.AdminTokenDuration)

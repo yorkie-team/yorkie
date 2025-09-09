@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/clients"
-	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
@@ -79,7 +78,7 @@ var errorToConnectCode = map[error]connect.Code{
 	database.ErrDocumentNotAttached:     connect.CodeFailedPrecondition,
 	database.ErrDocumentAlreadyAttached: connect.CodeFailedPrecondition,
 	database.ErrDocumentAlreadyDetached: connect.CodeFailedPrecondition,
-	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
+	packs.ErrDocumentAttached:           connect.CodeFailedPrecondition,
 	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
 	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,
 	packs.ErrDocumentNotRemoved:         connect.CodeFailedPrecondition,
@@ -140,7 +139,7 @@ var errorToCode = map[error]string{
 	database.ErrDocumentNotAttached:     "ErrDocumentNotAttached",
 	database.ErrDocumentAlreadyAttached: "ErrDocumentAlreadyAttached",
 	database.ErrDocumentAlreadyDetached: "ErrDocumentAlreadyDetached",
-	documents.ErrDocumentAttached:       "ErrDocumentAttached",
+	packs.ErrDocumentAttached:           "ErrDocumentAttached",
 	packs.ErrInvalidServerSeq:           "ErrInvalidServerSeq",
 	database.ErrConflictOnUpdate:        "ErrConflictOnUpdate",
 

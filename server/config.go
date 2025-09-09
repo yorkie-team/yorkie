@@ -38,10 +38,9 @@ const (
 	DefaultRPCPort       = 8080
 	DefaultProfilingPort = 8081
 
-	DefaultHousekeepingInterval                  = 30 * time.Second
-	DefaultHousekeepingCandidatesLimitPerProject = 500
-	DefaultHousekeepingProjectFetchSize          = 100
-	DefaultHousekeepingCompactionMinChanges      = 1000
+	DefaultHousekeepingInterval             = 30 * time.Second
+	DefaultHousekeepingCandidatesLimit      = 500
+	DefaultHousekeepingCompactionMinChanges = 1000
 
 	DefaultMongoConnectionURI                = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout            = 5 * time.Second
@@ -203,11 +202,8 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 	if c.Housekeeping.Interval == "" {
 		c.Housekeeping.Interval = DefaultHousekeepingInterval.String()
 	}
-	if c.Housekeeping.CandidatesLimitPerProject == 0 {
-		c.Housekeeping.CandidatesLimitPerProject = DefaultHousekeepingCandidatesLimitPerProject
-	}
-	if c.Housekeeping.ProjectFetchSize == 0 {
-		c.Housekeeping.ProjectFetchSize = DefaultHousekeepingProjectFetchSize
+	if c.Housekeeping.CandidatesLimit == 0 {
+		c.Housekeeping.CandidatesLimit = DefaultHousekeepingCandidatesLimit
 	}
 	if c.Housekeeping.CompactionMinChanges == 0 {
 		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
@@ -345,10 +341,9 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: profilingPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  DefaultHousekeepingInterval.String(),
-			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          DefaultHousekeepingProjectFetchSize,
-			CompactionMinChanges:      DefaultHousekeepingCompactionMinChanges,
+			Interval:             DefaultHousekeepingInterval.String(),
+			CandidatesLimit:      DefaultHousekeepingCandidatesLimit,
+			CompactionMinChanges: DefaultHousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
 			UseDefaultProject:         DefaultUseDefaultProject,

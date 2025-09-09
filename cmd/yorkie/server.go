@@ -318,16 +318,10 @@ func init() {
 		"housekeeping interval between housekeeping runs",
 	)
 	cmd.Flags().IntVar(
-		&conf.Housekeeping.CandidatesLimitPerProject,
-		"housekeeping-candidates-limit-per-project",
-		server.DefaultHousekeepingCandidatesLimitPerProject,
-		"candidates limit per project for a single housekeeping run",
-	)
-	cmd.Flags().IntVar(
-		&conf.Housekeeping.ProjectFetchSize,
-		"housekeeping-project-fetch-size",
-		server.DefaultHousekeepingProjectFetchSize,
-		"housekeeping project fetch size for a single housekeeping run",
+		&conf.Housekeeping.CandidatesLimit,
+		"housekeeping-candidates-limit",
+		server.DefaultHousekeepingCandidatesLimit,
+		"candidates limit for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.CompactionMinChanges,

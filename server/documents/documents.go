@@ -74,10 +74,6 @@ func DocWatchStreamKey(clientID time.ActorID, docKey key.Key) sync.Key {
 }
 
 var (
-	// ErrDocumentAttached is returned when the document is attached when
-	// deleting the document.
-	ErrDocumentAttached = errors.New("document is attached")
-
 	// ErrDocumentAlreadyExists is returned when the document already exists.
 	ErrDocumentAlreadyExists = errors.New("document already exists")
 )
@@ -528,7 +524,7 @@ func RemoveDocument(
 		return err
 	}
 	if isAttached {
-		return ErrDocumentAttached
+		return fmt.Errorf("remove document %s: %w", refKey, packs.ErrDocumentAttached)
 	}
 
 	return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)

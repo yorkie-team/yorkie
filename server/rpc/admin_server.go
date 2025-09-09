@@ -490,7 +490,7 @@ func (s *adminServer) UpdateDocument(
 			return nil, err
 		}
 		if count > 0 {
-			return nil, documents.ErrDocumentAttached
+			return nil, packs.ErrDocumentAttached
 		}
 	}
 

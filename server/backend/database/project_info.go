@@ -17,7 +17,6 @@
 package database
 
 import (
-	"errors"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
@@ -25,11 +24,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
-// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
-var ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
+// ZeroID represents the minimum possible ID value, used as a starting point.
+var ZeroID = types.ID("000000000000000000000000")
 
 // DefaultProjectID is the default project ID.
-var DefaultProjectID = types.ID("000000000000000000000000")
+var DefaultProjectID = ZeroID
 
 // DefaultProjectName is the default project name.
 var DefaultProjectName = "default"
@@ -189,7 +188,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
 	clientDeactivateThreshold, err := time.ParseDuration(i.ClientDeactivateThreshold)
 	if err != nil {
-		return 0, ErrInvalidTimeDurationString
+		return 0, types.ErrInvalidTimeDurationString
 	}
 
 	return clientDeactivateThreshold, nil

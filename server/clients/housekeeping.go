@@ -30,94 +30,95 @@ const (
 	deactivationKey = "housekeeping/deactivation"
 )
 
-// DeactivateInactives deactivates clients that have not been active for a
-// long time.
-func DeactivateInactives(
-	ctx context.Context,
-	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	housekeepingLastProjectID types.ID,
-) (types.ID, error) {
-	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
-	if !ok {
-		return database.DefaultProjectID, nil
-	}
-	defer locker.Unlock()
-
-	start := time.Now()
-	lastProjectID, candidates, err := FindDeactivateCandidates(
-		ctx,
-		be,
-		candidatesLimitPerProject,
-		projectFetchSize,
-		housekeepingLastProjectID,
-	)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	deactivatedCount := 0
-	for _, pair := range candidates {
-		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
-			return database.DefaultProjectID, err
-		}
-
-		deactivatedCount++
-	}
-
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, deactivated %d, %s",
-			len(candidates),
-			deactivatedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastProjectID, nil
-}
-
 // CandidatePair represents a pair of Project and Client.
 type CandidatePair struct {
-	Project *database.ProjectInfo
+	Project *types.Project
 	Client  *database.ClientInfo
 }
 
-// FindDeactivateCandidates finds candidates to deactivate from the database.
+// DeactivateInactives deactivates clients that have not been active for a
+// long time using direct client iteration.
+func DeactivateInactives(
+	ctx context.Context,
+	be *backend.Backend,
+	candidatesLimit int,
+	lastClientID types.ID,
+) (types.ID, int, int, error) {
+	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
+	if !ok {
+		return lastClientID, 0, 0, nil
+	}
+	defer locker.Unlock()
+
+	lastID, candidates, err := FindDeactivateCandidates(
+		ctx,
+		be,
+		candidatesLimit,
+		lastClientID,
+	)
+	if err != nil {
+		return lastClientID, 0, 0, err
+	}
+
+	// If no candidates found, reset to beginning for next cycle.
+	if len(candidates) == 0 {
+		return database.ZeroID, 0, 0, nil
+	}
+
+	deactivatedCount := 0
+	for _, candidate := range candidates {
+		if _, err := Deactivate(ctx, be, candidate.Project, candidate.Client.RefKey()); err != nil {
+			logging.From(ctx).Warnf("failed to deactivate client %s: %v", candidate.Client.ID, err)
+			continue
+		}
+		deactivatedCount++
+	}
+
+	return lastID, len(candidates), deactivatedCount, nil
+}
+
+// FindDeactivateCandidates finds candidates to deactivate using cache for projects.
+// This improves performance by avoiding complex aggregation queries and using in-memory filtering.
 func FindDeactivateCandidates(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
+	candidatesLimit int,
+	lastClientID types.ID,
 ) (types.ID, []CandidatePair, error) {
-	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	candidates, lastID, err := be.DB.FindActiveClients(ctx, candidatesLimit, lastClientID)
 	if err != nil {
-		return database.DefaultProjectID, nil, err
+		return database.ZeroID, nil, err
 	}
 
-	var candidates []CandidatePair
-	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
+	var pairs []CandidatePair
+	now := time.Now()
+
+	for _, candidate := range candidates {
+		// TODO(hackerwins): Consider caching projects in DB layer.
+		project, ok := be.Cache.Project.Get(candidate.ProjectID.String())
+		if !ok {
+			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+			if err != nil {
+				return database.ZeroID, nil, err
+			}
+
+			project = projectInfo.ToProject()
+			be.Cache.Project.Add(candidate.ProjectID.String(), project)
 		}
 
-		for _, info := range infos {
-			candidates = append(candidates, CandidatePair{
-				Project: projectInfo,
-				Client:  info,
+		// Check if client needs deactivation based on project's threshold
+		threshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		if err != nil {
+			return database.ZeroID, nil, err
+		}
+
+		if candidate.UpdatedAt.Before(now.Add(-threshold)) {
+			pairs = append(pairs, CandidatePair{
+				Project: project,
+				Client:  candidate,
 			})
 		}
 	}
 
-	var topProjectID types.ID
-	if len(projectInfos) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projectInfos[len(projectInfos)-1].ID
-	}
-
-	return topProjectID, candidates, nil
+	return lastID, pairs, nil
 }

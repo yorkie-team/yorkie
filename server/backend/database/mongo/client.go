@@ -462,51 +462,6 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-func (c *Client) FindNextNCyclingProjectInfos(
-	ctx context.Context,
-	pageSize int,
-	lastProjectID types.ID,
-) ([]*database.ProjectInfo, error) {
-	opts := options.Find()
-	opts.SetLimit(int64(pageSize))
-
-	cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
-		"_id": bson.M{
-			"$gt": lastProjectID,
-		},
-	}, opts)
-	if err != nil {
-		return nil, fmt.Errorf("find projects: %w", err)
-	}
-
-	var infos []*database.ProjectInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch projects: %w", err)
-	}
-
-	if len(infos) < pageSize {
-		opts.SetLimit(int64(pageSize - len(infos)))
-
-		cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
-			"_id": bson.M{
-				"$lte": lastProjectID,
-			},
-		}, opts)
-		if err != nil {
-			return nil, fmt.Errorf("find projects: %w", err)
-		}
-
-		var newInfos []*database.ProjectInfo
-		if err := cursor.All(ctx, &newInfos); err != nil {
-			return nil, fmt.Errorf("fetch projects: %w", err)
-		}
-		infos = append(infos, newInfos...)
-	}
-
-	return infos, nil
-}
-
 // ListProjectInfos returns all project infos owned by owner.
 func (c *Client) ListProjectInfos(
 	ctx context.Context,
@@ -1057,81 +1012,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (c *Client) FindDeactivateCandidatesPerProject(
-	ctx context.Context,
-	project *database.ProjectInfo,
-	candidatesLimit int,
-) ([]*database.ClientInfo, error) {
-	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
-	if err != nil {
-		return nil, err
-	}
-
-	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
-		"project_id": project.ID,
-		StatusKey:    database.ClientActivated,
-		"updated_at": bson.M{
-			"$lte": gotime.Now().Add(-clientDeactivateThreshold),
-		},
-	}, options.Find().SetLimit(int64(candidatesLimit)))
-
-	if err != nil {
-		return nil, fmt.Errorf("find deactivate candidates of %s: %w", project.ID, err)
-	}
-
-	var infos []*database.ClientInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch deactivate candidates of %s: %w", project.ID, err)
-	}
-
-	return infos, nil
-}
-
-// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
-func (c *Client) FindCompactionCandidatesPerProject(
-	ctx context.Context,
-	project *database.ProjectInfo,
-	candidatesLimit int,
-	compactionMinChanges int,
-) ([]*database.DocInfo, error) {
-	result, err := c.collection(ColDocuments).Aggregate(ctx, mongo.Pipeline{
-		bson.D{{Key: "$match", Value: bson.M{
-			"project_id": project.ID,
-			"server_seq": bson.M{"$gte": compactionMinChanges},
-		}}},
-		// Exclude documents attached to any client
-		bson.D{{Key: "$lookup", Value: bson.M{
-			"from": ColClients,
-			"let":  bson.M{"docId": "$_id", "projectId": "$project_id"},
-			"pipeline": []bson.M{
-				{"$match": bson.M{
-					"$expr": bson.M{
-						"$and": bson.A{
-							bson.M{"$eq": bson.A{"$project_id", "$$projectId"}},
-							bson.M{"$in": bson.A{"$$docId", bson.M{"$ifNull": bson.A{"$attached_docs", bson.A{}}}}},
-						},
-					},
-				}},
-			},
-			"as": "clients",
-		}}},
-		bson.D{{Key: "$match", Value: bson.M{"clients": bson.M{"$eq": bson.A{}}}}},
-		bson.D{{Key: "$project", Value: bson.M{"clients": 0}}},
-		bson.D{{Key: "$limit", Value: candidatesLimit}},
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
-	}
-
-	var infos []*database.DocInfo
-	if err := result.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("iterate compaction candidates: %w", err)
-	}
-	return infos, nil
-}
-
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
@@ -1159,6 +1039,61 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	}
 
 	return infos, nil
+}
+
+// FindActiveClients finds active clients for deactivation checking.
+func (c *Client) FindActiveClients(
+	ctx context.Context,
+	candidatesLimit int,
+	lastClientID types.ID,
+) ([]*database.ClientInfo, types.ID, error) {
+	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
+		"_id":    bson.M{"$gt": lastClientID},
+		"status": database.ClientActivated,
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+	if err != nil {
+		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
+	}
+
+	var infos []*database.ClientInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, database.ZeroID, fmt.Errorf("fetch active clients: %w", err)
+	}
+
+	var lastID types.ID = database.ZeroID
+	if len(infos) > 0 {
+		lastID = infos[len(infos)-1].ID
+	}
+
+	return infos, lastID, nil
+}
+
+// FindCompactionCandidates finds documents that need compaction.
+func (c *Client) FindCompactionCandidates(
+	ctx context.Context,
+	candidatesLimit int,
+	compactionMinChanges int,
+	lastDocID types.ID,
+) ([]*database.DocInfo, types.ID, error) {
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"_id":        bson.M{"$gt": lastDocID},
+		"server_seq": bson.M{"$gte": compactionMinChanges},
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+	if err != nil {
+		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, database.ZeroID, fmt.Errorf("fetch compaction candidates direct: %w", err)
+	}
+
+	var lastID types.ID = database.ZeroID
+	if len(infos) > 0 {
+		lastID = infos[len(infos)-1].ID
+	}
+
+	return infos, lastID, nil
 }
 
 // FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.

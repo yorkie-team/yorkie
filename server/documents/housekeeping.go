@@ -18,7 +18,6 @@ package documents
 
 import (
 	"context"
-	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -30,101 +29,87 @@ const (
 	compactionKey = "housekeeping/compaction"
 )
 
+// CandidatePairDoc represents a pair of Project and Document.
+type CandidatePairDoc struct {
+	Project  *types.Project
+	Document *database.DocInfo
+}
+
 // CompactDocuments compacts documents by removing old changes and creating
-// a new initial change.
+// a new initial change using direct document iteration.
 func CompactDocuments(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
+	candidatesLimit int,
 	compactionMinChanges int,
-	lastCompactionProjectID types.ID,
-) (types.ID, error) {
+	lastDocID types.ID,
+) (types.ID, int, int, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(compactionKey)
 	if !ok {
-		return database.DefaultProjectID, nil
+		return lastDocID, 0, 0, nil
 	}
 	defer locker.Unlock()
 
-	start := time.Now()
-	lastProjectID, candidates, err := FindCompactionCandidates(
+	lastID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,
-		candidatesLimitPerProject,
-		projectFetchSize,
+		candidatesLimit,
 		compactionMinChanges,
-		lastCompactionProjectID,
+		lastDocID,
 	)
 	if err != nil {
-		return database.DefaultProjectID, err
+		return lastDocID, 0, 0, err
+	}
+
+	// If no candidates found, reset to beginning for next cycle.
+	if len(candidates) == 0 {
+		return database.ZeroID, 0, 0, nil
 	}
 
 	compactedCount := 0
 	for _, pair := range candidates {
-		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
+		if err := CompactDocument(ctx, be, pair.Project, pair.Document); err != nil {
+			logging.From(ctx).Warnf("failed to compact document %s: %v", pair.Document.ID, err)
 			continue
 		}
 		compactedCount++
 	}
 
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, compacted %d, %s",
-			len(candidates),
-			compactedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastProjectID, nil
+	return lastID, len(candidates), compactedCount, nil
 }
 
-// CandidatePair represents a pair of Project and Document.
-type CandidatePair struct {
-	Project  *database.ProjectInfo
-	Document *database.DocInfo
-}
-
-// FindCompactionCandidates finds candidates to compact from the database.
+// FindCompactionCandidates finds candidates to compact by directly querying documents.
 func FindCompactionCandidates(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
+	candidatesLimit int,
 	compactionMinChanges int,
-	lastProjectID types.ID,
-) (types.ID, []CandidatePair, error) {
-	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	lastDocID types.ID,
+) (types.ID, []CandidatePairDoc, error) {
+	candidates, lastID, err := be.DB.FindCompactionCandidates(ctx, candidatesLimit, compactionMinChanges, lastDocID)
 	if err != nil {
-		return database.DefaultProjectID, nil, err
+		return database.ZeroID, nil, err
 	}
 
-	var candidates []CandidatePair
-	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindCompactionCandidatesPerProject(
-			ctx,
-			projectInfo,
-			candidatesLimitPerProject,
-			compactionMinChanges,
-		)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
+	var pairs []CandidatePairDoc
+	for _, candidate := range candidates {
+		// TODO(hackerwins): Consider caching projects in DB layer.
+		project, ok := be.Cache.Project.Get(candidate.ProjectID.String())
+		if !ok {
+			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+			if err != nil {
+				return database.ZeroID, nil, err
+			}
+
+			project = projectInfo.ToProject()
+			be.Cache.Project.Add(candidate.ProjectID.String(), project)
 		}
 
-		for _, info := range infos {
-			candidates = append(candidates, CandidatePair{
-				Project:  projectInfo,
-				Document: info,
-			})
-		}
+		pairs = append(pairs, CandidatePairDoc{
+			Project:  project,
+			Document: candidate,
+		})
 	}
 
-	var topProjectID types.ID
-	if len(projectInfos) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projectInfos[len(projectInfos)-1].ID
-	}
-
-	return topProjectID, candidates, nil
+	return lastID, pairs, nil
 }

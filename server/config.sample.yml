@@ -48,11 +48,8 @@ Housekeeping:
   # Interval is the time between housekeeping runs (default: 30s).
   Interval: "30s"
 
-  # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 500).
-  CandidatesLimitPerProject: 500
-
-  # ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates. (default: 100).
-  ProjectFetchSize: 100
+  # CandidatesLimit is the maximum number of candidates to be returned in a single query (default: 500).
+  CandidatesLimit: 500
 
   # CompactionMinChanges is minimum number of changes to compact a document. (default: 1000).
   CompactionMinChanges: 1000
