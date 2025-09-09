@@ -90,7 +90,6 @@ func FindDeactivateCandidates(
 	candidatesLimit int,
 	lastClientID types.ID,
 ) (types.ID, []CandidatePair, error) {
-	// First, get active candidates with a simple query
 	candidates, lastID, err := be.DB.FindActiveClients(ctx, candidatesLimit, lastClientID)
 	if err != nil {
 		return database.ZeroID, nil, err
