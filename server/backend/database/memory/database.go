@@ -954,20 +954,25 @@ func (d *DB) FindActiveClients(
 	}
 
 	var infos []*database.ClientInfo
-	var lastID types.ID = database.ZeroID
+	var lastID types.ID = lastClientID
 	count := 0
 	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
+
+		// Skip the starting point
 		if info.ID == lastClientID {
 			continue
 		}
 
+		// Always update lastID to ensure progress
+		lastID = info.ID
+
+		// Only include activated clients in results
 		if info.Status != database.ClientActivated {
 			continue
 		}
 
 		infos = append(infos, info.DeepCopy())
-		lastID = info.ID
 		count++
 	}
 
@@ -990,7 +995,7 @@ func (d *DB) FindCompactionCandidates(
 	}
 
 	var infos []*database.DocInfo
-	var lastID types.ID = database.ZeroID
+	var lastID types.ID = lastDocID
 	count := 0
 
 	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
@@ -1000,6 +1005,9 @@ func (d *DB) FindCompactionCandidates(
 		if info.ID == lastDocID {
 			continue
 		}
+
+		// Always update lastID to ensure progress
+		lastID = info.ID
 
 		// Check if document has enough changes to compact
 		if info.ServerSeq < int64(compactionMinChanges) {
@@ -1019,7 +1027,6 @@ func (d *DB) FindCompactionCandidates(
 		}
 
 		infos = append(infos, info.DeepCopy())
-		lastID = info.ID
 		count++
 	}
 

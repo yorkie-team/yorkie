@@ -43,14 +43,13 @@ func DeactivateInactives(
 	be *backend.Backend,
 	candidatesLimit int,
 	lastClientID types.ID,
-) (types.ID, error) {
+) (types.ID, int, int, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
 	if !ok {
-		return lastClientID, nil
+		return lastClientID, 0, 0, nil
 	}
 	defer locker.Unlock()
 
-	start := time.Now()
 	lastID, candidates, err := FindDeactivateCandidates(
 		ctx,
 		be,
@@ -58,7 +57,12 @@ func DeactivateInactives(
 		lastClientID,
 	)
 	if err != nil {
-		return database.ZeroID, err
+		return lastClientID, 0, 0, err
+	}
+
+	// If no candidates found, reset to beginning for next cycle.
+	if len(candidates) == 0 {
+		return database.ZeroID, 0, 0, nil
 	}
 
 	deactivatedCount := 0
@@ -70,16 +74,7 @@ func DeactivateInactives(
 		deactivatedCount++
 	}
 
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, deactivated %d, %s",
-			len(candidates),
-			deactivatedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastID, nil
+	return lastID, len(candidates), deactivatedCount, nil
 }
 
 // FindDeactivateCandidates finds candidates to deactivate using cache for projects.

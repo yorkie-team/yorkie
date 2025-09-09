@@ -18,7 +18,6 @@ package documents
 
 import (
 	"context"
-	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -44,14 +43,13 @@ func CompactDocuments(
 	candidatesLimit int,
 	compactionMinChanges int,
 	lastDocID types.ID,
-) (types.ID, error) {
+) (types.ID, int, int, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(compactionKey)
 	if !ok {
-		return database.ZeroID, nil
+		return lastDocID, 0, 0, nil
 	}
 	defer locker.Unlock()
 
-	start := time.Now()
 	lastID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,
@@ -60,7 +58,12 @@ func CompactDocuments(
 		lastDocID,
 	)
 	if err != nil {
-		return database.ZeroID, err
+		return lastDocID, 0, 0, err
+	}
+
+	// If no candidates found, reset to beginning for next cycle.
+	if len(candidates) == 0 {
+		return database.ZeroID, 0, 0, nil
 	}
 
 	compactedCount := 0
@@ -72,16 +75,7 @@ func CompactDocuments(
 		compactedCount++
 	}
 
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, compacted %d, %s",
-			len(candidates),
-			compactedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastID, nil
+	return lastID, len(candidates), compactedCount, nil
 }
 
 // FindCompactionCandidates finds candidates to compact by directly querying documents.

@@ -22,6 +22,7 @@ package server
 import (
 	"context"
 	gosync "sync"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
@@ -30,12 +31,22 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
+
+// housekeepingState is a common structure to hold the state of housekeeping tasks.
+type housekeepingState struct {
+	gosync.Mutex
+	lastID          types.ID
+	term            int
+	totalCandidates int
+	totalProcessed  int
+}
 
 // Yorkie is a server of Yorkie.
 // The server receives changes from the client, stores them in the repository,
@@ -184,61 +195,88 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 		return err
 	}
 
-	// Use a mutex to protect shared state
-	var deactivateState struct {
-		gosync.Mutex
-		lastClientID types.ID
-	}
-	deactivateState.lastClientID = database.ZeroID
+	deactivateState := &housekeepingState{lastID: database.ZeroID}
+	compactionState := &housekeepingState{lastID: database.ZeroID}
 
 	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		deactivateState.Lock()
-		currentLastClientID := deactivateState.lastClientID
+		currentLastID := deactivateState.lastID
 		deactivateState.Unlock()
 
-		lastClientID, err := clients.DeactivateInactives(
+		isNewTerm := currentLastID == database.ZeroID
+
+		start := time.Now()
+		lastID, candidatesCount, processedCount, err := clients.DeactivateInactives(
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimit,
-			currentLastClientID,
+			currentLastID,
 		)
 		if err != nil {
 			return err
 		}
 
 		deactivateState.Lock()
-		deactivateState.lastClientID = lastClientID
+		if isNewTerm {
+			deactivateState.term++
+		}
+
+		deactivateState.lastID = lastID
+		deactivateState.totalCandidates += candidatesCount
+		deactivateState.totalProcessed += processedCount
+
+		logging.From(ctx).Infof(
+			"HSKP: deactivation #%d, candidates %d/%d, deactivated %d/%d %s",
+			deactivateState.term,
+			candidatesCount,
+			deactivateState.totalCandidates,
+			processedCount,
+			deactivateState.totalProcessed,
+			time.Since(start),
+		)
 		deactivateState.Unlock()
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	// Use a separate mutex for compaction state
-	var compactionState struct {
-		gosync.Mutex
-		lastDocID types.ID
-	}
-	compactionState.lastDocID = database.ZeroID
-
 	if err := be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		compactionState.Lock()
-		currentLastDocID := compactionState.lastDocID
+		currentLastID := compactionState.lastID
 		compactionState.Unlock()
 
-		lastDocID, err := documents.CompactDocuments(
+		isNewTerm := currentLastID == database.ZeroID
+
+		start := time.Now()
+		lastID, candidatesCount, processedCount, err := documents.CompactDocuments(
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimit,
 			be.Housekeeping.Config.CompactionMinChanges,
-			currentLastDocID,
+			currentLastID,
 		)
 		if err != nil {
 			return err
 		}
 
 		compactionState.Lock()
-		compactionState.lastDocID = lastDocID
+		if isNewTerm {
+			compactionState.term++
+		}
+
+		compactionState.lastID = lastID
+		compactionState.totalCandidates += candidatesCount
+		compactionState.totalProcessed += processedCount
+
+		logging.From(ctx).Infof(
+			"HSKP: compaction #%d, candidates %d/%d, compacted %d/%d %s",
+			compactionState.term,
+			candidatesCount,
+			compactionState.totalCandidates,
+			processedCount,
+			compactionState.totalProcessed,
+			time.Since(start),
+		)
 		compactionState.Unlock()
 		return nil
 	}); err != nil {
