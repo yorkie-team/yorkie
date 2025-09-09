@@ -32,7 +32,7 @@ const (
 
 // CandidatePairDoc represents a pair of Project and Document.
 type CandidatePairDoc struct {
-	Project  *database.ProjectInfo
+	Project  *types.Project
 	Document *database.DocInfo
 }
 
@@ -65,7 +65,7 @@ func CompactDocuments(
 
 	compactedCount := 0
 	for _, pair := range candidates {
-		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
+		if err := CompactDocument(ctx, be, pair.Project, pair.Document); err != nil {
 			logging.From(ctx).Warnf("failed to compact document %s: %v", pair.Document.ID, err)
 			continue
 		}
@@ -99,15 +99,18 @@ func FindCompactionCandidates(
 
 	var pairs []CandidatePairDoc
 	for _, candidate := range candidates {
-		// Get project info for each candidate
-		projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
-		if err != nil {
-			logging.From(ctx).Warnf("failed to find project %s: %v", candidate.ProjectID, err)
-			continue
+		if _, ok := be.Cache.Project.Get(candidate.ProjectID.String()); !ok {
+			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+			if err != nil {
+				return database.ZeroID, nil, err
+			}
+
+			be.Cache.Project.Add(candidate.ProjectID.String(), projectInfo.ToProject())
 		}
+		project, _ := be.Cache.Project.Get(candidate.ProjectID.String())
 
 		pairs = append(pairs, CandidatePairDoc{
-			Project:  projectInfo,
+			Project:  project,
 			Document: candidate,
 		})
 	}

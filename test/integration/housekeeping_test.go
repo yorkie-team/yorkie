@@ -85,7 +85,7 @@ func TestHousekeeping(t *testing.T) {
 		fetchSize := 3
 
 		var err error
-		lastClientID := database.DefaultProjectID
+		lastClientID := database.ZeroID
 
 		// Test with basic pagination - this will find candidates based on client IDs
 		lastClientID, _, err = clients.FindDeactivateCandidates(
@@ -120,7 +120,7 @@ func TestHousekeeping(t *testing.T) {
 			ctx,
 			be,
 			10,
-			database.DefaultProjectID,
+			database.ZeroID,
 		)
 
 		assert.NoError(t, err)

@@ -32,7 +32,7 @@ const (
 
 // CandidatePair represents a pair of Project and Client.
 type CandidatePair struct {
-	Project *database.ProjectInfo
+	Project *types.Project
 	Client  *database.ClientInfo
 }
 
@@ -46,7 +46,7 @@ func DeactivateInactives(
 ) (types.ID, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
 	if !ok {
-		return database.ZeroID, nil
+		return lastClientID, nil
 	}
 	defer locker.Unlock()
 
@@ -63,7 +63,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, candidate := range candidates {
-		if _, err := Deactivate(ctx, be, candidate.Project.ToProject(), candidate.Client.RefKey()); err != nil {
+		if _, err := Deactivate(ctx, be, candidate.Project, candidate.Client.RefKey()); err != nil {
 			logging.From(ctx).Warnf("failed to deactivate client %s: %v", candidate.Client.ID, err)
 			continue
 		}
@@ -90,8 +90,8 @@ func FindDeactivateCandidates(
 	candidatesLimit int,
 	lastClientID types.ID,
 ) (types.ID, []CandidatePair, error) {
-	// First, get active clients with a simple query
-	clients, lastID, err := be.DB.FindActiveClients(ctx, candidatesLimit, lastClientID)
+	// First, get active candidates with a simple query
+	candidates, lastID, err := be.DB.FindActiveClients(ctx, candidatesLimit, lastClientID)
 	if err != nil {
 		return database.ZeroID, nil, err
 	}
@@ -99,44 +99,27 @@ func FindDeactivateCandidates(
 	var pairs []CandidatePair
 	now := time.Now()
 
-	for _, client := range clients {
-		// Try to get project from cache first
-		var projectInfo *database.ProjectInfo
-		if cached, ok := be.Cache.Project.Get(client.ProjectID.String()); ok {
-			projectInfo = &database.ProjectInfo{
-				ID:                        cached.ID,
-				Name:                      cached.Name,
-				PublicKey:                 cached.PublicKey,
-				SecretKey:                 cached.SecretKey,
-				Owner:                     cached.Owner,
-				ClientDeactivateThreshold: cached.ClientDeactivateThreshold,
-				CreatedAt:                 cached.CreatedAt,
-				UpdatedAt:                 cached.UpdatedAt,
-			}
-		} else {
-			// If not in cache, get from DB and cache it
-			projectInfo, err = be.DB.FindProjectInfoByID(ctx, client.ProjectID)
+	for _, candidate := range candidates {
+		if _, ok := be.Cache.Project.Get(candidate.ProjectID.String()); !ok {
+			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
 			if err != nil {
-				logging.From(ctx).Warnf("failed to find project %s: %v", client.ProjectID, err)
-				continue
+				return database.ZeroID, nil, err
 			}
 
-			// Cache the project for future use
-			project := projectInfo.ToProject()
-			be.Cache.Project.Add(client.ProjectID.String(), project)
+			be.Cache.Project.Add(candidate.ProjectID.String(), projectInfo.ToProject())
 		}
+		project, _ := be.Cache.Project.Get(candidate.ProjectID.String())
 
 		// Check if client needs deactivation based on project's threshold
-		clientDeactivateThreshold, err := projectInfo.ClientDeactivateThresholdAsTimeDuration()
+		threshold, err := project.ClientDeactivateThresholdAsTimeDuration()
 		if err != nil {
-			logging.From(ctx).Warnf("failed to parse deactivate threshold for project %s: %v", client.ProjectID, err)
-			continue
+			return database.ZeroID, nil, err
 		}
 
-		if client.UpdatedAt.Before(now.Add(-clientDeactivateThreshold)) {
+		if candidate.UpdatedAt.Before(now.Add(-threshold)) {
 			pairs = append(pairs, CandidatePair{
-				Project: projectInfo,
-				Client:  client,
+				Project: project,
+				Client:  candidate,
 			})
 		}
 	}

@@ -17,16 +17,12 @@
 package database
 
 import (
-	"errors"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
-
-// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
-var ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
 
 // ZeroID represents the minimum possible ID value, used as a starting point.
 var ZeroID = types.ID("000000000000000000000000")
@@ -192,7 +188,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
 	clientDeactivateThreshold, err := time.ParseDuration(i.ClientDeactivateThreshold)
 	if err != nil {
-		return 0, ErrInvalidTimeDurationString
+		return 0, types.ErrInvalidTimeDurationString
 	}
 
 	return clientDeactivateThreshold, nil

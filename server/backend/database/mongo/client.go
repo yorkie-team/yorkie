@@ -1075,32 +1075,10 @@ func (c *Client) FindCompactionCandidates(
 	compactionMinChanges int,
 	lastDocID types.ID,
 ) ([]*database.DocInfo, types.ID, error) {
-	cursor, err := c.collection(ColDocuments).Aggregate(ctx, mongo.Pipeline{
-		bson.D{{Key: "$match", Value: bson.M{
-			"_id":        bson.M{"$gt": lastDocID},
-			"server_seq": bson.M{"$gte": compactionMinChanges},
-		}}},
-		// Check if document is not attached to any client
-		bson.D{{Key: "$lookup", Value: bson.M{
-			"from": ColClients,
-			"let":  bson.M{"docId": "$_id", "projectId": "$project_id"},
-			"pipeline": []bson.M{
-				{"$match": bson.M{
-					"$expr": bson.M{
-						"$and": bson.A{
-							bson.M{"$eq": bson.A{"$project_id", "$$projectId"}},
-							bson.M{"$in": bson.A{"$$docId", bson.M{"$ifNull": bson.A{"$attached_docs", bson.A{}}}}},
-						},
-					},
-				}},
-			},
-			"as": "attached_clients",
-		}}},
-		bson.D{{Key: "$match", Value: bson.M{"attached_clients": bson.M{"$eq": bson.A{}}}}},
-		bson.D{{Key: "$project", Value: bson.M{"attached_clients": 0}}},
-		bson.D{{Key: "$sort", Value: bson.M{"_id": 1}}},
-		bson.D{{Key: "$limit", Value: candidatesLimit}},
-	})
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"_id":        bson.M{"$gt": lastDocID},
+		"server_seq": bson.M{"$gte": compactionMinChanges},
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
 	if err != nil {
 		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}

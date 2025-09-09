@@ -986,11 +986,11 @@ func (d *DB) FindCompactionCandidates(
 
 	iter, err := txn.LowerBound(tblDocuments, "id", lastDocID.String())
 	if err != nil {
-		return nil, database.DefaultProjectID, fmt.Errorf("find compaction candidates direct: %w", err)
+		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}
 
 	var infos []*database.DocInfo
-	var lastID types.ID = database.DefaultProjectID
+	var lastID types.ID = database.ZeroID
 	count := 0
 
 	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
@@ -1010,7 +1010,7 @@ func (d *DB) FindCompactionCandidates(
 		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
 			ProjectID: info.ProjectID,
 			DocID:     info.ID,
-		}, "")
+		}, types.ID(""))
 		if err != nil {
 			continue
 		}
