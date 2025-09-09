@@ -30,39 +30,43 @@ const (
 	deactivationKey = "housekeeping/deactivation"
 )
 
+// CandidatePair represents a pair of Project and Client.
+type CandidatePair struct {
+	Project *database.ProjectInfo
+	Client  *database.ClientInfo
+}
+
 // DeactivateInactives deactivates clients that have not been active for a
-// long time.
+// long time using direct client iteration.
 func DeactivateInactives(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	housekeepingLastProjectID types.ID,
+	candidatesLimit int,
+	lastClientID types.ID,
 ) (types.ID, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(deactivationKey)
 	if !ok {
-		return database.DefaultProjectID, nil
+		return database.ZeroID, nil
 	}
 	defer locker.Unlock()
 
 	start := time.Now()
-	lastProjectID, candidates, err := FindDeactivateCandidates(
+	lastID, candidates, err := FindDeactivateCandidates(
 		ctx,
 		be,
-		candidatesLimitPerProject,
-		projectFetchSize,
-		housekeepingLastProjectID,
+		candidatesLimit,
+		lastClientID,
 	)
 	if err != nil {
-		return database.DefaultProjectID, err
+		return database.ZeroID, err
 	}
 
 	deactivatedCount := 0
-	for _, pair := range candidates {
-		if _, err := Deactivate(ctx, be, pair.Project.ToProject(), pair.Client.RefKey()); err != nil {
-			return database.DefaultProjectID, err
+	for _, candidate := range candidates {
+		if _, err := Deactivate(ctx, be, candidate.Project.ToProject(), candidate.Client.RefKey()); err != nil {
+			logging.From(ctx).Warnf("failed to deactivate client %s: %v", candidate.Client.ID, err)
+			continue
 		}
-
 		deactivatedCount++
 	}
 
@@ -75,49 +79,35 @@ func DeactivateInactives(
 		)
 	}
 
-	return lastProjectID, nil
+	return lastID, nil
 }
 
-// CandidatePair represents a pair of Project and Client.
-type CandidatePair struct {
-	Project *database.ProjectInfo
-	Client  *database.ClientInfo
-}
-
-// FindDeactivateCandidates finds candidates to deactivate from the database.
+// FindDeactivateCandidates finds candidates to deactivate by directly querying clients.
 func FindDeactivateCandidates(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
+	candidatesLimit int,
+	lastClientID types.ID,
 ) (types.ID, []CandidatePair, error) {
-	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	candidates, lastID, err := be.DB.FindDeactivateCandidates(ctx, candidatesLimit, lastClientID)
 	if err != nil {
-		return database.DefaultProjectID, nil, err
+		return database.ZeroID, nil, err
 	}
 
-	var candidates []CandidatePair
-	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, projectInfo, candidatesLimitPerProject)
+	var pairs []CandidatePair
+	for _, candidate := range candidates {
+		// Get project info for each candidate
+		projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
 		if err != nil {
-			return database.DefaultProjectID, nil, err
+			logging.From(ctx).Warnf("failed to find project %s: %v", candidate.ProjectID, err)
+			continue
 		}
 
-		for _, info := range infos {
-			candidates = append(candidates, CandidatePair{
-				Project: projectInfo,
-				Client:  info,
-			})
-		}
+		pairs = append(pairs, CandidatePair{
+			Project: projectInfo,
+			Client:  candidate,
+		})
 	}
 
-	var topProjectID types.ID
-	if len(projectInfos) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projectInfos[len(projectInfos)-1].ID
-	}
-
-	return topProjectID, candidates, nil
+	return lastID, pairs, nil
 }

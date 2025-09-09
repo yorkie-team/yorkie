@@ -30,38 +30,43 @@ const (
 	compactionKey = "housekeeping/compaction"
 )
 
+// CandidatePairDoc represents a pair of Project and Document.
+type CandidatePairDoc struct {
+	Project  *database.ProjectInfo
+	Document *database.DocInfo
+}
+
 // CompactDocuments compacts documents by removing old changes and creating
-// a new initial change.
+// a new initial change using direct document iteration.
 func CompactDocuments(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
+	candidatesLimit int,
 	compactionMinChanges int,
-	lastCompactionProjectID types.ID,
+	lastDocID types.ID,
 ) (types.ID, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(compactionKey)
 	if !ok {
-		return database.DefaultProjectID, nil
+		return database.ZeroID, nil
 	}
 	defer locker.Unlock()
 
 	start := time.Now()
-	lastProjectID, candidates, err := FindCompactionCandidates(
+	lastID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,
-		candidatesLimitPerProject,
-		projectFetchSize,
+		candidatesLimit,
 		compactionMinChanges,
-		lastCompactionProjectID,
+		lastDocID,
 	)
 	if err != nil {
-		return database.DefaultProjectID, err
+		return database.ZeroID, err
 	}
 
 	compactedCount := 0
 	for _, pair := range candidates {
 		if err := CompactDocument(ctx, be, pair.Project.ToProject(), pair.Document); err != nil {
+			logging.From(ctx).Warnf("failed to compact document %s: %v", pair.Document.ID, err)
 			continue
 		}
 		compactedCount++
@@ -76,55 +81,36 @@ func CompactDocuments(
 		)
 	}
 
-	return lastProjectID, nil
+	return lastID, nil
 }
 
-// CandidatePair represents a pair of Project and Document.
-type CandidatePair struct {
-	Project  *database.ProjectInfo
-	Document *database.DocInfo
-}
-
-// FindCompactionCandidates finds candidates to compact from the database.
+// FindCompactionCandidates finds candidates to compact by directly querying documents.
 func FindCompactionCandidates(
 	ctx context.Context,
 	be *backend.Backend,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
+	candidatesLimit int,
 	compactionMinChanges int,
-	lastProjectID types.ID,
-) (types.ID, []CandidatePair, error) {
-	projectInfos, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	lastDocID types.ID,
+) (types.ID, []CandidatePairDoc, error) {
+	candidates, lastID, err := be.DB.FindCompactionCandidates(ctx, candidatesLimit, compactionMinChanges, lastDocID)
 	if err != nil {
-		return database.DefaultProjectID, nil, err
+		return database.ZeroID, nil, err
 	}
 
-	var candidates []CandidatePair
-	for _, projectInfo := range projectInfos {
-		infos, err := be.DB.FindCompactionCandidatesPerProject(
-			ctx,
-			projectInfo,
-			candidatesLimitPerProject,
-			compactionMinChanges,
-		)
+	var pairs []CandidatePairDoc
+	for _, candidate := range candidates {
+		// Get project info for each candidate
+		projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
 		if err != nil {
-			return database.DefaultProjectID, nil, err
+			logging.From(ctx).Warnf("failed to find project %s: %v", candidate.ProjectID, err)
+			continue
 		}
 
-		for _, info := range infos {
-			candidates = append(candidates, CandidatePair{
-				Project:  projectInfo,
-				Document: info,
-			})
-		}
+		pairs = append(pairs, CandidatePairDoc{
+			Project:  projectInfo,
+			Document: candidate,
+		})
 	}
 
-	var topProjectID types.ID
-	if len(projectInfos) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projectInfos[len(projectInfos)-1].ID
-	}
-
-	return topProjectID, candidates, nil
+	return lastID, pairs, nil
 }

@@ -68,14 +68,13 @@ var (
 
 	ProfilingPort = 11102
 
-	AdminUser                             = server.DefaultAdminUser
-	AdminPassword                         = server.DefaultAdminPassword
-	AdminPasswordForSignUp                = AdminPassword + "123!"
-	UseDefaultProject                     = true
-	HousekeepingInterval                  = 10 * gotime.Second
-	HousekeepingCandidatesLimitPerProject = 10
-	HousekeepingProjectFetchSize          = 10
-	HousekeepingCompactionMinChanges      = 1000
+	AdminUser                        = server.DefaultAdminUser
+	AdminPassword                    = server.DefaultAdminPassword
+	AdminPasswordForSignUp           = AdminPassword + "123!"
+	UseDefaultProject                = true
+	HousekeepingInterval             = 500 * gotime.Millisecond
+	HousekeepingCandidatesLimit      = 10
+	HousekeepingCompactionMinChanges = 5
 
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
@@ -278,10 +277,9 @@ func TestConfig() *server.Config {
 			Port: ProfilingPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  HousekeepingInterval.String(),
-			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          HousekeepingProjectFetchSize,
-			CompactionMinChanges:      HousekeepingCompactionMinChanges,
+			Interval:             HousekeepingInterval.String(),
+			CandidatesLimit:      HousekeepingCandidatesLimit,
+			CompactionMinChanges: HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
 			AdminUser:                   server.DefaultAdminUser,

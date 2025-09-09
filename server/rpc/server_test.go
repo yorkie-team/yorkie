@@ -93,9 +93,8 @@ func TestMain(m *testing.M) {
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
-		Interval:                  helper.HousekeepingInterval.String(),
-		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-		ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
+		Interval:        helper.HousekeepingInterval.String(),
+		CandidatesLimit: helper.HousekeepingCandidatesLimit,
 	}, met, nil, nil)
 	if err != nil {
 		log.Fatal(err)

@@ -184,40 +184,62 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 		return err
 	}
 
-	lastDeactivateProjectID := database.DefaultProjectID
+	// Use a mutex to protect shared state
+	var deactivateState struct {
+		gosync.Mutex
+		lastClientID types.ID
+	}
+	deactivateState.lastClientID = database.ZeroID
+
 	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
-		lastProjectID, err := clients.DeactivateInactives(
+		deactivateState.Lock()
+		currentLastClientID := deactivateState.lastClientID
+		deactivateState.Unlock()
+
+		lastClientID, err := clients.DeactivateInactives(
 			ctx,
 			be,
-			be.Housekeeping.Config.CandidatesLimitPerProject,
-			be.Housekeeping.Config.ProjectFetchSize,
-			lastDeactivateProjectID,
+			be.Housekeeping.Config.CandidatesLimit,
+			currentLastClientID,
 		)
 		if err != nil {
 			return err
 		}
 
-		lastDeactivateProjectID = lastProjectID
+		deactivateState.Lock()
+		deactivateState.lastClientID = lastClientID
+		deactivateState.Unlock()
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	lastCompactionProjectID := database.DefaultProjectID
+	// Use a separate mutex for compaction state
+	var compactionState struct {
+		gosync.Mutex
+		lastDocID types.ID
+	}
+	compactionState.lastDocID = database.ZeroID
+
 	if err := be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
-		lastProjectID, err := documents.CompactDocuments(
+		compactionState.Lock()
+		currentLastDocID := compactionState.lastDocID
+		compactionState.Unlock()
+
+		lastDocID, err := documents.CompactDocuments(
 			ctx,
 			be,
-			be.Housekeeping.Config.CandidatesLimitPerProject,
-			be.Housekeeping.Config.ProjectFetchSize,
+			be.Housekeeping.Config.CandidatesLimit,
 			be.Housekeeping.Config.CompactionMinChanges,
-			lastCompactionProjectID,
+			currentLastDocID,
 		)
 		if err != nil {
 			return err
 		}
 
-		lastCompactionProjectID = lastProjectID
+		compactionState.Lock()
+		compactionState.lastDocID = lastDocID
+		compactionState.Unlock()
 		return nil
 	}); err != nil {
 		return err

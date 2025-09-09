@@ -28,8 +28,11 @@ import (
 // ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
 var ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
 
+// ZeroID represents the minimum possible ID value, used as a starting point.
+var ZeroID = types.ID("000000000000000000000000")
+
 // DefaultProjectID is the default project ID.
-var DefaultProjectID = types.ID("000000000000000000000000")
+var DefaultProjectID = ZeroID
 
 // DefaultProjectName is the default project name.
 var DefaultProjectName = "default"

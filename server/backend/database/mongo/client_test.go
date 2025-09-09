@@ -57,18 +57,6 @@ func TestClient(t *testing.T) {
 		testcases.RunLeadershipTest(t, cli)
 	})
 
-	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
-		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
-	})
-
-	t.Run("FindCompactionCandidatesPerProject test", func(t *testing.T) {
-		testcases.RunFindCompactionCandidatesPerProjectTest(t, cli)
-	})
-
-	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
-		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
-	})
-
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
@@ -153,6 +141,10 @@ func TestClient(t *testing.T) {
 
 	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
 		testcases.RunFindAttachedClientCountsByDocIDsTest(t, cli, dummyProjectID)
+	})
+
+	t.Run("RunFindCandidates test", func(t *testing.T) {
+		testcases.RunFindCandidatesTest(t, cli, dummyProjectID)
 	})
 }
 

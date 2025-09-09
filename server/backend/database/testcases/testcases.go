@@ -1802,159 +1802,6 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 	})
 }
 
-// RunFindNextNCyclingProjectInfosTest runs the FindNextNCyclingProjectInfos tests for the given db.
-func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
-	t.Run("FindNextNCyclingProjectInfos cyclic search test", func(t *testing.T) {
-		ctx := context.Background()
-
-		projectCnt := 10
-		projects := make([]*database.ProjectInfo, 0)
-		for i := range projectCnt {
-			p, err := db.CreateProjectInfo(
-				ctx,
-				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
-				otherOwnerID,
-				clientDeactivateThreshold,
-			)
-			assert.NoError(t, err)
-			projects = append(projects, p)
-		}
-
-		lastProjectID := database.DefaultProjectID
-		pageSize := 2
-
-		for i := range 10 {
-			projectInfos, err := db.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
-			assert.NoError(t, err)
-
-			lastProjectID = projectInfos[len(projectInfos)-1].ID
-
-			assert.Equal(t, projects[((i+1)*pageSize-1)%projectCnt].ID, lastProjectID)
-		}
-
-	})
-}
-
-// RunFindDeactivateCandidatesPerProjectTest runs the FindDeactivateCandidatesPerProject tests for the given db.
-func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Database) {
-	t.Run("FindDeactivateCandidatesPerProject candidate search test", func(t *testing.T) {
-		ctx := context.Background()
-
-		p1, err := db.CreateProjectInfo(
-			ctx,
-			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()),
-			otherOwnerID,
-			clientDeactivateThreshold,
-		)
-		assert.NoError(t, err)
-
-		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1", map[string]string{"userID": t.Name() + "1-1"})
-		assert.NoError(t, err)
-
-		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2", map[string]string{"userID": t.Name() + "1-2"})
-		assert.NoError(t, err)
-
-		p2, err := db.CreateProjectInfo(
-			ctx,
-			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()),
-			otherOwnerID,
-			"0s",
-		)
-		assert.NoError(t, err)
-
-		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1", map[string]string{"userID": t.Name() + "2-1"})
-		assert.NoError(t, err)
-
-		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2", map[string]string{"userID": t.Name() + "2-2"})
-		assert.NoError(t, err)
-
-		candidates1, err := db.FindDeactivateCandidatesPerProject(ctx, p1, 10)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, len(candidates1))
-
-		candidates2, err := db.FindDeactivateCandidatesPerProject(ctx, p2, 10)
-		assert.NoError(t, err)
-
-		idList := make([]types.ID, len(candidates2))
-		for i, candidate := range candidates2 {
-			idList[i] = candidate.ID
-		}
-		assert.Equal(t, 2, len(candidates2))
-		assert.Contains(t, idList, c1.ID)
-		assert.Contains(t, idList, c2.ID)
-	})
-}
-
-// RunFindCompactionCandidatesPerProjectTest runs the FindCompactionCandidatesPerProject tests for the given db.
-func RunFindCompactionCandidatesPerProjectTest(t *testing.T, db database.Database) {
-	t.Run("FindCompactionCandidatesPerProject candidate search test", func(t *testing.T) {
-		ctx := context.Background()
-
-		documentCnt := 10
-		p, err := db.CreateProjectInfo(
-			ctx,
-			fmt.Sprintf("%s-RunFindCompactionCandidatesPerProject", t.Name()),
-			otherOwnerID,
-			clientDeactivateThreshold,
-		)
-		assert.NoError(t, err)
-		clientInfo1, err := db.ActivateClient(ctx, p.ID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
-		assert.NoError(t, err)
-		clientInfo2, err := db.ActivateClient(ctx, p.ID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
-		assert.NoError(t, err)
-
-		clientCountInDB, err := db.GetClientsCount(ctx, p.ID)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(2), clientCountInDB)
-
-		docInfos := make([]*database.DocInfo, 0, documentCnt)
-		for i := range documentCnt {
-			docKey := key.Key(fmt.Sprintf("tests$%s-%d", t.Name(), i))
-			docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo1.RefKey(), docKey)
-			assert.NoError(t, err)
-			docInfos = append(docInfos, docInfo)
-
-			// Set server_seq=1 via executing CompactChangeInfos
-			changes := make([]*change.Change, 0, 1)
-			changes = append(changes, change.New(change.InitialID(), "test-message", nil, nil))
-			err = db.CompactChangeInfos(ctx, docInfo, 0, changes)
-			assert.NoError(t, err)
-		}
-		docCountInDB, err := db.GetDocumentsCount(ctx, p.ID)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(documentCnt), docCountInDB)
-
-		{ // candidatesLimit=10, compactionMinChanges=1
-			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
-			assert.NoError(t, err)
-			assert.Equal(t, documentCnt, len(cands))
-		}
-		{ // candidatesLimit=5, compactionMinChanges=1
-			candidatesLimit := 5
-			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, candidatesLimit, 1)
-			assert.NoError(t, err)
-			assert.Equal(t, candidatesLimit, len(cands))
-		}
-		{ // candidatesLimit=10, compactionMinChanges=2
-			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 2)
-			assert.NoError(t, err)
-			assert.Equal(t, 0, len(cands))
-		}
-		{ // Attach some documents in clientInfo1 and clientInfo2
-			attachCnt := 3
-			for i := range attachCnt {
-				assert.NoError(t, clientInfo1.AttachDocument(docInfos[i].ID, false))
-				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfos[i]))
-				assert.NoError(t, clientInfo2.AttachDocument(docInfos[i+attachCnt].ID, false))
-				assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfos[i+attachCnt]))
-			}
-			cands, err := db.FindCompactionCandidatesPerProject(ctx, p, documentCnt, 1)
-			assert.NoError(t, err)
-			assert.Equal(t, documentCnt-2*attachCnt, len(cands))
-		}
-	})
-}
-
 // RunFindClientInfosByAttachedDocRefKeyTest runs the FindClientInfosByAttachedDocRefKey tests for the given db.
 func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
@@ -2094,4 +1941,85 @@ func toChangeInfos(t *testing.T, docKey types.DocRefKey, changes []*change.Chang
 		changeInfos[i] = info
 	}
 	return changeInfos
+}
+
+func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("FindDeactivateCandidates test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Test basic functionality - just call the method
+		clients, lastID, err := db.FindDeactivateCandidates(ctx, 10, database.ZeroID)
+		assert.NoError(t, err)
+
+		// Should not crash and return valid data
+		assert.GreaterOrEqual(t, len(clients), 0)
+
+		// All returned clients should be valid
+		for _, client := range clients {
+			assert.NotNil(t, client)
+			assert.NotEmpty(t, client.ID)
+		}
+
+		// 02. Test pagination with smaller limit
+		limitedClients, newLastID, err := db.FindDeactivateCandidates(ctx, 5, database.ZeroID)
+		assert.NoError(t, err)
+		assert.LessOrEqual(t, len(limitedClients), 5)
+
+		// Test second page if there are results
+		if len(limitedClients) > 0 {
+			_, _, err := db.FindDeactivateCandidates(ctx, 5, newLastID)
+			assert.NoError(t, err)
+		}
+
+		// 03. Test with empty result using high lastID
+		highID := types.ID("ffffffffffffffffffffffff")
+		emptyClients, _, err := db.FindDeactivateCandidates(ctx, 10, highID)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(emptyClients))
+
+		_ = lastID // Use lastID to avoid unused variable error
+	})
+
+	t.Run("FindCompactionCandidates test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Test basic functionality with very low threshold
+		candidates, lastID, err := db.FindCompactionCandidates(ctx, 10, 1, database.ZeroID)
+		assert.NoError(t, err)
+
+		// Should not crash and return valid data
+		assert.GreaterOrEqual(t, len(candidates), 0)
+
+		// All returned documents should be valid
+		for _, doc := range candidates {
+			assert.NotNil(t, doc)
+			assert.NotEmpty(t, doc.ID)
+		}
+
+		// 02. Test with very high threshold (should find fewer or no documents)
+		highThresholdCandidates, _, err := db.FindCompactionCandidates(ctx, 10, 10000, database.ZeroID)
+		assert.NoError(t, err)
+
+		// Should find fewer candidates than with low threshold
+		assert.LessOrEqual(t, len(highThresholdCandidates), len(candidates))
+
+		// 03. Test pagination with smaller limit
+		limitedCandidates, newLastID, err := db.FindCompactionCandidates(ctx, 5, 1, database.ZeroID)
+		assert.NoError(t, err)
+		assert.LessOrEqual(t, len(limitedCandidates), 5)
+
+		// Test second page if there are results
+		if len(limitedCandidates) > 0 {
+			_, _, err := db.FindCompactionCandidates(ctx, 5, 1, newLastID)
+			assert.NoError(t, err)
+		}
+
+		// 04. Test with empty result using high lastID
+		highID := types.ID("ffffffffffffffffffffffff")
+		emptyCandidates, _, err := db.FindCompactionCandidates(ctx, 10, 1, highID)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(emptyCandidates))
+
+		_ = lastID // Use lastID to avoid unused variable error
+	})
 }

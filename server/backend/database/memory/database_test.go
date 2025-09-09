@@ -40,18 +40,6 @@ func TestDB(t *testing.T) {
 		testcases.RunLeadershipTest(t, db)
 	})
 
-	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
-		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
-	})
-
-	t.Run("FindCompactionCandidatesPerProject test", func(t *testing.T) {
-		testcases.RunFindCompactionCandidatesPerProjectTest(t, db)
-	})
-
-	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
-		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
-	})
-
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
@@ -138,5 +126,9 @@ func TestDB(t *testing.T) {
 
 	t.Run("RunPurgeDocument test", func(t *testing.T) {
 		testcases.RunPurgeDocument(t, db, projectID)
+	})
+
+	t.Run("RunFindCandidates test", func(t *testing.T) {
+		testcases.RunFindCandidatesTest(t, db, projectID)
 	})
 }

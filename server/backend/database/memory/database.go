@@ -407,64 +407,6 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-func (d *DB) FindNextNCyclingProjectInfos(
-	_ context.Context,
-	pageSize int,
-	lastProjectID types.ID,
-) ([]*database.ProjectInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	iter, err := txn.LowerBound(
-		tblProjects,
-		"id",
-		lastProjectID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch projects: %w", err)
-	}
-
-	var infos []*database.ProjectInfo
-	isCircular := false
-
-	for i := 0; i < pageSize; i++ {
-		raw := iter.Next()
-		if raw == nil {
-			if isCircular {
-				break
-			}
-
-			iter, err = txn.LowerBound(
-				tblProjects,
-				"id",
-				database.DefaultProjectID.String(),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("fetch projects: %w", err)
-			}
-
-			i--
-			isCircular = true
-			continue
-		}
-		info := raw.(*database.ProjectInfo).DeepCopy()
-
-		if i == 0 && info.ID == lastProjectID {
-			pageSize++
-			continue
-		}
-
-		if len(infos) > 0 && infos[0].ID == info.ID {
-			break
-		}
-
-		infos = append(infos, info)
-	}
-
-	return infos, nil
-}
-
 // ListProjectInfos returns all project infos owned by owner.
 func (d *DB) ListProjectInfos(
 	_ context.Context,
@@ -997,92 +939,114 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (d *DB) FindDeactivateCandidatesPerProject(
+// FindDeactivateCandidates finds clients that need deactivation.
+func (d *DB) FindDeactivateCandidates(
 	_ context.Context,
-	project *database.ProjectInfo,
 	candidatesLimit int,
-) ([]*database.ClientInfo, error) {
+	lastClientID types.ID,
+) ([]*database.ClientInfo, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+	iter, err := txn.LowerBound(tblClients, "id", lastClientID.String())
 	if err != nil {
-		return nil, err
+		return nil, database.DefaultProjectID, fmt.Errorf("find deactivate candidates direct: %w", err)
 	}
-
-	offset := gotime.Now().Add(-clientDeactivateThreshold)
 
 	var infos []*database.ClientInfo
-	iterator, err := txn.ReverseLowerBound(
-		tblClients,
-		"project_id_status_updated_at",
-		project.ID.String(),
-		database.ClientActivated,
-		offset,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find deactivated candidates of %s: %w", project.ID, err)
-	}
+	var lastID types.ID = database.DefaultProjectID
+	count := 0
 
-	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
 
-		if info.Status != database.ClientActivated ||
-			candidatesLimit <= len(infos) ||
-			info.UpdatedAt.After(offset) {
-			break
+		// Skip the lastClientID itself
+		if info.ID == lastClientID {
+			continue
 		}
 
-		if info.ProjectID == project.ID {
-			infos = append(infos, info)
+		if info.Status != database.ClientActivated {
+			continue
 		}
+
+		// Get project info to check deactivation threshold
+		projectRaw, err := txn.First(tblProjects, "id", info.ProjectID.String())
+		if err != nil {
+			continue
+		}
+		if projectRaw == nil {
+			continue
+		}
+
+		projectInfo := projectRaw.(*database.ProjectInfo)
+		clientDeactivateThreshold, err := projectInfo.ClientDeactivateThresholdAsTimeDuration()
+		if err != nil {
+			continue
+		}
+
+		offset := gotime.Now().Add(-clientDeactivateThreshold)
+		if info.UpdatedAt.After(offset) {
+			continue
+		}
+
+		infos = append(infos, info)
+		lastID = info.ID
+		count++
 	}
-	return infos, nil
+
+	return infos, lastID, nil
 }
 
-// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
-func (d *DB) FindCompactionCandidatesPerProject(
+// FindCompactionCandidates finds documents that need compaction.
+func (d *DB) FindCompactionCandidates(
 	ctx context.Context,
-	project *database.ProjectInfo,
 	candidatesLimit int,
 	compactionMinChanges int,
-) ([]*database.DocInfo, error) {
+	lastDocID types.ID,
+) ([]*database.DocInfo, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	var infos []*database.DocInfo
-	iterator, err := txn.Get(tblDocuments, "project_id", project.ID.String())
+	iter, err := txn.LowerBound(tblDocuments, "id", lastDocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
+		return nil, database.DefaultProjectID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}
 
-	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+	var infos []*database.DocInfo
+	var lastID types.ID = database.DefaultProjectID
+	count := 0
+
+	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.DocInfo)
-		if candidatesLimit <= len(infos) {
-			break
+
+		// Skip the lastDocID itself
+		if info.ID == lastDocID {
+			continue
 		}
 
-		// 1. Check if the document is attached to a client.
+		// Check if document has enough changes to compact
+		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		// Check if document is attached to any client
 		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
-			ProjectID: project.ID,
+			ProjectID: info.ProjectID,
 			DocID:     info.ID,
 		}, "")
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if isAttached {
 			continue
 		}
 
-		// 2. Check if the document has enough changes to compact.
-		if info.ServerSeq < int64(compactionMinChanges) {
-			continue
-		}
-
 		infos = append(infos, info)
+		lastID = info.ID
+		count++
 	}
-	return infos, nil
+
+	return infos, lastID, nil
 }
 
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
