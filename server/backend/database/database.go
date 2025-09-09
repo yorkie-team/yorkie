@@ -203,8 +203,8 @@ type Database interface {
 	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
-	// FindDeactivateCandidates finds clients that need deactivation.
-	FindDeactivateCandidates(
+	// FindActiveClients finds active clients for deactivation checking.
+	FindActiveClients(
 		ctx context.Context,
 		candidatesLimit int,
 		lastClientID types.ID,

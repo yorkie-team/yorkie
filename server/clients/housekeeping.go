@@ -82,31 +82,63 @@ func DeactivateInactives(
 	return lastID, nil
 }
 
-// FindDeactivateCandidates finds candidates to deactivate by directly querying clients.
+// FindDeactivateCandidates finds candidates to deactivate using cache for projects.
+// This improves performance by avoiding complex aggregation queries and using in-memory filtering.
 func FindDeactivateCandidates(
 	ctx context.Context,
 	be *backend.Backend,
 	candidatesLimit int,
 	lastClientID types.ID,
 ) (types.ID, []CandidatePair, error) {
-	candidates, lastID, err := be.DB.FindDeactivateCandidates(ctx, candidatesLimit, lastClientID)
+	// First, get active clients with a simple query
+	clients, lastID, err := be.DB.FindActiveClients(ctx, candidatesLimit, lastClientID)
 	if err != nil {
 		return database.ZeroID, nil, err
 	}
 
 	var pairs []CandidatePair
-	for _, candidate := range candidates {
-		// Get project info for each candidate
-		projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+	now := time.Now()
+
+	for _, client := range clients {
+		// Try to get project from cache first
+		var projectInfo *database.ProjectInfo
+		if cached, ok := be.Cache.Project.Get(client.ProjectID.String()); ok {
+			projectInfo = &database.ProjectInfo{
+				ID:                        cached.ID,
+				Name:                      cached.Name,
+				PublicKey:                 cached.PublicKey,
+				SecretKey:                 cached.SecretKey,
+				Owner:                     cached.Owner,
+				ClientDeactivateThreshold: cached.ClientDeactivateThreshold,
+				CreatedAt:                 cached.CreatedAt,
+				UpdatedAt:                 cached.UpdatedAt,
+			}
+		} else {
+			// If not in cache, get from DB and cache it
+			projectInfo, err = be.DB.FindProjectInfoByID(ctx, client.ProjectID)
+			if err != nil {
+				logging.From(ctx).Warnf("failed to find project %s: %v", client.ProjectID, err)
+				continue
+			}
+
+			// Cache the project for future use
+			project := projectInfo.ToProject()
+			be.Cache.Project.Add(client.ProjectID.String(), project)
+		}
+
+		// Check if client needs deactivation based on project's threshold
+		clientDeactivateThreshold, err := projectInfo.ClientDeactivateThresholdAsTimeDuration()
 		if err != nil {
-			logging.From(ctx).Warnf("failed to find project %s: %v", candidate.ProjectID, err)
+			logging.From(ctx).Warnf("failed to parse deactivate threshold for project %s: %v", client.ProjectID, err)
 			continue
 		}
 
-		pairs = append(pairs, CandidatePair{
-			Project: projectInfo,
-			Client:  candidate,
-		})
+		if client.UpdatedAt.Before(now.Add(-clientDeactivateThreshold)) {
+			pairs = append(pairs, CandidatePair{
+				Project: projectInfo,
+				Client:  client,
+			})
+		}
 	}
 
 	return lastID, pairs, nil

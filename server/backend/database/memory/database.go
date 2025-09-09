@@ -939,9 +939,9 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidates finds clients that need deactivation.
-func (d *DB) FindDeactivateCandidates(
-	_ context.Context,
+// FindActiveClients finds active clients for deactivation checking.
+func (d *DB) FindActiveClients(
+	ctx context.Context,
 	candidatesLimit int,
 	lastClientID types.ID,
 ) ([]*database.ClientInfo, types.ID, error) {
@@ -950,17 +950,14 @@ func (d *DB) FindDeactivateCandidates(
 
 	iter, err := txn.LowerBound(tblClients, "id", lastClientID.String())
 	if err != nil {
-		return nil, database.DefaultProjectID, fmt.Errorf("find deactivate candidates direct: %w", err)
+		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
 	}
 
 	var infos []*database.ClientInfo
-	var lastID types.ID = database.DefaultProjectID
+	var lastID types.ID = database.ZeroID
 	count := 0
-
 	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
-
-		// Skip the lastClientID itself
 		if info.ID == lastClientID {
 			continue
 		}
@@ -969,27 +966,7 @@ func (d *DB) FindDeactivateCandidates(
 			continue
 		}
 
-		// Get project info to check deactivation threshold
-		projectRaw, err := txn.First(tblProjects, "id", info.ProjectID.String())
-		if err != nil {
-			continue
-		}
-		if projectRaw == nil {
-			continue
-		}
-
-		projectInfo := projectRaw.(*database.ProjectInfo)
-		clientDeactivateThreshold, err := projectInfo.ClientDeactivateThresholdAsTimeDuration()
-		if err != nil {
-			continue
-		}
-
-		offset := gotime.Now().Add(-clientDeactivateThreshold)
-		if info.UpdatedAt.After(offset) {
-			continue
-		}
-
-		infos = append(infos, info)
+		infos = append(infos, info.DeepCopy())
 		lastID = info.ID
 		count++
 	}
@@ -1041,7 +1018,7 @@ func (d *DB) FindCompactionCandidates(
 			continue
 		}
 
-		infos = append(infos, info)
+		infos = append(infos, info.DeepCopy())
 		lastID = info.ID
 		count++
 	}

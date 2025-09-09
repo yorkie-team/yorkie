@@ -1041,47 +1041,23 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 	return infos, nil
 }
 
-// FindDeactivateCandidates finds clients that need deactivation.
-func (c *Client) FindDeactivateCandidates(
+// FindActiveClients finds active clients for deactivation checking.
+func (c *Client) FindActiveClients(
 	ctx context.Context,
 	candidatesLimit int,
 	lastClientID types.ID,
 ) ([]*database.ClientInfo, types.ID, error) {
-	cursor, err := c.collection(ColClients).Aggregate(ctx, mongo.Pipeline{
-		bson.D{{Key: "$match", Value: bson.M{
-			"_id":    bson.M{"$gt": lastClientID},
-			"status": database.ClientActivated,
-		}}},
-		bson.D{{Key: "$lookup", Value: bson.M{
-			"from":         ColProjects,
-			"localField":   "project_id",
-			"foreignField": "_id",
-			"as":           "project",
-		}}},
-		bson.D{{Key: "$unwind", Value: "$project"}},
-		bson.D{{Key: "$addFields", Value: bson.M{
-			"client_deactivate_threshold": bson.M{
-				"$dateSubtract": bson.M{
-					"startDate": "$$NOW",
-					"unit":      "second",
-					"amount":    "$project.client_deactivate_threshold",
-				},
-			},
-		}}},
-		bson.D{{Key: "$match", Value: bson.M{
-			"updated_at": bson.M{"$lte": bson.M{"$toDate": "$client_deactivate_threshold"}},
-		}}},
-		bson.D{{Key: "$project", Value: bson.M{"project": 0}}},
-		bson.D{{Key: "$sort", Value: bson.M{"_id": 1}}},
-		bson.D{{Key: "$limit", Value: candidatesLimit}},
-	})
+	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
+		"_id":    bson.M{"$gt": lastClientID},
+		"status": database.ClientActivated,
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
 	if err != nil {
-		return nil, database.ZeroID, fmt.Errorf("find deactivate candidates direct: %w", err)
+		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
 	}
 
 	var infos []*database.ClientInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, database.ZeroID, fmt.Errorf("fetch deactivate candidates direct: %w", err)
+		return nil, database.ZeroID, fmt.Errorf("fetch active clients: %w", err)
 	}
 
 	var lastID types.ID = database.ZeroID
