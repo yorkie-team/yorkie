@@ -47,7 +47,6 @@ var (
 
 // Options are the options for the webhook httpClient.
 type Options struct {
-	RequestTimeout  time.Duration
 	MaxRetries      uint64
 	MinWaitInterval time.Duration
 	MaxWaitInterval time.Duration
@@ -56,19 +55,17 @@ type Options struct {
 // Client is a httpClient for the webhook.
 type Client[Req any, Res any] struct {
 	httpClient *http.Client
-	options    Options
 }
 
 // NewClient creates a new instance of Client. If you only want to get the status code,
 // then set Res to int.
 func NewClient[Req any, Res any](
-	options Options,
+	requestTimeout time.Duration,
 ) *Client[Req, Res] {
 	return &Client[Req, Res]{
 		httpClient: &http.Client{
-			Timeout: options.RequestTimeout,
+			Timeout: requestTimeout,
 		},
-		options: options,
 	}
 }
 
@@ -77,6 +74,7 @@ func (c *Client[Req, Res]) Send(
 	ctx context.Context,
 	url, hmacKey string,
 	body []byte,
+	options Options,
 ) (*Res, int, error) {
 	signature, err := createSignature(body, hmacKey)
 	if err != nil {
@@ -84,7 +82,7 @@ func (c *Client[Req, Res]) Send(
 	}
 
 	var res Res
-	status, err := c.withExponentialBackoff(ctx, func() (int, error) {
+	status, err := c.withExponentialBackoff(ctx, options, func() (int, error) {
 		req, err := c.buildRequest(ctx, url, signature, body)
 		if err != nil {
 			return 0, fmt.Errorf("build request: %w", err)
@@ -160,12 +158,12 @@ func createSignature(data []byte, hmacKey string) (string, error) {
 	return fmt.Sprintf("sha256=%s", signatureHex), nil
 }
 
-func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn func() (int, error)) (int, error) {
+func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, options Options, webhookFn func() (int, error)) (int, error) {
 	var retries uint64
 	var statusCode int
 	var err error
 
-	for retries <= c.options.MaxRetries {
+	for retries <= options.MaxRetries {
 		statusCode, err = webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if errors.Is(err, ErrUnexpectedStatusCode) {
@@ -175,7 +173,7 @@ func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn
 			return statusCode, err
 		}
 
-		waitBeforeRetry := waitInterval(retries, c.options.MinWaitInterval, c.options.MaxWaitInterval)
+		waitBeforeRetry := waitInterval(retries, options.MinWaitInterval, options.MaxWaitInterval)
 
 		select {
 		case <-ctx.Done():

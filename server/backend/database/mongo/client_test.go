@@ -158,7 +158,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		}()
 
 		// Create a test project
-		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID, "1h")
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID)
 		assert.NoError(t, err)
 
 		originalPublicKey := projectInfo.PublicKey
@@ -212,7 +212,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		}()
 
 		// Create a test project
-		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID, "1h")
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID)
 		assert.NoError(t, err)
 
 		// When

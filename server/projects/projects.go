@@ -35,7 +35,7 @@ func CreateProject(
 	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.CreateProjectInfo(ctx, name, owner, types.DefaultClientDeactivateThreshold.String())
+	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
 	if err != nil {
 		return nil, err
 	}

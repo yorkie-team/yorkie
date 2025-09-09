@@ -61,14 +61,14 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 	callback := func() {
-		if err := SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute); err != nil {
+		if err := SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
+		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options)
 	}
 	return nil
 }
@@ -89,13 +89,14 @@ func SendWebhook(
 	cli *webhook.Client[types.EventWebhookRequest, int],
 	event types.EventWebhookType,
 	attr types.WebhookAttribute,
+	options webhook.Options,
 ) error {
 	body, err := types.NewRequestBody(attr.DocKey, event)
 	if err != nil {
 		return fmt.Errorf("create webhook request body: %w", err)
 	}
 
-	_, status, err := cli.Send(ctx, attr.URL, attr.SigningKey, body)
+	_, status, err := cli.Send(ctx, attr.URL, attr.SigningKey, body, options)
 	if err != nil {
 		return fmt.Errorf("send webhook event: %w", err)
 	}

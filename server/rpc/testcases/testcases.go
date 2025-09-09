@@ -1031,13 +1031,26 @@ func RunAdminCreateProjectTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
-	_, err = testAdminClient.CreateProject(
+	resp2, err := testAdminClient.CreateProject(
 		context.Background(),
 		connect.NewRequest(&api.CreateProjectRequest{
 			Name: projectName,
 		},
 		))
 	assert.NoError(t, err)
+	project := converter.FromProject(resp2.Msg.Project)
+	assert.Equal(t, projectName, project.Name)
+	assert.Empty(t, project.AuthWebhookURL)
+	assert.Equal(t, database.DefaultAuthWebhookMaxRetries, project.AuthWebhookMaxRetries)
+	assert.Equal(t, database.DefaultAuthWebhookMinWaitInterval.String(), project.AuthWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultAuthWebhookMaxWaitInterval.String(), project.AuthWebhookMaxWaitInterval)
+	assert.Empty(t, project.EventWebhookURL)
+	assert.Equal(t, database.DefaultEventWebhookMaxRetries, project.EventWebhookMaxRetries)
+	assert.Equal(t, database.DefaultEventWebhookMinWaitInterval.String(), project.EventWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), project.EventWebhookMaxWaitInterval)
+	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), project.ClientDeactivateThreshold)
+	assert.Equal(t, 0, project.MaxAttachmentsPerDocument)
+	assert.Equal(t, 0, project.MaxSubscribersPerDocument)
 
 	// try to create project with existing name
 	_, err = testAdminClient.CreateProject(

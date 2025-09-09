@@ -50,8 +50,7 @@ var (
 	authGitHubTokenURL            string
 	authGitHubDeviceAuthURL       string
 
-	housekeepingInterval      time.Duration
-	clientDeactivateThreshold time.Duration
+	housekeepingInterval time.Duration
 
 	mongoConnectionURI                string
 	mongoConnectionTimeout            time.Duration
@@ -64,14 +63,10 @@ var (
 
 	pprofEnabled bool
 
-	authWebhookMaxWaitInterval time.Duration
-	authWebhookMinWaitInterval time.Duration
-	authWebhookRequestTimeout  time.Duration
-	authWebhookCacheTTL        time.Duration
+	authWebhookRequestTimeout time.Duration
+	authWebhookCacheTTL       time.Duration
 
-	eventWebhookMaxWaitInterval time.Duration
-	eventWebhookMinWaitInterval time.Duration
-	eventWebhookRequestTimeout  time.Duration
+	eventWebhookRequestTimeout time.Duration
 
 	projectCacheTTL time.Duration
 
@@ -103,13 +98,8 @@ func newServerCmd() *cobra.Command {
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
-			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
-			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
 			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-
-			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
-			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
 			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
 
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
@@ -433,24 +423,6 @@ func init() {
 		server.DefaultAuthWebhookRequestTimeout,
 		"Timeout for each authorization webhook request.",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthWebhookMaxRetries,
-		"auth-webhook-max-retries",
-		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for authorization webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMinWaitInterval,
-		"auth-webhook-min-wait-interval",
-		server.DefaultAuthWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMaxWaitInterval,
-		"auth-webhook-max-wait-interval",
-		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
-	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
 		"auth-webhook-cache-size",
@@ -468,24 +440,6 @@ func init() {
 		"event-webhook-request-timeout",
 		server.DefaultEventWebhookRequestTimeout,
 		"Timeout for each event webhook request.",
-	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.EventWebhookMaxRetries,
-		"event-webhook-max-retries",
-		server.DefaultEventWebhookMaxRetries,
-		"Maximum number of retries for event webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMinWaitInterval,
-		"event-webhook-min-wait-interval",
-		server.DefaultEventWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMaxWaitInterval,
-		"event-webhook-max-wait-interval",
-		server.DefaultEventWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

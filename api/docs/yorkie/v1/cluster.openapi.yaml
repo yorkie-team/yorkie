@@ -543,6 +543,18 @@ components:
             type: string
           title: allowed_origins
           type: array
+        authWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: auth_webhook_max_retries
+        authWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_wait_interval
+          type: string
         authWebhookMethods:
           additionalProperties: false
           description: ""
@@ -550,6 +562,11 @@ components:
             type: string
           title: auth_webhook_methods
           type: array
+        authWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_min_wait_interval
+          type: string
         authWebhookUrl:
           additionalProperties: false
           description: ""
@@ -573,6 +590,23 @@ components:
             type: string
           title: event_webhook_events
           type: array
+        eventWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: event_webhook_max_retries
+        eventWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_wait_interval
+          type: string
+        eventWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_min_wait_interval
+          type: string
         eventWebhookUrl:
           additionalProperties: false
           description: ""

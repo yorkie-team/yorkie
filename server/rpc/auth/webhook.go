@@ -67,6 +67,11 @@ func verifyAccess(
 		prj.AuthWebhookURL,
 		"",
 		body,
+		webhook.Options{
+			MaxRetries:      prj.AuthWebhookMaxRetries,
+			MinWaitInterval: prj.AuthWebhookMinWaitIntervalAsTimeDuration(),
+			MaxWaitInterval: prj.AuthWebhookMaxWaitIntervalAsTimeDuration(),
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)

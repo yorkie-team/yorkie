@@ -67,17 +67,11 @@ const (
 	DefaultSnapshotDisableGC = false
 	DefaultSnapshotCacheSize = 1000
 
-	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
-	DefaultAuthWebhookMaxRetries      = 10
-	DefaultAuthWebhookMaxWaitInterval = 3 * time.Second
-	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
-	DefaultAuthWebhookCacheSize       = 5000
-	DefaultAuthWebhookCacheTTL        = 10 * time.Second
+	DefaultAuthWebhookRequestTimeout = 3 * time.Second
+	DefaultAuthWebhookCacheSize      = 5000
+	DefaultAuthWebhookCacheTTL       = 10 * time.Second
 
-	DefaultEventWebhookRequestTimeout  = 3 * time.Second
-	DefaultEventWebhookMaxRetries      = 10
-	DefaultEventWebhookMaxWaitInterval = 3 * time.Second
-	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
+	DefaultEventWebhookRequestTimeout = 3 * time.Second
 
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
@@ -240,30 +234,11 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.AuthWebhookCacheSize == 0 {
 		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
 	}
-	if c.Backend.AuthWebhookMaxRetries == 0 {
-		c.Backend.AuthWebhookMaxRetries = DefaultAuthWebhookMaxRetries
-	}
-	if c.Backend.AuthWebhookMaxWaitInterval == "" {
-		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
-	}
-	if c.Backend.AuthWebhookMinWaitInterval == "" {
-		c.Backend.AuthWebhookMinWaitInterval = DefaultAuthWebhookMinWaitInterval.String()
-	}
 	if c.Backend.AuthWebhookRequestTimeout == "" {
 		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
 	}
 	if c.Backend.AuthWebhookCacheTTL == "" {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
-	}
-
-	if c.Backend.EventWebhookMaxRetries == 0 {
-		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
-	}
-	if c.Backend.EventWebhookMaxWaitInterval == "" {
-		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
-	}
-	if c.Backend.EventWebhookMinWaitInterval == "" {
-		c.Backend.EventWebhookMinWaitInterval = DefaultEventWebhookMinWaitInterval.String()
 	}
 	if c.Backend.EventWebhookRequestTimeout == "" {
 		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()

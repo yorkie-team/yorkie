@@ -48,11 +48,29 @@ type Project struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
+	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
+	AuthWebhookMaxRetries uint64 `bson:"auth_webhook_max_retries"`
+
+	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
+	AuthWebhookMinWaitInterval string `bson:"auth_webhook_min_wait_interval"`
+
+	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMaxWaitInterval string `bson:"auth_webhook_max_wait_interval"`
+
 	// EventWebhookURL is the url of the event webhook.
 	EventWebhookURL string `json:"event_webhook_url"`
 
 	// EventWebhookEvents are the events that event webhook will be triggered.
 	EventWebhookEvents []string `json:"event_webhook_events"`
+
+	// EventWebhookMaxRetries is the max count that retries the event webhook.
+	EventWebhookMaxRetries uint64 `bson:"event_webhook_max_retries"`
+
+	// EventWebhookMinWaitInterval is the min interval that waits before retrying the event webhook.
+	EventWebhookMinWaitInterval string `bson:"event_webhook_min_wait_interval"`
+
+	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
+	EventWebhookMaxWaitInterval string `bson:"event_webhook_max_wait_interval"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -149,11 +167,46 @@ func (p *Project) IsAttachmentLimitExceeded(count int) error {
 }
 
 // ClientDeactivateThresholdAsTimeDuration converts ClientDeactivateThreshold string to time.Duration.
-func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
+func (p *Project) ClientDeactivateThresholdAsTimeDuration() time.Duration {
 	clientDeactivateThreshold, err := time.ParseDuration(p.ClientDeactivateThreshold)
 	if err != nil {
-		return 0, ErrInvalidTimeDurationString
+		panic(ErrInvalidTimeDurationString)
 	}
+	return clientDeactivateThreshold
+}
 
-	return clientDeactivateThreshold, nil
+// AuthWebhookMinWaitIntervalAsTimeDuration converts AuthWebhookMinWaitInterval string to time.Duration.
+func (p *Project) AuthWebhookMinWaitIntervalAsTimeDuration() time.Duration {
+	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return authWebhookMinWaitInterval
+}
+
+// AuthWebhookMaxWaitIntervalAsTimeDuration converts AuthWebhookMaxWaitInterval string to time.Duration.
+func (p *Project) AuthWebhookMaxWaitIntervalAsTimeDuration() time.Duration {
+	authWebhookMaxWaitInterval, err := time.ParseDuration(p.AuthWebhookMaxWaitInterval)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return authWebhookMaxWaitInterval
+}
+
+// EventWebhookMinWaitIntervalAsTimeDuration converts EventWebhookMinWaitInterval string to time.Duration.
+func (p *Project) EventWebhookMinWaitIntervalAsTimeDuration() time.Duration {
+	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return eventWebhookMinWaitInterval
+}
+
+// EventWebhookMaxWaitIntervalAsTimeDuration converts EventWebhookMaxWaitInterval string to time.Duration.
+func (p *Project) EventWebhookMaxWaitIntervalAsTimeDuration() time.Duration {
+	eventWebhookMaxWaitInterval, err := time.ParseDuration(p.EventWebhookMaxWaitInterval)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return eventWebhookMaxWaitInterval
 }

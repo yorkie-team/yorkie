@@ -96,15 +96,6 @@ Backend:
   # AuthWebhookRequestTimeout is the timeout for each authorization webhook request.
   AuthWebhookRequestTimeout: "3s"
 
-  # AuthWebhookMaxRetries is the max number of retries for the authorization webhook.
-  AuthWebhookMaxRetries: 10
-
-  # AuthWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  AuthWebhookMinWaitInterval: "100ms"
-
-  # AuthWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  AuthWebhookMaxWaitInterval: "3s"
-
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
@@ -113,15 +104,6 @@ Backend:
 
   # EventWebhookRequestTimeout is the timeout for each event webhook request.
   EventWebhookRequestTimeout: "3s"
-
-  # EventWebhookMaxRetries is the max number of retries for the event webhook.
-  EventWebhookMaxRetries: 10
-
-  # EventWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  EventWebhookMinWaitInterval: "100ms"
-
-  # EventWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  EventWebhookMaxWaitInterval: "3s"
 
   # ProjectCacheSize is the size of the project metadata cache.
   ProjectCacheSize: 256

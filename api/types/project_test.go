@@ -108,4 +108,50 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.Error(t, info2.IsAttachmentLimitExceeded(1))
 	})
+
+	t.Run("parse test", func(t *testing.T) {
+		validInfo := &types.Project{
+			ClientDeactivateThreshold:   "20h",
+			AuthWebhookMinWaitInterval:  "10ms",
+			AuthWebhookMaxWaitInterval:  "5s",
+			EventWebhookMinWaitInterval: "40ms",
+			EventWebhookMaxWaitInterval: "3s",
+		}
+		clientDeactivateThreshold := validInfo.ClientDeactivateThresholdAsTimeDuration()
+		assert.Equal(t, clientDeactivateThreshold.String(), "20h0m0s")
+
+		authMinWaitInterval := validInfo.AuthWebhookMinWaitIntervalAsTimeDuration()
+		assert.Equal(t, authMinWaitInterval.String(), "10ms")
+
+		authMaxWaitInterval := validInfo.AuthWebhookMaxWaitIntervalAsTimeDuration()
+		assert.Equal(t, authMaxWaitInterval.String(), "5s")
+
+		eventMinWaitInterval := validInfo.EventWebhookMinWaitIntervalAsTimeDuration()
+		assert.Equal(t, eventMinWaitInterval.String(), "40ms")
+
+		eventMaxWaitInterval := validInfo.EventWebhookMaxWaitIntervalAsTimeDuration()
+		assert.Equal(t, eventMaxWaitInterval.String(), "3s")
+
+		invalidInfo := &types.Project{
+			ClientDeactivateThreshold:   "1 hour",
+			AuthWebhookMinWaitInterval:  "s",
+			AuthWebhookMaxWaitInterval:  "3",
+			EventWebhookMinWaitInterval: "1",
+			EventWebhookMaxWaitInterval: "3 seconds",
+		}
+		invalidInfo.ClientDeactivateThreshold = "1 hour"
+		assert.Panics(t, func() { invalidInfo.ClientDeactivateThresholdAsTimeDuration() })
+
+		invalidInfo.AuthWebhookMinWaitInterval = "s"
+		assert.Panics(t, func() { invalidInfo.AuthWebhookMinWaitIntervalAsTimeDuration() })
+
+		invalidInfo.AuthWebhookMaxWaitInterval = "3"
+		assert.Panics(t, func() { invalidInfo.AuthWebhookMaxWaitIntervalAsTimeDuration() })
+
+		invalidInfo.EventWebhookMinWaitInterval = "1"
+		assert.Panics(t, func() { invalidInfo.EventWebhookMinWaitIntervalAsTimeDuration() })
+
+		invalidInfo.EventWebhookMaxWaitInterval = "3 seconds"
+		assert.Panics(t, func() { invalidInfo.EventWebhookMaxWaitIntervalAsTimeDuration() })
+	})
 }
