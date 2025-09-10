@@ -560,7 +560,7 @@ func CompactDocument(
 	be *backend.Backend,
 	project *types.Project,
 	document *database.DocInfo,
-) error {
+) (bool, error) {
 	return be.ClusterClient.CompactDocument(ctx, project, document)
 }
 
