@@ -801,6 +801,20 @@ components:
           type: string
       title: Connect Error
       type: object
+    google.protobuf.BoolValue:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `bool`.
+
+         The JSON representation for `BoolValue` is JSON `true` and `false`.
+      properties:
+        value:
+          additionalProperties: false
+          description: The bool value.
+          title: value
+          type: boolean
+      title: BoolValue
+      type: object
     google.protobuf.Int32Value:
       additionalProperties: false
       description: |-
@@ -2445,6 +2459,11 @@ components:
           description: ""
           title: public_key
           type: string
+        removeOnDetach:
+          additionalProperties: false
+          description: ""
+          title: remove_on_detach
+          type: boolean
         secretKey:
           additionalProperties: false
           description: ""
@@ -2882,6 +2901,12 @@ components:
           additionalProperties: false
           description: ""
           title: name
+          type: object
+        removeOnDetach:
+          $ref: '#/components/schemas/google.protobuf.BoolValue'
+          additionalProperties: false
+          description: ""
+          title: remove_on_detach
           type: object
       title: UpdatableProjectFields
       type: object

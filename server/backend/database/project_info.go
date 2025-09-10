@@ -78,6 +78,9 @@ type ProjectInfo struct {
 	// MaxSizePerDocument is the maximum size of a document in bytes.
 	MaxSizePerDocument int `bson:"max_size_per_document"`
 
+	// RemoveOnDetach is the flag to remove the document on detach.
+	RemoveOnDetach bool `bson:"remove_on_detach"`
+
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `bson:"allowed_origins"`
 
@@ -97,6 +100,7 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 		MaxSubscribersPerDocument: 0,
 		MaxAttachmentsPerDocument: 0,
 		MaxSizePerDocument:        10 * 1024 * 1024,
+		RemoveOnDetach:            false,
 		PublicKey:                 shortuuid.New(),
 		SecretKey:                 shortuuid.New(),
 		CreatedAt:                 time.Now(),
@@ -123,6 +127,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:        i.MaxSizePerDocument,
+		RemoveOnDetach:            i.RemoveOnDetach,
 		AllowedOrigins:            i.AllowedOrigins,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
@@ -158,6 +163,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.MaxSizePerDocument != nil {
 		i.MaxSizePerDocument = *fields.MaxSizePerDocument
 	}
+	if fields.RemoveOnDetach != nil {
+		i.RemoveOnDetach = *fields.RemoveOnDetach
+	}
 	if fields.AllowedOrigins != nil {
 		i.AllowedOrigins = *fields.AllowedOrigins
 	}
@@ -177,6 +185,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		MaxSubscribersPerDocument: i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument: i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:        i.MaxSizePerDocument,
+		RemoveOnDetach:            i.RemoveOnDetach,
 		AllowedOrigins:            i.AllowedOrigins,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,

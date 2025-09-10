@@ -289,7 +289,7 @@ func (s *yorkieServer) DetachDocument(
 	// NOTE(hackerwins): If the project does not have an attachment limit,
 	// removing the document by removeIfNotAttached does not guarantee that
 	// the document is not attached to the client.
-	var status document.StatusType
+	var status document.StatusType = document.StatusDetached
 	if req.Msg.RemoveIfNotAttached {
 		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
 		if err != nil {
@@ -300,8 +300,6 @@ func (s *yorkieServer) DetachDocument(
 			pack.IsRemoved = true
 			status = document.StatusRemoved
 		}
-	} else {
-		status = document.StatusDetached
 	}
 
 	// 03. Push/Pull between the client and server.

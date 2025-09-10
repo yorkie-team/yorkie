@@ -91,6 +91,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 			"CLIENT DEACTIVATE THRESHOLD",
 			"MAX SUBSCRIBERS PER DOCUMENT",
 			"MAX ATTACHMENTS PER DOCUMENT",
+			"REMOVE ON DETACH",
 			"CREATED AT",
 		})
 		for _, project := range projects {
@@ -105,6 +106,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 				project.ClientDeactivateThreshold,
 				project.MaxSubscribersPerDocument,
 				project.MaxAttachmentsPerDocument,
+				project.RemoveOnDetach,
 				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
 			})
 		}

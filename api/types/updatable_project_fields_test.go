@@ -41,6 +41,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newClientDeactivateThreshold := "1h"
 		newMaxSubscribersPerDocument := 10
 		newMaxAttachmentsPerDocument := 10
+		newRemoveOnDetach := true
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
@@ -50,6 +51,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 			MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
+			RemoveOnDetach:            &newRemoveOnDetach,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -185,5 +187,19 @@ func TestUpdatableProjectFields(t *testing.T) {
 			MaxAttachmentsPerDocument: &invalidMaxAttachmentsPerDocument,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
+	})
+
+	t.Run("remove on detach test", func(t *testing.T) {
+		validRemoveOnDetach := true
+		fields := &types.UpdatableProjectFields{
+			RemoveOnDetach: &validRemoveOnDetach,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidRemoveOnDetach := false
+		fields = &types.UpdatableProjectFields{
+			RemoveOnDetach: &invalidRemoveOnDetach,
+		}
+		assert.NoError(t, fields.Validate())
 	})
 }

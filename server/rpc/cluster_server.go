@@ -102,9 +102,25 @@ func (s *clusterServer) DetachDocument(
 		defer locker.Unlock()
 	}
 
+	// NOTE(hackerwins): If the project does not have an attachment limit,
+	// removing the document by removeIfNotAttached does not guarantee that
+	// the document is not attached to the client.
+	var status document.StatusType = document.StatusDetached
+	if project.RemoveOnDetach {
+		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, refKey, clientInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAttached {
+			pack.IsRemoved = true
+			status = document.StatusRemoved
+		}
+	}
+
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
-		Status: document.StatusDetached,
+		Status: status,
 	}); err != nil {
 		return nil, err
 	}

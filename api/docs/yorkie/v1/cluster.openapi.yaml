@@ -602,6 +602,11 @@ components:
           description: ""
           title: public_key
           type: string
+        removeOnDetach:
+          additionalProperties: false
+          description: ""
+          title: remove_on_detach
+          type: boolean
         secretKey:
           additionalProperties: false
           description: ""

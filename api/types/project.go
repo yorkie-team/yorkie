@@ -66,6 +66,9 @@ type Project struct {
 	// MaxSizePerDocument is the maximum size of a document in bytes.
 	MaxSizePerDocument int `bson:"max_size_per_document"`
 
+	// RemoveOnDetach is the flag to remove the document on detach.
+	RemoveOnDetach bool `json:"remove_on_detach"`
+
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `json:"allowed_origins"`
 
