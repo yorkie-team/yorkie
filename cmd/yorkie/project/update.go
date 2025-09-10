@@ -140,7 +140,7 @@ func newUpdateCommand() *cobra.Command {
 			}
 
 			newRemoveOnDetach := project.RemoveOnDetach
-			if flagRemoveOnDetach {
+			if cmd.Flags().Lookup("remove-on-detach").Changed {
 				newRemoveOnDetach = flagRemoveOnDetach
 			}
 
