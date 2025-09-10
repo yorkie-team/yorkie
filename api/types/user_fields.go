@@ -18,6 +18,10 @@
 package types
 
 import (
+	"errors"
+	"fmt"
+	"strings"
+
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
@@ -32,5 +36,74 @@ type UserFields struct {
 
 // Validate validates the UserFields.
 func (i *UserFields) Validate() error {
-	return validation.ValidateStruct(i)
+	err := validation.ValidateStruct(i)
+	if err != nil {
+		return i.getDetailedError(err)
+	}
+	return nil
+}
+
+// getDetailedError creates user-friendly error messages from validation errors
+func (i *UserFields) getDetailedError(err error) error {
+	var messages []string
+
+	var formErr *validation.FormError
+	if errors.As(err, &formErr) {
+		for _, violation := range formErr.Violations {
+			msg := i.getFieldErrorMessage(violation.Field, violation.Tag)
+			if msg != "" {
+				messages = append(messages, msg)
+			}
+		}
+	}
+
+	if len(messages) > 0 {
+		return fmt.Errorf(strings.Join(messages, "; "))
+	}
+
+	return err
+}
+
+// getFieldErrorMessage returns specific field error messages
+func (i *UserFields) getFieldErrorMessage(field, tag string) string {
+	switch field {
+	case "Username":
+		return i.getUsernameErrorMessage(tag)
+	case "Password":
+		return i.getPasswordErrorMessage(tag)
+	default:
+		return fmt.Sprintf("%s validation failed", field)
+	}
+}
+
+// getUsernameErrorMessage returns specific error messages for username validation
+func (i *UserFields) getUsernameErrorMessage(tag string) string {
+	switch tag {
+	case "required":
+		return "username is required"
+	case "min":
+		return "username must be at least 2 characters long"
+	case "max":
+		return "username must be at most 30 characters long"
+	case "slug":
+		return "username must only contain letters, numbers, hyphen, period, underscore, and tilde"
+	default:
+		return fmt.Sprintf("username validation failed: %s", tag)
+	}
+}
+
+// getPasswordErrorMessage returns specific error messages for password validation
+func (i *UserFields) getPasswordErrorMessage(tag string) string {
+	switch tag {
+	case "required":
+		return "password is required"
+	case "min":
+		return "password must be at least 8 characters long"
+	case "max":
+		return "password must be at most 30 characters long"
+	case "alpha_num_special":
+		return "password must include letters, numbers, and special characters"
+	default:
+		return fmt.Sprintf("password validation failed: %s", tag)
+	}
 }
