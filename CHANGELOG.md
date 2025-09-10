@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Refactor housekeeping logic for simpler candidate fetching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1492
+
 ## [v0.6.29] - 2025-09-05
 
 ### Fixed
