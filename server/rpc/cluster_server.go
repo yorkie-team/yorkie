@@ -97,7 +97,7 @@ func (s *clusterServer) DetachDocument(
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
 	defer docLocker.RUnlock()
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
 	}

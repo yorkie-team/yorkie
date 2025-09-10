@@ -281,7 +281,7 @@ func (s *yorkieServer) DetachDocument(
 
 	// 02. Set the document status if it is not attached.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || req.Msg.RemoveIfNotAttached {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 	}
