@@ -141,13 +141,17 @@ func (s *clusterServer) CompactDocument(
 		// If the document is attached, we don't return an error.
 		// Because compaction is a best-effort operation.
 		if errors.Is(err, packs.ErrDocumentAttached) {
-			return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+			return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+				Compacted: false,
+			}), nil
 		}
 
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+		Compacted: true,
+	}), nil
 }
 
 // PurgeDocument purges the given document and its metadata from the database.

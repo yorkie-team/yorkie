@@ -289,6 +289,12 @@ components:
     yorkie.v1.ClusterServiceCompactDocumentResponse:
       additionalProperties: false
       description: ""
+      properties:
+        compacted:
+          additionalProperties: false
+          description: ""
+          title: compacted
+          type: boolean
       title: ClusterServiceCompactDocumentResponse
       type: object
     yorkie.v1.ClusterServiceDetachDocumentRequest:

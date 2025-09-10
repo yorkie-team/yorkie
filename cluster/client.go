@@ -139,8 +139,8 @@ func (c *Client) CompactDocument(
 	ctx context.Context,
 	project *types.Project,
 	docInfo *database.DocInfo,
-) error {
-	_, err := c.client.CompactDocument(
+) (bool, error) {
+	res, err := c.client.CompactDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
 			ProjectId:   docInfo.ProjectID.String(),
@@ -148,10 +148,10 @@ func (c *Client) CompactDocument(
 			DocumentKey: docInfo.Key.String(),
 		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return res.Msg.Compacted, nil
 }
 
 // PurgeDocument purges the given document.
