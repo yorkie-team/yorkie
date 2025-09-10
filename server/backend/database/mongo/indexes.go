@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	// ColLeaderships represents the leadership collection in the database.
-	ColLeaderships = "leaderships"
+	// ColClusterNodes represents the cluster nodes collection in the database.
+	ColClusterNodes = "clusternodes"
 	// ColProjects represents the projects collection in the database.
 	ColProjects = "projects"
 	// ColUsers represents the users collection in the database.
@@ -48,7 +48,7 @@ const (
 
 // Collections represents the list of all collections in the database.
 var Collections = []string{
-	ColLeaderships,
+	ColClusterNodes,
 	ColProjects,
 	ColUsers,
 	ColClients,
@@ -67,11 +67,26 @@ type collectionInfo struct {
 // Below are names and indexes information of Collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
 	{
-		name: ColLeaderships,
-		indexes: []mongo.IndexModel{{
-			Keys:    bson.D{{Key: "singleton", Value: int32(1)}},
-			Options: options.Index().SetUnique(true),
-		}},
+		name: ColClusterNodes,
+		indexes: []mongo.IndexModel{
+			{
+				Keys:    bson.D{{Key: "rpc_addr", Value: 1}},
+				Options: options.Index().SetUnique(true),
+			},
+			{
+				Keys: bson.D{{Key: "is_leader", Value: 1}},
+				Options: options.Index().
+					SetUnique(true).
+					SetPartialFilterExpression(bson.M{"is_leader": true}).
+					SetName("is_leader_true_unique"),
+			},
+			{
+				Keys: bson.D{{Key: "updated_at", Value: 1}},
+				Options: options.Index().
+					SetExpireAfterSeconds(60).
+					SetName("ttl_updated_at"),
+			},
+		},
 	},
 	{
 		name: ColUsers,

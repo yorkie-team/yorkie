@@ -58,10 +58,10 @@ func (d *DB) Close() error {
 	return nil
 }
 
-// leadershipRecord wraps LeadershipInfo with an ID for memory database storage.
-type leadershipRecord struct {
-	ID   string                   `json:"id"`
-	Info *database.LeadershipInfo `json:"info"`
+// clusterNodeRecord wraps ClusterNodeInfo with an ID for memory database storage.
+type clusterNodeRecord struct {
+	ID   string                    `json:"id"`
+	Info *database.ClusterNodeInfo `json:"info"`
 }
 
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
@@ -72,7 +72,7 @@ func (d *DB) TryLeadership(
 	hostname string,
 	leaseToken string,
 	leaseDuration gotime.Duration,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -80,14 +80,14 @@ func (d *DB) TryLeadership(
 	expiresAt := now.Add(leaseDuration)
 
 	// Find existing leadership
-	raw, err := txn.First(tblLeaderships, "id", "leadership")
+	raw, err := txn.First(tblClusterNodes, "id", "leadership")
 	if err != nil {
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
 
-	var existing *database.LeadershipInfo
+	var existing *database.ClusterNodeInfo
 	if raw != nil {
-		existing = raw.(*leadershipRecord).Info
+		existing = raw.(*clusterNodeRecord).Info
 	}
 
 	if leaseToken == "" {
@@ -107,25 +107,23 @@ func (d *DB) TryLeadership(
 		}
 
 		// Create or update leadership entry
-		newLeadership := &database.LeadershipInfo{
-			Hostname:   hostname,
+		newLeadership := &database.ClusterNodeInfo{
+			RPCAddr:    hostname,
 			LeaseToken: newToken,
-			ElectedAt:  now,
 			ExpiresAt:  expiresAt,
-			Term:       1, // Start with term 1 for new leadership
 		}
 
 		if existing != nil {
 			// Update existing entry with new term
-			newLeadership.Term = existing.Term + 1
+			//newLeadership.Term = existing.Term + 1
 		}
 
-		record := &leadershipRecord{
+		record := &clusterNodeRecord{
 			ID:   "leadership",
 			Info: newLeadership,
 		}
 
-		if err := txn.Insert(tblLeaderships, record); err != nil {
+		if err := txn.Insert(tblClusterNodes, record); err != nil {
 			return nil, fmt.Errorf("insert leadership: %w", err)
 		}
 
@@ -144,7 +142,7 @@ func (d *DB) TryLeadership(
 	}
 
 	// Check if the node is the current leader
-	if existing.Hostname != hostname {
+	if existing.RPCAddr != hostname {
 		return nil, database.ErrInvalidLeaseToken
 	}
 
@@ -160,21 +158,19 @@ func (d *DB) TryLeadership(
 	}
 
 	// Update with new token and expiry
-	renewedLeadership := &database.LeadershipInfo{
-		Hostname:   existing.Hostname,
+	renewedLeadership := &database.ClusterNodeInfo{
+		RPCAddr:    existing.RPCAddr,
 		LeaseToken: newToken,
-		ElectedAt:  existing.ElectedAt,
 		ExpiresAt:  expiresAt,
-		RenewedAt:  now,
-		Term:       existing.Term, // Keep the same term for renewal
+		UpdatedAt:  now,
 	}
 
-	record := &leadershipRecord{
+	record := &clusterNodeRecord{
 		ID:   "leadership",
 		Info: renewedLeadership,
 	}
 
-	if err := txn.Insert(tblLeaderships, record); err != nil {
+	if err := txn.Insert(tblClusterNodes, record); err != nil {
 		return nil, fmt.Errorf("renew leadership: %w", err)
 	}
 
@@ -183,11 +179,11 @@ func (d *DB) TryLeadership(
 }
 
 // FindLeadership returns the current leadership information.
-func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, error) {
+func (d *DB) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblLeaderships, "id", "leadership")
+	raw, err := txn.First(tblClusterNodes, "id", "leadership")
 	if err != nil {
 		return nil, fmt.Errorf("find leadership: %w", err)
 	}
@@ -195,7 +191,7 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, erro
 		return nil, nil
 	}
 
-	leadershipInfo := raw.(*leadershipRecord).Info
+	leadershipInfo := raw.(*clusterNodeRecord).Info
 
 	// Check if leadership has expired
 	if leadershipInfo.IsExpired() {
@@ -205,15 +201,53 @@ func (d *DB) FindLeadership(ctx context.Context) (*database.LeadershipInfo, erro
 	return leadershipInfo, nil
 }
 
-// ClearLeadership removes the current leadership information for testing purposes.
-func (d *DB) ClearLeadership(ctx context.Context) error {
+// FindActiveClusterNodes returns nodes considered active within the given time window.
+// A node is active if updated_at >= NOW - renewalInterval * 2.
+// Results are sorted with the leader first, then by updated_at descending.
+func (d *DB) FindActiveClusterNodes(
+	_ context.Context,
+	renewalInterval gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	now := gotime.Now()
+	cutoff := now.Add(-renewalInterval * 2)
+
+	iter, err := txn.Get(tblClusterNodes, "id")
+	if err != nil {
+		return nil, fmt.Errorf("fetch cluster nodes: %w", err)
+	}
+
+	var infos []*database.ClusterNodeInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*clusterNodeRecord).Info
+
+		if info.UpdatedAt.IsZero() || info.UpdatedAt.Before(cutoff) {
+			continue
+		}
+		cpy := *info
+		infos = append(infos, &cpy)
+	}
+
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].IsLeader != infos[j].IsLeader {
+			return infos[i].IsLeader && !infos[j].IsLeader
+		}
+		return infos[i].UpdatedAt.After(infos[j].UpdatedAt)
+	})
+	return infos, nil
+}
+
+// ClearClusterNodes removes the current leadership information for testing purposes.
+func (d *DB) ClearClusterNodes(ctx context.Context) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// Delete the leadership record if it exists
-	_, err := txn.DeleteAll(tblLeaderships, "id", "leadership")
+	// Delete the clusternode record if it exists
+	_, err := txn.DeleteAll(tblClusterNodes, "id")
 	if err != nil {
-		return fmt.Errorf("clear leadership: %w", err)
+		return fmt.Errorf("clear clusternode: %w", err)
 	}
 
 	txn.Commit()

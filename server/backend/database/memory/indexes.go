@@ -27,7 +27,7 @@ var (
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
 	tblSchemas        = "schemas"
-	tblLeaderships    = "leaderships"
+	tblClusterNodes   = "clusternodes"
 )
 
 var schema = &memdb.DBSchema{
@@ -285,16 +285,6 @@ var schema = &memdb.DBSchema{
 							&memdb.IntFieldIndex{Field: "Version"},
 						},
 					},
-				},
-			},
-		},
-		tblLeaderships: {
-			Name: tblLeaderships,
-			Indexes: map[string]*memdb.IndexSchema{
-				"id": {
-					Name:    "id",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
 			},
 		},

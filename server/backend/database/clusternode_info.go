@@ -23,24 +23,22 @@ import (
 	"time"
 )
 
-// LeadershipInfo represents the leadership information of a node in the cluster.
-type LeadershipInfo struct {
-	Hostname   string    `bson:"hostname"`
+// ClusterNodeInfo represents the leadership information of a node in the cluster.
+type ClusterNodeInfo struct {
+	RPCAddr    string    `bson:"rpc_addr"`
 	LeaseToken string    `bson:"lease_token"`
-	ElectedAt  time.Time `bson:"elected_at"`
 	ExpiresAt  time.Time `bson:"expires_at"`
-	RenewedAt  time.Time `bson:"renewed_at"`
-	Term       int64     `bson:"term"`
-	Singleton  int       `bson:"singleton"`
+	UpdatedAt  time.Time `bson:"updated_at"`
+	IsLeader   bool      `bson:"is_leader"`
 }
 
 // IsExpired returns true if the leadership lease has expired.
-func (li *LeadershipInfo) IsExpired() bool {
+func (li *ClusterNodeInfo) IsExpired() bool {
 	return time.Now().After(li.ExpiresAt)
 }
 
 // TimeUntilExpiry returns the duration until the lease expires.
-func (li *LeadershipInfo) TimeUntilExpiry() time.Duration {
+func (li *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
 	return time.Until(li.ExpiresAt)
 }
 
