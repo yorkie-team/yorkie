@@ -7,7 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.30] - 2025-09-11
+
 - Refactor housekeeping logic for simpler candidate fetching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1492
+- Enhance QueryMonitor with detailed collections and filter by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1494
+- Count only successfully compacted documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1495
+- Add project-level RemoveOnDetach setting by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1496
 
 ## [v0.6.29] - 2025-09-05
 
