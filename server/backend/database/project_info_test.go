@@ -38,6 +38,7 @@ func TestProjectInfo(t *testing.T) {
 		testClientDeactivateThreshold := "2h"
 		testMaxSubscribersPerDocument := 10
 		testMaxAttachmentsPerDocument := 10
+		testRemoveOnDetach := false
 
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
 		assert.Equal(t, testName, project.Name)
@@ -70,5 +71,10 @@ func TestProjectInfo(t *testing.T) {
 			MaxAttachmentsPerDocument: &testMaxAttachmentsPerDocument,
 		})
 		assert.Equal(t, testMaxAttachmentsPerDocument, project.MaxAttachmentsPerDocument)
+
+		project.UpdateFields(&types.UpdatableProjectFields{
+			RemoveOnDetach: &testRemoveOnDetach,
+		})
+		assert.Equal(t, testRemoveOnDetach, project.RemoveOnDetach)
 	})
 }

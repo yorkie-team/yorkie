@@ -59,6 +59,9 @@ type UpdatableProjectFields struct {
 	// MaxSizePerDocument is the maximum size of a document in bytes.
 	MaxSizePerDocument *int `bson:"max_size_per_document,omitempty" validate:"omitempty,min=0"`
 
+	// RemoveOnDetach is the flag to remove the document on detach.
+	RemoveOnDetach *bool `bson:"remove_on_detach,omitempty" validate:"omitempty,boolean"`
+
 	// AllowedOrigins is the list of origins that are allowed to access the project.
 	AllowedOrigins *[]string `bson:"allowed_origins,omitempty" validate:"omitempty,dive,valid_origin"`
 }
@@ -73,7 +76,8 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.EventWebhookEvents == nil &&
 		i.MaxSubscribersPerDocument == nil &&
 		i.MaxAttachmentsPerDocument == nil &&
-		i.MaxSizePerDocument == nil {
+		i.MaxSizePerDocument == nil &&
+		i.RemoveOnDetach == nil {
 		return ErrEmptyProjectFields
 	}
 

@@ -44,6 +44,7 @@ var (
 	flagClientDeactivateThreshold string
 	flagMaxSubscribersPerDocument int
 	flagMaxAttachmentsPerDocument int
+	flagRemoveOnDetach            bool
 )
 
 var allAuthWebhookMethods = []string{
@@ -138,6 +139,11 @@ func newUpdateCommand() *cobra.Command {
 				newMaxAttachmentsPerDocument = flagMaxAttachmentsPerDocument
 			}
 
+			newRemoveOnDetach := project.RemoveOnDetach
+			if cmd.Flags().Lookup("remove-on-detach").Changed {
+				newRemoveOnDetach = flagRemoveOnDetach
+			}
+
 			updatableProjectFields := &types.UpdatableProjectFields{
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
@@ -147,6 +153,7 @@ func newUpdateCommand() *cobra.Command {
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 				MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
 				MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
+				RemoveOnDetach:            &newRemoveOnDetach,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -304,6 +311,12 @@ func init() {
 		"max-attachments-per-document",
 		0,
 		"max attachments per document",
+	)
+	cmd.Flags().BoolVar(
+		&flagRemoveOnDetach,
+		"remove-on-detach",
+		false,
+		"remove on detach",
 	)
 	SubCmd.AddCommand(cmd)
 }
