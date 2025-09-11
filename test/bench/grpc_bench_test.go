@@ -70,11 +70,13 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 		authWebhookMaxRetries := uint64(10)
 		authWebhookMinWaitInterval := "10ms"
 		authWebhookMaxWaitInterval := "1s"
+		authWebhookRequestTimeout := "2s"
 		eventWebhookURL := fmt.Sprintf("http://eventWebhookURL%d", i)
 		eventWebhookEvents := []string{string(types.DocRootChanged)}
 		eventWebhookMaxRetries := uint64(20)
 		eventWebhookMinWaitInterval := "8ms"
 		eventWebhookMaxWaitInterval := "3s"
+		eventWebhookRequestTimeout := "5s"
 		clientDeactivateThreshold := "1h"
 
 		_, err := adminCli.UpdateProject(
@@ -87,11 +89,13 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				AuthWebhookMaxRetries:       &authWebhookMaxRetries,
 				AuthWebhookMinWaitInterval:  &authWebhookMinWaitInterval,
 				AuthWebhookMaxWaitInterval:  &authWebhookMaxWaitInterval,
+				AuthWebhookRequestTimeout:   &authWebhookRequestTimeout,
 				EventWebhookURL:             &eventWebhookURL,
 				EventWebhookEvents:          &eventWebhookEvents,
 				EventWebhookMaxRetries:      &eventWebhookMaxRetries,
 				EventWebhookMinWaitInterval: &eventWebhookMinWaitInterval,
 				EventWebhookMaxWaitInterval: &eventWebhookMaxWaitInterval,
+				EventWebhookRequestTimeout:  &eventWebhookRequestTimeout,
 				ClientDeactivateThreshold:   &clientDeactivateThreshold,
 			},
 		)

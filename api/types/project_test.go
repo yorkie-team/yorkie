@@ -114,8 +114,10 @@ func TestProjectInfo(t *testing.T) {
 			ClientDeactivateThreshold:   "20h",
 			AuthWebhookMinWaitInterval:  "10ms",
 			AuthWebhookMaxWaitInterval:  "5s",
+			AuthWebhookRequestTimeout:   "3s",
 			EventWebhookMinWaitInterval: "40ms",
 			EventWebhookMaxWaitInterval: "3s",
+			EventWebhookRequestTimeout:  "2s",
 		}
 		clientDeactivateThreshold := validInfo.ClientDeactivateThresholdAsTimeDuration()
 		assert.Equal(t, clientDeactivateThreshold.String(), "20h0m0s")
@@ -126,32 +128,33 @@ func TestProjectInfo(t *testing.T) {
 		authMaxWaitInterval := validInfo.AuthWebhookMaxWaitIntervalAsTimeDuration()
 		assert.Equal(t, authMaxWaitInterval.String(), "5s")
 
+		authRequestTimeout := validInfo.AuthWebhookRequestTimeoutAsTimeDuration()
+		assert.Equal(t, authRequestTimeout.String(), "3s")
+
 		eventMinWaitInterval := validInfo.EventWebhookMinWaitIntervalAsTimeDuration()
 		assert.Equal(t, eventMinWaitInterval.String(), "40ms")
 
 		eventMaxWaitInterval := validInfo.EventWebhookMaxWaitIntervalAsTimeDuration()
 		assert.Equal(t, eventMaxWaitInterval.String(), "3s")
 
+		eventRequestTimeout := validInfo.EventWebhookRequestTimeoutAsTimeDuration()
+		assert.Equal(t, eventRequestTimeout.String(), "2s")
+
 		invalidInfo := &types.Project{
 			ClientDeactivateThreshold:   "1 hour",
 			AuthWebhookMinWaitInterval:  "s",
 			AuthWebhookMaxWaitInterval:  "3",
+			AuthWebhookRequestTimeout:   "3 sec",
 			EventWebhookMinWaitInterval: "1",
 			EventWebhookMaxWaitInterval: "3 seconds",
+			EventWebhookRequestTimeout:  "2seconds",
 		}
-		invalidInfo.ClientDeactivateThreshold = "1 hour"
 		assert.Panics(t, func() { invalidInfo.ClientDeactivateThresholdAsTimeDuration() })
-
-		invalidInfo.AuthWebhookMinWaitInterval = "s"
 		assert.Panics(t, func() { invalidInfo.AuthWebhookMinWaitIntervalAsTimeDuration() })
-
-		invalidInfo.AuthWebhookMaxWaitInterval = "3"
 		assert.Panics(t, func() { invalidInfo.AuthWebhookMaxWaitIntervalAsTimeDuration() })
-
-		invalidInfo.EventWebhookMinWaitInterval = "1"
+		assert.Panics(t, func() { invalidInfo.AuthWebhookRequestTimeoutAsTimeDuration() })
 		assert.Panics(t, func() { invalidInfo.EventWebhookMinWaitIntervalAsTimeDuration() })
-
-		invalidInfo.EventWebhookMaxWaitInterval = "3 seconds"
 		assert.Panics(t, func() { invalidInfo.EventWebhookMaxWaitIntervalAsTimeDuration() })
+		assert.Panics(t, func() { invalidInfo.EventWebhookRequestTimeoutAsTimeDuration() })
 	})
 }

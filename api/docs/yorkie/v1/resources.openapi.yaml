@@ -1437,6 +1437,11 @@ components:
           description: ""
           title: auth_webhook_min_wait_interval
           type: string
+        authWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
+          type: string
         authWebhookUrl:
           additionalProperties: false
           description: ""
@@ -1476,6 +1481,11 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_min_wait_interval
+          type: string
+        eventWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
           type: string
         eventWebhookUrl:
           additionalProperties: false
@@ -1922,6 +1932,12 @@ components:
           description: ""
           title: auth_webhook_min_wait_interval
           type: object
+        authWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
+          type: object
         authWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'
           additionalProperties: false
@@ -1957,6 +1973,12 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_min_wait_interval
+          type: object
+        eventWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
           type: object
         eventWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'

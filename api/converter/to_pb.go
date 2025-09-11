@@ -64,11 +64,13 @@ func ToProject(project *types.Project) *api.Project {
 		AuthWebhookMaxRetries:       uint64(project.AuthWebhookMaxRetries),
 		AuthWebhookMinWaitInterval:  project.AuthWebhookMinWaitInterval,
 		AuthWebhookMaxWaitInterval:  project.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   project.AuthWebhookRequestTimeout,
 		EventWebhookUrl:             project.EventWebhookURL,
 		EventWebhookEvents:          project.EventWebhookEvents,
 		EventWebhookMaxRetries:      uint64(project.EventWebhookMaxRetries),
 		EventWebhookMinWaitInterval: project.EventWebhookMinWaitInterval,
 		EventWebhookMaxWaitInterval: project.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  project.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   project.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument:   int32(project.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument:   int32(project.MaxAttachmentsPerDocument),
@@ -612,6 +614,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 			Value: *fields.AuthWebhookMaxWaitInterval,
 		}
 	}
+	if fields.AuthWebhookRequestTimeout != nil {
+		pbUpdatableProjectFields.AuthWebhookRequestTimeout = &wrapperspb.StringValue{
+			Value: *fields.AuthWebhookRequestTimeout,
+		}
+	}
 	if fields.EventWebhookURL != nil {
 		pbUpdatableProjectFields.EventWebhookUrl = &wrapperspb.StringValue{Value: *fields.EventWebhookURL}
 	}
@@ -635,6 +642,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.EventWebhookMaxWaitInterval != nil {
 		pbUpdatableProjectFields.EventWebhookMaxWaitInterval = &wrapperspb.StringValue{
 			Value: *fields.EventWebhookMaxWaitInterval,
+		}
+	}
+	if fields.EventWebhookRequestTimeout != nil {
+		pbUpdatableProjectFields.EventWebhookRequestTimeout = &wrapperspb.StringValue{
+			Value: *fields.EventWebhookRequestTimeout,
 		}
 	}
 	if fields.ClientDeactivateThreshold != nil {

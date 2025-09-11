@@ -71,11 +71,13 @@ func FromProject(pbProject *api.Project) *types.Project {
 		AuthWebhookMaxRetries:       uint64(pbProject.AuthWebhookMaxRetries),
 		AuthWebhookMinWaitInterval:  pbProject.AuthWebhookMinWaitInterval,
 		AuthWebhookMaxWaitInterval:  pbProject.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   pbProject.AuthWebhookRequestTimeout,
 		EventWebhookURL:             pbProject.EventWebhookUrl,
 		EventWebhookEvents:          pbProject.EventWebhookEvents,
 		EventWebhookMaxRetries:      uint64(pbProject.EventWebhookMaxRetries),
 		EventWebhookMinWaitInterval: pbProject.EventWebhookMinWaitInterval,
 		EventWebhookMaxWaitInterval: pbProject.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  pbProject.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   pbProject.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument:   int(pbProject.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument:   int(pbProject.MaxAttachmentsPerDocument),
@@ -930,6 +932,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.AuthWebhookMaxWaitInterval != nil {
 		updatableProjectFields.AuthWebhookMaxWaitInterval = &pbProjectFields.AuthWebhookMaxWaitInterval.Value
 	}
+	if pbProjectFields.AuthWebhookRequestTimeout != nil {
+		updatableProjectFields.AuthWebhookRequestTimeout = &pbProjectFields.AuthWebhookRequestTimeout.Value
+	}
 	if pbProjectFields.EventWebhookUrl != nil {
 		updatableProjectFields.EventWebhookURL = &pbProjectFields.EventWebhookUrl.Value
 	}
@@ -945,6 +950,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 	if pbProjectFields.EventWebhookMaxWaitInterval != nil {
 		updatableProjectFields.EventWebhookMaxWaitInterval = &pbProjectFields.EventWebhookMaxWaitInterval.Value
+	}
+	if pbProjectFields.EventWebhookRequestTimeout != nil {
+		updatableProjectFields.EventWebhookRequestTimeout = &pbProjectFields.EventWebhookRequestTimeout.Value
 	}
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value

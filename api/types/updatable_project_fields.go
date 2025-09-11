@@ -49,6 +49,9 @@ type UpdatableProjectFields struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval *string `bson:"auth_webhook_max_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
 
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
+	AuthWebhookRequestTimeout *string `bson:"auth_webhook_request_timeout,omitempty" validate:"omitempty,min=2,duration"`
+
 	// EventWebhookURL is the URL of the event webhook.
 	EventWebhookURL *string `bson:"event_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
 
@@ -63,6 +66,9 @@ type UpdatableProjectFields struct {
 
 	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
 	EventWebhookMaxWaitInterval *string `bson:"event_webhook_max_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout *string `bson:"event_webhook_request_timeout,omitempty" validate:"omitempty,min=2,duration"`
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`

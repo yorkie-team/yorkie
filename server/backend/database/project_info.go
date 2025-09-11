@@ -35,13 +35,17 @@ var DefaultProjectID = ZeroID
 var DefaultProjectName = "default"
 
 const (
-	DefaultAuthWebhookMaxRetries       uint64 = 10
-	DefaultAuthWebhookMaxWaitInterval         = 3 * time.Second
-	DefaultAuthWebhookMinWaitInterval         = 100 * time.Millisecond
-	DefaultEventWebhookMaxRetries      uint64 = 10
-	DefaultEventWebhookMaxWaitInterval        = 3 * time.Second
-	DefaultEventWebhookMinWaitInterval        = 100 * time.Millisecond
-	DefaultClientDeactivateThreshold          = 24 * time.Hour
+	DefaultAuthWebhookMaxRetries      uint64        = 10
+	DefaultAuthWebhookMaxWaitInterval time.Duration = 3 * time.Second
+	DefaultAuthWebhookMinWaitInterval time.Duration = 100 * time.Millisecond
+	DefaultAuthWebhookRequestTimeout  time.Duration = 3 * time.Second
+
+	DefaultEventWebhookMaxRetries      uint64        = 10
+	DefaultEventWebhookMaxWaitInterval time.Duration = 3 * time.Second
+	DefaultEventWebhookMinWaitInterval time.Duration = 100 * time.Millisecond
+	DefaultEventWebhookRequestTimeout  time.Duration = 3 * time.Second
+
+	DefaultClientDeactivateThreshold time.Duration = 24 * time.Hour
 )
 
 // ProjectInfo is a struct for project information.
@@ -76,6 +80,9 @@ type ProjectInfo struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `bson:"auth_webhook_max_wait_interval"`
 
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
+	AuthWebhookRequestTimeout string `bson:"auth_webhook_request_timeout"`
+
 	// EventWebhookURL is the URL of the event webhook.
 	EventWebhookURL string `bson:"event_webhook_url"`
 
@@ -90,6 +97,9 @@ type ProjectInfo struct {
 
 	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
 	EventWebhookMaxWaitInterval string `bson:"event_webhook_max_wait_interval"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout string `bson:"event_webhook_request_timeout"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -127,9 +137,11 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		AuthWebhookMaxRetries:       DefaultAuthWebhookMaxRetries,
 		AuthWebhookMinWaitInterval:  DefaultAuthWebhookMinWaitInterval.String(),
 		AuthWebhookMaxWaitInterval:  DefaultAuthWebhookMaxWaitInterval.String(),
+		AuthWebhookRequestTimeout:   DefaultAuthWebhookRequestTimeout.String(),
 		EventWebhookMaxRetries:      DefaultEventWebhookMaxRetries,
 		EventWebhookMinWaitInterval: DefaultEventWebhookMinWaitInterval.String(),
 		EventWebhookMaxWaitInterval: DefaultEventWebhookMaxWaitInterval.String(),
+		EventWebhookRequestTimeout:  DefaultEventWebhookRequestTimeout.String(),
 		ClientDeactivateThreshold:   DefaultClientDeactivateThreshold.String(),
 		MaxSubscribersPerDocument:   0,
 		MaxAttachmentsPerDocument:   0,
@@ -158,11 +170,13 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AuthWebhookMaxRetries:       i.AuthWebhookMaxRetries,
 		AuthWebhookMinWaitInterval:  i.AuthWebhookMinWaitInterval,
 		AuthWebhookMaxWaitInterval:  i.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   i.AuthWebhookRequestTimeout,
 		EventWebhookURL:             i.EventWebhookURL,
 		EventWebhookEvents:          i.EventWebhookEvents,
 		EventWebhookMaxRetries:      i.EventWebhookMaxRetries,
 		EventWebhookMinWaitInterval: i.EventWebhookMinWaitInterval,
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
@@ -194,6 +208,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.AuthWebhookMaxWaitInterval != nil {
 		i.AuthWebhookMaxWaitInterval = *fields.AuthWebhookMaxWaitInterval
 	}
+	if fields.AuthWebhookRequestTimeout != nil {
+		i.AuthWebhookRequestTimeout = *fields.AuthWebhookRequestTimeout
+	}
 	if fields.EventWebhookURL != nil {
 		i.EventWebhookURL = *fields.EventWebhookURL
 	}
@@ -208,6 +225,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	}
 	if fields.EventWebhookMaxWaitInterval != nil {
 		i.EventWebhookMaxWaitInterval = *fields.EventWebhookMaxWaitInterval
+	}
+	if fields.EventWebhookRequestTimeout != nil {
+		i.EventWebhookRequestTimeout = *fields.EventWebhookRequestTimeout
 	}
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
@@ -240,11 +260,13 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		AuthWebhookMaxRetries:       i.AuthWebhookMaxRetries,
 		AuthWebhookMinWaitInterval:  i.AuthWebhookMinWaitInterval,
 		AuthWebhookMaxWaitInterval:  i.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   i.AuthWebhookRequestTimeout,
 		EventWebhookURL:             i.EventWebhookURL,
 		EventWebhookEvents:          i.EventWebhookEvents,
 		EventWebhookMaxRetries:      i.EventWebhookMaxRetries,
 		EventWebhookMinWaitInterval: i.EventWebhookMinWaitInterval,
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
@@ -256,14 +278,4 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		CreatedAt:                   i.CreatedAt,
 		UpdatedAt:                   i.UpdatedAt,
 	}
-}
-
-// ClientDeactivateThresholdAsTimeDuration converts ClientDeactivateThreshold string to time.Duration.
-func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
-	clientDeactivateThreshold, err := time.ParseDuration(i.ClientDeactivateThreshold)
-	if err != nil {
-		return 0, types.ErrInvalidTimeDurationString
-	}
-
-	return clientDeactivateThreshold, nil
 }

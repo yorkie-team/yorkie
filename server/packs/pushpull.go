@@ -149,6 +149,7 @@ func PushPull(
 						MaxRetries:      project.EventWebhookMaxRetries,
 						MinWaitInterval: project.EventWebhookMinWaitIntervalAsTimeDuration(),
 						MaxWaitInterval: project.EventWebhookMaxWaitIntervalAsTimeDuration(),
+						RequestTimeout:  project.EventWebhookRequestTimeoutAsTimeDuration(),
 					},
 				)); err != nil {
 					logging.From(ctx).Error(err)

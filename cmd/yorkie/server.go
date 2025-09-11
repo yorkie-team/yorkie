@@ -98,10 +98,7 @@ func newServerCmd() *cobra.Command {
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
-			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
-
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			if mongoConnectionURI != "" {
@@ -417,12 +414,6 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
-	cmd.Flags().DurationVar(
-		&authWebhookRequestTimeout,
-		"auth-webhook-request-timeout",
-		server.DefaultAuthWebhookRequestTimeout,
-		"Timeout for each authorization webhook request.",
-	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
 		"auth-webhook-cache-size",
@@ -434,12 +425,6 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookRequestTimeout,
-		"event-webhook-request-timeout",
-		server.DefaultEventWebhookRequestTimeout,
-		"Timeout for each event webhook request.",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

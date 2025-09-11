@@ -71,6 +71,7 @@ func verifyAccess(
 			MaxRetries:      prj.AuthWebhookMaxRetries,
 			MinWaitInterval: prj.AuthWebhookMinWaitIntervalAsTimeDuration(),
 			MaxWaitInterval: prj.AuthWebhookMaxWaitIntervalAsTimeDuration(),
+			RequestTimeout:  prj.AuthWebhookRequestTimeoutAsTimeDuration(),
 		},
 	)
 	if err != nil {

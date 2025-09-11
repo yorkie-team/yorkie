@@ -998,11 +998,13 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newAuthWebhookMaxRetries := uint64(10)
 		newAuthWebhookMinWaitInterval := "10ms"
 		newAuthWebhookMaxWaitInterval := "1s"
+		newAuthWebhookRequestTimeout := "3s"
 		newEventWebhookURL := "http://localhost:4000"
 		newEventWebhookEvents := []string{string(types.DocRootChanged)}
 		newEventWebhookMaxRetries := uint64(20)
 		newEventWebhookMinWaitInterval := "8ms"
 		newEventWebhookMaxWaitInterval := "3s"
+		newEventWebhookRequestTimeout := "5s"
 		newClientDeactivateThreshold := "1h"
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
@@ -1032,11 +1034,13 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
 			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
 			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
 			EventWebhookURL:             &newEventWebhookURL,
 			EventWebhookEvents:          &newEventWebhookEvents,
 			EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
 			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
@@ -1051,12 +1055,14 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookMaxRetries, updateInfo.AuthWebhookMaxRetries)
 		assert.Equal(t, newAuthWebhookMinWaitInterval, updateInfo.AuthWebhookMinWaitInterval)
 		assert.Equal(t, newAuthWebhookMaxWaitInterval, updateInfo.AuthWebhookMaxWaitInterval)
-		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newAuthWebhookRequestTimeout, updateInfo.AuthWebhookRequestTimeout)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newEventWebhookMaxRetries, updateInfo.EventWebhookMaxRetries)
 		assert.Equal(t, newEventWebhookMinWaitInterval, updateInfo.EventWebhookMinWaitInterval)
 		assert.Equal(t, newEventWebhookMaxWaitInterval, updateInfo.EventWebhookMaxWaitInterval)
+		assert.Equal(t, newEventWebhookRequestTimeout, updateInfo.EventWebhookRequestTimeout)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -1106,6 +1112,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newAuthWebhookMaxRetries2 := uint64(15)
 		newAuthWebhookMinWaitInterval2 := "20ms"
 		newAuthWebhookMaxWaitInterval2 := "2s"
+		newAuthWebhookRequestTimeout2 := "4s"
 		newAuthWebhookMethods2 := []string{
 			string(types.DetachDocument),
 			string(types.PushPull),
@@ -1113,15 +1120,18 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newEventWebhookMaxRetries2 := uint64(25)
 		newEventWebhookMinWaitInterval2 := "10ms"
 		newEventWebhookMaxWaitInterval2 := "4s"
+		newEventWebhookRequestTimeout2 := "6s"
 		fields = &types.UpdatableProjectFields{
 			AuthWebhookMethods:          &newAuthWebhookMethods2,
 			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries2,
 			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval2,
 			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval2,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout2,
 			EventWebhookEvents:          &newEventWebhookEvents2,
 			EventWebhookMaxRetries:      &newEventWebhookMaxRetries2,
 			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval2,
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval2,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout2,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -1133,10 +1143,12 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newAuthWebhookMaxRetries2, updateInfo.AuthWebhookMaxRetries)
 		assert.Equal(t, newAuthWebhookMinWaitInterval2, updateInfo.AuthWebhookMinWaitInterval)
 		assert.Equal(t, newAuthWebhookMaxWaitInterval2, updateInfo.AuthWebhookMaxWaitInterval)
+		assert.Equal(t, newAuthWebhookRequestTimeout2, updateInfo.AuthWebhookRequestTimeout)
 		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newEventWebhookMaxRetries2, updateInfo.EventWebhookMaxRetries)
 		assert.Equal(t, newEventWebhookMinWaitInterval2, updateInfo.EventWebhookMinWaitInterval)
 		assert.Equal(t, newEventWebhookMaxWaitInterval2, updateInfo.EventWebhookMaxWaitInterval)
+		assert.Equal(t, newEventWebhookRequestTimeout2, updateInfo.EventWebhookRequestTimeout)
 
 		// 05. Update clientDeactivateThreshold test
 		clientDeactivateThreshold2 := "2h"

@@ -67,11 +67,8 @@ const (
 	DefaultSnapshotDisableGC = false
 	DefaultSnapshotCacheSize = 1000
 
-	DefaultAuthWebhookRequestTimeout = 3 * time.Second
-	DefaultAuthWebhookCacheSize      = 5000
-	DefaultAuthWebhookCacheTTL       = 10 * time.Second
-
-	DefaultEventWebhookRequestTimeout = 3 * time.Second
+	DefaultAuthWebhookCacheSize = 5000
+	DefaultAuthWebhookCacheTTL  = 10 * time.Second
 
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
@@ -234,14 +231,8 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.AuthWebhookCacheSize == 0 {
 		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
 	}
-	if c.Backend.AuthWebhookRequestTimeout == "" {
-		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
-	}
 	if c.Backend.AuthWebhookCacheTTL == "" {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
-	}
-	if c.Backend.EventWebhookRequestTimeout == "" {
-		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
 	}
 
 	if c.Backend.ProjectCacheSize == 0 {

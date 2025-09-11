@@ -52,9 +52,6 @@ type Config struct {
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
 	SnapshotDisableGC bool `yaml:"SnapshotDisableGC"`
 
-	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
-	AuthWebhookRequestTimeout string `yaml:"AuthWebhookRequestTimeout"`
-
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
@@ -63,9 +60,6 @@ type Config struct {
 
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
-
-	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
-	EventWebhookRequestTimeout string `yaml:"EventWebhookRequestTimeout"`
 
 	// ProjectCacheSize is the cache size of the project metadata.
 	ProjectCacheSize int `yaml:"ProjectCacheSize"`
@@ -82,24 +76,10 @@ type Config struct {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.AuthWebhookRequestTimeout); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-request-timeout" flag: %w`,
-			c.AuthWebhookRequestTimeout,
-			err,
-		)
-	}
 	if _, err := time.ParseDuration(c.AuthWebhookCacheTTL); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
 			c.AuthWebhookCacheTTL,
-			err,
-		)
-	}
-	if _, err := time.ParseDuration(c.EventWebhookRequestTimeout); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--event-webhook-request-timeout" flag: %w`,
-			c.EventWebhookRequestTimeout,
 			err,
 		)
 	}
@@ -125,33 +105,11 @@ func (c *Config) ParseAdminTokenDuration() time.Duration {
 	return result
 }
 
-// ParseAuthWebhookRequestTimeout returns request timeout.
-func (c *Config) ParseAuthWebhookRequestTimeout() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookRequestTimeout)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook request timeout: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
 // ParseAuthWebhookCacheTTL returns TTL for authorized cache.
 func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseEventWebhookRequestTimeout returns request timeout.
-func (c *Config) ParseEventWebhookRequestTimeout() time.Duration {
-	result, err := time.ParseDuration(c.EventWebhookRequestTimeout)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse event webhook request timeout: %w", err)
 		os.Exit(1)
 	}
 

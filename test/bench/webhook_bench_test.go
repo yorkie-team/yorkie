@@ -1,4 +1,4 @@
-//go:build linux && bench
+//go:build bench
 
 /*
  * Copyright 2025 The Yorkie Authors. All rights reserved.
@@ -108,7 +108,7 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 		}
 	}()
 
-	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](100 * time.Millisecond)
+	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int]()
 	for range b.N {
 		for range webhookNum {
 			for i := range endpointNum {
@@ -125,6 +125,7 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 						MaxRetries:      0,
 						MinWaitInterval: 100 * time.Millisecond,
 						MaxWaitInterval: 100 * time.Millisecond,
+						RequestTimeout:  100 * time.Millisecond,
 					},
 				)
 				assert.NoError(b, err)
@@ -147,7 +148,7 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 		}
 	}()
 
-	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](100 * time.Millisecond)
+	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int]()
 
 	logging.DefaultLogger()
 
@@ -170,6 +171,7 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 							MaxRetries:      0,
 							MinWaitInterval: 100 * time.Millisecond,
 							MaxWaitInterval: 100 * time.Millisecond,
+							RequestTimeout:  100 * time.Millisecond,
 						},
 					),
 				)

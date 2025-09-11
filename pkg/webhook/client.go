@@ -50,6 +50,7 @@ type Options struct {
 	MaxRetries      uint64
 	MinWaitInterval time.Duration
 	MaxWaitInterval time.Duration
+	RequestTimeout  time.Duration
 }
 
 // Client is a httpClient for the webhook.
@@ -59,13 +60,9 @@ type Client[Req any, Res any] struct {
 
 // NewClient creates a new instance of Client. If you only want to get the status code,
 // then set Res to int.
-func NewClient[Req any, Res any](
-	requestTimeout time.Duration,
-) *Client[Req, Res] {
+func NewClient[Req any, Res any]() *Client[Req, Res] {
 	return &Client[Req, Res]{
-		httpClient: &http.Client{
-			Timeout: requestTimeout,
-		},
+		httpClient: &http.Client{},
 	}
 }
 
@@ -83,7 +80,10 @@ func (c *Client[Req, Res]) Send(
 
 	var res Res
 	status, err := c.withExponentialBackoff(ctx, options, func() (int, error) {
-		req, err := c.buildRequest(ctx, url, signature, body)
+		req, cancel, err := c.buildRequest(ctx, url, signature, options, body)
+		if cancel != nil {
+			defer cancel()
+		}
 		if err != nil {
 			return 0, fmt.Errorf("build request: %w", err)
 		}
@@ -129,11 +129,15 @@ func (c *Client[Req, Res]) Close() {
 func (c *Client[Req, Res]) buildRequest(
 	ctx context.Context,
 	url, hmac string,
+	options Options,
 	body []byte,
-) (*http.Request, error) {
+) (*http.Request, context.CancelFunc, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, options.RequestTimeout)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, fmt.Errorf("create POST request with context: %w", err)
+		cancel()
+		return nil, nil, fmt.Errorf("create POST request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -142,7 +146,7 @@ func (c *Client[Req, Res]) buildRequest(
 		req.Header.Set("X-Signature-256", hmac)
 	}
 
-	return req, nil
+	return req, cancel, nil
 }
 
 // createSignature sets the HMAC signature header for the request.

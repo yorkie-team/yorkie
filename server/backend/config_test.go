@@ -26,11 +26,9 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		AdminTokenDuration:         "24h",
-		AuthWebhookRequestTimeout:  "0ms",
-		AuthWebhookCacheTTL:        "10s",
-		ProjectCacheTTL:            "10m",
-		EventWebhookRequestTimeout: "0ms",
+		AdminTokenDuration:  "24h",
+		AuthWebhookCacheTTL: "10s",
+		ProjectCacheTTL:     "10m",
 	}
 }
 func TestConfig(t *testing.T) {
@@ -39,29 +37,19 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, validConf.Validate())
 
 		conf1 := validConf
-		conf1.AuthWebhookRequestTimeout = "1"
+		conf1.AuthWebhookCacheTTL = "s"
 		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf
-		conf2.AuthWebhookCacheTTL = "s"
+		conf2.ProjectCacheTTL = "10 minutes"
 		assert.Error(t, conf2.Validate())
-
-		conf3 := validConf
-		conf3.ProjectCacheTTL = "10 minutes"
-		assert.Error(t, conf3.Validate())
-
-		conf4 := validConf
-		conf4.EventWebhookRequestTimeout = "1"
-		assert.Error(t, conf4.Validate())
 	})
 
 	t.Run("parse test", func(t *testing.T) {
 		validConf := newValidBackendConf()
 
 		assert.Equal(t, "24h0m0s", validConf.ParseAdminTokenDuration().String())
-		assert.Equal(t, "0s", validConf.ParseAuthWebhookRequestTimeout().String())
 		assert.Equal(t, "10s", validConf.ParseAuthWebhookCacheTTL().String())
 		assert.Equal(t, "10m0s", validConf.ParseProjectCacheTTL().String())
-		assert.Equal(t, "0s", validConf.ParseEventWebhookRequestTimeout().String())
 	})
 }

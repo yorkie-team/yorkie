@@ -37,6 +37,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newAuthWebhookMaxRetries := uint64(10)
 		newAuthWebhookMinWaitInterval := "10ms"
 		newAuthWebhookMaxWaitInterval := "1s"
+		newAuthWebhookRequestTimeout := "500ms"
 		newEventWebhookURL := "http://localhost:4000"
 		newEventWebhookEvents := []string{
 			string(types.DocRootChanged),
@@ -44,6 +45,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newEventWebhookMaxRetries := uint64(20)
 		newEventWebhookMinWaitInterval := "8ms"
 		newEventWebhookMaxWaitInterval := "3s"
+		newEventWebhookRequestTimeout := "1s"
 		newClientDeactivateThreshold := "1h"
 		newMaxSubscribersPerDocument := 10
 		newMaxAttachmentsPerDocument := 10
@@ -55,11 +57,13 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
 			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
 			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
 			EventWebhookURL:             &newEventWebhookURL,
 			EventWebhookEvents:          &newEventWebhookEvents,
 			EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
 			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
 			MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
 			MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,

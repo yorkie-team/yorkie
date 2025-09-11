@@ -94,18 +94,16 @@ func TestMain(m *testing.M) {
 
 	testBackend, err = backend.New(
 		&backend.Config{
-			AdminUser:                  helper.AdminUser,
-			AdminPassword:              helper.AdminPassword,
-			UseDefaultProject:          helper.UseDefaultProject,
-			SnapshotThreshold:          helper.SnapshotThreshold,
-			SnapshotCacheSize:          helper.SnapshotCacheSize,
-			AuthWebhookCacheSize:       helper.AuthWebhookSize,
-			AuthWebhookCacheTTL:        helper.AuthWebhookCacheTTL.String(),
-			AuthWebhookRequestTimeout:  helper.AuthWebhookRequestTimeout.String(),
-			EventWebhookRequestTimeout: helper.EventWebhookRequestTimeout.String(),
-			ProjectCacheSize:           helper.ProjectCacheSize,
-			ProjectCacheTTL:            helper.ProjectCacheTTL.String(),
-			AdminTokenDuration:         helper.AdminTokenDuration,
+			AdminUser:            helper.AdminUser,
+			AdminPassword:        helper.AdminPassword,
+			UseDefaultProject:    helper.UseDefaultProject,
+			SnapshotThreshold:    helper.SnapshotThreshold,
+			SnapshotCacheSize:    helper.SnapshotCacheSize,
+			AuthWebhookCacheSize: helper.AuthWebhookSize,
+			AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
+			ProjectCacheSize:     helper.ProjectCacheSize,
+			ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
+			AdminTokenDuration:   helper.AdminTokenDuration,
 		}, &mongo.Config{
 			ConnectionURI:     helper.MongoConnectionURI,
 			YorkieDatabase:    helper.TestDBName(),

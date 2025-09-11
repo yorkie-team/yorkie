@@ -57,6 +57,9 @@ type Project struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `bson:"auth_webhook_max_wait_interval"`
 
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
+	AuthWebhookRequestTimeout string `bson:"auth_webhook_request_timeout"`
+
 	// EventWebhookURL is the url of the event webhook.
 	EventWebhookURL string `json:"event_webhook_url"`
 
@@ -71,6 +74,9 @@ type Project struct {
 
 	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
 	EventWebhookMaxWaitInterval string `bson:"event_webhook_max_wait_interval"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout string `bson:"event_webhook_request_timeout"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -193,6 +199,15 @@ func (p *Project) AuthWebhookMaxWaitIntervalAsTimeDuration() time.Duration {
 	return authWebhookMaxWaitInterval
 }
 
+// AuthWebhookRequestTimeoutAsTimeDuration converts AuthWebhookRequestTimeout string to time.Duration.
+func (p *Project) AuthWebhookRequestTimeoutAsTimeDuration() time.Duration {
+	authWebhookRequestTimeout, err := time.ParseDuration(p.AuthWebhookRequestTimeout)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return authWebhookRequestTimeout
+}
+
 // EventWebhookMinWaitIntervalAsTimeDuration converts EventWebhookMinWaitInterval string to time.Duration.
 func (p *Project) EventWebhookMinWaitIntervalAsTimeDuration() time.Duration {
 	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
@@ -209,4 +224,13 @@ func (p *Project) EventWebhookMaxWaitIntervalAsTimeDuration() time.Duration {
 		panic(ErrInvalidTimeDurationString)
 	}
 	return eventWebhookMaxWaitInterval
+}
+
+// EventWebhookRequestTimeoutAsTimeDuration converts EventWebhookRequestTimeout string to time.Duration.
+func (p *Project) EventWebhookRequestTimeoutAsTimeDuration() time.Duration {
+	eventWebhookRequestTimeout, err := time.ParseDuration(p.EventWebhookRequestTimeout)
+	if err != nil {
+		panic(ErrInvalidTimeDurationString)
+	}
+	return eventWebhookRequestTimeout
 }
