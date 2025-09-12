@@ -114,17 +114,11 @@ func DeactivateAsync(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) error {
-	// Create a background context that won't be cancelled when the original context is cancelled
-	// This ensures deactivation completes even if the browser window is closed
-	bgCtx := context.Background()
-
-	// Start deactivation in a goroutine
-	go func() {
-		if _, err := Deactivate(bgCtx, be, project, refKey); err != nil {
-			// Log the error since we can't return it from a goroutine
-			logging.From(bgCtx).Errorf("failed to deactivate client asynchronously: %v", err)
+	be.Background.AttachGoroutine(func(ctx context.Context) {
+		if _, err := Deactivate(ctx, be, project, refKey); err != nil {
+			logging.LogError(ctx, fmt.Errorf("deactivate client asynchronously: %w", err))
 		}
-	}()
+	}, "deactivation")
 
 	return nil
 }
