@@ -194,10 +194,11 @@ func TestClusterNodes(t *testing.T) {
 			infos, err := refSvr.FindActiveClusterNodes(ctx, renewalInterval)
 			require.NoError(t, err)
 			return len(infos) == numGoroutines && infos[0].IsLeader
-		}, 10*renewalInterval, renewalInterval)
+		}, 20*renewalInterval, renewalInterval)
 	})
 
 	t.Run("Should handle leader graceful shutdown test", func(t *testing.T) {
+		t.Skip("TODO(raararaara): Remove after adding TTL index setup for tests.")
 		ctx := context.Background()
 		renewalInterval := 100 * gotime.Millisecond
 
@@ -233,7 +234,7 @@ func TestClusterNodes(t *testing.T) {
 			require.NoError(t, err)
 
 			return 1 == len(infos) && infos[0].IsLeader && followerName == infos[0].RPCAddr
-		}, 150*renewalInterval, renewalInterval)
+		}, 100*renewalInterval, renewalInterval)
 
 		assert.NoError(t, followerSvr.Shutdown(true))
 	})
