@@ -119,6 +119,11 @@ func (r *Yorkie) ClearClusterNodes(ctx context.Context) error {
 	return r.backend.DB.ClearClusterNodes(ctx)
 }
 
+// FindLeadership returns the current leadership information for testing purposes.
+func (r *Yorkie) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
+	return r.backend.DB.FindLeadership(ctx)
+}
+
 // Start starts the server by opening the rpc port.
 func (r *Yorkie) Start() error {
 	r.lock.Lock()

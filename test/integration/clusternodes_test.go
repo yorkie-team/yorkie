@@ -116,6 +116,48 @@ func TestClusterNodes(t *testing.T) {
 		}, 20*renewalInterval, renewalInterval)
 	})
 
+	t.Run("Should handle server restart test", func(t *testing.T) {
+		ctx := context.Background()
+		renewalInterval := 100 * gotime.Millisecond
+
+		clearClusterNodes(ctx)
+
+		svr, err := server.New(newTestConfig("node-0"))
+		assert.NoError(t, err)
+
+		assert.NoError(t, svr.Start())
+		gotime.Sleep(500 * gotime.Millisecond)
+
+		assert.Eventually(t, func() bool {
+			svrs, err := svr.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+			return 1 == len(svrs) && svrs[0].IsLeader
+		}, 10*renewalInterval, renewalInterval)
+		prvLeader, err := svr.FindLeadership(ctx)
+		assert.NoError(t, err)
+
+		assert.NoError(t, svr.Shutdown(true))
+		gotime.Sleep(500 * gotime.Millisecond)
+
+		svr2, err := server.New(newTestConfig("node-0"))
+		assert.NoError(t, err)
+
+		assert.NoError(t, svr2.Start())
+
+		assert.Eventually(t, func() bool {
+			svrs, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
+			require.NoError(t, err)
+
+			return 1 == len(svrs)
+		}, 50*renewalInterval, renewalInterval)
+		currLeader, err := svr2.FindLeadership(ctx)
+		assert.NoError(t, err)
+
+		assert.NotEqual(t, prvLeader.LeaseToken, currLeader.LeaseToken)
+
+		assert.NoError(t, svr2.Shutdown(true))
+	})
+
 	t.Run("Should handle concurrent connection test", func(t *testing.T) {
 		ctx := context.Background()
 		renewalInterval := 100 * gotime.Millisecond
@@ -171,6 +213,7 @@ func TestClusterNodes(t *testing.T) {
 		}, 10*renewalInterval, renewalInterval)
 
 		infos, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
+		assert.NoError(t, err)
 		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
 		var followerName string
@@ -190,7 +233,7 @@ func TestClusterNodes(t *testing.T) {
 			require.NoError(t, err)
 
 			return 1 == len(infos) && infos[0].IsLeader && followerName == infos[0].RPCAddr
-		}, 10*renewalInterval, renewalInterval)
+		}, 150*renewalInterval, renewalInterval)
 
 		assert.NoError(t, followerSvr.Shutdown(true))
 	})

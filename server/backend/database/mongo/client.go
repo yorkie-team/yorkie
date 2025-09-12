@@ -181,8 +181,11 @@ func (c *Client) TryLeadership(
 		if err != nil {
 			return nil, err
 		}
-		if !ret.IsLeader {
-			_ = c.updateClusterFollower(ctx, rpcAddr)
+		// NOTE(raararaara): In some cases, a leaderless state may exist.
+		if ret == nil || ret.RPCAddr != rpcAddr {
+			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
+				return nil, err
+			}
 			return ret, nil
 		}
 	}
@@ -194,7 +197,14 @@ func (c *Client) TryLeadership(
 func (c *Client) FindLeadership(
 	ctx context.Context,
 ) (*database.ClusterNodeInfo, error) {
-	result := c.collection(ColClusterNodes).FindOne(ctx, bson.M{"is_leader": 1})
+	result := c.collection(ColClusterNodes).FindOne(
+		ctx,
+		bson.M{
+			"is_leader": true,
+			"$expr": bson.M{
+				"$gte": bson.A{"$expires_at", "$$NOW"},
+			},
+		})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, nil
 	}
@@ -205,11 +215,6 @@ func (c *Client) FindLeadership(
 	info := &database.ClusterNodeInfo{}
 	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("decode leadership: %w", err)
-	}
-
-	// Check if leadership has expired
-	if info.IsExpired() {
-		return nil, nil
 	}
 
 	return info, nil
@@ -250,7 +255,7 @@ func (c *Client) tryAcquireLeadership(
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
-			return info, nil
+			return c.FindLeadership(ctx)
 		}
 
 		return nil, fmt.Errorf("decode new cluster node: %w", err)

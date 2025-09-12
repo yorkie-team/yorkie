@@ -162,6 +162,11 @@ func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
 
+	// NOTE(raararaara): In some cases, a leaderless state may exist.
+	if lease == nil {
+		return nil
+	}
+
 	if lease.IsLeader {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
