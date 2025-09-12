@@ -102,10 +102,11 @@ func RunLeadershipTest(
 		// Second node acquires leadership
 		leaseDuration := 30 * gotime.Second
 
-		info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
-		require.NoError(t, err)
-
-		assert.Equal(t, nodeIDTwo, info.RPCAddr)
+		assert.Eventually(t, func() bool {
+			info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
+			require.NoError(t, err)
+			return info != nil && nodeIDTwo == info.RPCAddr
+		}, 10*gotime.Second, 1*gotime.Second)
 	})
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {

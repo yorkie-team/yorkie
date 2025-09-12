@@ -186,8 +186,8 @@ func (c *Client) TryLeadership(
 			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
 				return nil, err
 			}
-			return ret, nil
 		}
+		return ret, nil
 	}
 
 	return c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
@@ -255,6 +255,14 @@ func (c *Client) tryAcquireLeadership(
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
+			_, _ = c.collection(ColClusterNodes).UpdateMany(
+				ctx,
+				bson.M{
+					"is_leader": true,
+					"$expr":     bson.M{"$lt": bson.A{"$expires_at", "$$NOW"}},
+				},
+				bson.M{"$set": bson.M{"is_leader": false}},
+			)
 			return c.FindLeadership(ctx)
 		}
 

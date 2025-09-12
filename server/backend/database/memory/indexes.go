@@ -288,5 +288,25 @@ var schema = &memdb.DBSchema{
 				},
 			},
 		},
+		tblClusterNodes: {
+			Name: tblClusterNodes,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"rpc_addr": {
+					Name:    "rpc_addr",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "RPCAddr"},
+				},
+				"is_leader": {
+					Name:    "is_leader",
+					Unique:  false,
+					Indexer: &memdb.BoolFieldIndex{Field: "IsLeader"},
+				},
+			},
+		},
 	},
 }
