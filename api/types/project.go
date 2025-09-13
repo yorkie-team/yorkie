@@ -185,15 +185,15 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 
 // GetAuthWehbookOptions returns the webhook options for the auth webhook.
 func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
-	authWebhookMinWaitInterval, err := p.authWebhookMinWaitIntervalAsTimeDuration()
+	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
 	if err != nil {
 		return webhook.Options{}, err
 	}
-	authWebhookMaxWaitInterval, err := p.authWebhookMaxWaitIntervalAsTimeDuration()
+	authWebhookMaxWaitInterval, err := time.ParseDuration(p.AuthWebhookMaxWaitInterval)
 	if err != nil {
 		return webhook.Options{}, err
 	}
-	authWebhookRequestTimeout, err := p.authWebhookRequestTimeoutAsTimeDuration()
+	authWebhookRequestTimeout, err := time.ParseDuration(p.AuthWebhookRequestTimeout)
 	if err != nil {
 		return webhook.Options{}, err
 	}
@@ -207,15 +207,15 @@ func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
 
 // GetEventWehbookOptions returns the webhook options for the event webhook.
 func (p *Project) GetEventWehbookOptions() (webhook.Options, error) {
-	eventWebhookMinWaitInterval, err := p.eventWebhookMinWaitIntervalAsTimeDuration()
+	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
 	if err != nil {
 		return webhook.Options{}, err
 	}
-	eventWebhookMaxWaitInterval, err := p.eventWebhookMaxWaitIntervalAsTimeDuration()
+	eventWebhookMaxWaitInterval, err := time.ParseDuration(p.EventWebhookMaxWaitInterval)
 	if err != nil {
 		return webhook.Options{}, err
 	}
-	eventWebhookRequestTimeout, err := p.eventWebhookRequestTimeoutAsTimeDuration()
+	eventWebhookRequestTimeout, err := time.ParseDuration(p.EventWebhookRequestTimeout)
 	if err != nil {
 		return webhook.Options{}, err
 	}
@@ -225,58 +225,4 @@ func (p *Project) GetEventWehbookOptions() (webhook.Options, error) {
 		MaxWaitInterval: eventWebhookMaxWaitInterval,
 		RequestTimeout:  eventWebhookRequestTimeout,
 	}, nil
-}
-
-// authWebhookMinWaitIntervalAsTimeDuration converts AuthWebhookMinWaitInterval string to time.Duration.
-func (p *Project) authWebhookMinWaitIntervalAsTimeDuration() (time.Duration, error) {
-	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return authWebhookMinWaitInterval, nil
-}
-
-// authWebhookMaxWaitIntervalAsTimeDuration converts AuthWebhookMaxWaitInterval string to time.Duration.
-func (p *Project) authWebhookMaxWaitIntervalAsTimeDuration() (time.Duration, error) {
-	authWebhookMaxWaitInterval, err := time.ParseDuration(p.AuthWebhookMaxWaitInterval)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return authWebhookMaxWaitInterval, nil
-}
-
-// authWebhookRequestTimeoutAsTimeDuration converts AuthWebhookRequestTimeout string to time.Duration.
-func (p *Project) authWebhookRequestTimeoutAsTimeDuration() (time.Duration, error) {
-	authWebhookRequestTimeout, err := time.ParseDuration(p.AuthWebhookRequestTimeout)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return authWebhookRequestTimeout, nil
-}
-
-// eventWebhookMinWaitIntervalAsTimeDuration converts EventWebhookMinWaitInterval string to time.Duration.
-func (p *Project) eventWebhookMinWaitIntervalAsTimeDuration() (time.Duration, error) {
-	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return eventWebhookMinWaitInterval, nil
-}
-
-// eventWebhookMaxWaitIntervalAsTimeDuration converts EventWebhookMaxWaitInterval string to time.Duration.
-func (p *Project) eventWebhookMaxWaitIntervalAsTimeDuration() (time.Duration, error) {
-	eventWebhookMaxWaitInterval, err := time.ParseDuration(p.EventWebhookMaxWaitInterval)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return eventWebhookMaxWaitInterval, nil
-}
-
-// eventWebhookRequestTimeoutAsTimeDuration converts EventWebhookRequestTimeout string to time.Duration.
-func (p *Project) eventWebhookRequestTimeoutAsTimeDuration() (time.Duration, error) {
-	eventWebhookRequestTimeout, err := time.ParseDuration(p.EventWebhookRequestTimeout)
-	if err != nil {
-		return 0, ErrInvalidTimeDurationString
-	}
-	return eventWebhookRequestTimeout, nil
 }
