@@ -62,11 +62,17 @@ func verifyAccess(
 		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
+	options, err := prj.GetAuthWebhookOptions()
+	if err != nil {
+		return fmt.Errorf("get webhook options: %w", err)
+	}
+
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
 		"",
 		body,
+		options,
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)

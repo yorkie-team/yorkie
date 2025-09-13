@@ -57,22 +57,30 @@ func ToProjects(projects []*types.Project) []*api.Project {
 // ToProject converts the given model to Protobuf.
 func ToProject(project *types.Project) *api.Project {
 	return &api.Project{
-		Id:                        project.ID.String(),
-		Name:                      project.Name,
-		AuthWebhookUrl:            project.AuthWebhookURL,
-		AuthWebhookMethods:        project.AuthWebhookMethods,
-		EventWebhookUrl:           project.EventWebhookURL,
-		EventWebhookEvents:        project.EventWebhookEvents,
-		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
-		MaxSubscribersPerDocument: int32(project.MaxSubscribersPerDocument),
-		MaxAttachmentsPerDocument: int32(project.MaxAttachmentsPerDocument),
-		MaxSizePerDocument:        int32(project.MaxSizePerDocument),
-		RemoveOnDetach:            project.RemoveOnDetach,
-		AllowedOrigins:            project.AllowedOrigins,
-		PublicKey:                 project.PublicKey,
-		SecretKey:                 project.SecretKey,
-		CreatedAt:                 timestamppb.New(project.CreatedAt),
-		UpdatedAt:                 timestamppb.New(project.UpdatedAt),
+		Id:                          project.ID.String(),
+		Name:                        project.Name,
+		AuthWebhookUrl:              project.AuthWebhookURL,
+		AuthWebhookMethods:          project.AuthWebhookMethods,
+		AuthWebhookMaxRetries:       uint64(project.AuthWebhookMaxRetries),
+		AuthWebhookMinWaitInterval:  project.AuthWebhookMinWaitInterval,
+		AuthWebhookMaxWaitInterval:  project.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   project.AuthWebhookRequestTimeout,
+		EventWebhookUrl:             project.EventWebhookURL,
+		EventWebhookEvents:          project.EventWebhookEvents,
+		EventWebhookMaxRetries:      uint64(project.EventWebhookMaxRetries),
+		EventWebhookMinWaitInterval: project.EventWebhookMinWaitInterval,
+		EventWebhookMaxWaitInterval: project.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  project.EventWebhookRequestTimeout,
+		ClientDeactivateThreshold:   project.ClientDeactivateThreshold,
+		MaxSubscribersPerDocument:   int32(project.MaxSubscribersPerDocument),
+		MaxAttachmentsPerDocument:   int32(project.MaxAttachmentsPerDocument),
+		MaxSizePerDocument:          int32(project.MaxSizePerDocument),
+		RemoveOnDetach:              project.RemoveOnDetach,
+		AllowedOrigins:              project.AllowedOrigins,
+		PublicKey:                   project.PublicKey,
+		SecretKey:                   project.SecretKey,
+		CreatedAt:                   timestamppb.New(project.CreatedAt),
+		UpdatedAt:                   timestamppb.New(project.UpdatedAt),
 	}
 }
 
@@ -591,6 +599,26 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	} else {
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
 	}
+	if fields.AuthWebhookMaxRetries != nil {
+		pbUpdatableProjectFields.AuthWebhookMaxRetries = &wrapperspb.UInt64Value{
+			Value: uint64(*fields.AuthWebhookMaxRetries),
+		}
+	}
+	if fields.AuthWebhookMinWaitInterval != nil {
+		pbUpdatableProjectFields.AuthWebhookMinWaitInterval = &wrapperspb.StringValue{
+			Value: *fields.AuthWebhookMinWaitInterval,
+		}
+	}
+	if fields.AuthWebhookMaxWaitInterval != nil {
+		pbUpdatableProjectFields.AuthWebhookMaxWaitInterval = &wrapperspb.StringValue{
+			Value: *fields.AuthWebhookMaxWaitInterval,
+		}
+	}
+	if fields.AuthWebhookRequestTimeout != nil {
+		pbUpdatableProjectFields.AuthWebhookRequestTimeout = &wrapperspb.StringValue{
+			Value: *fields.AuthWebhookRequestTimeout,
+		}
+	}
 	if fields.EventWebhookURL != nil {
 		pbUpdatableProjectFields.EventWebhookUrl = &wrapperspb.StringValue{Value: *fields.EventWebhookURL}
 	}
@@ -600,6 +628,26 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		}
 	} else {
 		pbUpdatableProjectFields.EventWebhookEvents = nil
+	}
+	if fields.EventWebhookMaxRetries != nil {
+		pbUpdatableProjectFields.EventWebhookMaxRetries = &wrapperspb.UInt64Value{
+			Value: uint64(*fields.EventWebhookMaxRetries),
+		}
+	}
+	if fields.EventWebhookMinWaitInterval != nil {
+		pbUpdatableProjectFields.EventWebhookMinWaitInterval = &wrapperspb.StringValue{
+			Value: *fields.EventWebhookMinWaitInterval,
+		}
+	}
+	if fields.EventWebhookMaxWaitInterval != nil {
+		pbUpdatableProjectFields.EventWebhookMaxWaitInterval = &wrapperspb.StringValue{
+			Value: *fields.EventWebhookMaxWaitInterval,
+		}
+	}
+	if fields.EventWebhookRequestTimeout != nil {
+		pbUpdatableProjectFields.EventWebhookRequestTimeout = &wrapperspb.StringValue{
+			Value: *fields.EventWebhookRequestTimeout,
+		}
 	}
 	if fields.ClientDeactivateThreshold != nil {
 		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{

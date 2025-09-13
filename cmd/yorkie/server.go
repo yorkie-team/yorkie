@@ -50,8 +50,7 @@ var (
 	authGitHubTokenURL            string
 	authGitHubDeviceAuthURL       string
 
-	housekeepingInterval      time.Duration
-	clientDeactivateThreshold time.Duration
+	housekeepingInterval time.Duration
 
 	mongoConnectionURI                string
 	mongoConnectionTimeout            time.Duration
@@ -64,16 +63,8 @@ var (
 
 	pprofEnabled bool
 
-	authWebhookMaxWaitInterval time.Duration
-	authWebhookMinWaitInterval time.Duration
-	authWebhookRequestTimeout  time.Duration
-	authWebhookCacheTTL        time.Duration
-
-	eventWebhookMaxWaitInterval time.Duration
-	eventWebhookMinWaitInterval time.Duration
-	eventWebhookRequestTimeout  time.Duration
-
-	projectCacheTTL time.Duration
+	authWebhookCacheTTL time.Duration
+	projectCacheTTL     time.Duration
 
 	kafkaAddresses    string
 	kafkaTopic        string
@@ -102,17 +93,8 @@ func newServerCmd() *cobra.Command {
 			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
-			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
 
-			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
-			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
-			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-
-			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
-			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
-			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
-
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			if mongoConnectionURI != "" {
@@ -403,12 +385,6 @@ func init() {
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
 	)
-	cmd.Flags().DurationVar(
-		&clientDeactivateThreshold,
-		"client-deactivate-threshold",
-		server.DefaultClientDeactivateThreshold,
-		"Deactivate threshold of clients in specific project for housekeeping.",
-	)
 	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotThreshold,
 		"backend-snapshot-threshold",
@@ -434,30 +410,6 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
-	cmd.Flags().DurationVar(
-		&authWebhookRequestTimeout,
-		"auth-webhook-request-timeout",
-		server.DefaultAuthWebhookRequestTimeout,
-		"Timeout for each authorization webhook request.",
-	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthWebhookMaxRetries,
-		"auth-webhook-max-retries",
-		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for authorization webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMinWaitInterval,
-		"auth-webhook-min-wait-interval",
-		server.DefaultAuthWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMaxWaitInterval,
-		"auth-webhook-max-wait-interval",
-		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
-	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
 		"auth-webhook-cache-size",
@@ -469,30 +421,6 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookRequestTimeout,
-		"event-webhook-request-timeout",
-		server.DefaultEventWebhookRequestTimeout,
-		"Timeout for each event webhook request.",
-	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.EventWebhookMaxRetries,
-		"event-webhook-max-retries",
-		server.DefaultEventWebhookMaxRetries,
-		"Maximum number of retries for event webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMinWaitInterval,
-		"event-webhook-min-wait-interval",
-		server.DefaultEventWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMaxWaitInterval,
-		"event-webhook-max-wait-interval",
-		server.DefaultEventWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

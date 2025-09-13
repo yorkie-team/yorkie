@@ -34,24 +34,40 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newAuthWebhookMaxRetries := uint64(10)
+		newAuthWebhookMinWaitInterval := "10ms"
+		newAuthWebhookMaxWaitInterval := "1s"
+		newAuthWebhookRequestTimeout := "500ms"
 		newEventWebhookURL := "http://localhost:4000"
 		newEventWebhookEvents := []string{
 			string(types.DocRootChanged),
 		}
+		newEventWebhookMaxRetries := uint64(20)
+		newEventWebhookMinWaitInterval := "8ms"
+		newEventWebhookMaxWaitInterval := "3s"
+		newEventWebhookRequestTimeout := "1s"
 		newClientDeactivateThreshold := "1h"
 		newMaxSubscribersPerDocument := 10
 		newMaxAttachmentsPerDocument := 10
 		newRemoveOnDetach := true
 		fields := &types.UpdatableProjectFields{
-			Name:                      &newName,
-			AuthWebhookURL:            &newAuthWebhookURL,
-			AuthWebhookMethods:        &newAuthWebhookMethods,
-			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookEvents:        &newEventWebhookEvents,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
-			MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
-			MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
-			RemoveOnDetach:            &newRemoveOnDetach,
+			Name:                        &newName,
+			AuthWebhookURL:              &newAuthWebhookURL,
+			AuthWebhookMethods:          &newAuthWebhookMethods,
+			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
+			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
+			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
+			EventWebhookURL:             &newEventWebhookURL,
+			EventWebhookEvents:          &newEventWebhookEvents,
+			EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
+			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
+			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
+			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
+			MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,
+			RemoveOnDetach:              &newRemoveOnDetach,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -101,6 +117,14 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
+		}
+		assert.ErrorAs(t, fields.Validate(), &formErr)
+
+		// invalid ClientDeactivateThreshold
+		newClientDeactivateThreshold = "1 second"
+		fields = &types.UpdatableProjectFields{
+			Name:                      &newName,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &formErr)
 	})

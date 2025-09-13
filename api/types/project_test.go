@@ -108,4 +108,49 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.Error(t, info2.IsAttachmentLimitExceeded(1))
 	})
+
+	t.Run("parse test", func(t *testing.T) {
+		validInfo := &types.Project{
+			ClientDeactivateThreshold:   "20h",
+			AuthWebhookMinWaitInterval:  "10ms",
+			AuthWebhookMaxWaitInterval:  "5s",
+			AuthWebhookRequestTimeout:   "3s",
+			EventWebhookMinWaitInterval: "40ms",
+			EventWebhookMaxWaitInterval: "3s",
+			EventWebhookRequestTimeout:  "2s",
+		}
+		clientDeactivateThreshold, err := validInfo.ClientDeactivateThresholdAsTimeDuration()
+		assert.NoError(t, err)
+		assert.Equal(t, clientDeactivateThreshold.String(), "20h0m0s")
+
+		authWebhookOptions, err := validInfo.GetAuthWebhookOptions()
+		assert.NoError(t, err)
+		assert.Equal(t, authWebhookOptions.MinWaitInterval.String(), "10ms")
+		assert.Equal(t, authWebhookOptions.MaxWaitInterval.String(), "5s")
+		assert.Equal(t, authWebhookOptions.RequestTimeout.String(), "3s")
+
+		eventWebhookOptions, err := validInfo.GetEventWebhookOptions()
+		assert.NoError(t, err)
+		assert.Equal(t, eventWebhookOptions.MinWaitInterval.String(), "40ms")
+		assert.Equal(t, eventWebhookOptions.MaxWaitInterval.String(), "3s")
+		assert.Equal(t, eventWebhookOptions.RequestTimeout.String(), "2s")
+
+		invalidInfo := &types.Project{
+			ClientDeactivateThreshold:   "1 hour",
+			AuthWebhookMinWaitInterval:  "s",
+			AuthWebhookMaxWaitInterval:  "3",
+			AuthWebhookRequestTimeout:   "3 sec",
+			EventWebhookMinWaitInterval: "1",
+			EventWebhookMaxWaitInterval: "3 seconds",
+			EventWebhookRequestTimeout:  "2seconds",
+		}
+		_, err = invalidInfo.ClientDeactivateThresholdAsTimeDuration()
+		assert.Error(t, err)
+
+		_, err = invalidInfo.GetAuthWebhookOptions()
+		assert.Error(t, err)
+
+		_, err = invalidInfo.GetEventWebhookOptions()
+		assert.Error(t, err)
+	})
 }

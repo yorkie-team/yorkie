@@ -28,13 +28,20 @@ import (
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
 		dummyOwnerID := types.ID("000000000000000000000000")
-		clientDeactivateThreshold := "1h"
-		project := database.NewProjectInfo(t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		project := database.NewProjectInfo(t.Name(), dummyOwnerID)
 
 		testName := "testName"
 		testURL := "testUrl"
 		testMethods := []string{"testMethod"}
+		testAuthWebhookMaxRetries := uint64(10)
+		testAuthWebhookMinWaitInterval := "10ms"
+		testAuthWebhookMaxWaitInterval := "1s"
+		testAuthWebhookRequestTimeout := "500ms"
 		testEvents := []string{"testEvent"}
+		testEventWebhookMaxRetries := uint64(20)
+		testEventWebhookMinWaitInterval := "8ms"
+		testEventWebhookMaxWaitInterval := "3s"
+		testEventWebhookRequestTimeout := "1s"
 		testClientDeactivateThreshold := "2h"
 		testMaxSubscribersPerDocument := 10
 		testMaxAttachmentsPerDocument := 10
@@ -49,11 +56,33 @@ func TestProjectInfo(t *testing.T) {
 		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
 		assert.Equal(t, testMethods, project.AuthWebhookMethods)
 
+		project.UpdateFields(&types.UpdatableProjectFields{
+			AuthWebhookMaxRetries:      &testAuthWebhookMaxRetries,
+			AuthWebhookMinWaitInterval: &testAuthWebhookMinWaitInterval,
+			AuthWebhookMaxWaitInterval: &testAuthWebhookMaxWaitInterval,
+			AuthWebhookRequestTimeout:  &testAuthWebhookRequestTimeout,
+		})
+		assert.Equal(t, testAuthWebhookMaxRetries, project.AuthWebhookMaxRetries)
+		assert.Equal(t, testAuthWebhookMinWaitInterval, project.AuthWebhookMinWaitInterval)
+		assert.Equal(t, testAuthWebhookMaxWaitInterval, project.AuthWebhookMaxWaitInterval)
+		assert.Equal(t, testAuthWebhookRequestTimeout, project.AuthWebhookRequestTimeout)
+
 		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookURL: &testURL})
 		assert.Equal(t, testURL, project.EventWebhookURL)
 
 		project.UpdateFields(&types.UpdatableProjectFields{EventWebhookEvents: &testEvents})
 		assert.Equal(t, testEvents, project.EventWebhookEvents)
+
+		project.UpdateFields(&types.UpdatableProjectFields{
+			EventWebhookMaxRetries:      &testEventWebhookMaxRetries,
+			EventWebhookMinWaitInterval: &testEventWebhookMinWaitInterval,
+			EventWebhookMaxWaitInterval: &testEventWebhookMaxWaitInterval,
+			EventWebhookRequestTimeout:  &testEventWebhookRequestTimeout,
+		})
+		assert.Equal(t, testEventWebhookMaxRetries, project.EventWebhookMaxRetries)
+		assert.Equal(t, testEventWebhookMinWaitInterval, project.EventWebhookMinWaitInterval)
+		assert.Equal(t, testEventWebhookMaxWaitInterval, project.EventWebhookMaxWaitInterval)
+		assert.Equal(t, testEventWebhookRequestTimeout, project.EventWebhookRequestTimeout)
 
 		assert.Equal(t, dummyOwnerID, project.Owner)
 

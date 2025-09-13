@@ -89,19 +89,20 @@ func TestHMAC(t *testing.T) {
 	testServer := newHMACTestServer(t, validSecret, expectedResponse)
 	defer testServer.Close()
 
-	client := webhook.NewClient[testRequest, testResponse](webhook.Options{
+	client := webhook.NewClient[testRequest, testResponse]()
+	options := webhook.Options{
 		MaxRetries:      0,
 		MinWaitInterval: 0,
 		MaxWaitInterval: 0,
 		RequestTimeout:  1 * time.Second,
-	})
+	}
 
 	t.Run("valid HMAC key test", func(t *testing.T) {
 		reqPayload := testRequest{Name: "ValidHMAC"}
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
 
-		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body, options)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
@@ -113,7 +114,7 @@ func TestHMAC(t *testing.T) {
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
 
-		resp, statusCode, err := client.Send(context.Background(), testServer.URL, invalidSecret, body)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, invalidSecret, body, options)
 		assert.Error(t, err)
 		// The server responds with 403 Forbidden if the signature is invalid.
 		assert.Equal(t, http.StatusForbidden, statusCode)
@@ -125,7 +126,7 @@ func TestHMAC(t *testing.T) {
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
 
-		resp, statusCode, err := client.Send(context.Background(), testServer.URL, "", body)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, "", body, options)
 		assert.Error(t, err)
 		// The server responds with 401 Unauthorized if no signature header is provided.
 		assert.Equal(t, http.StatusUnauthorized, statusCode)
@@ -137,7 +138,7 @@ func TestHMAC(t *testing.T) {
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
 
-		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body)
+		resp, statusCode, err := client.Send(context.Background(), testServer.URL, validSecret, body, options)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
@@ -153,26 +154,18 @@ func TestBackoff(t *testing.T) {
 	server := newRetryServer(t, replyAfter, expectedResponse)
 	defer server.Close()
 
-	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
-		RequestTimeout:  10 * time.Millisecond,
-		MaxRetries:      uint64(reachableRetries),
-		MinWaitInterval: 1 * time.Millisecond,
-		MaxWaitInterval: 5 * time.Millisecond,
-	})
-
-	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
-		RequestTimeout:  10 * time.Millisecond,
-		MaxRetries:      uint64(unreachableRetries),
-		MinWaitInterval: 1 * time.Millisecond,
-		MaxWaitInterval: 5 * time.Millisecond,
-	})
-
+	webhookClient := webhook.NewClient[testRequest, testResponse]()
 	t.Run("retry fail test", func(t *testing.T) {
 		reqPayload := testRequest{Name: "retry fails"}
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
-
-		resp, statusCode, err := unreachableClient.Send(context.Background(), server.URL, "", body)
+		unreachableRetriesOptions := webhook.Options{
+			MaxRetries:      uint64(unreachableRetries),
+			MinWaitInterval: 1 * time.Millisecond,
+			MaxWaitInterval: 5 * time.Millisecond,
+			RequestTimeout:  10 * time.Millisecond,
+		}
+		resp, statusCode, err := webhookClient.Send(context.Background(), server.URL, "", body, unreachableRetriesOptions)
 		assert.Error(t, err)
 		assert.ErrorContains(t, err, webhook.ErrWebhookTimeout.Error())
 		assert.Equal(t, http.StatusServiceUnavailable, statusCode)
@@ -183,8 +176,13 @@ func TestBackoff(t *testing.T) {
 		reqPayload := testRequest{Name: "retry succeed"}
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
-
-		resp, statusCode, err := reachableClient.Send(context.Background(), server.URL, "", body)
+		reachableRetriesOptions := webhook.Options{
+			MaxRetries:      uint64(reachableRetries),
+			MinWaitInterval: 1 * time.Millisecond,
+			MaxWaitInterval: 5 * time.Millisecond,
+			RequestTimeout:  10 * time.Millisecond,
+		}
+		resp, statusCode, err := webhookClient.Send(context.Background(), server.URL, "", body, reachableRetriesOptions)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
@@ -198,26 +196,18 @@ func TestRequestTimeout(t *testing.T) {
 	server := newDelayServer(t, delayTime, expectedResponse)
 	defer server.Close()
 
-	reachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
-		RequestTimeout:  15 * time.Millisecond,
-		MaxRetries:      0,
-		MinWaitInterval: 0,
-		MaxWaitInterval: 0,
-	})
-
-	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
-		RequestTimeout:  5 * time.Millisecond,
-		MaxRetries:      0,
-		MinWaitInterval: 0,
-		MaxWaitInterval: 0,
-	})
-
+	webhookClient := webhook.NewClient[testRequest, testResponse]()
 	t.Run("request succeed after timeout", func(t *testing.T) {
 		reqPayload := testRequest{Name: "TimeoutTest"}
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
-
-		resp, statusCode, err := reachableClient.Send(context.Background(), server.URL, "", body)
+		options := webhook.Options{
+			MaxRetries:      0,
+			MinWaitInterval: 0,
+			MaxWaitInterval: 0,
+			RequestTimeout:  15 * time.Millisecond,
+		}
+		resp, statusCode, err := webhookClient.Send(context.Background(), server.URL, "", body, options)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.NotNil(t, resp)
@@ -228,8 +218,13 @@ func TestRequestTimeout(t *testing.T) {
 		reqPayload := testRequest{Name: "TimeoutTest"}
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
-
-		resp, statusCode, err := unreachableClient.Send(context.Background(), server.URL, "", body)
+		options := webhook.Options{
+			MaxRetries:      0,
+			MinWaitInterval: 0,
+			MaxWaitInterval: 0,
+			RequestTimeout:  5 * time.Millisecond,
+		}
+		resp, statusCode, err := webhookClient.Send(context.Background(), server.URL, "", body, options)
 		assert.Error(t, err)
 		assert.Equal(t, 0, statusCode)
 		assert.Nil(t, resp)
@@ -241,12 +236,13 @@ func TestErrorHandling(t *testing.T) {
 	server := newRetryServer(t, 2, expectedResponse)
 	defer server.Close()
 
-	unreachableClient := webhook.NewClient[testRequest, testResponse](webhook.Options{
-		RequestTimeout:  50 * time.Millisecond,
+	options := webhook.Options{
 		MaxRetries:      0,
 		MinWaitInterval: 0,
 		MaxWaitInterval: 0,
-	})
+		RequestTimeout:  50 * time.Millisecond,
+	}
+	unreachableClient := webhook.NewClient[testRequest, testResponse]()
 
 	t.Run("request fails with context done test", func(t *testing.T) {
 		reqPayload := testRequest{Name: "ContextDone"}
@@ -255,7 +251,7 @@ func TestErrorHandling(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer cancel()
-		resp, statusCode, err := unreachableClient.Send(ctx, server.URL, "", body)
+		resp, statusCode, err := unreachableClient.Send(ctx, server.URL, "", body, options)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusServiceUnavailable, statusCode)
 		assert.Nil(t, resp)
@@ -266,7 +262,7 @@ func TestErrorHandling(t *testing.T) {
 		body, err := json.Marshal(reqPayload)
 		assert.NoError(t, err)
 
-		resp, statusCode, err := unreachableClient.Send(context.Background(), "", "", body)
+		resp, statusCode, err := unreachableClient.Send(context.Background(), "", "", body, options)
 		assert.Error(t, err)
 		assert.Equal(t, 0, statusCode)
 		assert.Nil(t, resp)

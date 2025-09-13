@@ -115,22 +115,9 @@ func New(
 	bg := background.New(metrics)
 
 	// 04. Create webhook clients and cluster client.
-	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		pkgwebhook.Options{
-			MaxRetries:      conf.AuthWebhookMaxRetries,
-			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
-			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
-			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
-		},
-	)
-	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](
-		pkgwebhook.Options{
-			MaxRetries:      conf.EventWebhookMaxRetries,
-			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
-			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
-			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
-		},
-	))
+	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
+	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
+
 	clusterClient, err := cluster.Dial(conf.GatewayAddr)
 	if err != nil {
 		return nil, err
@@ -174,7 +161,6 @@ func New(
 			context.Background(),
 			conf.AdminUser,
 			conf.AdminPassword,
-			conf.ClientDeactivateThreshold,
 		)
 		if err != nil {
 			return nil, err

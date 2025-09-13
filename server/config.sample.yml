@@ -80,9 +80,6 @@ Backend:
   # used. If we are using server as single-tenant mode, this should be set to true.
   UseDefaultProject: true
 
-  # ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
-  ClientDeactivateThreshold: "24h"
-
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
   SnapshotThreshold: 500
@@ -96,35 +93,11 @@ Backend:
   # SnapshotCacheSize is the cache size of the snapshot.
   SnapshotCacheSize: 1000
 
-  # AuthWebhookRequestTimeout is the timeout for each authorization webhook request.
-  AuthWebhookRequestTimeout: "3s"
-
-  # AuthWebhookMaxRetries is the max number of retries for the authorization webhook.
-  AuthWebhookMaxRetries: 10
-
-  # AuthWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  AuthWebhookMinWaitInterval: "100ms"
-
-  # AuthWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  AuthWebhookMaxWaitInterval: "3s"
-
   # AuthWebhookCacheSize is the cache size of the authorization webhook.
   AuthWebhookCacheSize: 5000
 
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
   AuthWebhookCacheTTL: "10s"
-
-  # EventWebhookRequestTimeout is the timeout for each event webhook request.
-  EventWebhookRequestTimeout: "3s"
-
-  # EventWebhookMaxRetries is the max number of retries for the event webhook.
-  EventWebhookMaxRetries: 10
-
-  # EventWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  EventWebhookMinWaitInterval: "100ms"
-
-  # EventWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  EventWebhookMaxWaitInterval: "3s"
 
   # ProjectCacheSize is the size of the project metadata cache.
   ProjectCacheSize: 256

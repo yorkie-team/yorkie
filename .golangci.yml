@@ -41,3 +41,6 @@ issues:
     - text: "G112:"
       linters:
         - gosec
+    - path: api/types/updatable_project_fields.go
+      linters:
+        - lll

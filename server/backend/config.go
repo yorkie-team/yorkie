@@ -42,9 +42,6 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
-	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
-	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
-
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`
@@ -55,18 +52,6 @@ type Config struct {
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
 	SnapshotDisableGC bool `yaml:"SnapshotDisableGC"`
 
-	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
-	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
-
-	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
-	AuthWebhookMaxWaitInterval string `yaml:"AuthWebhookMaxWaitInterval"`
-
-	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
-	AuthWebhookMinWaitInterval string `yaml:"AuthWebhookMinWaitInterval"`
-
-	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
-	AuthWebhookRequestTimeout string `yaml:"AuthWebhookRequestTimeout"`
-
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
 	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
@@ -75,18 +60,6 @@ type Config struct {
 
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
-
-	// EventWebhookMaxRetries is the max count that retries the event webhook.
-	EventWebhookMaxRetries uint64 `yaml:"EventWebhookMaxRetries"`
-
-	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
-	EventWebhookMaxWaitInterval string `yaml:"EventWebhookMaxWaitInterval"`
-
-	// EventWebhookMinWaitInterval is the min interval that waits before retrying the event webhook.
-	EventWebhookMinWaitInterval string `yaml:"EventWebhookMinWaitInterval"`
-
-	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
-	EventWebhookRequestTimeout string `yaml:"EventWebhookRequestTimeout"`
 
 	// ProjectCacheSize is the cache size of the project metadata.
 	ProjectCacheSize int `yaml:"ProjectCacheSize"`
@@ -103,66 +76,10 @@ type Config struct {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.ClientDeactivateThreshold); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--client-deactivate-threshold" flag: %w`,
-			c.ClientDeactivateThreshold,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-max-wait-interval" flag: %w`,
-			c.AuthWebhookMaxWaitInterval,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.AuthWebhookMinWaitInterval); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-min-wait-interval" flag: %w`,
-			c.AuthWebhookMinWaitInterval,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.AuthWebhookRequestTimeout); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--auth-webhook-request-timeout" flag: %w`,
-			c.AuthWebhookRequestTimeout,
-			err,
-		)
-	}
-
 	if _, err := time.ParseDuration(c.AuthWebhookCacheTTL); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
 			c.AuthWebhookCacheTTL,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.EventWebhookMaxWaitInterval); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--event-webhook-max-wait-interval" flag: %w`,
-			c.EventWebhookMaxWaitInterval,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.EventWebhookMinWaitInterval); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--event-webhook-min-wait-interval" flag: %w`,
-			c.EventWebhookMinWaitInterval,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.EventWebhookRequestTimeout); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--event-webhook-request-timeout" flag: %w`,
-			c.EventWebhookRequestTimeout,
 			err,
 		)
 	}
@@ -188,77 +105,11 @@ func (c *Config) ParseAdminTokenDuration() time.Duration {
 	return result
 }
 
-// ParseAuthWebhookMaxWaitInterval returns max wait interval.
-func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseAuthWebhookMinWaitInterval returns min wait interval.
-func (c *Config) ParseAuthWebhookMinWaitInterval() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookMinWaitInterval)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook min wait interval: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseAuthWebhookRequestTimeout returns request timeout.
-func (c *Config) ParseAuthWebhookRequestTimeout() time.Duration {
-	result, err := time.ParseDuration(c.AuthWebhookRequestTimeout)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse auth webhook request timeout: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
 // ParseAuthWebhookCacheTTL returns TTL for authorized cache.
 func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseEventWebhookMaxWaitInterval returns max wait interval.
-func (c *Config) ParseEventWebhookMaxWaitInterval() time.Duration {
-	result, err := time.ParseDuration(c.EventWebhookMaxWaitInterval)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse event webhook max wait interval: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseEventWebhookMinWaitInterval returns min wait interval.
-func (c *Config) ParseEventWebhookMinWaitInterval() time.Duration {
-	result, err := time.ParseDuration(c.EventWebhookMinWaitInterval)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse event webhook min wait interval: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseEventWebhookRequestTimeout returns request timeout.
-func (c *Config) ParseEventWebhookRequestTimeout() time.Duration {
-	result, err := time.ParseDuration(c.EventWebhookRequestTimeout)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse event webhook request timeout: %w", err)
 		os.Exit(1)
 	}
 

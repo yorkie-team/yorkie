@@ -40,9 +40,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000000")
-	otherOwnerID              = types.ID("000000000000000000000001")
-	clientDeactivateThreshold = "23h"
+	dummyOwnerID = types.ID("000000000000000000000000")
+	otherOwnerID = types.ID("000000000000000000000001")
 )
 
 func setupBackend(t *testing.T) *backend.Backend {
@@ -137,10 +136,10 @@ func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo 
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := range 10 {
-		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
+		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
-		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID, clientDeactivateThreshold)
+		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
 	}
