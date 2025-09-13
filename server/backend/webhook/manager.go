@@ -61,7 +61,13 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 	callback := func() {
-		if err := SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options); err != nil {
+		if err := SendWebhook(
+			ctx,
+			m.webhookClient,
+			info.EventRefKey.EventWebhookType,
+			info.Attribute,
+			info.Options,
+		); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}

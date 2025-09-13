@@ -162,7 +162,9 @@ func createSignature(data []byte, hmacKey string) (string, error) {
 	return fmt.Sprintf("sha256=%s", signatureHex), nil
 }
 
-func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, options Options, webhookFn func() (int, error)) (int, error) {
+func (c *Client[Req, Res]) withExponentialBackoff(
+	ctx context.Context, options Options,
+	webhookFn func() (int, error)) (int, error) {
 	var retries uint64
 	var statusCode int
 	var err error

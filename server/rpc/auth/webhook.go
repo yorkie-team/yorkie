@@ -62,17 +62,17 @@ func verifyAccess(
 		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
+	options, err := prj.GetAuthWehbookOptions()
+	if err != nil {
+		return fmt.Errorf("get webhook options: %w", err)
+	}
+
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
 		"",
 		body,
-		webhook.Options{
-			MaxRetries:      prj.AuthWebhookMaxRetries,
-			MinWaitInterval: prj.AuthWebhookMinWaitIntervalAsTimeDuration(),
-			MaxWaitInterval: prj.AuthWebhookMaxWaitIntervalAsTimeDuration(),
-			RequestTimeout:  prj.AuthWebhookRequestTimeoutAsTimeDuration(),
-		},
+		options,
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)

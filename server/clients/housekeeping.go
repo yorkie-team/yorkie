@@ -107,7 +107,11 @@ func FindDeactivateCandidates(
 		}
 
 		// Check if client needs deactivation based on project's threshold
-		threshold := project.ClientDeactivateThresholdAsTimeDuration()
+		threshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		if err != nil {
+			return database.ZeroID, nil, err
+		}
+
 		if candidate.UpdatedAt.Before(now.Add(-threshold)) {
 			pairs = append(pairs, CandidatePair{
 				Project: project,

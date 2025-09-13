@@ -137,10 +137,10 @@ func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo 
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := range 10 {
-		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
+		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
-		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID, clientDeactivateThreshold)
+		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
 	}

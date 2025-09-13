@@ -63,12 +63,8 @@ var (
 
 	pprofEnabled bool
 
-	authWebhookRequestTimeout time.Duration
-	authWebhookCacheTTL       time.Duration
-
-	eventWebhookRequestTimeout time.Duration
-
-	projectCacheTTL time.Duration
+	authWebhookCacheTTL time.Duration
+	projectCacheTTL     time.Duration
 
 	kafkaAddresses    string
 	kafkaTopic        string

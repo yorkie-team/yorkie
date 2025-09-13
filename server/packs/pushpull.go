@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/units"
-	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -139,18 +138,18 @@ func PushPull(
 			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
+				options, err := project.GetEventWehbookOptions()
+				if err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
 				if err := be.EventWebhookManager.Send(ctx, types.NewEventWebhookInfo(
 					docKey,
 					events.DocRootChanged.WebhookType(),
 					project.SecretKey,
 					project.EventWebhookURL,
 					docInfo.Key.String(),
-					webhook.Options{
-						MaxRetries:      project.EventWebhookMaxRetries,
-						MinWaitInterval: project.EventWebhookMinWaitIntervalAsTimeDuration(),
-						MaxWaitInterval: project.EventWebhookMaxWaitIntervalAsTimeDuration(),
-						RequestTimeout:  project.EventWebhookRequestTimeoutAsTimeDuration(),
-					},
+					options,
 				)); err != nil {
 					logging.From(ctx).Error(err)
 					return

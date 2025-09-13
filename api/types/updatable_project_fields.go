@@ -99,11 +99,13 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.AuthWebhookMaxRetries == nil &&
 		i.AuthWebhookMinWaitInterval == nil &&
 		i.AuthWebhookMaxWaitInterval == nil &&
+		i.AuthWebhookRequestTimeout == nil &&
 		i.EventWebhookURL == nil &&
 		i.EventWebhookEvents == nil &&
 		i.EventWebhookMaxRetries == nil &&
 		i.EventWebhookMinWaitInterval == nil &&
 		i.EventWebhookMaxWaitInterval == nil &&
+		i.EventWebhookRequestTimeout == nil &&
 		i.ClientDeactivateThreshold == nil &&
 		i.MaxSubscribersPerDocument == nil &&
 		i.MaxAttachmentsPerDocument == nil &&

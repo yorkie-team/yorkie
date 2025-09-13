@@ -123,7 +123,7 @@ func newUpdateCommand() *cobra.Command {
 			)
 
 			newAuthWebhookMaxRetries := project.AuthWebhookMaxRetries
-			if flagAuthWebhookMaxRetries != 0 {
+			if cmd.Flags().Lookup("auth-webhook-max-retries").Changed {
 				newAuthWebhookMaxRetries = flagAuthWebhookMaxRetries
 			}
 			newAuthWebhookMinWaitInterval := project.AuthWebhookMinWaitInterval
@@ -152,7 +152,7 @@ func newUpdateCommand() *cobra.Command {
 			)
 
 			newEventWebhookMaxRetries := project.EventWebhookMaxRetries
-			if flagEventWebhookMaxRetries != 0 {
+			if cmd.Flags().Lookup("event-webhook-max-retries").Changed {
 				newEventWebhookMaxRetries = flagEventWebhookMaxRetries
 			}
 			newEventWebhookMinWaitInterval := project.EventWebhookMinWaitInterval
