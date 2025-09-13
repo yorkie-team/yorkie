@@ -187,15 +187,15 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
 	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	authWebhookMaxWaitInterval, err := time.ParseDuration(p.AuthWebhookMaxWaitInterval)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	authWebhookRequestTimeout, err := time.ParseDuration(p.AuthWebhookRequestTimeout)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	return webhook.Options{
 		MaxRetries:      p.AuthWebhookMaxRetries,
@@ -209,15 +209,15 @@ func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
 func (p *Project) GetEventWehbookOptions() (webhook.Options, error) {
 	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	eventWebhookMaxWaitInterval, err := time.ParseDuration(p.EventWebhookMaxWaitInterval)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	eventWebhookRequestTimeout, err := time.ParseDuration(p.EventWebhookRequestTimeout)
 	if err != nil {
-		return webhook.Options{}, err
+		return webhook.Options{}, ErrInvalidTimeDurationString
 	}
 	return webhook.Options{
 		MaxRetries:      p.EventWebhookMaxRetries,
