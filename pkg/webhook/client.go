@@ -47,28 +47,25 @@ var (
 
 // Options are the options for the webhook httpClient.
 type Options struct {
-	RequestTimeout  time.Duration
 	MaxRetries      uint64
 	MinWaitInterval time.Duration
 	MaxWaitInterval time.Duration
+	RequestTimeout  time.Duration
 }
 
 // Client is a httpClient for the webhook.
 type Client[Req any, Res any] struct {
 	httpClient *http.Client
-	options    Options
 }
 
 // NewClient creates a new instance of Client. If you only want to get the status code,
-// then set Res to int.
-func NewClient[Req any, Res any](
-	options Options,
-) *Client[Req, Res] {
+// NewClient creates and returns a new webhook Client configured with a default
+// http.Client. The returned Client does not hold any per-instance retry or
+// timeout options; per-call behavior (timeouts, retries, wait intervals) is
+// driven by the Options passed to Send.
+func NewClient[Req any, Res any]() *Client[Req, Res] {
 	return &Client[Req, Res]{
-		httpClient: &http.Client{
-			Timeout: options.RequestTimeout,
-		},
-		options: options,
+		httpClient: &http.Client{},
 	}
 }
 
@@ -77,6 +74,7 @@ func (c *Client[Req, Res]) Send(
 	ctx context.Context,
 	url, hmacKey string,
 	body []byte,
+	options Options,
 ) (*Res, int, error) {
 	signature, err := createSignature(body, hmacKey)
 	if err != nil {
@@ -84,8 +82,11 @@ func (c *Client[Req, Res]) Send(
 	}
 
 	var res Res
-	status, err := c.withExponentialBackoff(ctx, func() (int, error) {
-		req, err := c.buildRequest(ctx, url, signature, body)
+	status, err := c.withExponentialBackoff(ctx, options, func() (int, error) {
+		req, cancel, err := c.buildRequest(ctx, url, signature, options, body)
+		if cancel != nil {
+			defer cancel()
+		}
 		if err != nil {
 			return 0, fmt.Errorf("build request: %w", err)
 		}
@@ -131,11 +132,15 @@ func (c *Client[Req, Res]) Close() {
 func (c *Client[Req, Res]) buildRequest(
 	ctx context.Context,
 	url, hmac string,
+	options Options,
 	body []byte,
-) (*http.Request, error) {
+) (*http.Request, context.CancelFunc, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, options.RequestTimeout)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
 	if err != nil {
-		return nil, fmt.Errorf("create POST request with context: %w", err)
+		cancel()
+		return nil, nil, fmt.Errorf("create POST request with context: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -144,10 +149,13 @@ func (c *Client[Req, Res]) buildRequest(
 		req.Header.Set("X-Signature-256", hmac)
 	}
 
-	return req, nil
+	return req, cancel, nil
 }
 
-// createSignature sets the HMAC signature header for the request.
+// createSignature computes the HMAC-SHA256 of data using hmacKey and returns it formatted
+// for use in an `X-Signature-256` header as `sha256=<hex>`.
+// If hmacKey is empty this returns an empty string and no error.
+// An error is returned only if the underlying hash write fails.
 func createSignature(data []byte, hmacKey string) (string, error) {
 	if hmacKey == "" {
 		return "", nil
@@ -160,12 +168,14 @@ func createSignature(data []byte, hmacKey string) (string, error) {
 	return fmt.Sprintf("sha256=%s", signatureHex), nil
 }
 
-func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn func() (int, error)) (int, error) {
+func (c *Client[Req, Res]) withExponentialBackoff(
+	ctx context.Context, options Options,
+	webhookFn func() (int, error)) (int, error) {
 	var retries uint64
 	var statusCode int
 	var err error
 
-	for retries <= c.options.MaxRetries {
+	for retries <= options.MaxRetries {
 		statusCode, err = webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if errors.Is(err, ErrUnexpectedStatusCode) {
@@ -175,7 +185,7 @@ func (c *Client[Req, Res]) withExponentialBackoff(ctx context.Context, webhookFn
 			return statusCode, err
 		}
 
-		waitBeforeRetry := waitInterval(retries, c.options.MinWaitInterval, c.options.MaxWaitInterval)
+		waitBeforeRetry := waitInterval(retries, options.MinWaitInterval, options.MaxWaitInterval)
 
 		select {
 		case <-ctx.Done():

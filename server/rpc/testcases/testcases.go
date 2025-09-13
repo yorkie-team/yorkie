@@ -1012,7 +1012,12 @@ func RunAdminChangePasswordTest(
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
-// RunAdminCreateProjectTest runs the CreateProject test in admin.
+// RunAdminCreateProjectTest executes the admin CreateProject workflow for tests.
+// It logs in as the admin, creates a project with a generated unique name, and
+// asserts the created project's fields match expected defaults (webhook URLs,
+// retry/wait intervals, timeouts, deactivate threshold, and attachment/subscriber limits).
+// It also verifies that creating a project with the same name returns an
+// already-exists error.
 func RunAdminCreateProjectTest(
 	t *testing.T,
 	testAdminClient v1connect.AdminServiceClient,
@@ -1031,13 +1036,28 @@ func RunAdminCreateProjectTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
-	_, err = testAdminClient.CreateProject(
+	resp2, err := testAdminClient.CreateProject(
 		context.Background(),
 		connect.NewRequest(&api.CreateProjectRequest{
 			Name: projectName,
 		},
 		))
 	assert.NoError(t, err)
+	project := converter.FromProject(resp2.Msg.Project)
+	assert.Equal(t, projectName, project.Name)
+	assert.Empty(t, project.AuthWebhookURL)
+	assert.Equal(t, database.DefaultAuthWebhookMaxRetries, project.AuthWebhookMaxRetries)
+	assert.Equal(t, database.DefaultAuthWebhookMinWaitInterval.String(), project.AuthWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultAuthWebhookMaxWaitInterval.String(), project.AuthWebhookMaxWaitInterval)
+	assert.Equal(t, database.DefaultAuthWebhookRequestTimeout.String(), project.AuthWebhookRequestTimeout)
+	assert.Empty(t, project.EventWebhookURL)
+	assert.Equal(t, database.DefaultEventWebhookMaxRetries, project.EventWebhookMaxRetries)
+	assert.Equal(t, database.DefaultEventWebhookMinWaitInterval.String(), project.EventWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), project.EventWebhookMaxWaitInterval)
+	assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), project.EventWebhookRequestTimeout)
+	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), project.ClientDeactivateThreshold)
+	assert.Equal(t, 0, project.MaxAttachmentsPerDocument)
+	assert.Equal(t, 0, project.MaxSubscribersPerDocument)
 
 	// try to create project with existing name
 	_, err = testAdminClient.CreateProject(

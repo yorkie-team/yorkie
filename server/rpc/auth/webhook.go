@@ -38,7 +38,17 @@ var (
 	ErrPermissionDenied = errors.New("method is not allowed for this user")
 )
 
-// verifyAccess verifies the given user is allowed to access the given method.
+// verifyAccess verifies that the provided token is authorized to perform the
+// action described by accessInfo on the given project.
+//
+// It builds an AuthWebhookRequest from the token and accessInfo, consults an
+// in-memory cache keyed by the project's public key and request body, and if
+// there is no cached result, sends the request to prj.AuthWebhookURL using the
+// project's webhook options (retries, backoff and timeout). Non-401 responses
+// are cached. The function returns nil when access is allowed; otherwise it
+// returns an error indicating denial, unauthenticated status, or an unexpected
+// webhook response. It also returns wrapped errors if the request cannot be
+// marshaled, webhook options cannot be retrieved, or the webhook call fails.
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
@@ -62,11 +72,17 @@ func verifyAccess(
 		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
+	options, err := prj.GetAuthWehbookOptions()
+	if err != nil {
+		return fmt.Errorf("get webhook options: %w", err)
+	}
+
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
 		"",
 		body,
+		options,
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)

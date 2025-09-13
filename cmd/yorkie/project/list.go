@@ -71,6 +71,12 @@ func newListCommand() *cobra.Command {
 	}
 }
 
+// printProjects prints the given projects to the provided Cobra command in the specified output format.
+// Supported formats are the default table view, JSON, and YAML.
+// - Default (table): renders a multi-column table including project metadata and a human-readable "CREATED AT" age.
+// - JSON: pretty-prints the projects slice as indented JSON.
+// - YAML: marshals the projects slice to YAML.
+// Returns an error if JSON/YAML marshaling fails or if an unknown output format is provided.
 func printProjects(cmd *cobra.Command, output string, projects []*types.Project) error {
 	switch output {
 	case DefaultOutput:
@@ -86,8 +92,16 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 			"SECRET KEY",
 			"AUTH WEBHOOK URL",
 			"AUTH WEBHOOK METHODS",
+			"AUTH WEBHOOK MAX RETRIES",
+			"AUTH WEBHOOK MIN WAIT INTERVAL",
+			"AUTH WEBHOOK MAX WAIT INTERVAL",
+			"AUTH WEBHOOK REQUEST TIMEOUT",
 			"EVENT WEBHOOK URL",
 			"EVENT WEBHOOK EVENTS",
+			"EVENT WEBHOOK MAX RETRIES",
+			"EVENT WEBHOOK MIN WAIT INTERVAL",
+			"EVENT WEBHOOK MAX WAIT INTERVAL",
+			"EVENT WEBHOOK REQUEST TIMEOUT",
 			"CLIENT DEACTIVATE THRESHOLD",
 			"MAX SUBSCRIBERS PER DOCUMENT",
 			"MAX ATTACHMENTS PER DOCUMENT",
@@ -101,8 +115,16 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 				project.SecretKey,
 				project.AuthWebhookURL,
 				project.AuthWebhookMethods,
+				project.AuthWebhookMaxRetries,
+				project.AuthWebhookMinWaitInterval,
+				project.AuthWebhookMaxWaitInterval,
+				project.AuthWebhookRequestTimeout,
 				project.EventWebhookURL,
 				project.EventWebhookEvents,
+				project.EventWebhookMaxRetries,
+				project.EventWebhookMinWaitInterval,
+				project.EventWebhookMaxWaitInterval,
+				project.EventWebhookRequestTimeout,
 				project.ClientDeactivateThreshold,
 				project.MaxSubscribersPerDocument,
 				project.MaxAttachmentsPerDocument,

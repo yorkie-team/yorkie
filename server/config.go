@@ -61,24 +61,14 @@ const (
 	DefaultGitHubTokenURL      = "https://github.com/login/oauth/access_token" // #nosec G101
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
-	DefaultUseDefaultProject         = true
-	DefaultClientDeactivateThreshold = 24 * time.Hour
-	DefaultSnapshotThreshold         = 500
-	DefaultSnapshotInterval          = 500
-	DefaultSnapshotDisableGC         = false
-	DefaultSnapshotCacheSize         = 1000
+	DefaultUseDefaultProject = true
+	DefaultSnapshotThreshold = 500
+	DefaultSnapshotInterval  = 500
+	DefaultSnapshotDisableGC = false
+	DefaultSnapshotCacheSize = 1000
 
-	DefaultAuthWebhookRequestTimeout  = 3 * time.Second
-	DefaultAuthWebhookMaxRetries      = 10
-	DefaultAuthWebhookMaxWaitInterval = 3 * time.Second
-	DefaultAuthWebhookMinWaitInterval = 100 * time.Millisecond
-	DefaultAuthWebhookCacheSize       = 5000
-	DefaultAuthWebhookCacheTTL        = 10 * time.Second
-
-	DefaultEventWebhookRequestTimeout  = 3 * time.Second
-	DefaultEventWebhookMaxRetries      = 10
-	DefaultEventWebhookMaxWaitInterval = 3 * time.Second
-	DefaultEventWebhookMinWaitInterval = 100 * time.Millisecond
+	DefaultAuthWebhookCacheSize = 5000
+	DefaultAuthWebhookCacheTTL  = 10 * time.Second
 
 	DefaultProjectCacheSize = 256
 	DefaultProjectCacheTTL  = 10 * time.Minute
@@ -228,10 +218,6 @@ func (c *Config) ensureBackendDefaultValue() {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
 
-	if c.Backend.ClientDeactivateThreshold == "" {
-		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold.String()
-	}
-
 	if c.Backend.SnapshotThreshold == 0 {
 		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
 	}
@@ -245,33 +231,8 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.AuthWebhookCacheSize == 0 {
 		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
 	}
-	if c.Backend.AuthWebhookMaxRetries == 0 {
-		c.Backend.AuthWebhookMaxRetries = DefaultAuthWebhookMaxRetries
-	}
-	if c.Backend.AuthWebhookMaxWaitInterval == "" {
-		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
-	}
-	if c.Backend.AuthWebhookMinWaitInterval == "" {
-		c.Backend.AuthWebhookMinWaitInterval = DefaultAuthWebhookMinWaitInterval.String()
-	}
-	if c.Backend.AuthWebhookRequestTimeout == "" {
-		c.Backend.AuthWebhookRequestTimeout = DefaultAuthWebhookRequestTimeout.String()
-	}
 	if c.Backend.AuthWebhookCacheTTL == "" {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
-	}
-
-	if c.Backend.EventWebhookMaxRetries == 0 {
-		c.Backend.EventWebhookMaxRetries = DefaultEventWebhookMaxRetries
-	}
-	if c.Backend.EventWebhookMaxWaitInterval == "" {
-		c.Backend.EventWebhookMaxWaitInterval = DefaultEventWebhookMaxWaitInterval.String()
-	}
-	if c.Backend.EventWebhookMinWaitInterval == "" {
-		c.Backend.EventWebhookMinWaitInterval = DefaultEventWebhookMinWaitInterval.String()
-	}
-	if c.Backend.EventWebhookRequestTimeout == "" {
-		c.Backend.EventWebhookRequestTimeout = DefaultEventWebhookRequestTimeout.String()
 	}
 
 	if c.Backend.ProjectCacheSize == 0 {
@@ -332,6 +293,11 @@ func (c *Config) ensureDefaultValue() {
 	}
 }
 
+// newConfig returns a Config pre-populated with sensible defaults.
+// The provided port and profilingPort are assigned to the RPC and Profiling
+// subsystems respectively. Other fields initialized:
+// - Housekeeping: Interval, CandidatesLimit, CompactionMinChanges.
+// - Backend: UseDefaultProject, SnapshotThreshold, SnapshotInterval.
 func newConfig(port int, profilingPort int) *Config {
 	return &Config{
 		RPC: &rpc.Config{
@@ -346,10 +312,9 @@ func newConfig(port int, profilingPort int) *Config {
 			CompactionMinChanges: DefaultHousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			UseDefaultProject:         DefaultUseDefaultProject,
-			ClientDeactivateThreshold: DefaultClientDeactivateThreshold.String(),
-			SnapshotThreshold:         DefaultSnapshotThreshold,
-			SnapshotInterval:          DefaultSnapshotInterval,
+			UseDefaultProject: DefaultUseDefaultProject,
+			SnapshotThreshold: DefaultSnapshotThreshold,
+			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 	}
 }

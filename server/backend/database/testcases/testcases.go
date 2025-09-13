@@ -41,10 +41,9 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000000")
-	otherOwnerID              = types.ID("000000000000000000000001")
-	dummyClientID             = types.ID("000000000000000000000000")
-	clientDeactivateThreshold = "1h"
+	dummyOwnerID  = types.ID("000000000000000000000000")
+	otherOwnerID  = types.ID("000000000000000000000001")
+	dummyClientID = types.ID("000000000000000000000000")
 
 	nodeIDOne = "node-1"
 	nodeIDTwo = "node-2"
@@ -369,7 +368,7 @@ func RunFindProjectInfoBySecretKeyTest(
 		username := "admin@yorkie.dev"
 		password := "hashed-password"
 
-		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password)
 		assert.NoError(t, err)
 
 		info2, err := db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
@@ -392,12 +391,11 @@ func RunFindProjectInfoByNameTest(
 				ctx,
 				fmt.Sprintf("%s-%d", t.Name(), suffix),
 				dummyOwnerID,
-				clientDeactivateThreshold,
 			)
 			assert.NoError(t, err)
 		}
 
-		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
 		assert.NoError(t, err)
 
 		// Lists all projects that the dummyOwnerID is the owner.
@@ -405,7 +403,7 @@ func RunFindProjectInfoByNameTest(
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 
 		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
@@ -423,9 +421,9 @@ func RunFindProjectInfoByNameTest(
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
 		ctx := context.Background()
 
-		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
 		assert.NoError(t, err)
 
 		info2, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
@@ -825,7 +823,9 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunFindUserInfoByIDTest runs the FindUserInfoByID test for the given db.
+// RunFindUserInfoByIDTest runs a subtest that verifies FindUserInfoByID returns the expected user info.
+// It creates a default user via EnsureDefaultUserAndProject and asserts that FindUserInfoByID
+// returns a UserInfo with the same ID.
 func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
 	t.Run("RunFindUserInfoByID test", func(t *testing.T) {
 		ctx := context.Background()
@@ -833,7 +833,7 @@ func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
 		username := "findUserInfoTestAccount"
 		password := "temporary-password"
 
-		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password)
 		assert.NoError(t, err)
 
 		info1, err := db.FindUserInfoByID(ctx, user.ID)
@@ -843,7 +843,9 @@ func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunFindUserInfoByNameTest runs the FindUserInfoByName test for the given db.
+// RunFindUserInfoByNameTest verifies that FindUserInfoByName returns the user created by EnsureDefaultUserAndProject.
+// It creates a default user (via EnsureDefaultUserAndProject) and asserts that looking up by username returns a UserInfo
+// whose ID matches the created user's ID.
 func RunFindUserInfoByNameTest(t *testing.T, db database.Database) {
 	t.Run("RunFindUserInfoByName test", func(t *testing.T) {
 		ctx := context.Background()
@@ -851,7 +853,7 @@ func RunFindUserInfoByNameTest(t *testing.T, db database.Database) {
 		username := "findUserInfoTestAccount"
 		password := "temporary-password"
 
-		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password)
 		assert.NoError(t, err)
 
 		info1, err := db.FindUserInfoByName(ctx, user.Username)
@@ -997,25 +999,53 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newAuthWebhookMaxRetries := uint64(10)
+		newAuthWebhookMinWaitInterval := "10ms"
+		newAuthWebhookMaxWaitInterval := "1s"
+		newAuthWebhookRequestTimeout := "3s"
 		newEventWebhookURL := "http://localhost:4000"
 		newEventWebhookEvents := []string{string(types.DocRootChanged)}
+		newEventWebhookMaxRetries := uint64(20)
+		newEventWebhookMinWaitInterval := "8ms"
+		newEventWebhookMaxWaitInterval := "3s"
+		newEventWebhookRequestTimeout := "5s"
 		newClientDeactivateThreshold := "1h"
 
-		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
+		assert.Equal(t, dummyOwnerID, info.Owner)
+		assert.Empty(t, info.AuthWebhookURL)
+		assert.Empty(t, info.AuthWebhookMethods)
+		assert.Equal(t, database.DefaultAuthWebhookMaxRetries, info.AuthWebhookMaxRetries)
+		assert.Equal(t, database.DefaultAuthWebhookMinWaitInterval.String(), info.AuthWebhookMinWaitInterval)
+		assert.Equal(t, database.DefaultAuthWebhookMaxWaitInterval.String(), info.AuthWebhookMaxWaitInterval)
+		assert.Empty(t, info.EventWebhookURL)
+		assert.Empty(t, info.EventWebhookEvents)
+		assert.Equal(t, database.DefaultEventWebhookMaxRetries, info.EventWebhookMaxRetries)
+		assert.Equal(t, database.DefaultEventWebhookMinWaitInterval.String(), info.EventWebhookMinWaitInterval)
+		assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), info.EventWebhookMaxWaitInterval)
+		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
 		assert.NoError(t, err)
 
 		id := info.ID
 
 		// 01. Update all fields test
 		fields := &types.UpdatableProjectFields{
-			Name:                      &newName,
-			AuthWebhookURL:            &newAuthWebhookURL,
-			AuthWebhookMethods:        &newAuthWebhookMethods,
-			EventWebhookURL:           &newEventWebhookURL,
-			EventWebhookEvents:        &newEventWebhookEvents,
-			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			Name:                        &newName,
+			AuthWebhookURL:              &newAuthWebhookURL,
+			AuthWebhookMethods:          &newAuthWebhookMethods,
+			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
+			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
+			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
+			EventWebhookURL:             &newEventWebhookURL,
+			EventWebhookEvents:          &newEventWebhookEvents,
+			EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
+			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
+			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
+			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -1026,9 +1056,17 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
-		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newAuthWebhookMaxRetries, updateInfo.AuthWebhookMaxRetries)
+		assert.Equal(t, newAuthWebhookMinWaitInterval, updateInfo.AuthWebhookMinWaitInterval)
+		assert.Equal(t, newAuthWebhookMaxWaitInterval, updateInfo.AuthWebhookMaxWaitInterval)
+		assert.Equal(t, newAuthWebhookRequestTimeout, updateInfo.AuthWebhookRequestTimeout)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
+		assert.Equal(t, newEventWebhookMaxRetries, updateInfo.EventWebhookMaxRetries)
+		assert.Equal(t, newEventWebhookMinWaitInterval, updateInfo.EventWebhookMinWaitInterval)
+		assert.Equal(t, newEventWebhookMaxWaitInterval, updateInfo.EventWebhookMaxWaitInterval)
+		assert.Equal(t, newEventWebhookRequestTimeout, updateInfo.EventWebhookRequestTimeout)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -1043,9 +1081,15 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.NotEqual(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newAuthWebhookMaxRetries, updateInfo.AuthWebhookMaxRetries)
+		assert.Equal(t, newAuthWebhookMinWaitInterval, updateInfo.AuthWebhookMinWaitInterval)
+		assert.Equal(t, newAuthWebhookMaxWaitInterval, updateInfo.AuthWebhookMaxWaitInterval)
 		assert.Equal(t, newEventWebhookURL, updateInfo.EventWebhookURL)
 		assert.Equal(t, newEventWebhookEvents, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newEventWebhookMaxRetries, updateInfo.EventWebhookMaxRetries)
+		assert.Equal(t, newEventWebhookMinWaitInterval, updateInfo.EventWebhookMinWaitInterval)
+		assert.Equal(t, newEventWebhookMaxWaitInterval, updateInfo.EventWebhookMaxWaitInterval)
 
 		// 03. Update authWebhookURL and eventWebhookURL test
 		newEventWebhookURL2 := newEventWebhookURL + "2"
@@ -1067,15 +1111,31 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookURL2, updateInfo.EventWebhookURL)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 04. Update EventWebhookEvents test
+		// 04. Update other webhook fields test
 		var newEventWebhookEvents2 []string
+		newAuthWebhookMaxRetries2 := uint64(15)
+		newAuthWebhookMinWaitInterval2 := "20ms"
+		newAuthWebhookMaxWaitInterval2 := "2s"
+		newAuthWebhookRequestTimeout2 := "4s"
 		newAuthWebhookMethods2 := []string{
 			string(types.DetachDocument),
 			string(types.PushPull),
 		}
+		newEventWebhookMaxRetries2 := uint64(25)
+		newEventWebhookMinWaitInterval2 := "10ms"
+		newEventWebhookMaxWaitInterval2 := "4s"
+		newEventWebhookRequestTimeout2 := "6s"
 		fields = &types.UpdatableProjectFields{
-			AuthWebhookMethods: &newAuthWebhookMethods2,
-			EventWebhookEvents: &newEventWebhookEvents2,
+			AuthWebhookMethods:          &newAuthWebhookMethods2,
+			AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries2,
+			AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval2,
+			AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval2,
+			AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout2,
+			EventWebhookEvents:          &newEventWebhookEvents2,
+			EventWebhookMaxRetries:      &newEventWebhookMaxRetries2,
+			EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval2,
+			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval2,
+			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout2,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -1083,8 +1143,16 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 		assert.Equal(t, res, updateInfo)
-		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.Equal(t, newAuthWebhookMethods2, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newAuthWebhookMaxRetries2, updateInfo.AuthWebhookMaxRetries)
+		assert.Equal(t, newAuthWebhookMinWaitInterval2, updateInfo.AuthWebhookMinWaitInterval)
+		assert.Equal(t, newAuthWebhookMaxWaitInterval2, updateInfo.AuthWebhookMaxWaitInterval)
+		assert.Equal(t, newAuthWebhookRequestTimeout2, updateInfo.AuthWebhookRequestTimeout)
+		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
+		assert.Equal(t, newEventWebhookMaxRetries2, updateInfo.EventWebhookMaxRetries)
+		assert.Equal(t, newEventWebhookMinWaitInterval2, updateInfo.EventWebhookMinWaitInterval)
+		assert.Equal(t, newEventWebhookMaxWaitInterval2, updateInfo.EventWebhookMaxWaitInterval)
+		assert.Equal(t, newEventWebhookRequestTimeout2, updateInfo.EventWebhookRequestTimeout)
 
 		// 05. Update clientDeactivateThreshold test
 		clientDeactivateThreshold2 := "2h"
@@ -1116,7 +1184,15 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunFindDocInfosByPagingTest runs the FindDocInfosByPaging tests for the given db.
+// RunFindDocInfosByPagingTest runs subtests that exercise FindDocInfosByPaging
+// behavior against db for the given projectID.
+// 
+// The suite verifies:
+// - basic paging semantics (initial page, backward paging, forward paging) with a
+//   small dataset;
+// - complex combinations of offset, page size, and direction against a larger
+//   dummy dataset to ensure ordering and bounds are correct;
+// - that documents marked removed are excluded from paging results.
 func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("simple FindDocInfosByPaging test", func(t *testing.T) {
 		ctx := context.Background()
@@ -1183,7 +1259,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// dummy project setup
-		testProjectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		testProjectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 
 		// dummy document setup
@@ -1290,7 +1366,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// 01. Initialize a project and create documents.
-		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 
 		var docInfos []*database.DocInfo

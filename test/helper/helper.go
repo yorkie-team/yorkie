@@ -266,7 +266,13 @@ func AssertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
 
 var portOffset = 0
 
-// TestConfig returns config for creating Yorkie instance.
+// TestConfig returns a Config populated with sane defaults for creating a Yorkie
+// test server instance.
+//
+// The returned configuration uses test constants (ports, Mongo settings, cache
+// sizes, snapshot settings, etc.) and sets the Mongo database to TestDBName().
+// As a side effect, this function increments the package-level `portOffset` by
+// 100 to avoid port collisions between concurrently created test servers.
 func TestConfig() *server.Config {
 	portOffset += 100
 	return &server.Config{
@@ -282,26 +288,19 @@ func TestConfig() *server.Config {
 			CompactionMinChanges: HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			AdminUser:                   server.DefaultAdminUser,
-			AdminPassword:               server.DefaultAdminPassword,
-			SecretKey:                   server.DefaultSecretKey,
-			AdminTokenDuration:          server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:           true,
-			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold.String(),
-			SnapshotInterval:            10,
-			SnapshotThreshold:           SnapshotThreshold,
-			SnapshotCacheSize:           SnapshotCacheSize,
-			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
-			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
-			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
-			AuthWebhookCacheSize:        AuthWebhookSize,
-			AuthWebhookCacheTTL:         AuthWebhookCacheTTL.String(),
-			EventWebhookMaxWaitInterval: EventWebhookMaxWaitInterval.String(),
-			EventWebhookMinWaitInterval: EventWebhookMinWaitInterval.String(),
-			EventWebhookRequestTimeout:  EventWebhookRequestTimeout.String(),
-			ProjectCacheSize:            ProjectCacheSize,
-			ProjectCacheTTL:             ProjectCacheTTL.String(),
-			GatewayAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			AdminUser:            server.DefaultAdminUser,
+			AdminPassword:        server.DefaultAdminPassword,
+			SecretKey:            server.DefaultSecretKey,
+			AdminTokenDuration:   server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:    true,
+			SnapshotInterval:     10,
+			SnapshotThreshold:    SnapshotThreshold,
+			SnapshotCacheSize:    SnapshotCacheSize,
+			AuthWebhookCacheSize: AuthWebhookSize,
+			AuthWebhookCacheTTL:  AuthWebhookCacheTTL.String(),
+			ProjectCacheSize:     ProjectCacheSize,
+			ProjectCacheTTL:      ProjectCacheTTL.String(),
+			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

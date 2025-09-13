@@ -70,7 +70,17 @@ var (
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
-// given document.
+// PushPull pushes the client's change Pack to storage and then pulls an updated ServerPack for the given document.
+//
+// It orchestrates a full client sync for a document:
+// - Calls pushPack to persist client changes, then calls pullPack to build the response pack.
+// - Records timing and push/pull metrics and emits a debug log when enabled.
+// - If any changes were pushed or the request indicated removal, schedules a background task that:
+//   - Publishes a DocChanged event via PubSub.
+//   - Optionally sends a DocRootChanged webhook (when the project is configured and the pack contains operations).
+//   - Stores the document snapshot.
+// The function returns the ServerPack produced by pullPack, or an error if either the push or pull phase fails.
+// Any asynchronous work runs in a background goroutine and reports errors via logging.
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
@@ -138,12 +148,18 @@ func PushPull(
 			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
+				options, err := project.GetEventWehbookOptions()
+				if err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
 				if err := be.EventWebhookManager.Send(ctx, types.NewEventWebhookInfo(
 					docKey,
 					events.DocRootChanged.WebhookType(),
 					project.SecretKey,
 					project.EventWebhookURL,
 					docInfo.Key.String(),
+					options,
 				)); err != nil {
 					logging.From(ctx).Error(err)
 					return

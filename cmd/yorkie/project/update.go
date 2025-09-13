@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -31,20 +32,29 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
-	flagAuthWebhookURL            string
-	flagAuthWebhookMethodsAdd     []string
-	flagAuthWebhookMethodsRm      []string
-	flagEventWebhookURL           string
-	flagEventWebhookEventsAdd     []string
-	flagEventWebhookEventsRm      []string
-	flagName                      string
-	flagClientDeactivateThreshold string
-	flagMaxSubscribersPerDocument int
-	flagMaxAttachmentsPerDocument int
-	flagRemoveOnDetach            bool
+	flagAuthWebhookURL              string
+	flagAuthWebhookMethodsAdd       []string
+	flagAuthWebhookMethodsRm        []string
+	flagAuthWebhookMaxRetries       uint64
+	flagAuthWebhookMinWaitInterval  time.Duration
+	flagAuthWebhookMaxWaitInterval  time.Duration
+	flagAuthWebhookRequestTimeout   time.Duration
+	flagEventWebhookURL             string
+	flagEventWebhookEventsAdd       []string
+	flagEventWebhookEventsRm        []string
+	flagEventWebhookMaxRetries      uint64
+	flagEventWebhookMinWaitInterval time.Duration
+	flagEventWebhookMaxWaitInterval time.Duration
+	flagEventWebhookRequestTimeout  time.Duration
+	flagName                        string
+	flagClientDeactivateThreshold   time.Duration
+	flagMaxSubscribersPerDocument   int
+	flagMaxAttachmentsPerDocument   int
+	flagRemoveOnDetach              bool
 )
 
 var allAuthWebhookMethods = []string{
@@ -62,6 +72,13 @@ var allEventWebhookEvents = []string{
 	string(types.DocRootChanged),
 }
 
+// newUpdateCommand returns a Cobra command that updates a project by name.
+// It loads authentication and RPC configuration, retrieves the current project,
+// applies flag-driven changes (name, auth/event webhook settings including URLs, methods/events,
+// retry and timeout policies, client deactivate threshold, subscriber/attachment limits,
+// and remove-on-detach), sends the resulting UpdatableProjectFields to the admin API,
+// reports any server-side BadRequest field violations, and prints the updated project
+// in the configured output format (JSON or YAML).
 func newUpdateCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "update [name]",
@@ -112,6 +129,23 @@ func newUpdateCommand() *cobra.Command {
 				allAuthWebhookMethods,      // all
 			)
 
+			newAuthWebhookMaxRetries := project.AuthWebhookMaxRetries
+			if cmd.Flags().Lookup("auth-webhook-max-retries").Changed {
+				newAuthWebhookMaxRetries = flagAuthWebhookMaxRetries
+			}
+			newAuthWebhookMinWaitInterval := project.AuthWebhookMinWaitInterval
+			if flagAuthWebhookMinWaitInterval != 0 {
+				newAuthWebhookMinWaitInterval = flagAuthWebhookMinWaitInterval.String()
+			}
+			newAuthWebhookMaxWaitInterval := project.AuthWebhookMaxWaitInterval
+			if flagAuthWebhookMaxWaitInterval != 0 {
+				newAuthWebhookMaxWaitInterval = flagAuthWebhookMaxWaitInterval.String()
+			}
+			newAuthWebhookRequestTimeout := project.AuthWebhookRequestTimeout
+			if flagAuthWebhookRequestTimeout != 0 {
+				newAuthWebhookRequestTimeout = flagAuthWebhookRequestTimeout.String()
+			}
+
 			newEventWebhookURL := project.EventWebhookURL
 			if cmd.Flags().Lookup("event-webhook-url").Changed { // allow empty string
 				newEventWebhookURL = flagEventWebhookURL
@@ -124,9 +158,26 @@ func newUpdateCommand() *cobra.Command {
 				allEventWebhookEvents,      // all
 			)
 
+			newEventWebhookMaxRetries := project.EventWebhookMaxRetries
+			if cmd.Flags().Lookup("event-webhook-max-retries").Changed {
+				newEventWebhookMaxRetries = flagEventWebhookMaxRetries
+			}
+			newEventWebhookMinWaitInterval := project.EventWebhookMinWaitInterval
+			if flagEventWebhookMinWaitInterval != 0 {
+				newEventWebhookMinWaitInterval = flagEventWebhookMinWaitInterval.String()
+			}
+			newEventWebhookMaxWaitInterval := project.EventWebhookMaxWaitInterval
+			if flagEventWebhookMaxWaitInterval != 0 {
+				newEventWebhookMaxWaitInterval = flagEventWebhookMaxWaitInterval.String()
+			}
+			newEventWebhookRequestTimeout := project.EventWebhookRequestTimeout
+			if flagEventWebhookRequestTimeout != 0 {
+				newEventWebhookRequestTimeout = flagEventWebhookRequestTimeout.String()
+			}
+
 			newClientDeactivateThreshold := project.ClientDeactivateThreshold
-			if flagClientDeactivateThreshold != "" {
-				newClientDeactivateThreshold = flagClientDeactivateThreshold
+			if flagClientDeactivateThreshold != 0 {
+				newClientDeactivateThreshold = flagClientDeactivateThreshold.String()
 			}
 
 			newMaxSubscribersPerDocument := project.MaxSubscribersPerDocument
@@ -145,15 +196,23 @@ func newUpdateCommand() *cobra.Command {
 			}
 
 			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:                      &newName,
-				AuthWebhookURL:            &newAuthWebhookURL,
-				AuthWebhookMethods:        &newAuthWebhookMethods,
-				EventWebhookURL:           &newEventWebhookURL,
-				EventWebhookEvents:        &newEventWebhookEvents,
-				ClientDeactivateThreshold: &newClientDeactivateThreshold,
-				MaxSubscribersPerDocument: &newMaxSubscribersPerDocument,
-				MaxAttachmentsPerDocument: &newMaxAttachmentsPerDocument,
-				RemoveOnDetach:            &newRemoveOnDetach,
+				Name:                        &newName,
+				AuthWebhookURL:              &newAuthWebhookURL,
+				AuthWebhookMethods:          &newAuthWebhookMethods,
+				AuthWebhookMaxRetries:       &newAuthWebhookMaxRetries,
+				AuthWebhookMinWaitInterval:  &newAuthWebhookMinWaitInterval,
+				AuthWebhookMaxWaitInterval:  &newAuthWebhookMaxWaitInterval,
+				AuthWebhookRequestTimeout:   &newAuthWebhookRequestTimeout,
+				EventWebhookURL:             &newEventWebhookURL,
+				EventWebhookEvents:          &newEventWebhookEvents,
+				EventWebhookMaxRetries:      &newEventWebhookMaxRetries,
+				EventWebhookMinWaitInterval: &newEventWebhookMinWaitInterval,
+				EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
+				EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
+				ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+				MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
+				MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,
+				RemoveOnDetach:              &newRemoveOnDetach,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -250,6 +309,8 @@ func updateStringSlice(
 	return updated
 }
 
+// init registers the "update" subcommand and its CLI flags for updating project settings.
+// It configures flags for project name, authorization and event webhook URLs, methods/events to add or remove, webhook retry/backoff/timeouts, client deactivate threshold, document subscriber/attachment limits, and remove-on-detach, then adds the command to SubCmd.
 func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
@@ -276,6 +337,30 @@ func init() {
 		[]string{},
 		"authorization-webhook methods to remove ('ALL' for all methods)",
 	)
+	cmd.Flags().Uint64Var(
+		&flagAuthWebhookMaxRetries,
+		"auth-webhook-max-retries",
+		database.DefaultAuthWebhookMaxRetries,
+		"Maximum number of retries for authorization webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&flagAuthWebhookMinWaitInterval,
+		"auth-webhook-min-wait-interval",
+		database.DefaultAuthWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&flagAuthWebhookMaxWaitInterval,
+		"auth-webhook-max-wait-interval",
+		database.DefaultAuthWebhookMaxWaitInterval,
+		"Maximum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&flagAuthWebhookRequestTimeout,
+		"auth-webhook-request-timeout",
+		database.DefaultAuthWebhookRequestTimeout,
+		"Timeout for each authorization webhook request.",
+	)
 	cmd.Flags().StringVar(
 		&flagEventWebhookURL,
 		"event-webhook-url",
@@ -294,10 +379,34 @@ func init() {
 		[]string{},
 		"event-webhook events to remove ('ALL' for all events)",
 	)
-	cmd.Flags().StringVar(
+	cmd.Flags().Uint64Var(
+		&flagEventWebhookMaxRetries,
+		"event-webhook-max-retries",
+		database.DefaultEventWebhookMaxRetries,
+		"Maximum number of retries for event webhook.",
+	)
+	cmd.Flags().DurationVar(
+		&flagEventWebhookMinWaitInterval,
+		"event-webhook-min-wait-interval",
+		database.DefaultEventWebhookMinWaitInterval,
+		"Minimum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&flagEventWebhookMaxWaitInterval,
+		"event-webhook-max-wait-interval",
+		database.DefaultEventWebhookMaxWaitInterval,
+		"Maximum wait interval between retries(exponential backoff).",
+	)
+	cmd.Flags().DurationVar(
+		&flagEventWebhookRequestTimeout,
+		"event-webhook-request-timeout",
+		database.DefaultEventWebhookRequestTimeout,
+		"Timeout for each event webhook request.",
+	)
+	cmd.Flags().DurationVar(
 		&flagClientDeactivateThreshold,
 		"client-deactivate-threshold",
-		"",
+		database.DefaultClientDeactivateThreshold,
 		"client deactivate threshold for housekeeping",
 	)
 	cmd.Flags().IntVar(

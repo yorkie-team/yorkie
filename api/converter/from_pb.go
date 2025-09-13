@@ -61,25 +61,37 @@ func FromProjects(pbProjects []*api.Project) []*types.Project {
 	return projects
 }
 
-// FromProject converts the given Protobuf formats to model format.
+// FromProject converts a protobuf Project message to a model types.Project.
+// It performs a direct field mapping, converting protobuf numeric fields to the
+// model's numeric types (e.g., uint64 and int) and converting protobuf
+// timestamps with AsTime(). This function does not validate the input; calling
+// it with a nil pbProject will cause a panic.
 func FromProject(pbProject *api.Project) *types.Project {
 	return &types.Project{
-		ID:                        types.ID(pbProject.Id),
-		Name:                      pbProject.Name,
-		AuthWebhookURL:            pbProject.AuthWebhookUrl,
-		AuthWebhookMethods:        pbProject.AuthWebhookMethods,
-		EventWebhookURL:           pbProject.EventWebhookUrl,
-		EventWebhookEvents:        pbProject.EventWebhookEvents,
-		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
-		MaxSubscribersPerDocument: int(pbProject.MaxSubscribersPerDocument),
-		MaxAttachmentsPerDocument: int(pbProject.MaxAttachmentsPerDocument),
-		MaxSizePerDocument:        int(pbProject.MaxSizePerDocument),
-		RemoveOnDetach:            bool(pbProject.RemoveOnDetach),
-		AllowedOrigins:            pbProject.AllowedOrigins,
-		PublicKey:                 pbProject.PublicKey,
-		SecretKey:                 pbProject.SecretKey,
-		CreatedAt:                 pbProject.CreatedAt.AsTime(),
-		UpdatedAt:                 pbProject.UpdatedAt.AsTime(),
+		ID:                          types.ID(pbProject.Id),
+		Name:                        pbProject.Name,
+		AuthWebhookURL:              pbProject.AuthWebhookUrl,
+		AuthWebhookMethods:          pbProject.AuthWebhookMethods,
+		AuthWebhookMaxRetries:       uint64(pbProject.AuthWebhookMaxRetries),
+		AuthWebhookMinWaitInterval:  pbProject.AuthWebhookMinWaitInterval,
+		AuthWebhookMaxWaitInterval:  pbProject.AuthWebhookMaxWaitInterval,
+		AuthWebhookRequestTimeout:   pbProject.AuthWebhookRequestTimeout,
+		EventWebhookURL:             pbProject.EventWebhookUrl,
+		EventWebhookEvents:          pbProject.EventWebhookEvents,
+		EventWebhookMaxRetries:      uint64(pbProject.EventWebhookMaxRetries),
+		EventWebhookMinWaitInterval: pbProject.EventWebhookMinWaitInterval,
+		EventWebhookMaxWaitInterval: pbProject.EventWebhookMaxWaitInterval,
+		EventWebhookRequestTimeout:  pbProject.EventWebhookRequestTimeout,
+		ClientDeactivateThreshold:   pbProject.ClientDeactivateThreshold,
+		MaxSubscribersPerDocument:   int(pbProject.MaxSubscribersPerDocument),
+		MaxAttachmentsPerDocument:   int(pbProject.MaxAttachmentsPerDocument),
+		MaxSizePerDocument:          int(pbProject.MaxSizePerDocument),
+		RemoveOnDetach:              bool(pbProject.RemoveOnDetach),
+		AllowedOrigins:              pbProject.AllowedOrigins,
+		PublicKey:                   pbProject.PublicKey,
+		SecretKey:                   pbProject.SecretKey,
+		CreatedAt:                   pbProject.CreatedAt.AsTime(),
+		UpdatedAt:                   pbProject.UpdatedAt.AsTime(),
 	}
 }
 
@@ -902,7 +914,11 @@ func fromCounterType(valueType api.ValueType) (crdt.CounterType, error) {
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }
 
-// FromUpdatableProjectFields converts the given Protobuf formats to model format.
+// FromUpdatableProjectFields converts a protobuf UpdatableProjectFields into a model
+// types.UpdatableProjectFields. Only non-nil protobuf fields are applied; resulting
+// fields are pointers in the returned struct to indicate which values were provided.
+// Numeric protobuf values are converted to the appropriate Go types (e.g. retry counts
+// to uint64, limits to int). The function never returns a non-nil error.
 func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*types.UpdatableProjectFields, error) {
 	updatableProjectFields := &types.UpdatableProjectFields{}
 	if pbProjectFields.Name != nil {
@@ -914,11 +930,37 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.AuthWebhookMethods != nil {
 		updatableProjectFields.AuthWebhookMethods = &pbProjectFields.AuthWebhookMethods.Methods
 	}
+	if pbProjectFields.AuthWebhookMaxRetries != nil {
+		value := uint64(pbProjectFields.AuthWebhookMaxRetries.Value)
+		updatableProjectFields.AuthWebhookMaxRetries = &value
+	}
+	if pbProjectFields.AuthWebhookMinWaitInterval != nil {
+		updatableProjectFields.AuthWebhookMinWaitInterval = &pbProjectFields.AuthWebhookMinWaitInterval.Value
+	}
+	if pbProjectFields.AuthWebhookMaxWaitInterval != nil {
+		updatableProjectFields.AuthWebhookMaxWaitInterval = &pbProjectFields.AuthWebhookMaxWaitInterval.Value
+	}
+	if pbProjectFields.AuthWebhookRequestTimeout != nil {
+		updatableProjectFields.AuthWebhookRequestTimeout = &pbProjectFields.AuthWebhookRequestTimeout.Value
+	}
 	if pbProjectFields.EventWebhookUrl != nil {
 		updatableProjectFields.EventWebhookURL = &pbProjectFields.EventWebhookUrl.Value
 	}
 	if pbProjectFields.EventWebhookEvents != nil {
 		updatableProjectFields.EventWebhookEvents = &pbProjectFields.EventWebhookEvents.Events
+	}
+	if pbProjectFields.EventWebhookMaxRetries != nil {
+		value := uint64(pbProjectFields.EventWebhookMaxRetries.Value)
+		updatableProjectFields.EventWebhookMaxRetries = &value
+	}
+	if pbProjectFields.EventWebhookMinWaitInterval != nil {
+		updatableProjectFields.EventWebhookMinWaitInterval = &pbProjectFields.EventWebhookMinWaitInterval.Value
+	}
+	if pbProjectFields.EventWebhookMaxWaitInterval != nil {
+		updatableProjectFields.EventWebhookMaxWaitInterval = &pbProjectFields.EventWebhookMaxWaitInterval.Value
+	}
+	if pbProjectFields.EventWebhookRequestTimeout != nil {
+		updatableProjectFields.EventWebhookRequestTimeout = &pbProjectFields.EventWebhookRequestTimeout.Value
 	}
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value

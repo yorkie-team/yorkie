@@ -28,14 +28,16 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// CreateProject creates a project.
+// CreateProject creates a new project owned by the given owner with the provided name.
+// It persists the project via the backend and returns the created *types.Project.
+// Returns a non-nil error if project creation fails.
 func CreateProject(
 	ctx context.Context,
 	be *backend.Backend,
 	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.CreateProjectInfo(ctx, name, owner, be.Config.ClientDeactivateThreshold)
+	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
 	if err != nil {
 		return nil, err
 	}

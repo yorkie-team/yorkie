@@ -76,7 +76,19 @@ type Backend struct {
 	Warehouse warehouse.Warehouse
 }
 
-// New creates a new instance of Backend.
+// New creates and wires a Backend with all runtime components (cache, pub/sub,
+// lockers, background workers, housekeeper, webhook clients, cluster client,
+// database, message broker, and warehouse) using the provided configurations.
+// 
+// It resolves the host name from conf.Hostname or the local system, initializes
+// caches and background processing, dials the cluster gateway, and selects a
+// database implementation (MongoDB if mongoConf is non-nil, otherwise an in-memory
+// DB). If UseDefaultProject is set, it ensures the default user and project
+// exist.
+//
+// Returns an error if any required initialization step fails (e.g., hostname
+// resolution, cluster dial, database/housekeeping/warehouse setup, or ensuring
+// the default user/project).
 func New(
 	conf *Config,
 	mongoConf *mongo.Config,
@@ -115,22 +127,9 @@ func New(
 	bg := background.New(metrics)
 
 	// 04. Create webhook clients and cluster client.
-	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		pkgwebhook.Options{
-			MaxRetries:      conf.AuthWebhookMaxRetries,
-			MinWaitInterval: conf.ParseAuthWebhookMinWaitInterval(),
-			MaxWaitInterval: conf.ParseAuthWebhookMaxWaitInterval(),
-			RequestTimeout:  conf.ParseAuthWebhookRequestTimeout(),
-		},
-	)
-	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](
-		pkgwebhook.Options{
-			MaxRetries:      conf.EventWebhookMaxRetries,
-			MinWaitInterval: conf.ParseEventWebhookMinWaitInterval(),
-			MaxWaitInterval: conf.ParseEventWebhookMaxWaitInterval(),
-			RequestTimeout:  conf.ParseEventWebhookRequestTimeout(),
-		},
-	))
+	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
+	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
+
 	clusterClient, err := cluster.Dial(conf.GatewayAddr)
 	if err != nil {
 		return nil, err
@@ -174,7 +173,6 @@ func New(
 			context.Background(),
 			conf.AdminUser,
 			conf.AdminPassword,
-			conf.ClientDeactivateThreshold,
 		)
 		if err != nil {
 			return nil, err
