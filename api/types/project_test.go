@@ -123,13 +123,13 @@ func TestProjectInfo(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, clientDeactivateThreshold.String(), "20h0m0s")
 
-		authWebhookOptions, err := validInfo.GetAuthWehbookOptions()
+		authWebhookOptions, err := validInfo.GetAuthWebhookOptions()
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookOptions.MinWaitInterval.String(), "10ms")
 		assert.Equal(t, authWebhookOptions.MaxWaitInterval.String(), "5s")
 		assert.Equal(t, authWebhookOptions.RequestTimeout.String(), "3s")
 
-		eventWebhookOptions, err := validInfo.GetEventWehbookOptions()
+		eventWebhookOptions, err := validInfo.GetEventWebhookOptions()
 		assert.NoError(t, err)
 		assert.Equal(t, eventWebhookOptions.MinWaitInterval.String(), "40ms")
 		assert.Equal(t, eventWebhookOptions.MaxWaitInterval.String(), "3s")
@@ -147,10 +147,10 @@ func TestProjectInfo(t *testing.T) {
 		_, err = invalidInfo.ClientDeactivateThresholdAsTimeDuration()
 		assert.Error(t, err)
 
-		_, err = invalidInfo.GetAuthWehbookOptions()
+		_, err = invalidInfo.GetAuthWebhookOptions()
 		assert.Error(t, err)
 
-		_, err = invalidInfo.GetEventWehbookOptions()
+		_, err = invalidInfo.GetEventWebhookOptions()
 		assert.Error(t, err)
 	})
 }

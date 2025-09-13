@@ -414,6 +414,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"max_subscribers_per_document":    candidate.MaxSubscribersPerDocument,
 			"max_attachments_per_document":    candidate.MaxAttachmentsPerDocument,
 			"max_size_per_document":           candidate.MaxSizePerDocument,
+			"remove_on_detach":                candidate.RemoveOnDetach,
 			"public_key":                      candidate.PublicKey,
 			"secret_key":                      candidate.SecretKey,
 			"created_at":                      candidate.CreatedAt,
@@ -458,10 +459,13 @@ func (c *Client) CreateProjectInfo(
 		"event_webhook_max_wait_interval": info.EventWebhookMaxWaitInterval,
 		"event_webhook_request_timeout":   info.EventWebhookRequestTimeout,
 		"client_deactivate_threshold":     info.ClientDeactivateThreshold,
+		"max_subscribers_per_document":    info.MaxSubscribersPerDocument,
+		"max_attachments_per_document":    info.MaxAttachmentsPerDocument,
+		"max_size_per_document":           info.MaxSizePerDocument,
+		"remove_on_detach":                info.RemoveOnDetach,
 		"public_key":                      info.PublicKey,
 		"secret_key":                      info.SecretKey,
 		"created_at":                      info.CreatedAt,
-		"max_size_per_document":           info.MaxSizePerDocument,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {

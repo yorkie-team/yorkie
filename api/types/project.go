@@ -183,8 +183,8 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 	return clientDeactivateThreshold, nil
 }
 
-// GetAuthWehbookOptions returns the webhook options for the auth webhook.
-func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
+// GetAuthWebhookOptions returns the webhook options for the auth webhook.
+func (p *Project) GetAuthWebhookOptions() (webhook.Options, error) {
 	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
 	if err != nil {
 		return webhook.Options{}, ErrInvalidTimeDurationString
@@ -205,8 +205,8 @@ func (p *Project) GetAuthWehbookOptions() (webhook.Options, error) {
 	}, nil
 }
 
-// GetEventWehbookOptions returns the webhook options for the event webhook.
-func (p *Project) GetEventWehbookOptions() (webhook.Options, error) {
+// GetEventWebhookOptions returns the webhook options for the event webhook.
+func (p *Project) GetEventWebhookOptions() (webhook.Options, error) {
 	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
 	if err != nil {
 		return webhook.Options{}, ErrInvalidTimeDurationString

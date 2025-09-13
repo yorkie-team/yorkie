@@ -40,9 +40,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000000")
-	otherOwnerID              = types.ID("000000000000000000000001")
-	clientDeactivateThreshold = "23h"
+	dummyOwnerID = types.ID("000000000000000000000000")
+	otherOwnerID = types.ID("000000000000000000000001")
 )
 
 func setupBackend(t *testing.T) *backend.Backend {

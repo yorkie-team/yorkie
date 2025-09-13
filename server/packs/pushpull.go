@@ -138,7 +138,7 @@ func PushPull(
 			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
-				options, err := project.GetEventWehbookOptions()
+				options, err := project.GetEventWebhookOptions()
 				if err != nil {
 					logging.From(ctx).Error(err)
 					return
