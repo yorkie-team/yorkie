@@ -77,7 +77,7 @@ func TestClusterNodes(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.RPC.Port = getFreePort()
 		conf.Profiling.Port = getFreePort()
-		conf.Backend.Hostname = name
+		conf.Backend.RPCAddr = name
 		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
 		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
 
@@ -85,12 +85,7 @@ func TestClusterNodes(t *testing.T) {
 	}
 
 	startServer := func(name string) (*server.Yorkie, string) {
-		conf := helper.TestConfig()
-		conf.RPC.Port = getFreePort()
-		conf.Profiling.Port = getFreePort()
-		conf.Backend.Hostname = name
-		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
-		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
+		conf := newTestConfig(name)
 
 		svr, err := server.New(conf)
 		require.NoError(t, err)
@@ -115,7 +110,7 @@ func TestClusterNodes(t *testing.T) {
 
 		svrs := make([]*server.Yorkie, numGoroutines)
 		for i := range numGoroutines {
-			svr, err := server.New(newTestConfig(fmt.Sprintf("node-%d", i)))
+			svr, err := server.New(newTestConfig(fmt.Sprintf("test-addr-%d", i)))
 			require.NoError(t, err)
 			svrs[i] = svr
 		}
@@ -154,7 +149,7 @@ func TestClusterNodes(t *testing.T) {
 
 		clearClusterNodes(ctx)
 
-		svr, err := server.New(newTestConfig("node-0"))
+		svr, err := server.New(newTestConfig("test-addr-1"))
 		assert.NoError(t, err)
 
 		assert.NoError(t, svr.Start())
@@ -171,7 +166,7 @@ func TestClusterNodes(t *testing.T) {
 		assert.NoError(t, svr.Shutdown(true))
 		gotime.Sleep(500 * gotime.Millisecond)
 
-		svr2, err := server.New(newTestConfig("node-0"))
+		svr2, err := server.New(newTestConfig("test-addr-2"))
 		assert.NoError(t, err)
 
 		assert.NoError(t, svr2.Start())
@@ -194,7 +189,7 @@ func TestClusterNodes(t *testing.T) {
 
 		clearClusterNodes(ctx)
 
-		svr, err := server.New(newTestConfig("node-0"))
+		svr, err := server.New(newTestConfig("test-addr-0"))
 		assert.NoError(t, err)
 		be := svr.Backend()
 		mockDB := NewMockDB(be.DB)
@@ -246,7 +241,7 @@ func TestClusterNodes(t *testing.T) {
 
 		svrs := make([]*server.Yorkie, numGoroutines)
 		for i := range numGoroutines {
-			svr, err := server.New(newTestConfig(fmt.Sprintf("node-%d", i)))
+			svr, err := server.New(newTestConfig(fmt.Sprintf("test-addr-%d", i)))
 			require.NoError(t, err)
 			svrs[i] = svr
 		}
@@ -282,8 +277,8 @@ func TestClusterNodes(t *testing.T) {
 
 		clearClusterNodes(ctx)
 
-		svr1, hostname1 := startServer("node-1")
-		svr2, hostname2 := startServer("node-2")
+		svr1, hostname1 := startServer("test-addr-1")
+		svr2, hostname2 := startServer("test-addr-2")
 
 		assert.Eventually(t, func() bool {
 			infos, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)

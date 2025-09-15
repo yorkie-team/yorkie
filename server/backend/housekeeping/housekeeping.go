@@ -37,7 +37,7 @@ type Housekeeping struct {
 }
 
 // New creates a new housekeeping instance.
-func New(conf *Config, db database.Database, nodeID string) (*Housekeeping, error) {
+func New(conf *Config, db database.Database, rpcAddr string) (*Housekeeping, error) {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, fmt.Errorf("new scheduler: %w", err)
@@ -59,7 +59,7 @@ func New(conf *Config, db database.Database, nodeID string) (*Housekeeping, erro
 		RenewalInterval: renewalInterval,
 	}
 
-	leadershipManager := NewLeadershipManager(db, nodeID, leadershipConf)
+	leadershipManager := NewLeadershipManager(db, rpcAddr, leadershipConf)
 
 	return &Housekeeping{
 		Config:     conf,

@@ -519,6 +519,12 @@ func init() {
 		"Gateway address",
 	)
 	cmd.Flags().StringVar(
+		&conf.Backend.RPCAddr,
+		"backend-rpc-addr",
+		server.DefaultBackendRPCAddr,
+		"Backend RPC address",
+	)
+	cmd.Flags().StringVar(
 		&kafkaAddresses,
 		"kafka-addresses",
 		"",

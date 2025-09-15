@@ -99,6 +99,9 @@ type Config struct {
 
 	// GatewayAddr is the address of the gateway server.
 	GatewayAddr string `yaml:"GatewayAddr"`
+
+	// RPCAddr is the address of the RPC server.
+	RPCAddr string `yaml:"RPCAddr"`
 }
 
 // Validate validates this config.

@@ -68,6 +68,11 @@ spec:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.yorkie.image.pullPolicy }}
+        env:
+          - name: RPC_ADDR
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
         args: [
           "server",
           "--mongo-connection-uri",

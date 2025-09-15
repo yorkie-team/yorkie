@@ -95,6 +95,9 @@ func New(
 		}
 		conf.Hostname = hostname
 	}
+	if v, ok := os.LookupEnv("RPC_ADDR"); ok {
+		conf.RPCAddr = v
+	}
 
 	// 02. Create the cache manager, pubsub, and lockers.
 	cacheManager, err := cache.New(cache.Options{
@@ -153,7 +156,7 @@ func New(
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.Hostname)
+	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.RPCAddr)
 	if err != nil {
 		return nil, err
 	}
