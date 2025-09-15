@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
@@ -39,11 +40,35 @@ type UpdatableProjectFields struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalid_webhook_method"`
 
+	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
+	AuthWebhookMaxRetries *uint64 `bson:"auth_webhook_max_retries,omitempty" validate:"omitempty,min=0"`
+
+	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
+	AuthWebhookMinWaitInterval *string `bson:"auth_webhook_min_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
+
+	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMaxWaitInterval *string `bson:"auth_webhook_max_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
+
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
+	AuthWebhookRequestTimeout *string `bson:"auth_webhook_request_timeout,omitempty" validate:"omitempty,min=2,duration"`
+
 	// EventWebhookURL is the URL of the event webhook.
 	EventWebhookURL *string `bson:"event_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
 
 	// EventWebhookEvents is the events that trigger the webhook.
 	EventWebhookEvents *[]string `bson:"event_webhook_events,omitempty" validate:"omitempty,invalid_webhook_event"`
+
+	// EventWebhookMaxRetries is the max count that retries the event webhook.
+	EventWebhookMaxRetries *uint64 `bson:"event_webhook_max_retries,omitempty" validate:"omitempty,min=0"`
+
+	// EventWebhookMinWaitInterval is the min interval that waits before retrying the event webhook.
+	EventWebhookMinWaitInterval *string `bson:"event_webhook_min_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
+
+	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
+	EventWebhookMaxWaitInterval *string `bson:"event_webhook_max_wait_interval,omitempty" validate:"omitempty,min=2,duration"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout *string `bson:"event_webhook_request_timeout,omitempty" validate:"omitempty,min=2,duration"`
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
@@ -71,13 +96,22 @@ func (i *UpdatableProjectFields) Validate() error {
 	if i.Name == nil &&
 		i.AuthWebhookURL == nil &&
 		i.AuthWebhookMethods == nil &&
-		i.ClientDeactivateThreshold == nil &&
+		i.AuthWebhookMaxRetries == nil &&
+		i.AuthWebhookMinWaitInterval == nil &&
+		i.AuthWebhookMaxWaitInterval == nil &&
+		i.AuthWebhookRequestTimeout == nil &&
 		i.EventWebhookURL == nil &&
 		i.EventWebhookEvents == nil &&
+		i.EventWebhookMaxRetries == nil &&
+		i.EventWebhookMinWaitInterval == nil &&
+		i.EventWebhookMaxWaitInterval == nil &&
+		i.EventWebhookRequestTimeout == nil &&
+		i.ClientDeactivateThreshold == nil &&
 		i.MaxSubscribersPerDocument == nil &&
 		i.MaxAttachmentsPerDocument == nil &&
 		i.MaxSizePerDocument == nil &&
-		i.RemoveOnDetach == nil {
+		i.RemoveOnDetach == nil &&
+		i.AllowedOrigins == nil {
 		return ErrEmptyProjectFields
 	}
 
@@ -123,6 +157,25 @@ func init() {
 	}
 
 	if err := validation.RegisterTranslation("invalid_webhook_event", "given {0} is invalid event type"); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterValidation(
+		"duration",
+		func(level validation.FieldLevel) bool {
+			duration := level.Field().String()
+			if _, err := time.ParseDuration(duration); err != nil {
+				return false
+			}
+			return true
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterTranslation("duration", "given {0} must be a valid duration"); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}

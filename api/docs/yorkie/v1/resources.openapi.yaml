@@ -186,6 +186,22 @@ components:
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
       type: string
+    google.protobuf.UInt64Value:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `uint64`.
+
+         The JSON representation for `UInt64Value` is JSON string.
+      properties:
+        value:
+          additionalProperties: false
+          description: The uint64 value.
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: UInt64Value
+      type: object
     yorkie.v1.Change:
       additionalProperties: false
       description: ""
@@ -1397,6 +1413,18 @@ components:
             type: string
           title: allowed_origins
           type: array
+        authWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: auth_webhook_max_retries
+        authWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_wait_interval
+          type: string
         authWebhookMethods:
           additionalProperties: false
           description: ""
@@ -1404,6 +1432,16 @@ components:
             type: string
           title: auth_webhook_methods
           type: array
+        authWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_min_wait_interval
+          type: string
+        authWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
+          type: string
         authWebhookUrl:
           additionalProperties: false
           description: ""
@@ -1427,6 +1465,28 @@ components:
             type: string
           title: event_webhook_events
           type: array
+        eventWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: event_webhook_max_retries
+        eventWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_wait_interval
+          type: string
+        eventWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_min_wait_interval
+          type: string
+        eventWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
+          type: string
         eventWebhookUrl:
           additionalProperties: false
           description: ""
@@ -1848,11 +1908,35 @@ components:
           description: ""
           title: allowed_origins
           type: object
+        authWebhookMaxRetries:
+          $ref: '#/components/schemas/google.protobuf.UInt64Value'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_retries
+          type: object
+        authWebhookMaxWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_wait_interval
+          type: object
         authWebhookMethods:
           $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods'
           additionalProperties: false
           description: ""
           title: auth_webhook_methods
+          type: object
+        authWebhookMinWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_min_wait_interval
+          type: object
+        authWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
           type: object
         authWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'
@@ -1871,6 +1955,30 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_events
+          type: object
+        eventWebhookMaxRetries:
+          $ref: '#/components/schemas/google.protobuf.UInt64Value'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_retries
+          type: object
+        eventWebhookMaxWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_wait_interval
+          type: object
+        eventWebhookMinWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_min_wait_interval
+          type: object
+        eventWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
           type: object
         eventWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'

@@ -329,14 +329,13 @@ func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -393,24 +392,32 @@ func (c *Client) ensureDefaultUserInfo(
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 	candidate.ID = database.DefaultProjectID
 
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":                         candidate.Name,
-			"owner":                        candidate.Owner,
-			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
-			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
-			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
-			"max_size_per_document":        candidate.MaxSizePerDocument,
-			"public_key":                   candidate.PublicKey,
-			"secret_key":                   candidate.SecretKey,
-			"created_at":                   candidate.CreatedAt,
+			"name":                            candidate.Name,
+			"owner":                           candidate.Owner,
+			"auth_webhook_max_retries":        candidate.AuthWebhookMaxRetries,
+			"auth_webhook_min_wait_interval":  candidate.AuthWebhookMinWaitInterval,
+			"auth_webhook_max_wait_interval":  candidate.AuthWebhookMaxWaitInterval,
+			"auth_webhook_request_timeout":    candidate.AuthWebhookRequestTimeout,
+			"event_webhook_max_retries":       candidate.EventWebhookMaxRetries,
+			"event_webhook_min_wait_interval": candidate.EventWebhookMinWaitInterval,
+			"event_webhook_max_wait_interval": candidate.EventWebhookMaxWaitInterval,
+			"event_webhook_request_timeout":   candidate.EventWebhookRequestTimeout,
+			"client_deactivate_threshold":     candidate.ClientDeactivateThreshold,
+			"max_subscribers_per_document":    candidate.MaxSubscribersPerDocument,
+			"max_attachments_per_document":    candidate.MaxAttachmentsPerDocument,
+			"max_size_per_document":           candidate.MaxSizePerDocument,
+			"remove_on_detach":                candidate.RemoveOnDetach,
+			"public_key":                      candidate.PublicKey,
+			"secret_key":                      candidate.SecretKey,
+			"created_at":                      candidate.CreatedAt,
 		},
 	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
@@ -438,17 +445,27 @@ func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner)
 	result, err := c.collection(ColProjects).InsertOne(ctx, bson.M{
-		"name":                        info.Name,
-		"owner":                       owner,
-		"client_deactivate_threshold": info.ClientDeactivateThreshold,
-		"public_key":                  info.PublicKey,
-		"secret_key":                  info.SecretKey,
-		"created_at":                  info.CreatedAt,
-		"max_size_per_document":       info.MaxSizePerDocument,
+		"name":                            info.Name,
+		"owner":                           owner,
+		"auth_webhook_max_retries":        info.AuthWebhookMaxRetries,
+		"auth_webhook_min_wait_interval":  info.AuthWebhookMinWaitInterval,
+		"auth_webhook_max_wait_interval":  info.AuthWebhookMaxWaitInterval,
+		"auth_webhook_request_timeout":    info.AuthWebhookRequestTimeout,
+		"event_webhook_max_retries":       info.EventWebhookMaxRetries,
+		"event_webhook_min_wait_interval": info.EventWebhookMinWaitInterval,
+		"event_webhook_max_wait_interval": info.EventWebhookMaxWaitInterval,
+		"event_webhook_request_timeout":   info.EventWebhookRequestTimeout,
+		"client_deactivate_threshold":     info.ClientDeactivateThreshold,
+		"max_subscribers_per_document":    info.MaxSubscribersPerDocument,
+		"max_attachments_per_document":    info.MaxAttachmentsPerDocument,
+		"max_size_per_document":           info.MaxSizePerDocument,
+		"remove_on_detach":                info.RemoveOnDetach,
+		"public_key":                      info.PublicKey,
+		"secret_key":                      info.SecretKey,
+		"created_at":                      info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
