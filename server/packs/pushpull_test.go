@@ -104,7 +104,7 @@ func TestMain(m *testing.M) {
 			ProjectCacheSize:     helper.ProjectCacheSize,
 			ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
 			AdminTokenDuration:   helper.AdminTokenDuration,
-			RPCAddr:                     helper.RPCAddr,
+			RPCAddr:              helper.RPCAddr,
 		}, &mongo.Config{
 			ConnectionURI:     helper.MongoConnectionURI,
 			YorkieDatabase:    helper.TestDBName(),

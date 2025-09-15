@@ -296,7 +296,7 @@ func TestConfig() *server.Config {
 			ProjectCacheSize:     ProjectCacheSize,
 			ProjectCacheTTL:      ProjectCacheTTL.String(),
 			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			RPCAddr:                     fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			RPCAddr:              fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,
