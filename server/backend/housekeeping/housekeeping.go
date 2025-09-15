@@ -125,3 +125,7 @@ func (h *Housekeeping) Stop() error {
 
 	return nil
 }
+
+func (h *Housekeeping) SetLeadershipDB(db database.Database) {
+	h.leadership.SetDB(db)
+}

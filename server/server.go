@@ -124,6 +124,11 @@ func (r *Yorkie) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo,
 	return r.backend.DB.FindLeadership(ctx)
 }
 
+// Backend returns the backend for testing purposes.
+func (r *Yorkie) Backend() *backend.Backend {
+	return r.backend
+}
+
 // Start starts the server by opening the rpc port.
 func (r *Yorkie) Start() error {
 	r.lock.Lock()

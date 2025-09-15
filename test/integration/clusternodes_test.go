@@ -28,8 +28,40 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
+
+// MockDB represents a mock database for testing purposes
+type MockDB struct {
+	database.Database
+
+	isDisconnected bool
+}
+
+// NewMockDB returns a mock database with a real database
+func NewMockDB(database database.Database) *MockDB {
+	return &MockDB{
+		Database:       database,
+		isDisconnected: false,
+	}
+}
+
+func (m *MockDB) TryLeadership(
+	ctx context.Context,
+	rpcAddr,
+	leaseToken string,
+	leaseDuration gotime.Duration,
+) (*database.ClusterNodeInfo, error) {
+	if m.isDisconnected {
+		return nil, fmt.Errorf("database unavailable: mock disconnection")
+	}
+	return m.Database.TryLeadership(ctx, rpcAddr, leaseToken, leaseDuration)
+}
+
+func (m *MockDB) SetDisconnected(disconnected bool) {
+	m.isDisconnected = disconnected
+}
 
 func TestClusterNodes(t *testing.T) {
 	getFreePort := func() int {
@@ -156,6 +188,52 @@ func TestClusterNodes(t *testing.T) {
 		assert.NotEqual(t, prvLeader.LeaseToken, currLeader.LeaseToken)
 
 		assert.NoError(t, svr2.Shutdown(true))
+	})
+	t.Run("Should revoke and reacquire leadership after temporary DB disconnection", func(t *testing.T) {
+		ctx := context.Background()
+
+		clearClusterNodes(ctx)
+
+		svr, err := server.New(newTestConfig("node-0"))
+		assert.NoError(t, err)
+		be := svr.Backend()
+		mockDB := NewMockDB(be.DB)
+		be.Housekeeping.SetLeadershipDB(mockDB)
+
+		assert.NoError(t, svr.Start())
+
+		assert.Eventually(t, func() bool {
+			leader, err := svr.FindLeadership(ctx)
+			require.NoError(t, err)
+
+			return leader != nil
+		}, 1000*gotime.Second, 100*gotime.Millisecond)
+
+		leader, err := svr.FindLeadership(ctx)
+		prvToken := leader.LeaseToken
+		assert.NoError(t, err)
+		assert.True(t, leader.IsLeader)
+
+		mockDB.SetDisconnected(true)
+
+		assert.Eventually(t, func() bool {
+			leader, err := svr.FindLeadership(ctx)
+			require.NoError(t, err)
+
+			return leader == nil
+		}, 1000*gotime.Second, 100*gotime.Millisecond)
+
+		mockDB.SetDisconnected(false)
+
+		assert.Eventually(t, func() bool {
+			leader, err = svr.FindLeadership(ctx)
+			require.NoError(t, err)
+
+			return leader != nil
+		}, 1000*gotime.Second, 100*gotime.Millisecond)
+		currToken := leader.LeaseToken
+
+		assert.NotEqual(t, prvToken, currToken)
 	})
 
 	t.Run("Should handle concurrent connection test", func(t *testing.T) {

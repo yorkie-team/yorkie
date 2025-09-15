@@ -114,6 +114,10 @@ func (lm *LeadershipManager) CurrentLease() *database.ClusterNodeInfo {
 	return lm.currentLease.Load()
 }
 
+func (lm *LeadershipManager) SetDB(db database.Database) {
+	lm.database = db
+}
+
 // leadershipLoop manages the leadership acquisition and renewal process.
 func (lm *LeadershipManager) leadershipLoop(ctx context.Context) {
 	defer lm.wg.Done()
