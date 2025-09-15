@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	gotime "time"
 
@@ -36,14 +37,13 @@ import (
 type MockDB struct {
 	database.Database
 
-	isDisconnected bool
+	isDisconnected atomic.Bool
 }
 
 // NewMockDB returns a mock database with a real database
 func NewMockDB(database database.Database) *MockDB {
 	return &MockDB{
-		Database:       database,
-		isDisconnected: false,
+		Database: database,
 	}
 }
 
@@ -53,14 +53,14 @@ func (m *MockDB) TryLeadership(
 	leaseToken string,
 	leaseDuration gotime.Duration,
 ) (*database.ClusterNodeInfo, error) {
-	if m.isDisconnected {
+	if m.isDisconnected.Load() {
 		return nil, fmt.Errorf("database unavailable: mock disconnection")
 	}
 	return m.Database.TryLeadership(ctx, rpcAddr, leaseToken, leaseDuration)
 }
 
 func (m *MockDB) SetDisconnected(disconnected bool) {
-	m.isDisconnected = disconnected
+	m.isDisconnected.Store(disconnected)
 }
 
 func TestClusterNodes(t *testing.T) {
