@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -34,7 +35,7 @@ import (
 )
 
 func newListCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "ls",
 		Short:   "List all projects",
 		PreRunE: config.Preload,
@@ -61,7 +62,8 @@ func newListCommand() *cobra.Command {
 			}
 
 			output := viper.GetString("output")
-			err2 := printProjects(cmd, output, projects)
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			err2 := printProjects(cmd, output, projects, verbose)
 			if err2 != nil {
 				return err2
 			}
@@ -69,9 +71,13 @@ func newListCommand() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolP("verbose", "v", false, "Show detailed project information")
+
+	return cmd
 }
 
-func printProjects(cmd *cobra.Command, output string, projects []*types.Project) error {
+func printProjects(cmd *cobra.Command, output string, projects []*types.Project, verbose bool) error {
 	switch output {
 	case DefaultOutput:
 		tw := table.NewWriter()
@@ -80,51 +86,71 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project)
 		tw.Style().Options.SeparateFooter = false
 		tw.Style().Options.SeparateHeader = false
 		tw.Style().Options.SeparateRows = false
-		tw.AppendHeader(table.Row{
-			"NAME",
-			"PUBLIC KEY",
-			"SECRET KEY",
-			"AUTH WEBHOOK URL",
-			"AUTH WEBHOOK METHODS",
-			"AUTH WEBHOOK MAX RETRIES",
-			"AUTH WEBHOOK MIN WAIT INTERVAL",
-			"AUTH WEBHOOK MAX WAIT INTERVAL",
-			"AUTH WEBHOOK REQUEST TIMEOUT",
-			"EVENT WEBHOOK URL",
-			"EVENT WEBHOOK EVENTS",
-			"EVENT WEBHOOK MAX RETRIES",
-			"EVENT WEBHOOK MIN WAIT INTERVAL",
-			"EVENT WEBHOOK MAX WAIT INTERVAL",
-			"EVENT WEBHOOK REQUEST TIMEOUT",
-			"CLIENT DEACTIVATE THRESHOLD",
-			"MAX SUBSCRIBERS PER DOCUMENT",
-			"MAX ATTACHMENTS PER DOCUMENT",
-			"REMOVE ON DETACH",
-			"CREATED AT",
-		})
-		for _, project := range projects {
-			tw.AppendRow(table.Row{
-				project.Name,
-				project.PublicKey,
-				project.SecretKey,
-				project.AuthWebhookURL,
-				project.AuthWebhookMethods,
-				project.AuthWebhookMaxRetries,
-				project.AuthWebhookMinWaitInterval,
-				project.AuthWebhookMaxWaitInterval,
-				project.AuthWebhookRequestTimeout,
-				project.EventWebhookURL,
-				project.EventWebhookEvents,
-				project.EventWebhookMaxRetries,
-				project.EventWebhookMinWaitInterval,
-				project.EventWebhookMaxWaitInterval,
-				project.EventWebhookRequestTimeout,
-				project.ClientDeactivateThreshold,
-				project.MaxSubscribersPerDocument,
-				project.MaxAttachmentsPerDocument,
-				project.RemoveOnDetach,
-				units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
+
+		if verbose {
+			// Show all fields when verbose flag is used
+			tw.AppendHeader(table.Row{
+				"NAME",
+				"PUBLIC KEY",
+				"SECRET KEY",
+				"AUTH WEBHOOK URL",
+				"AUTH WEBHOOK METHODS",
+				"AUTH WEBHOOK MAX RETRIES",
+				"AUTH WEBHOOK MIN WAIT INTERVAL",
+				"AUTH WEBHOOK MAX WAIT INTERVAL",
+				"AUTH WEBHOOK REQUEST TIMEOUT",
+				"EVENT WEBHOOK URL",
+				"EVENT WEBHOOK EVENTS",
+				"EVENT WEBHOOK MAX RETRIES",
+				"EVENT WEBHOOK MIN WAIT INTERVAL",
+				"EVENT WEBHOOK MAX WAIT INTERVAL",
+				"EVENT WEBHOOK REQUEST TIMEOUT",
+				"CLIENT DEACTIVATE THRESHOLD",
+				"MAX SUBSCRIBERS PER DOCUMENT",
+				"MAX ATTACHMENTS PER DOCUMENT",
+				"REMOVE ON DETACH",
+				"CREATED AT",
 			})
+			for _, project := range projects {
+				tw.AppendRow(table.Row{
+					project.Name,
+					project.PublicKey,
+					project.SecretKey,
+					project.AuthWebhookURL,
+					strings.Join(project.AuthWebhookMethods, ","),
+					project.AuthWebhookMaxRetries,
+					project.AuthWebhookMinWaitInterval,
+					project.AuthWebhookMaxWaitInterval,
+					project.AuthWebhookRequestTimeout,
+					project.EventWebhookURL,
+					strings.Join(project.EventWebhookEvents, ","),
+					project.EventWebhookMaxRetries,
+					project.EventWebhookMinWaitInterval,
+					project.EventWebhookMaxWaitInterval,
+					project.EventWebhookRequestTimeout,
+					project.ClientDeactivateThreshold,
+					project.MaxSubscribersPerDocument,
+					project.MaxAttachmentsPerDocument,
+					project.RemoveOnDetach,
+					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
+				})
+			}
+		} else {
+			// Show only essential fields by default
+			tw.AppendHeader(table.Row{
+				"NAME",
+				"PUBLIC KEY",
+				"SECRET KEY",
+				"CREATED AT",
+			})
+			for _, project := range projects {
+				tw.AppendRow(table.Row{
+					project.Name,
+					project.PublicKey,
+					project.SecretKey,
+					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
+				})
+			}
 		}
 		cmd.Println(tw.Render())
 	case JSONOutput:
