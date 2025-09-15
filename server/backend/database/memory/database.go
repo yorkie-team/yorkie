@@ -396,14 +396,13 @@ func (d *DB) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -448,7 +447,6 @@ func (d *DB) ensureDefaultUserInfo(
 func (d *DB) ensureDefaultProjectInfo(
 	_ context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -460,7 +458,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -478,7 +476,6 @@ func (d *DB) CreateProjectInfo(
 	_ context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -493,7 +490,7 @@ func (d *DB) CreateProjectInfo(
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)

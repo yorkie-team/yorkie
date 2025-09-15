@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
 // DateFormat defines the standard format used for timestamps.
@@ -71,6 +73,7 @@ func NewRequestBody(docKey string, event EventWebhookType) ([]byte, error) {
 type EventWebhookInfo struct {
 	EventRefKey EventRefKey
 	Attribute   WebhookAttribute
+	Options     webhook.Options
 }
 
 // NewEventWebhookInfo initializes an EventWebhookInfo with the given parameters.
@@ -78,6 +81,7 @@ func NewEventWebhookInfo(
 	docRefKey DocRefKey,
 	event EventWebhookType,
 	signingKey, url, docKey string,
+	options webhook.Options,
 ) EventWebhookInfo {
 	return EventWebhookInfo{
 		EventRefKey: EventRefKey{
@@ -89,6 +93,7 @@ func NewEventWebhookInfo(
 			URL:        url,
 			DocKey:     docKey,
 		},
+		Options: options,
 	}
 }
 

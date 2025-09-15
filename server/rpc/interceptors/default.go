@@ -44,7 +44,7 @@ func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 		resp, err := next(ctx, req)
 		reqLogger := logging.From(ctx)
 		if err != nil {
-			logging.LogRPCError(reqLogger, req.Spec().Procedure, gotime.Since(start), err)
+			logRPCError(reqLogger, req.Spec().Procedure, gotime.Since(start), err)
 			return nil, connecthelper.ToStatusError(err)
 		}
 		return resp, nil
@@ -72,11 +72,11 @@ func (i *DefaultInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 		start := gotime.Now()
 		err := next(ctx, conn)
 		if err != nil {
-			logging.LogRPCStreamError(reqLogger, conn.Spec().Procedure, gotime.Since(start), err)
+			logRPCStreamError(reqLogger, conn.Spec().Procedure, gotime.Since(start), err)
 			return connecthelper.ToStatusError(err)
 		}
 
-		logging.LogRPCStreamSuccess(reqLogger, conn.Spec().Procedure, gotime.Since(start))
+		logRPCStreamSuccess(reqLogger, conn.Spec().Procedure, gotime.Since(start))
 		return nil
 	}
 }
