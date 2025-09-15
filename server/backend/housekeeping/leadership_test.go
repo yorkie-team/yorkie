@@ -65,6 +65,30 @@ func TestLeadershipManager(t *testing.T) {
 		assert.Equal(t, "node-1", lease.RPCAddr)
 	})
 
+	t.Run("LeadershipManager should get proper leader", func(t *testing.T) {
+		db := newDatabase()
+
+		conf := DefaultLeadershipConfig()
+		conf.RenewalInterval = 100 * time.Millisecond
+
+		manager := NewLeadershipManager(db, "node-1", conf)
+
+		err := manager.Start(ctx)
+		require.NoError(t, err)
+		defer manager.Stop()
+
+		// Wait for leadership acquisition
+		assert.Eventually(t, func() bool {
+			return manager.IsLeader()
+		}, 1*time.Second, 50*time.Millisecond)
+
+		assert.Eventually(t, func() bool {
+			leader, err := manager.Leader(ctx)
+			require.NoError(t, err)
+			return leader != nil
+		}, 1*time.Second, 50*time.Millisecond)
+	})
+
 	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
 		db := newDatabase()
 		conf := DefaultLeadershipConfig()
@@ -83,7 +107,7 @@ func TestLeadershipManager(t *testing.T) {
 
 		// Wait for one to become leader
 		assert.Eventually(t, func() bool {
-			return manager1.IsLeader() || manager2.IsLeader()
+			return manager1.IsLeader() != manager2.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 
 		// Only one should be leader
