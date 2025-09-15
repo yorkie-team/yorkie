@@ -24,25 +24,26 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	goerrors "errors"
 	"fmt"
 	"math"
 	"net/http"
 	"syscall"
 	"time"
 
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
 	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
-	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
+	ErrUnexpectedStatusCode = errors.Internal("unexpected status code from webhook").WithCode("ErrUnexpectedStatusCode")
 
 	// ErrUnexpectedResponse is returned when the response from the webhook is not as expected.
-	ErrUnexpectedResponse = errors.New("unexpected response from webhook")
+	ErrUnexpectedResponse = errors.Internal("unexpected response from webhook").WithCode("ErrUnexpectedResponse")
 
 	// ErrWebhookTimeout is returned when the webhook does not respond in time.
-	ErrWebhookTimeout = errors.New("webhook timeout")
+	ErrWebhookTimeout = errors.Internal("webhook timeout").WithCode("ErrWebhookTimeout")
 )
 
 // Options are the options for the webhook httpClient.
@@ -172,7 +173,7 @@ func (c *Client[Req, Res]) withExponentialBackoff(
 	for retries <= options.MaxRetries {
 		statusCode, err = webhookFn()
 		if !shouldRetry(statusCode, err) {
-			if errors.Is(err, ErrUnexpectedStatusCode) {
+			if goerrors.Is(err, ErrUnexpectedStatusCode) {
 				return statusCode, fmt.Errorf("%d: %w", statusCode, ErrUnexpectedStatusCode)
 			}
 
@@ -205,8 +206,8 @@ func waitInterval(retries uint64, minWaitInterval, maxWaitInterval time.Duration
 func shouldRetry(statusCode int, err error) bool {
 	// If the connection is reset, we should retry.
 	var errno syscall.Errno
-	if errors.As(err, &errno) {
-		return errors.Is(errno, syscall.ECONNRESET)
+	if goerrors.As(err, &errno) {
+		return goerrors.Is(errno, syscall.ECONNRESET)
 	}
 
 	return statusCode == http.StatusInternalServerError ||

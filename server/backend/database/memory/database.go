@@ -464,7 +464,7 @@ func (d *DB) UpdateProjectInfo(
 			return nil, fmt.Errorf("find project by owner and name: %w", err)
 		}
 		if existing != nil && info.Name != *fields.Name {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 	}
 

@@ -17,7 +17,6 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
@@ -29,13 +28,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // ErrEncodeOperationFailed is returned when encoding operations failed.
-var ErrEncodeOperationFailed = errors.New("encode operations failed")
+var ErrEncodeOperationFailed = errors.Internal("encode operations failed")
 
 // ErrDecodeOperationFailed is returned when decoding operations failed.
-var ErrDecodeOperationFailed = errors.New("decode operations failed")
+var ErrDecodeOperationFailed = errors.Internal("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {

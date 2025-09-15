@@ -20,15 +20,15 @@ package types
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrInvalidID is returned when the given ID is not ObjectID.
-	ErrInvalidID = errors.New("invalid ID")
+	ErrInvalidID = errors.InvalidArgument("invalid ID").WithCode("ErrInvalidID")
 )
 
 // ID represents ID of entity.

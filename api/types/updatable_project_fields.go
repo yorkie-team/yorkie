@@ -18,16 +18,16 @@
 package types
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // ErrEmptyProjectFields is returned when all the fields are empty.
-var ErrEmptyProjectFields = errors.New("updatable project fields are empty")
+var ErrEmptyProjectFields = errors.InvalidArgument("updatable project fields are empty").WithCode("ErrEmptyProjectFields")
 
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {

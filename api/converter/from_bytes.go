@@ -17,7 +17,6 @@
 package converter
 
 import (
-	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
@@ -26,7 +25,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
+
+// ErrUnmarshallFailed is returned when unmarshalling fails.
+var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
 
 // BytesToSnapshot creates a Snapshot from the given byte array.
 func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) {
@@ -51,7 +54,7 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbElem := &api.JSONElement{}
@@ -70,7 +73,7 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 // BytesToArray creates a Array from the given byte array.
 func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbArray := &api.JSONElement{}
@@ -89,7 +92,7 @@ func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 // BytesToTree creates a Tree from the given byte array.
 func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbTree := &api.JSONElement{}

@@ -606,7 +606,7 @@ func (c *Client) UpdateProjectInfo(
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 		return nil, fmt.Errorf("decode project: %w", err)
 	}

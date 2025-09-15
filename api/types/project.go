@@ -18,19 +18,19 @@
 package types
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
 var (
 	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
-	ErrTooManyAttachments = errors.New("attachment limit exceeded")
+	ErrTooManyAttachments = errors.ResourceExhausted("attachment limit exceeded")
 
 	// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
-	ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
+	ErrInvalidTimeDurationString = errors.InvalidArgument("invalid time duration string format")
 )
 
 // Project is a project that consists of multiple documents and clients.
