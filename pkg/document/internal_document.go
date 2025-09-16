@@ -29,6 +29,71 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
+// ClientMapping manages the bidirectional mapping between client keys and client IDs.
+type ClientMapping struct {
+	// clientIDMappings maps client ID to client key
+	clientIDMappings *gosync.Map
+	// clientKeyMappings maps client key to client ID
+	clientKeyMappings *gosync.Map
+}
+
+func NewClientMapping() *ClientMapping {
+	return &ClientMapping{
+		clientIDMappings:  &gosync.Map{},
+		clientKeyMappings: &gosync.Map{},
+	}
+}
+
+func (cm *ClientMapping) SetClientMappings(clientKeyToID map[string]string) {
+	for k, v := range clientKeyToID {
+		cm.clientKeyMappings.Store(k, v)
+		cm.clientIDMappings.Store(v, k)
+	}
+}
+
+func (cm *ClientMapping) AddClientMapping(clientKey string, clientID string) {
+	cm.clientKeyMappings.Store(clientKey, clientID)
+	cm.clientIDMappings.Store(clientID, clientKey)
+}
+
+func (cm *ClientMapping) RemoveClientMapping(clientID string) {
+	clientKey, _ := cm.clientIDMappings.Load(clientID)
+	cm.clientKeyMappings.Delete(clientKey)
+	cm.clientIDMappings.Delete(clientID)
+}
+
+func (cm *ClientMapping) GetClientID(clientKey string) (string, bool) {
+	clientID, ok := cm.clientKeyMappings.Load(clientKey)
+	if !ok {
+		return "", false
+	}
+	return clientID.(string), true
+}
+
+func (cm *ClientMapping) GetClientKey(clientID string) (string, bool) {
+	clientKey, ok := cm.clientIDMappings.Load(clientID)
+	if !ok {
+		return "", false
+	}
+	return clientKey.(string), true
+}
+
+func (cm *ClientMapping) DeepCopy() *ClientMapping {
+	newCM := NewClientMapping()
+
+	cm.clientKeyMappings.Range(func(key, value interface{}) bool {
+		newCM.clientKeyMappings.Store(key, value)
+		return true
+	})
+
+	cm.clientIDMappings.Range(func(key, value interface{}) bool {
+		newCM.clientIDMappings.Store(key, value)
+		return true
+	})
+
+	return newCM
+}
+
 // StatusType represents the status of the document.
 type StatusType int
 
@@ -83,6 +148,9 @@ type InternalDocument struct {
 	// online.
 	onlineClients *gosync.Map
 
+	// clientMappings manages the bidirectional mapping between client keys and client IDs.
+	clientMappings *ClientMapping
+
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
 	localChanges []*change.Change
@@ -94,13 +162,14 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(root),
-		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID(),
-		presences:     innerpresence.NewMap(),
-		onlineClients: &gosync.Map{},
+		key:            k,
+		status:         StatusDetached,
+		root:           crdt.NewRoot(root),
+		checkpoint:     change.InitialCheckpoint,
+		changeID:       change.InitialID(),
+		presences:      innerpresence.NewMap(),
+		onlineClients:  &gosync.Map{},
+		clientMappings: NewClientMapping(),
 	}
 }
 
@@ -121,13 +190,14 @@ func NewInternalDocumentFromSnapshot(
 	changeID.SetClocks(lamport, vector)
 
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(obj),
-		presences:     presences,
-		onlineClients: &gosync.Map{},
-		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      changeID,
+		key:            k,
+		status:         StatusDetached,
+		root:           crdt.NewRoot(obj),
+		presences:      presences,
+		onlineClients:  &gosync.Map{},
+		clientMappings: NewClientMapping(),
+		checkpoint:     change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:       changeID,
 	}, nil
 }
 
@@ -360,6 +430,17 @@ func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
 	return d.presences.Load(clientID).DeepCopy()
 }
 
+// PresenceByKey returns the presence of a client based on its key.
+// It returns nil if the client is not online or if the key is not found.
+func (d *InternalDocument) PresenceByKey(clientKey string) innerpresence.Presence {
+	clientID, ok := d.clientMappings.GetClientID(clientKey)
+	if !ok {
+		return nil
+	}
+
+	return d.Presence(clientID)
+}
+
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
 func (d *InternalDocument) PresenceForTest(clientID string) innerpresence.Presence {
@@ -398,14 +479,26 @@ func (d *InternalDocument) SetOnlineClients(ids ...string) {
 	}
 }
 
+func (d *InternalDocument) SetClientMappings(clientKeyToID map[string]string) {
+	d.clientMappings.SetClientMappings(clientKeyToID)
+}
+
 // AddOnlineClient adds the given client to the online clients.
 func (d *InternalDocument) AddOnlineClient(clientID string) {
 	d.onlineClients.Store(clientID, true)
 }
 
+func (d *InternalDocument) AddClientMapping(clientKey string, clientID string) {
+	d.clientMappings.AddClientMapping(clientKey, clientID)
+}
+
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
+}
+
+func (d *InternalDocument) RemoveClientMapping(clientID string) {
+	d.clientMappings.RemoveClientMapping(clientID)
 }
 
 // ToDocument converts this document to Document.
@@ -432,9 +525,10 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		// COnsider removing this in the future.
 		changeID: d.changeID.DeepCopy(),
 
-		root:          root,
-		presences:     d.presences.DeepCopy(),
-		onlineClients: &gosync.Map{},
-		localChanges:  d.localChanges,
+		root:           root,
+		presences:      d.presences.DeepCopy(),
+		onlineClients:  &gosync.Map{},
+		clientMappings: d.clientMappings.DeepCopy(),
+		localChanges:   d.localChanges,
 	}, nil
 }

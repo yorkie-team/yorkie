@@ -588,4 +588,48 @@ func TestDocument(t *testing.T) {
 		packB = docB.CreateChangePack()
 		assert.False(t, packA.Changes[2].AfterOrEqual(packB.Changes[1]))
 	})
+
+	t.Run("presence by key test", func(t *testing.T) {
+		doc := document.New("d1")
+		actorID, err := time.ActorIDFromHex("000000000000000000000001")
+		assert.NoError(t, err)
+		doc.SetActor(actorID)
+
+		clientKey1 := "clientKey1"
+		clientID1 := actorID.String()
+
+		clientKey2 := "clientKey2"
+		actorID2, err := time.ActorIDFromHex("000000000000000000000002")
+		assert.NoError(t, err)
+		clientID2 := actorID2.String()
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("name", "user1")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		doc.AddOnlineClient(clientID1)
+		doc.AddClientMapping(clientKey1, clientID1)
+
+		doc.SetActor(actorID2)
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("name", "user2")
+			return nil
+		})
+		assert.NoError(t, err)
+		doc.AddClientMapping(clientKey2, clientID2)
+
+		p1 := doc.PresenceByKey(clientKey1)
+		assert.NotNil(t, p1)
+		name, ok := p1["name"]
+		assert.True(t, ok)
+		assert.Equal(t, "user1", name)
+
+		p2 := doc.PresenceByKey(clientKey2)
+		assert.Nil(t, p2)
+
+		p3 := doc.PresenceByKey("non-existent-key")
+		assert.Nil(t, p3)
+	})
 }

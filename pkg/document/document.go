@@ -419,6 +419,10 @@ func (d *Document) Presence(clientID string) innerpresence.Presence {
 	return d.doc.Presence(clientID)
 }
 
+func (d *Document) PresenceByKey(clientKey string) innerpresence.Presence {
+	return d.doc.PresenceByKey(clientKey)
+}
+
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
 func (d *Document) PresenceForTest(clientID string) innerpresence.Presence {
@@ -442,14 +446,26 @@ func (d *Document) SetOnlineClients(clientIDs ...string) {
 	d.doc.SetOnlineClients(clientIDs...)
 }
 
+func (d *Document) SetClientMappings(clientKeys map[string]string) {
+	d.doc.SetClientMappings(clientKeys)
+}
+
 // AddOnlineClient adds the given client to the online clients.
 func (d *Document) AddOnlineClient(clientID string) {
 	d.doc.AddOnlineClient(clientID)
 }
 
+func (d *Document) AddClientMapping(clientKey string, clientID string) {
+	d.doc.AddClientMapping(clientKey, clientID)
+}
+
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
+}
+
+func (d *Document) RemoveClientMapping(clientID string) {
+	d.doc.RemoveClientMapping(clientID)
 }
 
 // Events returns the events of this document.
