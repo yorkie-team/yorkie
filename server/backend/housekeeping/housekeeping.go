@@ -126,6 +126,12 @@ func (h *Housekeeping) Stop() error {
 	return nil
 }
 
+// SetLeadershipDB sets the leadership's DB to given DB for testing purposes.
 func (h *Housekeeping) SetLeadershipDB(db database.Database) {
 	h.leadership.SetDB(db)
+}
+
+// LeadershipManager returns the current leadership manager for testing purposes.
+func (h *Housekeeping) LeadershipManager() *LeadershipManager {
+	return h.leadership
 }

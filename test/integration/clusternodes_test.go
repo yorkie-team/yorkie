@@ -73,19 +73,19 @@ func TestClusterNodes(t *testing.T) {
 		return l.Addr().(*net.TCPAddr).Port
 	}
 
-	newTestConfig := func(name string) *server.Config {
+	newTestConfig := func(addr string) *server.Config {
 		conf := helper.TestConfig()
 		conf.RPC.Port = getFreePort()
 		conf.Profiling.Port = getFreePort()
-		conf.Backend.RPCAddr = name
+		conf.Backend.RPCAddr = addr
 		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
 		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
 
 		return conf
 	}
 
-	startServer := func(name string) (*server.Yorkie, string) {
-		conf := newTestConfig(name)
+	startServer := func(addr string) (*server.Yorkie, string) {
+		conf := newTestConfig(addr)
 
 		svr, err := server.New(conf)
 		require.NoError(t, err)
@@ -261,12 +261,16 @@ func TestClusterNodes(t *testing.T) {
 			}
 		}()
 
-		refSvr := svrs[0]
-
 		assert.Eventually(t, func() bool {
-			infos, err := refSvr.FindActiveClusterNodes(ctx, renewalInterval)
-			require.NoError(t, err)
-			return len(infos) == numGoroutines && infos[0].IsLeader
+			freq := 0
+
+			for _, svr := range svrs {
+				if svr.IsLeader() {
+					freq++
+				}
+			}
+
+			return 1 == freq
 		}, 20*renewalInterval, renewalInterval)
 	})
 

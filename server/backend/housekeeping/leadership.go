@@ -171,7 +171,7 @@ func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
 		return nil
 	}
 
-	if lease.IsLeader {
+	if lease.IsLeader && lm.rpcAddr == lease.RPCAddr {
 		lm.becomeLeader(lease)
 		if logger := logging.From(ctx); logger != nil {
 			logger.Infof("leadership acquired, expires_at: %s", lease.ExpiresAt)

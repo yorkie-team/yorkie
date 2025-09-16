@@ -124,6 +124,11 @@ func (r *Yorkie) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo,
 	return r.backend.DB.FindLeadership(ctx)
 }
 
+// IsLeader returns whether this server is leader for testing purposes.
+func (r *Yorkie) IsLeader() bool {
+	return r.backend.Housekeeping.LeadershipManager().IsLeader()
+}
+
 // Backend returns the backend for testing purposes.
 func (r *Yorkie) Backend() *backend.Backend {
 	return r.backend
