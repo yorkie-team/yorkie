@@ -105,7 +105,7 @@ func RunLeadershipTest(
 			info, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
 			require.NoError(t, err)
 			return info != nil && nodeIDTwo == info.RPCAddr
-		}, 10*gotime.Second, 1*gotime.Second)
+		}, 1*gotime.Second, 100*gotime.Millisecond)
 	})
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {

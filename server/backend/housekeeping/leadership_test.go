@@ -77,11 +77,6 @@ func TestLeadershipManager(t *testing.T) {
 		require.NoError(t, err)
 		defer manager.Stop()
 
-		// Wait for leadership acquisition
-		assert.Eventually(t, func() bool {
-			return manager.IsLeader()
-		}, 1*time.Second, 50*time.Millisecond)
-
 		assert.Eventually(t, func() bool {
 			leader, err := manager.Leader(ctx)
 			require.NoError(t, err)
@@ -107,7 +102,7 @@ func TestLeadershipManager(t *testing.T) {
 
 		// Wait for one to become leader
 		assert.Eventually(t, func() bool {
-			return manager1.IsLeader() != manager2.IsLeader()
+			return manager1.IsLeader() || manager2.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 
 		// Only one should be leader

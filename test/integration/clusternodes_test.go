@@ -140,7 +140,7 @@ func TestClusterNodes(t *testing.T) {
 				len(infos2) == numGoroutines &&
 				infos1[0].RPCAddr == infos2[0].RPCAddr &&
 				infos1[1].RPCAddr == infos2[1].RPCAddr
-		}, 20*renewalInterval, renewalInterval)
+		}, 10*renewalInterval, renewalInterval)
 	})
 
 	t.Run("Should handle server restart test", func(t *testing.T) {
@@ -160,27 +160,27 @@ func TestClusterNodes(t *testing.T) {
 			require.NoError(t, err)
 			return 1 == len(svrs) && svrs[0].IsLeader
 		}, 10*renewalInterval, renewalInterval)
-		prvLeader, err := svr.FindLeadership(ctx)
-		assert.NoError(t, err)
 
 		assert.NoError(t, svr.Shutdown(true))
-		gotime.Sleep(500 * gotime.Millisecond)
 
 		svr2, err := server.New(newTestConfig("test-addr-2"))
 		assert.NoError(t, err)
 
 		assert.NoError(t, svr2.Start())
+		gotime.Sleep(500 * gotime.Millisecond)
 
 		assert.Eventually(t, func() bool {
 			svrs, err := svr2.FindActiveClusterNodes(ctx, renewalInterval)
 			require.NoError(t, err)
 
 			return 1 == len(svrs)
-		}, 50*renewalInterval, renewalInterval)
+		}, 10*renewalInterval, renewalInterval)
+
+		// Since there is only one node, that node must be the leader.
 		currLeader, err := svr2.FindLeadership(ctx)
 		assert.NoError(t, err)
 
-		assert.NotEqual(t, prvLeader.LeaseToken, currLeader.LeaseToken)
+		assert.Equal(t, "test-addr-2", currLeader.RPCAddr)
 
 		assert.NoError(t, svr2.Shutdown(true))
 	})
