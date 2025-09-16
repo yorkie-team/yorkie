@@ -22,6 +22,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,14 @@ func TestServer(t *testing.T) {
 		wrch, _, err := cli.Subscribe(doc)
 		assert.NoError(t, err)
 
+		wg.Add(1)
+		var once sync.Once
+		timeout := time.AfterFunc(3*time.Second, func() {
+			t.Error("Test timed out waiting for stream cancellation")
+			once.Do(func() { wg.Done() })
+		})
+		defer timeout.Stop()
+
 		go func() {
 			for {
 				select {
@@ -60,16 +69,15 @@ func TestServer(t *testing.T) {
 					// simplify the interface, we will define ClientError later.
 					if connect.CodeOf(wr.Err) == connect.CodeCanceled {
 						assert.Len(t, wr.Presences, 0)
-						wg.Done()
+						timeout.Stop()
+						once.Do(func() { wg.Done() })
 						return
 					}
 				}
 			}
 		}()
 
-		wg.Add(1)
 		assert.NoError(t, svr.Shutdown(true))
-
 		wg.Wait()
 	})
 }

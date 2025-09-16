@@ -18,7 +18,6 @@ package pubsub
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	gotime "time"
 
@@ -28,15 +27,16 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
 	// ErrTooManySubscribers is returned when the the subscription limit is exceeded.
-	ErrTooManySubscribers = errors.New("subscription limit exceeded")
+	ErrTooManySubscribers = errors.ResourceExhausted("subscription limit exceeded").WithCode("ErrTooManySubscribers")
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
-	ErrAlreadyConnected = errors.New("already connected to the document")
+	ErrAlreadyConnected = errors.AlreadyExists("already connected to the document").WithCode("ErrAlreadyConnected")
 )
 
 const (

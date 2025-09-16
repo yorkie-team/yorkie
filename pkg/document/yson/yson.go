@@ -22,7 +22,6 @@ package yson
 import (
 	"encoding/base64"
 	gojson "encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -30,17 +29,18 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 var (
 	// ErrUnsupported is returned when the given request is not
 	// supported.
-	ErrUnsupported = errors.New("unsupported element")
+	ErrUnsupported = errors.InvalidArgument("unsupported element")
 
 	// ErrInvalidYSON is returned when the given YSON is not
 	// valid.
-	ErrInvalidYSON = errors.New("invalid YSON")
+	ErrInvalidYSON = errors.InvalidArgument("invalid YSON")
 )
 
 const (

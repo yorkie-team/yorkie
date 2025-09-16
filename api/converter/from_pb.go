@@ -31,15 +31,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
 	// ErrUnsupportedDateRange is returned when the given date range is unsupported.
-	ErrUnsupportedDateRange = fmt.Errorf("unsupported date range")
+	ErrUnsupportedDateRange = errors.InvalidArgument("unsupported date range")
 
 	// ErrInvalidSchemaKey is returned when the given schema key is invalid.
-	ErrInvalidSchemaKey = fmt.Errorf("invalid schema key")
+	ErrInvalidSchemaKey = errors.InvalidArgument("invalid schema key").WithCode("ErrInvalidSchemaKey")
 )
 
 // FromUser converts the given Protobuf formats to model format.

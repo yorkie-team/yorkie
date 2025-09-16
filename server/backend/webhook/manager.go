@@ -19,7 +19,6 @@ package webhook
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -36,11 +35,6 @@ const (
 	throttleWindow  = 1 * time.Second
 	debouncingTime  = 1 * time.Second
 	expireBatchSize = 100
-)
-
-var (
-	// ErrUnexpectedStatusCode is returned when the webhook returns an unexpected status code.
-	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 )
 
 // Manager manages sending webhook events with rate limiting.
@@ -107,7 +101,7 @@ func SendWebhook(
 		return fmt.Errorf("send webhook event: %w", err)
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("webhook returned status %d: %w", status, ErrUnexpectedStatusCode)
+		return fmt.Errorf("webhook returned status %d: %w", status, webhook.ErrUnexpectedStatusCode)
 	}
 	return nil
 }

@@ -17,7 +17,6 @@
 package document
 
 import (
-	"errors"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -26,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
@@ -48,7 +48,7 @@ const (
 
 var (
 	// ErrDocumentRemoved occurs when the document is removed.
-	ErrDocumentRemoved = errors.New("document is removed")
+	ErrDocumentRemoved = errors.FailedPrecond("document is removed")
 )
 
 // InternalDocument is a document that is used internally. It is not directly

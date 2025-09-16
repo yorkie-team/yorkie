@@ -18,13 +18,14 @@
 package profiling
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrInvalidProfilingPort occurs when the port in the config is invalid.
-	ErrInvalidProfilingPort = errors.New("invalid port number for profiling server")
+	ErrInvalidProfilingPort = errors.InvalidArgument("invalid port number for profiling server")
 )
 
 // Config is the configuration for creating a Server instance.

@@ -18,13 +18,8 @@
 package sync
 
 import (
-	"errors"
-
 	"github.com/yorkie-team/yorkie/pkg/locker"
 )
-
-// ErrAlreadyLocked is returned when the lock is already locked.
-var ErrAlreadyLocked = errors.New("already locked")
 
 // Key represents key of Locker.
 type Key string

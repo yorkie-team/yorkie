@@ -19,10 +19,10 @@ package clients
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -30,10 +30,10 @@ import (
 
 var (
 	// ErrInvalidClientKey is returned when the given Key is not valid ClientKey.
-	ErrInvalidClientKey = errors.New("invalid client key")
+	ErrInvalidClientKey = errors.InvalidArgument("invalid client key").WithCode("ErrInvalidClientKey")
 
 	// ErrInvalidClientID is returned when the given Key is not valid ClientID.
-	ErrInvalidClientID = errors.New("invalid client id")
+	ErrInvalidClientID = errors.InvalidArgument("invalid client id").WithCode("ErrInvalidClientID")
 )
 
 // Activate activates the given client.

@@ -18,11 +18,11 @@ package types
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // VerbType represents an action taken on the document.
@@ -39,10 +39,10 @@ const (
 
 var (
 	// ErrInvalidWebhookRequest is returned when the given webhook request is not valid.
-	ErrInvalidWebhookRequest = errors.New("invalid authorization webhook request")
+	ErrInvalidWebhookRequest = errors.InvalidArgument("invalid authorization webhook request")
 
 	// ErrInvalidWebhookResponse is returned when the given webhook response is not valid.
-	ErrInvalidWebhookResponse = errors.New("invalid authorization webhook response")
+	ErrInvalidWebhookResponse = errors.InvalidArgument("invalid authorization webhook response")
 )
 
 // Method represents a method name of RPC.

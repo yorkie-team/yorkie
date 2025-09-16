@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // ServerActorID is the ID of the server actor.
@@ -30,7 +31,7 @@ var ServerActorID = types.ID("000000000000000000000000")
 
 var (
 	// ErrMismatchedPassword is returned when the password is mismatched.
-	ErrMismatchedPassword = fmt.Errorf("mismatched password")
+	ErrMismatchedPassword = errors.Unauthenticated("mismatched password").WithCode("ErrMismatchedPassword")
 )
 
 // UserInfo is a structure representing information of a user.

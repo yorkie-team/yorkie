@@ -17,7 +17,6 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 	gotime "time"
 
@@ -25,16 +24,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // Below are the errors may occur depending on the document and client status.
 var (
-	ErrClientNotActivated      = errors.New("client not activated")
-	ErrDocumentNotAttached     = errors.New("document not attached")
-	ErrDocumentNeverAttached   = errors.New("client has never attached the document")
-	ErrDocumentAlreadyAttached = errors.New("document already attached")
-	ErrDocumentAlreadyDetached = errors.New("document already detached")
-	ErrAttachedDocumentExists  = errors.New("attached document exits when deactivated")
+	ErrClientNotActivated      = errors.FailedPrecond("client not activated").WithCode("ErrClientNotActivated")
+	ErrDocumentNotAttached     = errors.FailedPrecond("document not attached").WithCode("ErrDocumentNotAttached")
+	ErrDocumentNeverAttached   = errors.FailedPrecond("document never attached").WithCode("ErrDocumentNeverAttached")
+	ErrDocumentAlreadyAttached = errors.FailedPrecond("document already attached").WithCode("ErrDocumentAlreadyAttached")
+	ErrDocumentAlreadyDetached = errors.FailedPrecond("document already detached").WithCode("ErrDocumentAlreadyDetached")
+	ErrAttachedDocumentExists  = errors.FailedPrecond("attached document exists").WithCode("ErrAttachedDocumentExists")
 )
 
 // Below are statuses of the client.

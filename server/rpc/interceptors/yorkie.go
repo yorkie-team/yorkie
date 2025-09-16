@@ -19,7 +19,6 @@ package interceptors
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,12 +27,16 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
+
+// ErrAPIKeyNotProvided is returned when the API key is not provided.
+var ErrAPIKeyNotProvided = errors.InvalidArgument("api key is not provided")
 
 func isYorkieService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
@@ -82,7 +85,7 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 		)
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
-			code := connecthelper.ToRPCCodeString(err)
+			code := connecthelper.CodeOf(err)
 			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
 			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
@@ -140,7 +143,7 @@ func (i *YorkieServiceInterceptor) WrapStreamingHandler(
 				"server_stream",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				connecthelper.CodeOf(err),
 			)
 		}
 
@@ -156,7 +159,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 
 	apiKey := header.Get(types.APIKeyKey)
 	if apiKey == "" && !i.backend.Config.UseDefaultProject {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("api key is not provided"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrAPIKeyNotProvided)
 	}
 	if apiKey != "" {
 		md.APIKey = apiKey
@@ -172,7 +175,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	if _, ok := i.backend.Cache.Project.Get(cacheKey); !ok {
 		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
-			return nil, connecthelper.ToStatusError(err)
+			return nil, connecthelper.ToConnectError(err)
 		}
 		i.backend.Cache.Project.Add(cacheKey, prj)
 	}

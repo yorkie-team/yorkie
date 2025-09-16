@@ -26,6 +26,8 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // Logger is a wrapper of zap.Logger.
@@ -112,10 +114,11 @@ func Enabled(level zapcore.Level) bool {
 func LogError(ctx context.Context, err error) {
 	logger := From(ctx)
 
-	// TODO(hackerwins): We need to mapping the given error to log level.
-	// For example, if the error is a validation error, we can log it as a warning.
-	// If the error is an internal server error, we can log it as an error.
-	// For now, we just log all errors as error level.
+	if errors.IsClientError(err) {
+		logger.Warn(err)
+		return
+	}
+
 	logger.Error(err)
 }
 

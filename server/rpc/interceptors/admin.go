@@ -18,7 +18,6 @@ package interceptors
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -37,10 +37,13 @@ import (
 
 var (
 	// ErrUnauthenticated is returned when authentication is failed.
-	ErrUnauthenticated = errors.New("authorization is not provided")
+	ErrUnauthenticated = errors.Unauthenticated("authorization is not provided")
 
 	// ErrInvalidAuthHeaderFormat is returned when the authorization header format is invalid.
-	ErrInvalidAuthHeaderFormat = errors.New("invalid authorization header format")
+	ErrInvalidAuthHeaderFormat = errors.InvalidArgument("invalid authorization header format")
+
+	// ErrSecretKeyNotProvided is returned when the secret key is not provided.
+	ErrSecretKeyNotProvided = errors.Unauthenticated("secret key is not provided")
 )
 
 func isAdminService(method string) bool {
@@ -99,7 +102,7 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 		)
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
-			code := connecthelper.ToRPCCodeString(err)
+			code := connecthelper.CodeOf(err)
 			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
 			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
@@ -155,7 +158,7 @@ func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHan
 				"server_stream",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				connecthelper.CodeOf(err),
 			)
 		}
 
@@ -223,7 +226,7 @@ func (i *AdminServiceInterceptor) authenticate(
 	case strings.EqualFold(scheme, types.AuthSchemeAPIKey):
 		// If the scheme is API-Key, verify the secret key and retrieve the project.
 		if strings.TrimSpace(param) == "" && !i.backend.Config.UseDefaultProject {
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("secret key is not provided"))
+			return nil, connect.NewError(connect.CodeUnauthenticated, ErrSecretKeyNotProvided)
 		}
 		project, err := projects.ProjectFromSecretKey(ctx, i.backend, strings.TrimSpace(param))
 		if err == nil {
