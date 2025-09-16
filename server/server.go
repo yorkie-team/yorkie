@@ -105,30 +105,6 @@ func New(conf *Config) (*Yorkie, error) {
 	}, nil
 }
 
-// FindActiveClusterNodes returns nodes considered active within the given time window.
-// It is used for testing.
-func (r *Yorkie) FindActiveClusterNodes(
-	ctx context.Context,
-	renewalInterval time.Duration,
-) ([]*database.ClusterNodeInfo, error) {
-	return r.backend.DB.FindActiveClusterNodes(ctx, renewalInterval)
-}
-
-// ClearClusterNodes removes the current clusternode information for testing purposes.
-func (r *Yorkie) ClearClusterNodes(ctx context.Context) error {
-	return r.backend.DB.ClearClusterNodes(ctx)
-}
-
-// FindLeadership returns the current leadership information for testing purposes.
-func (r *Yorkie) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
-	return r.backend.DB.FindLeadership(ctx)
-}
-
-// IsLeader returns whether this server is leader for testing purposes.
-func (r *Yorkie) IsLeader() bool {
-	return r.backend.Housekeeping.LeadershipManager().IsLeader()
-}
-
 // Backend returns the backend for testing purposes.
 func (r *Yorkie) Backend() *backend.Backend {
 	return r.backend

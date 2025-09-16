@@ -181,7 +181,9 @@ func (c *Client) TryLeadership(
 		if err != nil {
 			return nil, err
 		}
-		// NOTE(raararaara): In some cases, a leaderless state may exist.
+		// NOTE(raararaara): If we didn't become leader, just update our follower heartbeat.
+		// ret == nil          : no SOT-valid leader yet
+		// ret.RPCAddr != self : another node is the current leader.
 		if ret == nil || ret.RPCAddr != rpcAddr {
 			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
 				return nil, err

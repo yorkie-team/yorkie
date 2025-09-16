@@ -167,6 +167,8 @@ func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
 	}
 
 	// NOTE(raararaara): In some cases, a leaderless state may exist.
+	// lease == nil -> no SOT-valid leader right now, and we didn't acquire it.
+	// Stay follower and retry on the next tick.
 	if lease == nil {
 		return nil
 	}

@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -94,9 +95,6 @@ func New(
 			return nil, fmt.Errorf("os.Hostname: %w", err)
 		}
 		conf.Hostname = hostname
-	}
-	if v, ok := os.LookupEnv("RPC_ADDR"); ok {
-		conf.RPCAddr = v
 	}
 
 	// 02. Create the cache manager, pubsub, and lockers.
@@ -229,4 +227,28 @@ func (b *Backend) Shutdown() error {
 
 	logging.DefaultLogger().Infof("backend stopped")
 	return nil
+}
+
+// FindActiveClusterNodes returns nodes considered active within the given time window.
+// It is used for testing.
+func (b *Backend) FindActiveClusterNodes(
+	ctx context.Context,
+	renewalInterval time.Duration,
+) ([]*database.ClusterNodeInfo, error) {
+	return b.DB.FindActiveClusterNodes(ctx, renewalInterval)
+}
+
+// ClearClusterNodes removes the current clusternode information for testing purposes.
+func (b *Backend) ClearClusterNodes(ctx context.Context) error {
+	return b.DB.ClearClusterNodes(ctx)
+}
+
+// FindLeadership returns the current leadership information for testing purposes.
+func (b *Backend) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
+	return b.DB.FindLeadership(ctx)
+}
+
+// IsLeader returns whether this server is leader for testing purposes.
+func (b *Backend) IsLeader() bool {
+	return b.Housekeeping.LeadershipManager().IsLeader()
 }

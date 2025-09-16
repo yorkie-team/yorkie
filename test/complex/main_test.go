@@ -85,7 +85,7 @@ func TestMain(m *testing.M) {
 		ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
 		AdminTokenDuration:   helper.AdminTokenDuration,
 		GatewayAddr:          fmt.Sprintf("localhost:%d", helper.RPCPort),
-		RPCAddr:              fmt.Sprintf("localhost:%d", helper.RPCPort),
+		RPCAddr:              "localhost",
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    shardedDBNameForServer,
