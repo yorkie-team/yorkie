@@ -420,10 +420,18 @@ message DocEventBody {
   bytes payload = 2;
 }
 
+message WatchedEventPayload {
+  string client_key = 1;
+}
+
 message DocEvent {
   DocEventType type = 1;
   string publisher = 2;
   DocEventBody body = 3;
+
+  oneof payload {
+    WatchedEventPayload watched = 4;
+  }
 }
 
 message DataSize {

@@ -83,11 +83,13 @@ message DetachDocumentResponse {
 message WatchDocumentRequest {
   string client_id = 1;
   string document_id = 2;
+  string client_key = 3;
 }
 
 message WatchDocumentResponse {
   message Initialization {
     repeated string client_ids = 1;
+    map<string, string> client_mappings = 2;
   }
 
   oneof body {
