@@ -491,6 +491,7 @@ func (c *Client) Watch(ctx context.Context, doc *document.Document) (
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
 			ClientId:   c.id.String(),
+			ClientKey:  c.key,
 			DocumentId: attachment.docID.String(),
 		}), c.options.APIKey, doc.Key().String()),
 	)
@@ -617,6 +618,9 @@ func handleResponse(
 			clientIDs = append(clientIDs, id.String())
 		}
 
+		clientMappings := resp.Initialization.ClientMappings
+
+		doc.SetClientMappings(clientMappings)
 		doc.SetOnlineClients(clientIDs...)
 		return nil, nil
 	case *api.WatchDocumentResponse_Event:
@@ -634,6 +638,17 @@ func handleResponse(
 		case events.DocChanged:
 			return &WatchResponse{Type: DocumentChanged}, nil
 		case events.DocWatched:
+			switch p := resp.Event.Payload.(type) {
+			case *api.DocEvent_Watched:
+				if p.Watched != nil {
+					clientKey := p.Watched.GetClientKey()
+					doc.AddClientMapping(cli.String(), clientKey)
+				}
+			default:
+				// The payload is nil or of an unkown type.
+				// In this case, we proceed without adding client mapping.
+			}
+
 			doc.AddOnlineClient(cli.String())
 
 			// NOTE(hackerwins): If the presence does not exist, it means that
@@ -652,6 +667,7 @@ func handleResponse(
 		case events.DocUnwatched:
 			p := doc.Presence(cli.String())
 			doc.RemoveOnlineClient(cli.String())
+			doc.RemoveClientMapping(cli.String())
 
 			// NOTE(hackerwins): If the presence does not exist, it means that
 			// PushPull is already received before unwatching. In that case, the

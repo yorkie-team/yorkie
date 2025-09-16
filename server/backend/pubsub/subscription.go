@@ -28,20 +28,22 @@ import (
 
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
-	id         string
-	subscriber time.ActorID
-	mu         sync.Mutex
-	closed     bool
-	events     chan events.DocEvent
+	id            string
+	subscriber    time.ActorID
+	subscriberKey string
+	mu            sync.Mutex
+	closed        bool
+	events        chan events.DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber time.ActorID) *Subscription {
+func NewSubscription(subscriber time.ActorID, subscriberKey string) *Subscription {
 	return &Subscription{
-		id:         xid.New().String(),
-		subscriber: subscriber,
-		events:     make(chan events.DocEvent, 1),
-		closed:     false,
+		id:            xid.New().String(),
+		subscriber:    subscriber,
+		subscriberKey: subscriberKey,
+		events:        make(chan events.DocEvent, 1),
+		closed:        false,
 	}
 }
 
@@ -58,6 +60,10 @@ func (s *Subscription) Events() chan events.DocEvent {
 // Subscriber returns the subscriber of this subscription.
 func (s *Subscription) Subscriber() time.ActorID {
 	return s.subscriber
+}
+
+func (s *Subscription) SubscriberKey() string {
+	return s.subscriberKey
 }
 
 // Close closes all resources of this Subscription.

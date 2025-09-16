@@ -482,6 +482,11 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
+	clientKey := req.Msg.ClientKey
+	if clientKey == "" {
+		return clients.ErrInvalidClientKey
+	}
+
 	project := projects.From(ctx)
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
@@ -510,7 +515,8 @@ func (s *yorkieServer) WatchDocument(
 
 	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
 	defer locker.Unlock()
-	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
+	subscription, clientIDs, clientMappings, err := s.watchDoc(ctx, clientID, clientKey, docKey, project.MaxSubscribersPerDocument)
+
 	if err != nil {
 		return err
 	}
@@ -531,7 +537,8 @@ func (s *yorkieServer) WatchDocument(
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
 			Initialization: &api.WatchDocumentResponse_Initialization{
-				ClientIds: pbClientIDs,
+				ClientIds:      pbClientIDs,
+				ClientMappings: clientMappings,
 			},
 		},
 	}); err != nil {
@@ -550,6 +557,9 @@ func (s *yorkieServer) WatchDocument(
 				return err
 			}
 
+			watchedPayload := &api.WatchedEventPayload{
+				ClientKey: clientKey,
+			}
 			response := &api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
@@ -558,6 +568,9 @@ func (s *yorkieServer) WatchDocument(
 						Body: &api.DocEventBody{
 							Topic:   event.Body.Topic,
 							Payload: event.Body.Payload,
+						},
+						Payload: &api.DocEvent_Watched{
+							Watched: watchedPayload,
 						},
 					},
 				},
@@ -578,12 +591,13 @@ func (s *yorkieServer) WatchDocument(
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID time.ActorID,
+	clientKey string,
 	docKey types.DocRefKey,
 	limit int,
-) (*pubsub.Subscription, []time.ActorID, error) {
-	sub, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
+) (*pubsub.Subscription, []time.ActorID, map[string]string, error) {
+	sub, clientIDs, clientMappings, err := s.backend.PubSub.Subscribe(ctx, clientID, clientKey, docKey, limit)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
@@ -598,7 +612,7 @@ func (s *yorkieServer) watchDoc(
 		0,
 	)
 
-	return sub, clientIDs, nil
+	return sub, clientIDs, clientMappings, nil
 }
 
 func (s *yorkieServer) unwatchDoc(

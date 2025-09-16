@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	gotime "time"
 
 	"go.uber.org/zap"
@@ -37,6 +38,9 @@ var (
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
 	ErrAlreadyConnected = errors.New("already connected to the document")
+
+	// ErrAlreadyExistskey is returned when the subscriberKey (clientKey) is already exists in subscription.
+	ErrAlreadyExistsKey = errors.New("already attached subscriber key")
 )
 
 const (
@@ -61,8 +65,14 @@ func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
 }
 
 // Set adds the given subscription.
-func (s *Subscriptions) Set(sub *Subscription) {
+func (s *Subscriptions) Set(sub *Subscription) error {
+	subscriberKeys := s.internalMap.Keys()
+	if exists := slices.Contains(subscriberKeys, sub.subscriberKey); exists {
+		return ErrAlreadyExistsKey
+	}
 	s.internalMap.Set(sub.ID(), sub)
+
+	return nil
 }
 
 // Values returns the values of these subscriptions.
@@ -111,9 +121,10 @@ func New() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber time.ActorID,
+	subscriberKey string,
 	docKey types.DocRefKey,
 	limit int,
-) (*Subscription, []time.ActorID, error) {
+) (*Subscription, []time.ActorID, map[string]string, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
@@ -127,6 +138,8 @@ func (m *PubSub) Subscribe(
 	// and the new subscription is not set. If newSub is nil,
 	// it means the limit was exceeded and the subscription was not created.
 	var newSub *Subscription
+	var subErr error
+
 	_ = m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
 		if !exists {
 			subs = newSubscriptions(docKey)
@@ -136,13 +149,24 @@ func (m *PubSub) Subscribe(
 			return subs
 		}
 
-		newSub = NewSubscription(subscriber)
-		subs.Set(newSub)
+		newSub = NewSubscription(subscriber, subscriberKey)
+		if err := subs.Set(newSub); err != nil {
+			subErr = err
+			return subs
+		}
 		return subs
 	})
 
+	if subErr != nil {
+		return nil, nil, nil, fmt.Errorf(
+			"client key %s already exists in document: %w",
+			subscriberKey,
+			ErrAlreadyExistsKey,
+		)
+	}
+
 	if newSub == nil {
-		return nil, nil, fmt.Errorf(
+		return nil, nil, nil, fmt.Errorf(
 			"%d subscribers allowed per document: %w",
 			limit,
 			ErrTooManySubscribers,
@@ -158,7 +182,8 @@ func (m *PubSub) Subscribe(
 	}
 
 	ids := m.ClientIDs(docKey)
-	return newSub, ids, nil
+	mappings := m.ClientMappings(docKey)
+	return newSub, ids, mappings, nil
 }
 
 // Unsubscribe unsubscribes the given docKeys.
@@ -242,4 +267,19 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
 		ids = append(ids, sub.Subscriber())
 	}
 	return ids
+}
+
+func (m *PubSub) ClientMappings(docKey types.DocRefKey) map[string]string {
+	subs, ok := m.subscriptionsMap.Get(docKey)
+	if !ok {
+		return nil
+	}
+
+	mappings := make(map[string]string)
+
+	for _, sub := range subs.Values() {
+		mappings[sub.SubscriberKey()] = sub.Subscriber().String()
+	}
+
+	return mappings
 }
