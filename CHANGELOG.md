@@ -7,12 +7,34 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.31] - 2025-09-17
+
+### Added
+
+- Move webhook configuration to project level by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1498
+- Reduce unnecessary DB updates when vectors are already in sync by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1509
+- Reduce unnecessary DB updates when CPs are already in sync by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1510
+
+### Changed
+
+- Simplify RPC logging and its dependency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1499
+- Enhance project listing command with verbose output option by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1501
+- Unify error handling with structured status and metadata by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1504
+
 ## [v0.6.30] - 2025-09-11
+
+### Added
+
+- Add project-level RemoveOnDetach setting by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1496
+
+### Changed
 
 - Refactor housekeeping logic for simpler candidate fetching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1492
 - Enhance QueryMonitor with detailed collections and filter by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1494
+
+### Fixed
+
 - Count only successfully compacted documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1495
-- Add project-level RemoveOnDetach setting by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1496
 
 ## [v0.6.29] - 2025-09-05
 
