@@ -144,7 +144,6 @@ func TestClusterNodes(t *testing.T) {
 	})
 
 	t.Run("Should handle server restart test", func(t *testing.T) {
-		t.Skip("Skip test for debugging")
 		ctx := context.Background()
 		renewalInterval := 100 * gotime.Millisecond
 
@@ -182,7 +181,6 @@ func TestClusterNodes(t *testing.T) {
 	})
 
 	t.Run("Should revoke and reacquire leadership after temporary DB disconnection test", func(t *testing.T) {
-		t.Skip("Skip test for debugging")
 		ctx := context.Background()
 
 		clearClusterNodes(ctx)
@@ -265,18 +263,11 @@ func TestClusterNodes(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			freq := 0
 
-			result := make([]bool, numGoroutines)
-			for i, svr := range svrs {
-				result[i] = svr.Backend().IsLeader()
-				if result[i] {
+			for _, svr := range svrs {
+				if svr.Backend().IsLeader() {
 					freq++
 				}
-				//if svr.Backend().IsLeader() {
-				//	freq++
-				//}
 			}
-			//fmt.Print("member result: ", result)
-			//fmt.Print("\n")
 
 			return 1 == freq
 		}, 10*renewalInterval, renewalInterval)
