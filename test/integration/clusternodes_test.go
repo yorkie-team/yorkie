@@ -91,7 +91,7 @@ func TestClusterNodes(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, svr.Start())
 
-		return svr, conf.Backend.Hostname
+		return svr, conf.Backend.RPCAddr
 	}
 
 	clearClusterNodes := func(ctx context.Context) {
@@ -184,6 +184,7 @@ func TestClusterNodes(t *testing.T) {
 
 		assert.NoError(t, svr2.Shutdown(true))
 	})
+
 	t.Run("Should revoke and reacquire leadership after temporary DB disconnection test", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -196,13 +197,16 @@ func TestClusterNodes(t *testing.T) {
 		be.Housekeeping.SetLeadershipDB(mockDB)
 
 		assert.NoError(t, svr.Start())
+		defer func() {
+			assert.NoError(t, svr.Shutdown(true))
+		}()
 
 		assert.Eventually(t, func() bool {
 			leader, err := svr.Backend().FindLeadership(ctx)
 			require.NoError(t, err)
 
 			return leader != nil
-		}, 1000*gotime.Second, 100*gotime.Millisecond)
+		}, gotime.Second, 100*gotime.Millisecond)
 
 		leader, err := svr.Backend().FindLeadership(ctx)
 		prvToken := leader.LeaseToken
@@ -216,7 +220,7 @@ func TestClusterNodes(t *testing.T) {
 			require.NoError(t, err)
 
 			return leader == nil
-		}, 1000*gotime.Second, 100*gotime.Millisecond)
+		}, gotime.Second, 100*gotime.Millisecond)
 
 		mockDB.SetDisconnected(false)
 
@@ -225,7 +229,7 @@ func TestClusterNodes(t *testing.T) {
 			require.NoError(t, err)
 
 			return leader != nil
-		}, 1000*gotime.Second, 100*gotime.Millisecond)
+		}, gotime.Second, 100*gotime.Millisecond)
 		currToken := leader.LeaseToken
 
 		assert.NotEqual(t, prvToken, currToken)
@@ -280,7 +284,7 @@ func TestClusterNodes(t *testing.T) {
 
 		clearClusterNodes(ctx)
 
-		svr1, hostname1 := startServer("test-addr-1")
+		svr1, addr := startServer("test-addr-1")
 		svr2, _ := startServer("test-addr-2")
 
 		assert.Eventually(t, func() bool {
@@ -294,7 +298,7 @@ func TestClusterNodes(t *testing.T) {
 		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
 
-		if leader == hostname1 {
+		if leader == addr {
 			leaderSvr, followerSvr = svr1, svr2
 		} else {
 			leaderSvr, followerSvr = svr2, svr1
