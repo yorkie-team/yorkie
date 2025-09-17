@@ -1785,8 +1785,16 @@ func (c *Client) UpdateMinVersionVector(
 	// 01. Update synced version vector of the given client and document.
 	// NOTE(hackerwins): Considering removing the detached client's lamport
 	// from the other clients' version vectors. For now, we just ignore it.
-	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
-		return nil, err
+	needsUpdate := true
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
+		if existing, ok := vvMap.Get(clientInfo.ID); ok && vector.Equal(existing) {
+			needsUpdate = false
+		}
+	}
+	if needsUpdate {
+		if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+			return nil, err
+		}
 	}
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
@@ -1981,8 +1989,14 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is document %s attached: %w", docRefKey, err)
 	}
 
 	return true, nil
@@ -2232,8 +2246,15 @@ func (c *Client) IsSchemaAttached(
 	}
 
 	result := c.collection(ColDocuments).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is schema %s attached: %w", schema, err)
 	}
+
 	return true, nil
 }
