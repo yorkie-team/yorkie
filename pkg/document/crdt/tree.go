@@ -64,8 +64,8 @@ func NewTreePos(parentID *TreeNodeID, leftSiblingID *TreeNodeID) *TreePos {
 	}
 }
 
-// Equals compares the given two CRDTTreePos.
-func (t *TreePos) Equals(other *TreePos) bool {
+// Equal returns whether the given pos equals or not.
+func (t *TreePos) Equal(other *TreePos) bool {
 	return t.ParentID.CreatedAt.Compare(other.ParentID.CreatedAt) == 0 &&
 		t.ParentID.Offset == other.ParentID.Offset &&
 		t.LeftSiblingID.CreatedAt.Compare(other.LeftSiblingID.CreatedAt) == 0 &&
@@ -126,8 +126,8 @@ func (t *TreeNodeID) Compare(other llrb.Key) int {
 	return 0
 }
 
-// Equals returns whether given ID is equal to this ID or not.
-func (t *TreeNodeID) Equals(id *TreeNodeID) bool {
+// Equal returns whether given ID is equal to this ID or not.
+func (t *TreeNodeID) Equal(id *TreeNodeID) bool {
 	return t.CreatedAt.Compare(id.CreatedAt) == 0 && t.Offset == id.Offset
 }
 
@@ -1345,7 +1345,7 @@ func (t *Tree) ToTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
 	// NOTE(hackerwins): If the left node and the parent node are the same,
 	// it means that the position is the left-most of the parent node.
 	// We need to skip finding the left of the position.
-	if !pos.LeftSiblingID.Equals(parentNode.id) &&
+	if !pos.LeftSiblingID.Equal(parentNode.id) &&
 		pos.LeftSiblingID.Offset > 0 &&
 		pos.LeftSiblingID.Offset == leftNode.id.Offset &&
 		leftNode.InsPrevID != nil {
