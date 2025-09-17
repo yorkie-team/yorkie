@@ -966,8 +966,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	docInfo *database.DocInfo,
 ) error {
 	clientKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-
-	c.clientCache.Remove(clientKey)
 	clientDocInfo, ok := info.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf(
@@ -975,6 +973,18 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
+
+	if existing, ok := c.clientCache.Get(clientKey); ok {
+		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
+			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
+				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
+				existingDocInfo.Status == clientDocInfo.Status {
+				return nil
+			}
+		}
+	}
+
+	c.clientCache.Remove(clientKey)
 
 	attached, err := info.IsAttached(docInfo.ID)
 	if err != nil {
