@@ -258,8 +258,30 @@ func (d *DB) FindActiveClusterNodes(
 	return infos, nil
 }
 
+func (d *DB) RemoveClusterNode(_ context.Context, rpcAddr string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblClusterNodes, "rpc_addr", rpcAddr)
+	if err != nil {
+		return fmt.Errorf("remove cluster node %s: %w", rpcAddr, err)
+	}
+	if raw == nil {
+		return fmt.Errorf("remove cluster node %s: %w", rpcAddr, database.ErrDocumentNotFound)
+	}
+
+	record := raw.(*clusterNodeRecord)
+
+	if err = txn.Delete(tblClusterNodes, record); err != nil {
+		return fmt.Errorf("remove cluster node %s: %w", rpcAddr, database.ErrDocumentNotFound)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // ClearClusterNodes removes the current leadership information for testing purposes.
-func (d *DB) ClearClusterNodes(ctx context.Context) error {
+func (d *DB) ClearClusterNodes(_ context.Context) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 

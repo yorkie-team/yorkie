@@ -379,6 +379,15 @@ func (c *Client) FindActiveClusterNodes(
 	return nodes, nil
 }
 
+// RemoveClusterNode removes the cluster node identified by rpcAddr.
+func (c *Client) RemoveClusterNode(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).DeleteOne(ctx, bson.M{"rpc_addr": rpcAddr})
+	if err != nil {
+		return fmt.Errorf("remove cluster node: %w", err)
+	}
+	return nil
+}
+
 // ClearClusterNodes removes the current leadership information for testing purposes.
 func (c *Client) ClearClusterNodes(ctx context.Context) error {
 	_, err := c.collection(ColClusterNodes).DeleteMany(ctx, bson.M{})

@@ -18,6 +18,7 @@ package housekeeping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -110,17 +111,25 @@ func (h *Housekeeping) Start(ctx context.Context) error {
 
 // Stop stops the housekeeping service.
 func (h *Housekeeping) Stop() error {
+	var errs []error
+
 	// Stop the leadership manager first
 	if h.leadership != nil {
-		h.leadership.Stop()
+		if err := h.leadership.Stop(); err != nil {
+			errs = append(errs, fmt.Errorf("leadership stop: %w", err))
+		}
 	}
 
 	if err := h.scheduler.StopJobs(); err != nil {
-		return fmt.Errorf("scheduler stop jobs: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler stop jobs: %w", err))
 	}
 
 	if err := h.scheduler.Shutdown(); err != nil {
-		return fmt.Errorf("scheduler shutdown: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler shutdown: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil

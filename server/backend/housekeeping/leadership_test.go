@@ -52,7 +52,9 @@ func TestLeadershipManager(t *testing.T) {
 
 		err := manager.Start(ctx)
 		require.NoError(t, err)
-		defer manager.Stop()
+		defer func() {
+			assert.NoError(t, manager.Stop())
+		}()
 
 		// Wait for leadership acquisition
 		assert.Eventually(t, func() bool {
@@ -75,7 +77,9 @@ func TestLeadershipManager(t *testing.T) {
 
 		err := manager.Start(ctx)
 		require.NoError(t, err)
-		defer manager.Stop()
+		defer func() {
+			assert.NoError(t, manager.Stop())
+		}()
 
 		assert.Eventually(t, func() bool {
 			leader, err := manager.Leader(ctx)
@@ -94,11 +98,15 @@ func TestLeadershipManager(t *testing.T) {
 
 		err := manager1.Start(ctx)
 		require.NoError(t, err)
-		defer manager1.Stop()
+		defer func() {
+			assert.NoError(t, manager1.Stop())
+		}()
 
 		err = manager2.Start(ctx)
 		require.NoError(t, err)
-		defer manager2.Stop()
+		defer func() {
+			assert.NoError(t, manager2.Stop())
+		}()
 
 		// Wait for one to become leader
 		assert.Eventually(t, func() bool {
@@ -133,13 +141,21 @@ func TestLeadershipManager(t *testing.T) {
 		}, 1*time.Second, 50*time.Millisecond)
 
 		// Stop manager1 (simulating node failure)
-		manager1.Stop()
+		assert.NoError(t, manager1.Stop())
+		assert.Eventually(t, func() bool {
+			leader, err := manager1.Leader(ctx)
+			require.NoError(t, err)
+
+			return leader == nil
+		}, 1*time.Second, 50*time.Millisecond)
 
 		// Start manager2
 		manager2 := NewLeadershipManager(db, "node-2", conf)
 		err = manager2.Start(ctx)
 		require.NoError(t, err)
-		defer manager2.Stop()
+		defer func() {
+			assert.NoError(t, manager2.Stop())
+		}()
 
 		// Manager2 should eventually become leader
 		assert.Eventually(t, func() bool {

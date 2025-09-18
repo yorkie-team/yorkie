@@ -33,6 +33,7 @@ type LeadershipManager struct {
 	rpcAddr         string
 	leaseDuration   time.Duration
 	renewalInterval time.Duration
+	shutdownTimeout time.Duration
 
 	// State management
 	isLeader     atomic.Bool
@@ -46,6 +47,7 @@ type LeadershipManager struct {
 type LeadershipConfig struct {
 	LeaseDuration   time.Duration
 	RenewalInterval time.Duration
+	ShutdownTimeout time.Duration
 }
 
 // DefaultLeadershipConfig returns the default leadership configuration.
@@ -53,6 +55,7 @@ func DefaultLeadershipConfig() *LeadershipConfig {
 	return &LeadershipConfig{
 		LeaseDuration:   15 * time.Second,
 		RenewalInterval: 5 * time.Second,
+		ShutdownTimeout: 3 * time.Second,
 	}
 }
 
@@ -71,6 +74,7 @@ func NewLeadershipManager(db database.Database, rpcAddr string, conf *Leadership
 		rpcAddr:         rpcAddr,
 		leaseDuration:   conf.LeaseDuration,
 		renewalInterval: conf.RenewalInterval,
+		shutdownTimeout: conf.ShutdownTimeout,
 		stopCh:          make(chan struct{}),
 	}
 }
@@ -91,12 +95,18 @@ func (lm *LeadershipManager) Start(ctx context.Context) error {
 }
 
 // Stop stops the leadership manager.
-func (lm *LeadershipManager) Stop() {
+func (lm *LeadershipManager) Stop() error {
 	lm.mutex.Lock()
 	defer lm.mutex.Unlock()
 
 	close(lm.stopCh)
 	lm.wg.Wait()
+
+	if err := lm.database.RemoveClusterNode(context.Background(), lm.rpcAddr); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // IsLeader returns true if the current node is the leader.

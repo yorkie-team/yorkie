@@ -75,7 +75,7 @@ const (
 
 	DefaultHostname       = ""
 	DefaultGatewayAddr    = "localhost:8080"
-	DefaultBackendRPCAddr = "localhost"
+	DefaultBackendRPCAddr = "localhost:8080"
 )
 
 // Config is the configuration for creating a Yorkie instance.
