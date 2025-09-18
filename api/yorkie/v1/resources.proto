@@ -58,10 +58,11 @@ message Change {
 
 message ChangeID {
   uint32 client_seq = 1;
-  int64 server_seq = 2; 
-  int64 lamport = 3;
-  bytes actor_id = 4;
-  VersionVector version_vector = 5;
+  int64 op_seq = 2;
+  int64 pr_seq = 3;
+  int64 lamport = 4;
+  bytes actor_id = 5;
+  VersionVector version_vector = 6;
 }
 
 message VersionVector {
@@ -357,8 +358,9 @@ message Presence {
 }
 
 message Checkpoint {
-  int64 server_seq = 1; 
-  uint32 client_seq = 2;
+  int64 op_seq = 1;
+  int64 pr_seq = 2;
+  uint32 client_seq = 3;
 }
 
 message TextNodePos {

@@ -103,7 +103,8 @@ func CreateDocument(
 		return nil, err
 	}
 
-	if docInfo.Owner != userID || docInfo.GetServerSeq().Max() != 0 { // TODO: Should not use Max()
+	serverSeq := docInfo.GetServerSeq()
+	if docInfo.Owner != userID || serverSeq.OpSeq != 0 || serverSeq.PrSeq != 0 {
 		return nil, fmt.Errorf("create document: %w", ErrDocumentAlreadyExists)
 	}
 

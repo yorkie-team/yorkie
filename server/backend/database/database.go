@@ -291,14 +291,14 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		actorID types.ID,
 		serverSeq change.ServerSeq,
-	) (*OperationChangeInfo, error)
+	) (*ChangeInfo, error)
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
-		from int64,
-		to int64,
+		from change.ServerSeq,
+		to change.ServerSeq,
 	) ([]*change.Change, error)
 
 	// FindChangeInfosBetweenServerSeqs returns the operation and presence changeInfos between two server sequences.
@@ -307,20 +307,7 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		from change.ServerSeq,
 		to change.ServerSeq,
-	) ([]*OperationChangeInfo, []*PresenceChangeInfo, error)
-
-	// StorePresenceChangeInfo stores a presence change info in the presence storage.
-	StorePresenceChangeInfo(presenceInfo *PresenceChangeInfo) error
-
-	// StorePresenceChangeInfos stores multiple presence change infos in the presence storage.
-	StorePresenceChangeInfos(presenceInfos []*PresenceChangeInfo) error
-
-	// FindPresenceChangeInfosBetweenPrSeqs returns the presence change infos between two presence sequences.
-	FindPresenceChangeInfosBetweenPrSeqs(
-		docRefKey types.DocRefKey,
-		from int64,
-		to int64,
-	) ([]*PresenceChangeInfo, error)
+	) ([]*ChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(
@@ -333,7 +320,7 @@ type Database interface {
 	FindSnapshotInfo(
 		ctx context.Context,
 		refKey types.DocRefKey,
-		serverSeq int64,
+		serverSeq change.ServerSeq,
 	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.

@@ -34,8 +34,11 @@ type SnapshotInfo struct {
 	// DocID is the ID of the document which the snapshot belongs to.
 	DocID types.ID `bson:"doc_id"`
 
-	// ServerSeq is the sequence number of the server which the snapshot belongs to.
-	ServerSeq int64 `bson:"server_seq"`
+	// OpSeq is the sequence number of the operation which the snapshot belongs to.
+	OpSeq int64 `bson:"op_seq"`
+
+	// PrSeq is the sequence number of the presence which the snapshot belongs to.
+	PrSeq int64 `bson:"pr_seq"`
 
 	// Lamport is the Lamport timestamp of the snapshot.
 	Lamport int64 `bson:"lamport"`
@@ -60,7 +63,8 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 		ID:            i.ID,
 		ProjectID:     i.ProjectID,
 		DocID:         i.DocID,
-		ServerSeq:     i.ServerSeq,
+		OpSeq:     i.OpSeq,
+		PrSeq:     i.PrSeq,
 		Lamport:       i.Lamport,
 		VersionVector: i.VersionVector,
 		Snapshot:      i.Snapshot,

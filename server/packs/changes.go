@@ -18,11 +18,8 @@ package packs
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -32,8 +29,8 @@ func FindChanges(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	from int64,
-	to int64,
+	from change.ServerSeq,
+	to change.ServerSeq,
 ) ([]*change.Change, error) {
 	docRefKey := docInfo.RefKey()
 	return be.DB.FindChangesBetweenServerSeqs(

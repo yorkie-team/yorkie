@@ -510,7 +510,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		updatedClientInfo, _ := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 
 		// Record the serverSeq value at the time the PushPull request came in.
-		initialServerSeq := docInfo.GetServerSeq().Max() // TODO: Should not use Max()
+		initialServerSeq := docInfo.GetServerSeq().OpSeq + docInfo.GetServerSeq().PrSeq // Total change count at start
 
 		// The serverSeq of the checkpoint that the server has should always be the same as
 		// the serverSeq of the user's checkpoint that came in as a request, if no other user interfered.
@@ -519,7 +519,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		changeInfos, _, err := db.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			docInfo.RefKey(),
-			change.NewServerSeq(reqPackCheckpointServerSeq.Max()+1, reqPackCheckpointServerSeq.Max()+1), // TODO: Should not use Max()
+			change.NewServerSeq(reqPackCheckpointServerSeq.OpSeq+1, reqPackCheckpointServerSeq.PrSeq+1), // Query from next sequences
 			change.NewServerSeq(initialServerSeq, initialServerSeq),
 		)
 
@@ -567,7 +567,8 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 
 		// 02. Create a snapshot that reflect the latest doc info
 		updatedDocInfo, _ := db.FindDocInfoByRefKey(ctx, refKey)
-		assert.Equal(t, int64(6), updatedDocInfo.GetServerSeq().Max()) // TODO: Should not use Max()
+		updatedServerSeq := updatedDocInfo.GetServerSeq()
+		assert.Equal(t, int64(6), updatedServerSeq.OpSeq + updatedServerSeq.PrSeq) // Check total change count
 
 		pack = change.NewPack(
 			updatedDocInfo.Key,

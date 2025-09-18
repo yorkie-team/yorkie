@@ -52,6 +52,11 @@ func (ss ServerSeq) GreaterThan(other ServerSeq) bool {
 	return (ss.OpSeq >= other.OpSeq && ss.PrSeq >= other.PrSeq) && !ss.EqualWith(other)
 }
 
+// LessThan returns true if this ServerSeq is less than other.
+func (ss ServerSeq) LessThan(other ServerSeq) bool {
+	return (ss.OpSeq <= other.OpSeq && ss.PrSeq <= other.PrSeq) && !ss.EqualWith(other)
+}
+
 // EqualWith returns true if both ServerSeq have the same OpSeq and PrSeq.
 func (ss ServerSeq) EqualWith(other ServerSeq) bool {
 	return ss.OpSeq == other.OpSeq && ss.PrSeq == other.PrSeq

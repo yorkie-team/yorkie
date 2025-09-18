@@ -377,7 +377,7 @@ func (s *adminServer) GetSnapshotMeta(
 		s.backend,
 		project,
 		key.Key(req.Msg.DocumentKey),
-		change.NewServerSeq(req.Msg.ServerSeq, req.Msg.ServerSeq), // TODO: API should use ServerSeq struct
+		change.NewServerSeq(req.Msg.OpSeq, req.Msg.PrSeq),
 	)
 	if err != nil {
 		return nil, err
@@ -613,7 +613,8 @@ func (s *adminServer) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-	lastSeq := docInfo.GetServerSeq().Max() // TODO: Should not use Max()
+	serverSeq := docInfo.GetServerSeq()
+	lastSeq := serverSeq.OpSeq + serverSeq.PrSeq
 
 	from, to := types.GetChangesRange(types.Paging[int64]{
 		Offset:    req.Msg.PreviousSeq,

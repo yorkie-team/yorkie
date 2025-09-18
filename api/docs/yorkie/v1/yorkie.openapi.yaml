@@ -458,13 +458,20 @@ components:
           - type: string
           - type: number
           title: lamport
-        serverSeq:
+        opSeq:
           additionalProperties: false
           description: ""
           oneOf:
           - type: string
           - type: number
-          title: server_seq
+          title: op_seq
+        prSeq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: pr_seq
         versionVector:
           $ref: '#/components/schemas/yorkie.v1.VersionVector'
           additionalProperties: false
@@ -532,13 +539,20 @@ components:
           description: ""
           title: client_seq
           type: integer
-        serverSeq:
+        opSeq:
           additionalProperties: false
           description: ""
           oneOf:
           - type: string
           - type: number
-          title: server_seq
+          title: op_seq
+        prSeq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: pr_seq
       title: Checkpoint
       type: object
     yorkie.v1.DeactivateClientRequest:

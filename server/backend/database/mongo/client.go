@@ -1074,8 +1074,8 @@ func (c *Client) FindCompactionCandidatesPerProject(
 		}
 
 		// 2. Check if the document has enough changes to compact.
-		// TODO(kokodak): Consider another value instead of Max().
-		if info.GetServerSeq().Max() < int64(compactionMinChanges) { 
+		totalChanges := info.GetServerSeq().OpSeq + info.GetServerSeq().PrSeq
+		if totalChanges < int64(compactionMinChanges) { 
 			continue
 		}
 
@@ -1554,7 +1554,7 @@ func (c *Client) FindLatestChangeInfoByActor(
 	docRefKey types.DocRefKey,
 	actorID types.ID,
 	serverSeq change.ServerSeq,
-) (*database.OperationChangeInfo, error) {
+) (*database.ChangeInfo, error) {
 	option := options.FindOne().SetSort(bson.M{
 		"op_seq": -1,
 	})
@@ -1564,11 +1564,11 @@ func (c *Client) FindLatestChangeInfoByActor(
 		"doc_id":     docRefKey.DocID,
 		"actor_id":   actorID,
 		"op_seq": bson.M{
-			"$lte": serverSeq,
+			"$lte": serverSeq.OpSeq,
 		},
 	}, option)
 
-	changeInfo := &database.OperationChangeInfo{}
+	changeInfo := &database.ChangeInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
 		return changeInfo, nil
 	}
@@ -1587,8 +1587,8 @@ func (c *Client) FindLatestChangeInfoByActor(
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-	from int64,
-	to int64,
+	from change.ServerSeq,
+	to change.ServerSeq,
 ) ([]*change.Change, error) {
 	infos, err := c.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, from, to)
 	if err != nil {
@@ -1683,7 +1683,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		}
 	}
 
-	changeInfos, err := packs.CombineChangeInfos(opInfos, prInfos)
+	changeInfos, err := database.CombineChangeInfos(opInfos, prInfos)
 	if err != nil {
 		return nil, err
 	}

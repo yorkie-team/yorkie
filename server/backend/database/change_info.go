@@ -106,31 +106,30 @@
 
 // CombineChangeInfos combines operation and presence change infos into unified change infos.
 func CombineChangeInfos(
-	operationInfos []*OperationChangeInfo,
-	presenceInfos []*PresenceChangeInfo,
+	opInfos []*OperationChangeInfo,
+	prInfos []*PresenceChangeInfo,
 ) ([]*ChangeInfo, error) {
 	var changeInfos []*ChangeInfo
 	opIdx := 0
 	prIdx := 0
 
-	// Two-pointer algorithm to merge operation and presence change infos
-	for opIdx < len(operationInfos) || prIdx < len(presenceInfos) {
+	for opIdx < len(opInfos) || prIdx < len(prInfos) {
 		var opInfo *OperationChangeInfo
 		var prInfo *PresenceChangeInfo
 
 		// Determine which pointer to advance based on {opSeq, prSeq} comparison
-		if opIdx >= len(operationInfos) {
+		if opIdx >= len(opInfos) {
 			// Only presence infos remain
-			prInfo = presenceInfos[prIdx]
+			prInfo = prInfos[prIdx]
 			prIdx++
-		} else if prIdx >= len(presenceInfos) {
+		} else if prIdx >= len(prInfos) {
 			// Only operation infos remain
-			opInfo = operationInfos[opIdx]
+			opInfo = opInfos[opIdx]
 			opIdx++
 		} else {
 			// Compare {opSeq, prSeq} pairs to decide which pointer to advance
-			opCurrent := operationInfos[opIdx]
-			prCurrent := presenceInfos[prIdx]
+			opCurrent := opInfos[opIdx]
+			prCurrent := prInfos[prIdx]
 
 			// Compare directly without creating ServerSeq objects
 			if opCurrent.OpSeq == prCurrent.OpSeq && opCurrent.PrSeq == prCurrent.PrSeq {
@@ -232,6 +231,4 @@ func createCombinedChangeInfo(
  
 	 return clone
  }
- 
- 
  

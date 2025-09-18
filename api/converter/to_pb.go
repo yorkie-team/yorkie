@@ -184,7 +184,8 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 // ToCheckpoint converts the given model format to Protobuf format.
 func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
 	return &api.Checkpoint{
-		ServerSeq: cp.ServerSeq,
+		OpSeq:     cp.ServerSeq.OpSeq,
+		PrSeq:     cp.ServerSeq.PrSeq,
 		ClientSeq: cp.ClientSeq,
 	}
 }
@@ -197,7 +198,8 @@ func ToChangeID(id change.ID) (*api.ChangeID, error) {
 	}
 	return &api.ChangeID{
 		ClientSeq:     id.ClientSeq(),
-		ServerSeq:     id.ServerSeq(),
+		OpSeq:         id.ServerSeq().OpSeq,
+		PrSeq:         id.ServerSeq().PrSeq,
 		Lamport:       id.Lamport(),
 		ActorId:       id.ActorID().Bytes(),
 		VersionVector: pbVersionVector,

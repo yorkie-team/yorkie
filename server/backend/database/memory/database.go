@@ -1075,7 +1075,8 @@ func (d *DB) FindCompactionCandidatesPerProject(
 		}
 
 		// 2. Check if the document has enough changes to compact.
-		if info.GetServerSeq().Max() < int64(compactionMinChanges) { // TODO: Should not use Max()
+		totalChanges := info.GetServerSeq().OpSeq + info.GetServerSeq().PrSeq
+		if totalChanges < int64(compactionMinChanges) {
 			continue
 		}
 
@@ -1380,7 +1381,7 @@ func (d *DB) CreateChangeInfos(
 	if docInfo.ProjectID != refKey.ProjectID {
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
-	initialServerSeqMax := docInfo.GetServerSeq().Max() // TODO: Should not use Max()
+	initialServerSeq := docInfo.GetServerSeq()
 
 	// Process each change and separate operations from presences
 	for _, cn := range changes {
@@ -1448,7 +1449,7 @@ func (d *DB) CreateChangeInfos(
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
-	if loadedDocInfo.GetServerSeq().Max() != initialServerSeqMax { // TODO: Should not use Max()
+	if !loadedDocInfo.GetServerSeq().EqualWith(initialServerSeq) { 
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
@@ -1560,7 +1561,7 @@ func (d *DB) FindLatestChangeInfoByActor(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 	actorID types.ID,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 ) (*database.OperationChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1570,7 +1571,7 @@ func (d *DB) FindLatestChangeInfoByActor(
 		"doc_id_actor_id_server_seq",
 		docRefKey.DocID.String(),
 		actorID.String(),
-		serverSeq,
+		serverSeq.OpSeq, // Use OpSeq for operation-based actor search
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find the last change of %s: %w", actorID, err)
@@ -1590,10 +1591,10 @@ func (d *DB) FindLatestChangeInfoByActor(
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
-	from int64,
-	to int64,
+	from change.ServerSeq,
+	to change.ServerSeq,
 ) ([]*change.Change, error) {
-	infos, _, err := d.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, change.NewServerSeq(from, from), change.NewServerSeq(to, to))
+	infos, err := d.FindChangeInfosBetweenServerSeqs(ctx, docRefKey, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -1604,7 +1605,6 @@ func (d *DB) FindChangesBetweenServerSeqs(
 		if err != nil {
 			return nil, err
 		}
-
 		changes = append(changes, c)
 	}
 
@@ -1617,49 +1617,56 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	docRefKey types.DocRefKey,
 	from change.ServerSeq,
 	to change.ServerSeq,
-) ([]*database.OperationChangeInfo, []*database.PresenceChangeInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
+) ([]*database.ChangeInfo, error) {
+	hasOp := from.OpSeq <= to.OpSeq
+	hasPr := from.PrSeq <= to.PrSeq
 
-	// Extract range values from ServerSeq structs
-	fromOpSeq := from.OpSeq
-	toOpSeq := to.OpSeq
-	fromPrSeq := from.PrSeq
-	toPrSeq := to.PrSeq
+	var opInfos []*database.OperationChangeInfo
+	var prInfos []*database.PresenceChangeInfo
 
-	// Find operation changes
-	var operationInfos []*database.OperationChangeInfo
-	if fromOpSeq <= toOpSeq {
+	// If there are operation changes, fetch them
+	if hasOp {
+		txn := d.db.Txn(false)
+		defer txn.Abort()
+
 		iterator, err := txn.LowerBound(
 			tblChanges,
 			"doc_id_op_seq",
 			docRefKey.DocID.String(),
-			fromOpSeq,
+			from.OpSeq,
 		)
 		if err != nil {
-			return nil, nil, fmt.Errorf("find operation changes of %s: %w", docRefKey, err)
+			return nil, fmt.Errorf("find operation changes of %s: %w", docRefKey, err)
 		}
 
 		for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 			info := raw.(*database.OperationChangeInfo)
-			if info.DocID != docRefKey.DocID || info.OpSeq > toOpSeq {
+			if info.DocID != docRefKey.DocID || info.OpSeq > to.OpSeq {
 				break
 			}
-			operationInfos = append(operationInfos, info.DeepCopy())
+			opInfos = append(opInfos, info.DeepCopy())
 		}
 	}
 
-	// Find presence changes from presence storage
-	var presenceInfos []*database.PresenceChangeInfo
-	if fromPrSeq <= toPrSeq {
-		presenceInfos, _ = d.FindPresenceChangeInfosBetweenPrSeqs(
+	// If there are presence changes, fetch them
+	if hasPr {
+		var err error
+		prInfos, err = d.FindPresenceChangeInfosBetweenPrSeqs(
 			docRefKey,
-			fromPrSeq,
-			toPrSeq,
+			from.PrSeq,
+			to.PrSeq,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("fetch presence changes of %s: %w", docRefKey, err)
+		}
 	}
 
-	return operationInfos, presenceInfos, nil
+	changeInfos, err := database.CombineChangeInfos(opInfos, prInfos)
+	if err != nil {
+		return nil, err
+	}
+
+	return changeInfos, nil
 }
 
 // CreateSnapshotInfo stores the snapshot of the given document.
@@ -1680,7 +1687,7 @@ func (d *DB) CreateSnapshotInfo(
 		ID:            newID(),
 		ProjectID:     docRefKey.ProjectID,
 		DocID:         docRefKey.DocID,
-		ServerSeq:     doc.Checkpoint().ServerSeq.Max(), // TODO: Should not use Max(), SnapshotInfo should use ServerSeq struct
+		ServerSeq:     doc.Checkpoint().ServerSeq.OpSeq + doc.Checkpoint().ServerSeq.PrSeq, // Total change count at snapshot time
 		Lamport:       doc.Lamport(),
 		VersionVector: doc.VersionVector().DeepCopy(),
 		Snapshot:      snapshot,
@@ -1696,13 +1703,13 @@ func (d *DB) CreateSnapshotInfo(
 func (d *DB) FindSnapshotInfo(
 	_ context.Context,
 	docKey types.DocRefKey,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
 		docKey.DocID.String(),
-		serverSeq,
+		serverSeq.OpSeq + serverSeq.PrSeq, // Convert ServerSeq to total change count for comparison
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find snapshot by id: %w", err)
@@ -1724,14 +1731,15 @@ func (d *DB) FindClosestSnapshotInfo(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
+	totalChangeCount := serverSeq.OpSeq + serverSeq.PrSeq
 	iterator, err := txn.ReverseLowerBound(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docRefKey.DocID.String(),
-		serverSeq.Max(), // TODO: SnapshotInfo.ServerSeq should be ServerSeq struct
+		totalChangeCount, // Convert ServerSeq to total change count for comparison
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq.Max(), docRefKey, err)
+		return nil, fmt.Errorf("find snapshot before %d of %s: %w", totalChangeCount, docRefKey, err)
 	}
 
 	var snapshotInfo *database.SnapshotInfo
