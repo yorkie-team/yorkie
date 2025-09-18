@@ -211,9 +211,9 @@ func TestClusterNodes(t *testing.T) {
 		}, gotime.Second, 100*gotime.Millisecond)
 
 		leader, err := svr.Backend().FindLeadership(ctx)
-		prvToken := leader.LeaseToken
 		assert.NoError(t, err)
 		assert.True(t, leader.IsLeader)
+		prvToken := leader.LeaseToken
 
 		mockDB.SetDisconnected(true)
 
