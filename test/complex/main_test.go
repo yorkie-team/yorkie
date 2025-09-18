@@ -58,6 +58,7 @@ var (
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
+	testBackend              *backend.Backend
 )
 
 func TestMain(m *testing.M) {
@@ -73,37 +74,31 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
-		AdminUser:                   helper.AdminUser,
-		AdminPassword:               helper.AdminPassword,
-		UseDefaultProject:           helper.UseDefaultProject,
-		ClientDeactivateThreshold:   helper.ClientDeactivateThreshold,
-		SnapshotThreshold:           helper.SnapshotThreshold,
-		SnapshotCacheSize:           helper.SnapshotCacheSize,
-		AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
-		AuthWebhookMinWaitInterval:  helper.AuthWebhookMinWaitInterval.String(),
-		AuthWebhookRequestTimeout:   helper.AuthWebhookRequestTimeout.String(),
-		AuthWebhookCacheSize:        helper.AuthWebhookSize,
-		AuthWebhookCacheTTL:         helper.AuthWebhookCacheTTL.String(),
-		EventWebhookMaxWaitInterval: helper.EventWebhookMaxWaitInterval.String(),
-		EventWebhookMinWaitInterval: helper.EventWebhookMinWaitInterval.String(),
-		EventWebhookRequestTimeout:  helper.EventWebhookRequestTimeout.String(),
-		ProjectCacheSize:            helper.ProjectCacheSize,
-		ProjectCacheTTL:             helper.ProjectCacheTTL.String(),
-		AdminTokenDuration:          helper.AdminTokenDuration,
-		GatewayAddr:                 fmt.Sprintf("localhost:%d", helper.RPCPort),
+		AdminUser:            helper.AdminUser,
+		AdminPassword:        helper.AdminPassword,
+		UseDefaultProject:    helper.UseDefaultProject,
+		SnapshotThreshold:    helper.SnapshotThreshold,
+		SnapshotCacheSize:    helper.SnapshotCacheSize,
+		AuthWebhookCacheSize: helper.AuthWebhookSize,
+		AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
+		ProjectCacheSize:     helper.ProjectCacheSize,
+		ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
+		AdminTokenDuration:   helper.AdminTokenDuration,
+		GatewayAddr:          fmt.Sprintf("localhost:%d", helper.RPCPort),
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    shardedDBNameForServer,
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
-		Interval:                  helper.HousekeepingInterval.String(),
-		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-		ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
+		Interval:        helper.HousekeepingInterval.String(),
+		CandidatesLimit: helper.HousekeepingCandidatesLimit,
 	}, met, nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	testBackend = be
 
 	project, err := be.DB.FindProjectInfoByID(
 		context.Background(),

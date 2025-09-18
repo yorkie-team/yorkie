@@ -112,11 +112,23 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
+
+	if req.Msg.Synchronous {
+		if _, err := clients.Deactivate(ctx, s.backend, project, types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(actorID),
+		}); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&api.DeactivateClientResponse{}), nil
+	}
+
+	// Use DeactivateAsync to handle cases where browser window is closed
+	// and the context might be cancelled before deactivation completes
+	if err = clients.DeactivateAsync(s.backend, project, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -281,7 +293,7 @@ func (s *yorkieServer) DetachDocument(
 
 	// 02. Set the document status if it is not attached.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || req.Msg.RemoveIfNotAttached {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 	}
@@ -289,7 +301,7 @@ func (s *yorkieServer) DetachDocument(
 	// NOTE(hackerwins): If the project does not have an attachment limit,
 	// removing the document by removeIfNotAttached does not guarantee that
 	// the document is not attached to the client.
-	var status document.StatusType
+	var status document.StatusType = document.StatusDetached
 	if req.Msg.RemoveIfNotAttached {
 		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
 		if err != nil {
@@ -300,8 +312,6 @@ func (s *yorkieServer) DetachDocument(
 			pack.IsRemoved = true
 			status = document.StatusRemoved
 		}
-	} else {
-		status = document.StatusDetached
 	}
 
 	// 03. Push/Pull between the client and server.

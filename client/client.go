@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -46,6 +45,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 type status int
@@ -58,25 +58,25 @@ const (
 var (
 	// ErrClientNotActivated occurs when an inactive client executes a function
 	// that can only be executed when activated.
-	ErrClientNotActivated = errors.New("client is not activated")
+	ErrClientNotActivated = errors.FailedPrecond("client is not activated")
 
 	// ErrDocumentNotAttached occurs when the given document is not attached to
 	// this client.
-	ErrDocumentNotAttached = errors.New("document is not attached")
+	ErrDocumentNotAttached = errors.FailedPrecond("document is not attached")
 
 	// ErrDocumentNotDetached occurs when the given document is not detached from
 	// this client.
-	ErrDocumentNotDetached = errors.New("document is not detached")
+	ErrDocumentNotDetached = errors.FailedPrecond("document is not detached")
 
 	// ErrUnsupportedWatchResponseType occurs when the given WatchResponseType
 	// is not supported.
-	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
+	ErrUnsupportedWatchResponseType = errors.InvalidArgument("unsupported watch response type")
 
-	// ErrInitializationNotReceived occurs when the first response of the watch stream is not received.
-	ErrInitializationNotReceived = errors.New("initialization is not received")
+	// ErrInitNotReceived occurs when the first response of the watch stream is not received.
+	ErrInitNotReceived = errors.Internal("initialization is not received").WithCode("ErrInitNotReceived")
 
 	// ErrAlreadySubscribed occurs when the client is already subscribed to the document.
-	ErrAlreadySubscribed = errors.New("already subscribed")
+	ErrAlreadySubscribed = errors.AlreadyExists("already subscribed").WithCode("ErrAlreadySubscribed")
 )
 
 // Attachment represents the document attached.
@@ -253,15 +253,21 @@ func (c *Client) Activate(ctx context.Context) error {
 }
 
 // Deactivate deactivates this client.
-func (c *Client) Deactivate(ctx context.Context) error {
+func (c *Client) Deactivate(ctx context.Context, options ...DeactivateOption) error {
 	if c.status == deactivated {
 		return nil
+	}
+
+	opts := &DeactivateOptions{}
+	for _, opt := range options {
+		opt(opts)
 	}
 
 	_, err := c.client.DeactivateClient(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
-			ClientId: c.id.String(),
+			ClientId:    c.id.String(),
+			Synchronous: !opts.Asynchronous,
 		}), c.options.APIKey, c.key))
 	if err != nil {
 		return err
@@ -513,7 +519,7 @@ func (c *Client) runWatchLoop(
 	// the watch stream. runWatchLoop should be blocked until the first response is
 	// received.
 	if !stream.Receive() {
-		return ErrInitializationNotReceived
+		return ErrInitNotReceived
 	}
 	if _, err := handleResponse(stream.Msg(), doc); err != nil {
 		return err

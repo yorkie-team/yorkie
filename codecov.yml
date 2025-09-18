@@ -2,3 +2,7 @@ coverage:
   status:
     project: off
     patch: off
+ignore:
+  - "**/testcases/*"
+  - "**/helper/*"
+  - "**/v1/*"

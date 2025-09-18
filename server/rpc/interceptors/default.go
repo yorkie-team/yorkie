@@ -18,7 +18,6 @@ package interceptors
 
 import (
 	"context"
-	"errors"
 	gotime "time"
 
 	"connectrpc.com/connect"
@@ -45,8 +44,8 @@ func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 		resp, err := next(ctx, req)
 		reqLogger := logging.From(ctx)
 		if err != nil {
-			reqLogger.Warnf("RPC : %q %s => %q", req.Spec().Procedure, gotime.Since(start), err)
-			return nil, connecthelper.ToStatusError(err)
+			logRPCError(reqLogger, req.Spec().Procedure, gotime.Since(start), err)
+			return nil, connecthelper.ToConnectError(err)
 		}
 		return resp, nil
 	}
@@ -73,16 +72,11 @@ func (i *DefaultInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 		start := gotime.Now()
 		err := next(ctx, conn)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				reqLogger.Debugf("RPC : stream %q %s => %q", conn.Spec().Procedure, gotime.Since(start), err.Error())
-				return connecthelper.ToStatusError(err)
-			}
-
-			reqLogger.Warnf("RPC : stream %q %s => %q", conn.Spec().Procedure, gotime.Since(start), err.Error())
-			return connecthelper.ToStatusError(err)
+			logRPCStreamError(reqLogger, conn.Spec().Procedure, gotime.Since(start), err)
+			return connecthelper.ToConnectError(err)
 		}
 
-		reqLogger.Debugf("RPC : stream %q %s", conn.Spec().Procedure, gotime.Since(start))
+		logRPCStreamSuccess(reqLogger, conn.Spec().Procedure, gotime.Since(start))
 		return nil
 	}
 }

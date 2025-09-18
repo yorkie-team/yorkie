@@ -20,9 +20,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 const actorIDSize = 12
@@ -48,13 +49,13 @@ var (
 	}
 
 	// ErrInvalidHexString is returned when the given string is not valid hex.
-	ErrInvalidHexString = errors.New("invalid hex string")
+	ErrInvalidHexString = errors.InvalidArgument("invalid hex string").WithCode("ErrInvalidHexString")
 
 	// ErrInvalidBase64String is returned when the given string is not valid base64.
-	ErrInvalidBase64String = errors.New("invalid base64 string")
+	ErrInvalidBase64String = errors.InvalidArgument("invalid base64 string")
 
 	// ErrInvalidActorID is returned when the given ID is not valid.
-	ErrInvalidActorID = errors.New("invalid actor id")
+	ErrInvalidActorID = errors.InvalidArgument("invalid actor id").WithCode("ErrInvalidActorID")
 )
 
 // ActorID is a unique identifier for an actor in the system.

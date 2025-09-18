@@ -26,14 +26,13 @@ import (
 
 func TestCheckPoint(t *testing.T) {
 	t.Run("check point test", func(t *testing.T) {
-		initialServerSeq := change.NewServerSeq(change.InitialServerSeq, change.InitialServerSeq)
-		cp := change.NewCheckpoint(initialServerSeq, change.InitialClientSeq)
-		assert.True(t, cp.Equals(change.NewCheckpoint(change.NewServerSeq(0, 0), 0)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(change.NewServerSeq(1, 1), 1)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(change.NewServerSeq(1, 0), 0)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(change.NewServerSeq(0, 1), 1)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(change.NewServerSeq(1, 1), 1)))
-		assert.Equal(t, "opSeq=0, prSeq=0, clientSeq=0", cp.String())
+		cp := change.NewCheckpoint(change.InitialServerSeq, change.InitialClientSeq)
+		assert.True(t, cp.Equal(change.NewCheckpoint(0, 0)))
+		assert.False(t, cp.Equal(change.NewCheckpoint(1, 1)))
+		assert.False(t, cp.Equal(change.NewCheckpoint(1, 0)))
+		assert.False(t, cp.Equal(change.NewCheckpoint(0, 1)))
+		assert.False(t, cp.Equal(change.NewCheckpoint(1, 1)))
+		assert.Equal(t, "serverSeq=0, clientSeq=0", cp.String())
 
 		assert.Equal(t, cp, cp.NextServerSeq(change.NewServerSeq(0, 0)))
 		assert.Equal(t, change.NewCheckpoint(change.NewServerSeq(5, 5), 0), cp.NextServerSeq(change.NewServerSeq(5, 5)))

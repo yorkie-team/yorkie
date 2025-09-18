@@ -35,7 +35,7 @@ func CreateProject(
 	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.CreateProjectInfo(ctx, name, owner, be.Config.ClientDeactivateThreshold)
+	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +150,15 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 
 // ProjectFromSecretKey returns a project from a secret key.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
+	// NOTE(kokodak): If the secretKey is empty, fallback to the default project.
+	if secretKey == "" {
+		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return info.ToProject(), nil
+	}
+
 	info, err := be.DB.FindProjectInfoBySecretKey(ctx, secretKey)
 	if err != nil {
 		return nil, err

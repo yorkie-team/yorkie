@@ -57,20 +57,12 @@ func TestClient(t *testing.T) {
 		testcases.RunLeadershipTest(t, cli)
 	})
 
-	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
-		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
-	})
-
-	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
-		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
-	})
-
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
-		testcases.RunFindDocInfosByKeysTest(t, cli, dummyProjectID)
+	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysAndIDsTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
@@ -146,6 +138,14 @@ func TestClient(t *testing.T) {
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {
 		testcases.RunFindClientInfosByAttachedDocRefKeyTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("FindAttachedClientCountsByDocIDs test", func(t *testing.T) {
+		testcases.RunFindAttachedClientCountsByDocIDsTest(t, cli, dummyProjectID)
+	})
+
+	t.Run("RunFindCandidates test", func(t *testing.T) {
+		testcases.RunFindCandidatesTest(t, cli, dummyProjectID)
+	})
 }
 
 func TestClient_RotateProjectKeys(t *testing.T) {
@@ -158,7 +158,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		}()
 
 		// Create a test project
-		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID, "1h")
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-1", dummyProjectID)
 		assert.NoError(t, err)
 
 		originalPublicKey := projectInfo.PublicKey
@@ -212,7 +212,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		}()
 
 		// Create a test project
-		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID, "1h")
+		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID)
 		assert.NoError(t, err)
 
 		// When

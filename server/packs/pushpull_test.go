@@ -94,32 +94,24 @@ func TestMain(m *testing.M) {
 
 	testBackend, err = backend.New(
 		&backend.Config{
-			AdminUser:                   helper.AdminUser,
-			AdminPassword:               helper.AdminPassword,
-			UseDefaultProject:           helper.UseDefaultProject,
-			ClientDeactivateThreshold:   helper.ClientDeactivateThreshold,
-			SnapshotThreshold:           helper.SnapshotThreshold,
-			SnapshotCacheSize:           helper.SnapshotCacheSize,
-			AuthWebhookCacheSize:        helper.AuthWebhookSize,
-			AuthWebhookCacheTTL:         helper.AuthWebhookCacheTTL.String(),
-			AuthWebhookMaxWaitInterval:  helper.AuthWebhookMaxWaitInterval.String(),
-			AuthWebhookMinWaitInterval:  helper.AuthWebhookMinWaitInterval.String(),
-			AuthWebhookRequestTimeout:   helper.AuthWebhookRequestTimeout.String(),
-			EventWebhookMaxWaitInterval: helper.EventWebhookMaxWaitInterval.String(),
-			EventWebhookMinWaitInterval: helper.EventWebhookMinWaitInterval.String(),
-			EventWebhookRequestTimeout:  helper.EventWebhookRequestTimeout.String(),
-			ProjectCacheSize:            helper.ProjectCacheSize,
-			ProjectCacheTTL:             helper.ProjectCacheTTL.String(),
-			AdminTokenDuration:          helper.AdminTokenDuration,
+			AdminUser:            helper.AdminUser,
+			AdminPassword:        helper.AdminPassword,
+			UseDefaultProject:    helper.UseDefaultProject,
+			SnapshotThreshold:    helper.SnapshotThreshold,
+			SnapshotCacheSize:    helper.SnapshotCacheSize,
+			AuthWebhookCacheSize: helper.AuthWebhookSize,
+			AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
+			ProjectCacheSize:     helper.ProjectCacheSize,
+			ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
+			AdminTokenDuration:   helper.AdminTokenDuration,
 		}, &mongo.Config{
 			ConnectionURI:     helper.MongoConnectionURI,
 			YorkieDatabase:    helper.TestDBName(),
 			ConnectionTimeout: helper.MongoConnectionTimeout,
 			PingTimeout:       helper.MongoPingTimeout,
 		}, &housekeeping.Config{
-			Interval:                  helper.HousekeepingInterval.String(),
-			CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
+			Interval:        helper.HousekeepingInterval.String(),
+			CandidatesLimit: helper.HousekeepingCandidatesLimit,
 		}, met, nil, nil)
 	if err != nil {
 		log.Fatal(err)

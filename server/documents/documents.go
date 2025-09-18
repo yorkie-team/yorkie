@@ -19,7 +19,6 @@ package documents
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -74,12 +74,8 @@ func DocWatchStreamKey(clientID time.ActorID, docKey key.Key) sync.Key {
 }
 
 var (
-	// ErrDocumentAttached is returned when the document is attached when
-	// deleting the document.
-	ErrDocumentAttached = errors.New("document is attached")
-
 	// ErrDocumentAlreadyExists is returned when the document already exists.
-	ErrDocumentAlreadyExists = errors.New("document already exists")
+	ErrDocumentAlreadyExists = errors.AlreadyExists("document already exists").WithCode("ErrDocumentAlreadyExists")
 )
 
 // CreateDocument creates a new document with the given key and server sequence.
@@ -154,17 +150,24 @@ func ListDocumentSummaries(
 	}
 
 	var summaries []*types.DocumentSummary
+	docIDs := make([]types.ID, 0, len(infos))
 	for _, info := range infos {
-		// TODO(hackerwins): Resolve the N+1 problem.
-		clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
-		if err != nil {
-			return nil, err
-		}
+		docIDs = append(docIDs, info.ID)
+	}
+	if len(docIDs) == 0 {
+		return summaries, nil
+	}
 
+	attachedClientCounts, err := be.DB.FindAttachedClientCountsByDocIDs(ctx, project.ID, docIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, info := range infos {
 		summary := &types.DocumentSummary{
 			ID:              info.ID,
 			Key:             info.Key,
-			AttachedClients: len(clientInfos),
+			AttachedClients: attachedClientCounts[info.ID],
 			CreatedAt:       info.CreatedAt,
 			AccessedAt:      info.AccessedAt,
 			UpdatedAt:       info.UpdatedAt,
@@ -204,27 +207,25 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	clientInfos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
+	infos, err := be.DB.FindAttachedClientInfosByRefKey(ctx, info.RefKey())
 	if err != nil {
 		return nil, err
 	}
 
-	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.GetServerSeq())
+	summary, err := be.ClusterClient.GetDocument(
+		ctx,
+		project,
+		info.Key.String(),
+		true,
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &types.DocumentSummary{
-		ID:              info.ID,
-		Key:             info.Key,
-		AttachedClients: len(clientInfos),
-		CreatedAt:       info.CreatedAt,
-		AccessedAt:      info.AccessedAt,
-		UpdatedAt:       info.UpdatedAt,
-		Root:            doc.Marshal(),
-		DocSize:         doc.DocSize(),
-		SchemaKey:       info.Schema,
-	}, nil
+	summary.AttachedClients = len(infos)
+
+	return summary, nil
 }
 
 // GetDocumentSummaries returns a list of document summaries.
@@ -525,7 +526,7 @@ func RemoveDocument(
 		return err
 	}
 	if isAttached {
-		return ErrDocumentAttached
+		return fmt.Errorf("remove document %s: %w", refKey, packs.ErrDocumentAttached)
 	}
 
 	return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)
@@ -561,7 +562,7 @@ func CompactDocument(
 	be *backend.Backend,
 	project *types.Project,
 	document *database.DocInfo,
-) error {
+) (bool, error) {
 	return be.ClusterClient.CompactDocument(ctx, project, document)
 }
 

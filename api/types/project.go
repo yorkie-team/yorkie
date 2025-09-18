@@ -18,14 +18,19 @@
 package types
 
 import (
-	"errors"
 	"fmt"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/webhook"
 )
 
 var (
 	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
-	ErrTooManyAttachments = errors.New("attachment limit exceeded")
+	ErrTooManyAttachments = errors.ResourceExhausted("attachment limit exceeded")
+
+	// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
+	ErrInvalidTimeDurationString = errors.InvalidArgument("invalid time duration string format")
 )
 
 // Project is a project that consists of multiple documents and clients.
@@ -45,11 +50,35 @@ type Project struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
+	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
+	AuthWebhookMaxRetries uint64 `bson:"auth_webhook_max_retries"`
+
+	// AuthWebhookMinWaitInterval is the min interval that waits before retrying the authorization webhook.
+	AuthWebhookMinWaitInterval string `bson:"auth_webhook_min_wait_interval"`
+
+	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMaxWaitInterval string `bson:"auth_webhook_max_wait_interval"`
+
+	// AuthWebhookRequestTimeout is the max waiting time per auth webhook request.
+	AuthWebhookRequestTimeout string `bson:"auth_webhook_request_timeout"`
+
 	// EventWebhookURL is the url of the event webhook.
 	EventWebhookURL string `json:"event_webhook_url"`
 
 	// EventWebhookEvents are the events that event webhook will be triggered.
 	EventWebhookEvents []string `json:"event_webhook_events"`
+
+	// EventWebhookMaxRetries is the max count that retries the event webhook.
+	EventWebhookMaxRetries uint64 `bson:"event_webhook_max_retries"`
+
+	// EventWebhookMinWaitInterval is the min interval that waits before retrying the event webhook.
+	EventWebhookMinWaitInterval string `bson:"event_webhook_min_wait_interval"`
+
+	// EventWebhookMaxWaitInterval is the max interval that waits before retrying the event webhook.
+	EventWebhookMaxWaitInterval string `bson:"event_webhook_max_wait_interval"`
+
+	// EventWebhookRequestTimeout is the max waiting time per event webhook request.
+	EventWebhookRequestTimeout string `bson:"event_webhook_request_timeout"`
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
@@ -65,6 +94,9 @@ type Project struct {
 
 	// MaxSizePerDocument is the maximum size of a document in bytes.
 	MaxSizePerDocument int `bson:"max_size_per_document"`
+
+	// RemoveOnDetach is the flag to remove the document on detach.
+	RemoveOnDetach bool `json:"remove_on_detach"`
 
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `json:"allowed_origins"`
@@ -140,4 +172,57 @@ func (p *Project) IsAttachmentLimitExceeded(count int) error {
 	}
 
 	return nil
+}
+
+// ClientDeactivateThresholdAsTimeDuration converts ClientDeactivateThreshold string to time.Duration.
+func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
+	clientDeactivateThreshold, err := time.ParseDuration(p.ClientDeactivateThreshold)
+	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+	return clientDeactivateThreshold, nil
+}
+
+// GetAuthWebhookOptions returns the webhook options for the auth webhook.
+func (p *Project) GetAuthWebhookOptions() (webhook.Options, error) {
+	authWebhookMinWaitInterval, err := time.ParseDuration(p.AuthWebhookMinWaitInterval)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	authWebhookMaxWaitInterval, err := time.ParseDuration(p.AuthWebhookMaxWaitInterval)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	authWebhookRequestTimeout, err := time.ParseDuration(p.AuthWebhookRequestTimeout)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	return webhook.Options{
+		MaxRetries:      p.AuthWebhookMaxRetries,
+		MinWaitInterval: authWebhookMinWaitInterval,
+		MaxWaitInterval: authWebhookMaxWaitInterval,
+		RequestTimeout:  authWebhookRequestTimeout,
+	}, nil
+}
+
+// GetEventWebhookOptions returns the webhook options for the event webhook.
+func (p *Project) GetEventWebhookOptions() (webhook.Options, error) {
+	eventWebhookMinWaitInterval, err := time.ParseDuration(p.EventWebhookMinWaitInterval)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	eventWebhookMaxWaitInterval, err := time.ParseDuration(p.EventWebhookMaxWaitInterval)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	eventWebhookRequestTimeout, err := time.ParseDuration(p.EventWebhookRequestTimeout)
+	if err != nil {
+		return webhook.Options{}, ErrInvalidTimeDurationString
+	}
+	return webhook.Options{
+		MaxRetries:      p.EventWebhookMaxRetries,
+		MinWaitInterval: eventWebhookMinWaitInterval,
+		MaxWaitInterval: eventWebhookMaxWaitInterval,
+		RequestTimeout:  eventWebhookRequestTimeout,
+	}, nil
 }

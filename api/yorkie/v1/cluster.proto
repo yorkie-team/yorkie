@@ -47,7 +47,9 @@ message ClusterServiceCompactDocumentRequest {
   string document_key = 3;
 }
 
-message ClusterServiceCompactDocumentResponse {}
+message ClusterServiceCompactDocumentResponse {
+  bool compacted = 1;
+}
 
 message ClusterServicePurgeDocumentRequest {
   string project_id = 1;

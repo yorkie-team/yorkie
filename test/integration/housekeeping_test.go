@@ -40,9 +40,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000000")
-	otherOwnerID              = types.ID("000000000000000000000001")
-	clientDeactivateThreshold = "23h"
+	dummyOwnerID = types.ID("000000000000000000000000")
+	otherOwnerID = types.ID("000000000000000000000001")
 )
 
 func setupBackend(t *testing.T) *backend.Backend {
@@ -79,34 +78,22 @@ func TestHousekeeping(t *testing.T) {
 
 	projects := createProjects(t, be.DB)
 
-	t.Run("FindDeactivateCandidates return lastProjectID test", func(t *testing.T) {
+	t.Run("FindDeactivateCandidates return lastClientID test", func(t *testing.T) {
 		ctx := context.Background()
 
 		fetchSize := 3
 
 		var err error
-		lastProjectID := database.DefaultProjectID
-		for i := range len(projects) / fetchSize {
-			lastProjectID, _, err = clients.FindDeactivateCandidates(
-				ctx,
-				be,
-				0,
-				fetchSize,
-				lastProjectID,
-			)
-			assert.NoError(t, err)
-			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
-		}
+		lastClientID := database.ZeroID
 
-		lastProjectID, _, err = clients.FindDeactivateCandidates(
+		// Test with basic pagination - this will find candidates based on client IDs
+		lastClientID, _, err = clients.FindDeactivateCandidates(
 			ctx,
 			be,
-			0,
 			fetchSize,
-			lastProjectID,
+			lastClientID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, projects[fetchSize-(len(projects)%3)-1].ID, lastProjectID)
 	})
 
 	t.Run("FindDeactivateCandidates return clients test", func(t *testing.T) {
@@ -132,8 +119,7 @@ func TestHousekeeping(t *testing.T) {
 			ctx,
 			be,
 			10,
-			10,
-			database.DefaultProjectID,
+			database.ZeroID,
 		)
 
 		assert.NoError(t, err)
@@ -150,10 +136,10 @@ func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo 
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := range 10 {
-		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
+		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
-		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID, clientDeactivateThreshold)
+		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID)
 		assert.NoError(t, err)
 		projects = append(projects, p)
 	}

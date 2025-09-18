@@ -17,7 +17,6 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 	gotime "time"
 
@@ -25,16 +24,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // Below are the errors may occur depending on the document and client status.
 var (
-	ErrClientNotActivated      = errors.New("client not activated")
-	ErrDocumentNotAttached     = errors.New("document not attached")
-	ErrDocumentNeverAttached   = errors.New("client has never attached the document")
-	ErrDocumentAlreadyAttached = errors.New("document already attached")
-	ErrDocumentAlreadyDetached = errors.New("document already detached")
-	ErrAttachedDocumentExists  = errors.New("attached document exits when deactivated")
+	ErrClientNotActivated      = errors.FailedPrecond("client not activated").WithCode("ErrClientNotActivated")
+	ErrDocumentNotAttached     = errors.FailedPrecond("document not attached").WithCode("ErrDocumentNotAttached")
+	ErrDocumentNeverAttached   = errors.FailedPrecond("document never attached").WithCode("ErrDocumentNeverAttached")
+	ErrDocumentAlreadyAttached = errors.FailedPrecond("document already attached").WithCode("ErrDocumentAlreadyAttached")
+	ErrDocumentAlreadyDetached = errors.FailedPrecond("document already detached").WithCode("ErrDocumentAlreadyDetached")
+	ErrAttachedDocumentExists  = errors.FailedPrecond("attached document exists").WithCode("ErrAttachedDocumentExists")
 )
 
 // Below are statuses of the client.
@@ -162,7 +162,7 @@ func (i *ClientInfo) IsAttaching(docID types.ID) bool {
 
 // DetachDocument detaches the given document from this client.
 func (i *ClientInfo) DetachDocument(docID types.ID) error {
-	if err := i.EnsureDocumentAttached(docID); err != nil {
+	if err := i.EnsureDocumentAttachedOrAttaching(docID); err != nil {
 		return err
 	}
 
@@ -257,6 +257,23 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 
 	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
 		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			docID, i.ID, ErrDocumentNotAttached)
+	}
+
+	return nil
+}
+
+// EnsureDocumentAttachedOrAttaching ensures the given document is attached or attaching.
+func (i *ClientInfo) EnsureDocumentAttachedOrAttaching(docID types.ID) error {
+	if i.Status != ClientActivated {
+		return fmt.Errorf("ensure attached or attaching %s in client(%s): %w",
+			docID, i.ID, ErrClientNotActivated)
+	}
+
+	if !i.hasDocument(docID) ||
+		(i.Documents[docID].Status != DocumentAttached &&
+			i.Documents[docID].Status != DocumentAttaching) {
+		return fmt.Errorf("ensure attached or attaching %s in client(%s): %w",
 			docID, i.ID, ErrDocumentNotAttached)
 	}
 

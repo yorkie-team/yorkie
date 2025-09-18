@@ -67,7 +67,7 @@ func (id *RGATreeSplitNodeID) Compare(other llrb.Key) int {
 	return 0
 }
 
-// Equal returns whether given ID equals to this ID or not.
+// Equal returns whether the given ID equals or not.
 func (id *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
 	return id.Compare(other) == 0
 }

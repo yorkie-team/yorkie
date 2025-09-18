@@ -87,6 +87,19 @@ func WithMaxRecvMsgSize(maxRecvMsgSize int) Option {
 	return func(o *Options) { o.MaxCallRecvMsgSize = maxRecvMsgSize }
 }
 
+// DeactivateOption configures DeactivateOptions.
+type DeactivateOption func(*DeactivateOptions)
+
+// DeactivateOptions configures how we set up the document.
+type DeactivateOptions struct {
+	Asynchronous bool
+}
+
+// WithAsynchronous configures the asynchronous option of the document.
+func WithAsynchronous() DeactivateOption {
+	return func(o *DeactivateOptions) { o.Asynchronous = true }
+}
+
 // AttachOption configures AttachOptions.
 type AttachOption func(*AttachOptions)
 

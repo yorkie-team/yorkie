@@ -28,10 +28,9 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := housekeeping.Config{
-			Interval:                  "1m",
-			CandidatesLimitPerProject: 100,
-			ProjectFetchSize:          100,
-			CompactionMinChanges:      100,
+			Interval:             "1m",
+			CandidatesLimit:      100,
+			CompactionMinChanges: 100,
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -40,23 +39,19 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf
-		conf2.CandidatesLimitPerProject = 0
+		conf2.CandidatesLimit = 0
 		assert.Error(t, conf2.Validate())
 
 		conf3 := validConf
-		conf3.ProjectFetchSize = -1
+		conf3.CompactionMinChanges = 0
 		assert.Error(t, conf3.Validate())
 
 		conf4 := validConf
-		conf4.CompactionMinChanges = 0
-		assert.Error(t, conf4.Validate())
-
-		conf5 := validConf
-		conf5.LeadershipLeaseDuration = "5d"
-		err := conf5.Validate()
+		conf4.LeadershipLeaseDuration = "5d"
+		err := conf4.Validate()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(),
-			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-lease-duration"`, conf5.LeadershipLeaseDuration))
+			fmt.Sprintf(`invalid argument %s for "--housekeeping-leadership-lease-duration"`, conf4.LeadershipLeaseDuration))
 
 		conf6 := validConf
 		conf6.LeadershipRenewalInterval = "5"

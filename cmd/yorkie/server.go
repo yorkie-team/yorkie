@@ -50,8 +50,7 @@ var (
 	authGitHubTokenURL            string
 	authGitHubDeviceAuthURL       string
 
-	housekeepingInterval      time.Duration
-	clientDeactivateThreshold time.Duration
+	housekeepingInterval time.Duration
 
 	mongoConnectionURI                string
 	mongoConnectionTimeout            time.Duration
@@ -59,19 +58,13 @@ var (
 	mongoPingTimeout                  time.Duration
 	mongoMonitoringEnabled            bool
 	mongoMonitoringSlowQueryThreshold string
+	mongoCacheStatsEnabled            bool
+	mongoCacheStatsInterval           time.Duration
 
 	pprofEnabled bool
 
-	authWebhookMaxWaitInterval time.Duration
-	authWebhookMinWaitInterval time.Duration
-	authWebhookRequestTimeout  time.Duration
-	authWebhookCacheTTL        time.Duration
-
-	eventWebhookMaxWaitInterval time.Duration
-	eventWebhookMinWaitInterval time.Duration
-	eventWebhookRequestTimeout  time.Duration
-
-	projectCacheTTL time.Duration
+	authWebhookCacheTTL time.Duration
+	projectCacheTTL     time.Duration
 
 	kafkaAddresses    string
 	kafkaTopic        string
@@ -100,17 +93,8 @@ func newServerCmd() *cobra.Command {
 			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
-			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
 
-			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
-			conf.Backend.AuthWebhookMinWaitInterval = authWebhookMinWaitInterval.String()
-			conf.Backend.AuthWebhookRequestTimeout = authWebhookRequestTimeout.String()
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-
-			conf.Backend.EventWebhookMaxWaitInterval = eventWebhookMaxWaitInterval.String()
-			conf.Backend.EventWebhookMinWaitInterval = eventWebhookMinWaitInterval.String()
-			conf.Backend.EventWebhookRequestTimeout = eventWebhookRequestTimeout.String()
-
 			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			if mongoConnectionURI != "" {
@@ -121,6 +105,8 @@ func newServerCmd() *cobra.Command {
 					PingTimeout:                  mongoPingTimeout.String(),
 					MonitoringEnabled:            mongoMonitoringEnabled,
 					MonitoringSlowQueryThreshold: mongoMonitoringSlowQueryThreshold,
+					CacheStatsEnabled:            mongoCacheStatsEnabled,
+					CacheStatsInterval:           mongoCacheStatsInterval.String(),
 				}
 			}
 
@@ -314,16 +300,10 @@ func init() {
 		"housekeeping interval between housekeeping runs",
 	)
 	cmd.Flags().IntVar(
-		&conf.Housekeeping.CandidatesLimitPerProject,
-		"housekeeping-candidates-limit-per-project",
-		server.DefaultHousekeepingCandidatesLimitPerProject,
-		"candidates limit per project for a single housekeeping run",
-	)
-	cmd.Flags().IntVar(
-		&conf.Housekeeping.ProjectFetchSize,
-		"housekeeping-project-fetch-size",
-		server.DefaultHousekeepingProjectFetchSize,
-		"housekeeping project fetch size for a single housekeeping run",
+		&conf.Housekeeping.CandidatesLimit,
+		"housekeeping-candidates-limit",
+		server.DefaultHousekeepingCandidatesLimit,
+		"candidates limit for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.CompactionMinChanges,
@@ -367,6 +347,18 @@ func init() {
 		"100ms",
 		"Threshold for logging slow MongoDB queries (e.g. '100ms', '1s')",
 	)
+	cmd.Flags().BoolVar(
+		&mongoCacheStatsEnabled,
+		"mongo-cache-stats-enabled",
+		false,
+		"Enable MongoDB cache statistics logging",
+	)
+	cmd.Flags().DurationVar(
+		&mongoCacheStatsInterval,
+		"mongo-cache-stats-interval",
+		30*time.Second,
+		"Interval for logging MongoDB cache statistics (e.g. '30s', '1m')",
+	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminUser,
 		"backend-admin-user",
@@ -393,12 +385,6 @@ func init() {
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
 	)
-	cmd.Flags().DurationVar(
-		&clientDeactivateThreshold,
-		"client-deactivate-threshold",
-		server.DefaultClientDeactivateThreshold,
-		"Deactivate threshold of clients in specific project for housekeeping.",
-	)
 	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotThreshold,
 		"backend-snapshot-threshold",
@@ -424,30 +410,6 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
-	cmd.Flags().DurationVar(
-		&authWebhookRequestTimeout,
-		"auth-webhook-request-timeout",
-		server.DefaultAuthWebhookRequestTimeout,
-		"Timeout for each authorization webhook request.",
-	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthWebhookMaxRetries,
-		"auth-webhook-max-retries",
-		server.DefaultAuthWebhookMaxRetries,
-		"Maximum number of retries for authorization webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMinWaitInterval,
-		"auth-webhook-min-wait-interval",
-		server.DefaultAuthWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&authWebhookMaxWaitInterval,
-		"auth-webhook-max-wait-interval",
-		server.DefaultAuthWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
-	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
 		"auth-webhook-cache-size",
@@ -459,30 +421,6 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookRequestTimeout,
-		"event-webhook-request-timeout",
-		server.DefaultEventWebhookRequestTimeout,
-		"Timeout for each event webhook request.",
-	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.EventWebhookMaxRetries,
-		"event-webhook-max-retries",
-		server.DefaultEventWebhookMaxRetries,
-		"Maximum number of retries for event webhook.",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMinWaitInterval,
-		"event-webhook-min-wait-interval",
-		server.DefaultEventWebhookMinWaitInterval,
-		"Minimum wait interval between retries(exponential backoff).",
-	)
-	cmd.Flags().DurationVar(
-		&eventWebhookMaxWaitInterval,
-		"event-webhook-max-wait-interval",
-		server.DefaultEventWebhookMaxWaitInterval,
-		"Maximum wait interval between retries(exponential backoff).",
 	)
 	cmd.Flags().IntVar(
 		&conf.Backend.ProjectCacheSize,

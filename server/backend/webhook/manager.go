@@ -19,7 +19,6 @@ package webhook
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -36,11 +35,6 @@ const (
 	throttleWindow  = 1 * time.Second
 	debouncingTime  = 1 * time.Second
 	expireBatchSize = 100
-)
-
-var (
-	// ErrUnexpectedStatusCode is returned when the webhook returns an unexpected status code.
-	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 )
 
 // Manager manages sending webhook events with rate limiting.
@@ -61,14 +55,20 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 	callback := func() {
-		if err := SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute); err != nil {
+		if err := SendWebhook(
+			ctx,
+			m.webhookClient,
+			info.EventRefKey.EventWebhookType,
+			info.Attribute,
+			info.Options,
+		); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute)
+		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options)
 	}
 	return nil
 }
@@ -89,18 +89,19 @@ func SendWebhook(
 	cli *webhook.Client[types.EventWebhookRequest, int],
 	event types.EventWebhookType,
 	attr types.WebhookAttribute,
+	options webhook.Options,
 ) error {
 	body, err := types.NewRequestBody(attr.DocKey, event)
 	if err != nil {
 		return fmt.Errorf("create webhook request body: %w", err)
 	}
 
-	_, status, err := cli.Send(ctx, attr.URL, attr.SigningKey, body)
+	_, status, err := cli.Send(ctx, attr.URL, attr.SigningKey, body, options)
 	if err != nil {
 		return fmt.Errorf("send webhook event: %w", err)
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("webhook returned status %d: %w", status, ErrUnexpectedStatusCode)
+		return fmt.Errorf("webhook returned status %d: %w", status, webhook.ErrUnexpectedStatusCode)
 	}
 	return nil
 }

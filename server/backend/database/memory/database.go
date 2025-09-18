@@ -300,14 +300,13 @@ func (d *DB) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -352,7 +351,6 @@ func (d *DB) ensureDefaultUserInfo(
 func (d *DB) ensureDefaultProjectInfo(
 	_ context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -364,7 +362,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -382,7 +380,6 @@ func (d *DB) CreateProjectInfo(
 	_ context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -397,7 +394,7 @@ func (d *DB) CreateProjectInfo(
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
@@ -405,64 +402,6 @@ func (d *DB) CreateProjectInfo(
 	txn.Commit()
 
 	return info, nil
-}
-
-// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-func (d *DB) FindNextNCyclingProjectInfos(
-	_ context.Context,
-	pageSize int,
-	lastProjectID types.ID,
-) ([]*database.ProjectInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	iter, err := txn.LowerBound(
-		tblProjects,
-		"id",
-		lastProjectID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch projects: %w", err)
-	}
-
-	var infos []*database.ProjectInfo
-	isCircular := false
-
-	for i := 0; i < pageSize; i++ {
-		raw := iter.Next()
-		if raw == nil {
-			if isCircular {
-				break
-			}
-
-			iter, err = txn.LowerBound(
-				tblProjects,
-				"id",
-				database.DefaultProjectID.String(),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("fetch projects: %w", err)
-			}
-
-			i--
-			isCircular = true
-			continue
-		}
-		info := raw.(*database.ProjectInfo).DeepCopy()
-
-		if i == 0 && info.ID == lastProjectID {
-			pageSize++
-			continue
-		}
-
-		if len(infos) > 0 && infos[0].ID == info.ID {
-			break
-		}
-
-		infos = append(infos, info)
-	}
-
-	return infos, nil
 }
 
 // ListProjectInfos returns all project infos owned by owner.
@@ -525,7 +464,7 @@ func (d *DB) UpdateProjectInfo(
 			return nil, fmt.Errorf("find project by owner and name: %w", err)
 		}
 		if existing != nil && info.Name != *fields.Name {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 	}
 
@@ -914,7 +853,11 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 }
 
 // FindClientInfoByRefKey finds a client by the given refKey.
-func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+func (d *DB) FindClientInfoByRefKey(
+	_ context.Context,
+	refKey types.ClientRefKey,
+	skipCache ...bool,
+) (*database.ClientInfo, error) {
 	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -996,96 +939,101 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (d *DB) FindDeactivateCandidatesPerProject(
-	_ context.Context,
-	project *database.ProjectInfo,
+// FindActiveClients finds active clients for deactivation checking.
+func (d *DB) FindActiveClients(
+	ctx context.Context,
 	candidatesLimit int,
-) ([]*database.ClientInfo, error) {
+	lastClientID types.ID,
+) ([]*database.ClientInfo, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+	iter, err := txn.LowerBound(tblClients, "id", lastClientID.String())
 	if err != nil {
-		return nil, err
+		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
 	}
-
-	offset := gotime.Now().Add(-clientDeactivateThreshold)
 
 	var infos []*database.ClientInfo
-	iterator, err := txn.ReverseLowerBound(
-		tblClients,
-		"project_id_status_updated_at",
-		project.ID.String(),
-		database.ClientActivated,
-		offset,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find deactivated candidates of %s: %w", project.ID, err)
-	}
-
-	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+	var lastID types.ID = lastClientID
+	count := 0
+	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.ClientInfo)
 
-		if info.Status != database.ClientActivated ||
-			candidatesLimit <= len(infos) ||
-			info.UpdatedAt.After(offset) {
-			break
+		// Skip the starting point
+		if info.ID == lastClientID {
+			continue
 		}
 
-		if info.ProjectID == project.ID {
-			infos = append(infos, info)
+		// Always update lastID to ensure progress
+		lastID = info.ID
+
+		// Only include activated clients in results
+		if info.Status != database.ClientActivated {
+			continue
 		}
+
+		infos = append(infos, info.DeepCopy())
+		count++
 	}
-	return infos, nil
+
+	return infos, lastID, nil
 }
 
-// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
-func (d *DB) FindCompactionCandidatesPerProject(
+// FindCompactionCandidates finds documents that need compaction.
+func (d *DB) FindCompactionCandidates(
 	ctx context.Context,
-	project *database.ProjectInfo,
 	candidatesLimit int,
 	compactionMinChanges int,
-) ([]*database.DocInfo, error) {
+	lastDocID types.ID,
+) ([]*database.DocInfo, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	var infos []*database.DocInfo
-	iterator, err := txn.Get(tblDocuments, "project_id", project.ID.String())
+	iter, err := txn.LowerBound(tblDocuments, "id", lastDocID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
+		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}
 
-	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+	var infos []*database.DocInfo
+	var lastID types.ID = lastDocID
+	count := 0
+
+	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
 		info := raw.(*database.DocInfo)
-		if candidatesLimit <= len(infos) {
-			break
+
+		// Skip the lastDocID itself
+		if info.ID == lastDocID {
+			continue
 		}
 
-		// 1. Check if the document is attached to a client.
+		// Always update lastID to ensure progress
+		lastID = info.ID
+
+		// Check if document has enough changes to compact
+		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		// Check if document is attached to any client
 		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
-			ProjectID: project.ID,
+			ProjectID: info.ProjectID,
 			DocID:     info.ID,
-		}, "")
+		}, types.ID(""))
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if isAttached {
 			continue
 		}
 
-		// 2. Check if the document has enough changes to compact.
-		totalChanges := info.GetServerSeq().OpSeq + info.GetServerSeq().PrSeq
-		if totalChanges < int64(compactionMinChanges) {
-			continue
-		}
-
-		infos = append(infos, info)
+		infos = append(infos, info.DeepCopy())
+		count++
 	}
-	return infos, nil
+
+	return infos, lastID, nil
 }
 
-// FindAttachedClientInfosByRefKey finds the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (d *DB) FindAttachedClientInfosByRefKey(
 	_ context.Context,
 	docRefKey types.DocRefKey,
@@ -1107,6 +1055,35 @@ func (d *DB) FindAttachedClientInfosByRefKey(
 		}
 	}
 	return infos, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+func (d *DB) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+	}
+
+	var attachedClientMap = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		attachedClientMap[docID] = 0
+	}
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo)
+		for _, docID := range docIDs {
+			if info.Documents[docID] != nil && info.Documents[docID].Status == database.DocumentAttached {
+				attachedClientMap[docID]++
+			}
+		}
+	}
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
@@ -1171,6 +1148,27 @@ func (d *DB) findDocInfoByKey(txn *memdb.Txn, projectID types.ID, docKey key.Key
 	return docInfo, nil
 }
 
+// findDocInfoByID finds the document of the given id.
+func (d *DB) findDocInfoByID(txn *memdb.Txn, projectID types.ID, docID types.ID) (*database.DocInfo, error) {
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_id",
+		projectID.String(),
+		docID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find document of %s: %w", docID, err)
+	}
+	var docInfo *database.DocInfo
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if info := val.(*database.DocInfo); info.RemovedAt.IsZero() {
+			docInfo = info
+		}
+	}
+
+	return docInfo, nil
+}
+
 // FindDocInfoByKey finds the document of the given key.
 func (d *DB) FindDocInfoByKey(
 	_ context.Context,
@@ -1205,6 +1203,31 @@ func (d *DB) FindDocInfosByKeys(
 		info, err := d.findDocInfoByKey(txn, projectID, k)
 		if err != nil {
 			return nil, fmt.Errorf("find documents of %v: %w", keys, err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
+// FindDocInfosByIDs finds the documents of the given ids.
+func (d *DB) FindDocInfosByIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, id := range docIDs {
+		info, err := d.findDocInfoByID(txn, projectID, id)
+		if err != nil {
+			return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
 		}
 		if info == nil {
 			continue
@@ -1839,8 +1862,8 @@ func (d *DB) UpdateMinVersionVector(
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
-	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
-	// from min version vector.
+	// NOTE(hackerwins): Considering removing the detached client's lamport
+	// from the other clients' version vectors. For now, we just ignore it.
 	if err := d.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}

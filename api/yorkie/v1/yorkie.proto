@@ -50,6 +50,7 @@ message ActivateClientResponse {
 
 message DeactivateClientRequest {
   string client_id = 1;
+  bool synchronous = 2;
 }
 
 message DeactivateClientResponse {

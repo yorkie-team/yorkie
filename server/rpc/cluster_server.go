@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 
@@ -97,14 +98,30 @@ func (s *clusterServer) DetachDocument(
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
 	defer docLocker.RUnlock()
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
 	}
 
+	// NOTE(hackerwins): If the project does not have an attachment limit,
+	// removing the document by removeIfNotAttached does not guarantee that
+	// the document is not attached to the client.
+	var status document.StatusType = document.StatusDetached
+	if project.RemoveOnDetach {
+		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, refKey, clientInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAttached {
+			pack.IsRemoved = true
+			status = document.StatusRemoved
+		}
+	}
+
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
-		Status: document.StatusDetached,
+		Status: status,
 	}); err != nil {
 		return nil, err
 	}
@@ -137,10 +154,20 @@ func (s *clusterServer) CompactDocument(
 	}
 
 	if err := packs.Compact(ctx, s.backend, projectID, docInfo); err != nil {
+		// If the document is attached, we don't return an error.
+		// Because compaction is a best-effort operation.
+		if errors.Is(err, packs.ErrDocumentAttached) {
+			return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+				Compacted: false,
+			}), nil
+		}
+
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+		Compacted: true,
+	}), nil
 }
 
 // PurgeDocument purges the given document and its metadata from the database.
