@@ -107,7 +107,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 // NewInternalDocumentFromSnapshot creates a new instance of InternalDocument with the snapshot.
 func NewInternalDocumentFromSnapshot(
 	k key.Key,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 	lamport int64,
 	vector time.VersionVector,
 	snapshot []byte,
@@ -143,7 +143,7 @@ func (d *InternalDocument) Checkpoint() change.Checkpoint {
 
 // SyncCheckpoint syncs the checkpoint and the changeID with the given serverSeq
 // and clientSeq.
-func (d *InternalDocument) SyncCheckpoint(serverSeq int64, clientSeq uint32) {
+func (d *InternalDocument) SyncCheckpoint(serverSeq change.ServerSeq, clientSeq uint32) {
 	d.changeID = change.NewID(
 		clientSeq,
 		serverSeq,

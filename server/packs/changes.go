@@ -29,8 +29,8 @@ func FindChanges(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	from int64,
-	to int64,
+	from change.ServerSeq,
+	to change.ServerSeq,
 ) ([]*change.Change, error) {
 	docRefKey := docInfo.RefKey()
 	return be.DB.FindChangesBetweenServerSeqs(

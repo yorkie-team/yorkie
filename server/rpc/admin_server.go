@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -362,7 +363,7 @@ func (s *adminServer) GetSnapshotMeta(
 		s.backend,
 		project,
 		key.Key(req.Msg.DocumentKey),
-		req.Msg.ServerSeq,
+		change.NewServerSeq(req.Msg.OpSeq, req.Msg.PrSeq),
 	)
 	if err != nil {
 		return nil, err
@@ -583,10 +584,11 @@ func (s *adminServer) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-	lastSeq := docInfo.ServerSeq
+	lastSeq := docInfo.GetServerSeq()
+	previousSeq := change.NewServerSeq(req.Msg.PreviousOpSeq, req.Msg.PreviousPrSeq)
 
-	from, to := types.GetChangesRange(types.Paging[int64]{
-		Offset:    req.Msg.PreviousSeq,
+	from, to := types.GetChangesRangeServerSeq(types.Paging[change.ServerSeq]{
+		Offset:    previousSeq,
 		PageSize:  int(req.Msg.PageSize),
 		IsForward: req.Msg.IsForward,
 	}, lastSeq)

@@ -99,7 +99,8 @@ func CreateDocument(
 		return nil, err
 	}
 
-	if docInfo.Owner != userID || docInfo.ServerSeq != 0 {
+	serverSeq := docInfo.GetServerSeq()
+	if docInfo.Owner != userID || serverSeq.OpSeq != 0 || serverSeq.PrSeq != 0 {
 		return nil, fmt.Errorf("create document: %w", ErrDocumentAlreadyExists)
 	}
 
@@ -114,7 +115,7 @@ func CreateDocument(
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		docInfo,
-		docInfo.ServerSeq,
+		docInfo.GetServerSeq(),
 		newDoc.CreateChangePack().Changes,
 	); err != nil {
 		return nil, err
@@ -174,7 +175,7 @@ func ListDocumentSummaries(
 		}
 
 		if includeRoot {
-			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.ServerSeq)
+			doc, err := packs.BuildInternalDocForServerSeq(ctx, be, info, info.GetServerSeq())
 			if err != nil {
 				return nil, err
 			}
@@ -312,7 +313,7 @@ func GetDocumentByServerSeq(
 	be *backend.Backend,
 	project *types.Project,
 	k key.Key,
-	serverSeq int64,
+	serverSeq change.ServerSeq,
 ) (*document.InternalDocument, error) {
 	docInfo, err := be.DB.FindOrCreateDocInfo(
 		ctx,
@@ -430,14 +431,15 @@ func UpdateDocument(
 		Documents: map[types.ID]*database.ClientDocInfo{
 			docInfo.ID: {
 				Status:    database.DocumentAttached,
-				ServerSeq: docInfo.ServerSeq,
+				OpSeq:     docInfo.OpSeq,
+				PrSeq:     docInfo.PrSeq,
 				ClientSeq: 0,
 			},
 		},
 	}
 
 	doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, change.Checkpoint{
-		ServerSeq: docInfo.ServerSeq,
+		ServerSeq: docInfo.GetServerSeq(),
 		ClientSeq: 0,
 	}, time.InitialActorID)
 	if err != nil {

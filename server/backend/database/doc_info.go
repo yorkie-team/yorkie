@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
@@ -34,8 +35,11 @@ type DocInfo struct {
 	// Key is the key of the document.
 	Key key.Key `bson:"key"`
 
-	// ServerSeq is the sequence number of the last change of the document on the server.
-	ServerSeq int64 `bson:"server_seq"`
+	// OpSeq is the sequence number of the last operation change on the server.
+	OpSeq int64 `bson:"op_seq"`
+
+	// PrSeq is the sequence number of the last presence change on the server.
+	PrSeq int64 `bson:"pr_seq"`
 
 	// Owner is the owner(ID of the client) of the document.
 	Owner types.ID `bson:"owner"`
@@ -59,10 +63,26 @@ type DocInfo struct {
 	CompactedAt time.Time `bson:"compacted_at"`
 }
 
-// IncreaseServerSeq increases server sequence of the document.
-func (info *DocInfo) IncreaseServerSeq() int64 {
-	info.ServerSeq++
-	return info.ServerSeq
+// IncreaseOpSeq increases operation sequence of the document.
+func (info *DocInfo) IncreaseOpSeq() int64 {
+	info.OpSeq++
+	return info.OpSeq
+}
+
+// IncreasePrSeq increases presence sequence of the document.
+func (info *DocInfo) IncreasePrSeq() int64 {
+	info.PrSeq++
+	return info.PrSeq
+}
+
+// GetServerSeq returns the server sequence as ServerSeq struct.
+func (info *DocInfo) GetServerSeq() change.ServerSeq {
+	return change.NewServerSeq(info.OpSeq, info.PrSeq)
+}
+
+// GetMaxSeq returns the maximum sequence between OpSeq and PrSeq.
+func (info *DocInfo) GetMaxSeq() int64 {
+	return max(info.OpSeq, info.PrSeq)
 }
 
 // IsRemoved returns true if the document is removed
@@ -80,7 +100,8 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		ID:          info.ID,
 		ProjectID:   info.ProjectID,
 		Key:         info.Key,
-		ServerSeq:   info.ServerSeq,
+		OpSeq:       info.OpSeq,
+		PrSeq:       info.PrSeq,
 		Owner:       info.Owner,
 		Schema:      info.Schema,
 		CreatedAt:   info.CreatedAt,

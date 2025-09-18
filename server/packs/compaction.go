@@ -63,7 +63,7 @@ func Compact(
 	}
 
 	// 2. Build compacted changes and check if the content is the same.
-	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.GetServerSeq())
 	if err != nil {
 		logging.DefaultLogger().Errorf("[CD] Document %s failed to apply changes: %v\n", docInfo.ID, err)
 		return err
@@ -107,7 +107,7 @@ func Compact(
 	if err = be.DB.CompactChangeInfos(
 		ctx,
 		docInfo,
-		docInfo.ServerSeq,
+		docInfo.GetServerSeq(),
 		newDoc.CreateChangePack().Changes,
 	); err != nil {
 		logging.DefaultLogger().Errorf(

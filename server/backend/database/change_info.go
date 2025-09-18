@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
@@ -26,23 +27,18 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
-// ErrEncodeOperationFailed is returned when encoding operations failed.
-var ErrEncodeOperationFailed = errors.Internal("encode operations failed")
+var ErrCombineChanges = errors.New("combine changes failed")
 
-// ErrDecodeOperationFailed is returned when decoding operations failed.
-var ErrDecodeOperationFailed = errors.Internal("decode operations failed")
-
-// ChangeInfo is a structure representing information of a change.
+// ChangeInfo is a structure representing information of an change.
 type ChangeInfo struct {
 	ID             types.ID              `bson:"_id"`
 	ProjectID      types.ID              `bson:"project_id"`
 	DocID          types.ID              `bson:"doc_id"`
-	ServerSeq      int64                 `bson:"server_seq"`
+	OpSeq          int64                 `bson:"op_seq"`
+	PrSeq          int64                 `bson:"pr_seq"`
 	ClientSeq      uint32                `bson:"client_seq"`
 	Lamport        int64                 `bson:"lamport"`
 	ActorID        types.ID              `bson:"actor_id"`
@@ -52,8 +48,8 @@ type ChangeInfo struct {
 	PresenceChange *innerpresence.Change `bson:"presence_change"`
 }
 
-// NewFromChange creates a new ChangeInfo from the given change.
-func NewFromChange(docKey types.DocRefKey, c *change.Change) (*ChangeInfo, error) {
+// NewChangeInfo creates a new ChangeInfo from the given change and sequences.
+func NewChangeInfo(docKey types.DocRefKey, c *change.Change, opSeq, prSeq int64) (*ChangeInfo, error) {
 	if c == nil {
 		return nil, fmt.Errorf("change cannot be nil")
 	}
@@ -66,7 +62,8 @@ func NewFromChange(docKey types.DocRefKey, c *change.Change) (*ChangeInfo, error
 	return &ChangeInfo{
 		ProjectID:      docKey.ProjectID,
 		DocID:          docKey.DocID,
-		ServerSeq:      c.ServerSeq(),
+		OpSeq:          opSeq,
+		PrSeq:          prSeq,
 		ClientSeq:      c.ClientSeq(),
 		Lamport:        c.ID().Lamport(),
 		ActorID:        types.ID(c.ID().ActorID().String()),
@@ -75,27 +72,6 @@ func NewFromChange(docKey types.DocRefKey, c *change.Change) (*ChangeInfo, error
 		Operations:     encodedOperations,
 		PresenceChange: c.PresenceChange(),
 	}, nil
-
-}
-
-// EncodeOperations encodes the given operations into bytes array.
-func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
-	var encodedOps [][]byte
-
-	changes, err := converter.ToOperations(operations)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, pbOp := range changes {
-		encodedOp, err := proto.Marshal(pbOp)
-		if err != nil {
-			return nil, ErrEncodeOperationFailed
-		}
-		encodedOps = append(encodedOps, encodedOp)
-	}
-
-	return encodedOps, nil
 }
 
 // ToChange creates Change model from this ChangeInfo.
@@ -105,7 +81,8 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID, i.VersionVector)
+	serverSeq := change.NewServerSeq(i.OpSeq, i.PrSeq)
+	changeID := change.NewID(i.ClientSeq, serverSeq, i.Lamport, actorID, i.VersionVector)
 
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {
@@ -122,9 +99,125 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	}
 
 	c := change.New(changeID, i.Message, ops, i.PresenceChange)
-	c.SetServerSeq(i.ServerSeq)
+	c.SetServerSeq(change.NewServerSeq(i.OpSeq, i.PrSeq))
 
 	return c, nil
+}
+
+// CombineChangeInfos combines operation and presence change infos into unified change infos.
+func CombineChangeInfos(
+	opInfos []*OperationChangeInfo,
+	prInfos []*PresenceChangeInfo,
+) ([]*ChangeInfo, error) {
+	var changeInfos []*ChangeInfo
+	opIdx := 0
+	prIdx := 0
+
+	for opIdx < len(opInfos) || prIdx < len(prInfos) {
+		var opInfo *OperationChangeInfo
+		var prInfo *PresenceChangeInfo
+
+		// Determine which pointer to advance based on {opSeq, prSeq} comparison
+		if opIdx >= len(opInfos) {
+			// Only presence infos remain
+			prInfo = prInfos[prIdx]
+			prIdx++
+		} else if prIdx >= len(prInfos) {
+			// Only operation infos remain
+			opInfo = opInfos[opIdx]
+			opIdx++
+		} else {
+			// Compare {opSeq, prSeq} pairs to decide which pointer to advance
+			opCurrent := opInfos[opIdx]
+			prCurrent := prInfos[prIdx]
+
+			// Compare directly without creating ServerSeq objects
+			if opCurrent.OpSeq == prCurrent.OpSeq && opCurrent.PrSeq == prCurrent.PrSeq {
+				// Same {opSeq, prSeq} pair, combine into one change
+				opInfo = opCurrent
+				prInfo = prCurrent
+				opIdx++
+				prIdx++
+			} else if (opCurrent.OpSeq < prCurrent.OpSeq) ||
+				(opCurrent.OpSeq == prCurrent.OpSeq && opCurrent.PrSeq < prCurrent.PrSeq) {
+				// Operation comes first
+				opInfo = opCurrent
+				opIdx++
+			} else {
+				// Presence comes first
+				prInfo = prCurrent
+				prIdx++
+			}
+		}
+
+		// Create the combined change info directly
+		combinedChangeInfo, err := createCombinedChangeInfo(opInfo, prInfo)
+		if err != nil {
+			return nil, fmt.Errorf("create combined change info: %w", err)
+		}
+
+		changeInfos = append(changeInfos, combinedChangeInfo)
+	}
+
+	return changeInfos, nil
+}
+
+// createCombinedChangeInfo creates a ChangeInfo from operation and/or presence info
+func createCombinedChangeInfo(
+	opInfo *OperationChangeInfo,
+	prInfo *PresenceChangeInfo,
+) (*ChangeInfo, error) {
+	if opInfo != nil && prInfo != nil {
+		// Both operation and presence, combine them into one ChangeInfo
+		return &ChangeInfo{
+			ProjectID:      opInfo.ProjectID,
+			DocID:          opInfo.DocID,
+			OpSeq:          opInfo.OpSeq,
+			PrSeq:          opInfo.PrSeq,
+			ClientSeq:      opInfo.ClientSeq,
+			Lamport:        opInfo.Lamport,
+			ActorID:        opInfo.ActorID,
+			VersionVector:  opInfo.VersionVector,
+			Message:        opInfo.Message,
+			Operations:     opInfo.Operations,
+			PresenceChange: prInfo.PresenceChange,
+		}, nil
+
+	} else if opInfo != nil {
+		// Only operation: convert OperationChangeInfo to ChangeInfo
+		return &ChangeInfo{
+			ProjectID:      opInfo.ProjectID,
+			DocID:          opInfo.DocID,
+			OpSeq:          opInfo.OpSeq,
+			PrSeq:          opInfo.PrSeq,
+			ClientSeq:      opInfo.ClientSeq,
+			Lamport:        opInfo.Lamport,
+			ActorID:        opInfo.ActorID,
+			VersionVector:  opInfo.VersionVector,
+			Message:        opInfo.Message,
+			Operations:     opInfo.Operations,
+			PresenceChange: nil,
+		}, nil
+
+	} else if prInfo != nil {
+		// Only presence: convert PresenceChangeInfo to ChangeInfo
+		return &ChangeInfo{
+			ProjectID:      prInfo.ProjectID,
+			DocID:          prInfo.DocID,
+			OpSeq:          prInfo.OpSeq,
+			PrSeq:          prInfo.PrSeq,
+			ClientSeq:      prInfo.ClientSeq,
+			Lamport:        time.InitialLamport,
+			ActorID:        prInfo.ActorID,
+			VersionVector:  time.InitialVersionVector,
+			Message:        prInfo.Message,
+			Operations:     nil,
+			PresenceChange: prInfo.PresenceChange,
+		}, nil
+
+	} else {
+		return nil, ErrCombineChanges
+	}
 }
 
 // DeepCopy returns a deep copy of this ChangeInfo.
@@ -137,32 +230,4 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 	*clone = *i
 
 	return clone
-}
-
-// EncodePresenceChange encodes the given PresenceChange into bytes array.
-func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
-	if p == nil {
-		return nil, nil
-	}
-
-	bytes, err := proto.Marshal(converter.ToPresenceChange(p))
-	if err != nil {
-		return nil, fmt.Errorf("encode presence change to bytes: %w", err)
-	}
-
-	return bytes, nil
-}
-
-// PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
-func PresenceChangeFromBytes(bytes []byte) (*innerpresence.Change, error) {
-	if bytes == nil {
-		return nil, nil
-	}
-
-	pbChange := &api.PresenceChange{}
-	if err := proto.Unmarshal(bytes, pbChange); err != nil {
-		return nil, fmt.Errorf("decode presence change: %w", err)
-	}
-
-	return converter.FromPresenceChange(pbChange), nil
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var tID = reflect.TypeOf(types.ID(""))
@@ -158,12 +157,13 @@ func presenceChangeEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflec
 		return nil
 	}
 
-	bytes, err := database.EncodePresenceChange(presenceChange)
-	if err != nil {
-		return fmt.Errorf("encode error: %w", err)
-	}
+	// TODO: Remove this function as presence changes are now stored separately
+	// bytes, err := database.EncodePresenceChange(presenceChange)
+	// if err != nil {
+	// 	return fmt.Errorf("encode error: %w", err)
+	// }
 
-	if err := vw.WriteBinary(bytes); err != nil {
+	if err := vw.WriteBinary(nil); err != nil {
 		return fmt.Errorf("encode error: %w", err)
 	}
 
@@ -184,16 +184,17 @@ func presenceChangeDecoder(_ bson.DecodeContext, vr bson.ValueReader, val reflec
 		val.Set(reflect.Zero(tPresenceChange))
 		return nil
 	case bson.TypeBinary:
-		data, _, err := vr.ReadBinary()
+		_, _, err := vr.ReadBinary()
 		if err != nil {
 			return fmt.Errorf("decode error: %w", err)
 		}
 
-		presenceChange, err := database.PresenceChangeFromBytes(data)
-		if err != nil {
-			return fmt.Errorf("decode error: %w", err)
-		}
-		val.Set(reflect.ValueOf(presenceChange))
+		// TODO: Remove this function as presence changes are now stored separately
+		// presenceChange, err := database.PresenceChangeFromBytes(data)
+		// if err != nil {
+		// 	return fmt.Errorf("decode error: %w", err)
+		// }
+		val.Set(reflect.Zero(tPresenceChange))
 		return nil
 	default:
 		return fmt.Errorf("unsupported type: %v", vr.Type())

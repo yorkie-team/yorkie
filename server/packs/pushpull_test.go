@@ -217,10 +217,11 @@ func TestPacks(t *testing.T) {
 			DocID:     docID,
 		}
 
-		// 0. Check docInfo.ServerSeq and clientInfo.Checkpoint
+		// 0. Check docInfo total change count and clientInfo.Checkpoint
 		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(1), docInfo.ServerSeq)
+		serverSeq := docInfo.GetServerSeq()
+		assert.Equal(t, int64(1), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count
 
 		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
 			ProjectID: project.ID,
@@ -256,10 +257,11 @@ func TestPacks(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, changes, 1)
 
-		// 2-3. docInfo.ServerSeq increases from 1 to 2
+		// 2-3. docInfo total change count increases from 1 to 2
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(2), docInfo.ServerSeq)
+		serverSeq = docInfo.GetServerSeq()
+		assert.Equal(t, int64(2), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count
 
 		// 2-4. clientInfo.Checkpoint has not been updated
 		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
@@ -282,10 +284,11 @@ func TestPacks(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, changes, 0)
 
-		// 3-3. The server should detect the duplication and not update docInfo.ServerSeq
+		// 3-3. The server should detect the duplication and not update docInfo total change count
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(2), docInfo.ServerSeq)
+		serverSeq = docInfo.GetServerSeq()
+		assert.Equal(t, int64(2), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count remains same
 
 		// 3-4. clientInfo.Checkpoint has been updated properly
 		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{

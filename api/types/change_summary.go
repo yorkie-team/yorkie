@@ -14,6 +14,29 @@ type ChangeSummary struct {
 	Snapshot string
 }
 
+// GetChangesRangeServerSeq returns a range of changes using change.ServerSeq.
+// It applies the same paging logic independently to OpSeq and PrSeq components.
+func GetChangesRangeServerSeq(
+	paging Paging[change.ServerSeq],
+	lastSeq change.ServerSeq,
+) (change.ServerSeq, change.ServerSeq) {
+	// Apply GetChangesRange logic to OpSeq component
+	opFrom, opTo := GetChangesRange(Paging[int64]{
+		Offset:    paging.Offset.OpSeq,
+		PageSize:  paging.PageSize,
+		IsForward: paging.IsForward,
+	}, lastSeq.OpSeq)
+
+	// Apply GetChangesRange logic to PrSeq component
+	prFrom, prTo := GetChangesRange(Paging[int64]{
+		Offset:    paging.Offset.PrSeq,
+		PageSize:  paging.PageSize,
+		IsForward: paging.IsForward,
+	}, lastSeq.PrSeq)
+
+	return change.NewServerSeq(opFrom, prFrom), change.NewServerSeq(opTo, prTo)
+}
+
 // GetChangesRange returns a range of changes.
 func GetChangesRange(
 	paging Paging[int64],

@@ -34,7 +34,7 @@ func TestChangeInfo(t *testing.T) {
 		assert.NoError(t, err)
 
 		expectedID := actorID.String()
-		changeInfo := database.ChangeInfo{
+		changeInfo := database.OperationChangeInfo{
 			ActorID: types.ID(expectedID),
 		}
 

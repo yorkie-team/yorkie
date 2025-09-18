@@ -33,6 +33,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -359,7 +360,7 @@ func (c *Client) ListChangeSummaries(
 	ctx context.Context,
 	projectName string,
 	key key.Key,
-	previousSeq int64,
+	previousSeq change.ServerSeq,
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
@@ -370,10 +371,11 @@ func (c *Client) ListChangeSummaries(
 	ctx = projects.With(ctx, project)
 
 	resp, err := c.client.ListChanges(ctx, connect.NewRequest(&api.ListChangesRequest{
-		DocumentKey: key.String(),
-		PreviousSeq: previousSeq,
-		PageSize:    pageSize,
-		IsForward:   isForward,
+		DocumentKey:   key.String(),
+		PreviousOpSeq: previousSeq.OpSeq,
+		PreviousPrSeq: previousSeq.PrSeq,
+		PageSize:      pageSize,
+		IsForward:     isForward,
 	}))
 
 	if err != nil {
@@ -390,11 +392,12 @@ func (c *Client) ListChangeSummaries(
 		return summaries, nil
 	}
 
-	seq := changes[0].ServerSeq() - 1
+	seq := change.NewServerSeq(changes[0].OpSeq()-1, changes[0].PrSeq()-1)
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, connect.NewRequest(&api.GetSnapshotMetaRequest{
 		DocumentKey: key.String(),
-		ServerSeq:   seq,
+		OpSeq:       seq.OpSeq,
+		PrSeq:       seq.PrSeq,
 	}))
 	if err != nil {
 		return nil, err

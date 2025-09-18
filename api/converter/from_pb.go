@@ -158,7 +158,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 
 func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 	return change.NewCheckpoint(
-		pbCheckpoint.ServerSeq,
+		change.NewServerSeq(pbCheckpoint.OpSeq, pbCheckpoint.PrSeq),
 		pbCheckpoint.ClientSeq,
 	)
 }
@@ -199,7 +199,7 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 
 	return change.NewID(
 		id.ClientSeq,
-		id.ServerSeq,
+		change.NewServerSeq(id.OpSeq, id.PrSeq),
 		id.Lamport,
 		actorID,
 		vector,

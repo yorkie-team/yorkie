@@ -153,7 +153,8 @@ var collectionInfos = []collectionInfo{
 			Keys: bson.D{
 				{Key: "doc_id", Value: int32(1)}, // shard key
 				{Key: "project_id", Value: int32(1)},
-				{Key: "server_seq", Value: int32(1)},
+				{Key: "op_seq", Value: int32(1)},
+				{Key: "pr_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
@@ -161,7 +162,8 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: int32(1)}, // shard key
 				{Key: "project_id", Value: int32(1)},
 				{Key: "actor_id", Value: int32(1)},
-				{Key: "server_seq", Value: int32(1)},
+				{Key: "op_seq", Value: int32(1)},
+				{Key: "pr_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
@@ -171,7 +173,8 @@ var collectionInfos = []collectionInfo{
 			Keys: bson.D{
 				{Key: "doc_id", Value: int32(1)}, // shard key
 				{Key: "project_id", Value: int32(1)},
-				{Key: "server_seq", Value: int32(1)},
+				{Key: "op_seq", Value: int32(1)},
+				{Key: "pr_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
