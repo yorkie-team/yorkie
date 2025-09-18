@@ -1446,7 +1446,7 @@ func (d *DB) CreateChangeInfos(
 				ActorID:       types.ID(cn.ID().ActorID().String()),
 				VersionVector: cn.ID().VersionVector(),
 				Message:       cn.Message(),
-				Operations:    func() [][]byte {
+				Operations: func() [][]byte {
 					ops, _ := database.EncodeOperations(cn.Operations())
 					return ops
 				}(),
@@ -1472,7 +1472,7 @@ func (d *DB) CreateChangeInfos(
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
-	if !loadedDocInfo.GetServerSeq().EqualWith(initialServerSeq) { 
+	if !loadedDocInfo.GetServerSeq().EqualWith(initialServerSeq) {
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
@@ -1732,7 +1732,7 @@ func (d *DB) FindSnapshotInfo(
 	defer txn.Abort()
 	raw, err := txn.First(tblSnapshots, "doc_id_server_seq",
 		docKey.DocID.String(),
-		serverSeq.OpSeq + serverSeq.PrSeq, // Convert ServerSeq to total change count for comparison
+		serverSeq.OpSeq+serverSeq.PrSeq, // Convert ServerSeq to total change count for comparison
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find snapshot by id: %w", err)

@@ -212,10 +212,10 @@ func pushPack(
 	if err != nil {
 		return nil, nil, change.NewServerSeq(0, 0), change.InitialCheckpoint, err
 	}
-	
+
 	// Calculate initial ServerSeq by subtracting counts from current sequences
 	initialSeq := change.NewServerSeq(docInfo.OpSeq-opCount, docInfo.PrSeq-prCount)
-	
+
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Debugf(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %s -> %s, cp: %s",

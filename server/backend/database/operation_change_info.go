@@ -140,5 +140,3 @@ func (i *OperationChangeInfo) DeepCopy() *OperationChangeInfo {
 
 	return clone
 }
-
-

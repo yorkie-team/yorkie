@@ -221,7 +221,7 @@ func TestPacks(t *testing.T) {
 		docInfo, err := documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
 		serverSeq := docInfo.GetServerSeq()
-		assert.Equal(t, int64(1), serverSeq.OpSeq + serverSeq.PrSeq) // Check total change count
+		assert.Equal(t, int64(1), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count
 
 		clientInfo, err := clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
 			ProjectID: project.ID,
@@ -261,7 +261,7 @@ func TestPacks(t *testing.T) {
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
 		serverSeq = docInfo.GetServerSeq()
-		assert.Equal(t, int64(2), serverSeq.OpSeq + serverSeq.PrSeq) // Check total change count
+		assert.Equal(t, int64(2), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count
 
 		// 2-4. clientInfo.Checkpoint has not been updated
 		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{
@@ -288,7 +288,7 @@ func TestPacks(t *testing.T) {
 		docInfo, err = documents.FindDocInfoByRefKey(ctx, testBackend, docRefKey)
 		assert.NoError(t, err)
 		serverSeq = docInfo.GetServerSeq()
-		assert.Equal(t, int64(2), serverSeq.OpSeq + serverSeq.PrSeq) // Check total change count remains same
+		assert.Equal(t, int64(2), serverSeq.OpSeq+serverSeq.PrSeq) // Check total change count remains same
 
 		// 3-4. clientInfo.Checkpoint has been updated properly
 		clientInfo, err = clients.FindActiveClientInfo(ctx, testBackend, types.ClientRefKey{

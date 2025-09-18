@@ -600,7 +600,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		// 02. Create a snapshot that reflect the latest doc info
 		updatedDocInfo, _ := db.FindDocInfoByRefKey(ctx, refKey)
 		updatedServerSeq := updatedDocInfo.GetServerSeq()
-		assert.Equal(t, int64(6), updatedServerSeq.OpSeq + updatedServerSeq.PrSeq) // Check total change count
+		assert.Equal(t, int64(6), updatedServerSeq.OpSeq+updatedServerSeq.PrSeq) // Check total change count
 
 		pack = change.NewPack(
 			updatedDocInfo.Key,

@@ -429,12 +429,12 @@ func UpdateDocument(
 		ID:        types.IDFromActorID(time.InitialActorID),
 		ProjectID: project.ID,
 		Documents: map[types.ID]*database.ClientDocInfo{
-					docInfo.ID: {
-			Status:    database.DocumentAttached,
-			OpSeq:     docInfo.OpSeq,
-			PrSeq:     docInfo.PrSeq,
-			ClientSeq: 0,
-		},
+			docInfo.ID: {
+				Status:    database.DocumentAttached,
+				OpSeq:     docInfo.OpSeq,
+				PrSeq:     docInfo.PrSeq,
+				ClientSeq: 0,
+			},
 		},
 	}
 

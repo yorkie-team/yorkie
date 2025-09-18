@@ -51,11 +51,11 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	clientCache  *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
-	docCache     *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
-	changeCache  *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
-	vectorCache  *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
-	cacheManager *cache.Manager
+	clientCache     *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
+	docCache        *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
+	changeCache     *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	vectorCache     *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	cacheManager    *cache.Manager
 	presenceStorage *database.PresenceStorage
 }
 
@@ -136,10 +136,10 @@ func Dial(conf *Config) (*Client, error) {
 
 		cacheManager: cacheManager,
 
-		clientCache: clientCache,
-		docCache:    docCache,
-		changeCache: changeCache,
-		vectorCache: vectorCache,
+		clientCache:     clientCache,
+		docCache:        docCache,
+		changeCache:     changeCache,
+		vectorCache:     vectorCache,
 		presenceStorage: database.NewPresenceStorage(),
 	}
 
@@ -1446,12 +1446,12 @@ func (c *Client) CreateChangeInfos(
 
 	// 02. Separate operations and presences from changes and store them appropriately
 	now := gotime.Now()
-	
+
 	// Pre-allocate slices for separated data
 	var opModels []mongo.WriteModel
 	var prCIs []*database.PresenceChangeInfo
 	hasOperations := false
-	
+
 	// Process each change and separate operations from presences
 	for _, cn := range changes {
 		hasOp := len(cn.Operations()) > 0
@@ -1485,13 +1485,13 @@ func (c *Client) CreateChangeInfos(
 		// Store operations
 		if hasOp {
 			hasOperations = true
-			
+
 			// Create OperationChangeInfo for MongoDB storage
 			opCI, err := database.NewOperationChangeInfo(refKey, cn, opSeq, prSeq)
 			if err != nil {
 				return nil, change.InitialCheckpoint, fmt.Errorf("create operation change info: %w", err)
 			}
-			
+
 			opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
 				"project_id": refKey.ProjectID,
 				"doc_id":     refKey.DocID,
@@ -1619,9 +1619,9 @@ func (c *Client) CompactChangeInfos(
 	c.docCache.Remove(docInfo.RefKey())
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docInfo.ProjectID,
-		"_id":    docInfo.ID,
-		"op_seq": lastServerSeq.OpSeq,
-		"pr_seq": lastServerSeq.PrSeq,
+		"_id":        docInfo.ID,
+		"op_seq":     lastServerSeq.OpSeq,
+		"pr_seq":     lastServerSeq.PrSeq,
 	}, bson.M{
 		"$set": bson.M{
 			"op_seq":       newOpSeq,
@@ -1730,7 +1730,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 				filter := bson.M{
 					"project_id": docRefKey.ProjectID,
 					"doc_id":     docRefKey.DocID,
-					"op_seq": bson.M{"$gte": current, "$lte": to},
+					"op_seq":     bson.M{"$gte": current, "$lte": to},
 				}
 				opts := options.Find().SetSort(bson.D{{Key: "op_seq", Value: 1}}).SetLimit(chunkSize)
 				cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
@@ -1755,7 +1755,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		}); err != nil {
 			return nil, err
 		}
-		
+
 		opInfos = store.ChangesInRange(from.OpSeq, to.OpSeq)
 	}
 
@@ -1794,8 +1794,8 @@ func (c *Client) CreateSnapshotInfo(
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
 		"project_id":     docRefKey.ProjectID,
 		"doc_id":         docRefKey.DocID,
-		"op_seq":     doc.Checkpoint().ServerSeq.OpSeq,
-		"pr_seq":     doc.Checkpoint().ServerSeq.PrSeq,
+		"op_seq":         doc.Checkpoint().ServerSeq.OpSeq,
+		"pr_seq":         doc.Checkpoint().ServerSeq.PrSeq,
 		"lamport":        doc.Lamport(),
 		"version_vector": doc.VersionVector(),
 		"snapshot":       snapshot,
@@ -1816,8 +1816,8 @@ func (c *Client) FindSnapshotInfo(
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
 		"project_id": docKey.ProjectID,
 		"doc_id":     docKey.DocID,
-		"op_seq": serverSeq.OpSeq,
-		"pr_seq": serverSeq.PrSeq,
+		"op_seq":     serverSeq.OpSeq,
+		"pr_seq":     serverSeq.PrSeq,
 	})
 
 	info := &database.SnapshotInfo{}

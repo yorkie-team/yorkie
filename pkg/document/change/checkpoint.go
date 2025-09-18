@@ -133,5 +133,3 @@ func (cp Checkpoint) Equal(other Checkpoint) bool {
 func (cp Checkpoint) String() string {
 	return fmt.Sprintf("opSeq=%d, prSeq=%d, clientSeq=%d", cp.ServerSeq.OpSeq, cp.ServerSeq.PrSeq, cp.ClientSeq)
 }
-
-

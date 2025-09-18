@@ -25,14 +25,14 @@ import (
 
 // PresenceChangeInfo represents a presence change stored in memory.
 type PresenceChangeInfo struct {
-	ProjectID types.ID
-	DocID     types.ID
-	OpSeq     int64
-	PrSeq     int64
-	ClientSeq uint32
-	ActorID   types.ID
+	ProjectID      types.ID
+	DocID          types.ID
+	OpSeq          int64
+	PrSeq          int64
+	ClientSeq      uint32
+	ActorID        types.ID
 	PresenceChange *innerpresence.Change
-	Message string
+	Message        string
 }
 
 // NewPresenceChangeInfo creates a new PresenceChangeInfo from a change and sequences.
@@ -67,7 +67,7 @@ func (p *PresenceChangeInfo) ToChange() (*change.Change, error) {
 		change.NewServerSeq(p.OpSeq, p.PrSeq), // Use both sequences for reassembly
 		time.InitialLamport,                   // Use initial lamport since presence doesn't need logical clocks
 		actorID,
-		time.NewVersionVector(),               // Use empty version vector since presence doesn't need logical clocks
+		time.NewVersionVector(), // Use empty version vector since presence doesn't need logical clocks
 	)
 
 	// Create change with no operations, only presence
