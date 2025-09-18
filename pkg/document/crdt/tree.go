@@ -151,8 +151,8 @@ type TreeNode struct {
 }
 
 // Children returns the children of this node.
-func (n *TreeNode) Children() []*TreeNode {
-	children := n.Index.Children()
+func (n *TreeNode) Children(includeRemovedNode ...bool) []*TreeNode {
+	children := n.Index.Children(len(includeRemovedNode) > 0 && includeRemovedNode[0])
 	nodes := make([]*TreeNode, len(children))
 	for i, child := range children {
 		nodes[i] = child.Value
@@ -237,6 +237,11 @@ func (n *TreeNode) Attributes() string {
 	}
 
 	return " " + sb.String()
+}
+
+// ClearChildren clears the children.
+func (n *TreeNode) ClearChildren() error {
+	return n.Index.SetChildren(nil)
 }
 
 // Append appends the given node to the end of the children.
@@ -592,6 +597,14 @@ func (t *Tree) Marshal() string {
 	return builder.String()
 }
 
+// Marshal returns the JSON encoding of this Tree.
+func (n *TreeNode) Marshal() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf(`%s:`, n.id.CreatedAt.ToTestString()))
+	marshal(builder, n)
+	return builder.String()
+}
+
 // Purge physically purges the given node.
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
@@ -671,7 +684,7 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 	builder.WriteString(`]`)
 
 	if node.Attrs != nil && node.Attrs.Len() > 0 {
-		builder.WriteString(fmt.Sprintf(`,"attributes":`))
+		builder.WriteString(`,"attributes":`)
 		builder.WriteString(node.Attrs.Marshal())
 	}
 
@@ -836,12 +849,12 @@ func (t *Tree) Edit(
 	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
 	var diff resource.DataSize
-
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return nil, diff, err
 	}
+
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return nil, diff, err
@@ -849,31 +862,37 @@ func (t *Tree) Edit(
 
 	diff.Add(diffFrom, diffTo)
 
-	toBeRemoveds, toBeMovedToFromParents, err := t.collectBetween(
-		fromParent, fromLeft, toParent, toLeft,
-		editedAt, versionVector,
-	)
+	removes, merges, err := t.collectDeleteAndMerge(fromParent, fromLeft, toParent, toLeft)
 	if err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
-	for _, node := range toBeRemoveds {
-		if node.remove(editedAt) {
+	for _, node := range removes {
+		removed, err := t.RemoveNode(node, editedAt, versionVector)
+		if err != nil {
+			return nil, resource.DataSize{}, err
+		}
+		if removed != nil {
 			pairs = append(pairs, GCPair{
 				Parent: t,
-				Child:  node,
+				Child:  removed,
 			})
 		}
 	}
 
 	// 03. Merge: move the nodes that are marked as moved.
-	for _, node := range toBeMovedToFromParents {
-		if node.removedAt == nil {
-			if err := fromParent.Append(node); err != nil {
-				return nil, resource.DataSize{}, err
-			}
+	for _, node := range merges {
+		removed, err := t.MergeNode(node, editedAt, versionVector)
+		if err != nil {
+			return nil, resource.DataSize{}, err
+		}
+		if removed != nil {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  removed,
+			})
 		}
 	}
 
@@ -924,70 +943,108 @@ func (t *Tree) Edit(
 	return pairs, diff, nil
 }
 
-// collectBetween collects nodes that are marked as removed or moved.
-func (t *Tree) collectBetween(
-	fromParent *TreeNode, fromLeft *TreeNode,
-	toParent *TreeNode, toLeft *TreeNode,
-	editedAt *time.Ticket,
-	versionVector time.VersionVector,
+func (t *Tree) collectDeleteAndMerge(
+	fromParent, fromLeft, toParent, toLeft *TreeNode,
 ) ([]*TreeNode, []*TreeNode, error) {
-	var toBeRemoveds []*TreeNode
-	var toBeMovedToFromParents []*TreeNode
-	isVersionVectorEmpty := len(versionVector) == 0
+	var removes []*TreeNode
+	var merges []*TreeNode
+	var stack []*TreeNodeID
 
-	if err := t.traverseInPosRange(
-		fromParent, fromLeft,
-		toParent, toLeft,
-		func(token index.TreeToken[*TreeNode], ended bool) {
-			node, tokenType := token.Node, token.TokenType
-			// NOTE(hackerwins): If the node overlaps as a start token with the
-			// range then we need to move the remaining children to fromParent.
-			if tokenType == index.Start && !ended {
-				// TODO(hackerwins): Define more clearly merge-able rules
-				// between two parents. For now, we only merge two parents are
-				// both element nodes having text children.
-				// e.g. <p>a|b</p><p>c|d</p> -> <p>a|d</p>
-				// if !fromParent.Index.HasTextChild() ||
-				// 	!toParent.Index.HasTextChild() {
-				// 	return
-				// }
+	if fromParent == nil || fromLeft == nil || toParent == nil || toLeft == nil {
+		return nil, nil, fmt.Errorf("invalid TreePos: cannot resolve nodes")
+	}
 
-				for _, child := range node.Index.Children() {
-					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
-				}
-			}
+	err := traverseInTreePos(fromParent, fromLeft, toParent, toLeft, func(parent, left *TreeNode) error {
+		if left.IsText() {
+			removes = append(removes, left)
+			return nil
+		}
 
-			actorID := node.id.CreatedAt.ActorID()
-			var clientLamportAtChange int64
-			if isVersionVectorEmpty {
-				// Case 1: local editing from json package
-				clientLamportAtChange = time.MaxLamport
+		if parent == left {
+			// push
+			stack = append(stack, left.ID())
+		} else {
+			// pop
+			if len(stack) > 0 && stack[len(stack)-1].Equals(left.ID()) {
+				stack = stack[:len(stack)-1]
+				removes = append(removes, left)
 			} else {
-				// Case 2: from operation with version vector(After v0.5.7)
-				lamport, ok := versionVector.Get(actorID)
-				if ok {
-					clientLamportAtChange = lamport
-				} else {
-					clientLamportAtChange = 0
-				}
+				merges = append(merges, left)
 			}
-
-			// NOTE(sejongk): If the node is removable or its parent is going to
-			// be removed, then this node should be removed.
-			if node.canDelete(editedAt, clientLamportAtChange) ||
-				slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
-				// NOTE(hackerwins): If the node overlaps as an end token with the
-				// range then we need to keep the node.
-				if tokenType == index.Text || tokenType == index.Start {
-					toBeRemoveds = append(toBeRemoveds, node)
-				}
-			}
-		},
-	); err != nil {
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, nil, err
 	}
 
-	return toBeRemoveds, toBeMovedToFromParents, nil
+	slices.Reverse(merges)
+	return removes, merges, nil
+}
+
+func (t *Tree) RemoveNode(node *TreeNode, editedAt *time.Ticket, versionVector time.VersionVector) (*TreeNode, error) {
+	actorID := node.id.CreatedAt.ActorID()
+
+	if len(versionVector) == 0 {
+		if node.remove(editedAt) {
+			return node, nil
+		}
+	}
+	clientLamportAtChange, ok := versionVector.Get(actorID)
+	if !ok {
+		return nil, nil
+	}
+
+	if node.canDelete(editedAt, clientLamportAtChange) {
+		if node.remove(editedAt) {
+			return node, nil
+		}
+	}
+	return nil, nil
+}
+
+func (t *Tree) MergeNode(node *TreeNode, editedAt *time.Ticket, versionVector time.VersionVector) (*TreeNode, error) {
+	actorID := node.id.CreatedAt.ActorID()
+
+	var clientLamportAtChange int64
+	if len(versionVector) == 0 {
+		clientLamportAtChange = time.MaxLamport
+	} else {
+		var ok bool
+		clientLamportAtChange, ok = versionVector.Get(actorID)
+		if !ok {
+			return nil, nil
+		}
+	}
+
+	nodeIdx := node.Index
+	for nodeIdx, err := nodeIdx.NextSiblingExtended(); nodeIdx != nil; nodeIdx, err = nodeIdx.NextSiblingExtended() {
+		if err != nil {
+			return nil, err
+		}
+		right := nodeIdx.Value
+
+		if right.canDelete(editedAt, clientLamportAtChange) {
+			if node.Type() != right.Type() {
+				return nil, nil
+			}
+			children := right.Children(true)
+			if len(children) > 0 {
+				if err := right.ClearChildren(); err != nil {
+					return nil, err
+				}
+				if err := node.Append(children...); err != nil {
+					return nil, err
+				}
+			}
+			if right.remove(editedAt) {
+				return right, nil
+			}
+			return nil, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (t *Tree) split(
@@ -1038,6 +1095,61 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 	}
 
 	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback)
+}
+
+// callback must not modify the tree by `pkg/index/tree.go L256`
+func traverseInTreePos(fromParent, fromLeft, toParent, toLeft *TreeNode,
+	callback func(parent *TreeNode, left *TreeNode) error,
+) error {
+	isEnd := func(p1, l1, p2, l2 *TreeNode) bool {
+		return p1.ID().Equals(p2.ID()) && l1.ID().Equals(l2.ID())
+	}
+
+	var ok bool
+	stk := []*index.Node[*TreeNode]{}
+	for {
+		if isEnd(fromParent, fromLeft, toParent, toLeft) {
+			break
+		}
+		if fromParent, fromLeft, ok = nextTreePos(fromParent, fromLeft, &stk); !ok {
+			break
+		}
+		if err := callback(fromParent, fromLeft); err != nil {
+			break
+		}
+	}
+	return nil
+}
+
+func nextTreePos(parent, left *TreeNode, stk *[]*index.Node[*TreeNode]) (*TreeNode, *TreeNode, bool) {
+	var nextNode *TreeNode = nil
+
+	if parent == left {
+		children := slices.Clone(parent.Index.GetChildren())
+		*stk = append(children, (*stk)...)
+	} else if len(*stk) == 0 {
+		offset := parent.Index.OffsetOfChild(left.Index)
+		children := slices.Clone(parent.Index.GetChildren()[offset+1:])
+		*stk = append(children, (*stk)...)
+	}
+
+	if len(*stk) != 0 {
+		nextNode = (*stk)[0].Value
+	}
+
+	if nextNode != nil && (*stk)[0].Parent == parent.Index {
+		*stk = (*stk)[1:]
+		if nextNode.IsText() {
+			return parent, nextNode, true
+		} else {
+			return nextNode, nextNode, true
+		}
+	} else {
+		if parent.Index.Parent == nil {
+			return nil, nil, false
+		}
+		return parent.Index.Parent.Value, parent, true
+	}
 }
 
 // StyleByIndex applies the given attributes of the given range.
