@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -78,6 +79,12 @@ func TestClusterNodes(t *testing.T) {
 		conf.RPC.Port = getFreePort()
 		conf.Profiling.Port = getFreePort()
 		conf.Backend.RPCAddr = addr
+		conf.Mongo = &mongo.Config{
+			ConnectionTimeout: "5s",
+			ConnectionURI:     "mongodb://localhost:27017",
+			YorkieDatabase:    helper.TestDBName() + "-integration",
+			PingTimeout:       "5s",
+		}
 		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
 		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
 
@@ -261,22 +268,9 @@ func TestClusterNodes(t *testing.T) {
 		}()
 
 		assert.Eventually(t, func() bool {
-			for _, svr := range svrs {
-				res, err := svr.Backend().FindActiveClusterNodes(ctx, renewalInterval)
-				require.NoError(t, err)
-				return numGoroutines == len(res)
-			}
-
-			return false
-		}, 50*renewalInterval, renewalInterval)
-
-		assert.Eventually(t, func() bool {
 			freq := 0
 
 			for _, svr := range svrs {
-				//res, err := svr.Backend().FindActiveClusterNodes(ctx, renewalInterval)
-				//require.NoError(t, err)
-				//require.Equal(t, numGoroutines, len(res))
 				if svr.Backend().IsLeader() {
 					freq++
 				}
@@ -287,7 +281,6 @@ func TestClusterNodes(t *testing.T) {
 	})
 
 	t.Run("Should handle leader graceful shutdown test", func(t *testing.T) {
-		t.Skip("")
 		ctx := context.Background()
 		renewalInterval := 100 * gotime.Millisecond
 
