@@ -584,11 +584,11 @@ func (s *adminServer) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-	serverSeq := docInfo.GetServerSeq()
-	lastSeq := serverSeq.OpSeq + serverSeq.PrSeq
+	lastSeq := docInfo.GetServerSeq()
+	previousSeq := change.NewServerSeq(req.Msg.PreviousOpSeq, req.Msg.PreviousPrSeq)
 
-	from, to := types.GetChangesRange(types.Paging[int64]{
-		Offset:    req.Msg.PreviousSeq,
+	from, to := types.GetChangesRangeServerSeq(types.Paging[change.ServerSeq]{
+		Offset:    previousSeq,
 		PageSize:  int(req.Msg.PageSize),
 		IsForward: req.Msg.IsForward,
 	}, lastSeq)

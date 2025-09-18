@@ -30,13 +30,15 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 var (
-	previousSeq int64
-	pageSize    int32
-	isForward   bool
+	previousOpSeq int64
+	previousPrSeq int64
+	pageSize      int32
+	isForward     bool
 )
 
 func newHistoryCmd() *cobra.Command {
@@ -67,7 +69,7 @@ func newHistoryCmd() *cobra.Command {
 				ctx,
 				args[0],
 				key.Key(args[1]),
-				previousSeq,
+				change.NewServerSeq(previousOpSeq, previousPrSeq),
 				pageSize,
 				isForward,
 			)
@@ -129,10 +131,16 @@ func printHistories(cmd *cobra.Command, output string, changes []*types.ChangeSu
 func init() {
 	cmd := newHistoryCmd()
 	cmd.Flags().Int64Var(
-		&previousSeq,
-		"previous-seq",
+		&previousOpSeq,
+		"previous-op-seq",
 		0,
-		"The previous sequence to start from",
+		"The previous operation sequence to start from",
+	)
+	cmd.Flags().Int64Var(
+		&previousPrSeq,
+		"previous-pr-seq",
+		0,
+		"The previous presence sequence to start from",
 	)
 	cmd.Flags().Int32Var(
 		&pageSize,

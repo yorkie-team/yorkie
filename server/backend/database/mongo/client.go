@@ -859,7 +859,8 @@ func (c *Client) TryAttaching(
 		bson.M{
 			"$set": bson.M{
 				clientDocInfoKey(docID, StatusKey):    database.DocumentAttaching,
-				clientDocInfoKey(docID, "server_seq"): int64(0),
+				clientDocInfoKey(docID, "op_seq"):     int64(0),
+				clientDocInfoKey(docID, "pr_seq"):     int64(0),
 				clientDocInfoKey(docID, "client_seq"): uint32(0),
 				"updated_at":                          gotime.Now(),
 			},
@@ -978,7 +979,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	if existing, ok := c.clientCache.Get(clientKey); ok {
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
-			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
+			if (existingDocInfo.GetServerSeq().GreaterThan(clientDocInfo.GetServerSeq()) ||
+				existingDocInfo.GetServerSeq().EqualWith(clientDocInfo.GetServerSeq())) &&
 				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
 				existingDocInfo.Status == clientDocInfo.Status {
 				return nil
@@ -1012,7 +1014,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	} else {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
+				clientDocInfoKey(docInfo.ID, "op_seq"):     0,
+				clientDocInfoKey(docInfo.ID, "pr_seq"):     0,
 				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
 				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
 				"updated_at":                               info.UpdatedAt,
@@ -1106,8 +1109,8 @@ func (c *Client) FindCompactionCandidates(
 	lastDocID types.ID,
 ) ([]*database.DocInfo, types.ID, error) {
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"_id":        bson.M{"$gt": lastDocID},
-		"server_seq": bson.M{"$gte": compactionMinChanges},
+		"_id":    bson.M{"$gt": lastDocID},
+		"op_seq": bson.M{"$gte": compactionMinChanges},
 	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
 	if err != nil {
 		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
@@ -1201,7 +1204,8 @@ func (c *Client) FindOrCreateDocInfo(
 			},
 			"$setOnInsert": bson.M{
 				"owner":      clientRefKey.ClientID,
-				"server_seq": 0,
+				"op_seq":     0,
+				"pr_seq":     0,
 				"created_at": now,
 				"updated_at": now,
 			},

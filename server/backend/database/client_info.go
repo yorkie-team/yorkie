@@ -60,6 +60,11 @@ type ClientDocInfo struct {
 	ClientSeq uint32 `bson:"client_seq"`
 }
 
+// GetServerSeq returns the server sequence as ServerSeq struct.
+func (i *ClientDocInfo) GetServerSeq() change.ServerSeq {
+	return change.NewServerSeq(i.OpSeq, i.PrSeq)
+}
+
 // ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
 type ClientDocInfoMap map[types.ID]*ClientDocInfo
 

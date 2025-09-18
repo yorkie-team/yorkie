@@ -1615,13 +1615,20 @@ components:
           description: ""
           title: page_size
           type: integer
-        previousSeq:
+        previousOpSeq:
           additionalProperties: false
           description: ""
           oneOf:
           - type: string
           - type: number
-          title: previous_seq
+          title: previous_op_seq
+        previousPrSeq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: previous_pr_seq
       title: ListChangesRequest
       type: object
     yorkie.v1.ListChangesResponse:

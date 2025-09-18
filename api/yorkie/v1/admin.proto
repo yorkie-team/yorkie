@@ -223,9 +223,10 @@ message SearchDocumentsResponse {
 
 message ListChangesRequest {
   string document_key = 1;
-  int64 previous_seq = 2;
-  int32  page_size = 3;
-  bool   is_forward = 4;
+  int64 previous_op_seq = 2;
+  int64 previous_pr_seq = 3;
+  int32  page_size = 4;
+  bool   is_forward = 5;
 }
 
 message ListChangesResponse {
