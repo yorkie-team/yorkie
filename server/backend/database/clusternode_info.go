@@ -32,12 +32,14 @@ type ClusterNodeInfo struct {
 	IsLeader   bool      `bson:"is_leader"`
 }
 
-// IsExpired returns true if the leadership lease has expired.
+// IsExpired reports whether the leadership lease has expired.
+// Used only in memDB (in-memory database) implementations.
 func (ci *ClusterNodeInfo) IsExpired() bool {
 	return time.Now().After(ci.ExpiresAt)
 }
 
-// TimeUntilExpiry returns the duration until the lease expires.
+// TimeUntilExpiry returns the duration until the lease expires for memory database storage.
+// Used only in memDB (in-memory database) implementations.
 func (ci *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
 	return time.Until(ci.ExpiresAt)
 }

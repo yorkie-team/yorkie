@@ -82,9 +82,9 @@ func TestLeadershipManager(t *testing.T) {
 		}()
 
 		assert.Eventually(t, func() bool {
-			leader, err := manager.Leader(ctx)
+			infos, err := manager.ActiveClusterNodes(ctx)
 			require.NoError(t, err)
-			return leader != nil
+			return len(infos) == 1 && infos[0].IsLeader
 		}, 1*time.Second, 50*time.Millisecond)
 	})
 
@@ -143,10 +143,9 @@ func TestLeadershipManager(t *testing.T) {
 		// Stop manager1 (simulating node failure)
 		assert.NoError(t, manager1.Stop())
 		assert.Eventually(t, func() bool {
-			leader, err := manager1.Leader(ctx)
+			infos, err := manager1.ActiveClusterNodes(ctx)
 			require.NoError(t, err)
-
-			return leader == nil
+			return len(infos) == 0
 		}, 1*time.Second, 50*time.Millisecond)
 
 		// Start manager2
@@ -180,11 +179,11 @@ func TestLeadershipConcurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			nodeID := fmt.Sprintf("node-%d", id)
+			rpcAddr := fmt.Sprintf("test-addr-%d", id)
 
 			for range 50 {
-				info, err := db.TryLeadership(ctx, nodeID, "", leaseDuration)
-				if err == nil && info.RPCAddr == nodeID {
+				info, err := db.TryLeadership(ctx, rpcAddr, "", leaseDuration)
+				if err == nil && info != nil {
 					acquiredCount[id]++
 
 					// Hold leadership briefly then let it expire

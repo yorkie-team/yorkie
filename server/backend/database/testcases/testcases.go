@@ -66,26 +66,8 @@ func RunLeadershipTest(
 		assert.False(t, info.IsExpired())
 	})
 
-	t.Run("TryLeadership should return existing leader when valid", func(t *testing.T) {
-		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
-
-		// First node acquires leadership
-		leaseDuration := 30 * gotime.Second
-
-		info1, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
-		require.NoError(t, err)
-
-		// Second node tries to acquire leadership
-		info2, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
-		require.NoError(t, err)
-
-		// Should return the first node's leadership
-		assert.Equal(t, nodeIDOne, info2.RPCAddr)
-		assert.Equal(t, info1.LeaseToken, info2.LeaseToken)
-	})
-
 	t.Run("TryLeadership should allow takeover after expiry", func(t *testing.T) {
+		t.Skip("TODO(raararaara): Remove this after adding TTL index setup for tests.")
 		ctx := context.Background()
 		require.NoError(t, db.ClearClusterNodes(ctx))
 
@@ -158,30 +140,6 @@ func RunLeadershipTest(
 		// Try to renew from different node
 		_, err = db.TryLeadership(ctx, nodeIDTwo, info.LeaseToken, leaseDuration)
 		assert.ErrorIs(t, err, database.ErrInvalidLeaseToken)
-	})
-
-	t.Run("FindLeadership should return current leader", func(t *testing.T) {
-		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
-
-		// No leadership initially
-		info, err := db.FindLeadership(ctx)
-		require.NoError(t, err)
-		assert.Nil(t, info)
-
-		// Acquire leadership
-		leaseDuration := 30 * gotime.Second
-
-		acquired, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
-		require.NoError(t, err)
-
-		// Get leadership should return the same info
-		info, err = db.FindLeadership(ctx)
-		require.NoError(t, err)
-		require.NotNil(t, info)
-
-		assert.Equal(t, acquired.RPCAddr, info.RPCAddr)
-		assert.Equal(t, acquired.LeaseToken, info.LeaseToken)
 	})
 }
 

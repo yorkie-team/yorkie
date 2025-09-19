@@ -181,45 +181,18 @@ func (c *Client) TryLeadership(
 		if err != nil {
 			return nil, err
 		}
-		// NOTE(raararaara): If we didn't become leader, just update our follower heartbeat.
-		// ret == nil          : no SOT-valid leader yet
-		// ret.RPCAddr != self : another node is the current leader.
-		if ret == nil || ret.RPCAddr != rpcAddr {
+
+		// If lease is nil, it means leadership acquisition failed.
+		if ret == nil {
 			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
 				return nil, err
 			}
 		}
+
 		return ret, nil
 	}
 
 	return c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
-}
-
-// FindLeadership returns the current leadership information.
-func (c *Client) FindLeadership(
-	ctx context.Context,
-) (*database.ClusterNodeInfo, error) {
-	result := c.collection(ColClusterNodes).FindOne(
-		ctx,
-		bson.M{
-			"is_leader": true,
-			"$expr": bson.M{
-				"$gte": bson.A{"$expires_at", "$$NOW"},
-			},
-		})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find leadership: %w", result.Err())
-	}
-
-	info := &database.ClusterNodeInfo{}
-	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("decode leadership: %w", err)
-	}
-
-	return info, nil
 }
 
 // tryAcquireLeadership attempts to acquire new leadership.
@@ -257,19 +230,7 @@ func (c *Client) tryAcquireLeadership(
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
-			// demote
-			if _, err = c.collection(ColClusterNodes).UpdateOne(
-				ctx,
-				bson.M{
-					"is_leader": true,
-					"$expr":     bson.M{"$lt": bson.A{"$expires_at", "$$NOW"}},
-				},
-				bson.M{"$set": bson.M{"is_leader": false}},
-			); err != nil {
-				return nil, fmt.Errorf("demote expired leadership: %w", err)
-			}
-
-			return c.FindLeadership(ctx)
+			return nil, nil
 		}
 
 		return nil, fmt.Errorf("decode new cluster node: %w", err)
@@ -289,7 +250,7 @@ func (c *Client) tryRenewLeadership(
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
 	if err != nil {
-		return nil, fmt.Errorf("generate lease token: %w", err)
+		return nil, fmt.Errorf("generate lease token of %s: %w", rpcAddr, err)
 	}
 
 	// Try to update the existing leadership with the correct token and rpcAddr.
@@ -312,15 +273,15 @@ func (c *Client) tryRenewLeadership(
 	)
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("invalid token or node: %w", database.ErrInvalidLeaseToken)
+		return nil, fmt.Errorf("invalid token or node of %s: %w", rpcAddr, database.ErrInvalidLeaseToken)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("renew leadership: %w", result.Err())
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, result.Err())
 	}
 
 	info := &database.ClusterNodeInfo{}
 	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("decode cluster node: %w", err)
+		return nil, fmt.Errorf("decode cluster node of %s: %w", rpcAddr, err)
 	}
 
 	return info, nil
@@ -330,10 +291,7 @@ func (c *Client) tryRenewLeadership(
 func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) error {
 	_, err := c.collection(ColClusterNodes).UpdateOne(
 		ctx,
-		bson.M{
-			"rpc_addr":  rpcAddr,
-			"is_leader": bson.M{"$ne": true},
-		},
+		bson.M{"rpc_addr": rpcAddr},
 		bson.M{
 			"$currentDate": bson.M{"updated_at": true},
 			"$setOnInsert": bson.M{
@@ -346,7 +304,7 @@ func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) erro
 	if mongo.IsDuplicateKeyError(err) {
 		return nil
 	}
-	return err
+	return fmt.Errorf("update cluster follower of %s: %w", rpcAddr, err)
 }
 
 // FindActiveClusterNodes returns nodes considered active within the given time window.
@@ -389,7 +347,7 @@ func (c *Client) FindActiveClusterNodes(
 func (c *Client) RemoveClusterNode(ctx context.Context, rpcAddr string) error {
 	_, err := c.collection(ColClusterNodes).DeleteOne(ctx, bson.M{"rpc_addr": rpcAddr})
 	if err != nil {
-		return fmt.Errorf("remove cluster node: %w", err)
+		return fmt.Errorf("remove cluster node of %s: %w", rpcAddr, err)
 	}
 	return nil
 }

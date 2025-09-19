@@ -88,9 +88,6 @@ type Database interface {
 		leaseDuration gotime.Duration,
 	) (*ClusterNodeInfo, error)
 
-	// FindLeadership returns the current leadership information.
-	FindLeadership(ctx context.Context) (*ClusterNodeInfo, error)
-
 	// RemoveClusterNode removes the cluster node identified by rpcAddr.
 	RemoveClusterNode(ctx context.Context, rpcAddr string) error
 

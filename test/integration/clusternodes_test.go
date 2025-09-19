@@ -19,7 +19,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -65,19 +64,8 @@ func (m *MockDB) SetDisconnected(disconnected bool) {
 }
 
 func TestClusterNodes(t *testing.T) {
-	getFreePort := func() int {
-		l, err := net.Listen("tcp4", "127.0.0.1:0")
-		if err != nil {
-			panic(err)
-		}
-		defer assert.NoError(t, l.Close())
-		return l.Addr().(*net.TCPAddr).Port
-	}
-
 	newTestConfig := func(addr string) *server.Config {
 		conf := helper.TestConfig()
-		conf.RPC.Port = getFreePort()
-		conf.Profiling.Port = getFreePort()
 		conf.Backend.RPCAddr = addr
 		conf.Mongo = &mongo.Config{
 			ConnectionTimeout: "5s",
@@ -107,52 +95,70 @@ func TestClusterNodes(t *testing.T) {
 		require.NoError(t, dummy.Shutdown(true))
 	}
 
-	t.Run("Should list active cluster nodes test", func(t *testing.T) {
+	t.Run("Identical active cluster nodes across servers test", func(t *testing.T) {
 		ctx := context.Background()
-		renewalInterval := 100 * gotime.Millisecond
 
 		clearClusterNodes(ctx)
 
-		numGoroutines := 2
+		numServers := 2
 
-		svrs := make([]*server.Yorkie, numGoroutines)
-		for i := range numGoroutines {
+		svrs := make([]*server.Yorkie, numServers)
+		for i := range numServers {
 			svr, err := server.New(newTestConfig(fmt.Sprintf("test-addr-%d", i)))
 			require.NoError(t, err)
+			require.NoError(t, svr.Start())
 			svrs[i] = svr
 		}
 
-		var wg sync.WaitGroup
-		for _, svr := range svrs {
-			wg.Add(1)
-			go func(svr *server.Yorkie) {
-				defer wg.Done()
-				require.NoError(t, svr.Start())
-			}(svr)
-		}
-		wg.Wait()
 		defer func() {
 			for _, s := range svrs {
 				assert.NoError(t, s.Shutdown(true))
 			}
 		}()
 
-		assert.Eventually(t, func() bool {
-			infos1, err := svrs[0].Backend().FindActiveClusterNodes(ctx, renewalInterval)
-			require.NoError(t, err)
-			infos2, err := svrs[1].Backend().FindActiveClusterNodes(ctx, renewalInterval)
-			require.NoError(t, err)
+		toMap := func(infos []*database.ClusterNodeInfo) map[string]struct{} {
+			m := make(map[string]struct{}, len(infos))
+			for _, in := range infos {
+				m[in.RPCAddr] = struct{}{}
+			}
+			return m
+		}
+		equal := func(a, b map[string]struct{}) bool {
+			if len(a) != len(b) {
+				return false
+			}
+			for k := range a {
+				if _, ok := b[k]; !ok {
+					return false
+				}
+			}
+			return true
+		}
 
-			return len(infos1) == numGoroutines &&
-				len(infos2) == numGoroutines &&
-				infos1[0].RPCAddr == infos2[0].RPCAddr &&
-				infos1[1].RPCAddr == infos2[1].RPCAddr
-		}, 10*renewalInterval, renewalInterval)
+		assert.Eventually(t, func() bool {
+			var refMap map[string]struct{}
+
+			for _, svr := range svrs {
+				infos, err := svr.Backend().FindActiveClusterNodes(ctx)
+				require.NoError(t, err)
+
+				if len(infos) != numServers {
+					return false
+				}
+				mp := toMap(infos)
+
+				if refMap == nil {
+					refMap = mp
+				} else if !equal(refMap, mp) {
+					return false
+				}
+			}
+			return true
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 	})
 
-	t.Run("Should handle server restart test", func(t *testing.T) {
+	t.Run("Leadership reacquisition after server restart test", func(t *testing.T) {
 		ctx := context.Background()
-		renewalInterval := 100 * gotime.Millisecond
 
 		clearClusterNodes(ctx)
 
@@ -160,13 +166,12 @@ func TestClusterNodes(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.NoError(t, svr.Start())
-		gotime.Sleep(500 * gotime.Millisecond)
 
 		assert.Eventually(t, func() bool {
-			svrs, err := svr.Backend().FindActiveClusterNodes(ctx, renewalInterval)
+			svrs, err := svr.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 			return 1 == len(svrs) && svrs[0].IsLeader
-		}, 10*renewalInterval, renewalInterval)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		assert.NoError(t, svr.Shutdown(true))
 
@@ -180,14 +185,14 @@ func TestClusterNodes(t *testing.T) {
 
 		// Since there is only one node, that node must be the leader.
 		assert.Eventually(t, func() bool {
-			currLeader, err := svr2.Backend().FindLeadership(ctx)
+			infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 
-			return currLeader != nil && "test-addr-1" == currLeader.RPCAddr
-		}, 10*renewalInterval, renewalInterval)
+			return len(infos) > 0 && infos[0].IsLeader && "test-addr-1" == infos[0].RPCAddr
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 	})
 
-	t.Run("Should revoke and reacquire leadership after temporary DB disconnection test", func(t *testing.T) {
+	t.Run("Leadership revocation and reacquisition after temporary DB disconnection test", func(t *testing.T) {
 		ctx := context.Background()
 
 		clearClusterNodes(ctx)
@@ -203,47 +208,53 @@ func TestClusterNodes(t *testing.T) {
 			assert.NoError(t, svr.Shutdown(true))
 		}()
 
+		var leader *database.ClusterNodeInfo
 		assert.Eventually(t, func() bool {
-			leader, err := svr.Backend().FindLeadership(ctx)
+			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 
-			return leader != nil
-		}, gotime.Second, 100*gotime.Millisecond)
+			if len(infos) > 0 && infos[0].IsLeader {
+				leader = infos[0]
+				return true
+			}
 
-		leader, err := svr.Backend().FindLeadership(ctx)
-		assert.NoError(t, err)
-		assert.True(t, leader.IsLeader)
+			return false
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 		prvToken := leader.LeaseToken
 
 		mockDB.SetDisconnected(true)
 
 		assert.Eventually(t, func() bool {
-			leader, err := svr.Backend().FindLeadership(ctx)
+			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 
-			return leader == nil
-		}, gotime.Second, 100*gotime.Millisecond)
+			return len(infos) == 0
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		mockDB.SetDisconnected(false)
 
 		assert.Eventually(t, func() bool {
-			leader, err = svr.Backend().FindLeadership(ctx)
+			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 
-			return leader != nil
-		}, gotime.Second, 100*gotime.Millisecond)
+			if len(infos) > 0 && infos[0].IsLeader {
+				leader = infos[0]
+				return true
+			}
+
+			return false
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 		currToken := leader.LeaseToken
 
 		assert.NotEqual(t, prvToken, currToken)
 	})
 
-	t.Run("Should handle concurrent connection test", func(t *testing.T) {
+	t.Run("Concurrent connection leadership election test", func(t *testing.T) {
 		ctx := context.Background()
-		renewalInterval := 100 * gotime.Millisecond
 
 		clearClusterNodes(ctx)
 
-		numGoroutines := 2
+		numGoroutines := 5
 
 		svrs := make([]*server.Yorkie, numGoroutines)
 		for i := range numGoroutines {
@@ -277,12 +288,11 @@ func TestClusterNodes(t *testing.T) {
 			}
 
 			return 1 == freq
-		}, 50*renewalInterval, renewalInterval)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 	})
 
-	t.Run("Should handle leader graceful shutdown test", func(t *testing.T) {
+	t.Run("Leader graceful shutdown and succession test", func(t *testing.T) {
 		ctx := context.Background()
-		renewalInterval := 100 * gotime.Millisecond
 
 		clearClusterNodes(ctx)
 
@@ -290,12 +300,12 @@ func TestClusterNodes(t *testing.T) {
 		svr2, _ := startServer("test-addr-2")
 
 		assert.Eventually(t, func() bool {
-			infos, err := svr2.Backend().FindActiveClusterNodes(ctx, renewalInterval)
+			infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
 			require.NoError(t, err)
 			return 2 == len(infos) && infos[0].IsLeader
-		}, 10*renewalInterval, renewalInterval)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 
-		infos, err := svr2.Backend().FindActiveClusterNodes(ctx, renewalInterval)
+		infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
 		assert.NoError(t, err)
 		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
@@ -310,7 +320,7 @@ func TestClusterNodes(t *testing.T) {
 
 		assert.Eventually(t, func() bool {
 			return followerSvr.Backend().IsLeader()
-		}, 10*renewalInterval, renewalInterval)
+		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		assert.NoError(t, followerSvr.Shutdown(true))
 	})

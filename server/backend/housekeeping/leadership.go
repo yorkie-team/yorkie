@@ -98,11 +98,7 @@ func (lm *LeadershipManager) Stop() error {
 	close(lm.stopCh)
 	lm.wg.Wait()
 
-	if err := lm.database.RemoveClusterNode(context.Background(), lm.rpcAddr); err != nil {
-		return err
-	}
-
-	return nil
+	return lm.database.RemoveClusterNode(context.Background(), lm.rpcAddr)
 }
 
 // IsLeader returns true if the current node is the leader.
@@ -110,9 +106,9 @@ func (lm *LeadershipManager) IsLeader() bool {
 	return lm.isLeader.Load()
 }
 
-// Leader returns the current leader information.
-func (lm *LeadershipManager) Leader(ctx context.Context) (*database.ClusterNodeInfo, error) {
-	return lm.database.FindLeadership(ctx)
+// ActiveClusterNodes returns the active cluster nodes.
+func (lm *LeadershipManager) ActiveClusterNodes(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+	return lm.database.FindActiveClusterNodes(ctx, lm.renewalInterval)
 }
 
 // CurrentLease returns the current lease information if this node is the leader.
@@ -120,6 +116,7 @@ func (lm *LeadershipManager) CurrentLease() *database.ClusterNodeInfo {
 	return lm.currentLease.Load()
 }
 
+// SetDB sets the given database to this manager.
 func (lm *LeadershipManager) SetDB(db database.Database) {
 	lm.database = db
 }
@@ -172,18 +169,16 @@ func (lm *LeadershipManager) tryAcquireLeadership(ctx context.Context) error {
 		return fmt.Errorf("acquire leadership: %w", err)
 	}
 
-	// NOTE(raararaara): In some cases, a leaderless state may exist.
-	// lease == nil -> no SOT-valid leader right now, and we didn't acquire it.
-	// Stay follower and retry on the next tick.
+	// If lease is nil, it means leadership acquisition failed.
+	// Another node may already hold leadership, so just return.
 	if lease == nil {
 		return nil
 	}
 
-	if lease.IsLeader && lm.rpcAddr == lease.RPCAddr {
-		lm.becomeLeader(lease)
-		if logger := logging.From(ctx); logger != nil {
-			logger.Infof("leadership acquired, expires_at: %s", lease.ExpiresAt)
-		}
+	// Otherwise, this node successfully became the leader.
+	lm.becomeLeader(lease)
+	if logger := logging.From(ctx); logger != nil {
+		logger.Infof("leadership acquired, expires_at: %s", lease.ExpiresAt)
 	}
 
 	return nil

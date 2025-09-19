@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -229,23 +228,16 @@ func (b *Backend) Shutdown() error {
 	return nil
 }
 
-// FindActiveClusterNodes returns nodes considered active within the given time window.
-// It is used for testing.
+// FindActiveClusterNodes returns the active cluster nodes for testing purpose.
 func (b *Backend) FindActiveClusterNodes(
 	ctx context.Context,
-	renewalInterval time.Duration,
 ) ([]*database.ClusterNodeInfo, error) {
-	return b.DB.FindActiveClusterNodes(ctx, renewalInterval)
+	return b.Housekeeping.LeadershipManager().ActiveClusterNodes(ctx)
 }
 
 // ClearClusterNodes removes the current clusternode information for testing purposes.
 func (b *Backend) ClearClusterNodes(ctx context.Context) error {
 	return b.DB.ClearClusterNodes(ctx)
-}
-
-// FindLeadership returns the current leadership information for testing purposes.
-func (b *Backend) FindLeadership(ctx context.Context) (*database.ClusterNodeInfo, error) {
-	return b.DB.FindLeadership(ctx)
 }
 
 // IsLeader returns whether this server is leader for testing purposes.

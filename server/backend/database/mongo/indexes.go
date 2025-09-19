@@ -83,7 +83,7 @@ var collectionInfos = []collectionInfo{
 			{
 				Keys: bson.D{{Key: "updated_at", Value: 1}},
 				Options: options.Index().
-					SetExpireAfterSeconds(60).
+					SetExpireAfterSeconds(10).
 					SetName("ttl_updated_at"),
 			},
 		},

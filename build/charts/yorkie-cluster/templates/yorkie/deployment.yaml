@@ -69,7 +69,7 @@ spec:
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.yorkie.image.pullPolicy }}
         env:
-          - name: RPC_ADDR
+          - name: POD_IP
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
@@ -87,7 +87,7 @@ spec:
           "--backend-gateway-addr",
           "{{ .Values.yorkie.name }}-gateway.{{ .Values.yorkie.namespace }}.svc.cluster.local",
           "--backend-rpc-addr",
-          "$(RPC_ADDR):{{ .Values.yorkie.ports.rpcPort }}",
+          "$(POD_IP):{{ .Values.yorkie.ports.rpcPort }}",
           "--backend-use-default-project", "{{ .Values.yorkie.args.useDefaultProject }}",
           {{- if .Values.yorkie.args.snapshotInterval }}
           "--backend-snapshot-interval",
