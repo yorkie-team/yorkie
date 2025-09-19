@@ -44,10 +44,16 @@ const (
 
 func setupMongoClient(databaseName string) (*mongo.Client, error) {
 	config := &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    databaseName,
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     databaseName,
+		PingTimeout:        "5s",
+		CacheStatsEnabled:  false,
+		CacheStatsInterval: "30s",
+		ClientCacheSize:    1000,
+		DocCacheSize:       1000,
+		ChangeCacheSize:    1000,
+		VectorCacheSize:    1000,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, err

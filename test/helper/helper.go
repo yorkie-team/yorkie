@@ -93,9 +93,14 @@ var (
 	ProjectCacheTTL             = 5 * gotime.Second
 	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
 
-	MongoConnectionURI     = "mongodb://localhost:27017"
-	MongoConnectionTimeout = "5s"
-	MongoPingTimeout       = "5s"
+	MongoConnectionTimeout  = "5s"
+	MongoConnectionURI      = "mongodb://localhost:27017"
+	MongoPingTimeout        = "5s"
+	MongoCacheStatsInterval = "30s"
+	MongoClientCacheSize    = 1000
+	MongoDocCacheSize       = 1000
+	MongoChangeCacheSize    = 1000
+	MongoVectorCacheSize    = 1000
 )
 
 func init() {
@@ -297,10 +302,16 @@ func TestConfig() *server.Config {
 			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
-			ConnectionURI:     MongoConnectionURI,
-			ConnectionTimeout: MongoConnectionTimeout,
-			PingTimeout:       MongoPingTimeout,
-			YorkieDatabase:    TestDBName(),
+			ConnectionTimeout:  MongoConnectionTimeout,
+			ConnectionURI:      MongoConnectionURI,
+			YorkieDatabase:     TestDBName(),
+			PingTimeout:        MongoPingTimeout,
+			CacheStatsEnabled:  false,
+			CacheStatsInterval: "30s",
+			ClientCacheSize:    MongoClientCacheSize,
+			DocCacheSize:       MongoDocCacheSize,
+			ChangeCacheSize:    MongoChangeCacheSize,
+			VectorCacheSize:    MongoVectorCacheSize,
 		},
 	}
 }
@@ -414,10 +425,15 @@ func NewRangeSlice(start, end int) []int {
 // setupRawMongoClient returns the raw mongo client.
 func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 	conf := &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    databaseName,
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     databaseName,
+		PingTimeout:        "5s",
+		CacheStatsInterval: MongoCacheStatsInterval,
+		ClientCacheSize:    MongoClientCacheSize,
+		DocCacheSize:       MongoDocCacheSize,
+		ChangeCacheSize:    MongoChangeCacheSize,
+		VectorCacheSize:    MongoVectorCacheSize,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
