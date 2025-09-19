@@ -132,6 +132,24 @@ Mongo:
   # MonitoringSlowQueryThreshold is the threshold in milliseconds to log slow queries.
   MonitoringSlowQueryThreshold: "100ms"
 
+  # CacheStatsEnabled determines whether cache statistics logging is enabled.
+  CacheStatsEnabled: false
+
+  # CacheStatsInterval is the interval for logging cache statistics.
+  CacheStatsInterval: "30s"
+
+  # ClientCacheSize is the size of the client cache.
+  ClientCacheSize: 10000
+
+  # DocCacheSize is the size of the document cache.
+  DocCacheSize: 10000
+
+  # ChangeCacheSize is the size of the change cache.
+  ChangeCacheSize: 10000
+
+  # VectorCacheSize is the size of the version vector cache.
+  VectorCacheSize: 10000
+
 # Kafka is the yorkie analytics message broker configuration (Optional).
 Kafka:
   # Addresses is the URI to connect to message broker.

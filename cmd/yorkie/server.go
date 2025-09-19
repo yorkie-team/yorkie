@@ -60,6 +60,10 @@ var (
 	mongoMonitoringSlowQueryThreshold string
 	mongoCacheStatsEnabled            bool
 	mongoCacheStatsInterval           time.Duration
+	mongoClientCacheSize              int
+	mongoDocCacheSize                 int
+	mongoChangeCacheSize              int
+	mongoVectorCacheSize              int
 
 	pprofEnabled bool
 
@@ -107,6 +111,10 @@ func newServerCmd() *cobra.Command {
 					MonitoringSlowQueryThreshold: mongoMonitoringSlowQueryThreshold,
 					CacheStatsEnabled:            mongoCacheStatsEnabled,
 					CacheStatsInterval:           mongoCacheStatsInterval.String(),
+					ClientCacheSize:              mongoClientCacheSize,
+					DocCacheSize:                 mongoDocCacheSize,
+					ChangeCacheSize:              mongoChangeCacheSize,
+					VectorCacheSize:              mongoVectorCacheSize,
 				}
 			}
 
@@ -352,6 +360,30 @@ func init() {
 		"mongo-cache-stats-enabled",
 		false,
 		"Enable MongoDB cache statistics logging",
+	)
+	cmd.Flags().IntVar(
+		&mongoClientCacheSize,
+		"mongo-client-cache-size",
+		server.DefaultMongoClientCacheSize,
+		"MongoDB client cache size",
+	)
+	cmd.Flags().IntVar(
+		&mongoDocCacheSize,
+		"mongo-doc-cache-size",
+		server.DefaultMongoDocCacheSize,
+		"MongoDB document cache size",
+	)
+	cmd.Flags().IntVar(
+		&mongoChangeCacheSize,
+		"mongo-change-cache-size",
+		server.DefaultMongoChangeCacheSize,
+		"MongoDB change cache size",
+	)
+	cmd.Flags().IntVar(
+		&mongoVectorCacheSize,
+		"mongo-vector-cache-size",
+		server.DefaultMongoVectorCacheSize,
+		"MongoDB version vector cache size",
 	)
 	cmd.Flags().DurationVar(
 		&mongoCacheStatsInterval,

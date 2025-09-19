@@ -48,10 +48,16 @@ func setupBackend(t *testing.T) *backend.Backend {
 	conf := helper.TestConfig()
 	conf.Backend.UseDefaultProject = false
 	conf.Mongo = &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    helper.TestDBName() + "-integration",
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     helper.TestDBName() + "-integration",
+		PingTimeout:        "5s",
+		CacheStatsEnabled:  false,
+		CacheStatsInterval: "30s",
+		ClientCacheSize:    helper.MongoClientCacheSize,
+		DocCacheSize:       helper.MongoDocCacheSize,
+		ChangeCacheSize:    helper.MongoChangeCacheSize,
+		VectorCacheSize:    helper.MongoVectorCacheSize,
 	}
 
 	metrics, err := prometheus.NewMetrics()
