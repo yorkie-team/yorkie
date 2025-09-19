@@ -18,6 +18,7 @@ package housekeeping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -37,7 +38,7 @@ type Housekeeping struct {
 }
 
 // New creates a new housekeeping instance.
-func New(conf *Config, db database.Database, nodeID string) (*Housekeeping, error) {
+func New(conf *Config, db database.Database, rpcAddr string) (*Housekeeping, error) {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, fmt.Errorf("new scheduler: %w", err)
@@ -59,7 +60,7 @@ func New(conf *Config, db database.Database, nodeID string) (*Housekeeping, erro
 		RenewalInterval: renewalInterval,
 	}
 
-	leadershipManager := NewLeadershipManager(db, nodeID, leadershipConf)
+	leadershipManager := NewLeadershipManager(db, rpcAddr, leadershipConf)
 
 	return &Housekeeping{
 		Config:     conf,
@@ -110,18 +111,36 @@ func (h *Housekeeping) Start(ctx context.Context) error {
 
 // Stop stops the housekeeping service.
 func (h *Housekeeping) Stop() error {
+	var errs []error
+
 	// Stop the leadership manager first
 	if h.leadership != nil {
-		h.leadership.Stop()
+		if err := h.leadership.Stop(); err != nil {
+			errs = append(errs, fmt.Errorf("leadership stop: %w", err))
+		}
 	}
 
 	if err := h.scheduler.StopJobs(); err != nil {
-		return fmt.Errorf("scheduler stop jobs: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler stop jobs: %w", err))
 	}
 
 	if err := h.scheduler.Shutdown(); err != nil {
-		return fmt.Errorf("scheduler shutdown: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler shutdown: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
+}
+
+// SetLeadershipDB sets the leadership's DB to given DB for testing purposes.
+func (h *Housekeeping) SetLeadershipDB(db database.Database) {
+	h.leadership.SetDB(db)
+}
+
+// LeadershipManager returns the current leadership manager for testing purposes.
+func (h *Housekeeping) LeadershipManager() *LeadershipManager {
+	return h.leadership
 }

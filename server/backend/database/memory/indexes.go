@@ -27,7 +27,7 @@ var (
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
 	tblSchemas        = "schemas"
-	tblLeaderships    = "leaderships"
+	tblClusterNodes   = "clusternodes"
 )
 
 var schema = &memdb.DBSchema{
@@ -288,13 +288,23 @@ var schema = &memdb.DBSchema{
 				},
 			},
 		},
-		tblLeaderships: {
-			Name: tblLeaderships,
+		tblClusterNodes: {
+			Name: tblClusterNodes,
 			Indexes: map[string]*memdb.IndexSchema{
 				"id": {
 					Name:    "id",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"rpc_addr": {
+					Name:    "rpc_addr",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "RPCAddr"},
+				},
+				"is_leader": {
+					Name:    "is_leader",
+					Unique:  false,
+					Indexer: &memdb.BoolFieldIndex{Field: "IsLeader"},
 				},
 			},
 		},
