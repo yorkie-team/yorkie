@@ -33,7 +33,6 @@ type LeadershipManager struct {
 	rpcAddr         string
 	leaseDuration   time.Duration
 	renewalInterval time.Duration
-	shutdownTimeout time.Duration
 
 	// State management
 	isLeader     atomic.Bool
@@ -47,7 +46,6 @@ type LeadershipManager struct {
 type LeadershipConfig struct {
 	LeaseDuration   time.Duration
 	RenewalInterval time.Duration
-	ShutdownTimeout time.Duration
 }
 
 // DefaultLeadershipConfig returns the default leadership configuration.
@@ -55,7 +53,6 @@ func DefaultLeadershipConfig() *LeadershipConfig {
 	return &LeadershipConfig{
 		LeaseDuration:   15 * time.Second,
 		RenewalInterval: 5 * time.Second,
-		ShutdownTimeout: 3 * time.Second,
 	}
 }
 
@@ -74,7 +71,6 @@ func NewLeadershipManager(db database.Database, rpcAddr string, conf *Leadership
 		rpcAddr:         rpcAddr,
 		leaseDuration:   conf.LeaseDuration,
 		renewalInterval: conf.RenewalInterval,
-		shutdownTimeout: conf.ShutdownTimeout,
 		stopCh:          make(chan struct{}),
 	}
 }

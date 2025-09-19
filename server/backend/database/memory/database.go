@@ -180,7 +180,7 @@ func (d *DB) TryLeadership(
 	}
 
 	record := &clusterNodeRecord{
-		ID:              "leadership",
+		ID:              rpcAddr,
 		ClusterNodeInfo: renewedLeadership,
 	}
 
@@ -273,7 +273,7 @@ func (d *DB) RemoveClusterNode(_ context.Context, rpcAddr string) error {
 	record := raw.(*clusterNodeRecord)
 
 	if err = txn.Delete(tblClusterNodes, record); err != nil {
-		return fmt.Errorf("remove cluster node %s: %w", rpcAddr, database.ErrDocumentNotFound)
+		return fmt.Errorf("remove cluster node %s: %w", rpcAddr, err)
 	}
 
 	txn.Commit()
@@ -285,10 +285,10 @@ func (d *DB) ClearClusterNodes(_ context.Context) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// Delete the clusternode record if it exists
+	// Delete the cluster node records if it exists
 	_, err := txn.DeleteAll(tblClusterNodes, "id")
 	if err != nil {
-		return fmt.Errorf("clear clusternode: %w", err)
+		return fmt.Errorf("clear clusternodes: %w", err)
 	}
 
 	txn.Commit()
@@ -325,6 +325,7 @@ func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	old := raw.(*clusterNodeRecord).ClusterNodeInfo
 	n := *old
 
+	n.IsLeader = false
 	n.UpdatedAt = now
 
 	record := &clusterNodeRecord{

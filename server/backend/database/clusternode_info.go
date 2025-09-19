@@ -33,13 +33,22 @@ type ClusterNodeInfo struct {
 }
 
 // IsExpired returns true if the leadership lease has expired.
-func (li *ClusterNodeInfo) IsExpired() bool {
-	return time.Now().After(li.ExpiresAt)
+func (ci *ClusterNodeInfo) IsExpired() bool {
+	return time.Now().After(ci.ExpiresAt)
 }
 
 // TimeUntilExpiry returns the duration until the lease expires.
-func (li *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
-	return time.Until(li.ExpiresAt)
+func (ci *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
+	return time.Until(ci.ExpiresAt)
+}
+
+// DeepCopy returns a deep copy of this cluster node info.
+func (ci *ClusterNodeInfo) DeepCopy() *ClusterNodeInfo {
+	if ci == nil {
+		return nil
+	}
+	cpy := *ci
+	return &cpy
 }
 
 // GenerateLeaseToken generates a cryptographically secure random token

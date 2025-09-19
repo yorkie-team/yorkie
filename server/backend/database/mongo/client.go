@@ -253,18 +253,22 @@ func (c *Client) tryAcquireLeadership(
 	)
 
 	info := &database.ClusterNodeInfo{}
-	if err := result.Decode(&info); err != nil {
+	if err := result.Decode(info); err != nil {
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
-			_, _ = c.collection(ColClusterNodes).UpdateMany(
+			// demote
+			if _, err = c.collection(ColClusterNodes).UpdateOne(
 				ctx,
 				bson.M{
 					"is_leader": true,
 					"$expr":     bson.M{"$lt": bson.A{"$expires_at", "$$NOW"}},
 				},
 				bson.M{"$set": bson.M{"is_leader": false}},
-			)
+			); err != nil {
+				return nil, fmt.Errorf("demote expired leadership: %w", err)
+			}
+
 			return c.FindLeadership(ctx)
 		}
 
@@ -331,9 +335,11 @@ func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) erro
 			"is_leader": bson.M{"$ne": true},
 		},
 		bson.M{
-			"$set":         bson.M{"rpc_addr": rpcAddr},
 			"$currentDate": bson.M{"updated_at": true},
-			"$setOnInsert": bson.M{"is_leader": false},
+			"$setOnInsert": bson.M{
+				"rpc_addr":  rpcAddr,
+				"is_leader": false,
+			},
 		},
 		options.UpdateOne().SetUpsert(true),
 	)
