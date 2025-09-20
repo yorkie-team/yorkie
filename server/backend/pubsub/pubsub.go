@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	gotime "time"
 
 	"go.uber.org/zap"
@@ -66,12 +65,12 @@ func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
 
 // Set adds the given subscription.
 func (s *Subscriptions) Set(sub *Subscription) error {
-	subscriberKeys := s.internalMap.Keys()
-	if exists := slices.Contains(subscriberKeys, sub.subscriberKey); exists {
-		return ErrAlreadyExistsKey
+	for _, existing := range s.internalMap.Values() {
+		if existing.SubscriberKey() == sub.SubscriberKey() {
+			return ErrAlreadyExistsKey
+		}
 	}
 	s.internalMap.Set(sub.ID(), sub)
-
 	return nil
 }
 

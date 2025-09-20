@@ -45,6 +45,12 @@ func NewClientMapping() *ClientMapping {
 }
 
 func (cm *ClientMapping) SetClientMappings(clientKeyToID map[string]string) {
+	cm.clientKeyMappings.Range(func(key, value interface{}) bool {
+		cm.clientKeyMappings.Delete(key)
+		cm.clientIDMappings.Delete(value)
+		return true
+	})
+
 	for k, v := range clientKeyToID {
 		cm.clientKeyMappings.Store(k, v)
 		cm.clientIDMappings.Store(v, k)

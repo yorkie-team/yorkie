@@ -642,10 +642,10 @@ func handleResponse(
 			case *api.DocEvent_Watched:
 				if p.Watched != nil {
 					clientKey := p.Watched.GetClientKey()
-					doc.AddClientMapping(cli.String(), clientKey)
+					doc.AddClientMapping(clientKey, cli.String())
 				}
 			default:
-				// The payload is nil or of an unkown type.
+				// The payload is nil or of an unknown type.
 				// In this case, we proceed without adding client mapping.
 			}
 
