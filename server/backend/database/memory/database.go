@@ -180,33 +180,29 @@ func (d *DB) TryLeadership(
 	return renewedLeadership, nil
 }
 
-// FindActiveClusterNodes returns nodes considered active within the given time window.
-// A node is active if updated_at >= NOW - renewalInterval * 2.
+// FindClusterNodes returns all cluster nodes that have been updated within the given time window.
 // Results are sorted with the leader first, then by updated_at descending.
-func (d *DB) FindActiveClusterNodes(
+func (d *DB) FindClusterNodes(
 	_ context.Context,
-	renewalInterval gotime.Duration,
+	window gotime.Duration,
 ) ([]*database.ClusterNodeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	now := gotime.Now()
-	cutoff := now.Add(-renewalInterval * 2)
-
 	iter, err := txn.Get(tblClusterNodes, "id")
 	if err != nil {
-		return nil, fmt.Errorf("fetch cluster nodes: %w", err)
+		return nil, fmt.Errorf("find cluster nodes: %w", err)
 	}
 
+	cutoff := gotime.Now().Add(-window)
 	var infos []*database.ClusterNodeInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*clusterNodeRecord).ClusterNodeInfo
-
 		if info.UpdatedAt.IsZero() || info.UpdatedAt.Before(cutoff) {
 			continue
 		}
-		cpy := info.DeepCopy()
-		infos = append(infos, cpy)
+
+		infos = append(infos, info.DeepCopy())
 	}
 
 	sort.Slice(infos, func(i, j int) bool {
@@ -215,6 +211,7 @@ func (d *DB) FindActiveClusterNodes(
 		}
 		return infos[i].UpdatedAt.After(infos[j].UpdatedAt)
 	})
+
 	return infos, nil
 }
 
@@ -239,21 +236,21 @@ func (d *DB) RemoveClusterNode(_ context.Context, rpcAddr string) error {
 	return nil
 }
 
-// ClearClusterNodes removes the current leadership information for testing purposes.
-func (d *DB) ClearClusterNodes(_ context.Context) error {
+// RemoveClusterNodes removes all cluster nodes.
+func (d *DB) RemoveClusterNodes(_ context.Context) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	_, err := txn.DeleteAll(tblClusterNodes, "id")
 	if err != nil {
-		return fmt.Errorf("clear clusternodes: %w", err)
+		return fmt.Errorf("remove cluster nodes: %w", err)
 	}
 
 	txn.Commit()
 	return nil
 }
 
-// updateClusterFollower updates the given node as follower.
+// updateClusterFollower updates or creates a follower node entry for the given rpcAddr.
 func (d *DB) updateClusterFollower(txn *memdb.Txn, rpcAddr string) error {
 	now := gotime.Now()
 

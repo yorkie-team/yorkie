@@ -228,16 +228,16 @@ func (b *Backend) Shutdown() error {
 	return nil
 }
 
-// FindActiveClusterNodes returns the active cluster nodes for testing purpose.
-func (b *Backend) FindActiveClusterNodes(
+// ClusterNodes returns the active cluster nodes for testing purposes.
+func (b *Backend) ClusterNodes(
 	ctx context.Context,
 ) ([]*database.ClusterNodeInfo, error) {
-	return b.Housekeeping.LeadershipManager().ActiveClusterNodes(ctx)
+	return b.Housekeeping.LeadershipManager().ClusterNodes(ctx)
 }
 
-// ClearClusterNodes removes the current clusternode information for testing purposes.
+// RemoveClusterNodes removes all cluster nodes for testing purposes.
 func (b *Backend) ClearClusterNodes(ctx context.Context) error {
-	return b.DB.ClearClusterNodes(ctx)
+	return b.DB.RemoveClusterNodes(ctx)
 }
 
 // IsLeader returns whether this server is leader for testing purposes.

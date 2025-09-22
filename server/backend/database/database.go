@@ -88,13 +88,13 @@ type Database interface {
 	// RemoveClusterNode removes the cluster node identified by rpcAddr.
 	RemoveClusterNode(ctx context.Context, rpcAddr string) error
 
-	// ClearClusterNodes removes the current cluster node information for testing purposes.
-	ClearClusterNodes(ctx context.Context) error
+	// RemoveClusterNodes removes the current cluster node information for testing purposes.
+	RemoveClusterNodes(ctx context.Context) error
 
-	// FindActiveClusterNodes returns the active cluster nodes.
-	FindActiveClusterNodes(
+	// FindClusterNodes returns nodes considered active within the given time window.
+	FindClusterNodes(
 		ctx context.Context,
-		renewalInterval gotime.Duration,
+		window gotime.Duration,
 	) ([]*ClusterNodeInfo, error)
 
 	// FindProjectInfoByPublicKey returns a project by public key.

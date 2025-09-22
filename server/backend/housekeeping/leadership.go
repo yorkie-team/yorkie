@@ -106,9 +106,11 @@ func (lm *LeadershipManager) IsLeader() bool {
 	return lm.isLeader.Load()
 }
 
-// ActiveClusterNodes returns the active cluster nodes.
-func (lm *LeadershipManager) ActiveClusterNodes(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
-	return lm.database.FindActiveClusterNodes(ctx, lm.renewalInterval)
+// ClusterNodes returns the active cluster nodes.
+func (lm *LeadershipManager) ClusterNodes(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+	// NOTE(hackerwins): We use renewalInterval * 2 to account for possible delays
+	// in lease renewal due to network issues or other transient problems.
+	return lm.database.FindClusterNodes(ctx, lm.renewalInterval*2)
 }
 
 // CurrentLease returns the current lease information if this node is the leader.

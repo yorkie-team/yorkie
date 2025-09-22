@@ -82,7 +82,7 @@ func TestLeadershipManager(t *testing.T) {
 		}()
 
 		assert.Eventually(t, func() bool {
-			infos, err := manager.ActiveClusterNodes(ctx)
+			infos, err := manager.ClusterNodes(ctx)
 			require.NoError(t, err)
 			return len(infos) == 1 && infos[0].IsLeader
 		}, 1*time.Second, 50*time.Millisecond)
@@ -143,7 +143,7 @@ func TestLeadershipManager(t *testing.T) {
 		// Stop manager1 (simulating node failure)
 		assert.NoError(t, manager1.Stop())
 		assert.Eventually(t, func() bool {
-			infos, err := manager1.ActiveClusterNodes(ctx)
+			infos, err := manager1.ClusterNodes(ctx)
 			require.NoError(t, err)
 			return len(infos) == 0
 		}, 1*time.Second, 50*time.Millisecond)

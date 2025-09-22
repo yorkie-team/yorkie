@@ -144,7 +144,7 @@ func TestClusterNodes(t *testing.T) {
 			var refMap map[string]struct{}
 
 			for _, svr := range svrs {
-				infos, err := svr.Backend().FindActiveClusterNodes(ctx)
+				infos, err := svr.Backend().ClusterNodes(ctx)
 				require.NoError(t, err)
 
 				if len(infos) != numServers {
@@ -173,7 +173,7 @@ func TestClusterNodes(t *testing.T) {
 		assert.NoError(t, svr.Start())
 
 		assert.Eventually(t, func() bool {
-			svrs, err := svr.Backend().FindActiveClusterNodes(ctx)
+			svrs, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 			return 1 == len(svrs) && svrs[0].IsLeader
 		}, 1*gotime.Second, 50*gotime.Millisecond)
@@ -190,7 +190,7 @@ func TestClusterNodes(t *testing.T) {
 
 		// Since there is only one node, that node must be the leader.
 		assert.Eventually(t, func() bool {
-			infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
+			infos, err := svr2.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
 			return len(infos) > 0 && infos[0].IsLeader && "test-addr-1" == infos[0].RPCAddr
@@ -215,7 +215,7 @@ func TestClusterNodes(t *testing.T) {
 
 		var leader *database.ClusterNodeInfo
 		assert.Eventually(t, func() bool {
-			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
+			infos, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
 			if len(infos) > 0 && infos[0].IsLeader {
@@ -230,7 +230,7 @@ func TestClusterNodes(t *testing.T) {
 		mockDB.SetDisconnected(true)
 
 		assert.Eventually(t, func() bool {
-			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
+			infos, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
 			return len(infos) == 0
@@ -239,7 +239,7 @@ func TestClusterNodes(t *testing.T) {
 		mockDB.SetDisconnected(false)
 
 		assert.Eventually(t, func() bool {
-			infos, err := svr.Backend().FindActiveClusterNodes(ctx)
+			infos, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
 			if len(infos) > 0 && infos[0].IsLeader {
@@ -305,12 +305,12 @@ func TestClusterNodes(t *testing.T) {
 		svr2, _ := startServer("test-addr-2")
 
 		assert.Eventually(t, func() bool {
-			infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
+			infos, err := svr2.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 			return 2 == len(infos) && infos[0].IsLeader
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 
-		infos, err := svr2.Backend().FindActiveClusterNodes(ctx)
+		infos, err := svr2.Backend().ClusterNodes(ctx)
 		assert.NoError(t, err)
 		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie

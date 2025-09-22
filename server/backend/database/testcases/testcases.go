@@ -55,7 +55,7 @@ func RunLeadershipTest(
 ) {
 	t.Run("TryLeadership should work for new leadership", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -69,7 +69,7 @@ func RunLeadershipTest(
 	t.Run("TryLeadership should allow takeover after expiry", func(t *testing.T) {
 		t.Skip("TODO(raararaara): Remove this after adding TTL index setup for tests.")
 		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 
 		// First node acquires leadership with short lease
 		shortLease := 100 * gotime.Millisecond
@@ -92,7 +92,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should work for renewal with valid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -114,7 +114,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
@@ -129,7 +129,7 @@ func RunLeadershipTest(
 
 	t.Run("TryLeadership should fail for wrong node with token", func(t *testing.T) {
 		ctx := context.Background()
-		require.NoError(t, db.ClearClusterNodes(ctx))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 
 		leaseDuration := 30 * gotime.Second
 
