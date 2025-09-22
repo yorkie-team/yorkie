@@ -20,7 +20,6 @@ package packs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -28,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -35,11 +35,11 @@ import (
 
 var (
 	// ErrDocumentNotRemoved is returned when the document is not removed yet.
-	ErrDocumentNotRemoved = errors.New("document is not removed yet")
+	ErrDocumentNotRemoved = errors.FailedPrecond("document is not removed yet")
 
 	// ErrDocumentAttached is returned when the document is attached when
 	// deleting the document.
-	ErrDocumentAttached = errors.New("document is attached")
+	ErrDocumentAttached = errors.FailedPrecond("document is attached").WithCode("ErrDocumentAttached")
 )
 
 // Compact compacts the given document and its metadata and stores them in the

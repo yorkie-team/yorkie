@@ -23,12 +23,13 @@ import (
 
 	"github.com/google/btree"
 
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
 	// ErrInvalidServerSeq is returned when the server sequence is invalid.
-	ErrInvalidServerSeq = fmt.Errorf("invalid server sequence")
+	ErrInvalidServerSeq = errors.Internal("invalid server sequence").WithCode("ErrInvalidServerSeq")
 )
 
 // ChangeRange represents a range of server sequences from start to end

@@ -18,7 +18,6 @@ package packs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -32,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -66,7 +66,7 @@ type PushPullOptions struct {
 var (
 	// ErrInvalidServerSeq is returned when the given server seq greater than
 	// the initial server seq.
-	ErrInvalidServerSeq = errors.New("invalid server seq")
+	ErrInvalidServerSeq = errors.Internal("invalid server seq").WithCode("ErrInvalidServerSeq")
 )
 
 // PushPull stores the given changes and returns accumulated changes of the

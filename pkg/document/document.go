@@ -19,7 +19,6 @@ package document
 
 import (
 	gojson "encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -31,19 +30,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/pkg/schema"
 )
 
 var (
 	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
-	ErrUnsupportedPayloadType = errors.New("unsupported payload type")
+	ErrUnsupportedPayloadType = errors.InvalidArgument("unsupported payload type")
 
 	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
-	ErrDocumentSizeExceedsLimit = errors.New("document size exceeds the limit")
+	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted("document size exceeds the limit")
 
 	// ErrSchemaValidationFailed is returned when the document schema validation failed.
-	ErrSchemaValidationFailed = errors.New("schema validation failed")
+	ErrSchemaValidationFailed = errors.InvalidArgument("schema validation failed").WithCode("ErrSchemaValidationFailed")
 )
 
 // DocEvent represents the event that occurred in the document.

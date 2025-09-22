@@ -68,10 +68,15 @@ func TestClusterNodes(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.Backend.RPCAddr = addr
 		conf.Mongo = &mongo.Config{
-			ConnectionTimeout: "5s",
-			ConnectionURI:     "mongodb://localhost:27017",
-			YorkieDatabase:    helper.TestDBName() + "-integration",
-			PingTimeout:       "5s",
+			ConnectionTimeout:  helper.MongoConnectionTimeout,
+			ConnectionURI:      helper.MongoConnectionURI,
+			YorkieDatabase:     helper.TestDBName() + "-integration",
+			PingTimeout:        helper.MongoPingTimeout,
+			CacheStatsInterval: helper.MongoCacheStatsInterval,
+			ClientCacheSize:    helper.MongoClientCacheSize,
+			DocCacheSize:       helper.MongoDocCacheSize,
+			ChangeCacheSize:    helper.MongoChangeCacheSize,
+			VectorCacheSize:    helper.MongoVectorCacheSize,
 		}
 		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
 		conf.Housekeeping.LeadershipRenewalInterval = "100ms"

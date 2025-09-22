@@ -165,6 +165,27 @@ func (v VersionVector) Marshal() string {
 	return builder.String()
 }
 
+// Equal returns whether this VersionVector is equal to the given VersionVector.
+func (v VersionVector) Equal(other VersionVector) bool {
+	if len(v) != len(other) {
+		return false
+	}
+
+	for k, val := range v {
+		if val != other[k] {
+			return false
+		}
+	}
+
+	for k, val := range other {
+		if v[k] != val {
+			return false
+		}
+	}
+
+	return true
+}
+
 // AfterOrEqual returns whether this VersionVector is causally after or equal
 // the given VersionVector.
 func (v VersionVector) AfterOrEqual(other VersionVector) bool {

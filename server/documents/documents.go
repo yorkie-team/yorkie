@@ -19,7 +19,6 @@ package documents
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -33,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -75,7 +75,7 @@ func DocWatchStreamKey(clientID time.ActorID, docKey key.Key) sync.Key {
 
 var (
 	// ErrDocumentAlreadyExists is returned when the document already exists.
-	ErrDocumentAlreadyExists = errors.New("document already exists")
+	ErrDocumentAlreadyExists = errors.AlreadyExists("document already exists").WithCode("ErrDocumentAlreadyExists")
 )
 
 // CreateDocument creates a new document with the given key and server sequence.

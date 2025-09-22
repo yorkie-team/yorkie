@@ -185,6 +185,12 @@ func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key) error {
 		return err
 	}
 
+	// NOTE(hackerwins): This locker is used to prevent concurrent compaction
+	// requests for the same document. And it is also used to prevent
+	// concurrent push/pull requests while compaction is in progress.
+	locker := r.backend.Lockers.Locker(packs.DocKey(project.ID, docKey))
+	defer locker.Unlock()
+
 	docInfo, err := documents.FindDocInfoByKey(ctx, r.backend, project, docKey)
 	if err != nil {
 		return err

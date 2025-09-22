@@ -41,6 +41,18 @@ type Config struct {
 
 	// CacheStatsInterval is the interval for logging cache statistics.
 	CacheStatsInterval string `yaml:"CacheStatsInterval"`
+
+	// ClientCacheSize is the size of the client cache. It works as LRU cache.
+	ClientCacheSize int `yaml:"ClientCacheSize"`
+
+	// DocCacheSize is the size of the document cache. It works as LRU cache.
+	DocCacheSize int `yaml:"DocCacheSize"`
+
+	// ChangeCacheSize is the size of the change cache. It works as LRU cache.
+	ChangeCacheSize int `yaml:"ChangeCacheSize"`
+
+	// ActorCacheSize is the size of the actor cache. It works as LRU cache.
+	VectorCacheSize int `yaml:"VectorCacheSize"`
 }
 
 // Validate returns an error if the provided Config is invalidated.
@@ -98,10 +110,6 @@ func (c *Config) ParsePingTimeout() time.Duration {
 
 // ParseCacheStatsInterval returns cache stats interval duration.
 func (c *Config) ParseCacheStatsInterval() time.Duration {
-	if c.CacheStatsInterval == "" {
-		return 30 * time.Second // default to 30 seconds
-	}
-
 	result, err := time.ParseDuration(c.CacheStatsInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse cache stats interval: %v\n", err)

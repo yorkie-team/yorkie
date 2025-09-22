@@ -17,22 +17,23 @@
 package messagebroker
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrEmptyAddress is returned when the address is empty.
-	ErrEmptyAddress = errors.New("address cannot be empty")
+	ErrEmptyAddress = errors.InvalidArgument("address cannot be empty")
 
 	// ErrEmptyTopic is returned when the topic is empty.
-	ErrEmptyTopic = errors.New("topic cannot be empty")
+	ErrEmptyTopic = errors.InvalidArgument("topic cannot be empty")
 
 	// ErrInvalidDuration is returned when the duration is invalid.
-	ErrInvalidDuration = errors.New("invalid duration")
+	ErrInvalidDuration = errors.InvalidArgument("invalid duration")
 )
 
 // Config is the configuration for creating a message broker instance.

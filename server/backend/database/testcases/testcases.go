@@ -1128,7 +1128,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		// 06. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
-		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
 
 		// 07. OwnerID not match test
 		fields = &types.UpdatableProjectFields{Name: &existName}

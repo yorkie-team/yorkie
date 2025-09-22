@@ -37,10 +37,15 @@ const (
 
 func setupTestWithDummyData(t *testing.T) *mongo.Client {
 	config := &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    helper.TestDBName(),
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     helper.TestDBName(),
+		PingTimeout:        "5s",
+		CacheStatsInterval: helper.MongoCacheStatsInterval,
+		ClientCacheSize:    helper.MongoClientCacheSize,
+		DocCacheSize:       helper.MongoDocCacheSize,
+		ChangeCacheSize:    helper.MongoChangeCacheSize,
+		VectorCacheSize:    helper.MongoVectorCacheSize,
 	}
 	assert.NoError(t, config.Validate())
 

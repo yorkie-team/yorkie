@@ -19,7 +19,6 @@ package database
 
 import (
 	"context"
-	"errors"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -27,50 +26,48 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrProjectAlreadyExists is returned when the project already exists.
-	ErrProjectAlreadyExists = errors.New("project already exists")
+	ErrProjectAlreadyExists = errors.AlreadyExists("project already exists").WithCode("ErrProjectAlreadyExists")
 
 	// ErrUserNotFound is returned when the user is not found.
-	ErrUserNotFound = errors.New("user not found")
+	ErrUserNotFound = errors.NotFound("user not found").WithCode("ErrUserNotFound")
 
 	// ErrProjectNotFound is returned when the project is not found.
-	ErrProjectNotFound = errors.New("project not found")
+	ErrProjectNotFound = errors.NotFound("project not found").WithCode("ErrProjectNotFound")
 
 	// ErrUserAlreadyExists is returned when the user already exists.
-	ErrUserAlreadyExists = errors.New("user already exists")
+	ErrUserAlreadyExists = errors.AlreadyExists("user already exists").WithCode("ErrUserAlreadyExists")
 
 	// ErrClientNotFound is returned when the client could not be found.
-	ErrClientNotFound = errors.New("client not found")
+	ErrClientNotFound = errors.NotFound("client not found").WithCode("ErrClientNotFound")
 
 	// ErrDocumentNotFound is returned when the document could not be found.
-	ErrDocumentNotFound = errors.New("document not found")
+	ErrDocumentNotFound = errors.NotFound("document not found").WithCode("ErrDocumentNotFound")
 
 	// ErrChangeNotFound is returned when the change could not be found.
-	ErrChangeNotFound = errors.New("change not found")
+	ErrChangeNotFound = errors.NotFound("change not found").WithCode("ErrChangeNotFound")
 
 	// ErrSnapshotNotFound is returned when the snapshot could not be found.
-	ErrSnapshotNotFound = errors.New("snapshot not found")
+	ErrSnapshotNotFound = errors.NotFound("snapshot not found").WithCode("ErrSnapshotNotFound")
 
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
-	ErrConflictOnUpdate = errors.New("conflict on update")
-
-	// ErrProjectNameAlreadyExists is returned when the project name already exists.
-	ErrProjectNameAlreadyExists = errors.New("project name already exists")
+	ErrConflictOnUpdate = errors.FailedPrecond("conflict on update").WithCode("ErrConflictOnUpdate")
 
 	// ErrVersionVectorNotFound is returned when the version vector could not be found.
-	ErrVersionVectorNotFound = errors.New("version vector not found")
+	ErrVersionVectorNotFound = errors.NotFound("version vector not found").WithCode("ErrVersionVectorNotFound")
 
 	// ErrSchemaNotFound is returned when the schema could not be found.
-	ErrSchemaNotFound = errors.New("schema not found")
+	ErrSchemaNotFound = errors.NotFound("schema not found").WithCode("ErrSchemaNotFound")
 
 	// ErrSchemaAlreadyExists is returned when the schema already exists.
-	ErrSchemaAlreadyExists = errors.New("schema already exists")
+	ErrSchemaAlreadyExists = errors.AlreadyExists("schema already exists").WithCode("ErrSchemaAlreadyExists")
 
 	// ErrInvalidLeaseToken is returned when the provided token is invalid.
-	ErrInvalidLeaseToken = errors.New("invalid lease token")
+	ErrInvalidLeaseToken = errors.InvalidArgument("invalid lease token").WithCode("ErrInvalidLeaseToken")
 )
 
 // Database represents database which reads or saves Yorkie data.

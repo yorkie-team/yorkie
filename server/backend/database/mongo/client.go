@@ -51,11 +51,11 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
+	cacheManager *cache.Manager
 	clientCache  *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
 	docCache     *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
 	changeCache  *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
 	vectorCache  *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
-	cacheManager *cache.Manager
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -100,31 +100,31 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	clientCache, err := cache.NewLRUWithStats[types.ClientRefKey, *database.ClientInfo](10000, "clients")
+	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
+	clientCache, err := cache.NewLRUWithStats[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
+	cacheManager.RegisterCache(clientCache)
 
-	docCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.DocInfo](1000, "docs")
+	docCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.DocInfo](conf.DocCacheSize, "docs")
 	if err != nil {
 		return nil, fmt.Errorf("initialize document cache: %w", err)
 	}
+	cacheManager.RegisterCache(docCache)
 
-	changeCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](10000, "changes")
+	changeCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "changes")
 	if err != nil {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
+	cacheManager.RegisterCache(changeCache)
 
-	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](10000, "vectors")
+	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](
+		conf.VectorCacheSize, "vectors",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
-
-	// Create cache manager and register all caches
-	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
-	cacheManager.RegisterCache(clientCache)
-	cacheManager.RegisterCache(docCache)
-	cacheManager.RegisterCache(changeCache)
 	cacheManager.RegisterCache(vectorCache)
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
@@ -141,7 +141,6 @@ func Dial(conf *Config) (*Client, error) {
 		vectorCache: vectorCache,
 	}
 
-	// Start cache statistics logging if enabled
 	if conf.CacheStatsEnabled {
 		go cacheManager.StartPeriodicLogging(context.Background())
 	}
@@ -643,7 +642,7 @@ func (c *Client) UpdateProjectInfo(
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
@@ -1003,8 +1002,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	docInfo *database.DocInfo,
 ) error {
 	clientKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
-
-	c.clientCache.Remove(clientKey)
 	clientDocInfo, ok := info.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf(
@@ -1012,6 +1009,18 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
+
+	if existing, ok := c.clientCache.Get(clientKey); ok {
+		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
+			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
+				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
+				existingDocInfo.Status == clientDocInfo.Status {
+				return nil
+			}
+		}
+	}
+
+	c.clientCache.Remove(clientKey)
 
 	attached, err := info.IsAttached(docInfo.ID)
 	if err != nil {
@@ -1822,8 +1831,16 @@ func (c *Client) UpdateMinVersionVector(
 	// 01. Update synced version vector of the given client and document.
 	// NOTE(hackerwins): Considering removing the detached client's lamport
 	// from the other clients' version vectors. For now, we just ignore it.
-	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
-		return nil, err
+	needsUpdate := true
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
+		if existing, ok := vvMap.Get(clientInfo.ID); ok && vector.Equal(existing) {
+			needsUpdate = false
+		}
+	}
+	if needsUpdate {
+		if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+			return nil, err
+		}
 	}
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
@@ -2018,8 +2035,14 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is document %s attached: %w", docRefKey, err)
 	}
 
 	return true, nil
@@ -2269,8 +2292,15 @@ func (c *Client) IsSchemaAttached(
 	}
 
 	result := c.collection(ColDocuments).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is schema %s attached: %w", schema, err)
 	}
+
 	return true, nil
 }

@@ -47,6 +47,11 @@ const (
 	DefaultMongoPingTimeout                  = 5 * time.Second
 	DefaultMongoYorkieDatabase               = "yorkie-meta"
 	DefaultMongoMonitoringSlowQueryThreshold = 100 * time.Millisecond
+	DefaultMongoCacheStatsInterval           = 30 * time.Second
+	DefaultMongoClientCacheSize              = 10000
+	DefaultMongoDocCacheSize                 = 10000
+	DefaultMongoChangeCacheSize              = 10000
+	DefaultMongoVectorCacheSize              = 10000
 
 	DefaultKafkaTopic        = "user-events"
 	DefaultKafkaWriteTimeout = 5 * time.Second
@@ -268,6 +273,21 @@ func (c *Config) ensureMongoDefaultValue() {
 		if c.Mongo.MonitoringSlowQueryThreshold == "" {
 			c.Mongo.MonitoringSlowQueryThreshold = DefaultMongoMonitoringSlowQueryThreshold.String()
 		}
+	}
+	if c.Mongo.CacheStatsInterval == "" {
+		c.Mongo.CacheStatsInterval = DefaultMongoCacheStatsInterval.String()
+	}
+	if c.Mongo.ClientCacheSize == 0 {
+		c.Mongo.ClientCacheSize = DefaultMongoClientCacheSize
+	}
+	if c.Mongo.DocCacheSize == 0 {
+		c.Mongo.DocCacheSize = DefaultMongoDocCacheSize
+	}
+	if c.Mongo.ChangeCacheSize == 0 {
+		c.Mongo.ChangeCacheSize = DefaultMongoChangeCacheSize
+	}
+	if c.Mongo.VectorCacheSize == 0 {
+		c.Mongo.VectorCacheSize = DefaultMongoVectorCacheSize
 	}
 }
 

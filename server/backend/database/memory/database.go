@@ -518,7 +518,7 @@ func (d *DB) UpdateProjectInfo(
 			return nil, fmt.Errorf("find project by owner and name: %w", err)
 		}
 		if existing != nil && info.Name != *fields.Name {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 	}
 
@@ -1856,8 +1856,8 @@ func (d *DB) UpdateMinVersionVector(
 	vector time.VersionVector,
 ) (time.VersionVector, error) {
 	// 01. Update synced version vector of the given client and document.
-	// TODO(JOOHOJANG): We have to consider removing detached client's lamport
-	// from min version vector.
+	// NOTE(hackerwins): Considering removing the detached client's lamport
+	// from the other clients' version vectors. For now, we just ignore it.
 	if err := d.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
 		return nil, err
 	}

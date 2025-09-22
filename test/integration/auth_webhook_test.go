@@ -38,7 +38,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -168,7 +167,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "no token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{"code": auth.ErrUnauthenticated.Code(), "reason": "no token"}, converter.ErrorMetadataOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -180,7 +179,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-		assert.Equal(t, map[string]string{"code": connecthelper.CodeOf(auth.ErrUnauthenticated), "reason": "invalid token"}, converter.ErrorMetadataOf(err))
+		assert.Equal(t, map[string]string{"code": auth.ErrUnauthenticated.Code(), "reason": "invalid token"}, converter.ErrorMetadataOf(err))
 	})
 
 	t.Run("permission denied response test", func(t *testing.T) {
@@ -209,7 +208,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cliNotAllowed.Close()) }()
 		err = cliNotAllowed.Activate(ctx)
 		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(auth.ErrPermissionDenied), converter.ErrorCodeOf(err))
+		assert.Equal(t, auth.ErrPermissionDenied.Code(), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("selected method authorization webhook test", func(t *testing.T) {
@@ -310,7 +309,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		err = cli.Activate(ctx)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(webhook.ErrUnexpectedStatusCode), converter.ErrorCodeOf(err))
+		assert.Equal(t, webhook.ErrUnexpectedStatusCode.Code(), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("unexpected webhook response test", func(t *testing.T) {
@@ -353,7 +352,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		err = cli.Activate(ctx)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(webhook.ErrUnexpectedResponse), converter.ErrorCodeOf(err))
+		assert.Equal(t, webhook.ErrUnexpectedResponse.Code(), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("unavailable authentication server test(timeout)", func(t *testing.T) {
@@ -385,7 +384,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 
 		err = cli.Activate(ctx)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, connecthelper.CodeOf(webhook.ErrWebhookTimeout), converter.ErrorCodeOf(err))
+		assert.Equal(t, webhook.ErrWebhookTimeout.Code(), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("successful authorization after temporarily unavailable server test", func(t *testing.T) {

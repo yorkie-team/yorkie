@@ -21,6 +21,7 @@ package cluster
 import (
 	"context"
 	"crypto/tls"
+	goerrors "errors"
 	"net/http"
 	"strings"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -128,7 +130,7 @@ func (c *Client) DetachDocument(
 		}), project.PublicKey, docKey.String()),
 	)
 	if err != nil {
-		return err
+		return fromConnectError(err)
 	}
 
 	return nil
@@ -148,7 +150,7 @@ func (c *Client) CompactDocument(
 			DocumentKey: docInfo.Key.String(),
 		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
-		return false, err
+		return false, fromConnectError(err)
 	}
 
 	return res.Msg.Compacted, nil
@@ -168,7 +170,7 @@ func (c *Client) PurgeDocument(
 			DocumentKey: docInfo.Key.String(),
 		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
-		return err
+		return fromConnectError(err)
 	}
 
 	return nil
@@ -192,7 +194,7 @@ func (c *Client) GetDocument(
 		}), project.PublicKey, documentKey),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fromConnectError(err)
 	}
 
 	return converter.FromDocumentSummary(response.Msg.Document), nil
@@ -205,4 +207,38 @@ func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Requ
 	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
 
 	return conn
+}
+
+// fromConnectError converts connect.Error into our StatusError where possible.
+// If conversion is not possible, returns the original error.
+func fromConnectError(err error) error {
+	var cErr *connect.Error
+	if !goerrors.As(err, &cErr) {
+		return err
+	}
+
+	// Map connect.Code to our pkg/errors constructors where appropriate.
+	switch cErr.Code() {
+	case connect.CodeInvalidArgument:
+		return errors.InvalidArgument(cErr.Error())
+	case connect.CodeNotFound:
+		return errors.NotFound(cErr.Error())
+	case connect.CodeAlreadyExists:
+		return errors.AlreadyExists(cErr.Error())
+	case connect.CodePermissionDenied:
+		return errors.PermissionDenied(cErr.Error())
+	case connect.CodeResourceExhausted:
+		return errors.ResourceExhausted(cErr.Error())
+	case connect.CodeFailedPrecondition:
+		return errors.FailedPrecond(cErr.Error())
+	case connect.CodeUnauthenticated:
+		return errors.Unauthenticated(cErr.Error())
+	case connect.CodeInternal:
+		return errors.Internal(cErr.Error())
+	case connect.CodeUnavailable:
+		return errors.Unavailable(cErr.Error())
+	default:
+		// For codes without direct mapping, return the original connect error
+		return err
+	}
 }
