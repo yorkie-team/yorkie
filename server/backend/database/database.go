@@ -80,16 +80,22 @@ type Database interface {
 	// If leaseToken is provided, it attempts to renew the existing lease.
 	TryLeadership(
 		ctx context.Context,
-		hostname string,
+		rpcAddr string,
 		leaseToken string,
 		leaseDuration gotime.Duration,
-	) (*LeadershipInfo, error)
+	) (*ClusterNodeInfo, error)
 
-	// FindLeadership returns the current leadership information.
-	FindLeadership(ctx context.Context) (*LeadershipInfo, error)
+	// RemoveClusterNode removes the cluster node identified by rpcAddr.
+	RemoveClusterNode(ctx context.Context, rpcAddr string) error
 
-	// ClearLeadership removes the current leadership information for testing purposes.
-	ClearLeadership(ctx context.Context) error
+	// RemoveClusterNodes removes the current cluster node information for testing purposes.
+	RemoveClusterNodes(ctx context.Context) error
+
+	// FindClusterNodes returns nodes considered active within the given time window.
+	FindClusterNodes(
+		ctx context.Context,
+		window gotime.Duration,
+	) ([]*ClusterNodeInfo, error)
 
 	// FindProjectInfoByPublicKey returns a project by public key.
 	FindProjectInfoByPublicKey(

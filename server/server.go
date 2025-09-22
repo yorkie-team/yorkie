@@ -105,6 +105,11 @@ func New(conf *Config) (*Yorkie, error) {
 	}, nil
 }
 
+// Backend returns the backend for testing purposes.
+func (r *Yorkie) Backend() *backend.Backend {
+	return r.backend
+}
+
 // Start starts the server by opening the rpc port.
 func (r *Yorkie) Start() error {
 	r.lock.Lock()

@@ -140,7 +140,7 @@ func New(
 
 	// 06. Create the housekeeping instance. The housekeeping is used
 	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.Hostname)
+	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.RPCAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -226,4 +226,21 @@ func (b *Backend) Shutdown() error {
 
 	logging.DefaultLogger().Infof("backend stopped")
 	return nil
+}
+
+// ClusterNodes returns the active cluster nodes for testing purposes.
+func (b *Backend) ClusterNodes(
+	ctx context.Context,
+) ([]*database.ClusterNodeInfo, error) {
+	return b.Housekeeping.LeadershipManager().ClusterNodes(ctx)
+}
+
+// RemoveClusterNodes removes all cluster nodes for testing purposes.
+func (b *Backend) ClearClusterNodes(ctx context.Context) error {
+	return b.DB.RemoveClusterNodes(ctx)
+}
+
+// IsLeader returns whether this server is leader for testing purposes.
+func (b *Backend) IsLeader() bool {
+	return b.Housekeeping.LeadershipManager().IsLeader()
 }

@@ -92,6 +92,7 @@ var (
 	ProjectCacheSize            = 256
 	ProjectCacheTTL             = 5 * gotime.Second
 	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
+	RPCAddr                     = fmt.Sprintf("localhost:%d", RPCPort)
 
 	MongoConnectionTimeout  = "5s"
 	MongoConnectionURI      = "mongodb://localhost:27017"
@@ -300,6 +301,7 @@ func TestConfig() *server.Config {
 			ProjectCacheSize:     ProjectCacheSize,
 			ProjectCacheTTL:      ProjectCacheTTL.String(),
 			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			RPCAddr:              fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,

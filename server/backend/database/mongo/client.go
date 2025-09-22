@@ -169,50 +169,37 @@ func (c *Client) Close() error {
 // If leaseToken is provided, it attempts to renew the existing lease.
 func (c *Client) TryLeadership(
 	ctx context.Context,
-	hostname,
+	rpcAddr,
 	leaseToken string,
 	leaseDuration gotime.Duration,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	leaseMS := leaseDuration.Milliseconds()
 
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, leaseMS)
+		ret, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
+		if err != nil {
+			return nil, err
+		}
+
+		// If lease is nil, it means leadership acquisition failed.
+		if ret == nil {
+			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
+				return nil, err
+			}
+		}
+
+		return ret, nil
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
-}
-
-// FindLeadership returns the current leadership information.
-func (c *Client) FindLeadership(
-	ctx context.Context,
-) (*database.LeadershipInfo, error) {
-	result := c.collection(ColLeaderships).FindOne(ctx, bson.M{"singleton": 1})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find leadership: %w", result.Err())
-	}
-
-	info := &database.LeadershipInfo{}
-	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("decode leadership: %w", err)
-	}
-
-	// Check if leadership has expired
-	if info.IsExpired() {
-		return nil, nil
-	}
-
-	return info, nil
+	return c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
 }
 
 // tryAcquireLeadership attempts to acquire new leadership.
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
-	hostname string,
+	rpcAddr string,
 	leaseMS int64,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	// Generate a new lease token
 	token, err := database.GenerateLeaseToken()
 	if err != nil {
@@ -220,48 +207,32 @@ func (c *Client) tryAcquireLeadership(
 	}
 
 	// Try to acquire leadership using atomic upsert.
-	expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
-	result := c.collection(ColLeaderships).FindOneAndUpdate(
+	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
-		bson.D{
-			{Key: "singleton", Value: 1},
-		},
+		bson.M{"rpc_addr": rpcAddr},
 		mongo.Pipeline{
-			{{Key: "$replaceWith", Value: bson.D{
-				{Key: "$cond", Value: bson.A{
-					expired,
-					// if expired
-					bson.D{{Key: "$mergeObjects", Value: bson.A{
-						"$$ROOT",
-						bson.D{
-							{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-							{Key: "lease_token", Value: token},
-							{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
-								bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
-							},
-							{Key: "hostname", Value: hostname},
-							{Key: "renewed_at", Value: "$$NOW"},
-							{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
-							{Key: "singleton", Value: 1},
-						},
-					}}},
-					"$$ROOT", // else
-				}},
+			{{Key: "$set", Value: bson.D{
+				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+				{Key: "lease_token", Value: token},
+				{Key: "rpc_addr", Value: rpcAddr},
+				{Key: "updated_at", Value: "$$NOW"},
+				{Key: "is_leader", Value: true},
 			}}},
-		}, options.FindOneAndUpdate().
+		},
+		options.FindOneAndUpdate().
 			SetUpsert(true).
 			SetReturnDocument(options.After),
 	)
 
-	info := &database.LeadershipInfo{}
+	info := &database.ClusterNodeInfo{}
 	if err := result.Decode(info); err != nil {
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
-			return c.FindLeadership(ctx)
+			return nil, nil
 		}
 
-		return nil, fmt.Errorf("decode new leadership: %w", err)
+		return nil, fmt.Errorf("decode new cluster node: %w", err)
 	}
 
 	// Successfully acquired leadership
@@ -271,54 +242,113 @@ func (c *Client) tryAcquireLeadership(
 // tryRenewLeadership attempts to renew existing leadership
 func (c *Client) tryRenewLeadership(
 	ctx context.Context,
-	hostname string,
+	rpcAddr string,
 	leaseToken string,
 	leaseMS int64,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
 	if err != nil {
-		return nil, fmt.Errorf("generate lease token: %w", err)
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, err)
 	}
 
-	// Try to update the existing leadership with the correct token and hostname.
-	result := c.collection(ColLeaderships).FindOneAndUpdate(
+	// Try to update the existing leadership with the correct token and rpcAddr.
+	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"singleton":   1,
-			"hostname":    hostname,
+			"rpc_addr":    rpcAddr,
+			"is_leader":   true,
 			"lease_token": leaseToken,
+			"$expr":       bson.M{"$gte": bson.A{"$expires_at", "$$NOW"}},
 		},
 		mongo.Pipeline{
 			{{Key: "$set", Value: bson.D{
 				{Key: "lease_token", Value: newLeaseToken},
 				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-				{Key: "renewed_at", Value: "$$NOW"},
+				{Key: "updated_at", Value: "$$NOW"},
 			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("invalid token or node: %w", database.ErrInvalidLeaseToken)
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, database.ErrInvalidLeaseToken)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("renew leadership: %w", result.Err())
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, result.Err())
 	}
 
-	info := &database.LeadershipInfo{}
+	info := &database.ClusterNodeInfo{}
 	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("decode leadership: %w", err)
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, err)
 	}
 
 	return info, nil
 }
 
-// ClearLeadership removes the current leadership information for testing purposes.
-func (c *Client) ClearLeadership(ctx context.Context) error {
-	_, err := c.collection(ColLeaderships).DeleteMany(ctx, bson.M{})
+// updateClusterFollower updates the given node as follower.
+func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).UpdateOne(
+		ctx,
+		bson.M{"rpc_addr": rpcAddr},
+		bson.M{
+			"$currentDate": bson.M{"updated_at": true},
+			"$setOnInsert": bson.M{
+				"rpc_addr":  rpcAddr,
+				"is_leader": false,
+			},
+		},
+		options.UpdateOne().SetUpsert(true),
+	)
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		return fmt.Errorf("update cluster follower of %s: %w", rpcAddr, err)
+	}
+
+	return nil
+}
+
+// FindClusterNodes returns all cluster nodes that have been updated within the given time window.
+// Results are sorted with the leader first, then by updated_at descending.
+func (c *Client) FindClusterNodes(
+	ctx context.Context,
+	window gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
+	cursor, err := c.collection(ColClusterNodes).Find(
+		ctx,
+		bson.M{"$expr": bson.M{"$gte": bson.A{
+			"$updated_at", bson.D{{Key: "$add", Value: bson.A{"$$NOW", -window.Milliseconds()}}},
+		}}},
+		options.Find().SetSort(bson.D{
+			{Key: "is_leader", Value: -1},
+			{Key: "updated_at", Value: -1},
+		}),
+	)
 	if err != nil {
-		return fmt.Errorf("clear leadership: %w", err)
+		return nil, fmt.Errorf("find cluster nodes: %w", err)
+	}
+
+	var nodes []*database.ClusterNodeInfo
+	if err = cursor.All(ctx, &nodes); err != nil {
+		return nil, fmt.Errorf("find cluster nodes: %w", err)
+	}
+
+	return nodes, nil
+}
+
+// RemoveClusterNode removes the cluster node with the given rpcAddr.
+func (c *Client) RemoveClusterNode(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).DeleteOne(ctx, bson.M{"rpc_addr": rpcAddr})
+	if err != nil {
+		return fmt.Errorf("remove cluster node with %s: %w", rpcAddr, err)
+	}
+	return nil
+}
+
+// RemoveClusterNodes removes all cluster nodes.
+func (c *Client) RemoveClusterNodes(ctx context.Context) error {
+	_, err := c.collection(ColClusterNodes).DeleteMany(ctx, bson.M{})
+	if err != nil {
+		return fmt.Errorf("remove cluster nodes: %w", err)
 	}
 	return nil
 }

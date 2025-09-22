@@ -52,7 +52,9 @@ func TestLeadershipManager(t *testing.T) {
 
 		err := manager.Start(ctx)
 		require.NoError(t, err)
-		defer manager.Stop()
+		defer func() {
+			assert.NoError(t, manager.Stop())
+		}()
 
 		// Wait for leadership acquisition
 		assert.Eventually(t, func() bool {
@@ -62,7 +64,28 @@ func TestLeadershipManager(t *testing.T) {
 		// Verify leadership info
 		lease := manager.CurrentLease()
 		require.NotNil(t, lease)
-		assert.Equal(t, "node-1", lease.Hostname)
+		assert.Equal(t, "node-1", lease.RPCAddr)
+	})
+
+	t.Run("LeadershipManager should get proper leader", func(t *testing.T) {
+		db := newDatabase()
+
+		conf := DefaultLeadershipConfig()
+		conf.RenewalInterval = 100 * time.Millisecond
+
+		manager := NewLeadershipManager(db, "node-1", conf)
+
+		err := manager.Start(ctx)
+		require.NoError(t, err)
+		defer func() {
+			assert.NoError(t, manager.Stop())
+		}()
+
+		assert.Eventually(t, func() bool {
+			infos, err := manager.ClusterNodes(ctx)
+			require.NoError(t, err)
+			return len(infos) == 1 && infos[0].IsLeader
+		}, 1*time.Second, 50*time.Millisecond)
 	})
 
 	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
@@ -75,11 +98,15 @@ func TestLeadershipManager(t *testing.T) {
 
 		err := manager1.Start(ctx)
 		require.NoError(t, err)
-		defer manager1.Stop()
+		defer func() {
+			assert.NoError(t, manager1.Stop())
+		}()
 
 		err = manager2.Start(ctx)
 		require.NoError(t, err)
-		defer manager2.Stop()
+		defer func() {
+			assert.NoError(t, manager2.Stop())
+		}()
 
 		// Wait for one to become leader
 		assert.Eventually(t, func() bool {
@@ -114,13 +141,20 @@ func TestLeadershipManager(t *testing.T) {
 		}, 1*time.Second, 50*time.Millisecond)
 
 		// Stop manager1 (simulating node failure)
-		manager1.Stop()
+		assert.NoError(t, manager1.Stop())
+		assert.Eventually(t, func() bool {
+			infos, err := manager1.ClusterNodes(ctx)
+			require.NoError(t, err)
+			return len(infos) == 0
+		}, 1*time.Second, 50*time.Millisecond)
 
 		// Start manager2
 		manager2 := NewLeadershipManager(db, "node-2", conf)
 		err = manager2.Start(ctx)
 		require.NoError(t, err)
-		defer manager2.Stop()
+		defer func() {
+			assert.NoError(t, manager2.Stop())
+		}()
 
 		// Manager2 should eventually become leader
 		assert.Eventually(t, func() bool {
@@ -145,11 +179,11 @@ func TestLeadershipConcurrency(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 
-			nodeID := fmt.Sprintf("node-%d", id)
+			rpcAddr := fmt.Sprintf("test-addr-%d", id)
 
 			for range 50 {
-				info, err := db.TryLeadership(ctx, nodeID, "", leaseDuration)
-				if err == nil && info.Hostname == nodeID {
+				info, err := db.TryLeadership(ctx, rpcAddr, "", leaseDuration)
+				if err == nil && info != nil {
 					acquiredCount[id]++
 
 					// Hold leadership briefly then let it expire
