@@ -293,7 +293,7 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	n.children = append(n.children, newNodes...)
 	for _, newNode := range newNodes {
 		newNode.Parent = n
-		newNode.UpdateAncestorsSize()
+		newNode.UpdateAncestorsSizeByAppend()
 	}
 
 	return nil
@@ -315,10 +315,15 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
+// Children returns the children of the given node.
+func (n *Node[V]) GetChildren() []*Node[V] {
+	return n.children
+}
+
 // SetChildren sets the children of the given node.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
-	if n.IsText() {
+	if n.IsText() && children != nil {
 		return ErrInvalidMethodCallForTextNode
 	}
 
@@ -345,6 +350,22 @@ func (n *Node[V]) UpdateAncestorsSize() {
 			break
 		}
 
+		parent = parent.Parent
+	}
+}
+
+// UpdateAncestorsSizeByAppend updates the size of ancestors.
+// For the scenario that append removed node.
+func (n *Node[V]) UpdateAncestorsSizeByAppend() {
+	parent := n.Parent
+	if n.Value.IsRemoved() {
+		return
+	}
+	for parent != nil {
+		parent.Length += n.PaddedLength()
+		if parent.Value.IsRemoved() {
+			break
+		}
 		parent = parent.Parent
 	}
 }
@@ -438,11 +459,43 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 	return nil, nil
 }
 
+// NextSiblingExtended returns the next sibling of the node, including removed nodes.
+// If no immediate sibling exists, it traverses up the tree to find the next node
+// by checking parent's siblings and their children.
+func (n *Node[V]) NextSiblingExtended() (*Node[V], error) {
+	parent := n.Parent
+	if parent == nil {
+		return nil, nil
+	}
+
+	offset, err := parent.FindOffset(n, true)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(parent.children) > offset+1 {
+		sibling := n.Parent.children[offset+1]
+		return sibling, nil
+	}
+
+	for parent, err = parent.NextSiblingExtended(); parent != nil; parent, err = parent.NextSiblingExtended() {
+		if err != nil {
+			return nil, err
+		}
+		if len(parent.children) > 0 {
+			return parent.children[0], nil
+		}
+	}
+	return nil, err
+}
+
 // FindOffset returns the offset of the given node in the children.
-func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
+func (n *Node[V]) FindOffset(node *Node[V], includeRemovedNode ...bool) (int, error) {
 	if n.IsText() {
 		return 0, ErrInvalidMethodCallForTextNode
 	}
+
+	include := len(includeRemovedNode) > 0 && includeRemovedNode[0]
 
 	// If nodes are removed, the offset of the removed node is the number of
 	// nodes before the node excluding the removed nodes.
@@ -451,7 +504,7 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 		if child == node {
 			return offset, nil
 		}
-		if !child.Value.IsRemoved() {
+		if include || !child.Value.IsRemoved() {
 			offset++
 		}
 	}
