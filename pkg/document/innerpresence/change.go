@@ -46,3 +46,8 @@ func (c *Change) Execute(actorID time.ActorID, presences *Map) {
 		presences.Store(actorID.String(), c.Presence)
 	}
 }
+
+// IsClear returns true if the change is of type Clear.
+func (c *Change) IsClear() bool {
+	return c.ChangeType == Clear
+}
