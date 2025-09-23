@@ -139,6 +139,11 @@ func (i *ChangeInfo) DeepCopy() *ChangeInfo {
 	return clone
 }
 
+// PresenceOnly returns true if this change is a presence-only change.
+func (i *ChangeInfo) PresenceOnly() bool {
+	return len(i.Operations) == 0 && i.PresenceChange != nil
+}
+
 // EncodePresenceChange encodes the given PresenceChange into bytes array.
 func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
 	if p == nil {

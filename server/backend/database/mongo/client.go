@@ -51,11 +51,12 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	cacheManager *cache.Manager
-	clientCache  *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
-	docCache     *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
-	changeCache  *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
-	vectorCache  *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	cacheManager  *cache.Manager
+	clientCache   *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
+	docCache      *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
+	changeCache   *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	presenceCache *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	vectorCache   *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -119,6 +120,12 @@ func Dial(conf *Config) (*Client, error) {
 	}
 	cacheManager.RegisterCache(changeCache)
 
+	presenceCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "presences")
+	if err != nil {
+		return nil, fmt.Errorf("initialize presence cache: %w", err)
+	}
+	cacheManager.RegisterCache(presenceCache)
+
 	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](
 		conf.VectorCacheSize, "vectors",
 	)
@@ -135,10 +142,11 @@ func Dial(conf *Config) (*Client, error) {
 
 		cacheManager: cacheManager,
 
-		clientCache: clientCache,
-		docCache:    docCache,
-		changeCache: changeCache,
-		vectorCache: vectorCache,
+		clientCache:   clientCache,
+		docCache:      docCache,
+		changeCache:   changeCache,
+		presenceCache: presenceCache,
+		vectorCache:   vectorCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -1020,6 +1028,13 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
+	// NOTE(hackerwins): Clear presence changes of the given client on the
+	// document if the client is no longer attached to the document.
+	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
+	if pCache, ok := c.presenceCache.Get(docKey); ok && !attached {
+		pCache.RemoveChangesByActor(info.ID)
+	}
+
 	var updater bson.M
 	if attached {
 		updater = bson.M{
@@ -1467,25 +1482,31 @@ func (c *Client) CreateChangeInfos(
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Optimized batch processing
 	initialServerSeq := docInfo.ServerSeq
 	now := gotime.Now()
 
-	// Pre-allocate models slice to avoid dynamic allocations
-	models := make([]mongo.WriteModel, 0, len(changes))
+	// 02. Store the changes.
+	//    - presence-only changes are stored in presenceCache.
+	//    - regular changes are stored in DB.
 	hasOperations := false
-
+	var prChanges []*database.ChangeInfo
+	var opChanges []mongo.WriteModel
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
 		cn.ServerSeq = serverSeq
 		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
+		if cn.PresenceOnly() {
+			prChanges = append(prChanges, cn)
+			continue
+		}
+
 		if len(cn.Operations) > 0 {
 			hasOperations = true
 		}
 
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
+		opChanges = append(opChanges, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": refKey.ProjectID,
 			"doc_id":     refKey.DocID,
 			"server_seq": cn.ServerSeq,
@@ -1500,10 +1521,22 @@ func (c *Client) CreateChangeInfos(
 		}}).SetUpsert(true))
 	}
 
-	if len(changes) > 0 {
+	if len(prChanges) > 0 {
+		var store *ChangeStore
+		if cached, ok := c.presenceCache.Get(refKey); ok {
+			store = cached
+		} else {
+			store = NewChangeStore()
+			c.presenceCache.Add(refKey, store)
+		}
+
+		store.ReplaceOrInsert(prChanges)
+	}
+
+	if len(opChanges) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
-			models,
+			opChanges,
 			options.BulkWrite().SetOrdered(false),
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
@@ -1679,17 +1712,25 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, nil
 	}
 
-	// Get or create a change range store for this document
-	var store *ChangeStore
+	// 01. Create a temporary change store to hold the changes.
+	store := NewChangeStore()
+
+	// 02. Fill the store with presence only changes.
+	if prStore, ok := c.presenceCache.Get(docRefKey); ok {
+		store.ReplaceOrInsert(prStore.ChangesInRange(from, to))
+	}
+
+	// 03. Fill the store with regular changes.
+	var opStore *ChangeStore
 	if cached, ok := c.changeCache.Get(docRefKey); ok {
-		store = cached
+		opStore = cached
 	} else {
-		store = NewChangeStore()
-		c.changeCache.Add(docRefKey, store)
+		opStore = NewChangeStore()
+		c.changeCache.Add(docRefKey, opStore)
 	}
 
 	// Calculate missing ranges and fetch them in a single operation
-	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
+	if err := opStore.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
 		// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
 		const chunkSize int64 = 1000
 		var infos []*database.ChangeInfo
@@ -1723,6 +1764,8 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}); err != nil {
 		return nil, err
 	}
+
+	store.ReplaceOrInsert(opStore.ChangesInRange(from, to))
 
 	return store.ChangesInRange(from, to), nil
 }
@@ -2211,6 +2254,8 @@ func (c *Client) purgeDocumentInternals(
 	counts := make(map[string]int64)
 
 	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,

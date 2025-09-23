@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/btree"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -38,10 +39,12 @@ type ChangeRange struct {
 	To   int64 // Ending server sequence
 }
 
-// ChangeStore manages individual document changes using B-tree
+// ChangeStore manages individual document changes using B-tree. It allows
+// efficient storage and retrieval of changes based on their server sequence numbers.
 type ChangeStore struct {
-	mu   sync.RWMutex
-	tree *btree.BTreeG[*database.ChangeInfo]
+	mu     sync.RWMutex
+	ranges []ChangeRange
+	tree   *btree.BTreeG[*database.ChangeInfo]
 }
 
 // NewChangeStore creates a new instance of ChangeStore.
@@ -83,6 +86,11 @@ func (s *ChangeStore) EnsureChanges(
 		for _, change := range changes {
 			s.tree.ReplaceOrInsert(change)
 		}
+
+		// 4. Mark this requested range as fetched so we don't re-request
+		// sequences inside it again even if some sequence numbers weren't
+		// present in the returned changes (i.e. "missing server seq").
+		s.ranges = mergeAdjacentRanges(append(s.ranges, r))
 	}
 
 	return nil
@@ -125,10 +133,45 @@ func (s *ChangeStore) ChangesInRange(from, to int64) []*database.ChangeInfo {
 	return result
 }
 
+// RemoveChangesByActor removes presence changes for the given actor,
+// keeping Clear changes so the final state remains cleared.
+func (s *ChangeStore) RemoveChangesByActor(actorID types.ID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var toDelete []*database.ChangeInfo
+	s.tree.Ascend(func(item *database.ChangeInfo) bool {
+		if item != nil && item.ActorID == actorID && !item.PresenceChange.IsClear() {
+			toDelete = append(toDelete, item)
+		}
+		return true
+	})
+
+	for _, item := range toDelete {
+		s.tree.Delete(item)
+	}
+}
+
+// ReplaceOrInsert replaces or inserts the given changes into the store.
+func (s *ChangeStore) ReplaceOrInsert(changes []*database.ChangeInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, pch := range changes {
+		s.tree.ReplaceOrInsert(pch)
+	}
+}
+
 // calcMissingRanges calculates which ranges need to be fetched
 func (s *ChangeStore) calcMissingRanges(from, to int64) []ChangeRange {
 	if s.tree.Len() == 0 {
-		return []ChangeRange{{From: from, To: to}}
+		// If tree is empty but we've already fetched some ranges, mark those
+		// fetched ranges as present to avoid refetching them. Otherwise,
+		// request full range.
+		if len(s.ranges) == 0 {
+			return []ChangeRange{{From: from, To: to}}
+		}
+		// fallthrough to create seqMap and mark fetched ranges
 	}
 
 	var missingRanges []ChangeRange
@@ -155,6 +198,23 @@ func (s *ChangeStore) calcMissingRanges(from, to int64) []ChangeRange {
 
 		return true
 	})
+
+	// Also mark sequences within fetchedRanges as found so we don't request
+	// them again. This covers the case where the fetcher returned fewer
+	// changes than requested (holes) and we want to avoid re-fetching the
+	// same range repeatedly.
+	for _, fr := range s.ranges {
+		// ignore fetched ranges that don't overlap our target
+		if fr.To < from || fr.From > to {
+			continue
+		}
+
+		start := max(fr.From, from)
+		end := min(fr.To, to)
+		for seq := start; seq <= end; seq++ {
+			seqMap[seq] = true
+		}
+	}
 
 	// Now find contiguous missing ranges
 	var inRange bool = false
