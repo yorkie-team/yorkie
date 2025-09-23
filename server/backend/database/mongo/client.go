@@ -1650,8 +1650,8 @@ func (c *Client) FindLatestChangeInfoByActor(
 	actorID types.ID,
 	serverSeq change.ServerSeq,
 ) (*database.ChangeInfo, error) {
-	option := options.FindOne().SetSort(bson.M{
-		"op_seq": -1,
+	option := options.FindOne().SetSort(bson.D{
+		{Key: "op_seq", Value: -1},
 	})
 
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
@@ -1843,9 +1843,9 @@ func (c *Client) FindClosestSnapshotInfo(
 	serverSeq change.ServerSeq,
 	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
-	option := options.FindOne().SetSort(bson.M{
-		"op_seq": -1,
-		"pr_seq": -1,
+	option := options.FindOne().SetSort(bson.D{
+		{Key: "op_seq", Value: -1},
+		{Key: "pr_seq", Value: -1},
 	})
 
 	if !includeSnapshot {

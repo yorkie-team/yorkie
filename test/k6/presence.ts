@@ -102,7 +102,7 @@ export default function () {
   group("Presence", function () {
     try {
       const [clientID, clientKey] = activateClient();
-      const [docID, serverSeq] = attachDocument(
+      const [docID, opSeq, prSeq] = attachDocument(
         clientID,
         hexToBase64(clientID),
         docKey
@@ -110,14 +110,16 @@ export default function () {
 
       sleep(1); // Simulate some processing time
 
-      let lastServerSeq = serverSeq;
+      let lastOpSeq = opSeq;
+      let lastPrSeq = prSeq;
       // Randomly push and pull changes to the document to emulate presence updates
       for (let i = 0; i < 5; i++) {
-        [, lastServerSeq] = pushpullChanges(
+        [, lastOpSeq, lastPrSeq] = pushpullChanges(
           clientID,
           docID,
           docKey,
-          lastServerSeq
+          lastOpSeq,
+          lastPrSeq
         );
         sleep(1); // Simulate some processing time
       }
@@ -282,7 +284,8 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
   );
 
   const documentId = resp!.documentId;
-  const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+  const opSeq = Number(resp!.changePack.checkpoint.opSeq || 0);
+  const prSeq = Number(resp!.changePack.checkpoint.prSeq || 0);
 
   const endTime = new Date().getTime();
   const duration = endTime - startTime;
@@ -291,14 +294,15 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
   attachDocumentsSuccessRate.add(true);
   attachDocumentsTime.add(duration);
 
-  return [documentId, serverSeq];
+  return [documentId, opSeq, prSeq];
 }
 
 function pushpullChanges(
   clientID: string,
   docID: string,
   docKey: string,
-  lastServerSeq: number
+  lastOpSeq: number,
+  lastPrSeq: number
 ) {
   const startTime = new Date().getTime();
   const payload = {
@@ -308,7 +312,8 @@ function pushpullChanges(
       documentKey: docKey,
       checkpoint: {
         clientSeq: 1,
-        serverSeq: lastServerSeq,
+        opSeq: lastOpSeq,
+        prSeq: lastPrSeq,
       },
       versionVector: {},
     },
@@ -321,7 +326,8 @@ function pushpullChanges(
   );
 
   const documentId = resp!.documentId;
-  const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
+  const opSeq = Number(resp!.changePack.checkpoint.opSeq || 0);
+  const prSeq = Number(resp!.changePack.checkpoint.prSeq || 0);
 
   const endTime = new Date().getTime();
   const duration = endTime - startTime;
@@ -330,5 +336,5 @@ function pushpullChanges(
   pushpullsSuccessRate.add(true);
   pushpullsTime.add(duration);
 
-  return [documentId, serverSeq];
+  return [documentId, opSeq, prSeq];
 }
