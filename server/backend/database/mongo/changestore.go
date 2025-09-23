@@ -48,7 +48,12 @@ type ChangeStore struct {
 func NewChangeStore() *ChangeStore {
 	return &ChangeStore{
 		tree: btree.NewG(32, func(a, b *database.OperationChangeInfo) bool {
-			return a.OpSeq < b.OpSeq
+			// Primary sort: OpSeq
+			if a.OpSeq != b.OpSeq {
+				return a.OpSeq < b.OpSeq
+			}
+			// Secondary sort: PrSeq
+			return a.PrSeq < b.PrSeq
 		}),
 	}
 }

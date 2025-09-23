@@ -1766,7 +1766,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	// If there are presence changes, fetch them
 	if hasPr {
 		var err error
-		prInfos, err = c.FindPresenceChangeInfosBetweenPrSeqs(
+		prInfos, err = c.presenceStorage.GetPresencesInRange(
 			docRefKey,
 			from.PrSeq,
 			to.PrSeq,
@@ -2302,25 +2302,6 @@ func (c *Client) purgeDocumentInternals(
 	counts[ColVersionVectors] = res.DeletedCount
 
 	return counts, nil
-}
-
-// StorePresenceChangeInfo stores a presence change info in the presence storage.
-func (c *Client) StorePresenceChangeInfo(prCI *database.PresenceChangeInfo) error {
-	return c.presenceStorage.StorePresence(prCI)
-}
-
-// StorePresenceChangeInfos stores multiple presence change infos in the presence storage.
-func (c *Client) StorePresenceChangeInfos(prCIs []*database.PresenceChangeInfo) error {
-	return c.presenceStorage.StorePresences(prCIs)
-}
-
-// FindPresenceChangeInfosBetweenPrSeqs returns the presence change infos between two presence sequences.
-func (c *Client) FindPresenceChangeInfosBetweenPrSeqs(
-	docRefKey types.DocRefKey,
-	from int64,
-	to int64,
-) ([]*database.PresenceChangeInfo, error) {
-	return c.presenceStorage.GetPresencesInRange(docRefKey, from, to)
 }
 
 func (c *Client) collection(

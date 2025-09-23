@@ -18,27 +18,21 @@ package database
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/google/btree"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrInvalidPresenceSeq is returned when the presence sequence is invalid.
-	ErrInvalidPresenceSeq = fmt.Errorf("invalid presence sequence")
+	ErrInvalidPresenceSeq = errors.Internal("invalid presence sequence").WithCode("ErrInvalidPresenceSeq")
 )
 
-// PresenceRange represents a range of presence sequences from start to end
-type PresenceRange struct {
-	From int64 // Starting presence sequence
-	To   int64 // Ending presence sequence
-}
-
-// PresenceStorage manages presence changes using B-tree for efficient range queries.
-// This is an in-memory storage optimized for presence data that needs fast from-to queries.
+// PresenceStorage is an in-memory database for presence changes.
+// It serves as the Source of Truth (SOT) for all presence data.
 type PresenceStorage struct {
 	mu   sync.RWMutex
 	tree *btree.BTreeG[*PresenceChangeInfo]
@@ -48,37 +42,21 @@ type PresenceStorage struct {
 func NewPresenceStorage() *PresenceStorage {
 	return &PresenceStorage{
 		tree: btree.NewG(32, func(a, b *PresenceChangeInfo) bool {
-			// Primary sort: PrSeq
-			if a.PrSeq != b.PrSeq {
-				return a.PrSeq < b.PrSeq
-			}
-			// Secondary sort: ProjectID, DocID for completeness
+			// Primary sort: ProjectID
 			if a.ProjectID != b.ProjectID {
 				return a.ProjectID < b.ProjectID
 			}
-			return a.DocID < b.DocID
+			// Secondary sort: DocID
+			if a.DocID != b.DocID {
+				return a.DocID < b.DocID
+			}
+			// Tertiary sort: PrSeq
+			return a.PrSeq < b.PrSeq
 		}),
 	}
 }
 
-// StorePresence stores a presence info in the storage.
-func (s *PresenceStorage) StorePresence(presence *PresenceChangeInfo) error {
-	if presence == nil {
-		return fmt.Errorf("presence cannot be nil")
-	}
-
-	if presence.PrSeq <= 0 {
-		return fmt.Errorf("presence sequence must be positive: %w", ErrInvalidPresenceSeq)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.tree.ReplaceOrInsert(presence.DeepCopy())
-	return nil
-}
-
-// StorePresences stores multiple presence infos in batch.
+// StorePresences stores multiple presence changes in batch.
 func (s *PresenceStorage) StorePresences(presences []*PresenceChangeInfo) error {
 	if len(presences) == 0 {
 		return nil
@@ -94,14 +72,14 @@ func (s *PresenceStorage) StorePresences(presences []*PresenceChangeInfo) error 
 		if presence.PrSeq <= 0 {
 			return fmt.Errorf("presence sequence must be positive: %w", ErrInvalidPresenceSeq)
 		}
+
 		s.tree.ReplaceOrInsert(presence.DeepCopy())
 	}
 
 	return nil
 }
 
-// GetPresencesInRange retrieves all presence infos within the specified range
-// for a specific document.
+// GetPresencesInRange retrieves all presence changes within the specified PrSeq range for a specific document.
 func (s *PresenceStorage) GetPresencesInRange(
 	docRefKey types.DocRefKey,
 	from, to int64,
@@ -113,271 +91,61 @@ func (s *PresenceStorage) GetPresencesInRange(
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Return empty result if the tree is empty
 	if s.tree.Len() == 0 {
-		return nil, nil
+		return []*PresenceChangeInfo{}, nil
 	}
 
 	var result []*PresenceChangeInfo
-
-	// Create a dummy presence with the minimum sequence as search key
 	searchKey := &PresenceChangeInfo{
 		ProjectID: docRefKey.ProjectID,
 		DocID:     docRefKey.DocID,
 		PrSeq:     from,
 	}
 
-	// Define a callback function to process each presence in the range
 	s.tree.AscendGreaterOrEqual(searchKey, func(item *PresenceChangeInfo) bool {
-		presence := item
-
-		// Stop iteration when we've passed the end of our target range
-		if presence.PrSeq > to {
+		// Stop if we've moved to a different document
+		if item.ProjectID != docRefKey.ProjectID || item.DocID != docRefKey.DocID {
 			return false
 		}
 
-		// Skip if not for the same document
-		if presence.ProjectID != docRefKey.ProjectID || presence.DocID != docRefKey.DocID {
-			// Since our tree is sorted by PrSeq first, we need to continue
-			// until we find the right document or pass the range
-			return presence.PrSeq <= to
+		// Stop if we've passed the end of our target range
+		if item.PrSeq > to {
+			return false
 		}
 
-		// Add this presence to the result
-		result = append(result, presence.DeepCopy())
-
-		return true
+		result = append(result, item.DeepCopy())
+		return true // Continue iteration
 	})
 
 	return result, nil
 }
 
-// GetAllPresencesInRange retrieves all presence infos within the specified range
-// regardless of document (useful for debugging/monitoring).
-func (s *PresenceStorage) GetAllPresencesInRange(from, to int64) ([]*PresenceChangeInfo, error) {
-	if from > to {
-		return nil, fmt.Errorf("from (%d) > to (%d): %w", from, to, ErrInvalidPresenceSeq)
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Return empty result if the tree is empty
-	if s.tree.Len() == 0 {
-		return nil, nil
-	}
-
-	var result []*PresenceChangeInfo
-
-	// Create a dummy presence with the minimum sequence as search key
-	searchKey := &PresenceChangeInfo{PrSeq: from}
-
-	// Define a callback function to process each presence in the range
-	s.tree.AscendGreaterOrEqual(searchKey, func(item *PresenceChangeInfo) bool {
-		presence := item
-
-		// Stop iteration when we've passed the end of our target range
-		if presence.PrSeq > to {
-			return false
-		}
-
-		// Add this presence to the result
-		result = append(result, presence.DeepCopy())
-
-		return true
-	})
-
-	return result, nil
-}
-
-// GetMaxPrSeq returns the maximum presence sequence in the storage.
-func (s *PresenceStorage) GetMaxPrSeq() int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.tree.Len() == 0 {
+// DeletePresencesByActor removes all presence changes created by a specific actor.
+func (s *PresenceStorage) DeletePresencesByActor(actorID string) int {
+	if actorID == "" {
 		return 0
 	}
 
-	var maxPrSeq int64
-	s.tree.Descend(func(item *PresenceChangeInfo) bool {
-		maxPrSeq = item.PrSeq
-		return false // Stop after first item (highest PrSeq)
-	})
-
-	return maxPrSeq
-}
-
-// GetMaxPrSeqForDoc returns the maximum presence sequence for a specific document.
-func (s *PresenceStorage) GetMaxPrSeqForDoc(docRefKey types.DocRefKey) int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.tree.Len() == 0 {
-		return 0
-	}
-
-	var maxPrSeq int64
-	s.tree.Descend(func(item *PresenceChangeInfo) bool {
-		if item.ProjectID == docRefKey.ProjectID && item.DocID == docRefKey.DocID {
-			maxPrSeq = item.PrSeq
-			return false // Stop after first match (highest PrSeq for this doc)
-		}
-		return true // Continue searching
-	})
-
-	return maxPrSeq
-}
-
-// Size returns the number of presence infos stored.
-func (s *PresenceStorage) Size() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.tree.Len()
-}
-
-// Clear removes all presence infos from the storage.
-func (s *PresenceStorage) Clear() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.tree = btree.NewG(32, func(a, b *PresenceChangeInfo) bool {
-		if a.PrSeq != b.PrSeq {
-			return a.PrSeq < b.PrSeq
-		}
-		if a.ProjectID != b.ProjectID {
-			return a.ProjectID < b.ProjectID
-		}
-		return a.DocID < b.DocID
-	})
-}
-
-// RemovePresencesBeforePrSeq removes all presences with PrSeq less than the given sequence.
-// This can be used for cleanup/garbage collection.
-func (s *PresenceStorage) RemovePresencesBeforePrSeq(prSeq int64) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var toDelete []*PresenceChangeInfo
 
-	// Find all presences with PrSeq < prSeq
+	// Find all presences for the actor
 	s.tree.Ascend(func(item *PresenceChangeInfo) bool {
-		if item.PrSeq < prSeq {
+		if item.ActorID == types.ID(actorID) {
 			toDelete = append(toDelete, item)
-			return true
 		}
-		return false // Since tree is sorted by PrSeq, we can stop here
+		return true // Continue iteration
 	})
 
-	// Delete found items
+	// Delete collected items
+	deletedCount := 0
 	for _, item := range toDelete {
-		s.tree.Delete(item)
-	}
-
-	return len(toDelete)
-}
-
-// calcMissingPresenceRanges calculates which presence ranges need to be fetched
-// (this method is for potential future use when we need to fetch missing presence data)
-func (s *PresenceStorage) calcMissingPresenceRanges(docRefKey types.DocRefKey, from, to int64) []PresenceRange {
-	if s.tree.Len() == 0 {
-		return []PresenceRange{{From: from, To: to}}
-	}
-
-	var missingRanges []PresenceRange
-	var seqMap = make(map[int64]bool, to-from+1)
-
-	// First, create a map of all sequence numbers in our target range
-	for seq := from; seq <= to; seq++ {
-		seqMap[seq] = false // false means not found yet
-	}
-
-	// Mark which sequences we already have for this document
-	searchKey := &PresenceChangeInfo{
-		ProjectID: docRefKey.ProjectID,
-		DocID:     docRefKey.DocID,
-		PrSeq:     from,
-	}
-
-	s.tree.AscendGreaterOrEqual(searchKey, func(item *PresenceChangeInfo) bool {
-		presence := item
-		seq := presence.PrSeq
-
-		// Stop if we've gone past our target range
-		if seq > to {
-			return false
-		}
-
-		// Skip if not for the same document
-		if presence.ProjectID != docRefKey.ProjectID || presence.DocID != docRefKey.DocID {
-			return presence.PrSeq <= to
-		}
-
-		// Mark this sequence as found
-		seqMap[seq] = true
-
-		return true
-	})
-
-	// Now find contiguous missing ranges
-	var inRange bool = false
-	var startMissing int64
-
-	for seq := from; seq <= to; seq++ {
-		if !seqMap[seq] { // This sequence is missing
-			if !inRange {
-				// Start of a new missing range
-				inRange = true
-				startMissing = seq
-			}
-		} else if inRange { // We found a sequence but were in a missing range
-			// End of missing range
-			missingRanges = append(missingRanges, PresenceRange{
-				From: startMissing,
-				To:   seq - 1,
-			})
-			inRange = false
+		if _, ok := s.tree.Delete(item); ok {
+			deletedCount++
 		}
 	}
 
-	// Handle case where missing range extends to the end
-	if inRange {
-		missingRanges = append(missingRanges, PresenceRange{
-			From: startMissing,
-			To:   to,
-		})
-	}
-
-	// Merge adjacent ranges if needed
-	if len(missingRanges) > 1 {
-		return mergeAdjacentPresenceRanges(missingRanges)
-	}
-
-	return missingRanges
-}
-
-// mergeAdjacentPresenceRanges merges adjacent or overlapping presence ranges
-func mergeAdjacentPresenceRanges(ranges []PresenceRange) []PresenceRange {
-	if len(ranges) <= 1 {
-		return ranges
-	}
-
-	sort.Slice(ranges, func(i, j int) bool {
-		return ranges[i].From < ranges[j].From
-	})
-
-	result := make([]PresenceRange, 0, len(ranges))
-	current := ranges[0]
-
-	for i := 1; i < len(ranges); i++ {
-		if ranges[i].From <= current.To+1 {
-			current.To = max(current.To, ranges[i].To)
-		} else {
-			result = append(result, current)
-			current = ranges[i]
-		}
-	}
-
-	result = append(result, current)
-
-	return result
+	return deletedCount
 }
