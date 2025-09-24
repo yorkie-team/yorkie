@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.32] - 2025-09-24
+
+### Added
+
+- Introduce clusternodes collection to manage cluster nodes by @raararaara in https://github.com/yorkie-team/yorkie/pull/1502
+- Introduce presence memory cache by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1515
+
+### Changed
+
+- Add configurable cache sizes for MongoDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1513
+- Improve operation cache hit rate by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1516
+
 ## [v0.6.31] - 2025-09-17
 
 ### Added
