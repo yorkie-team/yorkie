@@ -69,11 +69,6 @@ func (m *Map[K, V]) shardForKey(key K) *shard[K, V] {
 	return &m.shards[idx%numShards]
 }
 
-// shardOf returns the shard for the given index.
-func (m *Map[K, V]) shardOf(idx int) *shard[K, V] {
-	return &m.shards[idx%numShards]
-}
-
 // Set sets a key-value pair.
 func (m *Map[K, V]) Set(key K, value V) {
 	shard := m.shardForKey(key)
@@ -174,7 +169,15 @@ func (m *Map[K, V]) Keys() []K {
 
 // Values returns a slice of all values in the map
 func (m *Map[K, V]) Values() []V {
-	values := make([]V, 0)
+	total := 0
+	for idx := range numShards {
+		shard := &m.shards[idx]
+		shard.RLock()
+		total += len(shard.items)
+		shard.RUnlock()
+	}
+
+	values := make([]V, 0, total)
 
 	for i := range numShards {
 		shard := &m.shards[i]
