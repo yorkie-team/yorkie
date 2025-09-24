@@ -144,6 +144,11 @@ func (i *ChangeInfo) PresenceOnly() bool {
 	return len(i.Operations) == 0 && i.PresenceChange != nil
 }
 
+// HasOperations returns true if this change has operations.
+func (i *ChangeInfo) HasOperations() bool {
+	return len(i.Operations) > 0
+}
+
 // EncodePresenceChange encodes the given PresenceChange into bytes array.
 func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
 	if p == nil {

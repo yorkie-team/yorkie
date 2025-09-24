@@ -96,6 +96,17 @@ func (s *ChangeStore) EnsureChanges(
 	return nil
 }
 
+// ExpandRange manually expands the fetched ranges with the given range.
+func (s *ChangeStore) ExpandRange(r ChangeRange) {
+	if r.From > r.To {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ranges = mergeAdjacentRanges(append(s.ranges, r))
+}
+
 // ChangesInRange retrieves all changes within the specified range
 func (s *ChangeStore) ChangesInRange(from, to int64) []*database.ChangeInfo {
 	if from > to {
