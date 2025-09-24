@@ -1032,8 +1032,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	// NOTE(hackerwins): Clear presence changes of the given client on the
 	// document if the client is no longer attached to the document.
 	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
-	if pCache, ok := c.presenceCache.Get(docKey); ok && !attached {
-		pCache.RemoveChangesByActor(info.ID)
+	if prStore, ok := c.presenceCache.Get(docKey); ok && !attached {
+		prStore.RemoveChangesByActor(info.ID)
 	}
 
 	var updater bson.M
@@ -1486,12 +1486,10 @@ func (c *Client) CreateChangeInfos(
 	initialServerSeq := docInfo.ServerSeq
 	now := gotime.Now()
 
-	// 02. Store the changes.
-	//    - presence-only changes are stored in presenceCache.
-	//    - regular changes are stored in DB.
+	// 02. Separate presence-only changes and operation changes.
 	hasOperations := false
 	var prChanges []*database.ChangeInfo
-	var opChanges []mongo.WriteModel
+	var opChanges []*database.ChangeInfo
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
@@ -1503,48 +1501,63 @@ func (c *Client) CreateChangeInfos(
 			continue
 		}
 
-		if len(cn.Operations) > 0 {
+		if cn.HasOperations() {
+			opChanges = append(opChanges, cn)
 			hasOperations = true
 		}
-
-		opChanges = append(opChanges, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq,
-		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        cn.ActorID,
-			"client_seq":      cn.ClientSeq,
-			"lamport":         cn.Lamport,
-			"version_vector":  cn.VersionVector,
-			"message":         cn.Message,
-			"operations":      cn.Operations,
-			"presence_change": cn.PresenceChange,
-		}}).SetUpsert(true))
 	}
 
+	// 03. Store presence-only changes.
 	if len(prChanges) > 0 {
-		var store *ChangeStore
+		var prStore *ChangeStore
 		if cached, ok := c.presenceCache.Get(refKey); ok {
-			store = cached
+			prStore = cached
 		} else {
-			store = NewChangeStore()
-			c.presenceCache.Add(refKey, store)
+			prStore = NewChangeStore()
+			c.presenceCache.Add(refKey, prStore)
+		}
+		prStore.ReplaceOrInsert(prChanges)
+	}
+
+	// 04. Store operation changes.
+	if len(opChanges) > 0 {
+		var opModels []mongo.WriteModel
+		for _, c := range opChanges {
+			opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
+				"project_id": refKey.ProjectID,
+				"doc_id":     refKey.DocID,
+				"server_seq": c.ServerSeq,
+			}).SetUpdate(bson.M{"$set": bson.M{
+				"actor_id":        c.ActorID,
+				"client_seq":      c.ClientSeq,
+				"lamport":         c.Lamport,
+				"version_vector":  c.VersionVector,
+				"message":         c.Message,
+				"operations":      c.Operations,
+				"presence_change": c.PresenceChange,
+			}}).SetUpsert(true))
 		}
 
-		store.ReplaceOrInsert(prChanges)
-	}
-
-	if len(opChanges) > 0 {
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
-			opChanges,
+			opModels,
 			options.BulkWrite().SetOrdered(false),
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 		}
 	}
 
-	// 03. Update the document info with the given changes.
+	var opStore *ChangeStore
+	if cached, ok := c.changeCache.Get(refKey); ok {
+		opStore = cached
+	} else {
+		opStore = NewChangeStore()
+		c.changeCache.Add(refKey, opStore)
+	}
+	opStore.ReplaceOrInsert(opChanges)
+	opStore.ExpandRange(ChangeRange{From: initialServerSeq + 1, To: docInfo.ServerSeq})
+
+	// 05. Update the document info with the given changes.
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
 	}
@@ -1721,7 +1734,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		store.ReplaceOrInsert(prStore.ChangesInRange(from, to))
 	}
 
-	// 03. Fill the store with regular changes.
+	// 03. Fill the store with operation changes. If not cached, load from DB.
 	var opStore *ChangeStore
 	if cached, ok := c.changeCache.Get(docRefKey); ok {
 		opStore = cached
@@ -1730,9 +1743,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		c.changeCache.Add(docRefKey, opStore)
 	}
 
-	// Calculate missing ranges and fetch them in a single operation
 	if err := opStore.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
-		// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
 		const chunkSize int64 = 1000
 		var infos []*database.ChangeInfo
 		current := from
@@ -1765,9 +1776,9 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}); err != nil {
 		return nil, err
 	}
-
 	store.ReplaceOrInsert(opStore.ChangesInRange(from, to))
 
+	// 04. Return the changes in the given range.
 	return store.ChangesInRange(from, to), nil
 }
 
