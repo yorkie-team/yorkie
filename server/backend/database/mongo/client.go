@@ -834,39 +834,23 @@ func (c *Client) ActivateClient(
 	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"metadata":   metadata,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
+			"metadata":   metadata,
 			"updated_at": now,
 		},
-	}, options.UpdateOne().SetUpsert(true))
-	if err != nil {
-		return nil, fmt.Errorf("activate client of %s: %w", key, err)
-	}
-
-	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
-		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-			"project_id": projectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
-			"$set": bson.M{
-				"created_at": now,
-			},
-		})
-	} else {
-		result = c.collection(ColClients).FindOne(ctx, bson.M{
-			"project_id": projectID,
-			"key":        key,
-		})
-	}
+		"$setOnInsert": bson.M{
+			"created_at": now,
+		},
+	}, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
 
 	info := &database.ClientInfo{}
-	if err = result.Decode(info); err != nil {
+	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("activate client of %s: %w", key, err)
 	}
 
@@ -1359,6 +1343,10 @@ func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) (*database.DocInfo, error) {
+	if info, ok := c.docCache.Get(refKey); ok {
+		return info.DeepCopy(), nil
+	}
+
 	result := c.collection(ColDocuments).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
@@ -1372,6 +1360,8 @@ func (c *Client) FindDocInfoByRefKey(
 
 		return nil, fmt.Errorf("find document of %s: %w", refKey, err)
 	}
+
+	c.docCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
 }
@@ -1465,20 +1455,11 @@ func (c *Client) CreateChangeInfos(
 	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	var docInfo *database.DocInfo
-	if info, ok := c.docCache.Get(refKey); ok {
-		docInfo = info.DeepCopy()
-	} else {
-		info, err := c.FindDocInfoByRefKey(ctx, refKey)
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
-		}
-
-		c.docCache.Add(refKey, info)
-		docInfo = info.DeepCopy()
-	}
-
 	// 01. Fetch the document info.
+	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, change.InitialCheckpoint, err
+	}
 	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
@@ -1946,7 +1927,10 @@ func (c *Client) GetMinVersionVector(
 		return nil, fmt.Errorf("find min version vector: %w", database.ErrVersionVectorNotFound)
 	}
 
-	vectors := append(vvMap.Values(), vector)
+	vals := vvMap.Values()
+	vectors := make([]time.VersionVector, len(vals)+1)
+	copy(vectors, vals)
+	vectors[len(vals)] = vector
 	return time.MinVersionVector(vectors...), nil
 }
 
