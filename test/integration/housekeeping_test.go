@@ -66,6 +66,7 @@ func setupBackend(t *testing.T) *backend.Backend {
 	be, err := backend.New(
 		conf.Backend,
 		conf.Mongo,
+		conf.Membership,
 		conf.Housekeeping,
 		metrics,
 		nil,

@@ -54,6 +54,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
@@ -68,13 +69,17 @@ var (
 
 	ProfilingPort = 11102
 
-	AdminUser                        = server.DefaultAdminUser
-	AdminPassword                    = server.DefaultAdminPassword
-	AdminPasswordForSignUp           = AdminPassword + "123!"
-	UseDefaultProject                = true
+	AdminUser              = server.DefaultAdminUser
+	AdminPassword          = server.DefaultAdminPassword
+	AdminPasswordForSignUp = AdminPassword + "123!"
+	UseDefaultProject      = true
+
 	HousekeepingInterval             = 500 * gotime.Millisecond
 	HousekeepingCandidatesLimit      = 10
 	HousekeepingCompactionMinChanges = 5
+
+	MembershipLeaseDuration   = "15s"
+	MembershipRenewalInterval = "5s"
 
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
@@ -281,6 +286,10 @@ func TestConfig() *server.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
+		},
+		Membership: &membership.Config{
+			LeaseDuration:   MembershipLeaseDuration,
+			RenewalInterval: MembershipRenewalInterval,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:             HousekeepingInterval.String(),

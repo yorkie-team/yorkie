@@ -21,6 +21,7 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -33,6 +34,7 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -56,6 +58,8 @@ type Backend struct {
 
 	// Background is used to manage background tasks.
 	Background *background.Background
+	// Membership is used to manage leader election and lease renewal.
+	Membership *membership.Manager
 	// Housekeeping is used to manage background batch tasks.
 	Housekeeping *housekeeping.Housekeeping
 
@@ -80,6 +84,7 @@ type Backend struct {
 func New(
 	conf *Config,
 	mongoConf *mongo.Config,
+	membershipConf *membership.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
 	kafkaConf *messagebroker.Config,
@@ -138,9 +143,9 @@ func New(
 		}
 	}
 
-	// 06. Create the housekeeping instance. The housekeeping is used
-	// to manage housekeeper tasks such as deactivating inactive clients.
-	housekeeper, err := housekeeping.New(housekeepingConf, db, conf.RPCAddr)
+	// 06. Create the membership manager and the housekeeping instance.
+	membership := membership.New(db, conf.RPCAddr, membershipConf)
+	housekeeper, err := housekeeping.New(housekeepingConf, membership)
 	if err != nil {
 		return nil, err
 	}
@@ -176,10 +181,12 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		Cache:        cacheManager,
-		Lockers:      lockers,
-		PubSub:       pubsub,
+		Cache:   cacheManager,
+		Lockers: lockers,
+		PubSub:  pubsub,
+
 		Background:   bg,
+		Membership:   membership,
 		Housekeeping: housekeeper,
 
 		AuthWebhookClient:   authWebhookClient,
@@ -195,6 +202,10 @@ func New(
 
 // Start starts the backend.
 func (b *Backend) Start(ctx context.Context) error {
+	if err := b.Membership.Start(ctx); err != nil {
+		return err
+	}
+
 	if err := b.Housekeeping.Start(ctx); err != nil {
 		return err
 	}
@@ -205,9 +216,15 @@ func (b *Backend) Start(ctx context.Context) error {
 
 // Shutdown closes all resources of this instance.
 func (b *Backend) Shutdown() error {
+	var errs []error
+
 	if err := b.Housekeeping.Stop(); err != nil {
-		return err
+		errs = append(errs, err)
 	}
+	if err := b.Membership.Stop(); err != nil {
+		errs = append(errs, err)
+	}
+
 	b.Background.Close()
 
 	b.AuthWebhookClient.Close()
@@ -215,13 +232,17 @@ func (b *Backend) Shutdown() error {
 	b.ClusterClient.Close()
 
 	if err := b.MsgBroker.Close(); err != nil {
-		logging.DefaultLogger().Error(err)
+		errs = append(errs, err)
 	}
 	if err := b.Warehouse.Close(); err != nil {
-		logging.DefaultLogger().Error(err)
+		errs = append(errs, err)
 	}
 	if err := b.DB.Close(); err != nil {
-		logging.DefaultLogger().Error(err)
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	logging.DefaultLogger().Infof("backend stopped")
@@ -232,7 +253,7 @@ func (b *Backend) Shutdown() error {
 func (b *Backend) ClusterNodes(
 	ctx context.Context,
 ) ([]*database.ClusterNodeInfo, error) {
-	return b.Housekeeping.LeadershipManager().ClusterNodes(ctx)
+	return b.Membership.ClusterNodes(ctx)
 }
 
 // RemoveClusterNodes removes all cluster nodes for testing purposes.
@@ -242,5 +263,10 @@ func (b *Backend) ClearClusterNodes(ctx context.Context) error {
 
 // IsLeader returns whether this server is leader for testing purposes.
 func (b *Backend) IsLeader() bool {
-	return b.Housekeeping.LeadershipManager().IsLeader()
+	return b.Membership.IsLeader()
+}
+
+// SetMembershipDB sets the database for membership for testing purposes.
+func (h *Backend) SetMembershipDB(db database.Database) {
+	h.Membership.SetDB(db)
 }

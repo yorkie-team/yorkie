@@ -70,10 +70,12 @@ type Config struct {
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
 
-	// GatewayAddr is the address of the gateway server.
+	// GatewayAddr is the address of the gateway server. It is used to unicast
+	// messages to other nodes in consistent-hashing based routing.
 	GatewayAddr string `yaml:"GatewayAddr"`
 
-	// RPCAddr is the address of the RPC server.
+	// RPCAddr is the address of the RPC server. It is used to broadcast
+	// messages to other nodes in the cluster.
 	RPCAddr string `yaml:"RPCAddr"`
 }
 

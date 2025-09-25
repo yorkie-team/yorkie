@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package housekeeping
+package membership
 
 import (
 	"context"
@@ -28,27 +28,34 @@ import (
 
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 func newDatabase() database.Database {
-	// Create a new in-memory database for testing
 	db, err := memory.New()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create in-memory database: %v", err))
 	}
-
 	return db
 }
 
-func TestLeadershipManager(t *testing.T) {
+func membershipConfig() *Config {
+	return &Config{
+		LeaseDuration:   "15s",
+		RenewalInterval: "5s",
+	}
+}
+
+func TestMembershipManager(t *testing.T) {
 	ctx := context.Background()
+	logging.DefaultLogger()
 
-	t.Run("LeadershipManager should acquire leadership", func(t *testing.T) {
+	t.Run("Manager should acquire leadership", func(t *testing.T) {
 		db := newDatabase()
-		conf := DefaultLeadershipConfig()
-		conf.RenewalInterval = 100 * time.Millisecond
+		conf := membershipConfig()
+		conf.RenewalInterval = "100ms"
 
-		manager := NewLeadershipManager(db, "node-1", conf)
+		manager := New(db, "node-1", conf)
 
 		err := manager.Start(ctx)
 		require.NoError(t, err)
@@ -56,24 +63,22 @@ func TestLeadershipManager(t *testing.T) {
 			assert.NoError(t, manager.Stop())
 		}()
 
-		// Wait for leadership acquisition
 		assert.Eventually(t, func() bool {
 			return manager.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 
-		// Verify leadership info
 		lease := manager.CurrentLease()
 		require.NotNil(t, lease)
 		assert.Equal(t, "node-1", lease.RPCAddr)
 	})
 
-	t.Run("LeadershipManager should get proper leader", func(t *testing.T) {
+	t.Run("Manager should get proper leader", func(t *testing.T) {
 		db := newDatabase()
 
-		conf := DefaultLeadershipConfig()
-		conf.RenewalInterval = 100 * time.Millisecond
+		conf := membershipConfig()
+		conf.RenewalInterval = "100ms"
 
-		manager := NewLeadershipManager(db, "node-1", conf)
+		manager := New(db, "node-1", conf)
 
 		err := manager.Start(ctx)
 		require.NoError(t, err)
@@ -88,13 +93,13 @@ func TestLeadershipManager(t *testing.T) {
 		}, 1*time.Second, 50*time.Millisecond)
 	})
 
-	t.Run("Multiple managers should compete for leadership", func(t *testing.T) {
+	t.Run("Managers should compete for leadership", func(t *testing.T) {
 		db := newDatabase()
-		conf := DefaultLeadershipConfig()
-		conf.RenewalInterval = 50 * time.Millisecond
+		conf := membershipConfig()
+		conf.RenewalInterval = "50ms"
 
-		manager1 := NewLeadershipManager(db, "node-1", conf)
-		manager2 := NewLeadershipManager(db, "node-2", conf)
+		manager1 := New(db, "node-1", conf)
+		manager2 := New(db, "node-2", conf)
 
 		err := manager1.Start(ctx)
 		require.NoError(t, err)
@@ -108,12 +113,10 @@ func TestLeadershipManager(t *testing.T) {
 			assert.NoError(t, manager2.Stop())
 		}()
 
-		// Wait for one to become leader
 		assert.Eventually(t, func() bool {
 			return manager1.IsLeader() || manager2.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 
-		// Only one should be leader
 		leaders := 0
 		if manager1.IsLeader() {
 			leaders++
@@ -126,21 +129,19 @@ func TestLeadershipManager(t *testing.T) {
 
 	t.Run("Leadership should transfer after lease expires", func(t *testing.T) {
 		db := newDatabase()
-		conf := DefaultLeadershipConfig()
-		conf.LeaseDuration = 200 * time.Millisecond
-		conf.RenewalInterval = 50 * time.Millisecond
+		conf := membershipConfig()
+		conf.LeaseDuration = "200ms"
+		conf.RenewalInterval = "50ms"
 
-		manager1 := NewLeadershipManager(db, "node-1", conf)
+		manager1 := New(db, "node-1", conf)
 
 		err := manager1.Start(ctx)
 		require.NoError(t, err)
 
-		// Wait for leadership acquisition
 		assert.Eventually(t, func() bool {
 			return manager1.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
 
-		// Stop manager1 (simulating node failure)
 		assert.NoError(t, manager1.Stop())
 		assert.Eventually(t, func() bool {
 			infos, err := manager1.ClusterNodes(ctx)
@@ -148,15 +149,13 @@ func TestLeadershipManager(t *testing.T) {
 			return len(infos) == 0
 		}, 1*time.Second, 50*time.Millisecond)
 
-		// Start manager2
-		manager2 := NewLeadershipManager(db, "node-2", conf)
+		manager2 := New(db, "node-2", conf)
 		err = manager2.Start(ctx)
 		require.NoError(t, err)
 		defer func() {
 			assert.NoError(t, manager2.Stop())
 		}()
 
-		// Manager2 should eventually become leader
 		assert.Eventually(t, func() bool {
 			return manager2.IsLeader()
 		}, 1*time.Second, 50*time.Millisecond)
@@ -166,6 +165,7 @@ func TestLeadershipManager(t *testing.T) {
 func TestLeadershipConcurrency(t *testing.T) {
 	ctx := context.Background()
 	db := newDatabase()
+	logging.DefaultLogger()
 
 	const numGoroutines = 10
 	const leaseDuration = 100 * time.Millisecond
@@ -173,7 +173,6 @@ func TestLeadershipConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	acquiredCount := make([]int, numGoroutines)
 
-	// Start multiple goroutines trying to acquire leadership
 	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
@@ -185,8 +184,6 @@ func TestLeadershipConcurrency(t *testing.T) {
 				info, err := db.TryLeadership(ctx, rpcAddr, "", leaseDuration)
 				if err == nil && info != nil {
 					acquiredCount[id]++
-
-					// Hold leadership briefly then let it expire
 					time.Sleep(10 * time.Millisecond)
 				}
 				time.Sleep(5 * time.Millisecond)
@@ -196,7 +193,6 @@ func TestLeadershipConcurrency(t *testing.T) {
 
 	wg.Wait()
 
-	// Verify that leadership was acquired by various nodes
 	totalAcquisitions := 0
 	for i, count := range acquiredCount {
 		t.Logf("Node %d acquired leadership %d times", i, count)
