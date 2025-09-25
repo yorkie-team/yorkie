@@ -7,6 +7,9 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Optimize cmap.values and improve client activation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1518
+- Update expected failure check for leadership competition by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1519
+
 ## [v0.6.32] - 2025-09-24
 
 ### Added
