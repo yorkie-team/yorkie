@@ -43,6 +43,14 @@ Profiling:
   # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
   PprofEnabled: false
 
+# Membership is the configuration for the membership of the cluster.
+Membership:
+  # LeaseDuration is the duration of leadership lease. (default: 15s).
+  LeaseDuration: "15s"
+
+  # RenewalInterval is the interval for membership renewal. (default: 5s).
+  RenewalInterval: "5s"
+
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
   # Interval is the time between housekeeping runs (default: 30s).
@@ -53,12 +61,6 @@ Housekeeping:
 
   # CompactionMinChanges is minimum number of changes to compact a document. (default: 1000).
   CompactionMinChanges: 1000
-
-  # LeadershipLeaseDuration is the duration of leadership lease. (default: 15s).
-  LeadershipLeaseDuration: "15s"
-
-  # LeadershipRenewalInterval is the interval for leadership renewal. (default: 5s).
-  LeadershipRenewalInterval: "5s"
 
 # Backend is the configuration for the backend of Yorkie.
 Backend:

@@ -77,6 +77,7 @@ func New(conf *Config) (*Yorkie, error) {
 	be, err := backend.New(
 		conf.Backend,
 		conf.Mongo,
+		conf.Membership,
 		conf.Housekeeping,
 		metrics,
 		conf.Kafka,

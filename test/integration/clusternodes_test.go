@@ -78,8 +78,8 @@ func TestClusterNodes(t *testing.T) {
 			ChangeCacheSize:    helper.MongoChangeCacheSize,
 			VectorCacheSize:    helper.MongoVectorCacheSize,
 		}
-		conf.Housekeeping.LeadershipLeaseDuration = "300ms"
-		conf.Housekeeping.LeadershipRenewalInterval = "100ms"
+		conf.Membership.LeaseDuration = "300ms"
+		conf.Membership.RenewalInterval = "100ms"
 
 		return conf
 	}
@@ -206,7 +206,7 @@ func TestClusterNodes(t *testing.T) {
 		assert.NoError(t, err)
 		be := svr.Backend()
 		mockDB := NewMockDB(be.DB)
-		be.Housekeeping.SetLeadershipDB(mockDB)
+		be.SetMembershipDB(mockDB)
 
 		assert.NoError(t, svr.Start())
 		defer func() {

@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-func TestLeadershipInfo(t *testing.T) {
+func TestClusterNodeInfo(t *testing.T) {
 	now := time.Now()
 
 	t.Run("IsExpired should return false for future expiry", func(t *testing.T) {

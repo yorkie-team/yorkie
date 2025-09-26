@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/profiling"
@@ -37,6 +38,9 @@ import (
 const (
 	DefaultRPCPort       = 8080
 	DefaultProfilingPort = 8081
+
+	DefaultMembershipLeaseDuration   = 15 * time.Second
+	DefaultMembershipRenewalInterval = 5 * time.Second
 
 	DefaultHousekeepingInterval             = 30 * time.Second
 	DefaultHousekeepingCandidatesLimit      = 500
@@ -87,6 +91,7 @@ const (
 type Config struct {
 	RPC          *rpc.Config           `yaml:"RPC"`
 	Profiling    *profiling.Config     `yaml:"Profiling"`
+	Membership   *membership.Config    `yaml:"Membership"`
 	Housekeeping *housekeeping.Config  `yaml:"Housekeeping"`
 	Backend      *backend.Config       `yaml:"Backend"`
 	Mongo        *mongo.Config         `yaml:"Mongo"`
@@ -187,6 +192,21 @@ func (c *Config) ensureProfilingDefaultValue() {
 	}
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
+	}
+}
+
+// ensureMembershipDefaultValue set the default membership.Config value (keeps YAML key Membership)
+func (c *Config) ensureMembershipDefaultValue() {
+	if c.Membership == nil {
+		c.Membership = &membership.Config{}
+	}
+
+	if c.Membership.LeaseDuration == "" {
+		c.Membership.LeaseDuration = DefaultMembershipLeaseDuration.String()
+	}
+
+	if c.Membership.RenewalInterval == "" {
+		c.Membership.RenewalInterval = DefaultMembershipRenewalInterval.String()
 	}
 }
 
@@ -306,6 +326,7 @@ func (c *Config) ensureKafkaDefaultValue() {
 func (c *Config) ensureDefaultValue() {
 	c.ensureRPCDefaultValue()
 	c.ensureProfilingDefaultValue()
+	c.ensureMembershipDefaultValue()
 	c.ensureHouseKeepingDefaultValue()
 	c.ensureBackendDefaultValue()
 
@@ -324,6 +345,10 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Profiling: &profiling.Config{
 			Port: profilingPort,
+		},
+		Membership: &membership.Config{
+			LeaseDuration:   DefaultMembershipLeaseDuration.String(),
+			RenewalInterval: DefaultMembershipRenewalInterval.String(),
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:             DefaultHousekeepingInterval.String(),

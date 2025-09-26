@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/server/rpc/testcases"
@@ -91,6 +92,9 @@ func TestMain(m *testing.M) {
 		DocCacheSize:       helper.MongoDocCacheSize,
 		ChangeCacheSize:    helper.MongoChangeCacheSize,
 		VectorCacheSize:    helper.MongoVectorCacheSize,
+	}, &membership.Config{
+		LeaseDuration:   helper.MembershipLeaseDuration,
+		RenewalInterval: helper.MembershipRenewalInterval,
 	}, &housekeeping.Config{
 		Interval:        helper.HousekeepingInterval.String(),
 		CandidatesLimit: helper.HousekeepingCandidatesLimit,
