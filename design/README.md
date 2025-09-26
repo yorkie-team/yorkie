@@ -21,6 +21,7 @@
 
 - [Sharded Cluster Mode](sharded-cluster-mode.md): Shard-based server cluster mode with consistent hashing
 - [MongoDB Sharding](mongodb-sharding.md): MongoDB sharding with sharding strategy considerations
+- [Membership Management](membership.md): Leader-member structure for managing cluster node lifecycle
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
 - [Housekeeping](housekeeping.md): Background tasks for cleaning up documents and tombstones
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
