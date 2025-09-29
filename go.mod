@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	connectrpc.com/connect v1.18.1
 	connectrpc.com/grpchealth v1.4.0
-	github.com/go-co-op/gocron/v2 v2.16.2
+	github.com/go-co-op/gocron/v2 v2.16.6
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.26.0
@@ -20,7 +20,7 @@ require (
 	github.com/segmentio/kafka-go v0.4.48
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/undefinedlabs/go-mpatch v1.0.7
 	go.mongodb.org/mongo-driver/v2 v2.2.0
 	go.uber.org/zap v1.27.0
