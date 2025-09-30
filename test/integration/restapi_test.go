@@ -33,11 +33,10 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -110,7 +109,7 @@ func TestRESTAPI(t *testing.T) {
 					doc := document.New(helper.TestDocKey(t, i))
 					assert.NoError(t, cli.Attach(ctx, doc,
 						client.WithInitialRoot(yson.ParseObject(`{"counter": Counter(Long(0))}`)),
-						client.WithPresence(innerpresence.Presence{"key": cli.Key()}),
+						client.WithPresence(presence.Data{"key": cli.Key()}),
 						client.WithRealtimeSync()))
 
 					docs = append(docs, doc)

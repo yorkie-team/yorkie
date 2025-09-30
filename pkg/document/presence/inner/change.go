@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-// Package innerpresence provides the implementation of Presence.
+// Package inner provides the implementation of Presence.
 // If the client is watching a document, the presence is shared with
 // all other clients watching the same document.
-package innerpresence
+package inner
 
 import "github.com/yorkie-team/yorkie/pkg/document/time"
 

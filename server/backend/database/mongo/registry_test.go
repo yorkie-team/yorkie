@@ -24,7 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -74,11 +74,11 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("presenceChange test", func(t *testing.T) {
-		presence := innerpresence.New()
-		presence.Set("color", "orange")
-		presenceChange := &innerpresence.Change{
-			ChangeType: innerpresence.Put,
-			Presence:   presence,
+		p := presence.NewData()
+		p.Set("color", "orange")
+		presenceChange := &presence.Change{
+			ChangeType: presence.Put,
+			Presence:   p,
 		}
 
 		buf := new(bytes.Buffer)
@@ -90,7 +90,7 @@ func TestRegistry(t *testing.T) {
 		assert.NoError(t, err)
 
 		info := struct {
-			PresenceChange *innerpresence.Change `bson:"presence_change"`
+			PresenceChange *presence.Change `bson:"presence_change"`
 		}{}
 		decoder := bson.NewDecoder(bson.NewDocumentReader(bytes.NewReader(buf.Bytes())))
 		decoder.SetRegistry(registry)

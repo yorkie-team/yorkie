@@ -18,10 +18,10 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Context is used to record the context of modification when editing a document.
@@ -34,7 +34,7 @@ type Context struct {
 	operations     []operations.Operation
 	delimiter      uint32
 	root           *crdt.Root
-	presenceChange *innerpresence.Change
+	presenceChange *inner.Change
 }
 
 // NewContext creates a new instance of Context.
@@ -126,6 +126,6 @@ func (c *Context) LastTimeTicket() *time.Ticket {
 }
 
 // SetPresenceChange sets the presence change of the user who made the change.
-func (c *Context) SetPresenceChange(presenceChange innerpresence.Change) {
+func (c *Context) SetPresenceChange(presenceChange inner.Change) {
 	c.presenceChange = &presenceChange
 }

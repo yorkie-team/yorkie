@@ -32,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -105,22 +104,22 @@ func TestPresence(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()})))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()})))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()})))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()})))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Check that the presence is updated on the other client.
 		assert.NoError(t, c1.Sync(ctx))
-		assert.Equal(t, innerpresence.Presence{"key": c1.Key()}, d1.MyPresence())
-		assert.Equal(t, innerpresence.Presence{"key": c2.Key()}, d1.PresenceForTest(c2.ID().String()))
-		assert.Equal(t, innerpresence.Presence{"key": c2.Key()}, d2.MyPresence())
-		assert.Equal(t, innerpresence.Presence{"key": c1.Key()}, d2.PresenceForTest(c1.ID().String()))
+		assert.Equal(t, presence.Data{"key": c1.Key()}, d1.MyPresence())
+		assert.Equal(t, presence.Data{"key": c2.Key()}, d1.PresenceForTest(c2.ID().String()))
+		assert.Equal(t, presence.Data{"key": c2.Key()}, d2.MyPresence())
+		assert.Equal(t, presence.Data{"key": c1.Key()}, d2.PresenceForTest(c1.ID().String()))
 
 		// 03. The first client detaches the document and check that the presence is updated on the other client.
 		assert.NoError(t, c1.Detach(ctx, d1))
 		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, innerpresence.Presence{"key": c2.Key()}, d2.MyPresence())
+		assert.Equal(t, presence.Data{"key": c2.Key()}, d2.MyPresence())
 		assert.Nil(t, d2.PresenceForTest(c1.ID().String()))
 	})
 
@@ -172,7 +171,7 @@ func TestPresence(t *testing.T) {
 		// 03. Watch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -190,7 +189,7 @@ func TestPresence(t *testing.T) {
 		assert.NoError(t, err)
 		expected = append(expected, watchResponsePair{
 			Type: client.PresenceChanged,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -202,7 +201,7 @@ func TestPresence(t *testing.T) {
 		// 05. Unwatch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -259,7 +258,7 @@ func TestPresence(t *testing.T) {
 		// 3. After c1 syncing the change of c2's attachment, c2 watches the document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -319,7 +318,7 @@ func TestPresence(t *testing.T) {
 		// 3. After c2 watches the document, c1 syncs the change of c2's attachment.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -381,7 +380,7 @@ func TestPresence(t *testing.T) {
 		// 03. Watch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -398,7 +397,7 @@ func TestPresence(t *testing.T) {
 		assert.NoError(t, err)
 		expected = append(expected, watchResponsePair{
 			Type: client.PresenceChanged,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -410,7 +409,7 @@ func TestPresence(t *testing.T) {
 		// 05. Unwatch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -470,7 +469,7 @@ func TestPresence(t *testing.T) {
 		// 03. Watch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -487,7 +486,7 @@ func TestPresence(t *testing.T) {
 		assert.NoError(t, err)
 		expected = append(expected, watchResponsePair{
 			Type: client.PresenceChanged,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -499,7 +498,7 @@ func TestPresence(t *testing.T) {
 		// 05. Unwatch the second client's document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -559,7 +558,7 @@ func TestPresence(t *testing.T) {
 		// 3. After c1 syncing the change of c2's update, c2 watches the document.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {"updated": "true"},
 			},
 		})
@@ -695,7 +694,7 @@ func TestPresence(t *testing.T) {
 		// 04. The second client watches the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
@@ -709,7 +708,7 @@ func TestPresence(t *testing.T) {
 		// 05. The second client unwatch the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -738,10 +737,10 @@ func TestPresence(t *testing.T) {
 
 		// 02. Create two document instances with the same key and attach clients
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()}), client.WithRealtimeSync()))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()}), client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()}), client.WithRealtimeSync()))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()}), client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 03. Subscribe both clients to the document

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // DocInfo is a structure representing information of the document.

@@ -27,10 +27,9 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -91,7 +90,7 @@ func (s *clusterServer) DetachDocument(
 		"",
 		nil,
 	)
-	p := presence.New(changeCtx, innerpresence.New())
+	p := presence.New(changeCtx, presence.NewData())
 	p.Clear()
 	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
@@ -241,7 +240,7 @@ func (s *clusterServer) GetDocument(
 
 		// Set presences if requested
 		if req.Msg.IncludePresences {
-			summary.Presences = make(map[string]innerpresence.Presence)
+			summary.Presences = make(map[string]presence.Data)
 			clientIDs := s.backend.PubSub.ClientIDs(docInfo.RefKey())
 			presences := doc.AllPresences()
 

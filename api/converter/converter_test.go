@@ -27,7 +27,6 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -260,9 +259,9 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("empty presence converting test", func(t *testing.T) {
-		change := &innerpresence.Change{
-			ChangeType: innerpresence.Put,
-			Presence:   innerpresence.New(),
+		change := &presence.Change{
+			ChangeType: presence.Put,
+			Presence:   presence.NewData(),
 		}
 
 		pbChange := converter.ToPresenceChange(change)
