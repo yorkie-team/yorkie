@@ -40,12 +40,11 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 type status int
@@ -124,7 +123,7 @@ const (
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type      WatchResponseType
-	Presences map[string]innerpresence.Presence
+	Presences map[string]presence.Data
 	Err       error
 }
 
@@ -645,7 +644,7 @@ func handleResponse(
 
 			return &WatchResponse{
 				Type: DocumentWatched,
-				Presences: map[string]innerpresence.Presence{
+				Presences: map[string]presence.Data{
 					cli.String(): doc.Presence(cli.String()),
 				},
 			}, nil
@@ -662,7 +661,7 @@ func handleResponse(
 
 			return &WatchResponse{
 				Type: DocumentUnwatched,
-				Presences: map[string]innerpresence.Presence{
+				Presences: map[string]presence.Data{
 					cli.String(): p,
 				},
 			}, nil

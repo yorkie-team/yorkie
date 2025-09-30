@@ -23,7 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -31,7 +31,7 @@ import (
 var tID = reflect.TypeOf(types.ID(""))
 var tActorID = reflect.TypeOf(time.ActorID{})
 var tVersionVector = reflect.TypeOf(time.VersionVector{})
-var tPresenceChange = reflect.TypeOf(&innerpresence.Change{})
+var tPresenceChange = reflect.TypeOf(&presence.Change{})
 
 // NewRegistryBuilder returns a new registry with the default encoder and decoder.
 func NewRegistryBuilder() *bson.Registry {
@@ -150,7 +150,7 @@ func presenceChangeEncoder(_ bson.EncodeContext, vw bson.ValueWriter, val reflec
 			Name: "presenceChangeEncoder", Types: []reflect.Type{tPresenceChange}, Received: val}
 	}
 
-	presenceChange := val.Interface().(*innerpresence.Change)
+	presenceChange := val.Interface().(*presence.Change)
 	if presenceChange == nil {
 		if err := vw.WriteNull(); err != nil {
 			return fmt.Errorf("encode error: %w", err)

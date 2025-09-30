@@ -17,8 +17,8 @@
 package change
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // Pack is a unit for delivering changes in a document to the remote.

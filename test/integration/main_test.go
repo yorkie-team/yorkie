@@ -28,7 +28,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -46,7 +46,7 @@ type clientAndDocPair struct {
 
 type watchResponsePair struct {
 	Type      client.WatchResponseType
-	Presences map[string]innerpresence.Presence
+	Presences map[string]presence.Data
 }
 
 var defaultServer *server.Yorkie

@@ -27,12 +27,12 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
-	"github.com/yorkie-team/yorkie/pkg/resource"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 var (
@@ -115,7 +115,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 	}
 
 	if pbSummary.Presences != nil {
-		presences := make(map[string]innerpresence.Presence)
+		presences := make(map[string]presence.Data)
 		for k, v := range pbSummary.Presences {
 			presences[k] = fromPresence(v)
 		}
@@ -303,46 +303,46 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	return ops, nil
 }
 
-func fromPresences(pbPresences map[string]*api.Presence) *innerpresence.Map {
-	presences := innerpresence.NewMap()
+func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
+	presences := presence.NewMap()
 	for id, pbPresence := range pbPresences {
 		presences.Store(id, fromPresence(pbPresence))
 	}
 	return presences
 }
 
-func fromPresence(pbPresence *api.Presence) innerpresence.Presence {
+func fromPresence(pbPresence *api.Presence) presence.Data {
 	if pbPresence == nil {
 		return nil
 	}
 
 	data := pbPresence.GetData()
 	if data == nil {
-		data = innerpresence.New()
+		data = presence.NewData()
 	}
 
 	return data
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.
-func FromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.Change {
+func FromPresenceChange(pbPresenceChange *api.PresenceChange) *presence.Change {
 	if pbPresenceChange == nil {
 		return nil
 	}
 
-	var p innerpresence.Change
+	var p presence.Change
 	switch pbPresenceChange.Type {
 	case api.PresenceChange_CHANGE_TYPE_PUT:
-		p = innerpresence.Change{
-			ChangeType: innerpresence.Put,
+		p = presence.Change{
+			ChangeType: presence.Put,
 			Presence:   pbPresenceChange.Presence.Data,
 		}
 		if p.Presence == nil {
-			p.Presence = innerpresence.New()
+			p.Presence = presence.NewData()
 		}
 	case api.PresenceChange_CHANGE_TYPE_CLEAR:
-		p = innerpresence.Change{
-			ChangeType: innerpresence.Clear,
+		p = presence.Change{
+			ChangeType: presence.Clear,
 			Presence:   nil,
 		}
 	}

@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // VerbType represents an action taken on the document.

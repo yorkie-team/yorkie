@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 

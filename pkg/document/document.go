@@ -25,13 +25,12 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
-	"github.com/yorkie-team/yorkie/pkg/resource"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/pkg/schema"
 )
 
@@ -49,7 +48,7 @@ var (
 // DocEvent represents the event that occurred in the document.
 type DocEvent struct {
 	Type      DocEventType
-	Presences map[string]innerpresence.Presence
+	Presences map[string]presence.Data
 }
 
 // DocEventType represents the type of the event that occurred in the document.
@@ -113,7 +112,7 @@ type Document struct {
 
 	// clonePresences is a copy of `doc.presences` to be exposed to the user and
 	// is used to protect `doc.presences`.
-	clonePresences *innerpresence.Map
+	clonePresences *presence.Map
 
 	// MaxSizeLimit is the maximum size of a document in bytes.
 	MaxSizeLimit int
@@ -176,7 +175,7 @@ func (d *Document) Update(
 
 	if err := updater(
 		json.NewObject(ctx, d.cloneRoot.Object()),
-		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.New())),
+		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), presence.NewData())),
 	); err != nil {
 		// NOTE(hackerwins): If the updater fails, we need to remove the cloneRoot and
 		// clonePresences to prevent the user from accessing the invalid state.
@@ -409,31 +408,31 @@ func (d *Document) ensureClone() error {
 }
 
 // MyPresence returns the presence of the actor.
-func (d *Document) MyPresence() innerpresence.Presence {
+func (d *Document) MyPresence() presence.Data {
 	return d.doc.MyPresence()
 }
 
 // Presence returns the presence of the given client.
 // If the client is not online, it returns nil.
-func (d *Document) Presence(clientID string) innerpresence.Presence {
+func (d *Document) Presence(clientID string) presence.Data {
 	return d.doc.Presence(clientID)
 }
 
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
-func (d *Document) PresenceForTest(clientID string) innerpresence.Presence {
+func (d *Document) PresenceForTest(clientID string) presence.Data {
 	return d.doc.PresenceForTest(clientID)
 }
 
 // Presences returns the presence map of online clients.
-func (d *Document) Presences() map[string]innerpresence.Presence {
+func (d *Document) Presences() map[string]presence.Data {
 	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
 	return d.doc.Presences()
 }
 
 // AllPresences returns the presence map of all clients
 // regardless of whether the client is online or not.
-func (d *Document) AllPresences() map[string]innerpresence.Presence {
+func (d *Document) AllPresences() map[string]presence.Data {
 	return d.doc.AllPresences()
 }
 

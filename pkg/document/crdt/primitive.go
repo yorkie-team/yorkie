@@ -23,8 +23,8 @@ import (
 	"math"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ValueType represents the type of Primitive value.

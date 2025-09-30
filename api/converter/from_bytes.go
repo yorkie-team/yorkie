@@ -23,7 +23,7 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 )
@@ -32,9 +32,9 @@ import (
 var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
 
 // BytesToSnapshot creates a Snapshot from the given byte array.
-func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) {
+func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 	if len(snapshot) == 0 {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), innerpresence.NewMap(), nil
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), presence.NewMap(), nil
 	}
 
 	pbSnapshot := &api.Snapshot{}

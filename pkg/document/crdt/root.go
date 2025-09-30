@@ -20,8 +20,8 @@
 package crdt
 
 import (
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ElementPair represents pair that has a parent element and child element.

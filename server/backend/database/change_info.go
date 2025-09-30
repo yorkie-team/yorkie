@@ -25,8 +25,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 )
@@ -39,17 +39,17 @@ var ErrDecodeOperationFailed = errors.Internal("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID             types.ID              `bson:"_id"`
-	ProjectID      types.ID              `bson:"project_id"`
-	DocID          types.ID              `bson:"doc_id"`
-	ServerSeq      int64                 `bson:"server_seq"`
-	ClientSeq      uint32                `bson:"client_seq"`
-	Lamport        int64                 `bson:"lamport"`
-	ActorID        types.ID              `bson:"actor_id"`
-	VersionVector  time.VersionVector    `bson:"version_vector"`
-	Message        string                `bson:"message"`
-	Operations     [][]byte              `bson:"operations"`
-	PresenceChange *innerpresence.Change `bson:"presence_change"`
+	ID             types.ID           `bson:"_id"`
+	ProjectID      types.ID           `bson:"project_id"`
+	DocID          types.ID           `bson:"doc_id"`
+	ServerSeq      int64              `bson:"server_seq"`
+	ClientSeq      uint32             `bson:"client_seq"`
+	Lamport        int64              `bson:"lamport"`
+	ActorID        types.ID           `bson:"actor_id"`
+	VersionVector  time.VersionVector `bson:"version_vector"`
+	Message        string             `bson:"message"`
+	Operations     [][]byte           `bson:"operations"`
+	PresenceChange *presence.Change   `bson:"presence_change"`
 }
 
 // NewFromChange creates a new ChangeInfo from the given change.
@@ -150,7 +150,7 @@ func (i *ChangeInfo) HasOperations() bool {
 }
 
 // EncodePresenceChange encodes the given PresenceChange into bytes array.
-func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
+func EncodePresenceChange(p *presence.Change) ([]byte, error) {
 	if p == nil {
 		return nil, nil
 	}
@@ -164,7 +164,7 @@ func EncodePresenceChange(p *innerpresence.Change) ([]byte, error) {
 }
 
 // PresenceChangeFromBytes decodes the given bytes array into PresenceChange.
-func PresenceChangeFromBytes(bytes []byte) (*innerpresence.Change, error) {
+func PresenceChangeFromBytes(bytes []byte) (*presence.Change, error) {
 	if bytes == nil {
 		return nil, nil
 	}

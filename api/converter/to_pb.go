@@ -28,10 +28,10 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ToUser converts the given model format to Protobuf format.
@@ -127,7 +127,7 @@ func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 }
 
 // ToPresences converts the given model to Protobuf format.
-func ToPresences(presences map[string]innerpresence.Presence) map[string]*api.Presence {
+func ToPresences(presences map[string]presence.Data) map[string]*api.Presence {
 	pbPresences := make(map[string]*api.Presence)
 	for k, v := range presences {
 		pbPresences[k] = ToPresence(v)
@@ -136,7 +136,7 @@ func ToPresences(presences map[string]innerpresence.Presence) map[string]*api.Pr
 }
 
 // ToPresence converts the given model to Protobuf format.
-func ToPresence(p innerpresence.Presence) *api.Presence {
+func ToPresence(p presence.Data) *api.Presence {
 	if p == nil {
 		return nil
 	}
@@ -147,18 +147,18 @@ func ToPresence(p innerpresence.Presence) *api.Presence {
 }
 
 // ToPresenceChange converts the given model to Protobuf format.
-func ToPresenceChange(p *innerpresence.Change) *api.PresenceChange {
+func ToPresenceChange(p *presence.Change) *api.PresenceChange {
 	if p == nil {
 		return nil
 	}
 
 	switch p.ChangeType {
-	case innerpresence.Put:
+	case presence.Put:
 		return &api.PresenceChange{
 			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
 			Presence: &api.Presence{Data: p.Presence},
 		}
-	case innerpresence.Clear:
+	case presence.Clear:
 		return &api.PresenceChange{
 			Type: api.PresenceChange_CHANGE_TYPE_CLEAR,
 		}

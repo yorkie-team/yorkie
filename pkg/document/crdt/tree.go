@@ -25,10 +25,10 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 var (
