@@ -20,6 +20,7 @@ import (
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -29,21 +30,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-// StatusType represents the status of the document.
-type StatusType int
+type StatusType = attachable.StatusType
 
 const (
-	// StatusDetached means that the document is not attached to the client.
-	// The actor of the ticket is created without being assigned.
-	StatusDetached StatusType = iota
-
-	// StatusAttached means that this document is attached to the client.
-	// The actor of the ticket is created with being assigned by the client.
-	StatusAttached
-
-	// StatusRemoved means that this document is removed. If the document is removed,
-	// it cannot be edited.
-	StatusRemoved
+	StatusDetached = attachable.StatusDetached
+	StatusAttached = attachable.StatusAttached
+	StatusRemoved  = attachable.StatusRemoved
 )
 
 var (

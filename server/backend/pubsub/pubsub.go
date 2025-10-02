@@ -44,66 +44,17 @@ const (
 	publishTimeout = 100 * gotime.Millisecond
 )
 
-// Subscriptions is a map of Subscriptions.
-type Subscriptions struct {
-	docKey      types.DocRefKey
-	internalMap *cmap.Map[string, *Subscription]
-	publisher   *BatchPublisher
-}
-
-func newSubscriptions(docKey types.DocRefKey) *Subscriptions {
-	s := &Subscriptions{
-		docKey:      docKey,
-		internalMap: cmap.New[string, *Subscription](),
-	}
-	s.publisher = NewBatchPublisher(s, 100*gotime.Millisecond)
-	return s
-}
-
-// Set adds the given subscription.
-func (s *Subscriptions) Set(sub *Subscription) {
-	s.internalMap.Set(sub.ID(), sub)
-}
-
-// Values returns the values of these subscriptions.
-func (s *Subscriptions) Values() []*Subscription {
-	return s.internalMap.Values()
-}
-
-// Publish publishes the given event.
-func (s *Subscriptions) Publish(event events.DocEvent) {
-	s.publisher.Publish(event)
-}
-
-// Delete deletes the subscription of the given id.
-func (s *Subscriptions) Delete(id string) {
-	s.internalMap.Delete(id, func(sub *Subscription, exists bool) bool {
-		if exists {
-			sub.Close()
-		}
-		return exists
-	})
-}
-
-// Len returns the length of these subscriptions.
-func (s *Subscriptions) Len() int {
-	return s.internalMap.Len()
-}
-
-// Close closes the subscriptions.
-func (s *Subscriptions) Close() {
-	s.publisher.Close()
-}
-
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	subscriptionsMap *cmap.Map[types.DocRefKey, *Subscriptions]
+	docSubsMap      *cmap.Map[types.DocRefKey, *DocSubscriptions]
+	presenceSubsMap *cmap.Map[types.PresenceRefKey, *PresenceSubscriptions]
 }
 
 // New creates an instance of PubSub.
 func New() *PubSub {
 	return &PubSub{
-		subscriptionsMap: cmap.New[types.DocRefKey, *Subscriptions](),
+		docSubsMap:      cmap.New[types.DocRefKey, *DocSubscriptions](),
+		presenceSubsMap: cmap.New[types.PresenceRefKey, *PresenceSubscriptions](),
 	}
 }
 
@@ -113,7 +64,7 @@ func (m *PubSub) Subscribe(
 	subscriber time.ActorID,
 	docKey types.DocRefKey,
 	limit int,
-) (*Subscription, []time.ActorID, error) {
+) (*DocSubscription, []time.ActorID, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
@@ -126,8 +77,8 @@ func (m *PubSub) Subscribe(
 	// The race condition is that the subscription limit is exceeded
 	// and the new subscription is not set. If newSub is nil,
 	// it means the limit was exceeded and the subscription was not created.
-	var newSub *Subscription
-	_ = m.subscriptionsMap.Upsert(docKey, func(subs *Subscriptions, exists bool) *Subscriptions {
+	var newSub *DocSubscription
+	_ = m.docSubsMap.Upsert(docKey, func(subs *DocSubscriptions, exists bool) *DocSubscriptions {
 		if !exists {
 			subs = newSubscriptions(docKey)
 		}
@@ -136,7 +87,7 @@ func (m *PubSub) Subscribe(
 			return subs
 		}
 
-		newSub = NewSubscription(subscriber)
+		newSub = NewDocSubscription(subscriber)
 		subs.Set(newSub)
 		return subs
 	})
@@ -165,7 +116,7 @@ func (m *PubSub) Subscribe(
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
 	docKey types.DocRefKey,
-	sub *Subscription,
+	sub *DocSubscription,
 ) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -177,10 +128,10 @@ func (m *PubSub) Unsubscribe(
 
 	sub.Close()
 
-	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
+	if subs, ok := m.docSubsMap.Get(docKey); ok {
 		subs.Delete(sub.ID())
 
-		m.subscriptionsMap.Delete(docKey, func(subs *Subscriptions, exists bool) bool {
+		m.docSubsMap.Delete(docKey, func(subs *DocSubscriptions, exists bool) bool {
 			if !exists || 0 < subs.Len() {
 				return false
 			}
@@ -218,7 +169,7 @@ func (m *PubSub) Publish(
 		)
 	}
 
-	if subs, ok := m.subscriptionsMap.Get(docKey); ok {
+	if subs, ok := m.docSubsMap.Get(docKey); ok {
 		subs.Publish(event)
 	}
 
@@ -232,7 +183,7 @@ func (m *PubSub) Publish(
 
 // ClientIDs returns the clients of the given document.
 func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
-	subs, ok := m.subscriptionsMap.Get(docKey)
+	subs, ok := m.docSubsMap.Get(docKey)
 	if !ok {
 		return nil
 	}
@@ -242,4 +193,98 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
 		ids = append(ids, sub.Subscriber())
 	}
 	return ids
+}
+
+// SubscribePresence subscribes to the given presence key.
+func (m *PubSub) SubscribePresence(
+	ctx context.Context,
+	subscriber time.ActorID,
+	refKey types.PresenceRefKey,
+) (*PresenceSubscription, int64, error) {
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			`SubscribePresence(%s,%s) Start`,
+			refKey,
+			subscriber,
+		)
+	}
+
+	var newSub *PresenceSubscription
+	var initialCount int64
+
+	_ = m.presenceSubsMap.Upsert(refKey, func(subs *PresenceSubscriptions, exists bool) *PresenceSubscriptions {
+		if !exists {
+			subs = newPresenceSubscriptions(refKey)
+		}
+
+		newSub = NewPresenceSubscription(subscriber)
+		subs.Set(newSub)
+		return subs
+	})
+
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			`SubscribePresence(%s,%s) End`,
+			refKey,
+			subscriber,
+		)
+	}
+
+	return newSub, initialCount, nil
+}
+
+// UnsubscribePresence unsubscribes the given presence key.
+func (m *PubSub) UnsubscribePresence(
+	ctx context.Context,
+	refKey types.PresenceRefKey,
+	sub *PresenceSubscription,
+) {
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			`UnsubscribePresence(%s,%s) Start`,
+			refKey,
+			sub.Subscriber(),
+		)
+	}
+
+	sub.Close()
+
+	if subs, ok := m.presenceSubsMap.Get(refKey); ok {
+		subs.Delete(sub.ID())
+
+		m.presenceSubsMap.Delete(refKey, func(subs *PresenceSubscriptions, exists bool) bool {
+			if !exists || 0 < subs.Len() {
+				return false
+			}
+
+			subs.Close()
+			return true
+		})
+	}
+
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			`UnsubscribePresence(%s,%s) End`,
+			refKey,
+			sub.Subscriber(),
+		)
+	}
+}
+
+// PublishPresence publishes the given presence event.
+func (m *PubSub) PublishPresence(
+	ctx context.Context,
+	event events.PresenceEvent,
+) {
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`PublishPresence(%s) Start`, event.RefKey)
+	}
+
+	if subs, ok := m.presenceSubsMap.Get(event.RefKey); ok {
+		subs.Publish(event)
+	}
+
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`PublishPresence(%s) End`, event.RefKey)
+	}
 }

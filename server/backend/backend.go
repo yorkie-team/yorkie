@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/presence"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
@@ -55,6 +56,8 @@ type Backend struct {
 	PubSub *pubsub.PubSub
 	// Lockers is used to lock/unlock resources.
 	Lockers *sync.LockerManager
+	// Presence is used to manage real-time presence counters.
+	Presence *presence.Manager
 
 	// Background is used to manage background tasks.
 	Background *background.Background
@@ -115,8 +118,9 @@ func New(
 	lockers := sync.New()
 	pubsub := pubsub.New()
 
-	// 03. Create the background instance. The background instance is used to
-	// manage background tasks.
+	// 03. Create the presence manager for real-time user tracking and background
+	// task manager.
+	presenceManager := presence.NewManager(pubsub)
 	bg := background.New(metrics)
 
 	// 04. Create webhook clients and cluster client.
@@ -181,9 +185,10 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		Cache:   cacheManager,
-		Lockers: lockers,
-		PubSub:  pubsub,
+		Cache:    cacheManager,
+		Lockers:  lockers,
+		PubSub:   pubsub,
+		Presence: presenceManager,
 
 		Background:   bg,
 		Membership:   membership,

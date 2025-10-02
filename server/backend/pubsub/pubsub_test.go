@@ -125,7 +125,7 @@ func TestPubSub(t *testing.T) {
 
 		// Try to subscribe concurrently with different ActorIDs
 		var wg gosync.WaitGroup
-		subscriptions := make([]*pubsub.Subscription, concurrency)
+		subscriptions := make([]*pubsub.DocSubscription, concurrency)
 		for i := range concurrency {
 			wg.Add(1)
 			go func(idx int) {

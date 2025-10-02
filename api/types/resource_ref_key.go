@@ -18,7 +18,20 @@ package types
 
 import (
 	"fmt"
+
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
+
+// ClientRefKey represents an identifier used to reference a client.
+type ClientRefKey struct {
+	ProjectID ID
+	ClientID  ID
+}
+
+// String returns the string representation of the given ClientRefKey.
+func (r ClientRefKey) String() string {
+	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
+}
 
 // DocRefKey represents an identifier used to reference a document.
 type DocRefKey struct {
@@ -31,15 +44,15 @@ func (r DocRefKey) String() string {
 	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
 }
 
-// ClientRefKey represents an identifier used to reference a client.
-type ClientRefKey struct {
-	ProjectID ID
-	ClientID  ID
+// PresenceRefKey represents an identifier used to reference a presence counter.
+type PresenceRefKey struct {
+	ProjectID   ID
+	PresenceKey key.Key
 }
 
-// String returns the string representation of the given ClientRefKey.
-func (r ClientRefKey) String() string {
-	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
+// String returns the string representation of the given PresenceRefKey.
+func (r PresenceRefKey) String() string {
+	return fmt.Sprintf("Presence (%s.%s)", r.ProjectID, r.PresenceKey)
 }
 
 // EventRefKey represents an identifier used to reference an event.

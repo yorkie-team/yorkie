@@ -1,7 +1,7 @@
 //go:build integration
 
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,780 +20,577 @@ package integration
 
 import (
 	"context"
-	gojson "encoding/json"
-	"fmt"
-	"strconv"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/yorkie-team/yorkie/admin"
-	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func TestPresence(t *testing.T) {
-	clients := activeClients(t, 2)
-	c1, c2 := clients[0], clients[1]
-	defer deactivateAndCloseClients(t, clients)
+func TestPresenceIntegration(t *testing.T) {
+	ctx := context.Background()
 
-	t.Run("update presence by calling Document.Update test", func(t *testing.T) {
-		// 01. Create a document and attach it to the clients
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+	t.Run("single client presence counter test", func(t *testing.T) {
+		clients := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, clients)
 
-		// 02. Update the root of the document and presence
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetString("key", "value")
-			p.Set("updated", "true")
-			return nil
-		}))
-		encoded, err := gojson.Marshal(d1.AllPresences())
-		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"}}`, c1.ID()), string(encoded))
+		cli := clients[0]
 
-		// 03 Sync documents and check that the presence is updated on the other client
-		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
-		encoded, err = gojson.Marshal(d2.AllPresences())
-		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"},"%s":{}}`, c1.ID(), c2.ID()), string(encoded))
+		// Create presence counter
+		presenceKey := helper.TestDocKey(t)
+		counter := presence.New(presenceKey)
+
+		// Test initial state
+		assert.Equal(t, presenceKey, counter.Key())
+		assert.Equal(t, attachable.TypePresence, counter.Type())
+		assert.Equal(t, attachable.StatusDetached, counter.Status())
+		assert.False(t, counter.IsAttached())
+
+		// Attach presence counter
+		err := cli.Attach(ctx, counter)
+		require.NoError(t, err)
+
+		// Verify attached state
+		assert.Equal(t, attachable.StatusAttached, counter.Status())
+		assert.True(t, counter.IsAttached())
+
+		// Detach presence counter
+		require.NoError(t, cli.Detach(ctx, counter))
+
+		// Verify detached state
+		assert.Equal(t, attachable.StatusDetached, counter.Status())
+		assert.False(t, counter.IsAttached())
 	})
 
-	t.Run("presence with snapshot test", func(t *testing.T) {
-		// 01. Create a document and attach it to the clients
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+	t.Run("multiple clients presence counter test", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		defer deactivateAndCloseClients(t, clients)
 
-		// 02. Update the root of the document and presence
-		for i := range int(helper.SnapshotThreshold) {
-			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetString("key", "value")
-				p.Set("updated", strconv.Itoa(i))
-				return nil
-			}))
+		client1, client2, client3 := clients[0], clients[1], clients[2]
+
+		// Create presence counters for the same room
+		presenceKey := helper.TestDocKey(t)
+		counter1 := presence.New(presenceKey)
+		counter2 := presence.New(presenceKey)
+		counter3 := presence.New(presenceKey)
+
+		// Attach first client
+		err := client1.Attach(ctx, counter1)
+		require.NoError(t, err)
+
+		// Attach second client
+		err = client2.Attach(ctx, counter2)
+		require.NoError(t, err)
+
+		// Attach third client
+		err = client3.Attach(ctx, counter3)
+		require.NoError(t, err)
+
+		// All should be attached
+		assert.True(t, counter1.IsAttached())
+		assert.True(t, counter2.IsAttached())
+		assert.True(t, counter3.IsAttached())
+
+		// Detach clients
+		require.NoError(t, client1.Detach(ctx, counter1))
+		assert.False(t, counter1.IsAttached())
+		require.NoError(t, client2.Detach(ctx, counter2))
+		assert.False(t, counter2.IsAttached())
+		require.NoError(t, client3.Detach(ctx, counter3))
+		assert.False(t, counter3.IsAttached())
+	})
+
+	t.Run("presence count value verification test", func(t *testing.T) {
+		clients := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, clients)
+		cli := clients[0]
+
+		// Create presence counter
+		counter := presence.New(helper.TestDocKey(t))
+
+		// Attach and start watching to get count updates
+		require.NoError(t, cli.Attach(ctx, counter))
+
+		countChan, closeWatch, err := cli.WatchPresence(ctx, counter)
+		require.NoError(t, err)
+		defer closeWatch()
+
+		// Wait for initial count (should be 1 - just this client)
+		var receivedCount int64
+		assert.Eventually(t, func() bool {
+			select {
+			case count := <-countChan:
+				receivedCount = count
+				return true
+			default:
+				return false
+			}
+		}, time.Second, 50*time.Millisecond, "Should receive initial count")
+
+		assert.Equal(t, int64(1), receivedCount, "Initial count should be 1")
+
+		// Validate Counter object holds the actual count value
+		assert.Equal(t, int64(1), counter.Count(), "Counter object should reflect actual count")
+	})
+
+	t.Run("presence count changes with multiple clients test", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		defer deactivateAndCloseClients(t, clients)
+
+		watcherClient := clients[0]
+		participantClients := clients[1:]
+
+		// Create presence counters for the same room
+		presenceKey := helper.TestDocKey(t)
+		watcherCounter := presence.New(presenceKey)
+
+		// Attach watcher first
+		err := watcherClient.Attach(ctx, watcherCounter)
+		require.NoError(t, err)
+
+		// Start watching count changes
+		countChan, closeWatch, err := watcherClient.WatchPresence(ctx, watcherCounter)
+		require.NoError(t, err)
+		defer closeWatch()
+
+		// Helper to collect and track latest count
+		var latestCount int64 = -1
+		collectCount := func() {
+			for {
+				select {
+				case c := <-countChan:
+					latestCount = c
+					t.Logf("Received count update: %d", c)
+				default:
+					return
+				}
+			}
 		}
-		encoded, err := gojson.Marshal(d1.AllPresences())
-		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"9"}}`, c1.ID()), string(encoded))
 
-		// 03 Sync documents and check that the presence is updated on the other client
-		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
-		encoded, err = gojson.Marshal(d2.AllPresences())
-		assert.NoError(t, err)
-		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"9"},"%s":{}}`, c1.ID(), c2.ID()), string(encoded))
+		// Helper to get current latest count
+		getLatestCount := func() int64 {
+			collectCount()
+			return latestCount
+		}
+
+		// Wait for initial count (1 = watcher) - blocking wait for first count
+		assert.Eventually(t, func() bool {
+			select {
+			case count := <-countChan:
+				return count == 1
+			default:
+				return false
+			}
+		}, time.Second, 50*time.Millisecond, "Should receive initial count of 1")
+
+		// Now use getLatestCount to drain any additional counts
+		getLatestCount()
+
+		// Add participants one by one and verify count increases
+		participantCounters := make([]*presence.Counter, len(participantClients))
+		for i, client := range participantClients {
+			participantCounters[i] = presence.New(presenceKey)
+
+			t.Logf("Attaching participant %d", i+1)
+			err := client.Attach(ctx, participantCounters[i])
+			require.NoError(t, err)
+
+			expectedCount := int64(2 + i) // watcher + participants so far
+			t.Logf("Waiting for count to reach %d", expectedCount)
+			assert.Eventually(t, func() bool {
+				count := getLatestCount()
+				t.Logf("Current count: %d, Expected: %d", count, expectedCount)
+				return count == expectedCount
+			}, 5*time.Second, 100*time.Millisecond, "Count should increase to %d", expectedCount)
+		}
+
+		// Final count should be 3 (1 watcher + 2 participants)
+		t.Log("Checking final count should be 3")
+		assert.Eventually(t, func() bool {
+			count := getLatestCount()
+			t.Logf("Final count check: %d (expected: 3)", count)
+			return count == 3
+		}, 5*time.Second, 100*time.Millisecond, "Final count should be 3")
+
+		// Remove participants one by one and verify count decreases
+		for i, client := range participantClients {
+			err := client.Detach(ctx, participantCounters[i])
+			require.NoError(t, err)
+
+			expectedCount := int64(3 - 1 - i) // remaining clients
+			assert.Eventually(t, func() bool {
+				count := getLatestCount()
+				return count == expectedCount
+			}, 2*time.Second, 50*time.Millisecond, "Count should decrease to %d", expectedCount)
+		}
+
+		// Final count should be 1 (only watcher remains)
+		assert.Eventually(t, func() bool {
+			count := getLatestCount()
+			return count == 1
+		}, time.Second, 50*time.Millisecond, "Final count should be 1")
+
+		// Validate Counter object reflects the final count
+		assert.Equal(t, int64(1), watcherCounter.Count(), "Watcher counter should reflect final count")
 	})
 
-	t.Run("presence with attach and detach test", func(t *testing.T) {
-		// 01. Create a document and attach it to the clients
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()})))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()})))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+	t.Run("out-of-order event handling test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
 
-		// 02. Check that the presence is updated on the other client.
-		assert.NoError(t, c1.Sync(ctx))
-		assert.Equal(t, presence.Data{"key": c1.Key()}, d1.MyPresence())
-		assert.Equal(t, presence.Data{"key": c2.Key()}, d1.PresenceForTest(c2.ID().String()))
-		assert.Equal(t, presence.Data{"key": c2.Key()}, d2.MyPresence())
-		assert.Equal(t, presence.Data{"key": c1.Key()}, d2.PresenceForTest(c1.ID().String()))
+		// Create presence counters for two clients
+		presenceKey := helper.TestDocKey(t)
+		counter1 := presence.New(presenceKey)
+		counter2 := presence.New(presenceKey)
 
-		// 03. The first client detaches the document and check that the presence is updated on the other client.
-		assert.NoError(t, c1.Detach(ctx, d1))
-		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, presence.Data{"key": c2.Key()}, d2.MyPresence())
-		assert.Nil(t, d2.PresenceForTest(c1.ID().String()))
-	})
+		// Attach the first counter first
+		err := clients[0].Attach(ctx, counter1)
+		require.NoError(t, err)
+		defer func() { _ = clients[0].Detach(ctx, counter1) }()
 
-	t.Run("presence-related events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		assert.NoError(t, c1.Sync(ctx))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		// Now we can watch from the attached counter
+		countCh, cancelWatch, err := clients[0].WatchPresence(ctx, counter1)
+		require.NoError(t, err)
+		defer cancelWatch()
 
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
+		// Attach the second counter
+		err = clients[1].Attach(ctx, counter2)
+		require.NoError(t, err)
+		defer func() { _ = clients[1].Detach(ctx, counter2) }()
 
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
+		// Track the last received count
+		var lastCount int64
+
+		// Verify initial count (2 clients)
+		assert.Eventually(t, func() bool {
+			select {
+			case count := <-countCh:
+				lastCount = count
+				return count == 2
+			default:
+				return false
+			}
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Sequential attach/detach operations with proper waiting
+		// to ensure presence state is properly synchronized
+		for i := 0; i < 5; i++ {
+			// Detach
+			err = clients[1].Detach(ctx, counter2)
+			require.NoError(t, err)
+
+			// Wait for count to stabilize at 1
+			stabilized := assert.Eventually(t, func() bool {
 				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-					if len(responsePairs) == 3 {
-						return
-					}
+				case count := <-countCh:
+					lastCount = count
+					return count == 1
+				case <-time.After(10 * time.Millisecond):
+					return false
+				}
+			}, time.Second, 50*time.Millisecond)
+
+			if !stabilized {
+				t.Logf("Warning: count did not stabilize to 1 after detach iteration %d", i)
+			}
+
+			// Re-attach
+			err = clients[1].Attach(ctx, counter2)
+			require.NoError(t, err)
+
+			// Wait for count to stabilize at 2
+			stabilized = assert.Eventually(t, func() bool {
+				select {
+				case count := <-countCh:
+					lastCount = count
+					return count == 2
+				case <-time.After(10 * time.Millisecond):
+					return false
+				}
+			}, time.Second, 50*time.Millisecond)
+
+			if !stabilized {
+				t.Logf("Warning: count did not stabilize to 2 after attach iteration %d", i)
+			}
+		}
+
+		// Drain any remaining events
+		time.Sleep(100 * time.Millisecond)
+		draining := true
+		for draining {
+			select {
+			case count := <-countCh:
+				lastCount = count
+				t.Logf("Drained count: %d", count)
+			case <-time.After(50 * time.Millisecond):
+				draining = false
+			}
+		}
+
+		// Final count should be 2 (both attached)
+		require.Equal(t, int64(2), lastCount, "Final count should be 2 after all operations")
+
+		// Note: Counter objects only reflect server state if they have WatchPresence active
+		// counter1 has WatchPresence active, so it should reflect the count
+		assert.Equal(t, int64(2), counter1.Count(), "Counter1 should reflect final count")
+		// counter2 doesn't have WatchPresence, so we can't verify its internal count
+		// This is expected behavior - Counter objects need WatchPresence to stay synchronized
+	})
+
+	t.Run("concurrent count consistency test", func(t *testing.T) {
+		clientCount := 10
+		clients := activeClients(t, clientCount)
+		defer deactivateAndCloseClients(t, clients)
+
+		presenceKey := helper.TestDocKey(t)
+		counters := make([]*presence.Counter, clientCount)
+
+		// Create counters for all clients
+		for i := range clientCount {
+			counters[i] = presence.New(presenceKey)
+		}
+
+		// Attach all clients concurrently
+		for i := range clientCount {
+			go func(idx int) {
+				assert.NoError(t, clients[idx].Attach(ctx, counters[idx]))
+			}(i)
+		}
+
+		// Wait for all to be attached
+		assert.Eventually(t, func() bool {
+			for i := range clientCount {
+				if !counters[i].IsAttached() {
+					return false
 				}
 			}
-		}()
+			return true
+		}, time.Second, 100*time.Millisecond, "All clients should be attached")
 
-		// 03. Watch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
+		// Start watching from multiple clients and verify they see the same count
+		watchClients := clients[:3] // Use first 3 clients as watchers
+		countChans := make([]<-chan int64, len(watchClients))
+		closeWatches := make([]func(), len(watchClients))
 
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		wgEvents.Wait()
-		wgEvents.Add(1)
+		for i, client := range watchClients {
+			countChan, closeWatch, err := client.WatchPresence(ctx, counters[i])
+			require.NoError(t, err)
+			countChans[i] = countChan
+			closeWatches[i] = closeWatch
+		}
 
-		// 04. Update the second client's presence.
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("updated", "true")
-			return nil
-		})
-		assert.NoError(t, err)
-		expected = append(expected, watchResponsePair{
-			Type: client.PresenceChanged,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		wgEvents.Wait()
-		wgEvents.Add(1)
-
-		// 05. Unwatch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentUnwatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		cancel2()
-
-		wgEvents.Wait()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("watch after attach events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-					if len(responsePairs) == 1 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 3. After c1 syncing the change of c2's attachment, c2 watches the document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
-		assert.NoError(t, c1.Sync(ctx))
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		defer cancel2()
-
-		wgEvents.Wait()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("attach after watch events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-					if len(responsePairs) == 1 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 3. After c2 watches the document, c1 syncs the change of c2's attachment.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		defer cancel2()
-		time.Sleep(100 * time.Millisecond) // wait until the window time for batch publishing
-		assert.NoError(t, c1.Sync(ctx))
-
-		wgEvents.Wait()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("unwatch after detach events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		assert.NoError(t, c1.Sync(ctx))
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(10 * time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-
-					if len(responsePairs) == 3 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 03. Watch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		wgEvents.Wait()
-		wgEvents.Add(1)
-
-		// 04. Update the second client's presence.
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("updated", "true")
-			return nil
-		})
-		assert.NoError(t, err)
-		expected = append(expected, watchResponsePair{
-			Type: client.PresenceChanged,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		wgEvents.Wait()
-		wgEvents.Add(1)
-
-		// 05. Unwatch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentUnwatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		wgEvents.Wait()
-
-		cancel2()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("detach after unwatch events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		assert.NoError(t, c1.Sync(ctx))
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(10 * time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-
-					if len(responsePairs) == 3 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 03. Watch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		wgEvents.Wait()
-		wgEvents.Add(1)
-
-		// 04. Update the second client's presence.
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("updated", "true")
-			return nil
-		})
-		assert.NoError(t, err)
-		expected = append(expected, watchResponsePair{
-			Type: client.PresenceChanged,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		wgEvents.Wait()
-		wgEvents.Add(1)
-
-		// 05. Unwatch the second client's document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentUnwatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		cancel2()
-
-		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-
-		wgEvents.Wait()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("watch after update events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						wgEvents.Done()
-					}
-					if len(responsePairs) == 1 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 3. After c1 syncing the change of c2's update, c2 watches the document.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {"updated": "true"},
-			},
-		})
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("updated", "true")
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, c2.Sync(ctx))
-		assert.NoError(t, c1.Sync(ctx))
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		defer cancel2()
-
-		wgEvents.Wait()
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("watch after detach events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-
-		// 02. Watch the first client's document.
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			for {
-				select {
-				case <-time.After(time.Second):
-					wgEvents.Done()
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-						println("what???", wr.Type)
-						assert.Fail(t, "unexpected presence event")
-					}
-				}
-			}
-		}()
-
-		// 3. After c1 syncing the change of c2's detachment, c2 watches the document.
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("updated", "true")
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, c1.Sync(ctx))
-
-		_, cancel2, err := c2.Subscribe(d2) // No events yet - before the window time for batch publishing
-		assert.NoError(t, err)
-		defer cancel2()
-		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx))
-
-		wgEvents.Wait()
-		assert.Equal(t, 0, len(responsePairs))
-	})
-
-	t.Run("watching multiple documents test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Two clients attach two documents with the same key, and watch them.
-		// But the second client also attaches another document.
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t) + "2")
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-
-		// 02. Watch the first client's document.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		wrch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
-		assert.NoError(t, err)
-		go func() {
-			defer func() {
-				wgEvents.Done()
-			}()
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
-
-					if wr.Type != client.DocumentChanged {
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:      wr.Type,
-							Presences: wr.Presences,
-						})
-					}
-
-					if len(responsePairs) == 2 {
-						return
-					}
-				}
-			}
-		}()
-
-		// 03. The second client attaches a document with the same key as the first client's document
-		// and another document with a different key.
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-		assert.NoError(t, c2.Attach(ctx, d3, client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
-
-		// 04. The second client watches the documents attached by itself.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentWatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): d2.MyPresence(),
-			},
-		})
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-
-		_, cancel3, err := c2.Subscribe(d3)
-		assert.NoError(t, err)
-
-		// 05. The second client unwatch the documents attached by itself.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentUnwatched,
-			Presences: map[string]presence.Data{
-				c2.ID().String(): {},
-			},
-		})
-		cancel2()
-		cancel3()
-
-		wgEvents.Wait()
-
-		assert.Equal(t, expected, responsePairs)
-	})
-
-	t.Run("GetDocument presence filtering test", func(t *testing.T) {
-		// 01. Get admin client and default project
-		ctx := context.Background()
-
-		adminCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
-		assert.NoError(t, err)
-		_, err = adminCli.LogIn(ctx, "admin", "admin")
-		assert.NoError(t, err)
 		defer func() {
-			adminCli.Close()
+			for _, closeWatch := range closeWatches {
+				closeWatch()
+			}
 		}()
 
-		project, err := adminCli.GetProject(ctx, "default")
-		assert.NoError(t, err)
+		// Collect counts from all watchers
+		collectCounts := func() []int64 {
+			counts := make([]int64, len(watchClients))
+			for i, countChan := range countChans {
+				select {
+				case count := <-countChan:
+					counts[i] = count
+				default:
+					// Keep previous count if no new update
+				}
+			}
+			return counts
+		}
 
-		// 02. Create two document instances with the same key and attach clients
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()}), client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()}), client.WithRealtimeSync()))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		// Eventually all watchers should see count = clientCount
+		assert.Eventually(t, func() bool {
+			counts := collectCounts()
+			for _, count := range counts {
+				if count != int64(clientCount) {
+					return false
+				}
+			}
+			return true
+		}, time.Second, 100*time.Millisecond, "All watchers should see count = %d", clientCount)
 
-		// 03. Subscribe both clients to the document
-		_, cancel1, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		defer cancel1()
-		_, cancel2, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
+		t.Logf("All %d watchers consistently see count = %d", len(watchClients), clientCount)
+	})
 
-		// Wait for subscription events to be processed on the server
-		time.Sleep(100 * time.Millisecond)
+	t.Run("presence watch integration test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
 
-		// 04. Sync clients to ensure presence information is updated
-		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
+		watcherClient, participantClient := clients[0], clients[1]
 
-		// 05. Call GetDocuments API and verify both presences are included
-		resBody := post(
-			t,
-			project,
-			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
-		)
+		// Create presence counters
+		presenceKey := helper.TestDocKey(t)
+		watcherCounter := presence.New(presenceKey)
+		participantCounter := presence.New(presenceKey)
 
-		summaries := &documentSummaries{}
-		gojson.Unmarshal(resBody, summaries)
-		assert.Equal(t, 1, len(summaries.Documents))
+		// Attach watcher first
+		err := watcherClient.Attach(ctx, watcherCounter)
+		require.NoError(t, err)
 
-		presences := summaries.Documents[0].Presences
-		assert.Equal(t, 2, len(presences), "should include presences of both subscribed clients")
-		assert.Contains(t, presences, c1.ID().String())
-		assert.Contains(t, presences, c2.ID().String())
+		// Start watching presence changes
+		countChan, closeWatch, err := watcherClient.WatchPresence(ctx, watcherCounter)
+		require.NoError(t, err)
+		defer closeWatch()
 
-		// 06. Unsubscribe c2 from the document
-		cancel2()
+		// Collect count updates in a slice
+		var counts []int64
 
-		time.Sleep(100 * time.Millisecond)
+		// Helper function to collect available counts
+		collectCounts := func() {
+			for {
+				select {
+				case count, ok := <-countChan:
+					if !ok {
+						return
+					}
+					counts = append(counts, count)
+				default:
+					return
+				}
+			}
+		}
 
-		// 07. Call GetDocuments API again and verify c2's presence is filtered out
-		resBody = post(
-			t,
-			project,
-			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
-		)
+		// Wait for initial count
+		assert.Eventually(t, func() bool {
+			collectCounts()
+			return len(counts) > 0
+		}, time.Second, 50*time.Millisecond, "Should receive initial count")
 
-		summaries = &documentSummaries{}
-		gojson.Unmarshal(resBody, summaries)
-		assert.Equal(t, 1, len(summaries.Documents))
+		initialCountLen := len(counts)
 
-		presences = summaries.Documents[0].Presences
-		assert.Equal(t, 1, len(presences), "should only include presence of subscribed client")
-		assert.Contains(t, presences, c1.ID().String())
-		assert.NotContains(t, presences, c2.ID().String(), "c2's presence should be filtered out")
+		// Attach participant (should trigger count update)
+		err = participantClient.Attach(ctx, participantCounter)
+		require.NoError(t, err)
+
+		// Wait for count update after attach
+		assert.Eventually(t, func() bool {
+			collectCounts()
+			return len(counts) > initialCountLen
+		}, time.Second, 50*time.Millisecond, "Should receive count update after participant attach")
+
+		attachCountLen := len(counts)
+
+		// Detach participant (should trigger another count update)
+		err = participantClient.Detach(ctx, participantCounter)
+		require.NoError(t, err)
+
+		// Wait for count update after detach
+		assert.Eventually(t, func() bool {
+			collectCounts()
+			return len(counts) > attachCountLen
+		}, time.Second, 50*time.Millisecond, "Should receive count update after participant detach")
+
+		// Verify we received count updates
+		assert.GreaterOrEqual(t, len(counts), 3, "Should receive at least 3 count updates (initial, attach, detach)")
+		t.Logf("Received count updates: %v", counts)
+	})
+
+	t.Run("presence counter stress test", func(t *testing.T) {
+		clientCount := 5
+
+		clients := activeClients(t, clientCount)
+		defer deactivateAndCloseClients(t, clients)
+
+		presenceKey := helper.TestDocKey(t)
+		counters := make([]*presence.Counter, clientCount)
+
+		// Create and activate multiple clients
+		for i := range clientCount {
+			counters[i] = presence.New(presenceKey)
+		}
+
+		// Attach all clients concurrently
+		for i := range clientCount {
+			go func(idx int) {
+				if err := clients[idx].Attach(ctx, counters[idx]); err != nil {
+					t.Errorf("Failed to attach client %d: %v", idx, err)
+				}
+			}(i)
+		}
+
+		// Wait for all attachments using assert.Eventually
+		assert.Eventually(t, func() bool {
+			for i := range clientCount {
+				if !counters[i].IsAttached() {
+					return false
+				}
+			}
+			return true
+		}, time.Second, 100*time.Millisecond, "All clients should be attached")
+
+		// Verify all are attached
+		for i := range clientCount {
+			assert.True(t, counters[i].IsAttached())
+		}
+
+		// Detach all clients concurrently
+		for i := range clientCount {
+			go func(idx int) {
+				err := clients[idx].Detach(ctx, counters[idx])
+				if err != nil {
+					t.Errorf("Failed to detach client %d: %v", idx, err)
+				}
+			}(i)
+		}
+
+		// Wait for all detachments using assert.Eventually
+		assert.Eventually(t, func() bool {
+			for i := range clientCount {
+				if counters[i].IsAttached() {
+					return false
+				}
+			}
+			return true
+		}, time.Second, 100*time.Millisecond, "All clients should be detached")
+
+		// Verify all are detached
+		for i := range clientCount {
+			assert.False(t, counters[i].IsAttached())
+		}
+
+		// Note: Detached counters may not immediately reflect zero count
+		// without active WatchPresence. This is expected behavior.
+	})
+
+	t.Run("mixed resource test", func(t *testing.T) {
+		clients := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, clients)
+
+		cli := clients[0]
+
+		// Create both document and presence counter
+		docKey := helper.TestDocKey(t, 1)
+		presenceKey := helper.TestDocKey(t, 2)
+
+		doc := document.New(docKey)
+		counter := presence.New(presenceKey)
+
+		// Test polymorphic usage
+		resources := []attachable.Attachable{doc, counter}
+
+		// Attach all resources
+		var err error
+		for _, resource := range resources {
+			err = cli.Attach(ctx, resource)
+			require.NoError(t, err)
+			assert.True(t, resource.IsAttached())
+		}
+
+		// Verify types
+		assert.Equal(t, attachable.TypeDocument, doc.Type())
+		assert.Equal(t, attachable.TypePresence, counter.Type())
+
+		// Detach all resources
+		for _, resource := range resources {
+			err = cli.Detach(ctx, resource)
+			require.NoError(t, err)
+			assert.False(t, resource.IsAttached())
+		}
 	})
 }

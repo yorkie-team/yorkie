@@ -1889,9 +1889,7 @@ func (c *Client) UpdateMinVersionVector(
 				return vector
 			})
 		} else {
-			vvMap.Delete(clientInfo.ID, func(value time.VersionVector, exists bool) bool {
-				return exists
-			})
+			vvMap.Delete(clientInfo.ID)
 		}
 	}
 

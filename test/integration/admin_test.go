@@ -158,9 +158,9 @@ func TestAdmin(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		rch, cancel, err := c1.Subscribe(d1)
-		defer cancel()
+		rch, cancel, err := c1.WatchStream(d1)
 		assert.NoError(t, err)
+		defer cancel()
 		go func() {
 			defer wg.Done()
 
