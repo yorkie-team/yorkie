@@ -21,6 +21,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -347,7 +348,7 @@ func (i *ClientInfo) IsServerClient() bool {
 // UpdateDocStatus updates the status of the document in the client info.
 func (i *ClientInfo) UpdateDocStatus(
 	docID types.ID,
-	status document.StatusType,
+	status attachable.StatusType,
 	cp change.Checkpoint,
 ) error {
 	switch status {

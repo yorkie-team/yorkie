@@ -20,6 +20,7 @@ import (
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -29,24 +30,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-// StatusType represents the status of the document.
-type StatusType int
-
-const (
-	// StatusDetached means that the document is not attached to the client.
-	// The actor of the ticket is created without being assigned.
-	StatusDetached StatusType = iota
-
-	// StatusAttached means that this document is attached to the client.
-	// The actor of the ticket is created with being assigned by the client.
-	StatusAttached
-
-	// StatusRemoved means that this document is removed. If the document is removed,
-	// it cannot be edited.
-	StatusRemoved
-)
-
 var (
+	StatusDetached = attachable.StatusDetached
+	StatusAttached = attachable.StatusAttached
+	StatusRemoved  = attachable.StatusRemoved
+
 	// ErrDocumentRemoved occurs when the document is removed.
 	ErrDocumentRemoved = errors.FailedPrecond("document is removed")
 )
@@ -60,7 +48,7 @@ type InternalDocument struct {
 
 	// status is the status of the document. It is used to check whether the
 	// document is attached to the client or detached or removed.
-	status StatusType
+	status attachable.StatusType
 
 	// checkpoint is the checkpoint of the document. It is used to determine
 	// what changes should be sent and what changes should be received.
@@ -245,7 +233,7 @@ func (d *InternalDocument) VersionVector() time.VersionVector {
 }
 
 // SetStatus sets the status of this document.
-func (d *InternalDocument) SetStatus(status StatusType) {
+func (d *InternalDocument) SetStatus(status attachable.StatusType) {
 	d.status = status
 }
 
