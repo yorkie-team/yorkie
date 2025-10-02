@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -249,6 +250,172 @@ func (s *yorkieServer) AttachDocument(
 	return connect.NewResponse(response), nil
 }
 
+// AttachPresence attaches the given presence counter to the client.
+func (s *yorkieServer) AttachPresence(
+	ctx context.Context,
+	req *connect.Request[api.AttachPresenceRequest],
+) (*connect.Response[api.AttachPresenceResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.AttachDocument, // Reuse for now, TODO: add specific presence method
+		Attributes: types.NewAccessAttributes([]key.Key{key.Key(req.Msg.PresenceKey)}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Attach client to presence counter using the backend manager
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	presenceID, count, err := s.backend.Presence.Attach(ctx, actorID, presenceKey)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &api.AttachPresenceResponse{
+		PresenceId: presenceID,
+		Count:      count,
+	}
+	return connect.NewResponse(response), nil
+}
+
+// DetachPresence detaches the given presence counter from the client.
+func (s *yorkieServer) DetachPresence(
+	ctx context.Context,
+	req *connect.Request[api.DetachPresenceRequest],
+) (*connect.Response[api.DetachPresenceResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.DetachDocument, // Reuse for now, TODO: add specific presence method
+		Attributes: types.NewAccessAttributes([]key.Key{key.Key(req.Msg.PresenceId)}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Detach client from presence counter using the backend manager
+	// Note: Using PresenceId as presenceKey for now, in production you might parse it differently
+	presenceKey := key.Key(req.Msg.PresenceId)
+	count, err := s.backend.Presence.Detach(ctx, actorID, presenceKey)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &api.DetachPresenceResponse{
+		Count: count,
+	}
+	return connect.NewResponse(response), nil
+}
+
+// WatchPresence connects the stream to deliver presence counter updates.
+func (s *yorkieServer) WatchPresence(
+	ctx context.Context,
+	req *connect.Request[api.WatchPresenceRequest],
+	stream *connect.ServerStream[api.WatchPresenceResponse],
+) error {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchDocuments, // Reuse for now, TODO: add specific presence method
+		Attributes: types.NewAccessAttributes([]key.Key{key.Key(req.Msg.PresenceId)}, types.Read),
+	}); err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return err
+	}
+
+	// 02. Subscribe to presence counter updates
+	presenceKey := key.Key(req.Msg.PresenceId)
+	subscriberID := actorID.String()
+	updateChan := s.backend.Presence.Subscribe(presenceKey, subscriberID)
+
+	// 03. Ensure cleanup when stream ends
+	defer func() {
+		s.backend.Presence.Unsubscribe(presenceKey, subscriberID)
+	}()
+
+	// 04. Stream presence count updates
+	for {
+		select {
+		case update, ok := <-updateChan:
+			if !ok {
+				// Channel closed, end stream
+				return nil
+			}
+
+			var response *api.WatchPresenceResponse
+			if update.Seq == 0 {
+				// This is the initial count (Seq 0 indicates initial state)
+				response = &api.WatchPresenceResponse{
+					Body: &api.WatchPresenceResponse_Initialized{
+						Initialized: &api.WatchPresenceInitialized{
+							Count: update.Count,
+							Seq:   update.Seq,
+						},
+					},
+				}
+			} else {
+				// This is a count update
+				response = &api.WatchPresenceResponse{
+					Body: &api.WatchPresenceResponse_Event{
+						Event: &api.PresenceEvent{
+							Type:  api.PresenceEvent_TYPE_COUNT_CHANGED,
+							Count: update.Count,
+							Seq:   update.Seq,
+						},
+					},
+				}
+			}
+
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 // DetachDocument detaches the given document to the client.
 func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
@@ -301,7 +468,7 @@ func (s *yorkieServer) DetachDocument(
 	// NOTE(hackerwins): If the project does not have an attachment limit,
 	// removing the document by removeIfNotAttached does not guarantee that
 	// the document is not attached to the client.
-	var status document.StatusType = document.StatusDetached
+	var status attachable.StatusType = attachable.StatusDetached
 	if req.Msg.RemoveIfNotAttached {
 		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
 		if err != nil {

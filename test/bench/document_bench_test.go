@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -47,7 +48,7 @@ func BenchmarkDocument(b *testing.B) {
 		for range b.N {
 			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
-			doc.SetStatus(document.StatusAttached)
+			doc.SetStatus(attachable.StatusAttached)
 			assert.True(b, doc.IsAttached())
 		}
 	})

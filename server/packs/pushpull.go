@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
-	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -60,7 +60,7 @@ type PushPullOptions struct {
 	Mode types.SyncMode
 
 	// Status represents the status of the document to be updated.
-	Status document.StatusType
+	Status attachable.StatusType
 }
 
 var (

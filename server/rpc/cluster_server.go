@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -105,7 +106,7 @@ func (s *clusterServer) DetachDocument(
 	// NOTE(hackerwins): If the project does not have an attachment limit,
 	// removing the document by removeIfNotAttached does not guarantee that
 	// the document is not attached to the client.
-	var status document.StatusType = document.StatusDetached
+	var status attachable.StatusType = attachable.StatusDetached
 	if project.RemoveOnDetach {
 		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, refKey, clientInfo.ID)
 		if err != nil {

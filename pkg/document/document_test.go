@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -47,7 +48,7 @@ func TestDocument(t *testing.T) {
 	t.Run("status test", func(t *testing.T) {
 		doc := document.New("d1")
 		assert.False(t, doc.IsAttached())
-		doc.SetStatus(document.StatusAttached)
+		doc.SetStatus(attachable.StatusAttached)
 		assert.True(t, doc.IsAttached())
 	})
 

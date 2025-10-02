@@ -36,6 +36,10 @@ service YorkieService {
 
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
 
+  rpc AttachPresence (AttachPresenceRequest) returns (AttachPresenceResponse) {}
+  rpc DetachPresence (DetachPresenceRequest) returns (DetachPresenceResponse) {}
+  rpc WatchPresence (WatchPresenceRequest) returns (stream WatchPresenceResponse) {}
+
   rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
 }
 
@@ -115,6 +119,53 @@ message PushPullChangesRequest {
 
 message PushPullChangesResponse {
   ChangePack change_pack = 1;
+}
+
+// Presence counter messages
+message AttachPresenceRequest {
+  string client_id = 1;
+  string presence_key = 2;
+}
+
+message AttachPresenceResponse {
+  string presence_id = 1;
+  int64 count = 2;
+}
+
+message DetachPresenceRequest {
+  string client_id = 1;
+  string presence_id = 2;
+}
+
+message DetachPresenceResponse {
+  int64 count = 1;
+}
+
+message WatchPresenceRequest {
+  string client_id = 1;
+  string presence_id = 2;
+}
+
+message WatchPresenceResponse {
+  oneof body {
+    WatchPresenceInitialized initialized = 1;
+    PresenceEvent event = 2;
+  }
+}
+
+message WatchPresenceInitialized {
+  int64 count = 1;
+  int64 seq = 2; // Monotonic counter for ordering
+}
+
+message PresenceEvent {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    TYPE_COUNT_CHANGED = 1;
+  }
+  Type type = 1;
+  int64 count = 2;
+  int64 seq = 3; // Monotonic counter for ordering
 }
 
 message BroadcastRequest {

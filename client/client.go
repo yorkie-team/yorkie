@@ -39,12 +39,14 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	presencecounter "github.com/yorkie-team/yorkie/pkg/presence"
 )
 
 type status int
@@ -277,9 +279,77 @@ func (c *Client) Deactivate(ctx context.Context, options ...DeactivateOption) er
 	return nil
 }
 
-// Attach attaches the given document to this client. It tells the server that
+// AttachResource attaches the given resource to this client.
+// This is a generalized version of Attach that works with any Attachable resource.
+func (c *Client) Attach(ctx context.Context, resource attachable.Attachable, options ...interface{}) error {
+	if c.status != activated {
+		return ErrClientNotActivated
+	}
+
+	if resource.Status() != attachable.StatusDetached {
+		return ErrDocumentNotDetached
+	}
+
+	switch resource.Type() {
+	case attachable.AttachableTypeDocument:
+		// Cast to Document and use existing Attach method
+		if doc, ok := resource.(*document.Document); ok {
+			// Convert generic options to AttachOption if provided
+			var attachOpts []AttachOption
+			for _, opt := range options {
+				if attachOpt, ok := opt.(AttachOption); ok {
+					attachOpts = append(attachOpts, attachOpt)
+				}
+			}
+			return c.attachDocument(ctx, doc, attachOpts...)
+		}
+		return fmt.Errorf("invalid document resource")
+	case attachable.AttachableTypePresence:
+		// Handle presence counter attachment
+		if counter, ok := resource.(*presencecounter.Counter); ok {
+			return c.attachPresence(ctx, counter)
+		}
+		return fmt.Errorf("invalid presence counter resource")
+	default:
+		return fmt.Errorf("unsupported resource type: %s", resource.Type())
+	}
+}
+
+// Detach detaches the given resource from this client.
+// This is a generalized version of Detach that works with any Attachable resource.
+func (c *Client) Detach(ctx context.Context, resource attachable.Attachable, options ...interface{}) error {
+	if c.status != activated {
+		return ErrClientNotActivated
+	}
+
+	switch resource.Type() {
+	case attachable.AttachableTypeDocument:
+		// Cast to Document and use existing Detach method
+		if doc, ok := resource.(*document.Document); ok {
+			// Convert generic options to DetachOption if provided
+			var detachOpts []DetachOption
+			for _, opt := range options {
+				if detachOpt, ok := opt.(DetachOption); ok {
+					detachOpts = append(detachOpts, detachOpt)
+				}
+			}
+			return c.detachDocument(ctx, doc, detachOpts...)
+		}
+		return fmt.Errorf("invalid document resource")
+	case attachable.AttachableTypePresence:
+		// Handle presence counter detachment
+		if counter, ok := resource.(*presencecounter.Counter); ok {
+			return c.detachPresence(ctx, counter)
+		}
+		return fmt.Errorf("invalid presence counter resource")
+	default:
+		return fmt.Errorf("unsupported resource type: %s", resource.Type())
+	}
+}
+
+// attachDocument attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
-func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...AttachOption) error {
+func (c *Client) attachDocument(ctx context.Context, doc *document.Document, options ...AttachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -377,13 +447,13 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	return nil
 }
 
-// Detach detaches the given document from this client. It tells the
+// detachDocument detaches the given document from this client. It tells the
 // server that this client will no longer synchronize the given document.
 //
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...DetachOption) error {
+func (c *Client) detachDocument(ctx context.Context, doc *document.Document, options ...DetachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -438,6 +508,133 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	delete(c.attachments, doc.Key())
 
 	return nil
+}
+
+// attachPresence attaches a presence counter to the server.
+func (c *Client) attachPresence(ctx context.Context, counter *presencecounter.Counter) error {
+	res, err := c.client.AttachPresence(
+		ctx,
+		withShardKey(connect.NewRequest(&api.AttachPresenceRequest{
+			ClientId:    c.id.String(),
+			PresenceKey: counter.Key().String(),
+		}), c.options.APIKey, counter.Key().String()))
+	if err != nil {
+		return err
+	}
+
+	// Update counter status from server response
+	counter.SetStatus(attachable.StatusAttached)
+	counter.SetActor(c.id)
+
+	// Store the presence ID for later use
+	_ = res.Msg.PresenceId
+
+	return nil
+}
+
+// detachPresence detaches a presence counter from the server.
+func (c *Client) detachPresence(ctx context.Context, counter *presencecounter.Counter) error {
+	_, err := c.client.DetachPresence(
+		ctx,
+		withShardKey(connect.NewRequest(&api.DetachPresenceRequest{
+			ClientId:   c.id.String(),
+			PresenceId: counter.Key().String(), // Using key as ID for now
+		}), c.options.APIKey, counter.Key().String()))
+	if err != nil {
+		return err
+	}
+
+	// Update counter status and reset count to 0
+	counter.SetStatus(attachable.StatusDetached)
+	counter.UpdateCount(0, 0) // Reset count and seq when detached
+
+	return nil
+}
+
+// WatchPresence starts watching presence count changes for the given counter.
+// It returns a channel that receives count updates and a close function to stop watching.
+func (c *Client) WatchPresence(ctx context.Context, counter *presencecounter.Counter) (<-chan int64, func(), error) {
+	if c.status != activated {
+		return nil, nil, ErrClientNotActivated
+	}
+
+	if counter.Status() != attachable.StatusAttached {
+		return nil, nil, fmt.Errorf("presence counter must be attached before watching")
+	}
+
+	// Create buffered channel for count updates
+	countChan := make(chan int64, 10)
+
+	// Create context for the watch stream
+	watchCtx, cancel := context.WithCancel(ctx)
+
+	// Start the watch stream
+	stream, err := c.client.WatchPresence(
+		watchCtx,
+		withShardKey(connect.NewRequest(&api.WatchPresenceRequest{
+			ClientId:   c.id.String(),
+			PresenceId: counter.Key().String(),
+		}), c.options.APIKey, counter.Key().String()))
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+
+	// Start goroutine to handle stream messages
+	go func() {
+		defer close(countChan)
+		defer cancel()
+
+		for {
+			select {
+			case <-watchCtx.Done():
+				return
+			default:
+				if !stream.Receive() {
+					if err := stream.Err(); err != nil {
+						// Log error and return to exit the goroutine
+						if c.logger != nil {
+							c.logger.Error("WatchPresence stream error", zap.Error(err))
+						}
+						return
+					}
+					// Stream ended normally
+					return
+				}
+
+				msg := stream.Msg()
+				switch body := msg.Body.(type) {
+				case *api.WatchPresenceResponse_Initialized:
+					// Always accept initial count and update counter
+					counter.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
+					select {
+					case countChan <- body.Initialized.Count:
+					case <-watchCtx.Done():
+						return
+					}
+				case *api.WatchPresenceResponse_Event:
+					// Let Counter decide whether to accept the update based on sequence
+					if body.Event != nil {
+						if counter.UpdateCount(body.Event.Count, body.Event.Seq) {
+							// Only send to channel if Counter accepted the update
+							select {
+							case countChan <- body.Event.Count:
+							case <-watchCtx.Done():
+								return
+							}
+						}
+						// Counter automatically drops out-of-order events
+					}
+				}
+			}
+		}
+	}()
+
+	closeFunc := func() {
+		cancel()
+	}
+
+	return countChan, closeFunc, nil
 }
 
 // Sync pushes local changes of the attached documents to the server and

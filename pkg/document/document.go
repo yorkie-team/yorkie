@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -132,7 +133,8 @@ type Document struct {
 	// broadcastEventHandlers is a map of registered event handlers for events.
 	broadcastEventHandlers map[string]func(
 		topic, publisher string,
-		payload []byte) error
+		payload []byte,
+	) error
 }
 
 // New creates a new instance of Document.
@@ -261,7 +263,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 05. Update the status.
 	if pack.IsRemoved {
-		d.SetStatus(StatusRemoved)
+		d.SetStatus(attachable.StatusRemoved)
 	}
 
 	return nil
@@ -299,6 +301,11 @@ func (d *Document) Key() key.Key {
 	return d.doc.key
 }
 
+// Type returns the type of this resource.
+func (d *Document) Type() attachable.AttachableType {
+	return attachable.AttachableTypeDocument
+}
+
 // Checkpoint returns the checkpoint of this document.
 func (d *Document) Checkpoint() change.Checkpoint {
 	return d.doc.checkpoint
@@ -330,24 +337,41 @@ func (d *Document) ActorID() time.ActorID {
 	return d.doc.ActorID()
 }
 
+// Status returns the status of this document.
+func (d *Document) Status() attachable.StatusType {
+	return d.doc.status
+}
+
 // SetStatus updates the status of this document.
-func (d *Document) SetStatus(status StatusType) {
+func (d *Document) SetStatus(status attachable.StatusType) {
+	switch status {
+	case attachable.StatusDetached:
+		d.doc.SetStatus(StatusDetached)
+	case attachable.StatusAttached:
+		d.doc.SetStatus(StatusAttached)
+	case attachable.StatusRemoved:
+		d.doc.SetStatus(StatusRemoved)
+	}
+}
+
+// IsAttached returns whether this document is attached or not.
+func (d *Document) IsAttached() bool {
+	return d.doc.IsAttached()
+}
+
+// InternalStatus returns the internal status of this document.
+func (d *Document) InternalStatus() attachable.StatusType {
+	return d.doc.status
+}
+
+// SetInternalStatus updates the internal status of this document.
+func (d *Document) SetInternalStatus(status attachable.StatusType) {
 	d.doc.SetStatus(status)
 }
 
 // VersionVector returns the version vector of this document.
 func (d *Document) VersionVector() time.VersionVector {
 	return d.doc.VersionVector()
-}
-
-// Status returns the status of this document.
-func (d *Document) Status() StatusType {
-	return d.doc.status
-}
-
-// IsAttached returns whether this document is attached or not.
-func (d *Document) IsAttached() bool {
-	return d.doc.IsAttached()
 }
 
 // RootObject returns the internal root object of this document.
