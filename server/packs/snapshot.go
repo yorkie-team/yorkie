@@ -160,6 +160,7 @@ func BuildInternalDocForServerSeq(
 func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
+	snapshotInterval int64,
 	docInfo *database.DocInfo,
 ) error {
 	// NOTE(hackerwins): If the snapshot is already being created by another routine,
@@ -186,7 +187,7 @@ func storeSnapshot(
 	if info.ServerSeq == docInfo.ServerSeq {
 		return nil
 	}
-	if docInfo.ServerSeq-info.ServerSeq < be.Config.SnapshotInterval {
+	if docInfo.ServerSeq-info.ServerSeq < snapshotInterval {
 		return nil
 	}
 

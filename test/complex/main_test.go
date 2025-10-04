@@ -29,6 +29,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -78,7 +79,6 @@ func TestMain(m *testing.M) {
 		AdminUser:            helper.AdminUser,
 		AdminPassword:        helper.AdminPassword,
 		UseDefaultProject:    helper.UseDefaultProject,
-		SnapshotThreshold:    helper.SnapshotThreshold,
 		SnapshotCacheSize:    helper.SnapshotCacheSize,
 		AuthWebhookCacheSize: helper.AuthWebhookSize,
 		AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
@@ -114,6 +114,18 @@ func TestMain(m *testing.M) {
 	project, err := be.DB.FindProjectInfoByID(
 		context.Background(),
 		database.DefaultProjectID,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	project, err = be.DB.UpdateProjectInfo(
+		context.Background(),
+		project.Owner,
+		project.ID,
+		&types.UpdatableProjectFields{
+			SnapshotThreshold: &helper.SnapshotThreshold,
+		},
 	)
 	if err != nil {
 		log.Fatal(err)

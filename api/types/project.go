@@ -84,6 +84,13 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// SnapshotThreshold is the threshold that determines if changes should be
+	// sent with snapshot when the number of changes is greater than this value.
+	SnapshotThreshold int64 `bson:"snapshot_threshold,omitempty"`
+
+	// SnapshotInterval is the interval of changes to create a snapshot.
+	SnapshotInterval int64 `bson:"snapshot_interval,omitempty"`
+
 	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`

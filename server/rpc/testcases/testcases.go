@@ -1050,6 +1050,8 @@ func RunAdminCreateProjectTest(
 	assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), project.EventWebhookMaxWaitInterval)
 	assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), project.EventWebhookRequestTimeout)
 	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), project.ClientDeactivateThreshold)
+	assert.Equal(t, database.DefaultSnapshotThreshold, project.SnapshotThreshold)
+	assert.Equal(t, database.DefaultSnapshotInterval, project.SnapshotInterval)
 	assert.Equal(t, 0, project.MaxAttachmentsPerDocument)
 	assert.Equal(t, 0, project.MaxSubscribersPerDocument)
 

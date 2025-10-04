@@ -54,8 +54,6 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 
 	assertDurationEqual(t, server.DefaultAdminTokenDuration, conf.Backend.AdminTokenDuration)
 	assert.Equal(t, server.DefaultUseDefaultProject, conf.Backend.UseDefaultProject)
-	assert.Equal(t, int64(server.DefaultSnapshotThreshold), conf.Backend.SnapshotThreshold)
-	assert.Equal(t, int64(server.DefaultSnapshotInterval), conf.Backend.SnapshotInterval)
 	assert.Equal(t, server.DefaultSnapshotDisableGC, conf.Backend.SnapshotDisableGC)
 	assert.Equal(t, server.DefaultSnapshotCacheSize, conf.Backend.SnapshotCacheSize)
 
@@ -90,9 +88,6 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.RPC.Port, server.DefaultRPCPort)
 		assert.Equal(t, conf.RPC.CertFile, "")
 		assert.Equal(t, conf.RPC.KeyFile, "")
-
-		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
-		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 	})
 
 	t.Run("read empty config file test", func(t *testing.T) {

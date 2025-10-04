@@ -790,8 +790,6 @@ func TestGarbageCollection(t *testing.T) {
 		// 01. Create a new server with SnapshotDisableGC set to true
 		conf := helper.TestConfig()
 		conf.Backend.SnapshotDisableGC = true
-		conf.Backend.SnapshotThreshold = 10
-		conf.Backend.SnapshotInterval = 10
 		testServer, err := server.New(conf)
 		assert.NoError(t, err)
 		assert.NoError(t, testServer.Start())
@@ -820,14 +818,14 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		}))
 		assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), 1))
-		for i := range int(conf.Backend.SnapshotInterval) {
+		for i := range int(helper.SnapshotInterval) {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
 				return nil
 			}))
 			assertVectorEquality(t, d1.VersionVector(), versionOf(d1.ActorID(), int64(2+i)))
 		}
-		assert.Equal(t, int(conf.Backend.SnapshotInterval), d1.GarbageLen())
+		assert.Equal(t, int(helper.SnapshotInterval), d1.GarbageLen())
 		assert.NoError(t, c1.Sync(ctx))
 
 		// 03. Check if the garbage is collected after the snapshot interval
@@ -844,7 +842,7 @@ func TestGarbageCollection(t *testing.T) {
 		defer func() {
 			assert.NoError(t, c2.Detach(ctx, d2))
 		}()
-		assert.Equal(t, int(conf.Backend.SnapshotInterval), d2.GarbageLen())
+		assert.Equal(t, int(helper.SnapshotInterval), d2.GarbageLen())
 	})
 
 	t.Run("concurrent garbage collection test", func(t *testing.T) {

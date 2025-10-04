@@ -78,6 +78,22 @@ components:
           type: integer
       title: Int32Value
       type: object
+    google.protobuf.Int64Value:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `int64`.
+
+         The JSON representation for `Int64Value` is JSON string.
+      properties:
+        value:
+          additionalProperties: false
+          description: The int64 value.
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: Int64Value
+      type: object
     google.protobuf.StringValue:
       additionalProperties: false
       description: |-
@@ -1532,6 +1548,20 @@ components:
           description: ""
           title: secret_key
           type: string
+        snapshotInterval:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: snapshot_interval
+        snapshotThreshold:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: snapshot_threshold
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false
@@ -2015,6 +2045,18 @@ components:
           additionalProperties: false
           description: ""
           title: remove_on_detach
+          type: object
+        snapshotInterval:
+          $ref: '#/components/schemas/google.protobuf.Int64Value'
+          additionalProperties: false
+          description: ""
+          title: snapshot_interval
+          type: object
+        snapshotThreshold:
+          $ref: '#/components/schemas/google.protobuf.Int64Value'
+          additionalProperties: false
+          description: ""
+          title: snapshot_threshold
           type: object
       title: UpdatableProjectFields
       type: object

@@ -1,4 +1,4 @@
-//go:build bench
+//go:build linux && bench
 
 /*
  * Copyright 2025 The Yorkie Authors. All rights reserved.

@@ -42,13 +42,6 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
-	// SnapshotThreshold is the threshold that determines if changes should be
-	// sent with snapshot when the number of changes is greater than this value.
-	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`
-
-	// SnapshotInterval is the interval of changes to create a snapshot.
-	SnapshotInterval int64 `yaml:"SnapshotInterval"`
-
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.
 	SnapshotDisableGC bool `yaml:"SnapshotDisableGC"`
 

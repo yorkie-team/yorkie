@@ -52,10 +52,7 @@ type watchResponsePair struct {
 var defaultServer *server.Yorkie
 
 func TestMain(m *testing.M) {
-	svr := helper.TestServer()
-	if err := svr.Start(); err != nil {
-		logging.DefaultLogger().Fatal(err)
-	}
+	svr := helper.TestServerWithSnapshotCfg(helper.SnapshotInterval, helper.SnapshotThreshold)
 	defaultServer = svr
 	code := m.Run()
 	if defaultServer != nil {

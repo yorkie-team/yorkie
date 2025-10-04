@@ -662,6 +662,20 @@ components:
           description: ""
           title: secret_key
           type: string
+        snapshotInterval:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: snapshot_interval
+        snapshotThreshold:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: snapshot_threshold
         updatedAt:
           $ref: '#/components/schemas/google.protobuf.Timestamp'
           additionalProperties: false

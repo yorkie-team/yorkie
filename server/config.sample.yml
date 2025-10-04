@@ -82,13 +82,6 @@ Backend:
   # used. If we are using server as single-tenant mode, this should be set to true.
   UseDefaultProject: true
 
-  # SnapshotThreshold is the threshold that determines if changes should be
-  # sent with snapshot when the number of changes is greater than this value.
-  SnapshotThreshold: 500
-
-  # SnapshotInterval is the number of changes to create a snapshot.
-  SnapshotInterval: 500
-
   # SnapshotDisableGC is whether to disable garbage collection of snapshots.
   SnapshotDisableGC: false
 

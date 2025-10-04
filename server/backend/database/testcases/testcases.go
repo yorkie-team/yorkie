@@ -961,6 +961,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newEventWebhookMaxWaitInterval := "3s"
 		newEventWebhookRequestTimeout := "5s"
 		newClientDeactivateThreshold := "1h"
+		newSnapshotThreshold := int64(50)
+		newSnapshotInterval := int64(100)
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
@@ -978,6 +980,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), info.EventWebhookMaxWaitInterval)
 		assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), info.EventWebhookRequestTimeout)
 		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
+		assert.Equal(t, database.DefaultSnapshotThreshold, info.SnapshotThreshold)
+		assert.Equal(t, database.DefaultSnapshotInterval, info.SnapshotInterval)
 		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
 		assert.NoError(t, err)
 
@@ -999,6 +1003,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
 			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			SnapshotThreshold:           &newSnapshotThreshold,
+			SnapshotInterval:            &newSnapshotInterval,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -1020,6 +1026,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookMaxWaitInterval, updateInfo.EventWebhookMaxWaitInterval)
 		assert.Equal(t, newEventWebhookRequestTimeout, updateInfo.EventWebhookRequestTimeout)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newSnapshotThreshold, updateInfo.SnapshotThreshold)
+		assert.Equal(t, newSnapshotInterval, updateInfo.SnapshotInterval)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -1125,12 +1133,28 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookEvents2, updateInfo.EventWebhookEvents)
 		assert.NotEqual(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 06. Duplicated name test
+		// 06. Update snapshot settings test
+		newSnapshotThreshold2 := int64(200)
+		newSnapshotInterval2 := int64(400)
+		fields = &types.UpdatableProjectFields{
+			SnapshotThreshold: &newSnapshotThreshold2,
+			SnapshotInterval:  &newSnapshotInterval2,
+		}
+		assert.NoError(t, fields.Validate())
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		assert.NoError(t, err)
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newSnapshotThreshold2, updateInfo.SnapshotThreshold)
+		assert.Equal(t, newSnapshotInterval2, updateInfo.SnapshotInterval)
+
+		// 07. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
 
-		// 07. OwnerID not match test
+		// 08. OwnerID not match test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)

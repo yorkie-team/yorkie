@@ -81,23 +81,18 @@ var (
 	MembershipLeaseDuration   = "15s"
 	MembershipRenewalInterval = "5s"
 
-	AdminTokenDuration          = "10s"
-	ClientDeactivateThreshold   = "10s"
-	SnapshotThreshold           = int64(10)
-	SnapshotCacheSize           = 10
-	AuthWebhookMaxWaitInterval  = 3 * gotime.Millisecond
-	AuthWebhookMinWaitInterval  = 3 * gotime.Millisecond
-	AuthWebhookRequestTimeout   = 100 * gotime.Millisecond
-	AuthWebhookSize             = 100
-	AuthWebhookCacheTTL         = 10 * gotime.Second
-	EventWebhookMaxWaitInterval = 3 * gotime.Millisecond
-	EventWebhookMinWaitInterval = 3 * gotime.Millisecond
-	EventWebhookRequestTimeout  = 100 * gotime.Millisecond
-	EventWebhookSize            = 100
-	ProjectCacheSize            = 256
-	ProjectCacheTTL             = 5 * gotime.Second
-	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
-	RPCAddr                     = fmt.Sprintf("localhost:%d", RPCPort)
+	AdminTokenDuration        = "10s"
+	ClientDeactivateThreshold = "10s"
+	SnapshotInterval          = int64(10)
+	SnapshotThreshold         = int64(10)
+	SnapshotCacheSize         = 10
+	AuthWebhookSize           = 100
+	AuthWebhookCacheTTL       = 10 * gotime.Second
+	EventWebhookSize          = 100
+	ProjectCacheSize          = 256
+	ProjectCacheTTL           = 5 * gotime.Second
+	GatewayAddr               = fmt.Sprintf("localhost:%d", RPCPort)
+	RPCAddr                   = fmt.Sprintf("localhost:%d", RPCPort)
 
 	MongoConnectionTimeout  = "5s"
 	MongoConnectionURI      = "mongodb://localhost:27017"
@@ -302,8 +297,6 @@ func TestConfig() *server.Config {
 			SecretKey:            server.DefaultSecretKey,
 			AdminTokenDuration:   server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:    true,
-			SnapshotInterval:     10,
-			SnapshotThreshold:    SnapshotThreshold,
 			SnapshotCacheSize:    SnapshotCacheSize,
 			AuthWebhookCacheSize: AuthWebhookSize,
 			AuthWebhookCacheTTL:  AuthWebhookCacheTTL.String(),
@@ -336,21 +329,45 @@ func TestServer() *server.Yorkie {
 	return y
 }
 
-// TestServerWithSnapshotCfg returns a new instance of Yorkie for testing with the
-// given snapshot interval and threshold.
-func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) (*server.Yorkie, error) {
-	config := TestConfig()
-	config.Backend.SnapshotInterval = snapshotInterval
-	config.Backend.SnapshotThreshold = snapshotThreshold
-
-	svr, err := server.New(config)
+// TestServerWithSnapshotCfg returns a new instance of Yorkie for testing
+// with the given snapshot config in default project.
+func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) *server.Yorkie {
+	y, err := server.New(TestConfig())
 	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
-	if err := svr.Start(); err != nil {
-		return nil, err
+	if err := y.Start(); err != nil {
+		log.Fatal(err)
 	}
-	return svr, nil
+
+	// Update default project's snapshot settings
+	ctx := context.Background()
+	adminCli, err := adminClient.Dial(y.RPCAddr(), adminClient.WithInsecure(true))
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = adminCli.LogIn(ctx, server.DefaultAdminUser, server.DefaultAdminPassword)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defaultProject, err := y.DefaultProject(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = adminCli.UpdateProject(
+		ctx,
+		defaultProject.ID.String(),
+		&types.UpdatableProjectFields{
+			SnapshotInterval:  &SnapshotInterval,
+			SnapshotThreshold: &SnapshotThreshold,
+		},
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return y
 }
 
 // TestDocKey returns a new instance of document key for testing.

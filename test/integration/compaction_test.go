@@ -38,7 +38,6 @@ func TestDocumentCompaction(t *testing.T) {
 
 	t.Run("text compaction test", func(t *testing.T) {
 		ctx := context.Background()
-		snapshotThreshold := int(helper.TestConfig().Backend.SnapshotThreshold)
 
 		// 1. Create a document
 		d1 := document.New(helper.TestDocKey(t))
@@ -59,7 +58,7 @@ func TestDocumentCompaction(t *testing.T) {
 		// 3. Create another changes to create a snapshot
 		docB := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, docB))
-		for i := 0; i < snapshotThreshold; i++ {
+		for i := 0; i < int(helper.SnapshotThreshold); i++ {
 			assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
 				text := r.GetText("text")
 				currentLength := len(text.String())

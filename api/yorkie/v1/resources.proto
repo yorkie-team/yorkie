@@ -298,6 +298,8 @@ message Project {
   string event_webhook_max_wait_interval = 23;
   string event_webhook_request_timeout = 24;
   string client_deactivate_threshold = 9;
+  int64 snapshot_threshold = 25;
+  int64 snapshot_interval = 26;
   int32 max_subscribers_per_document = 10;
   int32 max_attachments_per_document = 11;
   int32 max_size_per_document = 15;
@@ -338,6 +340,8 @@ message UpdatableProjectFields {
   google.protobuf.StringValue event_webhook_min_wait_interval = 17;
   google.protobuf.StringValue event_webhook_max_wait_interval = 18;
   google.protobuf.StringValue event_webhook_request_timeout = 19;
+  google.protobuf.Int64Value snapshot_threshold = 20;
+  google.protobuf.Int64Value snapshot_interval = 21;
   google.protobuf.StringValue client_deactivate_threshold = 6;
   google.protobuf.Int32Value max_subscribers_per_document = 7;
   google.protobuf.Int32Value max_attachments_per_document = 8;
