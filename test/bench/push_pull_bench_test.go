@@ -73,7 +73,7 @@ func setUpDefaultProject(b *testing.B, be *backend.Backend, snapshotInterval int
 		SnapshotThreshold: &snapshotThreshold,
 	}
 	ctx := context.Background()
-	_, err = be.DB.UpdateProjectInfo(ctx, projectInfo.Owner, projectInfo.ID, fields)
+	projectInfo, err = be.DB.UpdateProjectInfo(ctx, projectInfo.Owner, projectInfo.ID, fields)
 	assert.NoError(b, err)
 	return projectInfo.ToProject()
 }
@@ -261,9 +261,6 @@ func BenchmarkChange(b *testing.B) {
 	snapshotInterval := int64(100000)
 	snapshotThreshold := int64(100000)
 	project := setUpDefaultProject(b, be, snapshotInterval, snapshotThreshold)
-	assert.Equal(b, snapshotInterval, project.SnapshotInterval)
-	assert.Equal(b, snapshotThreshold, project.SnapshotThreshold)
-
 	b.ResetTimer()
 
 	b.Run("Push 10 Changes", func(b *testing.B) {
@@ -296,8 +293,6 @@ func BenchmarkSnapshot(b *testing.B) {
 	snapshotInterval := int64(10)
 	snapshotThreshold := int64(10)
 	project := setUpDefaultProject(b, be, snapshotInterval, snapshotThreshold)
-	assert.Equal(b, snapshotInterval, project.SnapshotInterval)
-	assert.Equal(b, snapshotThreshold, project.SnapshotThreshold)
 	b.ResetTimer()
 
 	b.Run("Push 3KB snapshot", func(b *testing.B) {

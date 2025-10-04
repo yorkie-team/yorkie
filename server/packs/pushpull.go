@@ -91,7 +91,9 @@ func PushPull(
 	}
 
 	// 02. pull the pack from the database.
-	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold, docInfo, reqPack, cpAfterPush, initialSeq, opts)
+	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
+		docInfo, reqPack, cpAfterPush, initialSeq, opts)
+
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -238,7 +240,9 @@ func pullPack(
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	// 01. pull changes or a snapshot from the database and create a response pack.
-	resPack, err := preparePack(ctx, be, clientInfo, snapshotThreshold, docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+	resPack, err := preparePack(ctx, be, clientInfo, snapshotThreshold,
+		docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+
 	if err != nil {
 		return nil, err
 	}
