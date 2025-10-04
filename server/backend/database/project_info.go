@@ -46,6 +46,9 @@ const (
 	DefaultEventWebhookRequestTimeout  time.Duration = 3 * time.Second
 
 	DefaultClientDeactivateThreshold time.Duration = 24 * time.Hour
+
+	DefaultSnapshotThreshold int64 = 500
+	DefaultSnapshotInterval  int64 = 500
 )
 
 // ProjectInfo is a struct for project information.
@@ -105,6 +108,13 @@ type ProjectInfo struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// SnapshotThreshold is the threshold that determines if changes should be
+	// sent with snapshot when the number of changes is greater than this value.
+	SnapshotThreshold int64 `bson:"snapshot_threshold"`
+
+	// SnapshotInterval is the interval of changes to create a snapshot.
+	SnapshotInterval int64 `bson:"snapshot_interval"`
+
 	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument int `bson:"max_subscribers_per_document"`
@@ -143,6 +153,8 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		EventWebhookMaxWaitInterval: DefaultEventWebhookMaxWaitInterval.String(),
 		EventWebhookRequestTimeout:  DefaultEventWebhookRequestTimeout.String(),
 		ClientDeactivateThreshold:   DefaultClientDeactivateThreshold.String(),
+		SnapshotThreshold:           DefaultSnapshotThreshold,
+		SnapshotInterval:            DefaultSnapshotInterval,
 		MaxSubscribersPerDocument:   0,
 		MaxAttachmentsPerDocument:   0,
 		MaxSizePerDocument:          10 * units.MiB,
@@ -178,6 +190,8 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		SnapshotThreshold:           i.SnapshotThreshold,
+		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:          i.MaxSizePerDocument,
@@ -232,6 +246,12 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
+	if fields.SnapshotThreshold != nil {
+		i.SnapshotThreshold = *fields.SnapshotThreshold
+	}
+	if fields.SnapshotInterval != nil {
+		i.SnapshotInterval = *fields.SnapshotInterval
+	}
 	if fields.MaxSubscribersPerDocument != nil {
 		i.MaxSubscribersPerDocument = *fields.MaxSubscribersPerDocument
 	}
@@ -268,6 +288,8 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		SnapshotThreshold:           i.SnapshotThreshold,
+		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:          i.MaxSizePerDocument,

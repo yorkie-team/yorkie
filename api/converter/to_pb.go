@@ -72,6 +72,8 @@ func ToProject(project *types.Project) *api.Project {
 		EventWebhookMaxWaitInterval: project.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  project.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   project.ClientDeactivateThreshold,
+		SnapshotThreshold:           int64(project.SnapshotThreshold),
+		SnapshotInterval:            int64(project.SnapshotInterval),
 		MaxSubscribersPerDocument:   int32(project.MaxSubscribersPerDocument),
 		MaxAttachmentsPerDocument:   int32(project.MaxAttachmentsPerDocument),
 		MaxSizePerDocument:          int32(project.MaxSizePerDocument),
@@ -652,6 +654,16 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	if fields.ClientDeactivateThreshold != nil {
 		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{
 			Value: *fields.ClientDeactivateThreshold,
+		}
+	}
+	if fields.SnapshotThreshold != nil {
+		pbUpdatableProjectFields.SnapshotThreshold = &wrapperspb.Int64Value{
+			Value: int64(*fields.SnapshotThreshold),
+		}
+	}
+	if fields.SnapshotInterval != nil {
+		pbUpdatableProjectFields.SnapshotInterval = &wrapperspb.Int64Value{
+			Value: int64(*fields.SnapshotInterval),
 		}
 	}
 	if fields.MaxSubscribersPerDocument != nil {

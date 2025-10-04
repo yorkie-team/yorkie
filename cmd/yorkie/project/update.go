@@ -52,6 +52,8 @@ var (
 	flagEventWebhookRequestTimeout  time.Duration
 	flagName                        string
 	flagClientDeactivateThreshold   time.Duration
+	flagSnapshotThreshold           int64
+	flagSnapshotInterval            int64
 	flagMaxSubscribersPerDocument   int
 	flagMaxAttachmentsPerDocument   int
 	flagRemoveOnDetach              bool
@@ -173,6 +175,16 @@ func newUpdateCommand() *cobra.Command {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold.String()
 			}
 
+			newSnapshotThreshold := project.SnapshotThreshold
+			if cmd.Flags().Lookup("snapshot-threshold").Changed {
+				newSnapshotThreshold = flagSnapshotThreshold
+			}
+
+			newSnapshotInterval := project.SnapshotInterval
+			if cmd.Flags().Lookup("snapshot-interval").Changed {
+				newSnapshotInterval = flagSnapshotInterval
+			}
+
 			newMaxSubscribersPerDocument := project.MaxSubscribersPerDocument
 			if flagMaxSubscribersPerDocument != 0 {
 				newMaxSubscribersPerDocument = flagMaxSubscribersPerDocument
@@ -203,6 +215,8 @@ func newUpdateCommand() *cobra.Command {
 				EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
 				EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 				ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+				SnapshotThreshold:           &newSnapshotThreshold,
+				SnapshotInterval:            &newSnapshotInterval,
 				MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
 				MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,
 				RemoveOnDetach:              &newRemoveOnDetach,
@@ -399,6 +413,19 @@ func init() {
 		"client-deactivate-threshold",
 		database.DefaultClientDeactivateThreshold,
 		"client deactivate threshold for housekeeping",
+	)
+	cmd.Flags().Int64Var(
+		&flagSnapshotThreshold,
+		"snapshot-threshold",
+		database.DefaultSnapshotThreshold,
+		"Threshold that determines if changes should be sent with snapshot when the number "+
+			"of changes is greater than this value.",
+	)
+	cmd.Flags().Int64Var(
+		&flagSnapshotInterval,
+		"snapshot-interval",
+		database.DefaultSnapshotInterval,
+		"Interval of changes to create a snapshot.",
 	)
 	cmd.Flags().IntVar(
 		&flagMaxSubscribersPerDocument,

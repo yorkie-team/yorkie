@@ -47,6 +47,8 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newEventWebhookMaxWaitInterval := "3s"
 		newEventWebhookRequestTimeout := "1s"
 		newClientDeactivateThreshold := "1h"
+		newSnapshotThreshold := int64(20)
+		newSnapshotInterval := int64(50)
 		newMaxSubscribersPerDocument := 10
 		newMaxAttachmentsPerDocument := 10
 		newRemoveOnDetach := true
@@ -65,6 +67,8 @@ func TestUpdatableProjectFields(t *testing.T) {
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
 			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			SnapshotThreshold:           &newSnapshotThreshold,
+			SnapshotInterval:            &newSnapshotInterval,
 			MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
 			MaxAttachmentsPerDocument:   &newMaxAttachmentsPerDocument,
 			RemoveOnDetach:              &newRemoveOnDetach,

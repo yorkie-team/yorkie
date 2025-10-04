@@ -71,8 +71,6 @@ const (
 	DefaultGitHubDeviceAuthURL = "https://github.com/login/device/code"
 
 	DefaultUseDefaultProject = true
-	DefaultSnapshotThreshold = 500
-	DefaultSnapshotInterval  = 500
 	DefaultSnapshotDisableGC = false
 	DefaultSnapshotCacheSize = 1000
 
@@ -244,12 +242,6 @@ func (c *Config) ensureBackendDefaultValue() {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
 
-	if c.Backend.SnapshotThreshold == 0 {
-		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
-	}
-	if c.Backend.SnapshotInterval == 0 {
-		c.Backend.SnapshotInterval = DefaultSnapshotInterval
-	}
 	if c.Backend.SnapshotCacheSize == 0 {
 		c.Backend.SnapshotCacheSize = DefaultSnapshotCacheSize
 	}
@@ -357,8 +349,6 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Backend: &backend.Config{
 			UseDefaultProject: DefaultUseDefaultProject,
-			SnapshotThreshold: DefaultSnapshotThreshold,
-			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 	}
 }

@@ -43,6 +43,8 @@ func TestProjectInfo(t *testing.T) {
 		testEventWebhookMaxWaitInterval := "3s"
 		testEventWebhookRequestTimeout := "1s"
 		testClientDeactivateThreshold := "2h"
+		testSnapshotThreshold := int64(100)
+		testSnapshotInterval := int64(80)
 		testMaxSubscribersPerDocument := 10
 		testMaxAttachmentsPerDocument := 10
 		testRemoveOnDetach := false
@@ -90,6 +92,13 @@ func TestProjectInfo(t *testing.T) {
 			ClientDeactivateThreshold: &testClientDeactivateThreshold,
 		})
 		assert.Equal(t, testClientDeactivateThreshold, project.ClientDeactivateThreshold)
+
+		project.UpdateFields(&types.UpdatableProjectFields{
+			SnapshotThreshold: &testSnapshotThreshold,
+			SnapshotInterval:  &testSnapshotInterval,
+		})
+		assert.Equal(t, testSnapshotThreshold, project.SnapshotThreshold)
+		assert.Equal(t, testSnapshotInterval, project.SnapshotInterval)
 
 		project.UpdateFields(&types.UpdatableProjectFields{
 			MaxSubscribersPerDocument: &testMaxSubscribersPerDocument,

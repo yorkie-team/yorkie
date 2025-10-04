@@ -87,10 +87,7 @@ func BenchmarkPresenceConcurrency(b *testing.B) {
 
 	// NOTE(hackerwins): To prevent the snapshot from being created, we set
 	// snapshot threshold and snapshot interval to very large values.
-	svr, err := helper.TestServerWithSnapshotCfg(100_000, 100_000)
-	if err != nil {
-		b.Fatal(err)
-	}
+	svr := helper.TestServerWithSnapshotCfg(100_000, 100_000)
 
 	b.Cleanup(func() {
 		if err := svr.Shutdown(true); err != nil {

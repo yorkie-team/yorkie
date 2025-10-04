@@ -45,14 +45,8 @@ func getDocKey(b *testing.B, i int) key.Key {
 	return key.Key(fmt.Sprintf("tests$%s-%d-%d", b.Name(), i, gotime.Now().UnixMilli()))
 }
 
-func setUpBackend(
-	b *testing.B,
-	snapshotInterval int64,
-	snapshotThreshold int64,
-) *backend.Backend {
+func setUpBackend(b *testing.B) *backend.Backend {
 	conf := helper.TestConfig()
-	conf.Backend.SnapshotInterval = snapshotInterval
-	conf.Backend.SnapshotThreshold = snapshotThreshold
 
 	metrics, err := prometheus.NewMetrics()
 	assert.NoError(b, err)
@@ -71,8 +65,15 @@ func setUpBackend(
 	return be
 }
 
-func setUpDefaultProject(b *testing.B, be *backend.Backend) *types.Project {
+func setUpDefaultProject(b *testing.B, be *backend.Backend, snapshotInterval int64, snapshotThreshold int64) *types.Project {
 	projectInfo, err := be.DB.FindProjectInfoByID(context.Background(), database.DefaultProjectID)
+	assert.NoError(b, err)
+	fields := &types.UpdatableProjectFields{
+		SnapshotInterval:  &snapshotInterval,
+		SnapshotThreshold: &snapshotThreshold,
+	}
+	ctx := context.Background()
+	_, err = be.DB.UpdateProjectInfo(ctx, projectInfo.Owner, projectInfo.ID, fields)
 	assert.NoError(b, err)
 	return projectInfo.ToProject()
 }
@@ -256,8 +257,13 @@ func benchmarkPullSnapshot(
 
 func BenchmarkChange(b *testing.B) {
 	// Disable to take a snapshot by making the interval and the threshold large.
-	be := setUpBackend(b, 100000, 100000)
-	project := setUpDefaultProject(b, be)
+	be := setUpBackend(b)
+	snapshotInterval := int64(100000)
+	snapshotThreshold := int64(100000)
+	project := setUpDefaultProject(b, be, snapshotInterval, snapshotThreshold)
+	assert.Equal(b, snapshotInterval, project.SnapshotInterval)
+	assert.Equal(b, snapshotThreshold, project.SnapshotThreshold)
+
 	b.ResetTimer()
 
 	b.Run("Push 10 Changes", func(b *testing.B) {
@@ -286,8 +292,12 @@ func BenchmarkChange(b *testing.B) {
 }
 
 func BenchmarkSnapshot(b *testing.B) {
-	be := setUpBackend(b, 10, 10)
-	project := setUpDefaultProject(b, be)
+	be := setUpBackend(b)
+	snapshotInterval := int64(10)
+	snapshotThreshold := int64(10)
+	project := setUpDefaultProject(b, be, snapshotInterval, snapshotThreshold)
+	assert.Equal(b, snapshotInterval, project.SnapshotInterval)
+	assert.Equal(b, snapshotThreshold, project.SnapshotThreshold)
 	b.ResetTimer()
 
 	b.Run("Push 3KB snapshot", func(b *testing.B) {
