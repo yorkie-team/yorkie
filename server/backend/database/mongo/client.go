@@ -995,6 +995,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
+	if !attached {
+		c.presenceStorage.DeletePresencesByActor(info.ID.String())
+	}
+
 	var updater bson.M
 	if attached {
 		updater = bson.M{

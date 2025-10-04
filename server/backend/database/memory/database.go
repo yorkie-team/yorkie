@@ -37,7 +37,8 @@ import (
 
 // DB is an in-memory database for testing or temporarily.
 type DB struct {
-	db *memdb.MemDB
+	db              *memdb.MemDB
+	presenceStorage *database.PresenceStorage
 }
 
 // New returns a new in-memory database.
@@ -49,7 +50,8 @@ func New() (*DB, error) {
 	}
 
 	return &DB{
-		db: memDB,
+		db:              memDB,
+		presenceStorage: database.NewPresenceStorage(),
 	}, nil
 }
 
@@ -1010,7 +1012,7 @@ func (d *DB) FindCompactionCandidates(
 		lastID = info.ID
 
 		// Check if document has enough changes to compact
-		if info.ServerSeq < int64(compactionMinChanges) {
+		if (info.OpSeq + info.PrSeq) < int64(compactionMinChanges) {
 			continue
 		}
 
@@ -1404,61 +1406,84 @@ func (d *DB) CreateChangeInfos(
 	if docInfo.ProjectID != refKey.ProjectID {
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
-	initialServerSeq := docInfo.GetServerSeq()
+
+	// 01. Fetch the document info.
+	if len(changes) == 0 && !isRemoved {
+		return docInfo, checkpoint, nil
+	}
+
+	initialOpSeq := docInfo.OpSeq
+	initialPrSeq := docInfo.PrSeq
+
+	// 02. Separate operations and presences from changes and store them appropriately
+	now := gotime.Now()
+
+	// Pre-allocate slices for separated data
+	var prCIs []*database.PresenceChangeInfo
+	hasOperations := false
 
 	// Process each change and separate operations from presences
 	for _, cn := range changes {
 		hasOp := len(cn.Operations()) > 0
 		hasPr := cn.PresenceChange() != nil
 
-		// For memory database, we'll use simple increment for both sequences
 		var opSeq, prSeq int64
+
 		if hasOp && hasPr {
-			// Both operation and presence: increment both
+			// Both operations and presence
 			opSeq = docInfo.IncreaseOpSeq()
 			prSeq = docInfo.IncreasePrSeq()
 		} else if hasOp {
-			// Only operation
+			// Only operations
 			opSeq = docInfo.IncreaseOpSeq()
-			prSeq = docInfo.PrSeq // Keep current prSeq
+			prSeq = docInfo.PrSeq
 		} else if hasPr {
 			// Only presence
-			opSeq = docInfo.OpSeq // Keep current opSeq
+			opSeq = docInfo.OpSeq
 			prSeq = docInfo.IncreasePrSeq()
 		} else {
-			// Neither (should not happen)
-			continue
+			// Empty change
+			opSeq = docInfo.OpSeq
+			prSeq = docInfo.PrSeq
 		}
 
-		checkpoint = checkpoint.NextServerSeq(change.NewServerSeq(opSeq, prSeq))
+		// Update checkpoint with new sequences
+		newServerSeq := change.NewServerSeq(opSeq, prSeq)
+		checkpoint = checkpoint.NextServerSeq(newServerSeq)
 		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq())
 
-		// Store operations in memory database
+		// Store operations
 		if hasOp {
-			if err := txn.Insert(tblChanges, &database.OperationChangeInfo{
-				ID:            newID(),
-				ProjectID:     docInfo.ProjectID,
-				DocID:         docInfo.ID,
-				OpSeq:         opSeq,
-				PrSeq:         prSeq,
-				ClientSeq:     cn.ClientSeq(),
-				Lamport:       cn.ID().Lamport(),
-				ActorID:       types.ID(cn.ID().ActorID().String()),
-				VersionVector: cn.ID().VersionVector(),
-				Message:       cn.Message(),
-				Operations: func() [][]byte {
-					ops, _ := database.EncodeOperations(cn.Operations())
-					return ops
-				}(),
-			}); err != nil {
-				return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
+			hasOperations = true
+
+			// Create OperationChangeInfo for memory storage
+			opCI, err := database.NewOperationChangeInfo(refKey, cn, opSeq, prSeq)
+			if err != nil {
+				return nil, change.InitialCheckpoint, fmt.Errorf("create operation change info: %w", err)
+			}
+
+			if err := txn.Insert(tblChanges, opCI); err != nil {
+				return nil, change.InitialCheckpoint, fmt.Errorf("create operation changes of %s: %w", refKey, err)
 			}
 		}
 
-		// For memory database, we don't store presences separately
-		// This is just for testing compatibility
+		// Store presences
+		if hasPr {
+			prCI := database.NewPresenceChangeInfo(refKey, cn, opSeq, prSeq)
+			if prCI != nil {
+				prCIs = append(prCIs, prCI)
+			}
+		}
 	}
 
+	// 03. Store presences
+	if len(prCIs) > 0 {
+		if err := d.presenceStorage.StorePresences(prCIs); err != nil {
+			return nil, change.InitialCheckpoint, fmt.Errorf("create presence changes of %s: %w", refKey, err)
+		}
+	}
+
+	// 04. Update the document info with the given changes.
 	raw, err = txn.First(
 		tblDocuments,
 		"project_id_id",
@@ -1472,24 +1497,24 @@ func (d *DB) CreateChangeInfos(
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
-	if !loadedDocInfo.GetServerSeq().EqualWith(initialServerSeq) {
+
+	// Check for conflicts using initial sequences
+	if loadedDocInfo.OpSeq != initialOpSeq || loadedDocInfo.PrSeq != initialPrSeq {
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, database.ErrConflictOnUpdate)
 	}
 
-	now := gotime.Now()
+	// Update document info
 	loadedDocInfo.OpSeq = docInfo.OpSeq
 	loadedDocInfo.PrSeq = docInfo.PrSeq
 
-	for _, cn := range changes {
-		if len(cn.Operations()) > 0 {
-			loadedDocInfo.UpdatedAt = now
-			break
-		}
+	if hasOperations {
+		loadedDocInfo.UpdatedAt = now
 	}
 
 	if isRemoved {
 		loadedDocInfo.RemovedAt = now
 	}
+
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
 		return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 	}
@@ -1585,7 +1610,7 @@ func (d *DB) FindLatestChangeInfoByActor(
 	docRefKey types.DocRefKey,
 	actorID types.ID,
 	serverSeq change.ServerSeq,
-) (*database.OperationChangeInfo, error) {
+) (*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -1601,9 +1626,23 @@ func (d *DB) FindLatestChangeInfoByActor(
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*database.OperationChangeInfo)
-		if info != nil && info.ActorID == actorID {
-			return info, nil
+		opInfo := raw.(*database.OperationChangeInfo)
+		if opInfo != nil && opInfo.ActorID == actorID {
+			// Convert OperationChangeInfo to ChangeInfo
+			changeInfo := &database.ChangeInfo{
+				ID:            opInfo.ID,
+				ProjectID:     opInfo.ProjectID,
+				DocID:         opInfo.DocID,
+				OpSeq:         opInfo.OpSeq,
+				PrSeq:         opInfo.PrSeq,
+				ClientSeq:     opInfo.ClientSeq,
+				Lamport:       opInfo.Lamport,
+				ActorID:       opInfo.ActorID,
+				VersionVector: opInfo.VersionVector,
+				Message:       opInfo.Message,
+				Operations:    opInfo.Operations,
+			}
+			return changeInfo, nil
 		}
 	}
 
@@ -1674,7 +1713,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	// If there are presence changes, fetch them
 	if hasPr {
 		var err error
-		prInfos, err = d.FindPresenceChangeInfosBetweenPrSeqs(
+		prInfos, err = d.presenceStorage.GetPresencesInRange(
 			docRefKey,
 			from.PrSeq,
 			to.PrSeq,
@@ -1710,7 +1749,8 @@ func (d *DB) CreateSnapshotInfo(
 		ID:            newID(),
 		ProjectID:     docRefKey.ProjectID,
 		DocID:         docRefKey.DocID,
-		ServerSeq:     doc.Checkpoint().ServerSeq.OpSeq + doc.Checkpoint().ServerSeq.PrSeq, // Total change count at snapshot time
+		OpSeq:         doc.Checkpoint().ServerSeq.OpSeq,
+		PrSeq:         doc.Checkpoint().ServerSeq.PrSeq,
 		Lamport:       doc.Lamport(),
 		VersionVector: doc.VersionVector().DeepCopy(),
 		Snapshot:      snapshot,
@@ -1773,7 +1813,8 @@ func (d *DB) FindClosestSnapshotInfo(
 				ID:            info.ID,
 				ProjectID:     info.ProjectID,
 				DocID:         info.DocID,
-				ServerSeq:     info.ServerSeq,
+				OpSeq:         info.OpSeq,
+				PrSeq:         info.PrSeq,
 				Lamport:       info.Lamport,
 				VersionVector: info.VersionVector,
 				CreatedAt:     info.CreatedAt,
@@ -2275,29 +2316,4 @@ func (d *DB) IsSchemaAttached(
 	}
 
 	return false, nil
-}
-
-// StorePresenceChangeInfo stores a presence change info in the presence storage.
-// NOTE: Memory database doesn't support presence storage, so this is a no-op.
-func (d *DB) StorePresenceChangeInfo(presenceInfo *database.PresenceChangeInfo) error {
-	// Memory database doesn't support presence storage yet
-	return nil
-}
-
-// StorePresenceChangeInfos stores multiple presence change infos in the presence storage.
-// NOTE: Memory database doesn't support presence storage, so this is a no-op.
-func (d *DB) StorePresenceChangeInfos(presenceInfos []*database.PresenceChangeInfo) error {
-	// Memory database doesn't support presence storage yet
-	return nil
-}
-
-// FindPresenceChangeInfosBetweenPrSeqs returns the presence change infos between two presence sequences.
-// NOTE: Memory database doesn't support presence storage, so this returns empty.
-func (d *DB) FindPresenceChangeInfosBetweenPrSeqs(
-	docRefKey types.DocRefKey,
-	from int64,
-	to int64,
-) ([]*database.PresenceChangeInfo, error) {
-	// Memory database doesn't support presence storage yet
-	return nil, nil
 }
