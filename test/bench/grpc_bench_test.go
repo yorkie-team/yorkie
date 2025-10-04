@@ -78,6 +78,8 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 		eventWebhookMaxWaitInterval := "3s"
 		eventWebhookRequestTimeout := "5s"
 		clientDeactivateThreshold := "1h"
+		snapshotThreshold := int64(50)
+		snapshotInterval := int64(10)
 
 		_, err := adminCli.UpdateProject(
 			ctx,
@@ -97,6 +99,8 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				EventWebhookMaxWaitInterval: &eventWebhookMaxWaitInterval,
 				EventWebhookRequestTimeout:  &eventWebhookRequestTimeout,
 				ClientDeactivateThreshold:   &clientDeactivateThreshold,
+				SnapshotThreshold:           &snapshotThreshold,
+				SnapshotInterval:            &snapshotInterval,
 			},
 		)
 		assert.NoError(b, err)
