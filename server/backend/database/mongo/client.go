@@ -54,9 +54,9 @@ type Client struct {
 	clientCache     *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
 	docCache        *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
 	changeCache     *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	presenceCache   *cache.LRUWithStats[types.DocRefKey, *database.PresenceStorage]
 	vectorCache     *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 	cacheManager    *cache.Manager
-	presenceStorage *database.PresenceStorage
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -116,6 +116,11 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
 
+	presenceCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.PresenceStorage](10000, "presences")
+	if err != nil {
+		return nil, fmt.Errorf("initialize presence cache: %w", err)
+	}
+
 	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](10000, "vectors")
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
@@ -126,6 +131,7 @@ func Dial(conf *Config) (*Client, error) {
 	cacheManager.RegisterCache(clientCache)
 	cacheManager.RegisterCache(docCache)
 	cacheManager.RegisterCache(changeCache)
+	cacheManager.RegisterCache(presenceCache)
 	cacheManager.RegisterCache(vectorCache)
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
@@ -139,8 +145,8 @@ func Dial(conf *Config) (*Client, error) {
 		clientCache:     clientCache,
 		docCache:        docCache,
 		changeCache:     changeCache,
+		presenceCache:   presenceCache,
 		vectorCache:     vectorCache,
-		presenceStorage: database.NewPresenceStorage(),
 	}
 
 	// Start cache statistics logging if enabled
@@ -995,8 +1001,11 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
-	if !attached {
-		c.presenceStorage.DeletePresencesByActor(info.ID.String())
+	// NOTE(hackerwins): Clear presence changes of the given client on the
+	// document if the client is no longer attached to the document.
+	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
+	if prStore, ok := c.presenceCache.Get(docKey); ok && !attached {
+		prStore.DeletePresencesByActor(info.ID.String())
 	}
 
 	var updater bson.M
@@ -1537,7 +1546,14 @@ func (c *Client) CreateChangeInfos(
 
 	// 04. Store presences
 	if len(prCIs) > 0 {
-		if err := c.presenceStorage.StorePresences(prCIs); err != nil {
+		var prStore *database.PresenceStorage
+		if cached, ok := c.presenceCache.Get(refKey); ok {
+			prStore = cached
+		} else {
+			prStore = database.NewPresenceStorage()
+			c.presenceCache.Add(refKey, prStore)
+		}
+		if err := prStore.StorePresences(prCIs); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("create presence changes of %s: %w", refKey, err)
 		}
 	}
@@ -1768,9 +1784,16 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}
 
 	// If there are presence changes, fetch them
+	var err error
 	if hasPr {
-		var err error
-		prInfos, err = c.presenceStorage.GetPresencesInRange(
+		var prStore *database.PresenceStorage
+		if cached, ok := c.presenceCache.Get(docRefKey); ok {
+			prStore = cached
+		} else {
+			prStore = database.NewPresenceStorage()
+			c.presenceCache.Add(docRefKey, prStore)
+		}
+		prInfos, err = prStore.GetPresencesInRange(
 			docRefKey,
 			from.PrSeq,
 			to.PrSeq,
