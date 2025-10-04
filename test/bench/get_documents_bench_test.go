@@ -65,7 +65,7 @@ func benchmarkGetDocuments(
 func BenchmarkGetDocuments(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
-	svr := helper.TestServerWithSnapshotCfg(10, 10)
+	svr := helper.TestServerWithSnapshotCfg(helper.SnapshotInterval, helper.SnapshotThreshold)
 	b.Cleanup(func() {
 		if err := svr.Shutdown(true); err != nil {
 			b.Fatal(err)
