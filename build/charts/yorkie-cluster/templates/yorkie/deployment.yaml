@@ -89,14 +89,6 @@ spec:
           "--backend-rpc-addr",
           "$(POD_IP):{{ .Values.yorkie.ports.rpcPort }}",
           "--backend-use-default-project", "{{ .Values.yorkie.args.useDefaultProject }}",
-          {{- if .Values.yorkie.args.snapshotInterval }}
-          "--backend-snapshot-interval",
-          "{{ .Values.yorkie.args.snapshotInterval }}",
-          {{- end }}
-          {{- if .Values.yorkie.args.snapshotThreshold }}
-          "--backend-snapshot-threshold",
-          "{{ .Values.yorkie.args.snapshotThreshold }}",
-          {{- end }}
           {{- if .Values.yorkie.logLevel }}
           "--log-level",
           "{{ .Values.yorkie.logLevel }}",
