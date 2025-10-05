@@ -360,8 +360,8 @@ func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) 
 		ctx,
 		defaultProject.ID.String(),
 		&types.UpdatableProjectFields{
-			SnapshotInterval:  &SnapshotInterval,
-			SnapshotThreshold: &SnapshotThreshold,
+			SnapshotInterval:  &snapshotInterval,
+			SnapshotThreshold: &snapshotThreshold,
 		},
 	)
 	if err != nil {
