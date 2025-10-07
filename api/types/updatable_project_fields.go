@@ -73,6 +73,13 @@ type UpdatableProjectFields struct {
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
 
+	// SnapshotThreshold is the threshold that determines if changes should be
+	// sent with snapshot when the number of changes is greater than this value.
+	SnapshotThreshold *int64 `bson:"snapshot_threshold,omitempty" validate:"omitempty,min=0"`
+
+	// SnapshotInterval is the interval of changes to create a snapshot.
+	SnapshotInterval *int64 `bson:"snapshot_interval,omitempty" validate:"omitempty,min=0"`
+
 	// MaxSubscribersPerDocument is the maximum number of subscribers per document.
 	// If it is 0, there is no limit.
 	MaxSubscribersPerDocument *int `bson:"max_subscribers_per_document,omitempty" validate:"omitempty,min=0"`
@@ -107,6 +114,8 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.EventWebhookMaxWaitInterval == nil &&
 		i.EventWebhookRequestTimeout == nil &&
 		i.ClientDeactivateThreshold == nil &&
+		i.SnapshotThreshold == nil &&
+		i.SnapshotInterval == nil &&
 		i.MaxSubscribersPerDocument == nil &&
 		i.MaxAttachmentsPerDocument == nil &&
 		i.MaxSizePerDocument == nil &&

@@ -91,7 +91,9 @@ func PushPull(
 	}
 
 	// 02. pull the pack from the database.
-	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts)
+	resPack, err := pullPack(ctx, be, clientInfo, project.SnapshotThreshold,
+		docInfo, reqPack, cpAfterPush, initialSeq, opts)
+
 	if err != nil {
 		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
@@ -155,8 +157,7 @@ func PushPull(
 					return
 				}
 			}
-
-			if err := storeSnapshot(ctx, be, docInfo); err != nil {
+			if err := storeSnapshot(ctx, be, project.SnapshotInterval, docInfo); err != nil {
 				logging.From(ctx).Error(err)
 			}
 		}, "pushpull")
@@ -231,6 +232,7 @@ func pullPack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
+	snapshotThreshold int64,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
@@ -238,7 +240,9 @@ func pullPack(
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	// 01. pull changes or a snapshot from the database and create a response pack.
-	resPack, err := preparePack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+	resPack, err := preparePack(ctx, be, clientInfo, snapshotThreshold,
+		docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +275,7 @@ func preparePack(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
+	snapshotThreshold int64,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
@@ -296,7 +301,7 @@ func preparePack(
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
-	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
+	if initialServerSeq-reqPack.Checkpoint.ServerSeq < snapshotThreshold {
 		cpAfterPull, pulledChanges, err := pullChangeInfos(
 			ctx,
 			be,
