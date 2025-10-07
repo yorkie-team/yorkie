@@ -235,7 +235,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorAs(t, fields.Validate(validName), &formErr)
 	})
-  
+
 	t.Run("remove on detach test", func(t *testing.T) {
 		validRemoveOnDetach := true
 		fields := &types.UpdatableProjectFields{
@@ -248,5 +248,5 @@ func TestUpdatableProjectFields(t *testing.T) {
 			RemoveOnDetach: &invalidRemoveOnDetach,
 		}
 		assert.NoError(t, fields.Validate())
-  })
+	})
 }
