@@ -24,12 +24,12 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 // SnapshotToBytes converts the given document to byte array.
-func SnapshotToBytes(obj *crdt.Object, presences map[string]innerpresence.Presence) ([]byte, error) {
+func SnapshotToBytes(obj *crdt.Object, presences map[string]presence.Data) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err

@@ -33,13 +33,15 @@ import (
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -69,7 +71,7 @@ func RunActivateAndDeactivateClientTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// invalid argument
@@ -77,20 +79,20 @@ func RunActivateAndDeactivateClientTest(
 		context.Background(),
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: ""}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(clients.ErrInvalidClientKey), converter.ErrorCodeOf(err))
+	assert.Equal(t, clients.ErrInvalidClientKey.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID, Synchronous: true}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(time.ErrInvalidHexString), converter.ErrorCodeOf(err))
+	assert.Equal(t, time.ErrInvalidHexString.Code(), converter.ErrorCodeOf(err))
 
 	// client not found
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID, Synchronous: true}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotFound.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAttachAndDetachDocumentTest runs the AttachDocument and DetachDocument test.
@@ -126,7 +128,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(time.ErrInvalidHexString), converter.ErrorCodeOf(err))
+	assert.Equal(t, time.ErrInvalidHexString.Code(), converter.ErrorCodeOf(err))
 
 	// try to attach with invalid client
 	_, err = testClient.AttachDocument(
@@ -137,7 +139,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotFound.Code(), converter.ErrorCodeOf(err))
 
 	// try to attach already attached document
 	_, err = testClient.AttachDocument(
@@ -148,7 +150,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotFound.Code(), converter.ErrorCodeOf(err))
 
 	// try to attach invalid change pack
 	_, err = testClient.AttachDocument(
@@ -159,7 +161,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(converter.ErrCheckpointRequired), converter.ErrorCodeOf(err))
+	assert.Equal(t, converter.ErrCheckpointRequired.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DetachDocument(
 		context.Background(),
@@ -181,7 +183,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DetachDocument(
 		context.Background(),
@@ -191,7 +193,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(converter.ErrCheckpointRequired), converter.ErrorCodeOf(err))
+	assert.Equal(t, converter.ErrCheckpointRequired.Code(), converter.ErrorCodeOf(err))
 
 	// document not found
 	_, err = testClient.DetachDocument(
@@ -205,11 +207,11 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotFound.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to attach the document with a deactivated client
@@ -221,7 +223,7 @@ func RunAttachAndDetachDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotActivated.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAttachAndDetachRemovedDocumentTest runs the AttachDocument and DetachDocument test on a removed document.
@@ -275,7 +277,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 
 	// try to create new document with same key as removed document
 	resPack, err = testClient.AttachDocument(
@@ -387,7 +389,7 @@ func RunPushPullChangeTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 
 	// try to push/pull with invalid pack
 	_, err = testClient.PushPullChanges(
@@ -399,11 +401,11 @@ func RunPushPullChangeTest(
 		},
 		))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(converter.ErrCheckpointRequired), converter.ErrorCodeOf(err))
+	assert.Equal(t, converter.ErrCheckpointRequired.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to push/pull with deactivated client
@@ -416,7 +418,7 @@ func RunPushPullChangeTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotActivated.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunPushPullChangeOnRemovedDocumentTest runs the PushChange and PullChange test on a removed document.
@@ -469,7 +471,7 @@ func RunPushPullChangeOnRemovedDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunRemoveDocumentTest runs the RemoveDocument test.
@@ -522,7 +524,7 @@ func RunRemoveDocumentTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunRemoveDocumentWithInvalidClientStateTest runs the RemoveDocument test with an invalid client state.
@@ -575,11 +577,11 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotAttached), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotAttached.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}))
 	assert.NoError(t, err)
 
 	// try to remove document with a deactivated client
@@ -592,7 +594,7 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 		},
 		))
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrClientNotActivated), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrClientNotActivated.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunWatchDocumentTest runs the WatchDocument test.
@@ -873,7 +875,7 @@ func RunAdminSignUpTest(
 		},
 		))
 	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrUserAlreadyExists), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrUserAlreadyExists.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminLoginTest runs the Admin Login test.
@@ -899,7 +901,7 @@ func RunAdminLoginTest(
 		},
 		))
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrMismatchedPassword), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrMismatchedPassword.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminDeleteAccountTest runs the admin delete user test.
@@ -937,7 +939,7 @@ func RunAdminDeleteAccountTest(
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrUserNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrUserNotFound.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminChangePasswordTest runs the admin change password user test.
@@ -986,7 +988,7 @@ func RunAdminChangePasswordTest(
 		},
 		))
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrMismatchedPassword), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrMismatchedPassword.Code(), converter.ErrorCodeOf(err))
 
 	_, err = testAdminClient.LogIn(
 		context.Background(),
@@ -1028,13 +1030,28 @@ func RunAdminCreateProjectTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
-	_, err = testAdminClient.CreateProject(
+	resp2, err := testAdminClient.CreateProject(
 		context.Background(),
 		connect.NewRequest(&api.CreateProjectRequest{
 			Name: projectName,
 		},
 		))
 	assert.NoError(t, err)
+	project := converter.FromProject(resp2.Msg.Project)
+	assert.Equal(t, projectName, project.Name)
+	assert.Empty(t, project.AuthWebhookURL)
+	assert.Equal(t, database.DefaultAuthWebhookMaxRetries, project.AuthWebhookMaxRetries)
+	assert.Equal(t, database.DefaultAuthWebhookMinWaitInterval.String(), project.AuthWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultAuthWebhookMaxWaitInterval.String(), project.AuthWebhookMaxWaitInterval)
+	assert.Equal(t, database.DefaultAuthWebhookRequestTimeout.String(), project.AuthWebhookRequestTimeout)
+	assert.Empty(t, project.EventWebhookURL)
+	assert.Equal(t, database.DefaultEventWebhookMaxRetries, project.EventWebhookMaxRetries)
+	assert.Equal(t, database.DefaultEventWebhookMinWaitInterval.String(), project.EventWebhookMinWaitInterval)
+	assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), project.EventWebhookMaxWaitInterval)
+	assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), project.EventWebhookRequestTimeout)
+	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), project.ClientDeactivateThreshold)
+	assert.Equal(t, 0, project.MaxAttachmentsPerDocument)
+	assert.Equal(t, 0, project.MaxSubscribersPerDocument)
 
 	// try to create project with existing name
 	_, err = testAdminClient.CreateProject(
@@ -1044,7 +1061,7 @@ func RunAdminCreateProjectTest(
 		},
 		))
 	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrProjectAlreadyExists), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrProjectAlreadyExists.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminListProjectsTest runs the ListProjects test in admin.
@@ -1121,7 +1138,7 @@ func RunAdminGetProjectTest(
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrProjectNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrProjectNotFound.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminUpdateProjectTest runs the UpdateProject test in admin.
@@ -1192,23 +1209,21 @@ func RunAdminListDocumentsTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
-	_, err = testAdminClient.ListDocuments(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
-		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName: defaultProjectName,
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
 		},
 		))
 	assert.NoError(t, err)
 
-	// try to list documents with non-existing project name
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
 	_, err = testAdminClient.ListDocuments(
-		context.Background(),
-		connect.NewRequest(&api.ListDocumentsRequest{
-			ProjectName: invalidSlugName,
-		},
-		))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrProjectNotFound), converter.ErrorCodeOf(err))
+		ctx,
+		connect.NewRequest(&api.ListDocumentsRequest{}))
+	assert.NoError(t, err)
 }
 
 // RunAdminGetDocumentTest runs the GetDocument test in admin.
@@ -1250,10 +1265,20 @@ func RunAdminGetDocumentTest(
 		))
 	assert.NoError(t, err)
 
-	_, err = testAdminClient.GetDocument(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	_, err = testAdminClient.GetDocument(
+		ctx,
 		connect.NewRequest(&api.GetDocumentRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: testDocumentKey,
 		},
 		))
@@ -1261,14 +1286,13 @@ func RunAdminGetDocumentTest(
 
 	// try to get document with non-existing document name
 	_, err = testAdminClient.GetDocument(
-		context.Background(),
+		ctx,
 		connect.NewRequest(&api.GetDocumentRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: invalidChangePack.DocumentKey,
 		},
 		))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotFound.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminGetDocumentsTest runs the GetDocuments test in admin.
@@ -1310,30 +1334,39 @@ func RunAdminGetDocumentsTest(
 		))
 	assert.NoError(t, err)
 
-	resp1, err := testAdminClient.GetDocuments(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	resp2, err := testAdminClient.GetDocuments(
+		ctx,
 		connect.NewRequest(&api.GetDocumentsRequest{
-			ProjectName:      defaultProjectName,
 			DocumentKeys:     []string{testDocumentKey},
 			IncludeRoot:      true,
 			IncludePresences: true,
 		},
 		))
 	assert.NoError(t, err)
-	assert.Len(t, resp1.Msg.Documents, 1)
+	assert.Len(t, resp2.Msg.Documents, 1)
 
 	// try to get document with non-existing document name
-	resp2, err := testAdminClient.GetDocuments(
-		context.Background(),
+	resp3, err := testAdminClient.GetDocuments(
+		ctx,
 		connect.NewRequest(&api.GetDocumentsRequest{
-			ProjectName:      defaultProjectName,
 			DocumentKeys:     []string{invalidChangePack.DocumentKey},
 			IncludeRoot:      true,
 			IncludePresences: true,
 		},
 		))
 	assert.NoError(t, err)
-	assert.Len(t, resp2.Msg.Documents, 0)
+	assert.Len(t, resp3.Msg.Documents, 0)
 }
 
 // RunAdminListChangesTest runs the ListChanges test in admin.
@@ -1375,10 +1408,20 @@ func RunAdminListChangesTest(
 		))
 	assert.NoError(t, err)
 
-	_, err = testAdminClient.ListChanges(
+	resp1, err := testAdminClient.GetProject(
 		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	_, err = testAdminClient.ListChanges(
+		ctx,
 		connect.NewRequest(&api.ListChangesRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: testDocumentKey,
 		},
 		))
@@ -1386,14 +1429,13 @@ func RunAdminListChangesTest(
 
 	// try to list changes with non-existing document name
 	_, err = testAdminClient.ListChanges(
-		context.Background(),
+		ctx,
 		connect.NewRequest(&api.ListChangesRequest{
-			ProjectName: defaultProjectName,
 			DocumentKey: invalidChangePack.DocumentKey,
 		}),
 	)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
+	assert.Equal(t, database.ErrDocumentNotFound.Code(), converter.ErrorCodeOf(err))
 }
 
 // RunAdminGetServerVersionTest runs the GetServerVersion test in admin.
@@ -1501,4 +1543,60 @@ func RunAdminRotateProjectKeysTest(
 		}),
 	)
 	assert.NoError(t, err)
+}
+
+// RunDeactivateClientWithAttachingDocumentTest ensures that even if a client has
+// a document in attaching state, deactivation succeeds and the document becomes detached.
+func RunDeactivateClientWithAttachingDocumentTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	be *backend.Backend,
+) {
+	ctx := context.Background()
+
+	// 01. Activate a client via RPC
+	activateResp, err := testClient.ActivateClient(
+		ctx,
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}),
+	)
+	assert.NoError(t, err)
+
+	// 02. Prepare an attaching state via DB
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+	assert.NoError(t, err)
+
+	actorID, err := time.ActorIDFromHex(activateResp.Msg.ClientId)
+	assert.NoError(t, err)
+	refKey := types.ClientRefKey{
+		ProjectID: projectInfo.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	}
+
+	docKey := helper.TestDocKey(t)
+	docInfo, err := be.DB.FindOrCreateDocInfo(ctx, refKey, docKey)
+	assert.NoError(t, err)
+
+	_, err = be.DB.TryAttaching(ctx, refKey, docInfo.ID)
+	assert.NoError(t, err)
+
+	ci, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	if assert.NotNil(t, ci.Documents[docInfo.ID]) {
+		assert.Equal(t, database.DocumentAttaching, ci.Documents[docInfo.ID].Status)
+	}
+
+	// 03. Deactivate via RPC
+	_, err = testClient.DeactivateClient(
+		ctx,
+		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId, Synchronous: true}),
+	)
+	assert.NoError(t, err)
+
+	// 04. Verify client is deactivated and doc is detached
+	ci2, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	assert.NoError(t, err)
+	assert.Equal(t, database.ClientDeactivated, ci2.Status)
+	if assert.NotNil(t, ci2.Documents[docInfo.ID]) {
+		assert.Equal(t, database.DocumentDetached, ci2.Documents[docInfo.ID].Status)
+	}
 }

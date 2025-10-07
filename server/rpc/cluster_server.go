@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 
@@ -26,10 +27,9 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -90,21 +90,37 @@ func (s *clusterServer) DetachDocument(
 		"",
 		nil,
 	)
-	p := presence.New(changeCtx, innerpresence.New())
+	p := presence.New(changeCtx, presence.NewData())
 	p.Clear()
 	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
 
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
 	defer docLocker.RUnlock()
-	if project.HasAttachmentLimit() {
+	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
 	}
 
+	// NOTE(hackerwins): If the project does not have an attachment limit,
+	// removing the document by removeIfNotAttached does not guarantee that
+	// the document is not attached to the client.
+	var status document.StatusType = document.StatusDetached
+	if project.RemoveOnDetach {
+		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, refKey, clientInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isAttached {
+			pack.IsRemoved = true
+			status = document.StatusRemoved
+		}
+	}
+
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:   types.SyncModePushOnly,
-		Status: document.StatusDetached,
+		Status: status,
 	}); err != nil {
 		return nil, err
 	}
@@ -137,10 +153,20 @@ func (s *clusterServer) CompactDocument(
 	}
 
 	if err := packs.Compact(ctx, s.backend, projectID, docInfo); err != nil {
+		// If the document is attached, we don't return an error.
+		// Because compaction is a best-effort operation.
+		if errors.Is(err, packs.ErrDocumentAttached) {
+			return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+				Compacted: false,
+			}), nil
+		}
+
 		return nil, err
 	}
 
-	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{}), nil
+	return connect.NewResponse(&api.ClusterServiceCompactDocumentResponse{
+		Compacted: true,
+	}), nil
 }
 
 // PurgeDocument purges the given document and its metadata from the database.
@@ -214,7 +240,7 @@ func (s *clusterServer) GetDocument(
 
 		// Set presences if requested
 		if req.Msg.IncludePresences {
-			summary.Presences = make(map[string]innerpresence.Presence)
+			summary.Presences = make(map[string]presence.Data)
 			clientIDs := s.backend.PubSub.ClientIDs(docInfo.RefKey())
 			presences := doc.AllPresences()
 

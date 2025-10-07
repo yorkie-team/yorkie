@@ -19,20 +19,21 @@ package clients
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
 	// ErrInvalidClientKey is returned when the given Key is not valid ClientKey.
-	ErrInvalidClientKey = errors.New("invalid client key")
+	ErrInvalidClientKey = errors.InvalidArgument("invalid client key").WithCode("ErrInvalidClientKey")
 
 	// ErrInvalidClientID is returned when the given Key is not valid ClientID.
-	ErrInvalidClientID = errors.New("invalid client id")
+	ErrInvalidClientID = errors.InvalidArgument("invalid client id").WithCode("ErrInvalidClientID")
 )
 
 // Activate activates the given client.
@@ -53,42 +54,73 @@ func Deactivate(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	info, err := FindActiveClientInfo(ctx, be, refKey)
+	// NOTE(hackerwins): In cluster using ConsistentHashing, document-specific
+	// requests are assigned to particular servers. ClientInfo is cached per
+	// server, which can lead to a situation where server executing deactivation
+	// may not have the complete attachment information in its cache.
+	// To ensure all attached documents are properly detached during client
+	// deactivation, we skip the cache and fetch ClientInfo directly from DB.
+	info, err := FindActiveClientInfo(ctx, be, refKey, true)
 	if err != nil {
 		return nil, err
 	}
 
+	docIDs := make([]types.ID, 0)
 	for docID, clientDocInfo := range info.Documents {
-		if clientDocInfo.Status != database.DocumentAttached {
+		if clientDocInfo.Status != database.DocumentAttached &&
+			clientDocInfo.Status != database.DocumentAttaching {
 			continue
 		}
+		docIDs = append(docIDs, docID)
+	}
 
-		// TODO(hackerwins): Solve N+1
-		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     docID,
-		})
-		if err != nil {
-			return nil, err
-		}
+	docInfos, err := be.DB.FindDocInfosByIDs(ctx, project.ID, docIDs)
+	if err != nil {
+		return nil, err
+	}
 
-		actorID, err := info.ID.ToActorID()
-		if err != nil {
-			return nil, err
-		}
+	if len(docInfos) != len(docIDs) {
+		return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
+			len(docIDs), len(docInfos))
+	}
 
+	actorID, err := info.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, info := range docInfos {
 		if err := be.ClusterClient.DetachDocument(
 			ctx,
 			project,
 			actorID,
-			docID,
-			docInfo.Key,
+			info.ID,
+			info.Key,
 		); err != nil {
 			return nil, err
 		}
 	}
 
 	return be.DB.DeactivateClient(ctx, refKey)
+}
+
+// DeactivateAsync deactivates the given client asynchronously.
+// This function is designed to handle browser window close scenarios
+// where the original context might be cancelled. It creates a new
+// background context to ensure the deactivation process completes
+// even if the original request context is cancelled.
+func DeactivateAsync(
+	be *backend.Backend,
+	project *types.Project,
+	refKey types.ClientRefKey,
+) error {
+	be.Background.AttachGoroutine(func(ctx context.Context) {
+		if _, err := Deactivate(ctx, be, project, refKey); err != nil {
+			logging.LogError(ctx, fmt.Errorf("deactivate client asynchronously: %w", err))
+		}
+	}, "deactivation")
+
+	return nil
 }
 
 // AttachDocument attaches the given document to the client.
@@ -129,8 +161,9 @@ func FindActiveClientInfo(
 	ctx context.Context,
 	be *backend.Backend,
 	refKey types.ClientRefKey,
+	skipCache ...bool,
 ) (*database.ClientInfo, error) {
-	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey, skipCache...)
 	if err != nil {
 		return nil, err
 	}

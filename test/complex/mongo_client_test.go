@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -44,10 +44,16 @@ const (
 
 func setupMongoClient(databaseName string) (*mongo.Client, error) {
 	config := &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    databaseName,
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     databaseName,
+		PingTimeout:        "5s",
+		CacheStatsEnabled:  false,
+		CacheStatsInterval: "30s",
+		ClientCacheSize:    1000,
+		DocCacheSize:       1000,
+		ChangeCacheSize:    1000,
+		VectorCacheSize:    1000,
 	}
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -72,8 +78,8 @@ func TestClientWithShardedDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
-		testcases.RunFindDocInfosByKeysTest(t, cli, dummyProjectID)
+	t.Run("RunFindDocInfosByKeysAndIDs test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysAndIDsTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {

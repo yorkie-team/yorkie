@@ -17,8 +17,8 @@
 package crdt
 
 import (
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // Array represents JSON array data structure including logical clock.

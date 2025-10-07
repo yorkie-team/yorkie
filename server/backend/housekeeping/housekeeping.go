@@ -18,12 +18,13 @@ package housekeeping
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
 
-	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -33,38 +34,20 @@ type Housekeeping struct {
 	Config *Config
 
 	scheduler  gocron.Scheduler
-	leadership *LeadershipManager
+	membership *membership.Manager
 }
 
 // New creates a new housekeeping instance.
-func New(conf *Config, db database.Database, nodeID string) (*Housekeeping, error) {
+func New(conf *Config, manager *membership.Manager) (*Housekeeping, error) {
 	scheduler, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, fmt.Errorf("new scheduler: %w", err)
 	}
 
-	// Create leadership config from housekeeping config
-	leaseDuration, err := conf.ParseLeadershipLeaseDuration()
-	if err != nil {
-		return nil, fmt.Errorf("parse leadership lease duration: %w", err)
-	}
-
-	renewalInterval, err := conf.ParseLeadershipRenewalInterval()
-	if err != nil {
-		return nil, fmt.Errorf("parse leadership renewal interval: %w", err)
-	}
-
-	leadershipConf := &LeadershipConfig{
-		LeaseDuration:   leaseDuration,
-		RenewalInterval: renewalInterval,
-	}
-
-	leadershipManager := NewLeadershipManager(db, nodeID, leadershipConf)
-
 	return &Housekeeping{
 		Config:     conf,
 		scheduler:  scheduler,
-		leadership: leadershipManager,
+		membership: manager,
 	}, nil
 }
 
@@ -78,7 +61,7 @@ func (h *Housekeeping) RegisterTask(
 		gocron.NewTask(func() {
 			ctx := context.Background()
 
-			if !h.leadership.IsLeader() {
+			if !h.membership.IsLeader() {
 				logging.From(ctx).Debug("skipping task - not leader")
 				return
 			}
@@ -97,30 +80,24 @@ func (h *Housekeeping) RegisterTask(
 
 // Start starts the housekeeping service.
 func (h *Housekeeping) Start(ctx context.Context) error {
-	// Start the leadership manager
-	if h.leadership != nil {
-		if err := h.leadership.Start(ctx); err != nil {
-			return fmt.Errorf("start leadership manager: %w", err)
-		}
-	}
-
 	h.scheduler.Start()
 	return nil
 }
 
 // Stop stops the housekeeping service.
 func (h *Housekeeping) Stop() error {
-	// Stop the leadership manager first
-	if h.leadership != nil {
-		h.leadership.Stop()
-	}
+	var errs []error
 
 	if err := h.scheduler.StopJobs(); err != nil {
-		return fmt.Errorf("scheduler stop jobs: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler stop jobs: %w", err))
 	}
 
 	if err := h.scheduler.Shutdown(); err != nil {
-		return fmt.Errorf("scheduler shutdown: %w", err)
+		errs = append(errs, fmt.Errorf("scheduler shutdown: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil

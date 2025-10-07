@@ -20,9 +20,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // Option configures Options.
@@ -87,20 +87,33 @@ func WithMaxRecvMsgSize(maxRecvMsgSize int) Option {
 	return func(o *Options) { o.MaxCallRecvMsgSize = maxRecvMsgSize }
 }
 
+// DeactivateOption configures DeactivateOptions.
+type DeactivateOption func(*DeactivateOptions)
+
+// DeactivateOptions configures how we set up the document.
+type DeactivateOptions struct {
+	Asynchronous bool
+}
+
+// WithAsynchronous configures the asynchronous option of the document.
+func WithAsynchronous() DeactivateOption {
+	return func(o *DeactivateOptions) { o.Asynchronous = true }
+}
+
 // AttachOption configures AttachOptions.
 type AttachOption func(*AttachOptions)
 
 // AttachOptions configures how we set up the document.
 type AttachOptions struct {
 	// Presence is the presence of the client.
-	Presence    innerpresence.Presence
+	Presence    presence.Data
 	InitialRoot yson.Object
 	IsRealtime  bool
 	Schema      string
 }
 
 // WithPresence configures the presence of the client.
-func WithPresence(presence innerpresence.Presence) AttachOption {
+func WithPresence(presence presence.Data) AttachOption {
 	return func(o *AttachOptions) { o.Presence = presence }
 }
 

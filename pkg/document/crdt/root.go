@@ -20,8 +20,8 @@
 package crdt
 
 import (
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ElementPair represents pair that has a parent element and child element.
@@ -183,6 +183,7 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 				return 0, err
 			}
 
+			r.docSize.GC.Sub(pair.Child.DataSize())
 			delete(r.gcNodePairMap, pair.Child.IDString())
 			count++
 		}

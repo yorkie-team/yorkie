@@ -17,20 +17,21 @@
 package rpc
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
 var (
 	// ErrInvalidRPCPort occurs when the port in the config is invalid.
-	ErrInvalidRPCPort = errors.New("invalid port number for RPC server")
+	ErrInvalidRPCPort = errors.InvalidArgument("invalid port number for RPC server")
+
 	// ErrInvalidCertFile occurs when the certificate file is invalid.
-	ErrInvalidCertFile = errors.New("invalid cert file for RPC server")
+	ErrInvalidCertFile = errors.InvalidArgument("invalid cert file for RPC server")
 	// ErrInvalidKeyFile occurs when the key file is invalid.
-	ErrInvalidKeyFile = errors.New("invalid key file for RPC server")
+	ErrInvalidKeyFile = errors.InvalidArgument("invalid key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.

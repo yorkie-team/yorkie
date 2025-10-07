@@ -19,53 +19,80 @@ package presence
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
 )
 
-// Presence is a proxy for the innerpresence.Presence to be manipulated from the outside.
+// Data is an alias for the underlying presence data type used internally.
+// Exporting this alias lets external packages consume presence data without
+// importing the internal `inner` package directly.
+type Data = inner.Presence
+
+// Map is an alias for the internal presences map implementation. This is
+// exported so higher-level packages can reference the map type when needed
+// without depending on the inner package.
+type Map = inner.Map
+
+// Change is an alias for inner.Change so external packages (server, api)
+// can reference presence changes without importing the internal package.
+type Change = inner.Change
+
+var Put = inner.Put
+var Clear = inner.Clear
+
+// NewData creates a new instance of Data.
+func NewData() Data {
+	return inner.New()
+}
+
+// NewMap creates a new instance of Map.
+func NewMap() *Map {
+	return inner.NewMap()
+}
+
+// Presence is a proxy for the inner.Presence to be manipulated from the outside.
 type Presence struct {
-	context  *change.Context
-	presence innerpresence.Presence
+	context *change.Context
+	data    Data
 }
 
 // New creates a new instance of Presence.
-func New(ctx *change.Context, presence innerpresence.Presence) *Presence {
+func New(ctx *change.Context, data Data) *Presence {
 	return &Presence{
-		context:  ctx,
-		presence: presence,
+		context: ctx,
+		data:    data,
 	}
 }
 
 // Initialize initializes the presence.
-func (p *Presence) Initialize(presence innerpresence.Presence) {
-	p.presence = presence
-	if p.presence == nil {
-		p.presence = innerpresence.New()
+func (p *Presence) Initialize(data Data) {
+	p.data = data
+	if p.data == nil {
+		p.data = NewData()
 	}
 
-	p.context.SetPresenceChange(innerpresence.Change{
-		ChangeType: innerpresence.Put,
-		Presence:   p.presence,
+	p.context.SetPresenceChange(Change{
+		ChangeType: Put,
+		Presence:   p.data,
 	})
 }
 
 // Set sets the value of the given key.
 func (p *Presence) Set(key string, value string) {
-	innerPresence := p.presence
-	innerPresence.Set(key, value)
+	data := p.data
+	data.Set(key, value)
 
-	p.context.SetPresenceChange(innerpresence.Change{
-		ChangeType: innerpresence.Put,
-		Presence:   innerPresence,
+	p.context.SetPresenceChange(Change{
+		ChangeType: Put,
+		Presence:   data,
 	})
 }
 
 // Clear clears the value of the given key.
 func (p *Presence) Clear() {
-	innerPresence := p.presence
-	innerPresence.Clear()
+	data := p.data
+	data.Clear()
 
-	p.context.SetPresenceChange(innerpresence.Change{
-		ChangeType: innerpresence.Clear,
+	p.context.SetPresenceChange(Change{
+		ChangeType: Clear,
 	})
 }

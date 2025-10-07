@@ -17,8 +17,8 @@
 package crdt
 
 import (
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // GCPair is a structure that represents a pair of parent and child for garbage

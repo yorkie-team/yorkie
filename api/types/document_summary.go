@@ -3,9 +3,9 @@ package types
 import (
 	"time"
 
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/resource"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // DocumentSummary represents a summary of document.
@@ -38,5 +38,5 @@ type DocumentSummary struct {
 	SchemaKey string
 
 	// Presences is the presence information of all clients.
-	Presences map[string]innerpresence.Presence
+	Presences map[string]presence.Data
 }

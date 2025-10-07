@@ -34,3 +34,8 @@ func From(ctx context.Context) *types.Project {
 func With(ctx context.Context, project *types.Project) context.Context {
 	return context.WithValue(ctx, projectKey{}, project)
 }
+
+func HasProject(ctx context.Context) bool {
+	_, ok := ctx.Value(projectKey{}).(*types.Project)
+	return ok
+}

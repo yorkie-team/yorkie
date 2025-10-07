@@ -3,22 +3,37 @@ RPC:
   # Port to listen on for RPC connections (default: 8080).
   Port: 8080
 
-  # MaxRequestBytes is the maximum client request size in bytes the server will accept (default: 4194304, 4MiB).
-  MaxRequestBytes: 4194304
-
-  # MaxConnectionAge is a duration for the maximum amount of time a connection may exist
-  # before it will be closed by sending a GoAway.
-  MaxConnectionAge: "0s"
-
-  # MaxConnectionAgeGrace is a duration for the amount of time after receiving a GoAway
-  # for pending RPCs to complete before forcibly closing connections.
-  MaxConnectionAgeGrace: "0s"
-
   # CertFile is the file containing the TLS certificate.
   CertFile: ""
 
   # KeyFile is the file containing the TLS private key.
   KeyFile: ""
+
+  # Auth is the configuration of AuthHandler for cookie-based session management.
+  Auth:
+    # GitHubClientID is GitHub OAuth Client ID.
+    GitHubClientID: ""
+
+    # GitHubClientSecret is GitHub OAuth Client Secret.
+    GitHubClientSecret: ""
+
+    # GitHubRedirectURL is GitHub OAuth callback URL.
+    GitHubRedirectURL: "http://localhost:8080/auth/github/callback"
+
+    # GitHubCallbackRedirectURL is GitHub OAuth callback redirect URL.
+    GitHubCallbackRedirectURL: "http://localhost:5173/dashboard"
+
+    # GitHubAuthURL is GitHub OAuth2 authorization URL.
+    GitHubAuthURL: "https://github.com/login/oauth/authorize"
+
+    # GitHubTokenURL is GitHub OAuth2 token URL.
+    GitHubTokenURL: "https://github.com/login/oauth/access_token"
+
+    # GitHubDeviceAuthURL is GitHub OAuth2 device authorization URL.
+    GitHubDeviceAuthURL: "https://github.com/login/device/code"
+
+    # GitHubUserURL is GitHub User API URL.
+    GitHubUserURL: "https://api.github.com/user"
 
 # Profiling is the configuration for the profiling server.
 Profiling:
@@ -28,26 +43,44 @@ Profiling:
   # PprofEnabled is whether to enable the pprof `/debug/pprof` endpoint.
   PprofEnabled: false
 
+# Membership is the configuration for the membership of the cluster.
+Membership:
+  # LeaseDuration is the duration of leadership lease. (default: 15s).
+  LeaseDuration: "15s"
+
+  # RenewalInterval is the interval for membership renewal. (default: 5s).
+  RenewalInterval: "5s"
+
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
-  # Interval is the time between housekeeping runs (default: 1m).
-  Interval: 1m
+  # Interval is the time between housekeeping runs (default: 30s).
+  Interval: "30s"
 
-  # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
-  CandidatesLimitPerProject: 100
+  # CandidatesLimit is the maximum number of candidates to be returned in a single query (default: 500).
+  CandidatesLimit: 500
 
-  # ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates. (default: 100).
-  ProjectFetchSize: 100
+  # CompactionMinChanges is minimum number of changes to compact a document. (default: 1000).
+  CompactionMinChanges: 1000
 
 # Backend is the configuration for the backend of Yorkie.
 Backend:
+  # AdminUser is the name of the default admin user who has full permissions.
+  # Set once on first-run. (default: admin).
+  AdminUser: "admin"
+
+  # AdminPassword is the password of the default admin. (default: admin).
+  AdminPassword: "admin"
+
+  # SecretKey is the secret key for signing authentication tokens.
+  SecretKey: ""
+
+  # AdminTokenDuration is the duration of the admin token. (default: 168h0m0s).
+  AdminTokenDuration: "168h0m0s"
+
   # UseDefaultProject is whether to use the default project (default: true).
   # If public key is not provided from the client, the default project will be
   # used. If we are using server as single-tenant mode, this should be set to true.
   UseDefaultProject: true
-
-  # ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
-  ClientDeactivateThreshold: "24h"
 
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
@@ -56,51 +89,30 @@ Backend:
   # SnapshotInterval is the number of changes to create a snapshot.
   SnapshotInterval: 500
 
-  # AuthWebhookURL is the URL to send authorization requests to.
-  AuthWebhookURL: ""
+  # SnapshotDisableGC is whether to disable garbage collection of snapshots.
+  SnapshotDisableGC: false
 
-  # AuthWebhookMethods is the list of methods to use for authorization.
-  AuthWebhookMethods: []
+  # SnapshotCacheSize is the cache size of the snapshot.
+  SnapshotCacheSize: 1000
 
-  # AuthWebhookRequestTimeout is the timeout for each authorization webhook request.
-  AuthWebhookRequestTimeout: "3s"
-
-  # AuthWebhookMaxRetries is the max number of retries for the authorization webhook.
-  AuthWebhookMaxRetries: 10
-
-  # AuthWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  AuthWebhookMinWaitInterval: "100ms"
-
-  # AuthWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  AuthWebhookMaxWaitInterval: "3s"
+  # AuthWebhookCacheSize is the cache size of the authorization webhook.
+  AuthWebhookCacheSize: 5000
 
   # AuthWebhookCacheTTL is the TTL value to set when caching the authorized result.
   AuthWebhookCacheTTL: "10s"
-
-  # EventWebhookRequestTimeout is the timeout for each event webhook request.
-  EventWebhookRequestTimeout: "3s"
-
-  # EventWebhookMaxRetries is the max number of retries for the event webhook.
-  EventWebhookMaxRetries: 10
-
-  # EventWebhookMinWaitInterval is the minimum wait interval between retries(exponential backoff).
-  EventWebhookMinWaitInterval: "100ms"
-
-  # EventWebhookMaxWaitInterval is the maximum wait interval between retries(exponential backoff).
-  EventWebhookMaxWaitInterval: "3s"
 
   # ProjectCacheSize is the size of the project metadata cache.
   ProjectCacheSize: 256
 
   # ProjectCacheTTL is the TTL value to set when caching the project metadata.
-  ProjectCacheTTL: "10m"
+  ProjectCacheTTL: "10m0s"
 
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""
 
   # GatewayAddr is the address of the gateway server.
-  GatewayAddr: ""
+  GatewayAddr: "localhost:8080"
 
 # Mongo is the MongoDB configuration (Optional).
 Mongo:
@@ -116,13 +128,42 @@ Mongo:
   # PingTimeout is the timeout for pinging MongoDB.
   PingTimeout: "5s"
 
+  # MonitoringEnabled is whether query monitoring is enabled.
+  MonitoringEnabled: true
+
+  # MonitoringSlowQueryThreshold is the threshold in milliseconds to log slow queries.
+  MonitoringSlowQueryThreshold: "100ms"
+
+  # CacheStatsEnabled determines whether cache statistics logging is enabled.
+  CacheStatsEnabled: false
+
+  # CacheStatsInterval is the interval for logging cache statistics.
+  CacheStatsInterval: "30s"
+
+  # ClientCacheSize is the size of the client cache.
+  ClientCacheSize: 10000
+
+  # DocCacheSize is the size of the document cache.
+  DocCacheSize: 10000
+
+  # ChangeCacheSize is the size of the change cache.
+  ChangeCacheSize: 10000
+
+  # VectorCacheSize is the size of the version vector cache.
+  VectorCacheSize: 10000
+
 # Kafka is the yorkie analytics message broker configuration (Optional).
 Kafka:
   # Addresses is the URI to connect to message broker.
-  Addresses: "localhost:29092"
+  Addresses: "localhost:29092,localhost:29093"
 
   # Topic is the message broker topic to use.
   Topic: "user-events"
 
   # WriteTimeout is the timeout for writing to the message broker.
   WriteTimeout: "5s"
+
+# StarRocks is the warehouse that stores data in StarRocks configuration (Optional).
+StarRocks:
+  # DSN is StarRocks DSN for the analytics.
+  DSN: ""

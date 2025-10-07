@@ -32,7 +32,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -763,7 +762,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		// c2 watches the same document, so c1 receives a document watched event.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})
@@ -793,7 +792,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		// c2 unwatch the document, so c1 receives a document unwatched event.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
+			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
 			},
 		})

@@ -14,21 +14,20 @@
  * limitations under the License.
  */
 
-// Package key provides the key implementation of the document.
+// Package key provides key type of resources in Yorkie.
 package key
 
 import (
-	"errors"
-
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 var (
 	// ErrInvalidKey is returned when the key is invalid.
-	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-120 characters")
+	ErrInvalidKey = errors.InvalidArgument("invalid key, slug with 4-120 characters").WithCode("ErrInvalidKey")
 )
 
-// Key represents a document key.
+// Key is the type for the key of resources in Yorkie.
 type Key string
 
 // String returns the string representation of the key.

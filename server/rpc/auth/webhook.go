@@ -19,12 +19,11 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/internal/metaerrors"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -32,10 +31,10 @@ import (
 
 var (
 	// ErrUnauthenticated is returned when the authentication is failed.
-	ErrUnauthenticated = errors.New("unauthenticated")
+	ErrUnauthenticated = errors.Unauthenticated("unauthenticated").WithCode("ErrUnauthenticated")
 
 	// ErrPermissionDenied is returned when the given user is not allowed for the access.
-	ErrPermissionDenied = errors.New("method is not allowed for this user")
+	ErrPermissionDenied = errors.PermissionDenied("not allowed").WithCode("ErrPermissionDenied")
 )
 
 // verifyAccess verifies the given user is allowed to access the given method.
@@ -62,11 +61,17 @@ func verifyAccess(
 		return handleWebhookResponse(entry.First, entry.Second)
 	}
 
+	options, err := prj.GetAuthWebhookOptions()
+	if err != nil {
+		return fmt.Errorf("get webhook options: %w", err)
+	}
+
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
 		"",
 		body,
+		options,
 	)
 	if err != nil {
 		return fmt.Errorf("send to webhook: %w", err)
@@ -98,9 +103,9 @@ func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
 	case status == http.StatusOK && res.Allowed:
 		return nil
 	case status == http.StatusForbidden && !res.Allowed:
-		return metaerrors.New(ErrPermissionDenied, map[string]string{"reason": res.Reason})
+		return errors.WithMetadata(ErrPermissionDenied, map[string]string{"reason": res.Reason})
 	case status == http.StatusUnauthorized && !res.Allowed:
-		return metaerrors.New(ErrUnauthenticated, map[string]string{"reason": res.Reason})
+		return errors.WithMetadata(ErrUnauthenticated, map[string]string{"reason": res.Reason})
 	default:
 		return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
 	}

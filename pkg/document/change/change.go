@@ -20,8 +20,8 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence/inner"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -37,11 +37,11 @@ type Change struct {
 	operations []operations.Operation
 
 	// presenceChange is the change of presence information.
-	presenceChange *innerpresence.Change
+	presenceChange *inner.Change
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, pc *innerpresence.Change) *Change {
+func New(id ID, message string, operations []operations.Operation, pc *inner.Change) *Change {
 	return &Change{
 		id:             id,
 		message:        message,
@@ -51,7 +51,7 @@ func New(id ID, message string, operations []operations.Operation, pc *innerpres
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
+func (c *Change) Execute(root *crdt.Root, presences *inner.Map) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root, c.ID().versionVector); err != nil {
 			return err
@@ -104,7 +104,7 @@ func (c *Change) SetActor(actor time.ActorID) {
 }
 
 // PresenceChange returns the presence change of this change.
-func (c *Change) PresenceChange() *innerpresence.Change {
+func (c *Change) PresenceChange() *inner.Change {
 	return c.presenceChange
 }
 

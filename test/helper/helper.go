@@ -45,15 +45,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
@@ -68,14 +69,17 @@ var (
 
 	ProfilingPort = 11102
 
-	AdminUser                             = server.DefaultAdminUser
-	AdminPassword                         = server.DefaultAdminPassword
-	AdminPasswordForSignUp                = AdminPassword + "123!"
-	UseDefaultProject                     = true
-	HousekeepingInterval                  = 10 * gotime.Second
-	HousekeepingCandidatesLimitPerProject = 10
-	HousekeepingProjectFetchSize          = 10
-	HousekeepingCompactionMinChanges      = 1000
+	AdminUser              = server.DefaultAdminUser
+	AdminPassword          = server.DefaultAdminPassword
+	AdminPasswordForSignUp = AdminPassword + "123!"
+	UseDefaultProject      = true
+
+	HousekeepingInterval             = 500 * gotime.Millisecond
+	HousekeepingCandidatesLimit      = 10
+	HousekeepingCompactionMinChanges = 5
+
+	MembershipLeaseDuration   = "15s"
+	MembershipRenewalInterval = "5s"
 
 	AdminTokenDuration          = "10s"
 	ClientDeactivateThreshold   = "10s"
@@ -90,14 +94,19 @@ var (
 	EventWebhookMinWaitInterval = 3 * gotime.Millisecond
 	EventWebhookRequestTimeout  = 100 * gotime.Millisecond
 	EventWebhookSize            = 100
-	EventWebhookCacheTTL        = 10 * gotime.Second
 	ProjectCacheSize            = 256
 	ProjectCacheTTL             = 5 * gotime.Second
 	GatewayAddr                 = fmt.Sprintf("localhost:%d", RPCPort)
+	RPCAddr                     = fmt.Sprintf("localhost:%d", RPCPort)
 
-	MongoConnectionURI     = "mongodb://localhost:27017"
-	MongoConnectionTimeout = "5s"
-	MongoPingTimeout       = "5s"
+	MongoConnectionTimeout  = "5s"
+	MongoConnectionURI      = "mongodb://localhost:27017"
+	MongoPingTimeout        = "5s"
+	MongoCacheStatsInterval = "30s"
+	MongoClientCacheSize    = 1000
+	MongoDocCacheSize       = 1000
+	MongoChangeCacheSize    = 1000
+	MongoVectorCacheSize    = 1000
 )
 
 func init() {
@@ -278,39 +287,42 @@ func TestConfig() *server.Config {
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
 		},
+		Membership: &membership.Config{
+			LeaseDuration:   MembershipLeaseDuration,
+			RenewalInterval: MembershipRenewalInterval,
+		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  HousekeepingInterval.String(),
-			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          HousekeepingProjectFetchSize,
-			CompactionMinChanges:      HousekeepingCompactionMinChanges,
+			Interval:             HousekeepingInterval.String(),
+			CandidatesLimit:      HousekeepingCandidatesLimit,
+			CompactionMinChanges: HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			AdminUser:                   server.DefaultAdminUser,
-			AdminPassword:               server.DefaultAdminPassword,
-			SecretKey:                   server.DefaultSecretKey,
-			AdminTokenDuration:          server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:           true,
-			ClientDeactivateThreshold:   server.DefaultClientDeactivateThreshold,
-			SnapshotInterval:            10,
-			SnapshotThreshold:           SnapshotThreshold,
-			SnapshotCacheSize:           SnapshotCacheSize,
-			AuthWebhookMaxWaitInterval:  AuthWebhookMaxWaitInterval.String(),
-			AuthWebhookMinWaitInterval:  AuthWebhookMinWaitInterval.String(),
-			AuthWebhookRequestTimeout:   AuthWebhookRequestTimeout.String(),
-			AuthWebhookCacheSize:        AuthWebhookSize,
-			AuthWebhookCacheTTL:         AuthWebhookCacheTTL.String(),
-			EventWebhookMaxWaitInterval: EventWebhookMaxWaitInterval.String(),
-			EventWebhookMinWaitInterval: EventWebhookMinWaitInterval.String(),
-			EventWebhookRequestTimeout:  EventWebhookRequestTimeout.String(),
-			ProjectCacheSize:            ProjectCacheSize,
-			ProjectCacheTTL:             ProjectCacheTTL.String(),
-			GatewayAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			AdminUser:            server.DefaultAdminUser,
+			AdminPassword:        server.DefaultAdminPassword,
+			SecretKey:            server.DefaultSecretKey,
+			AdminTokenDuration:   server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:    true,
+			SnapshotInterval:     10,
+			SnapshotThreshold:    SnapshotThreshold,
+			SnapshotCacheSize:    SnapshotCacheSize,
+			AuthWebhookCacheSize: AuthWebhookSize,
+			AuthWebhookCacheTTL:  AuthWebhookCacheTTL.String(),
+			ProjectCacheSize:     ProjectCacheSize,
+			ProjectCacheTTL:      ProjectCacheTTL.String(),
+			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			RPCAddr:              fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 		},
 		Mongo: &mongo.Config{
-			ConnectionURI:     MongoConnectionURI,
-			ConnectionTimeout: MongoConnectionTimeout,
-			PingTimeout:       MongoPingTimeout,
-			YorkieDatabase:    TestDBName(),
+			ConnectionTimeout:  MongoConnectionTimeout,
+			ConnectionURI:      MongoConnectionURI,
+			YorkieDatabase:     TestDBName(),
+			PingTimeout:        MongoPingTimeout,
+			CacheStatsEnabled:  false,
+			CacheStatsInterval: "30s",
+			ClientCacheSize:    MongoClientCacheSize,
+			DocCacheSize:       MongoDocCacheSize,
+			ChangeCacheSize:    MongoChangeCacheSize,
+			VectorCacheSize:    MongoVectorCacheSize,
 		},
 	}
 }
@@ -424,10 +436,15 @@ func NewRangeSlice(start, end int) []int {
 // setupRawMongoClient returns the raw mongo client.
 func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 	conf := &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    databaseName,
-		PingTimeout:       "5s",
+		ConnectionTimeout:  "5s",
+		ConnectionURI:      "mongodb://localhost:27017",
+		YorkieDatabase:     databaseName,
+		PingTimeout:        "5s",
+		CacheStatsInterval: MongoCacheStatsInterval,
+		ClientCacheSize:    MongoClientCacheSize,
+		DocCacheSize:       MongoDocCacheSize,
+		ChangeCacheSize:    MongoChangeCacheSize,
+		VectorCacheSize:    MongoVectorCacheSize,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())

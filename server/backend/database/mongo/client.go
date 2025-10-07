@@ -24,7 +24,6 @@ import (
 	"strings"
 	gotime "time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -32,11 +31,12 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -51,9 +51,12 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	docCache    *lru.Cache[types.DocRefKey, *database.DocInfo]
-	changeCache *lru.Cache[types.DocRefKey, *ChangeStore]
-	vectorCache *lru.Cache[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	cacheManager  *cache.Manager
+	clientCache   *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
+	docCache      *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
+	changeCache   *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	presenceCache *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
+	vectorCache   *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -98,30 +101,59 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	docCache, err := lru.New[types.DocRefKey, *database.DocInfo](1000)
+	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
+	clientCache, err := cache.NewLRUWithStats[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
+	if err != nil {
+		return nil, fmt.Errorf("initialize client cache: %w", err)
+	}
+	cacheManager.RegisterCache(clientCache)
+
+	docCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.DocInfo](conf.DocCacheSize, "docs")
 	if err != nil {
 		return nil, fmt.Errorf("initialize document cache: %w", err)
 	}
+	cacheManager.RegisterCache(docCache)
 
-	changeCache, err := lru.New[types.DocRefKey, *ChangeStore](1000)
+	changeCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "changes")
 	if err != nil {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
+	cacheManager.RegisterCache(changeCache)
 
-	vectorCache, err := lru.New[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](1000)
+	presenceCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "presences")
+	if err != nil {
+		return nil, fmt.Errorf("initialize presence cache: %w", err)
+	}
+	cacheManager.RegisterCache(presenceCache)
+
+	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](
+		conf.VectorCacheSize, "vectors",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("initialize version vector cache: %w", err)
 	}
+	cacheManager.RegisterCache(vectorCache)
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
-	return &Client{
-		config:      conf,
-		client:      client,
-		docCache:    docCache,
-		changeCache: changeCache,
-		vectorCache: vectorCache,
-	}, nil
+	yorkieClient := &Client{
+		config: conf,
+		client: client,
+
+		cacheManager: cacheManager,
+
+		clientCache:   clientCache,
+		docCache:      docCache,
+		changeCache:   changeCache,
+		presenceCache: presenceCache,
+		vectorCache:   vectorCache,
+	}
+
+	if conf.CacheStatsEnabled {
+		go cacheManager.StartPeriodicLogging(context.Background())
+	}
+
+	return yorkieClient, nil
 }
 
 // Close all resources of this client.
@@ -130,7 +162,12 @@ func (c *Client) Close() error {
 		return fmt.Errorf("close MongoDB client: %w", err)
 	}
 
+	c.cacheManager.Stop()
+
+	c.clientCache.Purge()
 	c.docCache.Purge()
+	c.changeCache.Purge()
+	c.presenceCache.Purge()
 	c.vectorCache.Purge()
 
 	return nil
@@ -141,50 +178,37 @@ func (c *Client) Close() error {
 // If leaseToken is provided, it attempts to renew the existing lease.
 func (c *Client) TryLeadership(
 	ctx context.Context,
-	hostname,
+	rpcAddr,
 	leaseToken string,
 	leaseDuration gotime.Duration,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	leaseMS := leaseDuration.Milliseconds()
 
 	if leaseToken == "" {
-		return c.tryAcquireLeadership(ctx, hostname, leaseMS)
+		ret, err := c.tryAcquireLeadership(ctx, rpcAddr, leaseMS)
+		if err != nil {
+			return nil, err
+		}
+
+		// If lease is nil, it means leadership acquisition failed.
+		if ret == nil {
+			if err = c.updateClusterFollower(ctx, rpcAddr); err != nil {
+				return nil, err
+			}
+		}
+
+		return ret, nil
 	}
 
-	return c.tryRenewLeadership(ctx, hostname, leaseToken, leaseMS)
-}
-
-// FindLeadership returns the current leadership information.
-func (c *Client) FindLeadership(
-	ctx context.Context,
-) (*database.LeadershipInfo, error) {
-	result := c.collection(ColLeaderships).FindOne(ctx, bson.M{"singleton": 1})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find leadership: %w", result.Err())
-	}
-
-	var info database.LeadershipInfo
-	if err := result.Decode(&info); err != nil {
-		return nil, fmt.Errorf("decode leadership: %w", err)
-	}
-
-	// Check if leadership has expired
-	if info.IsExpired() {
-		return nil, nil
-	}
-
-	return &info, nil
+	return c.tryRenewLeadership(ctx, rpcAddr, leaseToken, leaseMS)
 }
 
 // tryAcquireLeadership attempts to acquire new leadership.
 func (c *Client) tryAcquireLeadership(
 	ctx context.Context,
-	hostname string,
+	rpcAddr string,
 	leaseMS int64,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	// Generate a new lease token
 	token, err := database.GenerateLeaseToken()
 	if err != nil {
@@ -192,105 +216,148 @@ func (c *Client) tryAcquireLeadership(
 	}
 
 	// Try to acquire leadership using atomic upsert.
-	expired := bson.D{{Key: "$lt", Value: bson.A{"$expires_at", "$$NOW"}}}
-	result := c.collection(ColLeaderships).FindOneAndUpdate(
+	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
-		bson.D{
-			{Key: "singleton", Value: 1},
-		},
+		bson.M{"rpc_addr": rpcAddr},
 		mongo.Pipeline{
-			{{Key: "$replaceWith", Value: bson.D{
-				{Key: "$cond", Value: bson.A{
-					expired,
-					// if expired
-					bson.D{{Key: "$mergeObjects", Value: bson.A{
-						"$$ROOT",
-						bson.D{
-							{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-							{Key: "lease_token", Value: token},
-							{Key: "term", Value: bson.D{{Key: "$add", Value: bson.A{
-								bson.D{{Key: "$ifNull", Value: bson.A{"$term", 0}}}, 1}}},
-							},
-							{Key: "hostname", Value: hostname},
-							{Key: "renewed_at", Value: "$$NOW"},
-							{Key: "elected_at", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$elected_at", "$$NOW"}}}},
-							{Key: "singleton", Value: 1},
-						},
-					}}},
-					"$$ROOT", // else
-				}},
+			{{Key: "$set", Value: bson.D{
+				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
+				{Key: "lease_token", Value: token},
+				{Key: "rpc_addr", Value: rpcAddr},
+				{Key: "updated_at", Value: "$$NOW"},
+				{Key: "is_leader", Value: true},
 			}}},
-		}, options.FindOneAndUpdate().
+		},
+		options.FindOneAndUpdate().
 			SetUpsert(true).
 			SetReturnDocument(options.After),
 	)
 
-	var info database.LeadershipInfo
-	if err := result.Decode(&info); err != nil {
+	info := &database.ClusterNodeInfo{}
+	if err := result.Decode(info); err != nil {
 		// If the error is due to a duplicate key, it means another node has
 		// already acquired leadership.
 		if mongo.IsDuplicateKeyError(err) {
-			return c.FindLeadership(ctx)
+			return nil, nil
 		}
 
-		return nil, fmt.Errorf("decode new leadership: %w", err)
+		return nil, fmt.Errorf("decode new cluster node: %w", err)
 	}
 
 	// Successfully acquired leadership
-	return &info, nil
+	return info, nil
 }
 
 // tryRenewLeadership attempts to renew existing leadership
 func (c *Client) tryRenewLeadership(
 	ctx context.Context,
-	hostname string,
+	rpcAddr string,
 	leaseToken string,
 	leaseMS int64,
-) (*database.LeadershipInfo, error) {
+) (*database.ClusterNodeInfo, error) {
 	// Generate a new lease token for renewal
 	newLeaseToken, err := database.GenerateLeaseToken()
 	if err != nil {
-		return nil, fmt.Errorf("generate lease token: %w", err)
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, err)
 	}
 
-	// Try to update the existing leadership with the correct token and hostname.
-	result := c.collection(ColLeaderships).FindOneAndUpdate(
+	// Try to update the existing leadership with the correct token and rpcAddr.
+	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"singleton":   1,
-			"hostname":    hostname,
+			"rpc_addr":    rpcAddr,
+			"is_leader":   true,
 			"lease_token": leaseToken,
+			"$expr":       bson.M{"$gte": bson.A{"$expires_at", "$$NOW"}},
 		},
 		mongo.Pipeline{
 			{{Key: "$set", Value: bson.D{
 				{Key: "lease_token", Value: newLeaseToken},
 				{Key: "expires_at", Value: bson.D{{Key: "$add", Value: bson.A{"$$NOW", leaseMS}}}},
-				{Key: "renewed_at", Value: "$$NOW"},
+				{Key: "updated_at", Value: "$$NOW"},
 			}}},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("invalid token or node: %w", database.ErrInvalidLeaseToken)
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, database.ErrInvalidLeaseToken)
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("renew leadership: %w", result.Err())
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, result.Err())
 	}
 
-	var info database.LeadershipInfo
-	if err := result.Decode(&info); err != nil {
-		return nil, fmt.Errorf("decode leadership: %w", err)
+	info := &database.ClusterNodeInfo{}
+	if err := result.Decode(info); err != nil {
+		return nil, fmt.Errorf("renew leadership of %s: %w", rpcAddr, err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
-// ClearLeadership removes the current leadership information for testing purposes.
-func (c *Client) ClearLeadership(ctx context.Context) error {
-	_, err := c.collection(ColLeaderships).DeleteMany(ctx, bson.M{})
+// updateClusterFollower updates the given node as follower.
+func (c *Client) updateClusterFollower(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).UpdateOne(
+		ctx,
+		bson.M{"rpc_addr": rpcAddr},
+		bson.M{
+			"$currentDate": bson.M{"updated_at": true},
+			"$setOnInsert": bson.M{
+				"rpc_addr":  rpcAddr,
+				"is_leader": false,
+			},
+		},
+		options.UpdateOne().SetUpsert(true),
+	)
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		return fmt.Errorf("update cluster follower of %s: %w", rpcAddr, err)
+	}
+
+	return nil
+}
+
+// FindClusterNodes returns all cluster nodes that have been updated within the given time window.
+// Results are sorted with the leader first, then by updated_at descending.
+func (c *Client) FindClusterNodes(
+	ctx context.Context,
+	window gotime.Duration,
+) ([]*database.ClusterNodeInfo, error) {
+	cursor, err := c.collection(ColClusterNodes).Find(
+		ctx,
+		bson.M{"$expr": bson.M{"$gte": bson.A{
+			"$updated_at", bson.D{{Key: "$add", Value: bson.A{"$$NOW", -window.Milliseconds()}}},
+		}}},
+		options.Find().SetSort(bson.D{
+			{Key: "is_leader", Value: -1},
+			{Key: "updated_at", Value: -1},
+		}),
+	)
 	if err != nil {
-		return fmt.Errorf("clear leadership: %w", err)
+		return nil, fmt.Errorf("find cluster nodes: %w", err)
+	}
+
+	var nodes []*database.ClusterNodeInfo
+	if err = cursor.All(ctx, &nodes); err != nil {
+		return nil, fmt.Errorf("find cluster nodes: %w", err)
+	}
+
+	return nodes, nil
+}
+
+// RemoveClusterNode removes the cluster node with the given rpcAddr.
+func (c *Client) RemoveClusterNode(ctx context.Context, rpcAddr string) error {
+	_, err := c.collection(ColClusterNodes).DeleteOne(ctx, bson.M{"rpc_addr": rpcAddr})
+	if err != nil {
+		return fmt.Errorf("remove cluster node with %s: %w", rpcAddr, err)
+	}
+	return nil
+}
+
+// RemoveClusterNodes removes all cluster nodes.
+func (c *Client) RemoveClusterNodes(ctx context.Context) error {
+	_, err := c.collection(ColClusterNodes).DeleteMany(ctx, bson.M{})
+	if err != nil {
+		return fmt.Errorf("remove cluster nodes: %w", err)
 	}
 	return nil
 }
@@ -300,14 +367,13 @@ func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -348,39 +414,48 @@ func (c *Client) ensureDefaultUserInfo(
 		"username": candidate.Username,
 	})
 
-	info := database.UserInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.UserInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("default: %w", database.ErrUserNotFound)
 		}
+
 		return nil, fmt.Errorf("decode user %s: %w", username, err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // ensureDefaultProjectInfo creates the default project info if it does not exist.
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 	candidate.ID = database.DefaultProjectID
 
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
 		"_id": candidate.ID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":                         candidate.Name,
-			"owner":                        candidate.Owner,
-			"client_deactivate_threshold":  candidate.ClientDeactivateThreshold,
-			"max_subscribers_per_document": candidate.MaxSubscribersPerDocument,
-			"max_attachments_per_document": candidate.MaxAttachmentsPerDocument,
-			"max_size_per_document":        candidate.MaxSizePerDocument,
-			"public_key":                   candidate.PublicKey,
-			"secret_key":                   candidate.SecretKey,
-			"created_at":                   candidate.CreatedAt,
+			"name":                            candidate.Name,
+			"owner":                           candidate.Owner,
+			"auth_webhook_max_retries":        candidate.AuthWebhookMaxRetries,
+			"auth_webhook_min_wait_interval":  candidate.AuthWebhookMinWaitInterval,
+			"auth_webhook_max_wait_interval":  candidate.AuthWebhookMaxWaitInterval,
+			"auth_webhook_request_timeout":    candidate.AuthWebhookRequestTimeout,
+			"event_webhook_max_retries":       candidate.EventWebhookMaxRetries,
+			"event_webhook_min_wait_interval": candidate.EventWebhookMinWaitInterval,
+			"event_webhook_max_wait_interval": candidate.EventWebhookMaxWaitInterval,
+			"event_webhook_request_timeout":   candidate.EventWebhookRequestTimeout,
+			"client_deactivate_threshold":     candidate.ClientDeactivateThreshold,
+			"max_subscribers_per_document":    candidate.MaxSubscribersPerDocument,
+			"max_attachments_per_document":    candidate.MaxAttachmentsPerDocument,
+			"max_size_per_document":           candidate.MaxSizePerDocument,
+			"remove_on_detach":                candidate.RemoveOnDetach,
+			"public_key":                      candidate.PublicKey,
+			"secret_key":                      candidate.SecretKey,
+			"created_at":                      candidate.CreatedAt,
 		},
 	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
@@ -391,15 +466,16 @@ func (c *Client) ensureDefaultProjectInfo(
 		"_id": candidate.ID,
 	})
 
-	info := database.ProjectInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.ProjectInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("default: %w", database.ErrProjectNotFound)
 		}
+
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // CreateProjectInfo creates a new project.
@@ -407,17 +483,27 @@ func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner)
 	result, err := c.collection(ColProjects).InsertOne(ctx, bson.M{
-		"name":                        info.Name,
-		"owner":                       owner,
-		"client_deactivate_threshold": info.ClientDeactivateThreshold,
-		"public_key":                  info.PublicKey,
-		"secret_key":                  info.SecretKey,
-		"created_at":                  info.CreatedAt,
-		"max_size_per_document":       info.MaxSizePerDocument,
+		"name":                            info.Name,
+		"owner":                           owner,
+		"auth_webhook_max_retries":        info.AuthWebhookMaxRetries,
+		"auth_webhook_min_wait_interval":  info.AuthWebhookMinWaitInterval,
+		"auth_webhook_max_wait_interval":  info.AuthWebhookMaxWaitInterval,
+		"auth_webhook_request_timeout":    info.AuthWebhookRequestTimeout,
+		"event_webhook_max_retries":       info.EventWebhookMaxRetries,
+		"event_webhook_min_wait_interval": info.EventWebhookMinWaitInterval,
+		"event_webhook_max_wait_interval": info.EventWebhookMaxWaitInterval,
+		"event_webhook_request_timeout":   info.EventWebhookRequestTimeout,
+		"client_deactivate_threshold":     info.ClientDeactivateThreshold,
+		"max_subscribers_per_document":    info.MaxSubscribersPerDocument,
+		"max_attachments_per_document":    info.MaxAttachmentsPerDocument,
+		"max_size_per_document":           info.MaxSizePerDocument,
+		"remove_on_detach":                info.RemoveOnDetach,
+		"public_key":                      info.PublicKey,
+		"secret_key":                      info.SecretKey,
+		"created_at":                      info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -429,51 +515,6 @@ func (c *Client) CreateProjectInfo(
 
 	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
 	return info, nil
-}
-
-// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
-func (c *Client) FindNextNCyclingProjectInfos(
-	ctx context.Context,
-	pageSize int,
-	lastProjectID types.ID,
-) ([]*database.ProjectInfo, error) {
-	opts := options.Find()
-	opts.SetLimit(int64(pageSize))
-
-	cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
-		"_id": bson.M{
-			"$gt": lastProjectID,
-		},
-	}, opts)
-	if err != nil {
-		return nil, fmt.Errorf("find projects: %w", err)
-	}
-
-	var infos []*database.ProjectInfo
-	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch projects: %w", err)
-	}
-
-	if len(infos) < pageSize {
-		opts.SetLimit(int64(pageSize - len(infos)))
-
-		cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
-			"_id": bson.M{
-				"$lte": lastProjectID,
-			},
-		}, opts)
-		if err != nil {
-			return nil, fmt.Errorf("find projects: %w", err)
-		}
-
-		var newInfos []*database.ProjectInfo
-		if err := cursor.All(ctx, &newInfos); err != nil {
-			return nil, fmt.Errorf("fetch projects: %w", err)
-		}
-		infos = append(infos, newInfos...)
-	}
-
-	return infos, nil
 }
 
 // ListProjectInfos returns all project infos owned by owner.
@@ -502,15 +543,16 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 		"public_key": publicKey,
 	})
 
-	projectInfo := database.ProjectInfo{}
-	if err := result.Decode(&projectInfo); err != nil {
+	info := &database.ProjectInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
 		}
+
 		return nil, fmt.Errorf("find project by public key %s: %w", publicKey, err)
 	}
 
-	return &projectInfo, nil
+	return info, nil
 }
 
 // FindProjectInfoBySecretKey returns a project by secret key.
@@ -519,15 +561,16 @@ func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey strin
 		"secret_key": secretKey,
 	})
 
-	projectInfo := database.ProjectInfo{}
-	if err := result.Decode(&projectInfo); err != nil {
+	info := &database.ProjectInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", secretKey, database.ErrProjectNotFound)
 		}
+
 		return nil, fmt.Errorf("find project by secret key: %w", err)
 	}
 
-	return &projectInfo, nil
+	return info, nil
 }
 
 // FindProjectInfoByName returns a project by name.
@@ -541,15 +584,16 @@ func (c *Client) FindProjectInfoByName(
 		"owner": owner,
 	})
 
-	projectInfo := database.ProjectInfo{}
-	if err := result.Decode(&projectInfo); err != nil {
+	info := &database.ProjectInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
 		}
+
 		return nil, fmt.Errorf("find project by name %s: %w", name, err)
 	}
 
-	return &projectInfo, nil
+	return info, nil
 }
 
 // FindProjectInfoByID returns a project by the given id.
@@ -558,15 +602,15 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 		"_id": id,
 	})
 
-	projectInfo := database.ProjectInfo{}
-	if err := result.Decode(&projectInfo); err != nil {
+	info := &database.ProjectInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		return nil, fmt.Errorf("find project by id %s: %w", id, err)
 	}
 
-	return &projectInfo, nil
+	return info, nil
 }
 
 // UpdateProjectInfo updates the project info.
@@ -594,18 +638,18 @@ func (c *Client) UpdateProjectInfo(
 		"$set": updatableFields,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	info := database.ProjectInfo{}
-	if err := res.Decode(&info); err != nil {
+	info := &database.ProjectInfo{}
+	if err := res.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
 		}
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // RotateProjectKeys rotates the API keys of the project.
@@ -629,15 +673,15 @@ func (c *Client) RotateProjectKeys(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	// Handle errors and decode result
-	info := database.ProjectInfo{}
-	if err := res.Decode(&info); err != nil {
+	info := &database.ProjectInfo{}
+	if err := res.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // CreateUserInfo creates a new user.
@@ -689,15 +733,16 @@ func (c *Client) GetOrCreateUserInfoByGitHubID(
 			SetReturnDocument(options.After),
 	)
 
-	info := database.UserInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.UserInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserNotFound)
 		}
+
 		return nil, fmt.Errorf("create user %s: %w", githubID, err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // DeleteUserInfoByName deletes a user by name.
@@ -735,15 +780,16 @@ func (c *Client) FindUserInfoByID(ctx context.Context, userID types.ID) (*databa
 		"_id": userID,
 	})
 
-	userInfo := database.UserInfo{}
-	if err := result.Decode(&userInfo); err != nil {
+	info := &database.UserInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("find user %s: %w", userID, database.ErrUserNotFound)
 		}
+
 		return nil, fmt.Errorf("find user %s: %w", userID, err)
 	}
 
-	return &userInfo, nil
+	return info, nil
 }
 
 // FindUserInfoByName returns a user by username.
@@ -752,15 +798,15 @@ func (c *Client) FindUserInfoByName(ctx context.Context, username string) (*data
 		"username": username,
 	})
 
-	userInfo := database.UserInfo{}
-	if err := result.Decode(&userInfo); err != nil {
+	userInfo := &database.UserInfo{}
+	if err := result.Decode(userInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("find user %s: %w", username, database.ErrUserNotFound)
 		}
 		return nil, fmt.Errorf("find user %s: %w", username, err)
 	}
 
-	return &userInfo, nil
+	return userInfo, nil
 }
 
 // ListUserInfos returns all user infos.
@@ -788,43 +834,30 @@ func (c *Client) ActivateClient(
 	metadata map[string]string,
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
 		"project_id": projectID,
 		"key":        key,
-		"metadata":   metadata,
 	}, bson.M{
 		"$set": bson.M{
 			StatusKey:    database.ClientActivated,
+			"metadata":   metadata,
 			"updated_at": now,
 		},
-	}, options.UpdateOne().SetUpsert(true))
-	if err != nil {
+		"$setOnInsert": bson.M{
+			"created_at": now,
+		},
+	}, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
+
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("activate client of %s: %w", key, err)
 	}
 
-	var result *mongo.SingleResult
-	if res.UpsertedCount > 0 {
-		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-			"project_id": projectID,
-			"_id":        res.UpsertedID,
-		}, bson.M{
-			"$set": bson.M{
-				"created_at": now,
-			},
-		})
-	} else {
-		result = c.collection(ColClients).FindOne(ctx, bson.M{
-			"project_id": projectID,
-			"key":        key,
-		})
-	}
+	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}
+	c.clientCache.Add(refKey, info.DeepCopy())
 
-	clientInfo := database.ClientInfo{}
-	if err = result.Decode(&clientInfo); err != nil {
-		return nil, fmt.Errorf("activate client of %s: %w", key, err)
-	}
-
-	return &clientInfo, nil
+	return info, nil
 }
 
 // TryAttaching updates the status of the document to Attaching to prevent
@@ -859,8 +892,11 @@ func (c *Client) TryAttaching(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("try attaching %s to %s: %w", docID, refKey.ClientID, database.ErrClientNotFound)
 		}
+
 		return nil, fmt.Errorf("try attaching %s to %s : %w", docID, refKey.ClientID, err)
 	}
+
+	c.clientCache.Add(refKey, info.DeepCopy())
 
 	return info, nil
 }
@@ -896,60 +932,92 @@ func (c *Client) DeactivateClient(
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
 
-	info := database.ClientInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf(
-				"deactivate client of %s: %w",
-				refKey.ClientID,
-				database.ErrClientNotFound,
-			)
+			return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, database.ErrClientNotFound)
 		}
 		return nil, fmt.Errorf("deactivate client of %s: %w", refKey.ClientID, err)
 	}
 
-	return &info, nil
+	c.clientCache.Add(refKey, info.DeepCopy())
+
+	return info, nil
 }
 
 // FindClientInfoByRefKey finds the client of the given refKey.
-func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"project_id": refKey.ProjectID,
-		"_id":        refKey.ClientID,
-	}, bson.M{
-		"$set": bson.M{
-			"updated_at": gotime.Now(),
-		},
-	})
+func (c *Client) FindClientInfoByRefKey(
+	ctx context.Context,
+	refKey types.ClientRefKey,
+	skipCache ...bool,
+) (*database.ClientInfo, error) {
+	skip := len(skipCache) > 0 && skipCache[0]
 
-	clientInfo := database.ClientInfo{}
-	if err := result.Decode(&clientInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("find client of %s: %w", refKey, database.ErrClientNotFound)
+	if !skip {
+		if cached, ok := c.clientCache.Get(refKey); ok {
+			return cached.DeepCopy(), nil
 		}
 	}
 
-	return &clientInfo, nil
+	result := c.collection(ColClients).FindOne(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
+	})
+
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find client of %s: %w", refKey, database.ErrClientNotFound)
+		}
+
+		return nil, fmt.Errorf("find client of %s: %w", refKey, err)
+	}
+
+	if !skip {
+		c.clientCache.Add(refKey, info.DeepCopy())
+	}
+
+	return info, nil
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 // after handling PushPull.
 func (c *Client) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
-	clientInfo *database.ClientInfo,
+	info *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
+	clientKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
+	clientDocInfo, ok := info.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf(
-			"update client of %s after PushPull %s: %w",
-			clientInfo.ID, docInfo.ID, database.ErrDocumentNeverAttached,
+			"update client of %s after PP %s: %w",
+			info.ID, docInfo.ID, database.ErrDocumentNeverAttached,
 		)
 	}
 
-	attached, err := clientInfo.IsAttached(docInfo.ID)
+	if existing, ok := c.clientCache.Get(clientKey); ok {
+		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
+			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
+				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
+				existingDocInfo.Status == clientDocInfo.Status {
+				return nil
+			}
+		}
+	}
+
+	c.clientCache.Remove(clientKey)
+
+	attached, err := info.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
+	}
+
+	// NOTE(hackerwins): Clear presence changes of the given client on the
+	// document if the client is no longer attached to the document.
+	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
+	if prStore, ok := c.presenceCache.Get(docKey); ok && !attached {
+		prStore.RemoveChangesByActor(info.ID)
 	}
 
 	var updater bson.M
@@ -961,7 +1029,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			},
 			"$set": bson.M{
 				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
-				"updated_at":                            clientInfo.UpdatedAt,
+				"updated_at":                            info.UpdatedAt,
 			},
 			"$addToSet": bson.M{
 				"attached_docs": docInfo.ID,
@@ -973,7 +1041,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
 				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
 				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
-				"updated_at":                               clientInfo.UpdatedAt,
+				"updated_at":                               info.UpdatedAt,
 			},
 			"$pull": bson.M{
 				"attached_docs": docInfo.ID,
@@ -981,110 +1049,26 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
-		"project_id": clientInfo.ProjectID,
-		"_id":        clientInfo.ID,
-	}, updater)
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"project_id": info.ProjectID,
+		"_id":        info.ID,
+	}, updater, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	if err != nil {
-		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, err)
+	updated := &database.ClientInfo{}
+	if err := result.Decode(updated); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fmt.Errorf("decode client of %s after PP %s: %w", info.ID, docInfo.ID, database.ErrClientNotFound)
+		}
+
+		return fmt.Errorf("decode client info %s after PP %s: %w", info.ID, docInfo.ID, err)
 	}
-	if res.MatchedCount == 0 {
-		return fmt.Errorf("update client of %s after PushPull %s: %w", clientInfo.ID, docInfo.ID, database.ErrClientNotFound)
-	}
+
+	c.clientCache.Add(clientKey, updated.DeepCopy())
 
 	return nil
 }
 
-// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (c *Client) FindDeactivateCandidatesPerProject(
-	ctx context.Context,
-	project *database.ProjectInfo,
-	candidatesLimit int,
-) ([]*database.ClientInfo, error) {
-	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
-	if err != nil {
-		return nil, err
-	}
-
-	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
-		"project_id": project.ID,
-		StatusKey:    database.ClientActivated,
-		"updated_at": bson.M{
-			"$lte": gotime.Now().Add(-clientDeactivateThreshold),
-		},
-	}, options.Find().SetLimit(int64(candidatesLimit)))
-
-	if err != nil {
-		return nil, fmt.Errorf("find deactivate candidates of %s: %w", project.ID, err)
-	}
-
-	var clientInfos []*database.ClientInfo
-	if err := cursor.All(ctx, &clientInfos); err != nil {
-		return nil, fmt.Errorf("fetch deactivate candidates of %s: %w", project.ID, err)
-	}
-
-	return clientInfos, nil
-}
-
-// FindCompactionCandidatesPerProject finds the documents that need compaction per project.
-func (c *Client) FindCompactionCandidatesPerProject(
-	ctx context.Context,
-	project *database.ProjectInfo,
-	candidatesLimit int,
-	compactionMinChanges int,
-) ([]*database.DocInfo, error) {
-	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"project_id": project.ID,
-	}, options.Find().SetLimit(int64(candidatesLimit*2)))
-	if err != nil {
-		return nil, fmt.Errorf("find compaction candidates of %s: %w", project.ID, err)
-	}
-	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	var infos []*database.DocInfo
-	for cursor.Next(ctx) {
-		var info database.DocInfo
-		if err := cursor.Decode(&info); err != nil {
-			return nil, fmt.Errorf("decode document: %w", err)
-		}
-
-		if candidatesLimit <= len(infos) {
-			break
-		}
-
-		// 1. Check if the document is attached to a client.
-		// TODO(chacha912): Resolve the N+1 problem.
-		isAttached, err := c.IsDocumentAttached(ctx, types.DocRefKey{
-			ProjectID: project.ID,
-			DocID:     info.ID,
-		}, "")
-		if err != nil {
-			return nil, err
-		}
-		if isAttached {
-			continue
-		}
-
-		// 2. Check if the document has enough changes to compact.
-		if info.ServerSeq < int64(compactionMinChanges) {
-			continue
-		}
-
-		infos = append(infos, &info)
-	}
-	if err := cursor.Err(); err != nil {
-		return nil, fmt.Errorf("cursor error: %w", err)
-	}
-
-	return infos, nil
-}
-
-// FindAttachedClientInfosByRefKey returns the client infos of the given document.
+// FindAttachedClientInfosByRefKey returns the attached client infos of the given document.
 func (c *Client) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
@@ -1100,12 +1084,123 @@ func (c *Client) FindAttachedClientInfosByRefKey(
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
-	var clientInfos []*database.ClientInfo
-	if err := cursor.All(ctx, &clientInfos); err != nil {
+	var infos []*database.ClientInfo
+	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find attached clients of %s: %w", docRefKey, err)
 	}
 
-	return clientInfos, nil
+	for _, info := range infos {
+		refKey := types.ClientRefKey{ProjectID: info.ProjectID, ClientID: info.ID}
+		c.clientCache.Add(refKey, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
+// FindActiveClients finds active clients for deactivation checking.
+func (c *Client) FindActiveClients(
+	ctx context.Context,
+	candidatesLimit int,
+	lastClientID types.ID,
+) ([]*database.ClientInfo, types.ID, error) {
+	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
+		"_id":    bson.M{"$gt": lastClientID},
+		"status": database.ClientActivated,
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+	if err != nil {
+		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
+	}
+
+	var infos []*database.ClientInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, database.ZeroID, fmt.Errorf("fetch active clients: %w", err)
+	}
+
+	var lastID types.ID = database.ZeroID
+	if len(infos) > 0 {
+		lastID = infos[len(infos)-1].ID
+	}
+
+	return infos, lastID, nil
+}
+
+// FindCompactionCandidates finds documents that need compaction.
+func (c *Client) FindCompactionCandidates(
+	ctx context.Context,
+	candidatesLimit int,
+	compactionMinChanges int,
+	lastDocID types.ID,
+) ([]*database.DocInfo, types.ID, error) {
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"_id":        bson.M{"$gt": lastDocID},
+		"server_seq": bson.M{"$gte": compactionMinChanges},
+	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+	if err != nil {
+		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, database.ZeroID, fmt.Errorf("fetch compaction candidates direct: %w", err)
+	}
+
+	var lastID types.ID = database.ZeroID
+	if len(infos) > 0 {
+		lastID = infos[len(infos)-1].ID
+	}
+
+	return infos, lastID, nil
+}
+
+// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
+func (c *Client) FindAttachedClientCountsByDocIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) (map[types.ID]int, error) {
+	if len(docIDs) == 0 {
+		return map[types.ID]int{}, nil
+	}
+	cursor, err := c.collection(ColClients).Aggregate(ctx, mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"project_id": projectID,
+			"status":     database.ClientActivated,
+			"attached_docs": bson.M{
+				"$in": docIDs,
+			},
+		}}},
+		bson.D{{Key: "$unwind", Value: "$attached_docs"}},
+		bson.D{{Key: "$match", Value: bson.M{"attached_docs": bson.M{"$in": docIDs}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":   "$attached_docs",
+			"count": bson.M{"$sum": 1},
+		}}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+	}
+
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+
+	var attachedClientMap = make(map[types.ID]int)
+	for _, docID := range docIDs {
+		attachedClientMap[docID] = 0
+	}
+
+	for cursor.Next(ctx) {
+		var attachedInfo struct {
+			ID    types.ID `bson:"_id"`
+			Count int      `bson:"count"`
+		}
+		if err := cursor.Decode(&attachedInfo); err != nil {
+			return nil, fmt.Errorf("find attached client counts of %s: %w", docIDs, err)
+		}
+		attachedClientMap[attachedInfo.ID] = attachedInfo.Count
+	}
+
+	return attachedClientMap, nil
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
@@ -1177,12 +1272,12 @@ func (c *Client) FindDocInfoByKey(
 		return nil, fmt.Errorf("find document of %s: %w", docKey, result.Err())
 	}
 
-	info := database.DocInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("find document of %s: %w", docKey, err)
 	}
 
-	return &info, nil
+	return info, nil
 }
 
 // FindDocInfosByKeys finds the documents of the given keys.
@@ -1209,12 +1304,38 @@ func (c *Client) FindDocInfosByKeys(
 		return nil, fmt.Errorf("find documents of %v: %w", docKeys, err)
 	}
 
-	var docInfos []*database.DocInfo
-	if err := cursor.All(ctx, &docInfos); err != nil {
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("find documents of %v: %w", docKeys, err)
 	}
 
-	return docInfos, nil
+	return infos, nil
+}
+
+// FindDocInfosByIDs finds the documents of the given ids.
+func (c *Client) FindDocInfosByIDs(
+	ctx context.Context,
+	projectID types.ID,
+	docIDs []types.ID,
+) ([]*database.DocInfo, error) {
+	if len(docIDs) == 0 {
+		return nil, nil
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
+		"project_id": projectID,
+		"_id":        bson.M{"$in": docIDs},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("find documents of %v: %w", docIDs, err)
+	}
+
+	return infos, nil
 }
 
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
@@ -1222,23 +1343,27 @@ func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) (*database.DocInfo, error) {
+	if info, ok := c.docCache.Get(refKey); ok {
+		return info.DeepCopy(), nil
+	}
+
 	result := c.collection(ColDocuments).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.DocID,
 	})
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find document of %s: %w", refKey, result.Err())
-	}
 
-	info := database.DocInfo{}
-	if err := result.Decode(&info); err != nil {
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		}
+
 		return nil, fmt.Errorf("find document of %s: %w", refKey, err)
 	}
 
-	return &info, nil
+	c.docCache.Add(refKey, info.DeepCopy())
+
+	return info, nil
 }
 
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
@@ -1330,66 +1455,90 @@ func (c *Client) CreateChangeInfos(
 	changes []*database.ChangeInfo,
 	isRemoved bool,
 ) (*database.DocInfo, change.Checkpoint, error) {
-	cached, ok := c.docCache.Get(refKey)
-	if !ok {
-		info, err := c.FindDocInfoByRefKey(ctx, refKey)
-		if err != nil {
-			return nil, change.InitialCheckpoint, err
-		}
-		c.docCache.Add(refKey, info)
-		cached = info
-	}
-	docInfo := cached.DeepCopy()
-
 	// 01. Fetch the document info.
+	docInfo, err := c.FindDocInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, change.InitialCheckpoint, err
+	}
 	if len(changes) == 0 && !isRemoved {
 		return docInfo, checkpoint, nil
 	}
 
-	// 02. Optimized batch processing
 	initialServerSeq := docInfo.ServerSeq
 	now := gotime.Now()
 
-	// Pre-allocate models slice to avoid dynamic allocations
-	models := make([]mongo.WriteModel, 0, len(changes))
+	// 02. Separate presence-only changes and operation changes.
 	hasOperations := false
-
+	var prChanges []*database.ChangeInfo
+	var opChanges []*database.ChangeInfo
 	for _, cn := range changes {
 		serverSeq := docInfo.IncreaseServerSeq()
 		checkpoint = checkpoint.NextServerSeq(serverSeq)
 		cn.ServerSeq = serverSeq
 		checkpoint = checkpoint.SyncClientSeq(cn.ClientSeq)
 
-		if len(cn.Operations) > 0 {
-			hasOperations = true
+		if cn.PresenceOnly() {
+			prChanges = append(prChanges, cn)
+			continue
 		}
 
-		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"project_id": refKey.ProjectID,
-			"doc_id":     refKey.DocID,
-			"server_seq": cn.ServerSeq,
-		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        cn.ActorID,
-			"client_seq":      cn.ClientSeq,
-			"lamport":         cn.Lamport,
-			"version_vector":  cn.VersionVector,
-			"message":         cn.Message,
-			"operations":      cn.Operations,
-			"presence_change": cn.PresenceChange,
-		}}).SetUpsert(true))
+		if cn.HasOperations() {
+			opChanges = append(opChanges, cn)
+			hasOperations = true
+		}
 	}
 
-	if len(changes) > 0 {
+	// 03. Store presence-only changes.
+	if len(prChanges) > 0 {
+		var prStore *ChangeStore
+		if cached, ok := c.presenceCache.Get(refKey); ok {
+			prStore = cached
+		} else {
+			prStore = NewChangeStore()
+			c.presenceCache.Add(refKey, prStore)
+		}
+		prStore.ReplaceOrInsert(prChanges)
+	}
+
+	// 04. Store operation changes.
+	if len(opChanges) > 0 {
+		var opModels []mongo.WriteModel
+		for _, c := range opChanges {
+			opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
+				"project_id": refKey.ProjectID,
+				"doc_id":     refKey.DocID,
+				"server_seq": c.ServerSeq,
+			}).SetUpdate(bson.M{"$set": bson.M{
+				"actor_id":        c.ActorID,
+				"client_seq":      c.ClientSeq,
+				"lamport":         c.Lamport,
+				"version_vector":  c.VersionVector,
+				"message":         c.Message,
+				"operations":      c.Operations,
+				"presence_change": c.PresenceChange,
+			}}).SetUpsert(true))
+		}
+
 		if _, err := c.collection(ColChanges).BulkWrite(
 			ctx,
-			models,
+			opModels,
 			options.BulkWrite().SetOrdered(false),
 		); err != nil {
 			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
 		}
 	}
 
-	// 03. Update the document info with the given changes.
+	var opStore *ChangeStore
+	if cached, ok := c.changeCache.Get(refKey); ok {
+		opStore = cached
+	} else {
+		opStore = NewChangeStore()
+		c.changeCache.Add(refKey, opStore)
+	}
+	opStore.ReplaceOrInsert(opChanges)
+	opStore.ExpandRange(ChangeRange{From: initialServerSeq + 1, To: docInfo.ServerSeq})
+
+	// 05. Update the document info with the given changes.
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
 	}
@@ -1510,19 +1659,16 @@ func (c *Client) FindLatestChangeInfoByActor(
 		},
 	}, option)
 
-	changeInfo := &database.ChangeInfo{}
-	if result.Err() == mongo.ErrNoDocuments {
-		return changeInfo, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find the latest change of %s: %w", docRefKey, result.Err())
-	}
+	info := &database.ChangeInfo{}
+	if err := result.Decode(info); err != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return info, nil
+		}
 
-	if err := result.Decode(changeInfo); err != nil {
 		return nil, fmt.Errorf("find the latest change of %s: %w", docRefKey, err)
 	}
 
-	return changeInfo, nil
+	return info, nil
 }
 
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
@@ -1543,6 +1689,7 @@ func (c *Client) FindChangesBetweenServerSeqs(
 		if err != nil {
 			return nil, err
 		}
+
 		changes = append(changes, c)
 	}
 
@@ -1560,18 +1707,24 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, nil
 	}
 
-	// Get or create a change range store for this document
-	var store *ChangeStore
-	if cached, ok := c.changeCache.Get(docRefKey); ok {
-		store = cached
-	} else {
-		store = NewChangeStore()
-		c.changeCache.Add(docRefKey, store)
+	// 01. Create a temporary change store to hold the changes.
+	store := NewChangeStore()
+
+	// 02. Fill the store with presence only changes.
+	if prStore, ok := c.presenceCache.Get(docRefKey); ok {
+		store.ReplaceOrInsert(prStore.ChangesInRange(from, to))
 	}
 
-	// Calculate missing ranges and fetch them in a single operation
-	if err := store.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
-		// NOTE(hackerwins): Paginate fetching to avoid loading too many ChangeInfos at once.
+	// 03. Fill the store with operation changes. If not cached, load from DB.
+	var opStore *ChangeStore
+	if cached, ok := c.changeCache.Get(docRefKey); ok {
+		opStore = cached
+	} else {
+		opStore = NewChangeStore()
+		c.changeCache.Add(docRefKey, opStore)
+	}
+
+	if err := opStore.EnsureChanges(from, to, func(from, to int64) ([]*database.ChangeInfo, error) {
 		const chunkSize int64 = 1000
 		var infos []*database.ChangeInfo
 		current := from
@@ -1604,7 +1757,9 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}); err != nil {
 		return nil, err
 	}
+	store.ReplaceOrInsert(opStore.ChangesInRange(from, to))
 
+	// 04. Return the changes in the given range.
 	return store.ChangesInRange(from, to), nil
 }
 
@@ -1646,19 +1801,16 @@ func (c *Client) FindSnapshotInfo(
 		"server_seq": serverSeq,
 	})
 
-	snapshotInfo := &database.SnapshotInfo{}
-	if result.Err() == mongo.ErrNoDocuments {
-		return snapshotInfo, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, result.Err())
-	}
+	info := &database.SnapshotInfo{}
+	if err := result.Decode(info); err != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return info, nil
+		}
 
-	if err := result.Decode(snapshotInfo); err != nil {
 		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, err)
 	}
 
-	return snapshotInfo, nil
+	return info, nil
 }
 
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
@@ -1684,20 +1836,17 @@ func (c *Client) FindClosestSnapshotInfo(
 		},
 	}, option)
 
-	snapshotInfo := &database.SnapshotInfo{}
-	if result.Err() == mongo.ErrNoDocuments {
-		snapshotInfo.VersionVector = time.NewVersionVector()
-		return snapshotInfo, nil
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, result.Err())
-	}
+	info := &database.SnapshotInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			info.VersionVector = time.NewVersionVector()
+			return info, nil
+		}
 
-	if err := result.Decode(snapshotInfo); err != nil {
 		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
 	}
 
-	return snapshotInfo, nil
+	return info, nil
 }
 
 // UpdateMinVersionVector updates the version vector of the given client
@@ -1711,8 +1860,16 @@ func (c *Client) UpdateMinVersionVector(
 	// 01. Update synced version vector of the given client and document.
 	// NOTE(hackerwins): Considering removing the detached client's lamport
 	// from the other clients' version vectors. For now, we just ignore it.
-	if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
-		return nil, err
+	needsUpdate := true
+	if vvMap, ok := c.vectorCache.Get(docRefKey); ok {
+		if existing, ok := vvMap.Get(clientInfo.ID); ok && vector.Equal(existing) {
+			needsUpdate = false
+		}
+	}
+	if needsUpdate {
+		if err := c.updateVersionVector(ctx, clientInfo, docRefKey, vector); err != nil {
+			return nil, err
+		}
 	}
 
 	// 02. Update current client's version vector. If the client is detached, remove it.
@@ -1770,7 +1927,10 @@ func (c *Client) GetMinVersionVector(
 		return nil, fmt.Errorf("find min version vector: %w", database.ErrVersionVectorNotFound)
 	}
 
-	vectors := append(vvMap.Values(), vector)
+	vals := vvMap.Values()
+	vectors := make([]time.VersionVector, len(vals)+1)
+	copy(vectors, vals)
+	vectors[len(vals)] = vector
 	return time.MinVersionVector(vectors...), nil
 }
 
@@ -1907,8 +2067,14 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.ClientInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is document %s attached: %w", docRefKey, err)
 	}
 
 	return true, nil
@@ -1965,14 +2131,11 @@ func (c *Client) GetSchemaInfo(
 	})
 
 	info := &database.SchemaInfo{}
-	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("find schema of %s@%d: %w", name, version, database.ErrSchemaNotFound)
-	}
-	if result.Err() != nil {
-		return nil, fmt.Errorf("find schema of %s@%d: %w", name, version, result.Err())
-	}
-
 	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find schema of %s@%d: %w", name, version, database.ErrSchemaNotFound)
+		}
+
 		return nil, fmt.Errorf("decode schema of %s@%d: %w", name, version, err)
 	}
 
@@ -2087,6 +2250,9 @@ func (c *Client) purgeDocumentInternals(
 	counts := make(map[string]int64)
 
 	c.changeCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+	c.vectorCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
+
 	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
 		"doc_id":     docID,
@@ -2161,8 +2327,15 @@ func (c *Client) IsSchemaAttached(
 	}
 
 	result := c.collection(ColDocuments).FindOne(ctx, filter)
-	if result.Err() == mongo.ErrNoDocuments {
-		return false, nil
+
+	info := &database.DocInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("is schema %s attached: %w", schema, err)
 	}
+
 	return true, nil
 }

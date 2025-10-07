@@ -23,25 +23,34 @@ import (
 	"time"
 )
 
-// LeadershipInfo represents the leadership information of a node in the cluster.
-type LeadershipInfo struct {
-	Hostname   string    `bson:"hostname"`
+// ClusterNodeInfo represents the leadership information of a node in the cluster.
+type ClusterNodeInfo struct {
+	RPCAddr    string    `bson:"rpc_addr"`
 	LeaseToken string    `bson:"lease_token"`
-	ElectedAt  time.Time `bson:"elected_at"`
 	ExpiresAt  time.Time `bson:"expires_at"`
-	RenewedAt  time.Time `bson:"renewed_at"`
-	Term       int64     `bson:"term"`
-	Singleton  int       `bson:"singleton"`
+	UpdatedAt  time.Time `bson:"updated_at"`
+	IsLeader   bool      `bson:"is_leader"`
 }
 
-// IsExpired returns true if the leadership lease has expired.
-func (li *LeadershipInfo) IsExpired() bool {
-	return time.Now().After(li.ExpiresAt)
+// IsExpired reports whether the leadership lease has expired.
+// Used only in memDB (in-memory database) implementations.
+func (ci *ClusterNodeInfo) IsExpired() bool {
+	return time.Now().After(ci.ExpiresAt)
 }
 
-// TimeUntilExpiry returns the duration until the lease expires.
-func (li *LeadershipInfo) TimeUntilExpiry() time.Duration {
-	return time.Until(li.ExpiresAt)
+// TimeUntilExpiry returns the duration until the lease expires for memory database storage.
+// Used only in memDB (in-memory database) implementations.
+func (ci *ClusterNodeInfo) TimeUntilExpiry() time.Duration {
+	return time.Until(ci.ExpiresAt)
+}
+
+// DeepCopy returns a deep copy of this cluster node info.
+func (ci *ClusterNodeInfo) DeepCopy() *ClusterNodeInfo {
+	if ci == nil {
+		return nil
+	}
+	cpy := *ci
+	return &cpy
 }
 
 // GenerateLeaseToken generates a cryptographically secure random token

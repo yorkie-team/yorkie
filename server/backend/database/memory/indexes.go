@@ -19,19 +19,39 @@ package memory
 import "github.com/hashicorp/go-memdb"
 
 var (
+	tblClusterNodes   = "clusternodes"
 	tblProjects       = "projects"
 	tblUsers          = "users"
 	tblClients        = "clients"
 	tblDocuments      = "documents"
+	tblSchemas        = "schemas"
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
-	tblSchemas        = "schemas"
-	tblLeaderships    = "leaderships"
 )
 
 var schema = &memdb.DBSchema{
 	Tables: map[string]*memdb.TableSchema{
+		tblClusterNodes: {
+			Name: tblClusterNodes,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"rpc_addr": {
+					Name:    "rpc_addr",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "RPCAddr"},
+				},
+				"is_leader": {
+					Name:    "is_leader",
+					Unique:  false,
+					Indexer: &memdb.BoolFieldIndex{Field: "IsLeader"},
+				},
+			},
+		},
 		tblProjects: {
 			Name: tblProjects,
 			Indexes: map[string]*memdb.IndexSchema{
@@ -154,6 +174,40 @@ var schema = &memdb.DBSchema{
 				},
 			},
 		},
+		tblSchemas: {
+			Name: tblSchemas,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
+				},
+				"project_id_name": {
+					Name: "project_id_name",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Name"},
+						},
+					},
+				},
+				"project_id_name_version": {
+					Name:   "project_id_name_version",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Name"},
+							&memdb.IntFieldIndex{Field: "Version"},
+						},
+					},
+				},
+			},
+		},
 		tblChanges: {
 			Name: tblChanges,
 			Indexes: map[string]*memdb.IndexSchema{
@@ -251,50 +305,6 @@ var schema = &memdb.DBSchema{
 							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
-				},
-			},
-		},
-		tblSchemas: {
-			Name: tblSchemas,
-			Indexes: map[string]*memdb.IndexSchema{
-				"id": {
-					Name:    "id",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "ID"},
-				},
-				"project_id": {
-					Name:    "project_id",
-					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
-				},
-				"project_id_name": {
-					Name: "project_id_name",
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "ProjectID"},
-							&memdb.StringFieldIndex{Field: "Name"},
-						},
-					},
-				},
-				"project_id_name_version": {
-					Name:   "project_id_name_version",
-					Unique: true,
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "ProjectID"},
-							&memdb.StringFieldIndex{Field: "Name"},
-							&memdb.IntFieldIndex{Field: "Version"},
-						},
-					},
-				},
-			},
-		},
-		tblLeaderships: {
-			Name: tblLeaderships,
-			Indexes: map[string]*memdb.IndexSchema{
-				"id": {
-					Name:    "id",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
 			},
 		},

@@ -17,27 +17,30 @@
 package json
 
 import (
-	"errors"
-
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 var (
 	// ErrEmptyTextNode is returned when there's empty string value in text node
-	ErrEmptyTextNode = errors.New("text node cannot have empty value")
+	ErrEmptyTextNode = errors.InvalidArgument("text node cannot have empty value")
+
 	// ErrMixedNodeType is returned when there're element node and text node inside contents array
-	ErrMixedNodeType = errors.New("element node and text node cannot be passed together")
+	ErrMixedNodeType = errors.InvalidArgument("element node and text node cannot be passed together")
+
 	// ErrIndexBoundary is returned when from index is bigger than to index
-	ErrIndexBoundary = errors.New("from should be less than or equal to to")
+	ErrIndexBoundary = errors.InvalidArgument("from should be less than or equal to to")
+
 	// ErrPathLenDiff is returned when two paths have different length
-	ErrPathLenDiff = errors.New("both paths should have same length")
+	ErrPathLenDiff = errors.InvalidArgument("both paths should have same length")
+
 	// ErrEmptyPath is returned when there's empty path
-	ErrEmptyPath = errors.New("path should not be empty")
+	ErrEmptyPath = errors.InvalidArgument("path should not be empty")
 )
 
 // TreeNode is a node of Tree.

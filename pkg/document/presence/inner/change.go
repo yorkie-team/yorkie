@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-// Package innerpresence provides the implementation of Presence.
+// Package inner provides the implementation of Presence.
 // If the client is watching a document, the presence is shared with
 // all other clients watching the same document.
-package innerpresence
+package inner
 
 import "github.com/yorkie-team/yorkie/pkg/document/time"
 
@@ -45,4 +45,9 @@ func (c *Change) Execute(actorID time.ActorID, presences *Map) {
 	} else {
 		presences.Store(actorID.String(), c.Presence)
 	}
+}
+
+// IsClear returns true if the change is of type Clear.
+func (c *Change) IsClear() bool {
+	return c.ChangeType == Clear
 }

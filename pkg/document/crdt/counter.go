@@ -21,8 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ErrUnsupportedType is returned when the given type is not supported.

@@ -17,21 +17,24 @@
 package converter
 
 import (
-	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
+// ErrUnmarshallFailed is returned when unmarshalling fails.
+var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
+
 // BytesToSnapshot creates a Snapshot from the given byte array.
-func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) {
+func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 	if len(snapshot) == 0 {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), innerpresence.NewMap(), nil
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), presence.NewMap(), nil
 	}
 
 	pbSnapshot := &api.Snapshot{}
@@ -51,7 +54,7 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbElem := &api.JSONElement{}
@@ -70,7 +73,7 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 // BytesToArray creates a Array from the given byte array.
 func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbArray := &api.JSONElement{}
@@ -89,7 +92,7 @@ func BytesToArray(snapshot []byte) (*crdt.Array, error) {
 // BytesToTree creates a Tree from the given byte array.
 func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 	if len(snapshot) == 0 {
-		return nil, errors.New("snapshot should not be empty")
+		return nil, errors.InvalidArgument("snapshot should not be empty")
 	}
 
 	pbTree := &api.JSONElement{}
@@ -329,12 +332,13 @@ func fromTextNode(
 		id,
 		crdt.NewTextValue(pbNode.Value, attrs),
 	)
+
 	if pbNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 		if err != nil {
 			return nil, err
 		}
-		textNode.Remove(removedAt, time.MaxLamport)
+		textNode.SetRemovedAt(removedAt)
 	}
 	return textNode, nil
 }

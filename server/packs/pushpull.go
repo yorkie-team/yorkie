@@ -18,7 +18,6 @@ package packs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -30,8 +29,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -66,7 +66,7 @@ type PushPullOptions struct {
 var (
 	// ErrInvalidServerSeq is returned when the given server seq greater than
 	// the initial server seq.
-	ErrInvalidServerSeq = errors.New("invalid server seq")
+	ErrInvalidServerSeq = errors.Internal("invalid server seq").WithCode("ErrInvalidServerSeq")
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -81,16 +81,19 @@ func PushPull(
 	opts PushPullOptions,
 ) (*ServerPack, error) {
 	start := gotime.Now()
+	hostname := be.Config.Hostname
 
 	// 01. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
 	// 02. pull the pack from the database.
 	resPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialSeq, opts)
 	if err != nil {
+		be.Metrics.AddPushPullErrors(hostname, project, 1)
 		return nil, err
 	}
 
@@ -109,7 +112,6 @@ func PushPull(
 		)
 	}
 
-	hostname := be.Config.Hostname
 	be.Metrics.AddPushPullReceivedChanges(hostname, project, reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(hostname, project, reqPack.OperationsLen())
 	be.Metrics.AddPushPullSentChanges(hostname, project, resPack.ChangesLen())
@@ -136,12 +138,18 @@ func PushPull(
 			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {
+				options, err := project.GetEventWebhookOptions()
+				if err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
 				if err := be.EventWebhookManager.Send(ctx, types.NewEventWebhookInfo(
 					docKey,
 					events.DocRootChanged.WebhookType(),
 					project.SecretKey,
 					project.EventWebhookURL,
 					docInfo.Key.String(),
+					options,
 				)); err != nil {
 					logging.From(ctx).Error(err)
 					return

@@ -17,16 +17,16 @@
 package document
 
 import (
-	"errors"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
+	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // StatusType represents the status of the document.
@@ -48,7 +48,7 @@ const (
 
 var (
 	// ErrDocumentRemoved occurs when the document is removed.
-	ErrDocumentRemoved = errors.New("document is removed")
+	ErrDocumentRemoved = errors.FailedPrecond("document is removed")
 )
 
 // InternalDocument is a document that is used internally. It is not directly
@@ -77,7 +77,7 @@ type InternalDocument struct {
 
 	// presences is the map of the presence. It is used to store the presence
 	// of the actors who are attaching this document.
-	presences *innerpresence.Map
+	presences *presence.Map
 
 	// onlineClients is the set of the client who is editing this document in
 	// online.
@@ -99,7 +99,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 		root:          crdt.NewRoot(root),
 		checkpoint:    change.InitialCheckpoint,
 		changeID:      change.InitialID(),
-		presences:     innerpresence.NewMap(),
+		presences:     presence.NewMap(),
 		onlineClients: &gosync.Map{},
 	}
 }
@@ -298,7 +298,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			clientID := c.ID().ActorID().String()
 			if _, ok := d.onlineClients.Load(clientID); ok {
 				switch c.PresenceChange().ChangeType {
-				case innerpresence.Put:
+				case presence.Put:
 					// NOTE(chacha912): When the user exists in onlineClients, but
 					// their presence was initially absent, we can consider that we have
 					// received their initial presence, so trigger the 'watched' event.
@@ -308,12 +308,12 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 					}
 					event := DocEvent{
 						Type: eventType,
-						Presences: map[string]innerpresence.Presence{
+						Presences: map[string]presence.Data{
 							clientID: c.PresenceChange().Presence,
 						},
 					}
 					events = append(events, event)
-				case innerpresence.Clear:
+				case presence.Clear:
 					// NOTE(chacha912): When the user exists in onlineClients, but
 					// PresenceChange(clear) is received, we can consider it as detachment
 					// occurring before unwatch.
@@ -321,7 +321,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 					// them from the online clients and trigger the 'unwatched' event.
 					event := DocEvent{
 						Type: UnwatchedEvent,
-						Presences: map[string]innerpresence.Presence{
+						Presences: map[string]presence.Data{
 							clientID: d.Presence(clientID),
 						},
 					}
@@ -342,9 +342,9 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 }
 
 // MyPresence returns the presence of the actor currently editing the document.
-func (d *InternalDocument) MyPresence() innerpresence.Presence {
+func (d *InternalDocument) MyPresence() presence.Data {
 	if d.status != StatusAttached {
-		return innerpresence.New()
+		return presence.NewData()
 	}
 	p := d.presences.Load(d.changeID.ActorID().String())
 	return p.DeepCopy()
@@ -352,7 +352,7 @@ func (d *InternalDocument) MyPresence() innerpresence.Presence {
 
 // Presence returns the presence of the given client.
 // If the client is not online, it returns nil.
-func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
+func (d *InternalDocument) Presence(clientID string) presence.Data {
 	if _, ok := d.onlineClients.Load(clientID); !ok {
 		return nil
 	}
@@ -362,13 +362,13 @@ func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
 
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
-func (d *InternalDocument) PresenceForTest(clientID string) innerpresence.Presence {
+func (d *InternalDocument) PresenceForTest(clientID string) presence.Data {
 	return d.presences.Load(clientID).DeepCopy()
 }
 
 // Presences returns the presence map of online clients.
-func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
-	presences := make(map[string]innerpresence.Presence)
+func (d *InternalDocument) Presences() map[string]presence.Data {
+	presences := make(map[string]presence.Data)
 	d.onlineClients.Range(func(key, value interface{}) bool {
 		p := d.presences.Load(key.(string))
 		if p == nil {
@@ -382,7 +382,7 @@ func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
 
 // AllPresences returns the presence map of all clients
 // regardless of whether the client is online or not.
-func (d *InternalDocument) AllPresences() map[string]innerpresence.Presence {
+func (d *InternalDocument) AllPresences() map[string]presence.Data {
 	return d.presences.ToMap()
 }
 

@@ -18,33 +18,35 @@
 // Protobuf, bytes and vice versa.
 package converter
 
-import "errors"
+import (
+	"github.com/yorkie-team/yorkie/pkg/errors"
+)
 
 var (
 	// ErrPackRequired is returned when an empty pack is passed.
-	ErrPackRequired = errors.New("pack required")
+	ErrPackRequired = errors.InvalidArgument("pack required").WithCode("ErrPackRequired")
 
 	// ErrCheckpointRequired is returned when a pack with an empty checkpoint is
 	// passed.
-	ErrCheckpointRequired = errors.New("checkpoint required")
+	ErrCheckpointRequired = errors.InvalidArgument("checkpoint required").WithCode("ErrCheckpointRequired")
 
 	// ErrUnsupportedOperation is returned when the given operation is not
 	// supported yet.
-	ErrUnsupportedOperation = errors.New("unsupported operation")
+	ErrUnsupportedOperation = errors.InvalidArgument("unsupported operation").WithCode("ErrUnsupportedOperation")
 
 	// ErrUnsupportedElement is returned when the given element is not
 	// supported yet.
-	ErrUnsupportedElement = errors.New("unsupported element")
+	ErrUnsupportedElement = errors.InvalidArgument("unsupported element").WithCode("ErrUnsupportedElement")
 
 	// ErrUnsupportedEventType is returned when the given event type is not
 	// supported yet.
-	ErrUnsupportedEventType = errors.New("unsupported event type")
+	ErrUnsupportedEventType = errors.InvalidArgument("unsupported event type").WithCode("ErrUnsupportedEventType")
 
 	// ErrUnsupportedValueType is returned when the given value type is not
 	// supported yet.
-	ErrUnsupportedValueType = errors.New("unsupported value type")
+	ErrUnsupportedValueType = errors.InvalidArgument("unsupported value type").WithCode("ErrUnsupportedValueType")
 
 	// ErrUnsupportedCounterType is returned when the given counter type is not
 	// supported yet.
-	ErrUnsupportedCounterType = errors.New("unsupported counter type")
+	ErrUnsupportedCounterType = errors.InvalidArgument("unsupported counter type").WithCode("ErrUnsupportedCounterType")
 )

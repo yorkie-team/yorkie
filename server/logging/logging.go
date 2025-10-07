@@ -18,6 +18,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -25,6 +26,8 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // Logger is a wrapper of zap.Logger.
@@ -32,6 +35,19 @@ type Logger = *zap.SugaredLogger
 
 // Field is a wrapper of zap.Field.
 type Field = zap.Field
+
+// Level represents the logging level.
+type Level = zapcore.Level
+
+// Log levels
+const (
+	Debug = zapcore.DebugLevel
+	Info  = zapcore.InfoLevel
+	Warn  = zapcore.WarnLevel
+	Error = zapcore.ErrorLevel
+	Panic = zapcore.PanicLevel
+	Fatal = zapcore.FatalLevel
+)
 
 var defaultLogger Logger
 var logLevel = zapcore.InfoLevel
@@ -92,6 +108,18 @@ func DefaultLogger() Logger {
 // Enabled returns true if the given level is enabled.
 func Enabled(level zapcore.Level) bool {
 	return level >= logLevel
+}
+
+// LogError logs the given error using the logger from the context.
+func LogError(ctx context.Context, err error) {
+	logger := From(ctx)
+
+	if errors.IsClientError(err) {
+		logger.Warn(err)
+		return
+	}
+
+	logger.Error(err)
 }
 
 // newLogger returns a new raw logger.

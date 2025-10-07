@@ -19,8 +19,8 @@ package crdt
 import (
 	"errors"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // ErrChildNotFound is returned when the child is not found in the container.

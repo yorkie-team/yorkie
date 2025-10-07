@@ -7,6 +7,100 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Optimize cmap.values and improve client activation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1518
+- Update expected failure check for leadership competition by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1519
+
+## [v0.6.32] - 2025-09-24
+
+### Added
+
+- Introduce clusternodes collection to manage cluster nodes by @raararaara in https://github.com/yorkie-team/yorkie/pull/1502
+- Introduce presence memory cache by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1515
+
+### Changed
+
+- Add configurable cache sizes for MongoDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1513
+- Improve operation cache hit rate by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1516
+
+## [v0.6.31] - 2025-09-17
+
+### Added
+
+- Move webhook configuration to project level by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1498
+- Reduce unnecessary DB updates when vectors are already in sync by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1509
+- Reduce unnecessary DB updates when CPs are already in sync by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1510
+
+### Changed
+
+- Simplify RPC logging and its dependency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1499
+- Enhance project listing command with verbose output option by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1501
+- Unify error handling with structured status and metadata by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1504
+
+## [v0.6.30] - 2025-09-11
+
+### Added
+
+- Add project-level RemoveOnDetach setting by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1496
+
+### Changed
+
+- Refactor housekeeping logic for simpler candidate fetching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1492
+- Enhance QueryMonitor with detailed collections and filter by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1494
+
+### Fixed
+
+- Count only successfully compacted documents by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1495
+
+## [v0.6.29] - 2025-09-05
+
+### Fixed
+
+- Add SecretKey Fallback for UseDefaultProject by @kokodak in https://github.com/yorkie-team/yorkie/pull/1475
+- Copy deep cached client info by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1476
+- Ignore test helpers or generated files from test coverage by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1479
+- Ensure deactivation by adding skipCache to FindClientInfoByRefKey by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1480
+- Increase cache hit rate with refined logging and DB fixes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1482
+- Fix garbage size accounting for Text nodes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1483
+- Use ClusterClient for GetDocumentSummary by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1484
+
+## [v0.6.28] - 2025-09-02
+
+### Added
+
+- Introduce client cache for faster client retrieval by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1472
+- Enhance deactivation with asynchronous opts by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1473
+
+### Changed
+
+- Introduce auth scheme and remove projectName from API requests by @SANGHEEJEONG in https://github.com/yorkie-team/yorkie/pull/1471
+
+## [v0.6.27] - 2025-08-29
+
+### Added
+
+- Add metrics for response latency and PushPull errors by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1459
+- Optimize Client.Deactivate by removing N+1 query by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1463
+- Optimize queries by removing N+1 problem by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1468
+
+### Fixed
+
+- Fix Housekeeping failures by allowing Deactivate in Attaching by @kokodak in https://github.com/yorkie-team/yorkie/pull/1460
+
+### Changed
+
+## [v0.6.26] - 2025-08-20
+
+### Changed
+
+- Improve error for better context in DB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1445
+- Improve changes fetching with database-level pagination by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1448
+
+### Fixed
+
+- Fix incorrect tombstone in Tree.Remove for overlapping ranges by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1435
+- Refine server configuration defaults and tests by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1450
+- Fix removedAt timestamp handling in text deletions by @sigmaith in https://github.com/yorkie-team/yorkie/pull/1447
+
 ## [v0.6.25] - 2025-08-12
 
 ### Fixed

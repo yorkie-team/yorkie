@@ -33,13 +33,14 @@ waiting for the lock.
 package locker
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
+
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 // ErrNoSuchLock is returned when the requested lock does not exist
-var ErrNoSuchLock = errors.New("no such lock")
+var ErrNoSuchLock = errors.NotFound("no such lock")
 
 // Locker provides a locking mechanism based on the passed in reference name
 type Locker struct {

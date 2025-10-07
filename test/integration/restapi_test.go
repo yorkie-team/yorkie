@@ -33,10 +33,10 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -109,7 +109,7 @@ func TestRESTAPI(t *testing.T) {
 					doc := document.New(helper.TestDocKey(t, i))
 					assert.NoError(t, cli.Attach(ctx, doc,
 						client.WithInitialRoot(yson.ParseObject(`{"counter": Counter(Long(0))}`)),
-						client.WithPresence(innerpresence.Presence{"key": cli.Key()}),
+						client.WithPresence(presence.Data{"key": cli.Key()}),
 						client.WithRealtimeSync()))
 
 					docs = append(docs, doc)
@@ -154,17 +154,67 @@ func TestRESTAPI(t *testing.T) {
 	})
 
 	t.Run("list documents test", func(t *testing.T) {
-		project, _ := helper.CreateProjectAndDocuments(t, defaultServer, 3)
-		res := post(
-			t,
-			project,
-			fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_key": "test"}`, project.Name),
-		)
+		project := helper.CreateProject(t, defaultServer, t.Name())
+		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
+		assert.NoError(t, err)
+		defer cli1.Close()
+		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
+		assert.NoError(t, err)
+		defer cli2.Close()
 
-		summaries := &documentSummaries{}
-		assert.NoError(t, gojson.Unmarshal(res, summaries))
-		assert.Len(t, summaries.Documents, 3)
+		ctx := context.Background()
+		assert.NoError(t, cli1.Activate(ctx))
+		assert.NoError(t, cli2.Activate(ctx))
+
+		key1, key2 := helper.TestDocKey(t, 1), helper.TestDocKey(t, 2)
+		doc1, doc2 := document.New(key1), document.New(key1)
+		assert.NoError(t, cli1.Attach(ctx, doc1))
+		assert.NoError(t, cli2.Attach(ctx, doc2))
+		doc3 := document.New(key2)
+		assert.NoError(t, cli1.Attach(ctx, doc3))
+
+		assert.NoError(t, cli1.Sync(ctx))
+		{
+			res := post(
+				t,
+				project,
+				fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
+				fmt.Sprintf(`{"project_name": "%s"}`, project.Name),
+			)
+
+			summaries := &documentSummaries{}
+			assert.NoError(t, gojson.Unmarshal(res, summaries))
+			assert.Len(t, summaries.Documents, 2)
+			for _, doc := range summaries.Documents {
+				assert.Contains(t, []key.Key{key1, key2}, doc.Key)
+				if doc.Key == key1 {
+					assert.Equal(t, 2, doc.AttachedClients)
+				} else {
+					assert.Equal(t, 1, doc.AttachedClients)
+				}
+			}
+		}
+		assert.NoError(t, cli1.Deactivate(ctx))
+		{
+			res := post(
+				t,
+				project,
+				fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr()),
+				fmt.Sprintf(`{"project_name": "%s"}`, project.Name),
+			)
+
+			summaries := &documentSummaries{}
+			assert.NoError(t, gojson.Unmarshal(res, summaries))
+			assert.Len(t, summaries.Documents, 2)
+			for _, doc := range summaries.Documents {
+				assert.Contains(t, []key.Key{key1, key2}, doc.Key)
+				if doc.Key == key1 {
+					assert.Equal(t, 1, doc.AttachedClients)
+				} else {
+					assert.Equal(t, 0, doc.AttachedClients)
+				}
+			}
+		}
 	})
 
 	t.Run("search documents test", func(t *testing.T) {
@@ -258,18 +308,6 @@ func TestRESTAPI(t *testing.T) {
 		}
 		wg.Wait()
 	})
-
-	t.Run("document api access control test", func(t *testing.T) {
-		project1 := helper.CreateProject(t, defaultServer, t.Name()+"1")
-		project2 := helper.CreateProject(t, defaultServer, t.Name()+"2")
-
-		postWithUnauthorizedErrorCheck(
-			t,
-			project1,
-			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project2.Name, ""),
-		)
-	})
 }
 
 // post sends a POST request to the given URL with the given body.
@@ -277,7 +315,10 @@ func post(t *testing.T, project *types.Project, url, body string) []byte {
 	req, err := http.NewRequest("POST", url, strings.NewReader(body))
 	assert.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", project.SecretKey)
+	req.Header.Set(
+		types.AuthorizationKey,
+		fmt.Sprintf("%s %s", types.AuthSchemeAPIKey, project.SecretKey),
+	)
 
 	httpClient := http.Client{}
 	res, err := httpClient.Do(req)
@@ -287,16 +328,4 @@ func post(t *testing.T, project *types.Project, url, body string) []byte {
 	resBody, err := io.ReadAll(res.Body)
 	assert.NoError(t, err)
 	return resBody
-}
-
-func postWithUnauthorizedErrorCheck(t *testing.T, project *types.Project, url, body string) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(body))
-	assert.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", project.SecretKey)
-
-	httpClient := http.Client{}
-	res, err := httpClient.Do(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
 }

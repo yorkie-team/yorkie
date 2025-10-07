@@ -97,7 +97,7 @@ func (cp Checkpoint) SyncClientSeq(clientSeq uint32) Checkpoint {
 // Forward updates the given checkpoint with those values when it is greater
 // than the values of internal properties.
 func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
-	if cp.Equals(other) {
+	if cp.Equal(other) {
 		return cp
 	}
 
@@ -108,8 +108,8 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 	return NewCheckpoint(maxServerSeq, maxClientSeq)
 }
 
-// Equals returns whether the given checkpoint is equal to this checkpoint or not.
-func (cp Checkpoint) Equals(other Checkpoint) bool {
+// Equal returns whether the given checkpoint is equal to this checkpoint or not.
+func (cp Checkpoint) Equal(other Checkpoint) bool {
 	return cp.ServerSeq == other.ServerSeq &&
 		cp.ClientSeq == other.ClientSeq
 }

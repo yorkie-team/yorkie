@@ -21,8 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/resource"
 )
 
 // RHTNode is a node of RHT(Replicated Hashtable).

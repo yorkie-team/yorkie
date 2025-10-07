@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.25
+  version: v0.6.32
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -801,6 +801,20 @@ components:
           type: string
       title: Connect Error
       type: object
+    google.protobuf.BoolValue:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `bool`.
+
+         The JSON representation for `BoolValue` is JSON `true` and `false`.
+      properties:
+        value:
+          additionalProperties: false
+          description: The bool value.
+          title: value
+          type: boolean
+      title: BoolValue
+      type: object
     google.protobuf.Int32Value:
       additionalProperties: false
       description: |-
@@ -923,6 +937,22 @@ components:
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
       type: string
+    google.protobuf.UInt64Value:
+      additionalProperties: false
+      description: |-
+        Wrapper message for `uint64`.
+
+         The JSON representation for `UInt64Value` is JSON string.
+      properties:
+        value:
+          additionalProperties: false
+          description: The uint64 value.
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: UInt64Value
+      type: object
     yorkie.v1.Change:
       additionalProperties: false
       description: ""
@@ -1031,11 +1061,6 @@ components:
           description: ""
           title: initial_root
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: CreateDocumentRequest
       type: object
     yorkie.v1.CreateDocumentResponse:
@@ -1077,11 +1102,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         rules:
           additionalProperties: false
           description: ""
@@ -1260,11 +1280,6 @@ components:
           description: ""
           title: document_key
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetDocumentRequest
       type: object
     yorkie.v1.GetDocumentResponse:
@@ -1300,11 +1315,6 @@ components:
           description: ""
           title: include_root
           type: boolean
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetDocumentsRequest
       type: object
     yorkie.v1.GetDocumentsResponse:
@@ -1353,11 +1363,6 @@ components:
           additionalProperties: false
           description: ""
           title: date_range
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: GetProjectStatsRequest
       type: object
     yorkie.v1.GetProjectStatsRequest.DateRange:
@@ -1412,11 +1417,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -1445,11 +1445,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -1505,11 +1500,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_key
-          type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
           type: string
         serverSeq:
           additionalProperties: false
@@ -1606,11 +1596,6 @@ components:
           - type: string
           - type: number
           title: previous_seq
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListChangesRequest
       type: object
     yorkie.v1.ListChangesResponse:
@@ -1651,11 +1636,6 @@ components:
           description: ""
           title: previous_id
           type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListDocumentsRequest
       type: object
     yorkie.v1.ListDocumentsResponse:
@@ -1694,12 +1674,6 @@ components:
     yorkie.v1.ListSchemasRequest:
       additionalProperties: false
       description: ""
-      properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: ListSchemasRequest
       type: object
     yorkie.v1.ListSchemasResponse:
@@ -2380,6 +2354,18 @@ components:
             type: string
           title: allowed_origins
           type: array
+        authWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: auth_webhook_max_retries
+        authWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_wait_interval
+          type: string
         authWebhookMethods:
           additionalProperties: false
           description: ""
@@ -2387,6 +2373,16 @@ components:
             type: string
           title: auth_webhook_methods
           type: array
+        authWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_min_wait_interval
+          type: string
+        authWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
+          type: string
         authWebhookUrl:
           additionalProperties: false
           description: ""
@@ -2410,6 +2406,28 @@ components:
             type: string
           title: event_webhook_events
           type: array
+        eventWebhookMaxRetries:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: event_webhook_max_retries
+        eventWebhookMaxWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_wait_interval
+          type: string
+        eventWebhookMinWaitInterval:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_min_wait_interval
+          type: string
+        eventWebhookRequestTimeout:
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
+          type: string
         eventWebhookUrl:
           additionalProperties: false
           description: ""
@@ -2445,6 +2463,11 @@ components:
           description: ""
           title: public_key
           type: string
+        removeOnDetach:
+          additionalProperties: false
+          description: ""
+          title: remove_on_detach
+          type: boolean
         secretKey:
           additionalProperties: false
           description: ""
@@ -2472,11 +2495,6 @@ components:
           description: ""
           title: force
           type: boolean
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
       title: RemoveDocumentByAdminRequest
       type: object
     yorkie.v1.RemoveDocumentByAdminResponse:
@@ -2488,11 +2506,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         schemaName:
           additionalProperties: false
           description: ""
@@ -2598,11 +2611,6 @@ components:
           description: ""
           title: page_size
           type: integer
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
-          type: string
         query:
           additionalProperties: false
           description: ""
@@ -2829,11 +2837,35 @@ components:
           description: ""
           title: allowed_origins
           type: object
+        authWebhookMaxRetries:
+          $ref: '#/components/schemas/google.protobuf.UInt64Value'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_retries
+          type: object
+        authWebhookMaxWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_max_wait_interval
+          type: object
         authWebhookMethods:
           $ref: '#/components/schemas/yorkie.v1.UpdatableProjectFields.AuthWebhookMethods'
           additionalProperties: false
           description: ""
           title: auth_webhook_methods
+          type: object
+        authWebhookMinWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_min_wait_interval
+          type: object
+        authWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: auth_webhook_request_timeout
           type: object
         authWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'
@@ -2852,6 +2884,30 @@ components:
           additionalProperties: false
           description: ""
           title: event_webhook_events
+          type: object
+        eventWebhookMaxRetries:
+          $ref: '#/components/schemas/google.protobuf.UInt64Value'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_retries
+          type: object
+        eventWebhookMaxWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_max_wait_interval
+          type: object
+        eventWebhookMinWaitInterval:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_min_wait_interval
+          type: object
+        eventWebhookRequestTimeout:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: event_webhook_request_timeout
           type: object
         eventWebhookUrl:
           $ref: '#/components/schemas/google.protobuf.StringValue'
@@ -2882,6 +2938,12 @@ components:
           additionalProperties: false
           description: ""
           title: name
+          type: object
+        removeOnDetach:
+          $ref: '#/components/schemas/google.protobuf.BoolValue'
+          additionalProperties: false
+          description: ""
+          title: remove_on_detach
           type: object
       title: UpdatableProjectFields
       type: object
@@ -2932,11 +2994,6 @@ components:
           additionalProperties: false
           description: ""
           title: document_key
-          type: string
-        projectName:
-          additionalProperties: false
-          description: ""
-          title: project_name
           type: string
         root:
           additionalProperties: false

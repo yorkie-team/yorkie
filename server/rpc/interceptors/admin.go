@@ -18,13 +18,15 @@ package interceptors
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	gotime "time"
 
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -33,8 +35,16 @@ import (
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
-// ErrUnauthenticated is returned when authentication is failed.
-var ErrUnauthenticated = errors.New("authorization is not provided")
+var (
+	// ErrUnauthenticated is returned when authentication is failed.
+	ErrUnauthenticated = errors.Unauthenticated("authorization is not provided")
+
+	// ErrInvalidAuthHeaderFormat is returned when the authorization header format is invalid.
+	ErrInvalidAuthHeaderFormat = errors.InvalidArgument("invalid authorization header format")
+
+	// ErrSecretKeyNotProvided is returned when the secret key is not provided.
+	ErrSecretKeyNotProvided = errors.Unauthenticated("secret key is not provided")
+)
 
 func isAdminService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
@@ -74,6 +84,7 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 			return next(ctx, req)
 		}
 
+		start := gotime.Now()
 		ctx, err := i.buildContext(ctx, req.Spec().Procedure, req.Header())
 		if err != nil {
 			return nil, err
@@ -91,11 +102,14 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 		)
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
-			i.backend.Metrics.AddServerHandledCounter(
+			code := connecthelper.CodeOf(err)
+			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
+			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				code,
+				gotime.Since(start).Seconds(),
 			)
 		}
 
@@ -144,7 +158,7 @@ func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHan
 				"server_stream",
 				split[1],
 				split[2],
-				connecthelper.ToRPCCodeString(err),
+				connecthelper.CodeOf(err),
 			)
 		}
 
@@ -177,41 +191,45 @@ func (i *AdminServiceInterceptor) authenticate(
 	header http.Header,
 ) (context.Context, error) {
 	// NOTE(hackerwins): The token can be provided by the Authorization header or cookie.
-	token := header.Get(types.AuthorizationKey)
-	if token == "" {
+	authHeader := header.Get(types.AuthorizationKey)
+	if authHeader == "" {
 		cookie, err := (&http.Request{Header: header}).Cookie(types.SessionKey)
 		if err != nil && err != http.ErrNoCookie {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		if cookie != nil {
-			token = cookie.Value
+			authHeader = fmt.Sprintf("%s %s", types.AuthSchemeBearer, cookie.Value)
 		}
 	}
-	if token == "" {
+	if authHeader == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
-	claims, err := i.tokenManager.Verify(token)
-
-	// NOTE(hackerwins): If the token is valid, we extract the user information
-	// and set it in the context with the admin access scope.
-	if err == nil {
-		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
-		if err == nil {
-			user.AccessScope = types.AccessScopeAdmin
-			ctx = users.With(ctx, user)
-			return ctx, nil
-		}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 {
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrInvalidAuthHeaderFormat)
 	}
+	scheme := parts[0]
+	param := parts[1]
 
-	// NOTE(hackerwins): If the token is a project secret key, we extract the project
-	// information and set it in the context with the project access scope.
-	project, err := projects.ProjectFromSecretKey(ctx, i.backend, token)
-	if err == nil {
-		user, err := users.GetUserByID(ctx, i.backend, project.Owner)
+	switch {
+	case strings.EqualFold(scheme, types.AuthSchemeBearer):
+		// If the scheme is Bearer, verify the token and retrieve the user.
+		claims, err := i.tokenManager.Verify(param)
 		if err == nil {
-			user.AccessScope = types.AccessScopeProject
-			ctx = users.With(ctx, user)
+			user, err := users.GetUserByName(ctx, i.backend, claims.Username)
+			if err == nil {
+				ctx = users.With(ctx, user)
+				return ctx, nil
+			}
+		}
+	case strings.EqualFold(scheme, types.AuthSchemeAPIKey):
+		// If the scheme is API-Key, verify the secret key and retrieve the project.
+		if strings.TrimSpace(param) == "" && !i.backend.Config.UseDefaultProject {
+			return nil, connect.NewError(connect.CodeUnauthenticated, ErrSecretKeyNotProvided)
+		}
+		project, err := projects.ProjectFromSecretKey(ctx, i.backend, strings.TrimSpace(param))
+		if err == nil {
 			ctx = projects.With(ctx, project)
 			return ctx, nil
 		}

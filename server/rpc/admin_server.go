@@ -28,9 +28,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -199,7 +199,8 @@ func (s *adminServer) GetProject(
 	ctx context.Context,
 	req *connect.Request[api.GetProjectRequest],
 ) (*connect.Response[api.GetProjectResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.Name)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -255,10 +256,7 @@ func (s *adminServer) GetProjectStats(
 		return nil, err
 	}
 
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	stats, err := projects.GetProjectStats(ctx, s.backend, project.ID, from, to)
 	if err != nil {
@@ -278,10 +276,7 @@ func (s *adminServer) CreateDocument(
 	ctx context.Context,
 	req *connect.Request[api.CreateDocumentRequest],
 ) (*connect.Response[api.CreateDocumentResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	var initialRoot yson.Object
 	if req.Msg.InitialRoot != "" {
@@ -315,10 +310,7 @@ func (s *adminServer) GetDocument(
 	ctx context.Context,
 	req *connect.Request[api.GetDocumentRequest],
 ) (*connect.Response[api.GetDocumentResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	document, err := documents.GetDocumentSummary(
 		ctx,
@@ -340,10 +332,7 @@ func (s *adminServer) GetDocuments(
 	ctx context.Context,
 	req *connect.Request[api.GetDocumentsRequest],
 ) (*connect.Response[api.GetDocumentsResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	var keys []key.Key
 	for _, k := range req.Msg.DocumentKeys {
@@ -372,10 +361,7 @@ func (s *adminServer) GetSnapshotMeta(
 	ctx context.Context,
 	req *connect.Request[api.GetSnapshotMetaRequest],
 ) (*connect.Response[api.GetSnapshotMetaResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	doc, err := documents.GetDocumentByServerSeq(
 		ctx,
@@ -410,10 +396,7 @@ func (s *adminServer) ListDocuments(
 	ctx context.Context,
 	req *connect.Request[api.ListDocumentsRequest],
 ) (*connect.Response[api.ListDocumentsResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	docs, err := documents.ListDocumentSummaries(
 		ctx,
@@ -440,10 +423,7 @@ func (s *adminServer) SearchDocuments(
 	ctx context.Context,
 	req *connect.Request[api.SearchDocumentsRequest],
 ) (*connect.Response[api.SearchDocumentsResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	result, err := documents.SearchDocumentSummaries(
 		ctx,
@@ -467,10 +447,7 @@ func (s *adminServer) UpdateDocument(
 	ctx context.Context,
 	req *connect.Request[api.UpdateDocumentRequest],
 ) (*connect.Response[api.UpdateDocumentResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	hasRoot := req.Msg.Root != ""
 	hasSchemaKey := req.Msg.SchemaKey != ""
@@ -519,7 +496,7 @@ func (s *adminServer) UpdateDocument(
 			return nil, err
 		}
 		if count > 0 {
-			return nil, documents.ErrDocumentAttached
+			return nil, packs.ErrDocumentAttached
 		}
 	}
 
@@ -559,10 +536,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	ctx context.Context,
 	req *connect.Request[api.RemoveDocumentByAdminRequest],
 ) (*connect.Response[api.RemoveDocumentByAdminResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
 	defer locker.RUnlock()
@@ -604,10 +578,7 @@ func (s *adminServer) ListChanges(
 	ctx context.Context,
 	req *connect.Request[api.ListChangesRequest],
 ) (*connect.Response[api.ListChangesResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
@@ -657,10 +628,7 @@ func (s *adminServer) CreateSchema(
 		return nil, err
 	}
 
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	schema, err := schemas.CreateSchema(
 		ctx,
@@ -685,10 +653,7 @@ func (s *adminServer) GetSchema(
 	ctx context.Context,
 	req *connect.Request[api.GetSchemaRequest],
 ) (*connect.Response[api.GetSchemaResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	schema, err := schemas.GetSchema(
 		ctx,
@@ -711,10 +676,7 @@ func (s *adminServer) GetSchemas(
 	ctx context.Context,
 	req *connect.Request[api.GetSchemasRequest],
 ) (*connect.Response[api.GetSchemasResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	schemas, err := schemas.GetSchemas(
 		ctx,
@@ -736,10 +698,7 @@ func (s *adminServer) ListSchemas(
 	ctx context.Context,
 	req *connect.Request[api.ListSchemasRequest],
 ) (*connect.Response[api.ListSchemasResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	schemas, err := schemas.ListSchemas(
 		ctx,
@@ -760,10 +719,7 @@ func (s *adminServer) RemoveSchema(
 	ctx context.Context,
 	req *connect.Request[api.RemoveSchemaRequest],
 ) (*connect.Response[api.RemoveSchemaResponse], error) {
-	project, err := s.GetProjectWithAuth(ctx, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
+	project := projects.From(ctx)
 
 	// Check if the schema is being used by any documents
 	schema := fmt.Sprintf("%s@%d", req.Msg.SchemaName, req.Msg.Version)
@@ -828,36 +784,4 @@ func (s *adminServer) RotateProjectKeys(
 	return connect.NewResponse(&api.RotateProjectKeysResponse{
 		Project: converter.ToProject(newProject),
 	}), nil
-}
-
-// GetProjectWithAuth fetches the project based on the user's access scope.
-func (s *adminServer) GetProjectWithAuth(
-	ctx context.Context,
-	projectName string,
-) (*types.Project, error) {
-	user := users.From(ctx)
-
-	switch user.AccessScope {
-	case types.AccessScopeProject:
-		// Verify project from context for project scope
-		ctxProject := projects.From(ctx)
-		if ctxProject.Name != projectName {
-			return nil, fmt.Errorf(
-				"project mismatch: key is for %s, got %s: %w",
-				ctxProject.Name,
-				projectName,
-				auth.ErrUnauthenticated,
-			)
-		}
-		return ctxProject, nil
-	case types.AccessScopeAdmin:
-		// Fetch project for admin scope
-		project, err := projects.GetProject(ctx, s.backend, user.ID, projectName)
-		if err != nil {
-			return nil, err
-		}
-		return project, nil
-	default:
-		return nil, fmt.Errorf("invalid access scope: %s", user.AccessScope)
-	}
 }
