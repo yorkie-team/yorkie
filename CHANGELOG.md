@@ -7,8 +7,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-- Optimize cmap.values and improve client activation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1518
+## [v0.6.33] - 2025-10-14
+
+- Optimize cmap.values slices and client activation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1518
 - Update expected failure check for leadership competition by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1519
+- Refactor leadership to membership by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1522
+- Add Membership Design Document by @raararaara in https://github.com/yorkie-team/yorkie/pull/1521
+- Refactor packages for preparing multiple document types by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1525
+- Move Snapshot configuration to project level by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1527
 
 ## [v0.6.32] - 2025-09-24
 
