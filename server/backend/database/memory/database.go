@@ -165,6 +165,7 @@ func (d *DB) TryLeadership(
 		LeaseToken: newToken,
 		ExpiresAt:  expiresAt,
 		UpdatedAt:  now,
+		IsLeader:   true,
 	}
 
 	record := &clusterNodeRecord{
