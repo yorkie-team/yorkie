@@ -307,6 +307,12 @@ func TestText(t *testing.T) {
 		// TODO(MoonGyu1): d1 and d2 should have the result below after applying mark operation
 		// assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"The "},{"attrs":{"b":"1"},"val":"brown "},{"attrs":{"b":"1"},"val":"fox jumped."}]}`, d1.Marshal())
 	})
+}
+
+func TestTextLWW(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
 		ctx := context.Background()
@@ -368,17 +374,6 @@ func TestText(t *testing.T) {
 		assert.True(t, dNode.RemovedAt().After(bcNode.RemovedAt()),
 			"In causal deletion, 'd' should be deleted after 'bc' (T3 > T2)")
 
-		// Debug logging
-		t.Logf("d1 nodes count: %d", len(nodes1))
-		for i, node := range nodes1 {
-			t.Logf("d1[%d]: value='%s', removed=%v", i, node.Value().String(), node.RemovedAt() != nil)
-		}
-
-		t.Logf("d2 nodes count: %d", len(nodes2))
-		for i, node := range nodes2 {
-			t.Logf("d2[%d]: value='%s', removed=%v", i, node.Value().String(), node.RemovedAt() != nil)
-		}
-
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
@@ -392,7 +387,7 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
 	})
 
-	t.Run("concurrent deletion test for LWW behavior", func(t *testing.T) {
+	t.Run("concurrent deletion test for LWW behavior - complete inclusion (larger range later)", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -426,21 +421,221 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		textNode1 := d1.Root().GetText("k1")
-		textNode2 := d2.Root().GetText("k1")
-
-		nodes1 := textNode1.Nodes()
-		nodes2 := textNode2.Nodes()
+		nodes1 := d1.Root().GetText("k1").Nodes()
+		nodes2 := d2.Root().GetText("k1").Nodes()
 
 		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
 
-		timestampSet := make(map[string]bool)
-		for _, node := range append(nodes1, nodes2...) {
-			assert.NotNil(t, node.RemovedAt(), "All nodes should be deleted")
-			timestampSet[node.RemovedAt().ToTestString()] = true
+		var aNode1, bcNode1, dNode1 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes1 {
+			if node.Value().String() == "a" {
+				aNode1 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode1 = node
+			}
+			if node.Value().String() == "d" {
+				dNode1 = node
+			}
 		}
-		assert.Equal(t, 1, len(timestampSet), "All nodes in both documents should have same timestamp")
+		var aNode2, bcNode2, dNode2 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes2 {
+			if node.Value().String() == "a" {
+				aNode2 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode2 = node
+			}
+			if node.Value().String() == "d" {
+				dNode2 = node
+			}
+		}
 
-		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a node should be removed")
+		assert.NotNil(t, bcNode1.RemovedAt(), "c1 bc node should be removed")
+		assert.NotNil(t, dNode1.RemovedAt(), "c1 d node should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a node should be removed")
+		assert.NotNil(t, bcNode2.RemovedAt(), "c2 bc node should be removed")
+		assert.NotNil(t, dNode2.RemovedAt(), "c2 d node should be removed")
+
+		// all nodes should have same removedAt
+		removedAt := aNode1.RemovedAt()
+		assert.Equal(t, removedAt, bcNode1.RemovedAt(), "bc node should have same removedAt")
+		assert.Equal(t, removedAt, dNode1.RemovedAt(), "d node should have same removedAt")
+		assert.Equal(t, removedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
+		assert.Equal(t, removedAt, bcNode2.RemovedAt(), "bc node should have same removedAt")
+		assert.Equal(t, removedAt, dNode2.RemovedAt(), "d node should have same removedAt")
+		
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - complete inclusion (smaller range later)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "abcd")
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(0, 4, "")
+			return nil
+		}, "delete abcd by c1")
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(1, 3, "")
+			return nil
+		}, "delete bc by c2")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		nodes1 := d1.Root().GetText("k1").Nodes()
+		nodes2 := d2.Root().GetText("k1").Nodes()
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		var aNode1, bcNode1, dNode1 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes1 {
+			if node.Value().String() == "a" {
+				aNode1 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode1 = node
+			}
+			if node.Value().String() == "d" {
+				dNode1 = node
+			}
+		}
+		var aNode2, bcNode2, dNode2 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes2 {
+			if node.Value().String() == "a" {
+				aNode2 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode2 = node
+			}
+			if node.Value().String() == "d" {
+				dNode2 = node
+			}
+		}
+
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a node should be removed")
+		assert.NotNil(t, bcNode1.RemovedAt(), "c1 bc node should be removed")
+		assert.NotNil(t, dNode1.RemovedAt(), "c1 d node should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a node should be removed")
+		assert.NotNil(t, bcNode2.RemovedAt(), "c2 bc node should be removed")
+		assert.NotNil(t, dNode2.RemovedAt(), "c2 d node should be removed")
+		
+		earlierExpectedRemovedAt := aNode1.RemovedAt()
+		laterExpectedRemovedAt := bcNode1.RemovedAt()
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 i node removedAt should be after c1 b node removedAt")
+
+		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, dNode1.RemovedAt(), "d node should have same removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, dNode2.RemovedAt(), "d node should have same removedAt")
+
+		assert.Equal(t, laterExpectedRemovedAt, bcNode2.RemovedAt(), "bc node should have same removedAt")
+		
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - partial overlap", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "abcd")
+			return nil
+		}, "insert abcd")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(0, 3, "")
+			return nil
+		}, "delete abc by c1")
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(1, 4, "")
+			return nil
+		}, "delete bcd by c2")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		nodes1 := d1.Root().GetText("k1").Nodes()
+		nodes2 := d2.Root().GetText("k1").Nodes()
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		var aNode1, bcNode1, dNode1 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes1 {
+			if node.Value().String() == "a" {
+				aNode1 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode1 = node
+			}
+			if node.Value().String() == "d" {
+				dNode1 = node
+			}
+		}
+		var aNode2, bcNode2, dNode2 *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, node := range nodes2 {
+			if node.Value().String() == "a" {
+				aNode2 = node
+			}
+			if node.Value().String() == "bc" {
+				bcNode2 = node
+			}
+			if node.Value().String() == "d" {
+				dNode2 = node
+			}
+		}
+		assert.NotNil(t,
+			aNode1.RemovedAt(),
+			bcNode1.RemovedAt(),
+			dNode1.RemovedAt(),
+			aNode2.RemovedAt(),
+			bcNode2.RemovedAt(),
+			dNode2.RemovedAt(),
+			"c1 and c2 nodes should be removed",
+		)
+
+		// bc and d nodes should have same removedAt
+		assert.Equal(t,
+			bcNode1.RemovedAt().ToTestString(),
+			bcNode2.RemovedAt().ToTestString(),
+			dNode1.RemovedAt().ToTestString(),
+			dNode2.RemovedAt().ToTestString(),
+			"bc and d nodes should have same removedAt",
+		)
+		assert.Equal(t, aNode1.RemovedAt().ToTestString(), aNode2.RemovedAt().ToTestString(), "a nodes should have same removedAt")
+
+		assert.False(t, aNode1.RemovedAt().After(bcNode1.RemovedAt()), "a node removedAt should be after bc node removedAt")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
 	})
 }

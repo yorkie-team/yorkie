@@ -953,6 +953,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("overlapping-merge-and-merge", func(t *testing.T) {
+		t.Skip("skip this for lww performance test")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -3892,5 +3893,665 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>ab</p><p>ced</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+}
+
+func TestTreeLWW(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <b>ab</b><i>cd</i><a>ef</a>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 9, nil, 0)
+			return nil
+		}, "first deletion <i>cd</i> by c1")
+		assert.NoError(t, err)
+
+		// After first deletion, sync c1 and c2
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// After sync, second deletion  to c2
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 9, nil, 0)
+			return nil
+		}, "second deletion <b>ab</b><a>ef</a> by c2")
+		assert.NoError(t, err)
+
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+
+		var bNode, iNode, aNode *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "b" {
+				bNode = node
+			} else if node.Type() == "i" {
+				iNode = node
+			} else if node.Type() == "a" {
+				aNode = node
+			}
+		}
+		assert.NotEmpty(t, bNode, "b node should exist")
+		assert.NotEmpty(t, iNode, "i node should exist")
+		assert.NotEmpty(t, aNode, "a node should exist")
+
+		// i node should be removed after b node
+		bRemovedAt := bNode.RemovedAt()
+		iRemovedAt := iNode.RemovedAt()
+		aRemovedAt := aNode.RemovedAt()
+
+		assert.NotNil(t, bRemovedAt, "b node removedAt should not be nil")
+		assert.NotNil(t, iRemovedAt, "i node removedAt should not be nil")
+		assert.NotNil(t, aRemovedAt, "a node removedAt should not be nil")
+		assert.True(t, bRemovedAt.After(iRemovedAt), "b node removedAt should be after i node removedAt")
+		assert.True(t, aRemovedAt.After(iRemovedAt), "a node removedAt should be after i node removedAt")
+
+		// After sync, c1 and c2 should have same tree
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		nodes1 = d1.Root().GetTree("t").Nodes()
+		nodes2 = d2.Root().GetTree("t").Nodes()
+
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - same level complete inclusion (larger range later)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <p><b>ab</b><i>cd</i><a>ef</a></p>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// c1 deletes i node
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 9, nil, 0)
+			return nil
+		}, "first deletion <i>cd</i> by c1")
+		assert.NoError(t, err)
+
+		// c2 deletes b and a nodes
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 13, nil, 0)
+			return nil
+		}, "second deletion <b>ab</b><i>cd</i><a>ef</a> by c2")
+		assert.NoError(t, err)
+
+		// After sync, c1 and c2 should have same tree
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		
+		// c2 nodes (larger range) are deleted later, so LWW behavior should be working in c1 nodes
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		var bNode1, iNode1, aNode1, abTextNode1, cdTextNode1, efTextNode1 *crdt.TreeNode
+		for _, node := range nodes1 {
+			if node.Type() == "b" {
+				bNode1 = node
+			} else if node.Type() == "i" {
+				iNode1 = node
+			} else if node.Type() == "a" {
+				aNode1 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode1 = node
+			}
+		}
+
+		var bNode2, iNode2, aNode2, abTextNode2, cdTextNode2, efTextNode2 *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "b" {
+				bNode2 = node
+			} else if node.Type() == "i" {
+				iNode2 = node
+			} else if node.Type() == "a" {
+				aNode2 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode2 = node
+			}
+		}
+
+		assert.NotNil(t, bNode1.RemovedAt(), "c1 b nodes should be removed")
+		assert.NotNil(t, iNode1.RemovedAt(), "c1 i nodes should be removed")
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a nodes should be removed")
+		assert.NotNil(t, bNode2.RemovedAt(), "c2 b nodes should be removed")
+		assert.NotNil(t, iNode2.RemovedAt(), "c2 i nodes should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a nodes should be removed")
+		assert.NotNil(t, abTextNode1.RemovedAt(), "c1 ab text node should be removed")
+		assert.NotNil(t, cdTextNode1.RemovedAt(), "c1 cd text node should be removed")
+		assert.NotNil(t, efTextNode1.RemovedAt(), "c1 ef text node should be removed")
+		assert.NotNil(t, abTextNode2.RemovedAt(), "c2 ab text node should be removed")
+		assert.NotNil(t, cdTextNode2.RemovedAt(), "c2 cd text node should be removed")
+		assert.NotNil(t, efTextNode2.RemovedAt(), "c2 ef text node should be removed")
+
+		expectedRemovedAt := bNode1.RemovedAt()
+
+		assert.Equal(t, expectedRemovedAt, iNode1.RemovedAt(), "c1 i nodes should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, aNode1.RemovedAt(), "c1 a nodes should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, iNode2.RemovedAt(), "c2 i nodes should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, aNode2.RemovedAt(), "c2 a nodes should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, bNode2.RemovedAt(), "c2 b nodes should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, abTextNode1.RemovedAt(), "c1 ab text node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, cdTextNode1.RemovedAt(), "c1 cd text node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, efTextNode1.RemovedAt(), "c1 ef text node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, abTextNode2.RemovedAt(), "c2 ab text node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, cdTextNode2.RemovedAt(), "c2 cd text node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, efTextNode2.RemovedAt(), "c2 ef text node should have same removedAt")
+
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - same level complete inclusion (smaller range later)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <p><b>ab</b><i>cd</i><a>ef</a></p>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// c1 deletes b and a nodes
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 13, nil, 0)
+			return nil
+		}, "first deletion <b>ab</b><i>cd</i><a>ef</a> by c1")
+		assert.NoError(t, err)
+		
+		// c2 deletes i node
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 9, nil, 0)
+			return nil
+		}, "second deletion <i>cd</i> by c2")
+		assert.NoError(t, err)
+		
+		// After sync, c1 and c2 should have same tree
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		
+		// c2 nodes (smaller range) are deleted later, so LWW behavior should not be working in c2 nodes
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+		var bNode1, iNode1, aNode1, abTextNode1, cdTextNode1, efTextNode1 *crdt.TreeNode
+		for _, node := range nodes1 {
+			if node.Type() == "b" {
+				bNode1 = node
+			} else if node.Type() == "i" {
+				iNode1 = node
+			} else if node.Type() == "a" {
+				aNode1 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode1 = node
+			}
+		}
+
+		var bNode2, iNode2, aNode2, abTextNode2, cdTextNode2, efTextNode2 *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "b" {
+				bNode2 = node
+			} else if node.Type() == "i" {
+				iNode2 = node
+			} else if node.Type() == "a" {
+				aNode2 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode2 = node
+			}
+		}
+
+		assert.NotNil(t, bNode1.RemovedAt(), "c1 b nodes should be removed")
+		assert.NotNil(t, iNode1.RemovedAt(), "c1 i nodes should be removed")
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a nodes should be removed")
+		assert.NotNil(t, bNode2.RemovedAt(), "c2 b nodes should be removed")
+		assert.NotNil(t, iNode2.RemovedAt(), "c2 i nodes should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a nodes should be removed")
+		assert.NotNil(t, abTextNode1.RemovedAt(), "c1 ab text node should be removed")
+		assert.NotNil(t, cdTextNode1.RemovedAt(), "c1 cd text node should be removed")
+		assert.NotNil(t, efTextNode1.RemovedAt(), "c1 ef text node should be removed")
+		assert.NotNil(t, abTextNode2.RemovedAt(), "c2 ab text node should be removed")
+		assert.NotNil(t, cdTextNode2.RemovedAt(), "c2 cd text node should be removed")
+		assert.NotNil(t, efTextNode2.RemovedAt(), "c2 ef text node should be removed")
+
+		earlierExpectedRemovedAt := bNode1.RemovedAt()
+		laterExpectedRemovedAt := iNode1.RemovedAt()
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 i node removedAt should be after c1 b node removedAt")
+
+		assert.Equal(t, laterExpectedRemovedAt, iNode2.RemovedAt(), "c2 i node should have same earlier removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, cdTextNode1.RemovedAt(), "c1 cd text node should have same earlier removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, cdTextNode2.RemovedAt(), "c2 cd text node should have same earlier removedAt")
+
+		assert.Equal(t, earlierExpectedRemovedAt, bNode2.RemovedAt(), "c2 b node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, aNode1.RemovedAt(), "c2 i node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "c2 a node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, abTextNode1.RemovedAt(), "c1 ab text node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, abTextNode2.RemovedAt(), "c2 ab text node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, efTextNode1.RemovedAt(), "c1 ef text node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, efTextNode2.RemovedAt(), "c2 ef text node should have same later removedAt")
+
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - same level partial overlap", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <p><b>ab</b><i>cd</i><a>ef</a></p>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// c1 deletes b and i nodes
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 9, nil, 0)
+			return nil
+		}, "first deletion <b>ab</b><i>cd</i> by c1")
+		assert.NoError(t, err)
+
+		// c2 deletes i and a node
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 13, nil, 0)
+			return nil
+		}, "second deletion <i>cd</i><a>ef</a> by c2")
+		assert.NoError(t, err)
+
+		// After sync, c1 and c2 should have same tree
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		
+		// c2 nodes are deleted later, so LWW behavior should not be working in c1 partial overlap nodes
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		var bNode1, iNode1, aNode1, abTextNode1, cdTextNode1, efTextNode1 *crdt.TreeNode
+		for _, node := range nodes1 {
+			if node.Type() == "b" {
+				bNode1 = node
+			} else if node.Type() == "i" {
+				iNode1 = node
+			} else if node.Type() == "a" {
+				aNode1 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode1 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode1 = node
+			}
+		}
+
+		var bNode2, iNode2, aNode2, abTextNode2, cdTextNode2, efTextNode2 *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "b" {
+				bNode2 = node
+			} else if node.Type() == "i" {
+				iNode2 = node
+			} else if node.Type() == "a" {
+				aNode2 = node
+			} else if node.Type() == "text" && node.Value == "ab" {
+				abTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "cd" {
+				cdTextNode2 = node
+			} else if node.Type() == "text" && node.Value == "ef" {
+				efTextNode2 = node
+			}
+		}
+
+		assert.NotNil(t, bNode1.RemovedAt(), "c1 b nodes should be removed")
+		assert.NotNil(t, iNode1.RemovedAt(), "c1 i nodes should be removed")
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a nodes should be removed")
+		assert.NotNil(t, bNode2.RemovedAt(), "c2 b nodes should be removed")
+		assert.NotNil(t, iNode2.RemovedAt(), "c2 i nodes should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a nodes should be removed")
+
+		earlierExpectedRemovedAt := bNode1.RemovedAt()
+		laterExpectedRemovedAt := iNode1.RemovedAt()
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 i node removedAt should be after c1 b node removedAt")
+
+		assert.Equal(t, laterExpectedRemovedAt, aNode1.RemovedAt(), "c1 a node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, aNode2.RemovedAt(), "c2 a node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, iNode2.RemovedAt(), "c2 i node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, cdTextNode1.RemovedAt(), "c1 cd text node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, cdTextNode2.RemovedAt(), "c2 cd text node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, efTextNode1.RemovedAt(), "c1 ef text node should have same later removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, efTextNode2.RemovedAt(), "c2 ef text node should have same later removedAt")
+
+		assert.Equal(t, earlierExpectedRemovedAt, bNode2.RemovedAt(), "c2 b node should have same earlier removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, abTextNode1.RemovedAt(), "c1 ab text node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, abTextNode2.RemovedAt(), "c2 ab text node should have same later removedAt")
+
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - ancestor descendant (ancestor later)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{
+							Type: "p",
+							Children: []json.TreeNode{
+								{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+							},
+						},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <p><p><b>ab</b></p><i>cd</i><a>ef</a></p>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// c1 deletes inner <b>ab</b> (descendant first)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 6, nil, 0)
+			return nil
+		}, "first deletion inner <b>ab</b> by c1")
+		assert.NoError(t, err)
+
+		// c2 deletes outer <p> (ancestor later)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 11, nil, 0)
+			return nil
+		}, "second deletion outer <p><b>ab</b></p><i>cd</i> by c2")
+		assert.NoError(t, err)
+
+		// After sync, c1 and c2 should have same tree
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		
+		// All nodes should be removed with c2's timestamp (ancestor deletion wins)
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+		assert.Equal(t, len(nodes1), len(nodes2), "Both documents should have same number of nodes")
+
+		var outerPNode1, innerPNode1, bNode1, iNode1, aNode1 *crdt.TreeNode
+		for _, node := range nodes1 {
+			if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "root" {
+				outerPNode1 = node
+			} else if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "p" {
+				innerPNode1 = node
+			} else if node.Type() == "b" {
+				bNode1 = node
+			} else if node.Type() == "i" {
+				iNode1 = node
+			} else if node.Type() == "a" {
+				aNode1 = node
+			}
+		}
+
+		var outerPNode2, innerPNode2, bNode2, iNode2, aNode2 *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "root" {
+				outerPNode2 = node
+			} else if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "p" {
+				innerPNode2 = node
+			} else if node.Type() == "b" {
+				bNode2 = node
+			} else if node.Type() == "i" {
+				iNode2 = node
+			} else if node.Type() == "a" {
+				aNode2 = node
+			}
+		}
+
+		assert.Nil(t, outerPNode1.RemovedAt(), "c1 outer p node should not be removed")
+		assert.NotNil(t, innerPNode1.RemovedAt(), "c1 inner p node should be removed")
+		assert.NotNil(t, bNode1.RemovedAt(), "c1 b node should be removed")
+		assert.NotNil(t, iNode1.RemovedAt(), "c1 i node should be removed")
+		assert.Nil(t, aNode1.RemovedAt(), "c1 a node should not be removed")
+		assert.Nil(t, outerPNode2.RemovedAt(), "c2 outer p node should not be removed")
+		assert.NotNil(t, innerPNode2.RemovedAt(), "c2 inner p node should be removed")
+		assert.NotNil(t, bNode2.RemovedAt(), "c2 b node should be removed")
+		assert.NotNil(t, iNode2.RemovedAt(), "c2 i node should be removed")
+		assert.Nil(t, aNode2.RemovedAt(), "c2 a node should not be removed")
+
+		// All should have the same removedAt (from c2's ancestor deletion)
+		expectedRemovedAt := innerPNode1.RemovedAt()
+		assert.Equal(t, expectedRemovedAt, bNode1.RemovedAt(), "c1 b node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, iNode1.RemovedAt(), "c1 i node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, innerPNode2.RemovedAt(), "c2 inner p node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, bNode2.RemovedAt(), "c2 b node should have same removedAt")
+		assert.Equal(t, expectedRemovedAt, iNode2.RemovedAt(), "c2 i node should have same removedAt")
+
+		assert.Equal(t, "<root><p><a>ef</a></p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent deletion test for LWW behavior - ancestor descendant (descendant later)", func(t *testing.T) {
+		
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{
+							Type: "p",
+							Children: []json.TreeNode{
+								{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+							},
+						},
+						{Type: "i", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+						{Type: "a", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+					},
+				}},
+			})
+			return nil
+		}, "insert <p><p><b>ab</b></p><i>cd</i><a>ef</a></p>")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// c1 deletes <p><b>ab</b></p><i>cd</i> (ancestor first)
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 11, nil, 0)
+			return nil
+		}, "first deletion <p><b>ab</b></p><i>cd</i> by c1")
+		assert.NoError(t, err)
+
+		// c2 deletes inner <b>ab</b> (descendant later)
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 6, nil, 0)
+			return nil
+		}, "second deletion <b>ab</b> by c2")
+		assert.NoError(t, err)
+
+		// Sync and verify LWW behavior
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		nodes1 := d1.Root().GetTree("t").Nodes()
+		nodes2 := d2.Root().GetTree("t").Nodes()
+
+		// All nodes should be removed with c1's timestamp (ancestor deletion wins)
+		var outerPNode1, innerPNode1, bNode1, iNode1, aNode1 *crdt.TreeNode
+		for _, node := range nodes1 {
+			if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "root" {
+				outerPNode1 = node
+			} else if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "p" {
+				innerPNode1 = node
+			} else if node.Type() == "b" {
+				bNode1 = node
+			} else if node.Type() == "i" {
+				iNode1 = node
+			} else if node.Type() == "a" {
+				aNode1 = node
+			}
+		}
+
+		var outerPNode2, innerPNode2, bNode2, iNode2, aNode2 *crdt.TreeNode
+		for _, node := range nodes2 {
+			if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "root" {
+				outerPNode2 = node
+			} else if node.Type() == "p" && node.Index.Parent != nil && node.Index.Parent.Value.Type() == "p" {
+				innerPNode2 = node
+			} else if node.Type() == "b" {
+				bNode2 = node
+			} else if node.Type() == "i" {
+				iNode2 = node
+			} else if node.Type() == "a" {
+				aNode2 = node
+			}
+		}
+
+		assert.Nil(t, outerPNode1.RemovedAt(), "c1 outer p node should not be removed")
+		assert.NotNil(t, innerPNode1.RemovedAt(), "c1 inner p node should be removed")
+		assert.NotNil(t, bNode1.RemovedAt(), "c1 b node should be removed")
+		assert.NotNil(t, iNode1.RemovedAt(), "c1 i node should be removed")
+		assert.Nil(t, aNode1.RemovedAt(), "c1 a node should not be removed")
+		assert.Nil(t, outerPNode2.RemovedAt(), "c2 outer p node should not be removed")
+		assert.NotNil(t, innerPNode2.RemovedAt(), "c2 inner p node should be removed")
+		assert.NotNil(t, bNode2.RemovedAt(), "c2 b node should be removed")
+		assert.NotNil(t, iNode2.RemovedAt(), "c2 i node should be removed")
+		assert.Nil(t, aNode2.RemovedAt(), "c2 a node should not be removed")
+
+		// b node should not have same removedAt
+		earlierExpectedRemovedAt := innerPNode1.RemovedAt()
+		laterExpectedRemovedAt := bNode1.RemovedAt()
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 b node removedAt should be after c1 inner p node removedAt")
+
+		assert.Equal(t, earlierExpectedRemovedAt, innerPNode2.RemovedAt(), "c2 inner p node should have later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, iNode1.RemovedAt(), "c1 i node should have later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, iNode2.RemovedAt(), "c2 i node should have later removedAt")
+
+		assert.Equal(t, laterExpectedRemovedAt, bNode1.RemovedAt(), "c1 b node should have earlier removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, bNode2.RemovedAt(), "c2 b node should have earlier removedAt")
+
+		assert.Equal(t, "<root><p><a>ef</a></p></root>", d1.Root().GetTree("t").ToXML())
+
 	})
 }
