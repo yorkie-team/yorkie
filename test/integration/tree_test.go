@@ -4032,7 +4032,7 @@ func TestTreeLWW(t *testing.T) {
 
 		// After sync, c1 and c2 should have same tree
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		
+
 		// c2 nodes (larger range) are deleted later, so LWW behavior should be working in c1 nodes
 		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 := d2.Root().GetTree("t").Nodes()
@@ -4138,17 +4138,17 @@ func TestTreeLWW(t *testing.T) {
 			return nil
 		}, "first deletion <b>ab</b><i>cd</i><a>ef</a> by c1")
 		assert.NoError(t, err)
-		
+
 		// c2 deletes i node
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(5, 9, nil, 0)
 			return nil
 		}, "second deletion <i>cd</i> by c2")
 		assert.NoError(t, err)
-		
+
 		// After sync, c1 and c2 should have same tree
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		
+
 		// c2 nodes (smaller range) are deleted later, so LWW behavior should not be working in c2 nodes
 		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 := d2.Root().GetTree("t").Nodes()
@@ -4208,7 +4208,7 @@ func TestTreeLWW(t *testing.T) {
 		assert.Equal(t, laterExpectedRemovedAt, cdTextNode2.RemovedAt(), "c2 cd text node should have same earlier removedAt")
 
 		assert.Equal(t, earlierExpectedRemovedAt, bNode2.RemovedAt(), "c2 b node should have same later removedAt")
-		assert.Equal(t, earlierExpectedRemovedAt, aNode1.RemovedAt(), "c2 i node should have same later removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, aNode1.RemovedAt(), "c1 a node should have same later removedAt")
 		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "c2 a node should have same later removedAt")
 		assert.Equal(t, earlierExpectedRemovedAt, abTextNode1.RemovedAt(), "c1 ab text node should have same later removedAt")
 		assert.Equal(t, earlierExpectedRemovedAt, abTextNode2.RemovedAt(), "c2 ab text node should have same later removedAt")
@@ -4265,7 +4265,7 @@ func TestTreeLWW(t *testing.T) {
 
 		// After sync, c1 and c2 should have same tree
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		
+
 		// c2 nodes are deleted later, so LWW behavior should not be working in c1 partial overlap nodes
 		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 := d2.Root().GetTree("t").Nodes()
@@ -4383,7 +4383,7 @@ func TestTreeLWW(t *testing.T) {
 
 		// After sync, c1 and c2 should have same tree
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		
+
 		// All nodes should be removed with c2's timestamp (ancestor deletion wins)
 		nodes1 := d1.Root().GetTree("t").Nodes()
 		nodes2 := d2.Root().GetTree("t").Nodes()
@@ -4442,7 +4442,7 @@ func TestTreeLWW(t *testing.T) {
 	})
 
 	t.Run("concurrent deletion test for LWW behavior - ancestor descendant (descendant later)", func(t *testing.T) {
-		
+
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)

@@ -465,8 +465,9 @@ func TestTextLWW(t *testing.T) {
 		assert.Equal(t, removedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
 		assert.Equal(t, removedAt, bcNode2.RemovedAt(), "bc node should have same removedAt")
 		assert.Equal(t, removedAt, dNode2.RemovedAt(), "d node should have same removedAt")
-		
-		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), "documents should have same value")
+		assert.Equal(t, `{"k1":[]}`, d2.Marshal(), "documents should have same value")
 	})
 
 	t.Run("concurrent deletion test for LWW behavior - complete inclusion (smaller range later)", func(t *testing.T) {
@@ -538,7 +539,7 @@ func TestTextLWW(t *testing.T) {
 		assert.NotNil(t, aNode2.RemovedAt(), "c2 a node should be removed")
 		assert.NotNil(t, bcNode2.RemovedAt(), "c2 bc node should be removed")
 		assert.NotNil(t, dNode2.RemovedAt(), "c2 d node should be removed")
-		
+
 		earlierExpectedRemovedAt := aNode1.RemovedAt()
 		laterExpectedRemovedAt := bcNode1.RemovedAt()
 		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 i node removedAt should be after c1 b node removedAt")
@@ -548,8 +549,9 @@ func TestTextLWW(t *testing.T) {
 		assert.Equal(t, earlierExpectedRemovedAt, dNode2.RemovedAt(), "d node should have same removedAt")
 
 		assert.Equal(t, laterExpectedRemovedAt, bcNode2.RemovedAt(), "bc node should have same removedAt")
-		
-		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), "documents should have same value")
+		assert.Equal(t, `{"k1":[]}`, d2.Marshal(), "documents should have same value")
 	})
 
 	t.Run("concurrent deletion test for LWW behavior - partial overlap", func(t *testing.T) {
@@ -614,28 +616,25 @@ func TestTextLWW(t *testing.T) {
 				dNode2 = node
 			}
 		}
-		assert.NotNil(t,
-			aNode1.RemovedAt(),
-			bcNode1.RemovedAt(),
-			dNode1.RemovedAt(),
-			aNode2.RemovedAt(),
-			bcNode2.RemovedAt(),
-			dNode2.RemovedAt(),
-			"c1 and c2 nodes should be removed",
-		)
+		assert.NotNil(t, aNode1.RemovedAt(), "c1 a node should be removed")
+		assert.NotNil(t, bcNode1.RemovedAt(), "c1 bc node should be removed")
+		assert.NotNil(t, dNode1.RemovedAt(), "c1 d node should be removed")
+		assert.NotNil(t, aNode2.RemovedAt(), "c2 a node should be removed")
+		assert.NotNil(t, bcNode2.RemovedAt(), "c2 bc node should be removed")
+		assert.NotNil(t, dNode2.RemovedAt(), "c2 d node should be removed")
 
 		// bc and d nodes should have same removedAt
-		assert.Equal(t,
-			bcNode1.RemovedAt().ToTestString(),
-			bcNode2.RemovedAt().ToTestString(),
-			dNode1.RemovedAt().ToTestString(),
-			dNode2.RemovedAt().ToTestString(),
-			"bc and d nodes should have same removedAt",
-		)
-		assert.Equal(t, aNode1.RemovedAt().ToTestString(), aNode2.RemovedAt().ToTestString(), "a nodes should have same removedAt")
+		earlierExpectedRemovedAt := aNode1.RemovedAt()
+		laterExpectedRemovedAt := bcNode1.RemovedAt()
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 d node removedAt should be after c1 bc node removedAt")
 
-		assert.False(t, aNode1.RemovedAt().After(bcNode1.RemovedAt()), "a node removedAt should be after bc node removedAt")
+		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
 
-		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), d2.Marshal(), "Both documents should have same value")
+		assert.Equal(t, laterExpectedRemovedAt, bcNode2.RemovedAt(), "bc node should have same removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, dNode1.RemovedAt(), "d node should have same removedAt")
+		assert.Equal(t, laterExpectedRemovedAt, dNode2.RemovedAt(), "d node should have same removedAt")
+
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal(), "documents should have same value")
+		assert.Equal(t, `{"k1":[]}`, d2.Marshal(), "documents should have same value")
 	})
 }
