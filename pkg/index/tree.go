@@ -218,8 +218,8 @@ func tokensBetween[V Value](root *Node[V], from, to int, callback func(token Tre
 
 // tokensBetweenIncludeRemovedNodes iterates the tokens between the given range including removed nodes.
 func tokensBetweenIncludeRemovedNodes[V Value](
-	root *Node[V], 
-	from, to int, 
+	root *Node[V],
+	from, to int,
 	callback func(token TreeToken[V], ended bool),
 ) error {
 	if from > to {
@@ -774,8 +774,8 @@ func (t *Tree[V]) TokensBetween(from int, to int, callback func(token TreeToken[
 
 // TokensBetweenIncludeRemovedNodes returns the tokens between the given range including removed nodes.
 func (t *Tree[V]) TokensBetweenIncludeRemovedNodes(
-	from int, 
-	to int, 
+	from int,
+	to int,
 	callback func(token TreeToken[V], ended bool),
 ) error {
 	return tokensBetweenIncludeRemovedNodes(t.root, from, to, callback)
