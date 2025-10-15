@@ -660,6 +660,7 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 	}
 
 	root.Index.UpdateDescendantsSize()
+	root.Index.UpdateDescendantsSizeIncludeRemovedNodes()
 
 	// build crdt.Tree from root to construct the links between nodes.
 	return crdt.NewTree(root, nil).Root(), nil
