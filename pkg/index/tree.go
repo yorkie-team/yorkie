@@ -381,7 +381,7 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
-// Children returns the children of the given node.
+// GetChildren returns the children of the given node.
 func (n *Node[V]) GetChildren() []*Node[V] {
 	return n.children
 }
