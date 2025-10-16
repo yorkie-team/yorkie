@@ -22,6 +22,8 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 )
@@ -33,6 +35,12 @@ var (
 
 // ID represents ID of entity.
 type ID string
+
+// NewID generates a new unique ID using MongoDB's ObjectID algorithm.
+// This ensures globally unique identifiers without coordination.
+func NewID() ID {
+	return ID(bson.NewObjectID().Hex())
+}
 
 // String returns a string representation of this ID.
 func (id *ID) String() string {

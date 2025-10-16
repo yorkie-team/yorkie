@@ -249,6 +249,193 @@ func (s *yorkieServer) AttachDocument(
 	return connect.NewResponse(response), nil
 }
 
+// AttachPresence attaches the given presence counter to the client.
+func (s *yorkieServer) AttachPresence(
+	ctx context.Context,
+	req *connect.Request[api.AttachPresenceRequest],
+) (*connect.Response[api.AttachPresenceResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	if err := presenceKey.Validate(); err != nil {
+		return nil, err
+	}
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.AttachPresence,
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Create PresenceRefKey and attach to presence counter
+	refKey := types.PresenceRefKey{
+		ProjectID:   project.ID,
+		PresenceKey: presenceKey,
+	}
+
+	presenceID, count, err := s.backend.Presence.Attach(ctx, refKey, actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &api.AttachPresenceResponse{
+		PresenceId: presenceID.String(),
+		Count:      count,
+	}
+	return connect.NewResponse(response), nil
+}
+
+// DetachPresence detaches the given presence counter from the client.
+func (s *yorkieServer) DetachPresence(
+	ctx context.Context,
+	req *connect.Request[api.DetachPresenceRequest],
+) (*connect.Response[api.DetachPresenceResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	if err := presenceKey.Validate(); err != nil {
+		return nil, err
+	}
+	presenceID := types.ID(req.Msg.PresenceId)
+	if err := presenceID.Validate(); err != nil {
+		return nil, err
+	}
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.DetachPresence,
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Detach using presence ID
+	count, err := s.backend.Presence.Detach(ctx, presenceID)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &api.DetachPresenceResponse{
+		Count: count,
+	}
+	return connect.NewResponse(response), nil
+}
+
+// WatchPresence connects the stream to deliver presence counter updates.
+func (s *yorkieServer) WatchPresence(
+	ctx context.Context,
+	req *connect.Request[api.WatchPresenceRequest],
+	stream *connect.ServerStream[api.WatchPresenceResponse],
+) error {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	if err := presenceKey.Validate(); err != nil {
+		return err
+	}
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchPresence,
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+	}); err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return err
+	}
+
+	// 02. Create PresenceRefKey and subscribe to presence counter updates
+	refKey := types.PresenceRefKey{
+		ProjectID:   project.ID,
+		PresenceKey: presenceKey,
+	}
+
+	subscription, _, err := s.backend.PubSub.SubscribePresence(ctx, actorID, refKey)
+	if err != nil {
+		return err
+	}
+
+	// 03. Ensure cleanup when stream ends
+	defer func() {
+		s.backend.PubSub.UnsubscribePresence(ctx, refKey, subscription)
+	}()
+
+	// 04. Send initial count
+	currentCount := s.backend.Presence.Count(refKey)
+	if err := stream.Send(&api.WatchPresenceResponse{
+		Body: &api.WatchPresenceResponse_Initialized{
+			Initialized: &api.WatchPresenceInitialized{
+				Count: currentCount,
+				Seq:   0,
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	// 05. Stream presence count updates
+	for {
+		select {
+		case event, ok := <-subscription.Events():
+			if !ok {
+				// Channel closed, end stream
+				return nil
+			}
+
+			// Send count update (skip if it's the initial event with Seq 0)
+			if event.Seq > 0 {
+				response := &api.WatchPresenceResponse{
+					Body: &api.WatchPresenceResponse_Event{
+						Event: &api.PresenceEvent{
+							Type:  api.PresenceEvent_TYPE_COUNT_CHANGED,
+							Count: event.Count,
+							Seq:   event.Seq,
+						},
+					},
+				}
+
+				if err := stream.Send(response); err != nil {
+					return err
+				}
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 // DetachDocument detaches the given document to the client.
 func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
@@ -502,7 +689,7 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchDocuments,
+		Method:     types.WatchDocument,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return err
@@ -580,7 +767,7 @@ func (s *yorkieServer) watchDoc(
 	clientID time.ActorID,
 	docKey types.DocRefKey,
 	limit int,
-) (*pubsub.Subscription, []time.ActorID, error) {
+) (*pubsub.DocSubscription, []time.ActorID, error) {
 	sub, clientIDs, err := s.backend.PubSub.Subscribe(ctx, clientID, docKey, limit)
 	if err != nil {
 		return nil, nil, err
@@ -603,7 +790,7 @@ func (s *yorkieServer) watchDoc(
 
 func (s *yorkieServer) unwatchDoc(
 	ctx context.Context,
-	sub *pubsub.Subscription,
+	sub *pubsub.DocSubscription,
 	docKey types.DocRefKey,
 ) error {
 	s.backend.PubSub.Unsubscribe(ctx, docKey, sub)

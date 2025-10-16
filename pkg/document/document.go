@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -67,6 +68,18 @@ const (
 	// the document have changed.
 	PresenceChangedEvent DocEventType = "presence-changed"
 )
+
+// Root represents the root of a document.
+type Root = json.Object
+
+// Int represents an integer type in the document.
+const Int = crdt.IntegerCnt
+
+// Presence represents the presence of a client editing the document.
+type Presence = presence.Presence
+
+// PresenceData represents the data of a client's presence.
+type PresenceData = presence.Data
 
 // BroadcastRequest represents a broadcast request that will be delivered to the client.
 type BroadcastRequest struct {
@@ -132,7 +145,8 @@ type Document struct {
 	// broadcastEventHandlers is a map of registered event handlers for events.
 	broadcastEventHandlers map[string]func(
 		topic, publisher string,
-		payload []byte) error
+		payload []byte,
+	) error
 }
 
 // New creates a new instance of Document.
@@ -156,7 +170,7 @@ func New(key key.Key, opts ...Option) *Document {
 
 // Update executes the given updater to update this document.
 func (d *Document) Update(
-	updater func(root *json.Object, p *presence.Presence) error,
+	updater func(root *json.Object, p *Presence) error,
 	msgAndArgs ...interface{},
 ) error {
 	if d.doc.status == StatusRemoved {
@@ -299,6 +313,11 @@ func (d *Document) Key() key.Key {
 	return d.doc.key
 }
 
+// Type returns the type of this resource.
+func (d *Document) Type() attachable.ResourceType {
+	return attachable.TypeDocument
+}
+
 // Checkpoint returns the checkpoint of this document.
 func (d *Document) Checkpoint() change.Checkpoint {
 	return d.doc.checkpoint
@@ -330,24 +349,24 @@ func (d *Document) ActorID() time.ActorID {
 	return d.doc.ActorID()
 }
 
-// SetStatus updates the status of this document.
-func (d *Document) SetStatus(status StatusType) {
-	d.doc.SetStatus(status)
-}
-
-// VersionVector returns the version vector of this document.
-func (d *Document) VersionVector() time.VersionVector {
-	return d.doc.VersionVector()
-}
-
 // Status returns the status of this document.
 func (d *Document) Status() StatusType {
 	return d.doc.status
 }
 
+// SetStatus updates the status of this document.
+func (d *Document) SetStatus(status StatusType) {
+	d.doc.SetStatus(status)
+}
+
 // IsAttached returns whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
+}
+
+// VersionVector returns the version vector of this document.
+func (d *Document) VersionVector() time.VersionVector {
+	return d.doc.VersionVector()
 }
 
 // RootObject returns the internal root object of this document.

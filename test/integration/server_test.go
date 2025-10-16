@@ -20,7 +20,7 @@ package integration
 
 import (
 	"context"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,39 +45,29 @@ func TestServer(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
 
-		wg := sync.WaitGroup{}
-		wrch, _, err := cli.Subscribe(doc)
+		// Subscribe to watch stream to verify it closes properly on server shutdown
+		stream, _, err := cli.WatchStream(doc)
 		assert.NoError(t, err)
 
-		wg.Add(1)
-		var once sync.Once
-		timeout := time.AfterFunc(3*time.Second, func() {
-			t.Error("Test timed out waiting for stream cancellation")
-			once.Do(func() { wg.Done() })
-		})
-		defer timeout.Stop()
+		var closed atomic.Bool
 
+		// Monitor watch stream for server shutdown signal
 		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					assert.Fail(t, "unexpected ctx done")
+			for wdr := range stream {
+				// Server shutdown should close the stream with CodeCanceled error
+				if connect.CodeOf(wdr.Err) == connect.CodeCanceled {
+					assert.Len(t, wdr.Presences, 0)
+					closed.Store(true)
 					return
-				case wr := <-wrch:
-					// TODO(hackerwins): Define ClientError instead of using ConnectError later.
-					// For now, we use ConnectError to check whether the stream is closed. To
-					// simplify the interface, we will define ClientError later.
-					if connect.CodeOf(wr.Err) == connect.CodeCanceled {
-						assert.Len(t, wr.Presences, 0)
-						timeout.Stop()
-						once.Do(func() { wg.Done() })
-						return
-					}
 				}
 			}
 		}()
 
+		// Shutdown server and verify stream closes within timeout
 		assert.NoError(t, svr.Shutdown(true))
-		wg.Wait()
+
+		assert.Eventually(t, func() bool {
+			return closed.Load()
+		}, 3*time.Second, 100*time.Millisecond, "stream should close on server shutdown")
 	})
 }

@@ -36,8 +36,11 @@ type Map = inner.Map
 // can reference presence changes without importing the internal package.
 type Change = inner.Change
 
-var Put = inner.Put
-var Clear = inner.Clear
+const (
+	// Put and Clear are aliases for the corresponding constants in the inner package.
+	Put   = inner.Put
+	Clear = inner.Clear
+)
 
 // NewData creates a new instance of Data.
 func NewData() Data {

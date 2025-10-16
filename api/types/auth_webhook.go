@@ -52,12 +52,18 @@ type Method string
 const (
 	ActivateClient   Method = "ActivateClient"
 	DeactivateClient Method = "DeactivateClient"
-	AttachDocument   Method = "AttachDocument"
-	DetachDocument   Method = "DetachDocument"
-	RemoveDocument   Method = "RemoveDocument"
-	PushPull         Method = "PushPull"
-	WatchDocuments   Method = "WatchDocuments"
-	Broadcast        Method = "Broadcast"
+
+	AttachDocument Method = "AttachDocument"
+	DetachDocument Method = "DetachDocument"
+	RemoveDocument Method = "RemoveDocument"
+	PushPull       Method = "PushPull"
+	WatchDocument  Method = "WatchDocument"
+
+	AttachPresence Method = "AttachPresence"
+	DetachPresence Method = "DetachPresence"
+	WatchPresence  Method = "WatchPresence"
+
+	Broadcast Method = "Broadcast"
 )
 
 // IsAuthMethod returns whether the given method can be used for authorization.
@@ -75,11 +81,17 @@ func AuthMethods() []Method {
 	return []Method{
 		ActivateClient,
 		DeactivateClient,
+
 		AttachDocument,
 		DetachDocument,
 		RemoveDocument,
 		PushPull,
-		WatchDocuments,
+		WatchDocument,
+
+		AttachPresence,
+		DetachPresence,
+		WatchPresence,
+
 		Broadcast,
 	}
 }

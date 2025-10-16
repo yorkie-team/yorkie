@@ -48,7 +48,7 @@ var allWebhookMethods = &[]string{
 	string(types.DetachDocument),
 	string(types.RemoveDocument),
 	string(types.PushPull),
-	string(types.WatchDocuments),
+	string(types.WatchDocument),
 	string(types.Broadcast),
 }
 
@@ -219,7 +219,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		project.AuthWebhookURL = authServer.URL
 		project.AuthWebhookMethods = []string{
 			string(types.AttachDocument),
-			string(types.WatchDocuments),
+			string(types.WatchDocument),
 		}
 		_, err := adminCli.UpdateProject(
 			ctx,
@@ -248,8 +248,8 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc, client.WithRealtimeSync())
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
-		_, _, err = cli.Subscribe(doc)
-		assert.Equal(t, client.ErrDocumentNotAttached, err)
+		_, _, err = cli.WatchStream(doc)
+		assert.Equal(t, client.ErrNotAttached, err)
 	})
 }
 
