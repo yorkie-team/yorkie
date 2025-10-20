@@ -119,7 +119,7 @@ func (c *Client[Req, Res]) Send(
 			if logger != nil {
 				logger.Errorf("webhook json decode failed: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
 			}
-			return resp.StatusCode, fmt.Errorf("%w: invalid json response", ErrUnexpectedResponse)
+			return resp.StatusCode, fmt.Errorf("invalid json response: %w", ErrUnexpectedResponse)
 		}
 
 		return resp.StatusCode, nil
