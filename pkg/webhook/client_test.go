@@ -267,4 +267,29 @@ func TestErrorHandling(t *testing.T) {
 		assert.Equal(t, 0, statusCode)
 		assert.Nil(t, resp)
 	})
+
+	t.Run("invalid JSON response test", func(t *testing.T) {
+		invalidJSONServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("invalid json response"))
+		}))
+		defer invalidJSONServer.Close()
+
+		reqPayload := testRequest{Name: "test"}
+		body, err := json.Marshal(reqPayload)
+		assert.NoError(t, err)
+
+		options := webhook.Options{
+			MaxRetries:      0,
+			MinWaitInterval: 0,
+			MaxWaitInterval: 0,
+			RequestTimeout:  15 * time.Millisecond,
+		}
+		resp, statusCode, err := unreachableClient.Send(context.Background(), invalidJSONServer.URL, "", body, options)
+		assert.Error(t, err)
+		assert.Equal(t, http.StatusOK, statusCode)
+		assert.Nil(t, resp)
+		assert.Contains(t, err.Error(), "invalid json response")
+	})
 }
