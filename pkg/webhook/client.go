@@ -115,11 +115,11 @@ func (c *Client[Req, Res]) Send(
 		}
 
 		if err := json.Unmarshal(bodyBytes, &res); err != nil {
-			truncatedBody := string(bodyBytes)
-			if len(truncatedBody) > 500 {
-				truncatedBody = truncatedBody[:500] + "..."
+			logger := logging.From(ctx)
+			if logger != nil {
+				logger.Errorf("webhook json decode failed: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
 			}
-			return resp.StatusCode, fmt.Errorf("%w: body=%s", ErrUnexpectedResponse, truncatedBody)
+			return resp.StatusCode, fmt.Errorf("%w: invalid json response", ErrUnexpectedResponse)
 		}
 
 		return resp.StatusCode, nil
