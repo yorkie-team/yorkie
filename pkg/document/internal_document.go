@@ -17,8 +17,6 @@
 package document
 
 import (
-	gosync "sync"
-
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -73,7 +71,7 @@ type InternalDocument struct {
 
 	// onlineClients is the set of the client who is editing this document in
 	// online.
-	onlineClients *gosync.Map
+	onlineClients map[string]bool
 
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
@@ -92,7 +90,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 		checkpoint:    change.InitialCheckpoint,
 		changeID:      change.InitialID(),
 		presences:     presence.NewMap(),
-		onlineClients: &gosync.Map{},
+		onlineClients: make(map[string]bool),
 	}
 }
 
@@ -117,7 +115,7 @@ func NewInternalDocumentFromSnapshot(
 		status:        StatusDetached,
 		root:          crdt.NewRoot(obj),
 		presences:     presences,
-		onlineClients: &gosync.Map{},
+		onlineClients: make(map[string]bool),
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:      changeID,
 	}, nil
@@ -288,7 +286,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 	for _, c := range changes {
 		if c.PresenceChange() != nil {
 			clientID := c.ID().ActorID().String()
-			if _, ok := d.onlineClients.Load(clientID); ok {
+			if _, ok := d.onlineClients[clientID]; ok {
 				switch c.PresenceChange().ChangeType {
 				case presence.Put:
 					// NOTE(chacha912): When the user exists in onlineClients, but
@@ -345,7 +343,7 @@ func (d *InternalDocument) MyPresence() presence.Data {
 // Presence returns the presence of the given client.
 // If the client is not online, it returns nil.
 func (d *InternalDocument) Presence(clientID string) presence.Data {
-	if _, ok := d.onlineClients.Load(clientID); !ok {
+	if !d.onlineClients[clientID] {
 		return nil
 	}
 
@@ -361,14 +359,13 @@ func (d *InternalDocument) PresenceForTest(clientID string) presence.Data {
 // Presences returns the presence map of online clients.
 func (d *InternalDocument) Presences() map[string]presence.Data {
 	presences := make(map[string]presence.Data)
-	d.onlineClients.Range(func(key, value interface{}) bool {
-		p := d.presences.Load(key.(string))
+	for clientID := range d.onlineClients {
+		p := d.presences.Load(clientID)
 		if p == nil {
-			return true
+			continue
 		}
-		presences[key.(string)] = p.DeepCopy()
-		return true
-	})
+		presences[clientID] = p.DeepCopy()
+	}
 	return presences
 }
 
@@ -380,24 +377,21 @@ func (d *InternalDocument) AllPresences() map[string]presence.Data {
 
 // SetOnlineClients sets the online clients.
 func (d *InternalDocument) SetOnlineClients(ids ...string) {
-	d.onlineClients.Range(func(key, value interface{}) bool {
-		d.onlineClients.Delete(key)
-		return true
-	})
+	d.onlineClients = make(map[string]bool)
 
 	for _, id := range ids {
-		d.onlineClients.Store(id, true)
+		d.onlineClients[id] = true
 	}
 }
 
 // AddOnlineClient adds the given client to the online clients.
 func (d *InternalDocument) AddOnlineClient(clientID string) {
-	d.onlineClients.Store(clientID, true)
+	d.onlineClients[clientID] = true
 }
 
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
-	d.onlineClients.Delete(clientID)
+	delete(d.onlineClients, clientID)
 }
 
 // ToDocument converts this document to Document.
@@ -414,6 +408,11 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		return nil, err
 	}
 
+	onlineClients := make(map[string]bool)
+	for id := range d.onlineClients {
+		onlineClients[id] = true
+	}
+
 	return &InternalDocument{
 		key:        d.key,
 		status:     d.status,
@@ -426,7 +425,7 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 
 		root:          root,
 		presences:     d.presences.DeepCopy(),
-		onlineClients: &gosync.Map{},
+		onlineClients: onlineClients,
 		localChanges:  d.localChanges,
 	}, nil
 }

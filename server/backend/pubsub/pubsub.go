@@ -158,9 +158,9 @@ func (m *PubSub) Publish(
 ) {
 	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
 	// race condition of concurrent access to the cache.
-	_ = event.Publisher.String()
+	_ = event.Actor.String()
 
-	docKey := event.DocRefKey
+	docKey := event.Key
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) Start`,
@@ -210,7 +210,6 @@ func (m *PubSub) SubscribePresence(
 	}
 
 	var newSub *PresenceSubscription
-	var initialCount int64
 
 	_ = m.presenceSubsMap.Upsert(refKey, func(subs *PresenceSubscriptions, exists bool) *PresenceSubscriptions {
 		if !exists {
@@ -230,7 +229,7 @@ func (m *PubSub) SubscribePresence(
 		)
 	}
 
-	return newSub, initialCount, nil
+	return newSub, 0, nil
 }
 
 // UnsubscribePresence unsubscribes the given presence key.
@@ -277,14 +276,14 @@ func (m *PubSub) PublishPresence(
 	event events.PresenceEvent,
 ) {
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`PublishPresence(%s) Start`, event.RefKey)
+		logging.From(ctx).Debugf(`PublishPresence(%s) Start`, event.Key)
 	}
 
-	if subs, ok := m.presenceSubsMap.Get(event.RefKey); ok {
+	if subs, ok := m.presenceSubsMap.Get(event.Key); ok {
 		subs.Publish(event)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`PublishPresence(%s) End`, event.RefKey)
+		logging.From(ctx).Debugf(`PublishPresence(%s) End`, event.Key)
 	}
 }

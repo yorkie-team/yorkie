@@ -30,12 +30,6 @@ const (
 	ClientActivatedEvent ClientEventType = "client-activated"
 )
 
-// ClientEvent represents an event that occurs in the client.
-type ClientEvent struct {
-	// Type is the type of the event.
-	Type ClientEventType
-}
-
 // DocEventType represents the type of the DocEvent.
 type DocEventType string
 
@@ -87,11 +81,11 @@ type DocEvent struct {
 	// Type is the type of the event.
 	Type DocEventType
 
-	// Publisher is the actor who published the event.
-	Publisher time.ActorID
+	// Key is the key of the document that the event occurred.
+	Key types.DocRefKey
 
-	// DocRefKey is the key of the document that the event occurred.
-	DocRefKey types.DocRefKey
+	// Actor is the actor who published the event.
+	Actor time.ActorID
 
 	// Body includes additional data specific to the DocEvent.
 	Body DocEventBody
@@ -99,7 +93,12 @@ type DocEvent struct {
 
 // PresenceEvent represents a presence count change event.
 type PresenceEvent struct {
-	RefKey types.PresenceRefKey // Reference key of the presence
-	Count  int64                // Current count
-	Seq    int64                // Monotonic sequence number for ordering
+	// Key is the key of the presence that the event occurred.
+	Key types.PresenceRefKey
+
+	// Seq is the sequence number of the presence event.
+	Seq int64
+
+	// Count is the current count of the presence.
+	Count int64
 }

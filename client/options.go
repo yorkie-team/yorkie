@@ -17,6 +17,8 @@
 package client
 
 import (
+	gotime "time"
+
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -50,6 +52,21 @@ type Options struct {
 
 	// MaxCallRecvMsgSize is the maximum message size in bytes the client can receive.
 	MaxCallRecvMsgSize int
+
+	// SyncLoopDuration is the duration of the sync loop.
+	// After each sync loop, the client waits for the duration to next sync.
+	// The default value is 50ms (same as JS SDK).
+	SyncLoopDuration gotime.Duration
+
+	// RetrySyncLoopDelay is the delay of the retry sync loop.
+	// If the sync loop fails, the client waits for the delay to retry the sync loop.
+	// The default value is 1000ms.
+	RetrySyncLoopDelay gotime.Duration
+
+	// PresenceHeartbeatInterval is the interval of the presence heartbeat.
+	// The client sends a heartbeat to the server to refresh the presence TTL.
+	// The default value is 30 seconds.
+	PresenceHeartbeatInterval gotime.Duration
 }
 
 // WithKey configures the key of the client.
@@ -85,6 +102,21 @@ func WithLogger(logger *zap.Logger) Option {
 // WithMaxRecvMsgSize configures the maximum message size in bytes the client can receive.
 func WithMaxRecvMsgSize(maxRecvMsgSize int) Option {
 	return func(o *Options) { o.MaxCallRecvMsgSize = maxRecvMsgSize }
+}
+
+// WithSyncLoopDuration configures the duration of the sync loop.
+func WithSyncLoopDuration(duration gotime.Duration) Option {
+	return func(o *Options) { o.SyncLoopDuration = duration }
+}
+
+// WithRetrySyncLoopDelay configures the delay of the retry sync loop.
+func WithRetrySyncLoopDelay(delay gotime.Duration) Option {
+	return func(o *Options) { o.RetrySyncLoopDelay = delay }
+}
+
+// WithPresenceHeartbeatInterval configures the interval of the presence heartbeat.
+func WithPresenceHeartbeatInterval(interval gotime.Duration) Option {
+	return func(o *Options) { o.PresenceHeartbeatInterval = interval }
 }
 
 // DeactivateOption configures DeactivateOptions.

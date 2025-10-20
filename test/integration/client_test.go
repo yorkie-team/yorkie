@@ -136,12 +136,12 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c3.Attach(ctx, d3))
 
 		// 02. c1, c2 sync with push-pull mode.
-		assert.NoError(t, d1.Update(func(root *document.Root, p *document.Presence) error {
-			root.SetInteger("c1", 0)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c1", 0)
 			return nil
 		}))
-		assert.NoError(t, d1.Update(func(root *document.Root, p *document.Presence) error {
-			root.SetInteger("c2", 0)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c2", 0)
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
@@ -152,17 +152,17 @@ func TestClient(t *testing.T) {
 		// 03. c1 and c2 sync with push-only mode. So, the changes of c1 and c2
 		// are not reflected to each other.
 		// But, c3 can get the changes of c1 and c2, because c3 sync with pull-pull mode.
-		assert.NoError(t, d1.Update(func(root *document.Root, p *document.Presence) error {
-			root.SetInteger("c1", 1)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c1", 1)
 			return nil
 		}))
-		assert.NoError(t, d2.Update(func(root *document.Root, p *document.Presence) error {
-			root.SetInteger("c2", 1)
+		assert.NoError(t, d2.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c2", 1)
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
-		assert.NoError(t, c1.Sync(ctx), client.WithDocKey(d1.Key()).WithPushOnly())
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
 		assert.NoError(t, c3.Sync(ctx))
 		assert.NotEqual(t, d1.Marshal(), d2.Marshal())
 		assert.Equal(t, d1.Root().Get("c1").Marshal(), d3.Root().Get("c1").Marshal())

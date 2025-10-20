@@ -21,6 +21,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
@@ -113,6 +114,9 @@ func WithDisableGC() Option {
 // root. This is to protect the base json from errors that may occur while user
 // edit the document.
 type Document struct {
+	// mu protects the document from concurrent access.
+	mu sync.RWMutex
+
 	// doc is the original data of the actual document.
 	doc *InternalDocument
 
@@ -173,6 +177,9 @@ func (d *Document) Update(
 	updater func(root *json.Object, p *Presence) error,
 	msgAndArgs ...interface{},
 ) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if d.doc.status == StatusRemoved {
 		return ErrDocumentRemoved
 	}
@@ -235,6 +242,9 @@ func (d *Document) Update(
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	hasSnapshot := len(pack.Snapshot) > 0
 
@@ -251,7 +261,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 
 	// 02. Remove local changes applied to server.
-	for d.HasLocalChanges() {
+	for d.doc.HasLocalChanges() {
 		c := d.doc.localChanges[0]
 		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
 			break
@@ -325,6 +335,9 @@ func (d *Document) Checkpoint() change.Checkpoint {
 
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *Document) HasLocalChanges() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	return d.doc.HasLocalChanges()
 }
 
@@ -445,7 +458,6 @@ func (d *Document) PresenceForTest(clientID string) presence.Data {
 
 // Presences returns the presence map of online clients.
 func (d *Document) Presences() map[string]presence.Data {
-	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
 	return d.doc.Presences()
 }
 
@@ -457,16 +469,25 @@ func (d *Document) AllPresences() map[string]presence.Data {
 
 // SetOnlineClients sets the online clients.
 func (d *Document) SetOnlineClients(clientIDs ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetOnlineClients(clientIDs...)
 }
 
 // AddOnlineClient adds the given client to the online clients.
 func (d *Document) AddOnlineClient(clientID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.AddOnlineClient(clientID)
 }
 
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *Document) RemoveOnlineClient(clientID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.RemoveOnlineClient(clientID)
 }
 

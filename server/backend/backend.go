@@ -120,7 +120,11 @@ func New(
 
 	// 03. Create the presence manager for real-time user tracking and background
 	// task manager.
-	presenceManager := presence.NewManager(pubsub)
+	presenceManager := presence.NewManager(
+		pubsub,
+		conf.ParsePresenceTTL(),
+		conf.ParsePresenceCleanupInterval(),
+	)
 	bg := background.New(metrics)
 
 	// 04. Create webhook clients and cluster client.
@@ -215,6 +219,8 @@ func (b *Backend) Start(ctx context.Context) error {
 		return err
 	}
 
+	b.Presence.Start()
+
 	logging.DefaultLogger().Infof("backend started")
 	return nil
 }
@@ -222,6 +228,8 @@ func (b *Backend) Start(ctx context.Context) error {
 // Shutdown closes all resources of this instance.
 func (b *Backend) Shutdown() error {
 	var errs []error
+
+	b.Presence.Stop()
 
 	if err := b.Housekeeping.Stop(); err != nil {
 		errs = append(errs, err)

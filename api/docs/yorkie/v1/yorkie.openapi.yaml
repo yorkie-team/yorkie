@@ -106,6 +106,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/RefreshPresence:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/RemoveDocument:
     post:
       description: ""
@@ -216,6 +228,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
       required: true
+    yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceRequest'
+      required: true
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentRequest:
       content:
         application/json:
@@ -312,6 +333,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
+      description: ""
+    yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceResponse'
       description: ""
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentResponse:
       content:
@@ -1513,6 +1543,32 @@ components:
           title: change_pack
           type: object
       title: PushPullChangesResponse
+      type: object
+    yorkie.v1.RefreshPresenceRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        presenceId:
+          additionalProperties: false
+          description: ""
+          title: presence_id
+          type: string
+        presenceKey:
+          additionalProperties: false
+          description: ""
+          title: presence_key
+          type: string
+      title: RefreshPresenceRequest
+      type: object
+    yorkie.v1.RefreshPresenceResponse:
+      additionalProperties: false
+      description: ""
+      title: RefreshPresenceResponse
       type: object
     yorkie.v1.RemoveDocumentRequest:
       additionalProperties: false

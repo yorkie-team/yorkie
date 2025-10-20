@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package presence provides presence counter implementation.
+// Package presence provides presence implementation.
 package presence
 
 import (
@@ -26,15 +26,15 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-// Counter represents a lightweight presence counter for tracking online users.
-type Counter struct {
-	// key is the key of the presence counter.
+// Presence represents a presence in a document.
+type Presence struct {
+	// key is the key of the presence.
 	key key.Key
 
-	// status is the status of the presence counter.
+	// status is the status of the presence.
 	status atomic.Int32
 
-	// actorID is the ID of the actor currently working with this counter.
+	// actorID is the ID of the actor currently working with this presence.
 	actorMu sync.RWMutex
 	actorID time.ActorID
 
@@ -45,66 +45,66 @@ type Counter struct {
 	seq atomic.Int64
 }
 
-// New creates a new instance of presence Counter.
-func New(k key.Key) *Counter {
-	counter := &Counter{
+// New creates a new instance of Presence.
+func New(k key.Key) *Presence {
+	counter := &Presence{
 		key: k,
 	}
 	counter.status.Store(int32(attachable.StatusDetached))
 	return counter
 }
 
-// Key returns the key of this presence counter.
-func (c *Counter) Key() key.Key {
+// Key returns the key of this presence.
+func (c *Presence) Key() key.Key {
 	return c.key
 }
 
 // Type returns the type of this resource.
-func (c *Counter) Type() attachable.ResourceType {
+func (c *Presence) Type() attachable.ResourceType {
 	return attachable.TypePresence
 }
 
-// Status returns the status of this presence counter.
-func (c *Counter) Status() attachable.StatusType {
+// Status returns the status of this presence.
+func (c *Presence) Status() attachable.StatusType {
 	return attachable.StatusType(c.status.Load())
 }
 
-// SetStatus updates the status of this presence counter.
-func (c *Counter) SetStatus(status attachable.StatusType) {
+// SetStatus updates the status of this presence.
+func (c *Presence) SetStatus(status attachable.StatusType) {
 	c.status.Store(int32(status))
 }
 
-// IsAttached returns whether this presence counter is attached or not.
-func (c *Counter) IsAttached() bool {
+// IsAttached returns whether this presence is attached or not.
+func (c *Presence) IsAttached() bool {
 	return attachable.StatusType(c.status.Load()) == attachable.StatusAttached
 }
 
-// ActorID returns ID of the actor currently working with this counter.
-func (c *Counter) ActorID() time.ActorID {
+// ActorID returns ID of the actor currently working with this presence.
+func (c *Presence) ActorID() time.ActorID {
 	c.actorMu.RLock()
 	defer c.actorMu.RUnlock()
 	return c.actorID
 }
 
-// SetActor sets actor into this presence counter.
-func (c *Counter) SetActor(actor time.ActorID) {
+// SetActor sets actor into this presence.
+func (c *Presence) SetActor(actor time.ActorID) {
 	c.actorMu.Lock()
 	defer c.actorMu.Unlock()
 	c.actorID = actor
 }
 
 // Count returns the current count value.
-func (c *Counter) Count() int64 {
+func (c *Presence) Count() int64 {
 	return c.count.Load()
 }
 
 // Seq returns the last seen sequence number.
-func (c *Counter) Seq() int64 {
+func (c *Presence) Seq() int64 {
 	return c.seq.Load()
 }
 
 // UpdateCount updates the count and sequence number if the sequence is newer.
-func (c *Counter) UpdateCount(count int64, seq int64) bool {
+func (c *Presence) UpdateCount(count int64, seq int64) bool {
 	// Only update if sequence is newer (or initial state with seq=0)
 	currentSeq := c.seq.Load()
 	if seq > currentSeq || seq == 0 {

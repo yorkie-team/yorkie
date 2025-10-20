@@ -27,6 +27,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	gotime "time"
 
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
@@ -46,6 +48,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/pkg/presence"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 type status int
@@ -65,6 +68,9 @@ var (
 
 	// ErrNotDetached occurs when the given resource is not detached.
 	ErrNotDetached = errors.FailedPrecond("resource is not detached")
+
+	// ErrInvalidResource occurs when the given resource is invalid.
+	ErrInvalidResource = errors.InvalidArgument("invalid resource")
 
 	// ErrUnsupportedWatchResponseType occurs when the given WatchResponseType
 	// is not supported.
@@ -93,6 +99,10 @@ type Client struct {
 	key         string
 	status      status
 	attachments *cmap.Map[key.Key, *Attachment]
+
+	syncCtx    context.Context
+	syncCancel context.CancelFunc
+	syncLoopWg sync.WaitGroup
 }
 
 // WatchDocResponseType is type of watch response.
@@ -124,6 +134,21 @@ func New(opts ...Option) (*Client, error) {
 	k := options.Key
 	if k == "" {
 		k = xid.New().String()
+	}
+
+	// Set default sync loop duration if not configured (50ms like JS SDK)
+	if options.SyncLoopDuration == 0 {
+		options.SyncLoopDuration = 50 * gotime.Millisecond
+	}
+
+	// Set default retry sync loop delay if not configured
+	if options.RetrySyncLoopDelay == 0 {
+		options.RetrySyncLoopDelay = 1000 * gotime.Millisecond
+	}
+
+	// Set default heartbeat interval if not configured
+	if options.PresenceHeartbeatInterval == 0 {
+		options.PresenceHeartbeatInterval = 30 * gotime.Second
 	}
 
 	conn := &http.Client{}
@@ -236,6 +261,8 @@ func (c *Client) Activate(ctx context.Context) error {
 	c.status = statusActivated
 	c.id = clientID
 
+	c.runSyncLoop(ctx)
+
 	return nil
 }
 
@@ -248,6 +275,12 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 	deactiveOpts := &DeactivateOptions{}
 	for _, opt := range opts {
 		opt(deactiveOpts)
+	}
+
+	// Stop sync loop before closing watch streams
+	if c.syncCancel != nil {
+		c.syncCancel()
+		c.syncLoopWg.Wait()
 	}
 
 	for _, attachment := range c.attachments.Values() {
@@ -271,23 +304,102 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 	return nil
 }
 
+// runSyncLoop runs the sync loop for all attached resources.
+// It periodically checks if any resource needs synchronization and performs it.
+func (c *Client) runSyncLoop(ctx context.Context) {
+	c.syncCtx, c.syncCancel = context.WithCancel(ctx)
+	c.syncLoopWg.Add(1)
+
+	go func() {
+		defer c.syncLoopWg.Done()
+
+		ticker := gotime.NewTicker(c.options.SyncLoopDuration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-c.syncCtx.Done():
+				return
+			case <-ticker.C:
+				for _, attachment := range c.attachments.Values() {
+					if !attachment.needSync(c.options.PresenceHeartbeatInterval) {
+						continue
+					}
+
+					if err := c.syncInternal(c.syncCtx, attachment, nil); err != nil {
+						logging.DefaultLogger().Warnf("sync failed: %v", err)
+						gotime.Sleep(c.options.RetrySyncLoopDelay)
+					}
+
+				}
+			}
+		}
+	}()
+}
+
+// syncInternal performs synchronization for the given attachment based on its type.
+// If syncOpts is provided, it will be used for the sync operation; otherwise,
+// the attachment's sync mode will be used.
+func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts *SyncOptions) error {
+	attachment.syncMu.Lock()
+	defer attachment.syncMu.Unlock()
+
+	if attachment.Is(attachable.TypeDocument) {
+		d, ok := attachment.resource.(*document.Document)
+		if !ok {
+			return ErrInvalidResource
+		}
+
+		options := SyncOptions{
+			key:  d.Key(),
+			mode: types.SyncModePushPull,
+		}
+
+		// Use provided sync options if available, otherwise use attachment's sync mode
+		if opts != nil {
+			options = *opts
+		} else if attachment.syncMode == SyncModeRealtimePushOnly {
+			options.mode = types.SyncModePushOnly
+		}
+
+		if err := c.pushPullChanges(ctx, options); err != nil {
+			return err
+		}
+
+		attachment.changeEventReceived = false
+		return nil
+	}
+
+	p, ok := attachment.resource.(*presence.Presence)
+	if !ok {
+		return ErrInvalidResource
+	}
+
+	if err := c.refreshPresence(ctx, p); err != nil {
+		return err
+	}
+
+	attachment.lastSyncTime = gotime.Now()
+
+	return nil
+}
+
 // AttachResource attaches the given resource to this client.
 // This is a generalized version of Attach that works with any Attachable resource.
-func (c *Client) Attach(ctx context.Context, resource attachable.Attachable, opts ...interface{}) error {
+func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...interface{}) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
-	if resource.Status() != attachable.StatusDetached {
+	if r.Status() != attachable.StatusDetached {
 		return ErrNotDetached
 	}
 
-	resource.SetActor(c.id)
+	r.SetActor(c.id)
 
-	switch resource.Type() {
-	case attachable.TypeDocument:
-		doc, ok := resource.(*document.Document)
+	if r.Type() == attachable.TypeDocument {
+		d, ok := r.(*document.Document)
 		if !ok {
-			return fmt.Errorf("invalid document resource")
+			return ErrInvalidResource
 		}
 
 		attachOpts := &AttachOptions{}
@@ -297,35 +409,40 @@ func (c *Client) Attach(ctx context.Context, resource attachable.Attachable, opt
 			}
 		}
 
-		return c.attachDocument(ctx, doc, attachOpts)
-	case attachable.TypePresence:
-		counter, ok := resource.(*presence.Counter)
-		if !ok {
-			return fmt.Errorf("invalid presence resource")
-		}
+		return c.attachDocument(ctx, d, attachOpts)
 
-		return c.attachPresence(ctx, counter)
-	default:
-		return fmt.Errorf("unsupported resource type: %s", resource.Type())
 	}
+
+	p, ok := r.(*presence.Presence)
+	if !ok {
+		return ErrInvalidResource
+	}
+
+	return c.attachPresence(ctx, p)
 }
 
 // Detach detaches the given resource from this client.
 // This is a generalized version of Detach that works with any Attachable resource.
-func (c *Client) Detach(ctx context.Context, resource attachable.Attachable, opts ...interface{}) error {
+func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...interface{}) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
-	attachment, ok := c.attachments.Get(resource.Key())
+	attachment, ok := c.attachments.Get(r.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	switch resource.Type() {
-	case attachable.TypeDocument:
-		doc, ok := resource.(*document.Document)
+	attachment.syncMu.Lock()
+	defer attachment.syncMu.Unlock()
+
+	if attachment.closeWatchStream != nil {
+		attachment.closeWatchStream()
+	}
+
+	if attachment.Is(attachable.TypeDocument) {
+		d, ok := r.(*document.Document)
 		if !ok {
-			return fmt.Errorf("invalid document resource")
+			return ErrInvalidResource
 		}
 
 		detachOpts := &DetachOptions{}
@@ -335,32 +452,28 @@ func (c *Client) Detach(ctx context.Context, resource attachable.Attachable, opt
 			}
 		}
 
-		attachment.closeWatchStream()
-
-		return c.detachDocument(ctx, doc, detachOpts)
-	case attachable.TypePresence:
-		counter, ok := resource.(*presence.Counter)
-		if !ok {
-			return fmt.Errorf("invalid presence resource")
-		}
-
-		return c.detachPresence(ctx, counter)
-	default:
-		return fmt.Errorf("unsupported resource type: %s", resource.Type())
+		return c.detachDocument(ctx, d, detachOpts)
 	}
+
+	p, ok := r.(*presence.Presence)
+	if !ok {
+		return ErrInvalidResource
+	}
+
+	return c.detachPresence(ctx, p)
 }
 
 // attachDocument attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
-func (c *Client) attachDocument(ctx context.Context, doc *document.Document, opts *AttachOptions) error {
+func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts *AttachOptions) error {
 	// 01. Initialize presence data
-	if err := doc.Update(func(r *json.Object, p *document.Presence) error {
+	if err := d.Update(func(r *json.Object, p *document.Presence) error {
 		p.Initialize(opts.Presence)
 		return nil
 	}); err != nil {
 		return err
 	}
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
 		return err
 	}
@@ -372,7 +485,7 @@ func (c *Client) attachDocument(ctx context.Context, doc *document.Document, opt
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 			SchemaKey:  opts.Schema,
-		}), c.options.APIKey, doc.Key().String()),
+		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
 		return err
@@ -384,43 +497,52 @@ func (c *Client) attachDocument(ctx context.Context, doc *document.Document, opt
 		return err
 	}
 
-	doc.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
+	d.MaxSizeLimit = int(res.Msg.MaxSizePerDocument)
 	if res.Msg.SchemaRules != nil {
-		doc.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
+		d.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
 	}
 
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
 			"after apply %d changes: %s",
 			len(pack.Changes),
-			doc.RootObject().Marshal(),
+			d.RootObject().Marshal(),
 		))
 	}
 
-	if doc.Status() == attachable.StatusRemoved {
+	if d.Status() == attachable.StatusRemoved {
 		return nil
 	}
-	doc.SetStatus(attachable.StatusAttached)
+	d.SetStatus(attachable.StatusAttached)
 
 	// 04. Start watch stream
 	watchCtx, cancelFunc := context.WithCancel(ctx)
-	c.attachments.Set(doc.Key(), &Attachment{
-		resource:         doc,
-		resourceID:       types.ID(res.Msg.DocumentId),
-		watchCtx:         watchCtx,
-		closeWatchStream: cancelFunc,
+
+	// Set sync mode based on IsRealtime option
+	syncMode := SyncModeManual
+	if opts.IsRealtime {
+		syncMode = SyncModeRealtime
+	}
+
+	c.attachments.Set(d.Key(), &Attachment{
+		resource:            d,
+		resourceID:          types.ID(res.Msg.DocumentId),
+		watchCtx:            watchCtx,
+		closeWatchStream:    cancelFunc,
+		syncMode:            syncMode,
+		changeEventReceived: false,
 	})
 	if opts.IsRealtime {
-		if err = c.runWatchLoop(watchCtx, doc); err != nil {
+		if err = c.runWatchLoop(watchCtx, d); err != nil {
 			return err
 		}
 	}
 
 	// 05. Set initial root values if provided
-	return doc.Update(func(r *json.Object, p *document.Presence) error {
+	return d.Update(func(r *json.Object, p *document.Presence) error {
 		for k, v := range opts.InitialRoot {
 			if r.Get(k) != nil {
 				continue
@@ -439,20 +561,20 @@ func (c *Client) attachDocument(ctx context.Context, doc *document.Document, opt
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) detachDocument(ctx context.Context, doc *document.Document, opts *DetachOptions) error {
-	attachment, ok := c.attachments.Get(doc.Key())
+func (c *Client) detachDocument(ctx context.Context, d *document.Document, opts *DetachOptions) error {
+	attachment, ok := c.attachments.Get(d.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	if err := doc.Update(func(r *json.Object, p *document.Presence) error {
+	if err := d.Update(func(r *json.Object, p *document.Presence) error {
 		p.Clear()
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
 		return err
 	}
@@ -464,7 +586,7 @@ func (c *Client) detachDocument(ctx context.Context, doc *document.Document, opt
 			DocumentId:          attachment.resourceID.String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
-		}), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, d.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -474,44 +596,65 @@ func (c *Client) detachDocument(ctx context.Context, doc *document.Document, opt
 		return err
 	}
 
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
-	if doc.Status() != document.StatusRemoved {
-		doc.SetStatus(document.StatusDetached)
+	if d.Status() != document.StatusRemoved {
+		d.SetStatus(document.StatusDetached)
 	}
-	c.attachments.Delete(doc.Key())
+	c.attachments.Delete(d.Key())
 
 	return nil
 }
 
 // attachPresence attaches a presence counter to the server.
-func (c *Client) attachPresence(ctx context.Context, counter *presence.Counter) error {
+func (c *Client) attachPresence(ctx context.Context, p *presence.Presence) error {
 	res, err := c.client.AttachPresence(
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachPresenceRequest{
 			ClientId:    c.id.String(),
-			PresenceKey: counter.Key().String(),
-		}), c.options.APIKey, counter.Key().String()))
+			PresenceKey: p.Key().String(),
+		}), c.options.APIKey, p.Key().String()))
 	if err != nil {
 		return err
 	}
 
-	counter.SetStatus(attachable.StatusAttached)
-	c.attachments.Set(counter.Key(), &Attachment{
-		resource:   counter,
-		resourceID: types.ID(res.Msg.PresenceId),
-	})
+	p.SetStatus(attachable.StatusAttached)
+	attachment := &Attachment{
+		resource:     p,
+		resourceID:   types.ID(res.Msg.PresenceId),
+		syncMode:     SyncModeRealtime,
+		lastSyncTime: gotime.Now(),
+	}
+	c.attachments.Set(p.Key(), attachment)
 
 	// Update initial count from attach response
-	counter.UpdateCount(res.Msg.Count, 0)
+	p.UpdateCount(res.Msg.Count, 0)
 
 	return nil
 }
 
+// refreshPresence refreshes the TTL of the given presence counter.
+func (c *Client) refreshPresence(ctx context.Context, p *presence.Presence) error {
+	attachment, ok := c.attachments.Get(p.Key())
+	if !ok {
+		return ErrNotAttached
+	}
+
+	_, err := c.client.RefreshPresence(
+		ctx,
+		withShardKey(connect.NewRequest(&api.RefreshPresenceRequest{
+			ClientId:    c.id.String(),
+			PresenceId:  attachment.resourceID.String(),
+			PresenceKey: p.Key().String(),
+		}), c.options.APIKey, p.Key().String()))
+
+	return err
+}
+
 // detachPresence detaches a presence counter from the server.
-func (c *Client) detachPresence(ctx context.Context, counter *presence.Counter) error {
-	attachment, ok := c.attachments.Get(counter.Key())
+func (c *Client) detachPresence(ctx context.Context, p *presence.Presence) error {
+	attachment, ok := c.attachments.Get(p.Key())
 	if !ok {
 		return ErrNotAttached
 	}
@@ -521,25 +664,25 @@ func (c *Client) detachPresence(ctx context.Context, counter *presence.Counter) 
 		withShardKey(connect.NewRequest(&api.DetachPresenceRequest{
 			ClientId:    c.id.String(),
 			PresenceId:  attachment.resourceID.String(),
-			PresenceKey: counter.Key().String(),
-		}), c.options.APIKey, counter.Key().String()))
+			PresenceKey: p.Key().String(),
+		}), c.options.APIKey, p.Key().String()))
 	if err != nil {
 		return err
 	}
 
 	// Update counter status and reset count to 0
-	counter.SetStatus(attachable.StatusDetached)
-	counter.UpdateCount(0, 0) // Reset count and seq when detached
+	p.SetStatus(attachable.StatusDetached)
+	p.UpdateCount(0, 0) // Reset count and seq when detached
 
-	c.attachments.Delete(counter.Key())
+	c.attachments.Delete(p.Key())
 
 	return nil
 }
 
 // WatchPresence starts watching presence count changes for the given counter.
 // It returns a channel that receives count updates and a close function to stop watching.
-func (c *Client) WatchPresence(ctx context.Context, counter *presence.Counter) (<-chan int64, func(), error) {
-	_, ok := c.attachments.Get(counter.Key())
+func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-chan int64, func(), error) {
+	_, ok := c.attachments.Get(p.Key())
 	if !ok {
 		return nil, nil, ErrNotAttached
 	}
@@ -548,7 +691,7 @@ func (c *Client) WatchPresence(ctx context.Context, counter *presence.Counter) (
 		return nil, nil, ErrNotActivated
 	}
 
-	if counter.Status() != attachable.StatusAttached {
+	if p.Status() != attachable.StatusAttached {
 		return nil, nil, fmt.Errorf("presence counter must be attached before watching")
 	}
 
@@ -563,8 +706,8 @@ func (c *Client) WatchPresence(ctx context.Context, counter *presence.Counter) (
 		watchCtx,
 		withShardKey(connect.NewRequest(&api.WatchPresenceRequest{
 			ClientId:    c.id.String(),
-			PresenceKey: counter.Key().String(),
-		}), c.options.APIKey, counter.Key().String()))
+			PresenceKey: p.Key().String(),
+		}), c.options.APIKey, p.Key().String()))
 	if err != nil {
 		cancel()
 		return nil, nil, err
@@ -596,7 +739,7 @@ func (c *Client) WatchPresence(ctx context.Context, counter *presence.Counter) (
 				switch body := msg.Body.(type) {
 				case *api.WatchPresenceResponse_Initialized:
 					// Always accept initial count and update counter
-					counter.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
+					p.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
 					select {
 					case countChan <- body.Initialized.Count:
 					case <-watchCtx.Done():
@@ -605,7 +748,7 @@ func (c *Client) WatchPresence(ctx context.Context, counter *presence.Counter) (
 				case *api.WatchPresenceResponse_Event:
 					// Let Counter decide whether to accept the update based on sequence
 					if body.Event != nil {
-						if counter.UpdateCount(body.Event.Count, body.Event.Seq) {
+						if p.UpdateCount(body.Event.Count, body.Event.Seq) {
 							// Only send to channel if Counter accepted the update
 							select {
 							case countChan <- body.Event.Count:
@@ -638,7 +781,12 @@ func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 	}
 
 	for _, opt := range opts {
-		if err := c.pushPullChanges(ctx, opt); err != nil {
+		attachment, ok := c.attachments.Get(opt.key)
+		if !ok {
+			return ErrNotAttached
+		}
+
+		if err := c.syncInternal(ctx, attachment, &opt); err != nil {
 			return err
 		}
 	}
@@ -648,9 +796,9 @@ func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 
 // WatchStream returns a stream of watch events for testing purposes.
 func (c *Client) WatchStream(
-	resource attachable.Attachable,
+	r attachable.Attachable,
 ) (<-chan WatchDocResponse, context.CancelFunc, error) {
-	attachment, ok := c.attachments.Get(resource.Key())
+	attachment, ok := c.attachments.Get(r.Key())
 	if !ok {
 		return nil, nil, ErrNotAttached
 	}
@@ -663,11 +811,8 @@ func (c *Client) WatchStream(
 // is returned. If the context "watchCtx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
 // nil "Err()".
-func (c *Client) runWatchLoop(
-	ctx context.Context,
-	doc *document.Document,
-) error {
-	attachment, ok := c.attachments.Get(doc.Key())
+func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
+	attachment, ok := c.attachments.Get(d.Key())
 	if !ok {
 		return ErrNotAttached
 	}
@@ -677,7 +822,7 @@ func (c *Client) runWatchLoop(
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.resourceID.String(),
-		}), c.options.APIKey, doc.Key().String()),
+		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
 		return err
@@ -689,7 +834,7 @@ func (c *Client) runWatchLoop(
 	if !stream.Receive() {
 		return ErrInitNotReceived
 	}
-	if _, err := handleResponse(stream.Msg(), doc); err != nil {
+	if _, err := handleResponse(stream.Msg(), d); err != nil {
 		return err
 	}
 	if err = stream.Err(); err != nil {
@@ -702,7 +847,7 @@ func (c *Client) runWatchLoop(
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
-			resp, err := handleResponse(pbResp, doc)
+			resp, err := handleResponse(pbResp, d)
 			if err != nil {
 				rch <- WatchDocResponse{Err: err}
 				ctx.Done()
@@ -713,6 +858,16 @@ func (c *Client) runWatchLoop(
 				continue
 			}
 
+			// Set remote change event flag when document change is received
+			if resp.Type == DocumentChanged {
+				attachment, ok := c.attachments.Get(d.Key())
+				if ok {
+					attachment.syncMu.Lock()
+					attachment.changeEventReceived = true
+					attachment.syncMu.Unlock()
+				}
+			}
+
 			rch <- *resp
 		}
 		if err = stream.Err(); err != nil {
@@ -721,7 +876,7 @@ func (c *Client) runWatchLoop(
 			close(rch)
 
 			// If watch stream is disconnected, we re-establish the watch stream.
-			err = c.runWatchLoop(ctx, doc)
+			err = c.runWatchLoop(ctx, d)
 			if err != nil {
 				return
 			}
@@ -741,7 +896,7 @@ func (c *Client) runWatchLoop(
 	go func() {
 		for {
 			select {
-			case e := <-doc.Events():
+			case e := <-d.Events():
 				t := PresenceChanged
 				if e.Type == document.WatchedEvent {
 					t = DocumentWatched
@@ -758,8 +913,8 @@ func (c *Client) runWatchLoop(
 	go func() {
 		for {
 			select {
-			case r := <-doc.BroadcastRequests():
-				doc.BroadcastResponses() <- c.broadcast(ctx, doc, r.Topic, r.Payload)
+			case r := <-d.BroadcastRequests():
+				d.BroadcastResponses() <- c.broadcast(ctx, d, r.Topic, r.Payload)
 			case <-ctx.Done():
 				return
 			}
@@ -769,10 +924,7 @@ func (c *Client) runWatchLoop(
 	return nil
 }
 
-func handleResponse(
-	pbResp *api.WatchDocumentResponse,
-	doc *document.Document,
-) (*WatchDocResponse, error) {
+func handleResponse(pbResp *api.WatchDocumentResponse, d *document.Document) (*WatchDocResponse, error) {
 	switch resp := pbResp.Body.(type) {
 	case *api.WatchDocumentResponse_Initialization_:
 		var clientIDs []string
@@ -784,7 +936,7 @@ func handleResponse(
 			clientIDs = append(clientIDs, id.String())
 		}
 
-		doc.SetOnlineClients(clientIDs...)
+		d.SetOnlineClients(clientIDs...)
 		return nil, nil
 	case *api.WatchDocumentResponse_Event:
 		eventType, err := converter.FromEventType(resp.Event.Type)
@@ -801,24 +953,24 @@ func handleResponse(
 		case events.DocChanged:
 			return &WatchDocResponse{Type: DocumentChanged}, nil
 		case events.DocWatched:
-			doc.AddOnlineClient(cli.String())
+			d.AddOnlineClient(cli.String())
 
 			// NOTE(hackerwins): If the presence does not exist, it means that
 			// PushPull is not received before watching. In that case, the 'watched'
 			// event is ignored here, and it will be triggered by PushPull.
-			if doc.Presence(cli.String()) == nil {
+			if d.Presence(cli.String()) == nil {
 				return nil, nil
 			}
 
 			return &WatchDocResponse{
 				Type: DocumentWatched,
 				Presences: map[string]document.PresenceData{
-					cli.String(): doc.Presence(cli.String()),
+					cli.String(): d.Presence(cli.String()),
 				},
 			}, nil
 		case events.DocUnwatched:
-			p := doc.Presence(cli.String())
-			doc.RemoveOnlineClient(cli.String())
+			p := d.Presence(cli.String())
+			d.RemoveOnlineClient(cli.String())
 
 			// NOTE(hackerwins): If the presence does not exist, it means that
 			// PushPull is already received before unwatching. In that case, the
@@ -836,7 +988,7 @@ func handleResponse(
 		case events.DocBroadcast:
 			eventBody := resp.Event.Body
 			// If the handler exists, it means that the broadcast topic has been subscribed to.
-			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
+			if handler, ok := d.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
 				err := handler(eventBody.Topic, resp.Event.Publisher, eventBody.Payload)
 				if err != nil {
 					return &WatchDocResponse{
@@ -876,12 +1028,12 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 		return ErrNotAttached
 	}
 
-	doc, ok := attachment.resource.(*document.Document)
+	d, ok := attachment.resource.(*document.Document)
 	if !ok {
-		return fmt.Errorf("invalid document resource")
+		return ErrInvalidResource
 	}
 
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
 		return err
 	}
@@ -902,28 +1054,28 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
-	if doc.Status() == document.StatusRemoved {
-		c.attachments.Delete(doc.Key())
+	if d.Status() == document.StatusRemoved {
+		c.attachments.Delete(d.Key())
 	}
 
 	return nil
 }
 
 // Remove removes the given document.
-func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
+func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
 
-	attachment, ok := c.attachments.Get(doc.Key())
+	attachment, ok := c.attachments.Get(d.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
 		return err
 	}
@@ -935,7 +1087,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 			ClientId:   c.id.String(),
 			DocumentId: attachment.resourceID.String(),
 			ChangePack: pbChangePack,
-		}), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, d.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -945,22 +1097,27 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
-	if doc.Status() == document.StatusRemoved {
-		c.attachments.Delete(doc.Key())
+	if d.Status() == document.StatusRemoved {
+		c.attachments.Delete(d.Key())
 	}
 
 	return nil
 }
 
-func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic string, payload []byte) error {
+func (c *Client) broadcast(
+	ctx context.Context,
+	d *document.Document,
+	topic string,
+	payload []byte,
+) error {
 	if c.status != statusActivated {
 		return ErrNotActivated
 	}
 
-	attachment, ok := c.attachments.Get(doc.Key())
+	attachment, ok := c.attachments.Get(d.Key())
 	if !ok {
 		return ErrNotAttached
 	}
@@ -972,7 +1129,7 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 			DocumentId: attachment.resourceID.String(),
 			Topic:      topic,
 			Payload:    payload,
-		}), c.options.APIKey, doc.Key().String()))
+		}), c.options.APIKey, d.Key().String()))
 	if err != nil {
 		return err
 	}

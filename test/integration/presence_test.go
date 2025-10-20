@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/presence"
@@ -43,28 +44,28 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// Create presence counter
 		presenceKey := helper.TestDocKey(t)
-		counter := presence.New(presenceKey)
+		p := presence.New(presenceKey)
 
 		// Test initial state
-		assert.Equal(t, presenceKey, counter.Key())
-		assert.Equal(t, attachable.TypePresence, counter.Type())
-		assert.Equal(t, attachable.StatusDetached, counter.Status())
-		assert.False(t, counter.IsAttached())
+		assert.Equal(t, presenceKey, p.Key())
+		assert.Equal(t, attachable.TypePresence, p.Type())
+		assert.Equal(t, attachable.StatusDetached, p.Status())
+		assert.False(t, p.IsAttached())
 
 		// Attach presence counter
-		err := cli.Attach(ctx, counter)
+		err := cli.Attach(ctx, p)
 		require.NoError(t, err)
 
 		// Verify attached state
-		assert.Equal(t, attachable.StatusAttached, counter.Status())
-		assert.True(t, counter.IsAttached())
+		assert.Equal(t, attachable.StatusAttached, p.Status())
+		assert.True(t, p.IsAttached())
 
 		// Detach presence counter
-		require.NoError(t, cli.Detach(ctx, counter))
+		require.NoError(t, cli.Detach(ctx, p))
 
 		// Verify detached state
-		assert.Equal(t, attachable.StatusDetached, counter.Status())
-		assert.False(t, counter.IsAttached())
+		assert.Equal(t, attachable.StatusDetached, p.Status())
+		assert.False(t, p.IsAttached())
 	})
 
 	t.Run("multiple clients presence counter test", func(t *testing.T) {
@@ -192,7 +193,7 @@ func TestPresenceIntegration(t *testing.T) {
 		getLatestCount()
 
 		// Add participants one by one and verify count increases
-		participantCounters := make([]*presence.Counter, len(participantClients))
+		participantCounters := make([]*presence.Presence, len(participantClients))
 		for i, client := range participantClients {
 			participantCounters[i] = presence.New(presenceKey)
 
@@ -348,7 +349,7 @@ func TestPresenceIntegration(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		presenceKey := helper.TestDocKey(t)
-		counters := make([]*presence.Counter, clientCount)
+		counters := make([]*presence.Presence, clientCount)
 
 		// Create counters for all clients
 		for i := range clientCount {
@@ -498,7 +499,7 @@ func TestPresenceIntegration(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		presenceKey := helper.TestDocKey(t)
-		counters := make([]*presence.Counter, clientCount)
+		counters := make([]*presence.Presence, clientCount)
 
 		// Create and activate multiple clients
 		for i := range clientCount {
@@ -592,5 +593,99 @@ func TestPresenceIntegration(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, resource.IsAttached())
 		}
+	})
+
+	t.Run("presence TTL refresh test", func(t *testing.T) {
+		// Use custom heartbeat interval for faster testing
+		cli, err := client.Dial(
+			defaultServer.RPCAddr(),
+			client.WithPresenceHeartbeatInterval(1*time.Second),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Deactivate(ctx))
+			assert.NoError(t, cli.Close())
+		}()
+
+		presenceKey := helper.TestDocKey(t)
+		counter := presence.New(presenceKey)
+
+		// Attach presence counter
+		err = cli.Attach(ctx, counter)
+		require.NoError(t, err)
+		assert.True(t, counter.IsAttached())
+
+		// Wait for a few heartbeat cycles (3 seconds)
+		// The client should automatically send refresh requests via heartbeat
+		time.Sleep(3 * time.Second)
+
+		// Presence should still be active after multiple refresh cycles
+		assert.True(t, counter.IsAttached())
+
+		// Detach
+		require.NoError(t, cli.Detach(ctx, counter))
+		assert.False(t, counter.IsAttached())
+	})
+
+	t.Run("presence expires after TTL without refresh", func(t *testing.T) {
+		// This test verifies that presence sessions expire when clients don't send refresh.
+		// We use a short TTL (5s) configured in test helper.
+		ctx := context.Background()
+
+		// cli1 has heartbeat disabled (long interval) to simulate a crash.
+		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithPresenceHeartbeatInterval(1*time.Hour))
+		require.NoError(t, err)
+		require.NoError(t, cli1.Activate(ctx))
+		defer func() { assert.NoError(t, cli1.Close()) }()
+
+		// cli2 has normal heartbeat to stay active and observe cli1's expiration.
+		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithPresenceHeartbeatInterval(2*time.Second))
+		require.NoError(t, err)
+		require.NoError(t, cli2.Activate(ctx))
+		defer func() { assert.NoError(t, cli2.Close()) }()
+
+		counter1 := presence.New(helper.TestDocKey(t))
+		counter2 := presence.New(helper.TestDocKey(t))
+		require.NoError(t, cli1.Attach(ctx, counter1))
+		require.NoError(t, cli2.Attach(ctx, counter2))
+
+		// Start watching on cli2 to receive count updates
+		countCh, unwatch, err := cli2.WatchPresence(ctx, counter2)
+		require.NoError(t, err)
+		defer unwatch()
+
+		// Wait for initial count
+		select {
+		case count := <-countCh:
+			assert.Equal(t, int64(2), count, "Initial count should be 2")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Timeout waiting for initial count")
+		}
+
+		// Simulate cli1 crash by deactivating without detach
+		// This stops the client but leaves presence on server
+		require.NoError(t, cli1.Deactivate(ctx))
+
+		// Wait for TTL (5s) + cleanup interval (1s) + buffer
+		// After cleanup runs, cli2 should receive an update with count=1
+		dropped := false
+		for !dropped {
+			select {
+			case count := <-countCh:
+				if count == 1 {
+					dropped = true
+					t.Logf("Count dropped to 1 after client1 expired")
+				}
+			case <-time.After(8 * time.Second):
+				t.Fatal("Timeout waiting for count to drop after TTL expiration")
+			}
+		}
+
+		// Verify count dropped to 1
+		assert.Equal(t, int64(1), counter2.Count(), "Count should be 1 after client1 expired")
+
+		// client2 should still be active
+		assert.True(t, counter2.IsAttached())
 	})
 }

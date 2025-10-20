@@ -66,7 +66,6 @@ func TestMap(t *testing.T) {
 	t.Run("delete", func(t *testing.T) {
 		m := cmap.New[string, int]()
 
-		// Delete with callback function
 		m.Set("a", 1)
 		exists := m.Delete("a", func(val int, exists bool) bool {
 			assert.Equal(t, 1, val)

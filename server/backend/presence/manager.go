@@ -21,11 +21,13 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // PubSub is an interface for publishing presence events.
@@ -33,39 +35,93 @@ type PubSub interface {
 	PublishPresence(ctx context.Context, event events.PresenceEvent)
 }
 
-// PresenceInfo represents information about a presence session.
-type PresenceInfo struct {
-	ID       types.ID             // Unique presence session ID
-	ClientID time.ActorID         // Client who created this presence
-	RefKey   types.PresenceRefKey // Reference to the presence counter
+// Session represents a single session.
+type Session struct {
+	ID        types.ID             // Unique session ID
+	Key       types.PresenceRefKey // Reference to the presence counter
+	Actor     time.ActorID         // Client who created this presence
+	UpdatedAt gotime.Time          // Last activity time for TTL calculation
 }
 
 // Manager manages presence counters for real-time user tracking.
 type Manager struct {
-	// presences maps PresenceRefKey to a map of unique presence IDs.
-	presences *cmap.Map[types.PresenceRefKey, *cmap.Map[types.ID, *PresenceInfo]]
+	// presences maps key to a map of unique presence IDs.
+	presences *cmap.Map[types.PresenceRefKey, *cmap.Map[types.ID, *Session]]
 
 	// clientToPresence maps clientID to their presence IDs for quick lookup.
 	clientToPresence *cmap.Map[time.ActorID, *cmap.Map[types.PresenceRefKey, types.ID]]
 
-	// presenceIDToRefKey is a reverse index for O(1) Detach lookup
-	presenceIDToRefKey *cmap.Map[types.ID, types.PresenceRefKey]
+	// sessionIDToKey is a reverse index for O(1) Detach lookup
+	sessionIDToKey *cmap.Map[types.ID, types.PresenceRefKey]
 
 	// pubsub is used to publish presence events
 	pubsub PubSub
 
 	// seqCounter is a monotonic counter for ordering events
 	seqCounter atomic.Int64
+
+	// presenceTTL is the time-to-live duration for sessions
+	presenceTTL gotime.Duration
+
+	// cleanupInterval is the interval for running cleanup of expired presences
+	cleanupInterval gotime.Duration
+
+	// cleanupTicker is the ticker for periodic cleanup
+	cleanupTicker *gotime.Ticker
+
+	// cleanupDone is the channel to signal cleanup goroutine to stop
+	cleanupDone chan struct{}
 }
 
 // NewManager creates a new presence manager.
-func NewManager(pubsub PubSub) *Manager {
-	return &Manager{
-		presences:          cmap.New[types.PresenceRefKey, *cmap.Map[types.ID, *PresenceInfo]](),
-		clientToPresence:   cmap.New[time.ActorID, *cmap.Map[types.PresenceRefKey, types.ID]](),
-		presenceIDToRefKey: cmap.New[types.ID, types.PresenceRefKey](),
-		pubsub:             pubsub,
+func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Duration) *Manager {
+	if ttl == 0 {
+		ttl = 60 * gotime.Second
 	}
+
+	if cleanupInterval == 0 {
+		cleanupInterval = 10 * gotime.Second
+	}
+
+	return &Manager{
+		presences:        cmap.New[types.PresenceRefKey, *cmap.Map[types.ID, *Session]](),
+		clientToPresence: cmap.New[time.ActorID, *cmap.Map[types.PresenceRefKey, types.ID]](),
+		sessionIDToKey:   cmap.New[types.ID, types.PresenceRefKey](),
+
+		pubsub: pubsub,
+
+		presenceTTL:     ttl,
+		cleanupInterval: cleanupInterval,
+		cleanupDone:     make(chan struct{}),
+	}
+}
+
+// Start begins the background cleanup process for expired presences.
+func (m *Manager) Start() {
+	m.cleanupTicker = gotime.NewTicker(m.cleanupInterval)
+
+	go func() {
+		ctx := context.Background()
+		for {
+			select {
+			case <-m.cleanupTicker.C:
+				if sessions, err := m.CleanupExpiredSessions(ctx); err == nil && sessions > 0 {
+					logging.From(ctx).Infof("Cleaned up %d expired sessions", sessions)
+				}
+			case <-m.cleanupDone:
+				return
+			}
+		}
+	}()
+}
+
+// Stop stops the background cleanup process.
+func (m *Manager) Stop() {
+	if m.cleanupTicker != nil {
+		m.cleanupTicker.Stop()
+	}
+
+	close(m.cleanupDone)
 }
 
 // nextSeq returns the next monotonic sequence number.
@@ -76,40 +132,37 @@ func (m *Manager) nextSeq() int64 {
 // Attach adds a client to a presence counter and returns the unique presence ID.
 func (m *Manager) Attach(
 	ctx context.Context,
-	refKey types.PresenceRefKey,
+	key types.PresenceRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
 	// Check if client is already attached to this presence
-	if clientPresenceMap, exists := m.clientToPresence.Get(clientID); exists {
-		if presenceID, found := clientPresenceMap.Get(refKey); found {
-			// Client already attached, return existing presence ID and current count
-			return presenceID, m.Count(refKey), nil
+	if clientPresenceMap, ok := m.clientToPresence.Get(clientID); ok {
+		if presenceID, found := clientPresenceMap.Get(key); found {
+			return presenceID, m.Count(key), nil
 		}
 	}
 
-	// Generate unique presence ID
-	presenceID := types.NewID()
-
-	// Get or create presence map for this refKey
-	presenceMap := m.presences.Upsert(
-		refKey,
-		func(val *cmap.Map[types.ID, *PresenceInfo], exists bool) *cmap.Map[types.ID, *PresenceInfo] {
+	sessionMap := m.presences.Upsert(
+		key,
+		func(val *cmap.Map[types.ID, *Session], exists bool) *cmap.Map[types.ID, *Session] {
 			if !exists {
-				val = cmap.New[types.ID, *PresenceInfo]()
+				val = cmap.New[types.ID, *Session]()
 			}
+
 			return val
 		},
 	)
 
-	// Add new presence session
-	presenceMap.Set(presenceID, &PresenceInfo{
-		ID:       presenceID,
-		ClientID: clientID,
-		RefKey:   refKey,
+	id := types.NewID()
+	sessionMap.Set(id, &Session{
+		ID:        id,
+		Actor:     clientID,
+		Key:       key,
+		UpdatedAt: gotime.Now(),
 	})
 
 	// Add reverse index for O(1) detach lookup
-	m.presenceIDToRefKey.Set(presenceID, refKey)
+	m.sessionIDToKey.Set(id, key)
 
 	// Get or create client presence map
 	clientPresenceMap := m.clientToPresence.Upsert(
@@ -118,102 +171,151 @@ func (m *Manager) Attach(
 			if !exists {
 				val = cmap.New[types.PresenceRefKey, types.ID]()
 			}
+
 			return val
 		},
 	)
-	clientPresenceMap.Set(refKey, presenceID)
+	clientPresenceMap.Set(key, id)
 
 	// Get new count immediately after adding to minimize race window
-	newCount := int64(presenceMap.Len())
+	newCount := int64(sessionMap.Len())
 
 	// Publish event to PubSub
 	m.pubsub.PublishPresence(ctx, events.PresenceEvent{
-		RefKey: refKey,
-		Count:  newCount,
-		Seq:    m.nextSeq(),
+		Key:   key,
+		Count: newCount,
+		Seq:   m.nextSeq(),
 	})
 
-	return presenceID, newCount, nil
+	return id, newCount, nil
 }
 
 // Detach removes a client from a presence counter using presence ID.
 func (m *Manager) Detach(
 	ctx context.Context,
-	presenceID types.ID,
+	id types.ID,
 ) (int64, error) {
-	// Use reverse index for O(1) lookup instead of O(n) iteration
-	refKey, exists := m.presenceIDToRefKey.Get(presenceID)
-	if !exists {
-		return 0, fmt.Errorf("presence not found: %s", presenceID)
+	key, ok := m.sessionIDToKey.Get(id)
+	if !ok {
+		return 0, fmt.Errorf("session of %s not found", id)
 	}
 
-	// Get presence map
-	presenceMap, exists := m.presences.Get(refKey)
-	if !exists {
-		return 0, fmt.Errorf("presence map not found for key: %s", refKey)
+	sessionMap, ok := m.presences.Get(key)
+	if !ok {
+		return 0, fmt.Errorf("session map of %s not found", key)
 	}
 
-	// Get presence info
-	info, exists := presenceMap.Get(presenceID)
-	if !exists {
-		return 0, fmt.Errorf("presence info not found: %s", presenceID)
+	session, ok := sessionMap.Get(id)
+	if !ok {
+		return 0, fmt.Errorf("session of %s not found", id)
 	}
 
-	// Remove from presences
-	presenceMap.Delete(presenceID)
+	sessionMap.Delete(id)
 
-	// Get new count immediately after removal to minimize race window
-	newCount := int64(presenceMap.Len())
+	newCount := int64(sessionMap.Len())
 
-	// Remove from reverse index
-	m.presenceIDToRefKey.Delete(presenceID)
+	m.sessionIDToKey.Delete(id)
 
-	// Remove from client mapping
-	if clientPresenceMap, exists := m.clientToPresence.Get(info.ClientID); exists {
-		clientPresenceMap.Delete(refKey)
+	if clientPresenceMap, ok := m.clientToPresence.Get(session.Actor); ok {
+		clientPresenceMap.Delete(key)
 
-		// Clean up empty client map
 		if clientPresenceMap.Len() == 0 {
-			m.clientToPresence.Delete(info.ClientID)
+			m.clientToPresence.Delete(session.Actor)
 		}
 	}
 
-	// Clean up empty presence map if count reaches 0
 	if newCount == 0 {
-		m.presences.Delete(refKey)
+		m.presences.Delete(key)
 	}
 
-	// Publish event to PubSub
 	m.pubsub.PublishPresence(ctx, events.PresenceEvent{
-		RefKey: refKey,
-		Count:  newCount,
-		Seq:    m.nextSeq(),
+		Key:   key,
+		Count: newCount,
+		Seq:   m.nextSeq(),
 	})
 
 	return newCount, nil
 }
 
+// Refresh extends the TTL of an existing session by updating its activity time.
+func (m *Manager) Refresh(
+	ctx context.Context,
+	id types.ID,
+) error {
+	key, ok := m.sessionIDToKey.Get(id)
+	if !ok {
+		return fmt.Errorf("session of %s not found", id)
+	}
+
+	sessionMap, ok := m.presences.Get(key)
+	if !ok {
+		return fmt.Errorf("session map of %s not found", key)
+	}
+
+	info, ok := sessionMap.Get(id)
+	if !ok {
+		return fmt.Errorf("session of %s not found", id)
+	}
+
+	sessionMap.Set(id, &Session{
+		ID:        info.ID,
+		Key:       info.Key,
+		Actor:     info.Actor,
+		UpdatedAt: gotime.Now(),
+	})
+
+	return nil
+}
+
 // Count returns the current count for a presence key.
 // This is a lock-free operation by directly querying the presence map length.
-func (m *Manager) Count(refKey types.PresenceRefKey) int64 {
-	if presenceMap, ok := m.presences.Get(refKey); ok {
+func (m *Manager) Count(key types.PresenceRefKey) int64 {
+	if presenceMap, ok := m.presences.Get(key); ok {
 		return int64(presenceMap.Len())
 	}
+
 	return 0
+}
+
+// CleanupExpiredSessions removes sessions that have exceeded their TTL.
+// Returns the number of cleaned up sessions.
+func (m *Manager) CleanupExpiredSessions(ctx context.Context) (int, error) {
+	now := gotime.Now()
+	cleanedCount := 0
+
+	for _, sessionMap := range m.presences.Values() {
+		expiredIDs := []types.ID{}
+
+		// Check if session has expired (UpdatedAt + TTL < now)
+		for _, session := range sessionMap.Values() {
+			if now.Sub(session.UpdatedAt) > m.presenceTTL {
+				expiredIDs = append(expiredIDs, session.ID)
+			}
+		}
+
+		// Remove expired sessions
+		for _, id := range expiredIDs {
+			if _, err := m.Detach(ctx, id); err != nil {
+				logging.From(ctx).Warnf("detach expired session of %s: %v", id, err)
+				continue
+			}
+
+			cleanedCount++
+		}
+	}
+
+	return cleanedCount, nil
 }
 
 // Stats returns statistics about the presence manager.
 func (m *Manager) Stats() map[string]int {
-	totalPresences := m.presences.Len()
 	totalSessions := 0
-
-	// Count all sessions across all presence maps
 	for _, presenceMap := range m.presences.Values() {
 		totalSessions += presenceMap.Len()
 	}
 
 	return map[string]int{
-		"total_presences": totalPresences,
+		"total_presences": m.presences.Len(),
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}

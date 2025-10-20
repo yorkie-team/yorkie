@@ -65,9 +65,11 @@ var logger *zap.Logger
 
 // Below are the values of the Yorkie config used in the test.
 var (
-	RPCPort = 11101
-
+	RPCPort       = 11101
 	ProfilingPort = 11102
+
+	MembershipLeaseDuration   = "15s"
+	MembershipRenewalInterval = "5s"
 
 	AdminUser              = server.DefaultAdminUser
 	AdminPassword          = server.DefaultAdminPassword
@@ -78,8 +80,8 @@ var (
 	HousekeepingCandidatesLimit      = 10
 	HousekeepingCompactionMinChanges = 5
 
-	MembershipLeaseDuration   = "15s"
-	MembershipRenewalInterval = "5s"
+	PresenceTTL             = "5s"
+	PresenceCleanupInterval = "1s"
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
@@ -292,18 +294,20 @@ func TestConfig() *server.Config {
 			CompactionMinChanges: HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			AdminUser:            server.DefaultAdminUser,
-			AdminPassword:        server.DefaultAdminPassword,
-			SecretKey:            server.DefaultSecretKey,
-			AdminTokenDuration:   server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:    true,
-			SnapshotCacheSize:    SnapshotCacheSize,
-			AuthWebhookCacheSize: AuthWebhookSize,
-			AuthWebhookCacheTTL:  AuthWebhookCacheTTL.String(),
-			ProjectCacheSize:     ProjectCacheSize,
-			ProjectCacheTTL:      ProjectCacheTTL.String(),
-			GatewayAddr:          fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			RPCAddr:              fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			AdminUser:               server.DefaultAdminUser,
+			AdminPassword:           server.DefaultAdminPassword,
+			SecretKey:               server.DefaultSecretKey,
+			AdminTokenDuration:      server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:       true,
+			SnapshotCacheSize:       SnapshotCacheSize,
+			AuthWebhookCacheSize:    AuthWebhookSize,
+			AuthWebhookCacheTTL:     AuthWebhookCacheTTL.String(),
+			ProjectCacheSize:        ProjectCacheSize,
+			ProjectCacheTTL:         ProjectCacheTTL.String(),
+			GatewayAddr:             fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			RPCAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			PresenceTTL:             PresenceTTL,
+			PresenceCleanupInterval: PresenceCleanupInterval,
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,

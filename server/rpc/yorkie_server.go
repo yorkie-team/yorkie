@@ -265,7 +265,7 @@ func (s *yorkieServer) AttachPresence(
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func (s *yorkieServer) DetachPresence(
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.DetachPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
@@ -340,6 +340,49 @@ func (s *yorkieServer) DetachPresence(
 	response := &api.DetachPresenceResponse{
 		Count: count,
 	}
+	return connect.NewResponse(response), nil
+}
+
+// RefreshPresence refreshes the TTL of the given presence.
+func (s *yorkieServer) RefreshPresence(
+	ctx context.Context,
+	req *connect.Request[api.RefreshPresenceRequest],
+) (*connect.Response[api.RefreshPresenceResponse], error) {
+	// 01. Validate the request and verify access
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	if err := presenceKey.Validate(); err != nil {
+		return nil, err
+	}
+	presenceID := types.ID(req.Msg.PresenceId)
+	if err := presenceID.Validate(); err != nil {
+		return nil, err
+	}
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.RefreshPresence,
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. Refresh presence using presence ID
+	if err := s.backend.Presence.Refresh(ctx, presenceID); err != nil {
+		return nil, err
+	}
+
+	response := &api.RefreshPresenceResponse{}
 	return connect.NewResponse(response), nil
 }
 
@@ -741,7 +784,7 @@ func (s *yorkieServer) WatchDocument(
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
 						Type:      eventType,
-						Publisher: event.Publisher.String(),
+						Publisher: event.Actor.String(),
 						Body: &api.DocEventBody{
 							Topic:   event.Body.Topic,
 							Payload: event.Body.Payload,
@@ -774,9 +817,9 @@ func (s *yorkieServer) watchDoc(
 	}
 
 	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
-		Type:      events.DocWatched,
-		Publisher: sub.Subscriber(),
-		DocRefKey: docKey,
+		Type:  events.DocWatched,
+		Actor: sub.Subscriber(),
+		Key:   docKey,
 	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
@@ -795,9 +838,9 @@ func (s *yorkieServer) unwatchDoc(
 ) error {
 	s.backend.PubSub.Unsubscribe(ctx, docKey, sub)
 	s.backend.PubSub.Publish(ctx, sub.Subscriber(), events.DocEvent{
-		Type:      events.DocUnwatched,
-		Publisher: sub.Subscriber(),
-		DocRefKey: docKey,
+		Type:  events.DocUnwatched,
+		Actor: sub.Subscriber(),
+		Key:   docKey,
 	})
 	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 		s.backend.Config.Hostname,
@@ -847,9 +890,9 @@ func (s *yorkieServer) Broadcast(
 	}
 
 	s.backend.PubSub.Publish(ctx, clientID, events.DocEvent{
-		Type:      events.DocBroadcast,
-		Publisher: clientID,
-		DocRefKey: docKey,
+		Type:  events.DocBroadcast,
+		Actor: clientID,
+		Key:   docKey,
 		Body: events.DocEventBody{
 			Topic:   req.Msg.Topic,
 			Payload: req.Msg.Payload,

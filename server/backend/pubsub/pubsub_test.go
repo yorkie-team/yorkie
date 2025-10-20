@@ -44,9 +44,9 @@ func TestPubSub(t *testing.T) {
 			DocID:     types.ID("000000000000000000000000"),
 		}
 		docEvent := events.DocEvent{
-			Type:      events.DocWatched,
-			Publisher: idB,
-			DocRefKey: refKey,
+			Type:  events.DocWatched,
+			Actor: idB,
+			Key:   refKey,
 		}
 
 		ctx := context.Background()

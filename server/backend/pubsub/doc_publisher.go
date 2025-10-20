@@ -75,11 +75,11 @@ func (bp *DocPublisher) Publish(event events.DocEvent) {
 	// This occurs when a client attaches/detaches a document since the order
 	// of Changed and Watch/Unwatch events is not guaranteed.
 	if event.Type == events.DocChanged {
-		count, exists := bp.docChangedCountMap[event.Publisher.String()]
+		count, exists := bp.docChangedCountMap[event.Actor.String()]
 		if exists && count > 1 {
 			return
 		}
-		bp.docChangedCountMap[event.Publisher.String()] = count + 1
+		bp.docChangedCountMap[event.Actor.String()] = count + 1
 	}
 
 	bp.events = append(bp.events, event)
@@ -124,7 +124,7 @@ func (bp *DocPublisher) publish() {
 
 	for _, sub := range bp.subs.Values() {
 		for _, event := range events {
-			if sub.Subscriber().Compare(event.Publisher) == 0 {
+			if sub.Subscriber().Compare(event.Actor) == 0 {
 				continue
 			}
 
@@ -132,7 +132,7 @@ func (bp *DocPublisher) publish() {
 				bp.logger.Infof(
 					"Publish(%s,%s) to %s timeout or closed",
 					event.Type,
-					event.Publisher,
+					event.Actor,
 					sub.Subscriber(),
 				)
 			}
