@@ -107,6 +107,7 @@ func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
 	case status == http.StatusUnauthorized && !res.Allowed:
 		return errors.WithMetadata(ErrUnauthenticated, map[string]string{"reason": res.Reason})
 	default:
-		return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
+		return fmt.Errorf("status=%d, allowed=%v, reason=%s: %w",
+			status, res.Allowed, res.Reason, webhook.ErrUnexpectedResponse)
 	}
 }

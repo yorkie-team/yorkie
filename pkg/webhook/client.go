@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"syscall"
@@ -108,8 +109,13 @@ func (c *Client[Req, Res]) Send(
 			return resp.StatusCode, nil
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-			return resp.StatusCode, ErrUnexpectedResponse
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return resp.StatusCode, fmt.Errorf("read response body: %w", err)
+		}
+
+		if err := json.Unmarshal(bodyBytes, &res); err != nil {
+			return resp.StatusCode, fmt.Errorf("%w: body=%s", ErrUnexpectedResponse, string(bodyBytes))
 		}
 
 		return resp.StatusCode, nil
