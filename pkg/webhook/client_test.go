@@ -272,7 +272,8 @@ func TestErrorHandling(t *testing.T) {
 		invalidJSONServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("invalid json response"))
+			_, err := w.Write([]byte("invalid json response"))
+			assert.NoError(t, err)
 		}))
 		defer invalidJSONServer.Close()
 
