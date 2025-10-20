@@ -115,7 +115,11 @@ func (c *Client[Req, Res]) Send(
 		}
 
 		if err := json.Unmarshal(bodyBytes, &res); err != nil {
-			return resp.StatusCode, fmt.Errorf("%w: body=%s", ErrUnexpectedResponse, string(bodyBytes))
+			truncatedBody := string(bodyBytes)
+			if len(truncatedBody) > 500 {
+				truncatedBody = truncatedBody[:500] + "..."
+			}
+			return resp.StatusCode, fmt.Errorf("%w: body=%s", ErrUnexpectedResponse, truncatedBody)
 		}
 
 		return resp.StatusCode, nil
