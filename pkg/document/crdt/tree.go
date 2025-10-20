@@ -150,19 +150,6 @@ type TreeNode struct {
 	Attrs *RHT
 }
 
-func (n *TreeNode) ToString() string {
-	if n == nil {
-		return "TreeNode: nil"
-	}
-	if n.Index == nil {
-		return fmt.Sprintf("TreeNode: type: [nil], value: [%s]", n.Value)
-	}
-	if n.removedAt == nil {
-		return fmt.Sprintf("TreeNode: type: [%s], value: [%s]: removedAt: nil", n.Type(), n.Value)
-	}
-	return fmt.Sprintf("TreeNode: type: [%s], value: [%s], removedAt: [%v]", n.Type(), n.Value, n.removedAt.ToTestString())
-}
-
 // Children returns the children of this node.
 func (n *TreeNode) Children(includeRemovedNode ...bool) []*TreeNode {
 	children := n.Index.Children(len(includeRemovedNode) > 0 && includeRemovedNode[0])
