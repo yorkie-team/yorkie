@@ -826,18 +826,17 @@ func (t *Tree) EditT(
 	splitLevel int,
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
-) error {
+) ([]GCPair, resource.DataSize, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
-		return err
+		return nil, resource.DataSize{}, err
 	}
 	toPos, err := t.FindPos(end)
 	if err != nil {
-		return err
+		return nil, resource.DataSize{}, err
 	}
 
-	_, _, err = t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
-	return err
+	return t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
 }
 
 // FindPos finds the position of the given index in the tree.
