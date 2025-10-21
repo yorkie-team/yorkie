@@ -53,7 +53,7 @@ func verifyAccess(
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("marshal webhook request: %w", err)
+		return fmt.Errorf("verify access: %w", err)
 	}
 
 	cacheKey := generateCacheKey(prj.PublicKey, body)
@@ -63,7 +63,7 @@ func verifyAccess(
 
 	options, err := prj.GetAuthWebhookOptions()
 	if err != nil {
-		return fmt.Errorf("get webhook options: %w", err)
+		return fmt.Errorf("verify access: %w", err)
 	}
 
 	res, status, err := be.AuthWebhookClient.Send(
@@ -74,7 +74,7 @@ func verifyAccess(
 		options,
 	)
 	if err != nil {
-		return fmt.Errorf("send to webhook: %w", err)
+		return fmt.Errorf("verify access: %w", err)
 	}
 
 	// TODO(hackerwins): We should consider caching the response of Unauthorized as well.
@@ -96,7 +96,7 @@ func generateCacheKey(publicKey string, body []byte) string {
 // handleWebhookResponse processes the webhook response and returns an error if necessary.
 func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
 	if res == nil {
-		return fmt.Errorf("nil response for status %d: %w", status, webhook.ErrUnexpectedResponse)
+		return fmt.Errorf("nil response for status %d: %w", status, webhook.ErrInvalidJSONResponse)
 	}
 
 	switch {
@@ -107,6 +107,7 @@ func handleWebhookResponse(status int, res *types.AuthWebhookResponse) error {
 	case status == http.StatusUnauthorized && !res.Allowed:
 		return errors.WithMetadata(ErrUnauthenticated, map[string]string{"reason": res.Reason})
 	default:
-		return fmt.Errorf("%d: %w", status, webhook.ErrUnexpectedResponse)
+		return fmt.Errorf("status=%d, allowed=%v, reason=%s: %w",
+			status, res.Allowed, res.Reason, webhook.ErrInvalidJSONResponse)
 	}
 }

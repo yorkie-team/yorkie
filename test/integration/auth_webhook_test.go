@@ -352,7 +352,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		err = cli.Activate(ctx)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, webhook.ErrUnexpectedResponse.Code(), converter.ErrorCodeOf(err))
+		assert.Equal(t, webhook.ErrInvalidJSONResponse.Code(), converter.ErrorCodeOf(err))
 	})
 
 	t.Run("unavailable authentication server test(timeout)", func(t *testing.T) {

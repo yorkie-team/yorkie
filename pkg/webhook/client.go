@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	goerrors "errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"syscall"
@@ -39,8 +40,8 @@ var (
 	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
 	ErrUnexpectedStatusCode = errors.Internal("unexpected status code from webhook").WithCode("ErrUnexpectedStatusCode")
 
-	// ErrUnexpectedResponse is returned when the response from the webhook is not as expected.
-	ErrUnexpectedResponse = errors.Internal("unexpected response from webhook").WithCode("ErrUnexpectedResponse")
+	// ErrInvalidJSONResponse is returned when the response from the webhook is not as expected.
+	ErrInvalidJSONResponse = errors.Internal("invalid json response from webhook").WithCode("ErrInvalidJSONResponse")
 
 	// ErrWebhookTimeout is returned when the webhook does not respond in time.
 	ErrWebhookTimeout = errors.Internal("webhook timeout").WithCode("ErrWebhookTimeout")
@@ -76,7 +77,7 @@ func (c *Client[Req, Res]) Send(
 ) (*Res, int, error) {
 	signature, err := createSignature(body, hmacKey)
 	if err != nil {
-		return nil, 0, fmt.Errorf("create signature: %w", err)
+		return nil, 0, fmt.Errorf("send webhook: %w", err)
 	}
 
 	var res Res
@@ -86,12 +87,12 @@ func (c *Client[Req, Res]) Send(
 			defer cancel()
 		}
 		if err != nil {
-			return 0, fmt.Errorf("build request: %w", err)
+			return 0, fmt.Errorf("send webhook: %w", err)
 		}
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			return 0, fmt.Errorf("do request: %w", err)
+			return 0, fmt.Errorf("send webhook: %w", err)
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -108,8 +109,18 @@ func (c *Client[Req, Res]) Send(
 			return resp.StatusCode, nil
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-			return resp.StatusCode, ErrUnexpectedResponse
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return resp.StatusCode, fmt.Errorf("send webhook: %w", err)
+		}
+
+		if err := json.Unmarshal(body, &res); err != nil {
+			logger := logging.From(ctx)
+			if logger != nil {
+				logger.Errorf("send webhook url=%s, status=%d, body=%s", url, resp.StatusCode, string(body))
+			}
+
+			return resp.StatusCode, ErrInvalidJSONResponse
 		}
 
 		return resp.StatusCode, nil
