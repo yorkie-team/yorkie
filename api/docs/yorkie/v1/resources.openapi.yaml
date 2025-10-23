@@ -1418,6 +1418,40 @@ components:
         - 3
       title: ChangeType
       type: string
+    yorkie.v1.PresenceEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        count:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: count
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        type:
+          $ref: '#/components/schemas/yorkie.v1.PresenceEvent.Type'
+          additionalProperties: false
+          description: ""
+          title: type
+      title: PresenceEvent
+      type: object
+    yorkie.v1.PresenceEvent.Type:
+      description: ""
+      enum:
+      - - TYPE_UNSPECIFIED
+        - 0
+        - TYPE_COUNT_CHANGED
+        - 1
+      title: Type
+      type: string
     yorkie.v1.Project:
       additionalProperties: false
       description: ""

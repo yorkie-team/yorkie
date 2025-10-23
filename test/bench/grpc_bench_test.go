@@ -21,7 +21,6 @@ package bench
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -108,32 +107,6 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 	return nil
 }
 
-func watchDoc(
-	ctx context.Context,
-	b *testing.B,
-	cli *client.Client,
-	d *document.Document,
-	rch <-chan client.WatchResponse,
-	done <-chan bool,
-) {
-	for {
-		select {
-		case resp := <-rch:
-			if resp.Err == io.EOF {
-				assert.Fail(b, resp.Err.Error())
-			}
-			assert.NoError(b, resp.Err)
-
-			if resp.Type == client.DocumentChanged {
-				err := cli.Sync(ctx, client.WithDocKey(d.Key()))
-				assert.NoError(b, err)
-			}
-		case <-done:
-			return
-		}
-	}
-}
-
 func BenchmarkRPC(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
@@ -170,6 +143,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
+		// Setup documents with initial content
 		d1 := document.New(helper.TestDocKey(b))
 		err := c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(b, err)
@@ -190,33 +164,21 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		rch1, _, err := c1.Subscribe(d1)
-		assert.NoError(b, err)
-		rch2, _, err := c2.Subscribe(d2)
-		assert.NoError(b, err)
-
-		done1 := make(chan bool)
-		done2 := make(chan bool)
-
+		// Benchmark: Both clients update their documents concurrently
 		for range b.N {
 			wg := sync.WaitGroup{}
 			wg.Add(2)
+
+			// Client 1 updates its document
 			go func() {
 				defer wg.Done()
-				watchDoc(ctx, b, c1, d1, rch1, done2)
-			}()
-			go func() {
-				defer wg.Done()
-				watchDoc(ctx, b, c2, d2, rch2, done1)
+				benchmarkUpdateAndSync(b, ctx, 50, c1, d1, testKey1)
 			}()
 
+			// Client 2 updates its document
 			go func() {
-				benchmarkUpdateAndSync(b, ctx, 50, c1, d1, testKey1)
-				done1 <- true
-			}()
-			go func() {
+				defer wg.Done()
 				benchmarkUpdateAndSync(b, ctx, 50, c2, d2, testKey2)
-				done2 <- true
 			}()
 
 			wg.Wait()

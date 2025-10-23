@@ -20,20 +20,65 @@ package integration
 
 import (
 	"context"
-	"sync"
 	"testing"
+	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
+
+// waitForEvent waits for a specific event type from the watch stream.
+// If shouldReceive is true, it expects to receive the event within timeout.
+// If shouldReceive is false, it ensures the event is NOT received within timeout.
+func waitForEvent(
+	t *testing.T,
+	stream <-chan client.WatchDocResponse,
+	eventType client.WatchDocResponseType,
+	timeout time.Duration,
+	shouldReceive bool,
+) bool {
+	deadline := time.After(timeout)
+	for {
+		select {
+		case resp, ok := <-stream:
+			if !ok {
+				// Channel closed
+				if shouldReceive {
+					assert.Fail(t, "channel closed while waiting for event: %v", eventType)
+					return false
+				}
+				return true
+			}
+			if resp.Err != nil {
+				// Context canceled is expected when deactivating
+				if !shouldReceive && resp.Err.Error() == "canceled: context canceled" {
+					return true
+				}
+				assert.Fail(t, "stream error", resp.Err)
+				return false
+			}
+			if resp.Type == eventType {
+				if shouldReceive {
+					return true
+				}
+				assert.Fail(t, "should not receive %v event", eventType)
+				return false
+			}
+			// Received a different event type - continue waiting
+		case <-deadline:
+			if shouldReceive {
+				assert.Fail(t, "timeout waiting for event: %v", eventType)
+				return false
+			}
+			// Timeout without receiving the event is expected
+			return true
+		}
+	}
+}
 
 func TestClient(t *testing.T) {
 	t.Run("dial and close test", func(t *testing.T) {
@@ -91,12 +136,12 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c3.Attach(ctx, d3))
 
 		// 02. c1, c2 sync with push-pull mode.
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("c1", 0)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c1", 0)
 			return nil
 		}))
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("c2", 0)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c2", 0)
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
@@ -107,17 +152,17 @@ func TestClient(t *testing.T) {
 		// 03. c1 and c2 sync with push-only mode. So, the changes of c1 and c2
 		// are not reflected to each other.
 		// But, c3 can get the changes of c1 and c2, because c3 sync with pull-pull mode.
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("c1", 1)
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c1", 1)
 			return nil
 		}))
-		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("c2", 1)
+		assert.NoError(t, d2.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("c2", 1)
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
-		assert.NoError(t, c1.Sync(ctx), client.WithDocKey(d1.Key()).WithPushOnly())
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
 		assert.NoError(t, c3.Sync(ctx))
 		assert.NotEqual(t, d1.Marshal(), d2.Marshal())
 		assert.Equal(t, d1.Root().Get("c1").Marshal(), d3.Root().Get("c1").Marshal())
@@ -142,8 +187,8 @@ func TestClient(t *testing.T) {
 
 		// 02. cli update the document with creating a counter
 		//     and sync with push-pull mode: CP(1, 1) -> CP(2, 2)
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
+		assert.NoError(t, doc.Update(func(root *document.Root, p *document.Presence) error {
+			root.SetNewCounter("counter", document.Int, 0)
 			return nil
 		}))
 		assert.Equal(t, change.Checkpoint{ClientSeq: 1, ServerSeq: 1}, doc.Checkpoint())
@@ -152,7 +197,7 @@ func TestClient(t *testing.T) {
 
 		// 03. cli update the document with increasing the counter(0 -> 1)
 		//     and sync with push-only mode: CP(2, 2) -> CP(3, 2)
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.NoError(t, doc.Update(func(root *document.Root, p *document.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
@@ -162,8 +207,8 @@ func TestClient(t *testing.T) {
 
 		// 04. cli update the document with increasing the counter(1 -> 2)
 		//     and sync with push-pull mode. CP(3, 2) -> CP(4, 4)
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetCounter("counter").Increase(1)
+		assert.NoError(t, doc.Update(func(r *document.Root, p *document.Presence) error {
+			r.GetCounter("counter").Increase(1)
 			return nil
 		}))
 
@@ -175,35 +220,46 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, "2", doc.Root().GetCounter("counter").Marshal())
 	})
 
-	t.Run("deactivated client's stream test", func(t *testing.T) {
+	t.Run("deactivate should stop watch streams test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+		c1, c2 := clients[0], clients[1]
+
 		ctx := context.Background()
 
-		c1, err := client.Dial(defaultServer.RPCAddr())
-		assert.NoError(t, err)
-		assert.NoError(t, c1.Activate(ctx))
-
+		// 01. c1 attaches document with realtime sync
 		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 
-		// 01. Attach the document and subscribe.
-		assert.NoError(t, c1.Attach(ctx, d1))
+		// 02. c2 attaches the same document and gets watch stream
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
+		stream, _, err := c2.WatchStream(d2)
+		assert.NoError(t, err)
 
-		// 02. Deactivate the client and try to watch.
-		assert.NoError(t, defaultServer.DeactivateClient(ctx, c1))
+		// 03. c1 makes a change - c2 should receive it to verify stream is working
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("before", 1)
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
 
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		stream, _ := c1.Watch(ctx, d1)
+		// Wait for document change event
+		if !waitForEvent(t, stream, client.DocumentChanged, time.Second, true) {
+			return
+		}
 
-		go func() {
-			defer wg.Done()
+		// 04. Deactivate c2 - this should stop the watch stream
+		assert.NoError(t, c2.Deactivate(ctx))
 
-			stream.Receive()
-			if err = stream.Err(); err != nil {
-				assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
-				return
-			}
-		}()
+		// 05. c1 makes another change - c2 should NOT receive this
+		assert.NoError(t, d1.Update(func(r *document.Root, p *document.Presence) error {
+			r.SetInteger("after", 2)
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
 
-		wg.Wait()
+		// 06. Verify that watch stream is closed or no document-changed events are received
+		waitForEvent(t, stream, client.DocumentChanged, time.Second, false)
 	})
 }

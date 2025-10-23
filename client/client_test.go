@@ -34,6 +34,10 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/pkg/presence"
 )
 
 type testYorkieServer struct {
@@ -107,5 +111,61 @@ func TestClient(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(context.Background()))
+	})
+}
+
+func TestAttachableInterfaceCompatibility(t *testing.T) {
+	t.Run("Document implements Attachable", func(t *testing.T) {
+		docKey := key.Key("test-doc")
+		doc := document.New(docKey)
+
+		// Ensure Document implements Attachable
+		var _ attachable.Attachable = doc
+
+		assert.Equal(t, "test-doc", doc.Key().String())
+		assert.Equal(t, attachable.TypeDocument, doc.Type())
+		assert.Equal(t, attachable.StatusDetached, doc.Status())
+		assert.False(t, doc.IsAttached())
+	})
+
+	t.Run("Presence Counter implements Attachable", func(t *testing.T) {
+		presenceKey := key.Key("test-presence")
+		counter := presence.New(presenceKey)
+
+		// Ensure Presence Counter implements Attachable
+		var _ attachable.Attachable = counter
+
+		assert.Equal(t, "test-presence", counter.Key().String())
+		assert.Equal(t, attachable.TypePresence, counter.Type())
+		assert.Equal(t, attachable.StatusDetached, counter.Status())
+		assert.False(t, counter.IsAttached())
+	})
+
+	t.Run("Status changes work correctly", func(t *testing.T) {
+		docKey := key.Key("status-doc")
+		doc := document.New(docKey)
+
+		presenceKey := key.Key("status-presence")
+		counter := presence.New(presenceKey)
+
+		resources := []attachable.Attachable{doc, counter}
+
+		for _, resource := range resources {
+			// Test status transitions
+			assert.Equal(t, attachable.StatusDetached, resource.Status())
+			assert.False(t, resource.IsAttached())
+
+			resource.SetStatus(attachable.StatusAttached)
+			assert.Equal(t, attachable.StatusAttached, resource.Status())
+			assert.True(t, resource.IsAttached())
+
+			resource.SetStatus(attachable.StatusRemoved)
+			assert.Equal(t, attachable.StatusRemoved, resource.Status())
+			assert.False(t, resource.IsAttached())
+
+			resource.SetStatus(attachable.StatusDetached)
+			assert.Equal(t, attachable.StatusDetached, resource.Status())
+			assert.False(t, resource.IsAttached())
+		}
 	})
 }

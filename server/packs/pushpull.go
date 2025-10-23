@@ -134,9 +134,9 @@ func PushPull(
 			// webhook manually. But we need to consider unified event handling system
 			// to handle this with rate-limiter and retry mechanism.
 			be.PubSub.Publish(ctx, publisher, events.DocEvent{
-				Type:      events.DocChanged,
-				Publisher: publisher,
-				DocRefKey: docKey,
+				Type:  events.DocChanged,
+				Actor: publisher,
+				Key:   docKey,
 			})
 
 			if reqPack.OperationsLen() > 0 && project.RequireEventWebhook(events.DocRootChanged.WebhookType()) {

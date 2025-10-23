@@ -231,7 +231,5 @@ func (m *QueryMonitor) extractFilterFromArray(value interface{}, filterKey strin
 
 // cleanupCommand removes command info from cache
 func (m *QueryMonitor) cleanupCommand(requestID int64) {
-	m.commandCache.Delete(requestID, func(value *commandInfo, exists bool) bool {
-		return exists // Delete if exists
-	})
+	m.commandCache.Delete(requestID)
 }

@@ -38,8 +38,8 @@ func (c *loggerID) next() string {
 	return "p" + strconv.Itoa(int(next))
 }
 
-// BatchPublisher is a publisher that publishes events in batch.
-type BatchPublisher struct {
+// DocPublisher is a publisher that publishes events in batch.
+type DocPublisher struct {
 	logger             *zap.SugaredLogger
 	mutex              gosync.Mutex
 	events             []events.DocEvent
@@ -47,12 +47,12 @@ type BatchPublisher struct {
 
 	window    time.Duration
 	closeChan chan struct{}
-	subs      *Subscriptions
+	subs      *DocSubscriptions
 }
 
-// NewBatchPublisher creates a new BatchPublisher instance.
-func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublisher {
-	bp := &BatchPublisher{
+// NewDocPublisher creates a new instance of DocPublisher.
+func NewDocPublisher(subs *DocSubscriptions, window time.Duration) *DocPublisher {
+	bp := &DocPublisher{
 		logger:             logging.New(id.next()),
 		docChangedCountMap: make(map[string]int),
 		window:             window,
@@ -66,7 +66,7 @@ func NewBatchPublisher(subs *Subscriptions, window time.Duration) *BatchPublishe
 
 // Publish adds the given event to the batch. If the batch is full, it publishes
 // the batch.
-func (bp *BatchPublisher) Publish(event events.DocEvent) {
+func (bp *DocPublisher) Publish(event events.DocEvent) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
 
@@ -75,17 +75,17 @@ func (bp *BatchPublisher) Publish(event events.DocEvent) {
 	// This occurs when a client attaches/detaches a document since the order
 	// of Changed and Watch/Unwatch events is not guaranteed.
 	if event.Type == events.DocChanged {
-		count, exists := bp.docChangedCountMap[event.Publisher.String()]
+		count, exists := bp.docChangedCountMap[event.Actor.String()]
 		if exists && count > 1 {
 			return
 		}
-		bp.docChangedCountMap[event.Publisher.String()] = count + 1
+		bp.docChangedCountMap[event.Actor.String()] = count + 1
 	}
 
 	bp.events = append(bp.events, event)
 }
 
-func (bp *BatchPublisher) processLoop() {
+func (bp *DocPublisher) processLoop() {
 	ticker := time.NewTicker(bp.window)
 	defer ticker.Stop()
 
@@ -94,12 +94,13 @@ func (bp *BatchPublisher) processLoop() {
 		case <-ticker.C:
 			bp.publish()
 		case <-bp.closeChan:
+			bp.publish()
 			return
 		}
 	}
 }
 
-func (bp *BatchPublisher) publish() {
+func (bp *DocPublisher) publish() {
 	bp.mutex.Lock()
 
 	if len(bp.events) == 0 {
@@ -123,7 +124,7 @@ func (bp *BatchPublisher) publish() {
 
 	for _, sub := range bp.subs.Values() {
 		for _, event := range events {
-			if sub.Subscriber().Compare(event.Publisher) == 0 {
+			if sub.Subscriber().Compare(event.Actor) == 0 {
 				continue
 			}
 
@@ -131,7 +132,7 @@ func (bp *BatchPublisher) publish() {
 				bp.logger.Infof(
 					"Publish(%s,%s) to %s timeout or closed",
 					event.Type,
-					event.Publisher,
+					event.Actor,
 					sub.Subscriber(),
 				)
 			}
@@ -140,6 +141,6 @@ func (bp *BatchPublisher) publish() {
 }
 
 // Close stops the batch publisher
-func (bp *BatchPublisher) Close() {
+func (bp *DocPublisher) Close() {
 	close(bp.closeChan)
 }

@@ -44,9 +44,9 @@ func TestPubSub(t *testing.T) {
 			DocID:     types.ID("000000000000000000000000"),
 		}
 		docEvent := events.DocEvent{
-			Type:      events.DocWatched,
-			Publisher: idB,
-			DocRefKey: refKey,
+			Type:  events.DocWatched,
+			Actor: idB,
+			Key:   refKey,
 		}
 
 		ctx := context.Background()
@@ -125,7 +125,7 @@ func TestPubSub(t *testing.T) {
 
 		// Try to subscribe concurrently with different ActorIDs
 		var wg gosync.WaitGroup
-		subscriptions := make([]*pubsub.Subscription, concurrency)
+		subscriptions := make([]*pubsub.DocSubscription, concurrency)
 		for i := range concurrency {
 			wg.Add(1)
 			go func(idx int) {

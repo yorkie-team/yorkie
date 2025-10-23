@@ -44,8 +44,8 @@ type clientAndDocPair struct {
 	doc *document.Document
 }
 
-type watchResponsePair struct {
-	Type      client.WatchResponseType
+type watchDocPair struct {
+	Type      client.WatchDocResponseType
 	Presences map[string]presence.Data
 }
 

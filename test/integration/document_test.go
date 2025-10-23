@@ -20,12 +20,9 @@ package integration
 
 import (
 	"context"
-	gojson "encoding/json"
-	"errors"
 	"io"
 	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -39,8 +36,8 @@ import (
 )
 
 func TestDocument(t *testing.T) {
-	clients := activeClients(t, 3)
-	c1, c2, c3 := clients[0], clients[1], clients[2]
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("attach/detach test", func(t *testing.T) {
@@ -169,8 +166,8 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 
-		_, _, err := c1.Subscribe(d1)
-		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+		_, _, err := c1.WatchStream(d1)
+		assert.ErrorIs(t, err, client.ErrNotAttached)
 
 		err = c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(t, err)
@@ -183,7 +180,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 watches doc1.
 		wg.Add(1)
-		rch, _, err := c1.Subscribe(d1)
+		rch, _, err := c1.WatchStream(d1)
 		assert.NoError(t, err)
 
 		go func() {
@@ -269,11 +266,11 @@ func TestDocument(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 
 		// 01. client is not activated.
-		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrNotActivated)
 
 		// 02. document is not attached.
 		assert.NoError(t, cli.Activate(ctx))
-		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrNotAttached)
 
 		// 03. document is attached.
 		assert.NoError(t, cli.Attach(ctx, d1))
@@ -287,7 +284,7 @@ func TestDocument(t *testing.T) {
 		}), document.ErrDocumentRemoved)
 
 		// 05. try to attach a removed document.
-		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrNotDetached)
 	})
 
 	t.Run("removed document creation test", func(t *testing.T) {
@@ -406,19 +403,19 @@ func TestDocument(t *testing.T) {
 
 		// 01. abnormal behavior on detached state
 		d1 := document.New(helper.TestDocKey(t))
-		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrNotAttached)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrNotAttached)
 
 		// 02. abnormal behavior on attached state
 		assert.NoError(t, cli.Attach(ctx, d1))
-		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrNotDetached)
 
 		// 03. abnormal behavior on removed state
 		assert.NoError(t, cli.Remove(ctx, d1))
-		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrNotAttached)
 	})
 
 	t.Run("removed document removal with watching test", func(t *testing.T) {
@@ -426,266 +423,21 @@ func TestDocument(t *testing.T) {
 
 		// 01. c1 creates d1 without attaching.
 		d1 := document.New(helper.TestDocKey(t))
-		_, _, err := c1.Subscribe(d1)
-		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+		_, _, err := c1.WatchStream(d1)
+		assert.ErrorIs(t, err, client.ErrNotAttached)
 
 		// 02. c1 attaches d1 and watches it.
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		_, _, err = c1.Subscribe(d1)
+		_, _, err = c1.WatchStream(d1)
 		assert.NoError(t, err)
 
 		// 03. c1 removes d1 and watches it.
 		assert.NoError(t, c1.Remove(ctx, d1))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
-		_, _, err = c1.Subscribe(d1)
-		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+		_, _, err = c1.WatchStream(d1)
+		assert.ErrorIs(t, err, client.ErrNotAttached)
 	})
 
-	t.Run("broadcast to subscribers except publisher test", func(t *testing.T) {
-		bch := make(chan string)
-		ctx := context.Background()
-		handler := func(topic, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.Equal(t, topic, "mention")
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
-			bch <- mentionedBy
-			return nil
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
-
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
-
-		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3, client.WithRealtimeSync()))
-		rch3, _, err := c3.Subscribe(d3)
-		assert.NoError(t, err)
-		d3.SubscribeBroadcastEvent("mention", handler)
-
-		err = d3.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case <-rch1:
-				case <-rch2:
-				case <-rch3:
-				case m := <-bch:
-					assert.Equal(t, "yorkie", m)
-					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber,
-					// except the publisher, successfully receives the event.
-					assert.Equal(t, 2, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
-
-	t.Run("no broadcasts to unsubscribers", func(t *testing.T) {
-		bch := make(chan string)
-		ctx := context.Background()
-		handler := func(topic, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.Equal(t, topic, "mention")
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
-			bch <- mentionedBy
-			return nil
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
-
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
-
-		// d1 unsubscribes to the broadcast event.
-		d1.UnsubscribeBroadcastEvent("mention")
-
-		err = d2.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case <-rch1:
-				case <-rch2:
-				case m := <-bch:
-					assert.Equal(t, "yorkie", m)
-					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if both the unsubscriber
-					// and the publisher don't receive the event.
-					assert.Equal(t, 0, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
-
-	t.Run("unsubscriber can broadcast", func(t *testing.T) {
-		bch := make(chan string)
-		ctx := context.Background()
-		handler := func(topic, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.Equal(t, topic, "mention")
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
-			bch <- mentionedBy
-			return nil
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
-
-		// c2 doesn't subscribe to the "mention" broadcast event.
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-
-		// The unsubscriber c2 broadcasts the "mention" event.
-		err = d2.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case <-rch1:
-				case <-rch2:
-				case m := <-bch:
-					assert.Equal(t, "yorkie", m)
-					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber
-					// receives the unsubscriber's event.
-					assert.Equal(t, 1, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
-
-	t.Run("reject to broadcast unserializable payload", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		_, _, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", nil)
-
-		// Try to broadcast an unserializable payload.
-		ch := make(chan string)
-		err = d1.Broadcast("mention", ch)
-		assert.ErrorIs(t, document.ErrUnsupportedPayloadType, err)
-	})
-
-	t.Run("error occurs while handling broadcast event", func(t *testing.T) {
-		var ErrBroadcastEventHandlingError = errors.New("")
-
-		ctx := context.Background()
-		handler := func(topic, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.Equal(t, topic, "mention")
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			return ErrBroadcastEventHandlingError
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.Subscribe(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
-
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.Subscribe(d2)
-		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
-
-		err = d2.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case resp := <-rch1:
-					if resp.Err != nil {
-						assert.Equal(t, resp.Type, client.DocumentBroadcast)
-						assert.ErrorIs(t, resp.Err, ErrBroadcastEventHandlingError)
-						rcv++
-					}
-				case <-rch2:
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber
-					// successfully receives the event.
-					assert.Equal(t, 1, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
 }
 
 func TestDocumentWithProjects(t *testing.T) {
@@ -722,17 +474,17 @@ func TestDocumentWithProjects(t *testing.T) {
 		defer func() { assert.NoError(t, c3.Deactivate(ctx)) }()
 
 		// 02. c1 and c2 watch the same document and c3 watches another document but the same key.
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
+		var expected []watchDocPair
+		var responsePairs []watchDocPair
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
 		d1 := document.New(helper.TestDocKey(t))
 		err = c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(t, err)
-		rch, cancel1, err := c1.Subscribe(d1)
-		defer cancel1()
+		rch, cancel1, err := c1.WatchStream(d1)
 		assert.NoError(t, err)
+		defer cancel1()
 
 		go func() {
 			defer wg.Done()
@@ -748,7 +500,7 @@ func TestDocumentWithProjects(t *testing.T) {
 					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 				} else {
-					responsePairs = append(responsePairs, watchResponsePair{
+					responsePairs = append(responsePairs, watchDocPair{
 						Type:      resp.Type,
 						Presences: resp.Presences,
 					})
@@ -760,7 +512,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		}()
 
 		// c2 watches the same document, so c1 receives a document watched event.
-		expected = append(expected, watchResponsePair{
+		expected = append(expected, watchDocPair{
 			Type: client.DocumentWatched,
 			Presences: map[string]presence.Data{
 				c2.ID().String(): {},
@@ -768,7 +520,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		})
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		_, cancel2, err := c2.Subscribe(d2)
+		_, cancel2, err := c2.WatchStream(d2)
 		assert.NoError(t, err)
 
 		// c2 updates the document, so c1 receives a documents changed event.
@@ -781,7 +533,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		// d3 is in another project, so c1 and c2 should not receive events.
 		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3, client.WithRealtimeSync()))
-		_, cancel3, err := c3.Subscribe(d3)
+		_, cancel3, err := c3.WatchStream(d3)
 		assert.NoError(t, err)
 		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key3", "value3")
@@ -790,7 +542,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		assert.NoError(t, c3.Sync(ctx))
 
 		// c2 unwatch the document, so c1 receives a document unwatched event.
-		expected = append(expected, watchResponsePair{
+		expected = append(expected, watchDocPair{
 			Type: client.DocumentUnwatched,
 			Presences: map[string]presence.Data{
 				c2.ID().String(): {},

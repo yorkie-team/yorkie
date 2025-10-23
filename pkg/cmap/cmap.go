@@ -110,14 +110,27 @@ func (m *Map[K, V]) Get(key K) (V, bool) {
 type DeleteFunc[K comparable, V any] func(value V, exists bool) bool
 
 // Delete removes a value from the map.
-func (m *Map[K, V]) Delete(key K, deleteFunc DeleteFunc[K, V]) bool {
+// If deleteFunc is provided, it will be called to determine whether to delete the key.
+// If deleteFunc is not provided (nil), the key will be deleted if it exists.
+// Returns true if the key was deleted, false otherwise.
+func (m *Map[K, V]) Delete(key K, deleteFunc ...DeleteFunc[K, V]) bool {
 	shard := m.shardForKey(key)
 
 	shard.Lock()
 	defer shard.Unlock()
 
 	value, exists := shard.items[key]
-	del := deleteFunc(value, exists)
+
+	// If no deleteFunc provided, simply delete if exists
+	if len(deleteFunc) == 0 {
+		if exists {
+			delete(shard.items, key)
+		}
+		return exists
+	}
+
+	// Use provided deleteFunc to determine deletion
+	del := deleteFunc[0](value, exists)
 	if del && exists {
 		delete(shard.items, key)
 	}
