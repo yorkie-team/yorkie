@@ -76,6 +76,56 @@ func TestMap(t *testing.T) {
 		_, exists = m.Get("a")
 		assert.False(t, exists)
 	})
+
+	t.Run("delete without callback", func(t *testing.T) {
+		m := cmap.New[string, int]()
+
+		// Delete non-existent key
+		removed := m.Delete("nonexistent")
+		assert.False(t, removed)
+
+		// Set and delete existing key
+		m.Set("a", 1)
+		removed = m.Delete("a")
+		assert.True(t, removed)
+
+		// Verify key is deleted
+		_, exists := m.Get("a")
+		assert.False(t, exists)
+
+		// Delete already deleted key
+		removed = m.Delete("a")
+		assert.False(t, removed)
+	})
+
+	t.Run("delete with conditional callback", func(t *testing.T) {
+		m := cmap.New[string, int]()
+
+		// Set value and conditionally delete
+		m.Set("a", 5)
+		deleted := m.Delete("a", func(val int, exists bool) bool {
+			// Only delete if value > 3
+			return exists && val > 3
+		})
+		assert.True(t, deleted)
+
+		// Verify it's deleted
+		_, exists := m.Get("a")
+		assert.False(t, exists)
+
+		// Set value and don't delete due to condition
+		m.Set("b", 2)
+		deleted = m.Delete("b", func(val int, exists bool) bool {
+			// Only delete if value > 3
+			return exists && val > 3
+		})
+		assert.False(t, deleted)
+
+		// Verify it's NOT deleted
+		val, exists := m.Get("b")
+		assert.True(t, exists)
+		assert.Equal(t, 2, val)
+	})
 }
 
 func randomIntn(n int) int {

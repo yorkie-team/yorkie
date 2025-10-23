@@ -948,7 +948,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newAuthWebhookURL := "http://localhost:3000"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
-			string(types.WatchDocuments),
+			string(types.WatchDocument),
 		}
 		newAuthWebhookMaxRetries := uint64(10)
 		newAuthWebhookMinWaitInterval := "10ms"

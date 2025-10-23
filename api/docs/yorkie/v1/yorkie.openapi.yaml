@@ -34,6 +34,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/AttachPresence:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.AttachPresence.yorkie.v1.AttachPresenceRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.AttachPresence.yorkie.v1.AttachPresenceResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/Broadcast:
     post:
       description: ""
@@ -70,6 +82,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/DetachPresence:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.DetachPresence.yorkie.v1.DetachPresenceRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.DetachPresence.yorkie.v1.DetachPresenceResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/PushPullChanges:
     post:
       description: ""
@@ -78,6 +102,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/RefreshPresence:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -106,6 +142,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/WatchPresence:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchPresence.yorkie.v1.WatchPresenceRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchPresence.yorkie.v1.WatchPresenceResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
 components:
   requestBodies:
     yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientRequest:
@@ -125,6 +173,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.AttachDocumentRequest'
+      required: true
+    yorkie.v1.YorkieService.AttachPresence.yorkie.v1.AttachPresenceRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.AttachPresenceRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.AttachPresenceRequest'
       required: true
     yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastRequest:
       content:
@@ -153,6 +210,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequest'
       required: true
+    yorkie.v1.YorkieService.DetachPresence.yorkie.v1.DetachPresenceRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachPresenceRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachPresenceRequest'
+      required: true
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesRequest:
       content:
         application/json:
@@ -161,6 +227,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.PushPullChangesRequest'
+      required: true
+    yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceRequest'
       required: true
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentRequest:
       content:
@@ -172,6 +247,9 @@ components:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentRequest'
       required: true
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest:
+      content: {}
+      required: true
+    yorkie.v1.YorkieService.WatchPresence.yorkie.v1.WatchPresenceRequest:
       content: {}
       required: true
   responses:
@@ -202,6 +280,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.AttachDocumentResponse'
       description: ""
+    yorkie.v1.YorkieService.AttachPresence.yorkie.v1.AttachPresenceResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.AttachPresenceResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.AttachPresenceResponse'
+      description: ""
     yorkie.v1.YorkieService.Broadcast.yorkie.v1.BroadcastResponse:
       content:
         application/json:
@@ -229,6 +316,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponse'
       description: ""
+    yorkie.v1.YorkieService.DetachPresence.yorkie.v1.DetachPresenceResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachPresenceResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.DetachPresenceResponse'
+      description: ""
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse:
       content:
         application/json:
@@ -237,6 +333,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.PushPullChangesResponse'
+      description: ""
+    yorkie.v1.YorkieService.RefreshPresence.yorkie.v1.RefreshPresenceResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RefreshPresenceResponse'
       description: ""
     yorkie.v1.YorkieService.RemoveDocument.yorkie.v1.RemoveDocumentResponse:
       content:
@@ -248,6 +353,8 @@ components:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentResponse'
       description: ""
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse:
+      description: ""
+    yorkie.v1.YorkieService.WatchPresence.yorkie.v1.WatchPresenceResponse:
       description: ""
   schemas:
     connect.error:
@@ -372,6 +479,40 @@ components:
           title: schema_rules
           type: array
       title: AttachDocumentResponse
+      type: object
+    yorkie.v1.AttachPresenceRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        presenceKey:
+          additionalProperties: false
+          description: ""
+          title: presence_key
+          type: string
+      title: AttachPresenceRequest
+      type: object
+    yorkie.v1.AttachPresenceResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        count:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: count
+        presenceId:
+          additionalProperties: false
+          description: ""
+          title: presence_id
+          type: string
+      title: AttachPresenceResponse
       type: object
     yorkie.v1.BroadcastRequest:
       additionalProperties: false
@@ -600,6 +741,40 @@ components:
           title: change_pack
           type: object
       title: DetachDocumentResponse
+      type: object
+    yorkie.v1.DetachPresenceRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        presenceId:
+          additionalProperties: false
+          description: ""
+          title: presence_id
+          type: string
+        presenceKey:
+          additionalProperties: false
+          description: ""
+          title: presence_key
+          type: string
+      title: DetachPresenceRequest
+      type: object
+    yorkie.v1.DetachPresenceResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        count:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: count
+      title: DetachPresenceResponse
       type: object
     yorkie.v1.DocEvent:
       additionalProperties: false
@@ -1296,6 +1471,40 @@ components:
         - 3
       title: ChangeType
       type: string
+    yorkie.v1.PresenceEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        count:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: count
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        type:
+          $ref: '#/components/schemas/yorkie.v1.PresenceEvent.Type'
+          additionalProperties: false
+          description: ""
+          title: type
+      title: PresenceEvent
+      type: object
+    yorkie.v1.PresenceEvent.Type:
+      description: ""
+      enum:
+      - - TYPE_UNSPECIFIED
+        - 0
+        - TYPE_COUNT_CHANGED
+        - 1
+      title: Type
+      type: string
     yorkie.v1.PushPullChangesRequest:
       additionalProperties: false
       description: ""
@@ -1334,6 +1543,32 @@ components:
           title: change_pack
           type: object
       title: PushPullChangesResponse
+      type: object
+    yorkie.v1.RefreshPresenceRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        presenceId:
+          additionalProperties: false
+          description: ""
+          title: presence_id
+          type: string
+        presenceKey:
+          additionalProperties: false
+          description: ""
+          title: presence_key
+          type: string
+      title: RefreshPresenceRequest
+      type: object
+    yorkie.v1.RefreshPresenceResponse:
+      additionalProperties: false
+      description: ""
+      title: RefreshPresenceResponse
       type: object
     yorkie.v1.RemoveDocumentRequest:
       additionalProperties: false
@@ -1655,6 +1890,60 @@ components:
           title: client_ids
           type: array
       title: Initialization
+      type: object
+    yorkie.v1.WatchPresenceInitialized:
+      additionalProperties: false
+      description: ""
+      properties:
+        count:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: count
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+      title: WatchPresenceInitialized
+      type: object
+    yorkie.v1.WatchPresenceRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        presenceKey:
+          additionalProperties: false
+          description: ""
+          title: presence_key
+          type: string
+      title: WatchPresenceRequest
+      type: object
+    yorkie.v1.WatchPresenceResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        event:
+          $ref: '#/components/schemas/yorkie.v1.PresenceEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+        initialized:
+          $ref: '#/components/schemas/yorkie.v1.WatchPresenceInitialized'
+          additionalProperties: false
+          description: ""
+          title: initialized
+          type: object
+      title: WatchPresenceResponse
       type: object
   securitySchemes:
     ApiKeyAuth:

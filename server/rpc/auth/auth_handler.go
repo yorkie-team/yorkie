@@ -196,9 +196,7 @@ func (h *AuthManager) handleGitHubLogin(_ context.Context, w http.ResponseWriter
 
 func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
-	if ok := h.stateStore.Delete(state, func(value time.Time, exists bool) bool {
-		return exists
-	}); !ok {
+	if ok := h.stateStore.Delete(state); !ok {
 		http.Error(w, "Invalid state", http.StatusBadRequest)
 		return
 	}

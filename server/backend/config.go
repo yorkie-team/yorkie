@@ -60,6 +60,15 @@ type Config struct {
 	// ProjectCacheTTL is the TTL value to set when caching the project metadata.
 	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
 
+	// PresenceTTL is the time-to-live duration for presence sessions.
+	// If a presence is not refreshed within this duration, it will be removed.
+	// Default is "60s".
+	PresenceTTL string `yaml:"PresenceTTL"`
+
+	// PresenceCleanupInterval is the interval for running cleanup of expired presences.
+	// Default is "10s".
+	PresenceCleanupInterval string `yaml:"PresenceCleanupInterval"`
+
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
 
@@ -87,6 +96,24 @@ func (c *Config) Validate() error {
 			c.ProjectCacheTTL,
 			err,
 		)
+	}
+	if c.PresenceTTL != "" {
+		if _, err := time.ParseDuration(c.PresenceTTL); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--presence-ttl" flag: %w`,
+				c.PresenceTTL,
+				err,
+			)
+		}
+	}
+	if c.PresenceCleanupInterval != "" {
+		if _, err := time.ParseDuration(c.PresenceCleanupInterval); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--presence-cleanup-interval" flag: %w`,
+				c.PresenceCleanupInterval,
+				err,
+			)
+		}
 	}
 
 	return nil
@@ -119,6 +146,36 @@ func (c *Config) ParseProjectCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.ProjectCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse project metadata cache ttl: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParsePresenceTTL returns TTL for presence sessions.
+func (c *Config) ParsePresenceTTL() time.Duration {
+	if c.PresenceTTL == "" {
+		return 60 * time.Second // Default: 60 seconds
+	}
+
+	result, err := time.ParseDuration(c.PresenceTTL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse presence ttl: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParsePresenceCleanupInterval returns the interval for presence cleanup.
+func (c *Config) ParsePresenceCleanupInterval() time.Duration {
+	if c.PresenceCleanupInterval == "" {
+		return 10 * time.Second // Default: 10 seconds
+	}
+
+	result, err := time.ParseDuration(c.PresenceCleanupInterval)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse presence cleanup interval: %v\n", err)
 		os.Exit(1)
 	}
 

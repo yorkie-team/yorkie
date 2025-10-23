@@ -287,18 +287,19 @@ func TestTree(t *testing.T) {
 			}, 0)
 			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p><p><tn>aqB</tn></p></tc></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
-						Type:     "tn",
-						Children: []json.TreeNode{},
-					}, 0)
-					return nil
-				})
-			}, index.ErrUnreachablePath)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
+					Type:     "tn",
+					Children: []json.TreeNode{},
+				}, 0)
+				return nil
+			})
+		}, index.ErrUnreachablePath)
 	})
 
 	t.Run("edit content with path test 2", func(t *testing.T) {
@@ -601,21 +602,22 @@ func TestTree(t *testing.T) {
 			})
 			assert.Equal(t, "<doc><p>ab</p></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
-						Type:  "text",
-						Value: "c",
-					}, {
-						Type:  "text",
-						Value: "",
-					}}, 0)
-					return nil
-				})
-			}, json.ErrEmptyTextNode)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
+					Type:  "text",
+					Value: "c",
+				}, {
+					Type:  "text",
+					Value: "",
+				}}, 0)
+				return nil
+			})
+		}, json.ErrEmptyTextNode)
 	})
 
 	t.Run("detecting error for mixed type insertion test", func(t *testing.T) {
@@ -633,21 +635,22 @@ func TestTree(t *testing.T) {
 			})
 			assert.Equal(t, "<doc><p>ab</p></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
-						Type:     "p",
-						Children: []json.TreeNode{},
-					}, {
-						Type:  "text",
-						Value: "d",
-					}}, 0)
-					return nil
-				})
-			}, json.ErrMixedNodeType)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}, {
+					Type:  "text",
+					Value: "d",
+				}}, 0)
+				return nil
+			})
+		}, json.ErrMixedNodeType)
 	})
 
 	t.Run("detecting correct error order test 1", func(t *testing.T) {
@@ -665,20 +668,21 @@ func TestTree(t *testing.T) {
 			})
 			assert.Equal(t, "<doc><p>ab</p></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
-						Type:     "p",
-						Children: []json.TreeNode{{Type: "text", Value: "c"}, {Type: "text", Value: ""}},
-					}, {
-						Type: "text", Value: "d",
-					}}, 0)
-					return nil
-				})
-			}, json.ErrMixedNodeType)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}, {Type: "text", Value: ""}},
+				}, {
+					Type: "text", Value: "d",
+				}}, 0)
+				return nil
+			})
+		}, json.ErrMixedNodeType)
 	})
 
 	t.Run("detecting correct error order test 2", func(t *testing.T) {
@@ -696,21 +700,22 @@ func TestTree(t *testing.T) {
 			})
 			assert.Equal(t, "<doc><p>ab</p></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
-						Type:     "p",
-						Children: []json.TreeNode{{Type: "text", Value: "c"}},
-					}, {
-						Type:     "p",
-						Children: []json.TreeNode{{Type: "text", Value: ""}},
-					}}, 0)
-					return nil
-				})
-			}, json.ErrEmptyTextNode)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: ""}},
+				}}, 0)
+				return nil
+			})
+		}, json.ErrEmptyTextNode)
 	})
 
 	t.Run("detecting correct error order test 3", func(t *testing.T) {
@@ -728,21 +733,22 @@ func TestTree(t *testing.T) {
 			})
 			assert.Equal(t, "<doc><p>ab</p></doc>", root.GetTree("t").ToXML())
 
-			assert.Panics(t, func() {
-				doc.Update(func(root *json.Object, p *presence.Presence) error {
-					root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
-						Type:  "text",
-						Value: "d",
-					}, {
-						Type:     "p",
-						Children: []json.TreeNode{{Type: "text", Value: "c"}},
-					}}, 0)
-					return nil
-				})
-			}, json.ErrMixedNodeType)
 			return nil
 		})
 		assert.NoError(t, err)
+
+		assert.Panics(t, func() {
+			doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
+					Type:  "text",
+					Value: "d",
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}}, 0)
+				return nil
+			})
+		}, json.ErrMixedNodeType)
 	})
 
 	t.Run("edit its content with attributes test", func(t *testing.T) {

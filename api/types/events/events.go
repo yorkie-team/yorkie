@@ -22,6 +22,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ClientEventType represents the type of the ClientEvent.
+type ClientEventType string
+
+const (
+	// ClientActivatedEvent is an event that occurs when the client is activated.
+	ClientActivatedEvent ClientEventType = "client-activated"
+)
+
 // DocEventType represents the type of the DocEvent.
 type DocEventType string
 
@@ -73,26 +81,24 @@ type DocEvent struct {
 	// Type is the type of the event.
 	Type DocEventType
 
-	// Publisher is the actor who published the event.
-	Publisher time.ActorID
+	// Key is the key of the document that the event occurred.
+	Key types.DocRefKey
 
-	// DocRefKey is the key of the document that the event occurred.
-	DocRefKey types.DocRefKey
+	// Actor is the actor who published the event.
+	Actor time.ActorID
 
 	// Body includes additional data specific to the DocEvent.
 	Body DocEventBody
 }
 
-// ClientEventType represents the type of the ClientEvent.
-type ClientEventType string
+// PresenceEvent represents a presence count change event.
+type PresenceEvent struct {
+	// Key is the key of the presence that the event occurred.
+	Key types.PresenceRefKey
 
-const (
-	// ClientActivatedEvent is an event that occurs when the client is activated.
-	ClientActivatedEvent ClientEventType = "client-activated"
-)
+	// Seq is the sequence number of the presence event.
+	Seq int64
 
-// ClientEvent represents an event that occurs in the client.
-type ClientEvent struct {
-	// Type is the type of the event.
-	Type ClientEventType
+	// Count is the current count of the presence.
+	Count int64
 }

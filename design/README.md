@@ -2,12 +2,13 @@
 
 ## Contents
 
-### Document
+### Document & Presence
 
 - [Document-Client Lifecycle](document-client-lifecycle.md): States and transitions of documents and clients
 - [Document Editing](document-editing.md): Local and remote document editing mechanism
 - [Data Structure](data-structure.md): Data structures for root in document
-- [Presence](presence.md): Real-time presence in document
+- [DocPresence](doc-presence.md): Data structure for presence in document
+- [Presence](presence.md): Dedicated presence for real-time user tracking
 
 ### CRDT
 

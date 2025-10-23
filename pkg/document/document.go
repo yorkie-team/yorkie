@@ -21,8 +21,10 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -68,6 +70,18 @@ const (
 	PresenceChangedEvent DocEventType = "presence-changed"
 )
 
+// Root represents the root of a document.
+type Root = json.Object
+
+// Int represents an integer type in the document.
+const Int = crdt.IntegerCnt
+
+// Presence represents the presence of a client editing the document.
+type Presence = presence.Presence
+
+// PresenceData represents the data of a client's presence.
+type PresenceData = presence.Data
+
 // BroadcastRequest represents a broadcast request that will be delivered to the client.
 type BroadcastRequest struct {
 	Topic   string
@@ -100,6 +114,9 @@ func WithDisableGC() Option {
 // root. This is to protect the base json from errors that may occur while user
 // edit the document.
 type Document struct {
+	// mu protects the document from concurrent access.
+	mu sync.RWMutex
+
 	// doc is the original data of the actual document.
 	doc *InternalDocument
 
@@ -132,7 +149,8 @@ type Document struct {
 	// broadcastEventHandlers is a map of registered event handlers for events.
 	broadcastEventHandlers map[string]func(
 		topic, publisher string,
-		payload []byte) error
+		payload []byte,
+	) error
 }
 
 // New creates a new instance of Document.
@@ -156,9 +174,12 @@ func New(key key.Key, opts ...Option) *Document {
 
 // Update executes the given updater to update this document.
 func (d *Document) Update(
-	updater func(root *json.Object, p *presence.Presence) error,
+	updater func(root *json.Object, p *Presence) error,
 	msgAndArgs ...interface{},
 ) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if d.doc.status == StatusRemoved {
 		return ErrDocumentRemoved
 	}
@@ -221,6 +242,9 @@ func (d *Document) Update(
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	hasSnapshot := len(pack.Snapshot) > 0
 
@@ -237,7 +261,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 
 	// 02. Remove local changes applied to server.
-	for d.HasLocalChanges() {
+	for d.doc.HasLocalChanges() {
 		c := d.doc.localChanges[0]
 		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
 			break
@@ -299,6 +323,11 @@ func (d *Document) Key() key.Key {
 	return d.doc.key
 }
 
+// Type returns the type of this resource.
+func (d *Document) Type() attachable.ResourceType {
+	return attachable.TypeDocument
+}
+
 // Checkpoint returns the checkpoint of this document.
 func (d *Document) Checkpoint() change.Checkpoint {
 	return d.doc.checkpoint
@@ -306,6 +335,9 @@ func (d *Document) Checkpoint() change.Checkpoint {
 
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *Document) HasLocalChanges() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	return d.doc.HasLocalChanges()
 }
 
@@ -330,24 +362,24 @@ func (d *Document) ActorID() time.ActorID {
 	return d.doc.ActorID()
 }
 
-// SetStatus updates the status of this document.
-func (d *Document) SetStatus(status StatusType) {
-	d.doc.SetStatus(status)
-}
-
-// VersionVector returns the version vector of this document.
-func (d *Document) VersionVector() time.VersionVector {
-	return d.doc.VersionVector()
-}
-
 // Status returns the status of this document.
 func (d *Document) Status() StatusType {
 	return d.doc.status
 }
 
+// SetStatus updates the status of this document.
+func (d *Document) SetStatus(status StatusType) {
+	d.doc.SetStatus(status)
+}
+
 // IsAttached returns whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
+}
+
+// VersionVector returns the version vector of this document.
+func (d *Document) VersionVector() time.VersionVector {
+	return d.doc.VersionVector()
 }
 
 // RootObject returns the internal root object of this document.
@@ -426,7 +458,6 @@ func (d *Document) PresenceForTest(clientID string) presence.Data {
 
 // Presences returns the presence map of online clients.
 func (d *Document) Presences() map[string]presence.Data {
-	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
 	return d.doc.Presences()
 }
 
@@ -438,16 +469,25 @@ func (d *Document) AllPresences() map[string]presence.Data {
 
 // SetOnlineClients sets the online clients.
 func (d *Document) SetOnlineClients(clientIDs ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.SetOnlineClients(clientIDs...)
 }
 
 // AddOnlineClient adds the given client to the online clients.
 func (d *Document) AddOnlineClient(clientID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.AddOnlineClient(clientID)
 }
 
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *Document) RemoveOnlineClient(clientID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.doc.RemoveOnlineClient(clientID)
 }
 
