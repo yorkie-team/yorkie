@@ -1,171 +1,172 @@
 openapi: 3.1.0
 info:
-  description: Yorkie is an open source document store for building collaborative
+  description:
+    Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.33
+  version: v0.6.34
 servers:
-- description: Production server
-  url: https://api.yorkie.dev
-- description: Local server
-  url: http://localhost:8080
+  - description: Production server
+    url: https://api.yorkie.dev
+  - description: Local server
+    url: http://localhost:8080
 paths:
   /yorkie.v1.ClusterService/CompactDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.ClusterService
+        - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/DetachDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.ClusterService
+        - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/GetDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.ClusterService
+        - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/PurgeDocument:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest'
+        $ref: "#/components/requestBodies/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest"
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse'
+          $ref: "#/components/responses/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse"
         default:
-          $ref: '#/components/responses/connect.error'
+          $ref: "#/components/responses/connect.error"
       tags:
-      - yorkie.v1.ClusterService
+        - yorkie.v1.ClusterService
 components:
   requestBodies:
     yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest"
       required: true
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest"
       required: true
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest"
       required: true
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest"
       required: true
   responses:
     connect.error:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
         application/proto:
           schema:
-            $ref: '#/components/schemas/connect.error'
+            $ref: "#/components/schemas/connect.error"
       description: ""
     yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse"
       description: ""
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse"
       description: ""
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse"
       description: ""
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse"
         application/proto:
           schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+            $ref: "#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse"
       description: ""
   schemas:
     connect.error:
       additionalProperties: false
-      description: 'Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation'
+      description: "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
       properties:
         code:
           enum:
-          - CodeCanceled
-          - CodeUnknown
-          - CodeInvalidArgument
-          - CodeDeadlineExceeded
-          - CodeNotFound
-          - CodeAlreadyExists
-          - CodePermissionDenied
-          - CodeResourceExhausted
-          - CodeFailedPrecondition
-          - CodeAborted
-          - CodeOutOfRange
-          - CodeInternal
-          - CodeUnavailable
-          - CodeDataLoss
-          - CodeUnauthenticated
+            - CodeCanceled
+            - CodeUnknown
+            - CodeInvalidArgument
+            - CodeDeadlineExceeded
+            - CodeNotFound
+            - CodeAlreadyExists
+            - CodePermissionDenied
+            - CodeResourceExhausted
+            - CodeFailedPrecondition
+            - CodeAborted
+            - CodeOutOfRange
+            - CodeInternal
+            - CodeUnavailable
+            - CodeDataLoss
+            - CodeUnauthenticated
           examples:
-          - CodeNotFound
+            - CodeNotFound
           type: string
         message:
           type: string
@@ -317,7 +318,7 @@ components:
           title: document_key
           type: string
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
           description: ""
           title: project
@@ -349,7 +350,7 @@ components:
           title: include_root
           type: boolean
         project:
-          $ref: '#/components/schemas/yorkie.v1.Project'
+          $ref: "#/components/schemas/yorkie.v1.Project"
           additionalProperties: false
           description: ""
           title: project
@@ -361,7 +362,7 @@ components:
       description: ""
       properties:
         document:
-          $ref: '#/components/schemas/yorkie.v1.DocumentSummary'
+          $ref: "#/components/schemas/yorkie.v1.DocumentSummary"
           additionalProperties: false
           description: ""
           title: document
@@ -415,13 +416,13 @@ components:
       description: ""
       properties:
         gc:
-          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
           additionalProperties: false
           description: ""
           title: gc
           type: object
         live:
-          $ref: '#/components/schemas/yorkie.v1.DataSize'
+          $ref: "#/components/schemas/yorkie.v1.DataSize"
           additionalProperties: false
           description: ""
           title: live
@@ -433,7 +434,7 @@ components:
       description: ""
       properties:
         accessedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: accessed_at
@@ -444,13 +445,13 @@ components:
           title: attached_clients
           type: integer
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
           type: object
         documentSize:
-          $ref: '#/components/schemas/yorkie.v1.DocSize'
+          $ref: "#/components/schemas/yorkie.v1.DocSize"
           additionalProperties: false
           description: ""
           title: document_size
@@ -481,7 +482,7 @@ components:
           title: schema_key
           type: string
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -498,7 +499,7 @@ components:
           title: key
           type: string
         value:
-          $ref: '#/components/schemas/yorkie.v1.Presence'
+          $ref: "#/components/schemas/yorkie.v1.Presence"
           additionalProperties: false
           description: ""
           title: value
@@ -547,8 +548,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: auth_webhook_max_retries
         authWebhookMaxWaitInterval:
           additionalProperties: false
@@ -583,7 +584,7 @@ components:
           title: client_deactivate_threshold
           type: string
         createdAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: created_at
@@ -599,8 +600,8 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: event_webhook_max_retries
         eventWebhookMaxWaitInterval:
           additionalProperties: false
@@ -666,18 +667,18 @@ components:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: snapshot_interval
         snapshotThreshold:
           additionalProperties: false
           description: ""
           oneOf:
-          - type: string
-          - type: number
+            - type: string
+            - type: number
           title: snapshot_threshold
         updatedAt:
-          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          $ref: "#/components/schemas/google.protobuf.Timestamp"
           additionalProperties: false
           description: ""
           title: updated_at
@@ -690,7 +691,7 @@ components:
       name: Authorization
       type: apiKey
 security:
-- ApiKeyAuth: []
+  - ApiKeyAuth: []
 tags:
-- description: ClusterService is a service that provides an API for Cluster.
-  name: yorkie.v1.ClusterService
+  - description: ClusterService is a service that provides an API for Cluster.
+    name: yorkie.v1.ClusterService
