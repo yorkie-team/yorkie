@@ -59,6 +59,18 @@ type Client struct {
 	vectorCache   *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
+type webhookLogDoc struct {
+	ID           types.ID    `bson:"_id"`
+	ProjectID    types.ID    `bson:"project_id"`
+	WebhookType  string      `bson:"webhook_type"`
+	WebhookURL   string      `bson:"webhook_url"`
+	RequestBody  []byte      `bson:"request_body"`
+	StatusCode   int         `bson:"status_code"`
+	ResponseBody []byte      `bson:"response_body"`
+	ErrorMessage string      `bson:"error_message"`
+	CreatedAt    gotime.Time `bson:"created_at"`
+}
+
 // Dial creates an instance of Client and dials the given MongoDB.
 func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
@@ -2340,4 +2352,81 @@ func (c *Client) IsSchemaAttached(
 	}
 
 	return true, nil
+}
+
+// CreateWebhookLog creates a new webhook log entry.
+func (c *Client) CreateWebhookLog(
+	ctx context.Context,
+	webhookLog *types.WebhookLogInfo,
+) error {
+	responseBody := webhookLog.ResponseBody
+	if len(responseBody) > 10*1024 {
+		responseBody = responseBody[:10*1024] // 10kb
+	}
+
+	result, err := c.collection(ColWebhookLogs).InsertOne(ctx, bson.M{
+		"project_id":    webhookLog.ProjectID,
+		"webhook_type":  webhookLog.WebhookType,
+		"webhook_url":   webhookLog.WebhookURL,
+		"request_body":  webhookLog.RequestBody,
+		"status_code":   webhookLog.StatusCode,
+		"response_body": responseBody,
+		"error_message": webhookLog.ErrorMessage,
+		"created_at":    webhookLog.CreatedAt,
+	})
+	if err != nil {
+		return fmt.Errorf("create webhook log: %w", err)
+	}
+
+	webhookLog.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return nil
+}
+
+// ListWebhookLogs returns webhook logs for a project.
+func (c *Client) ListWebhookLogs(
+	ctx context.Context,
+	projectID types.ID,
+	webhookType string,
+	pageSize int,
+	offset int,
+) ([]*types.WebhookLogInfo, error) {
+	filter := bson.M{
+		"project_id": projectID,
+	}
+
+	if webhookType != "" {
+		filter["webhook_type"] = webhookType
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetLimit(int64(pageSize)).
+		SetSkip(int64(offset))
+
+	cursor, err := c.collection(ColWebhookLogs).Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("find webhook logs: %w", err)
+	}
+
+	var docs []*webhookLogDoc
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("fetch webhook logs: %w", err)
+	}
+
+	infos := make([]*types.WebhookLogInfo, len(docs))
+	for i, doc := range docs {
+		infos[i] = &types.WebhookLogInfo{
+			ID:           types.ID(doc.ID),
+			ProjectID:    doc.ProjectID,
+			WebhookType:  doc.WebhookType,
+			WebhookURL:   doc.WebhookURL,
+			RequestBody:  doc.RequestBody,
+			StatusCode:   doc.StatusCode,
+			ResponseBody: doc.ResponseBody,
+			ErrorMessage: doc.ErrorMessage,
+			CreatedAt:    doc.CreatedAt,
+		}
+	}
+
+	return infos, nil
 }
