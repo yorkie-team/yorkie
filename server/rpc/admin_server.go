@@ -779,3 +779,37 @@ func (s *adminServer) RotateProjectKeys(
 		Project: converter.ToProject(newProject),
 	}), nil
 }
+
+func (s *adminServer) ListWebhookLogs(
+	ctx context.Context,
+	req *connect.Request[api.ListWebhookLogsRequest],
+) (*connect.Response[api.ListWebhookLogsResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	logs, err := s.backend.DB.ListWebhookLogs(
+		ctx,
+		project.ID,
+		req.Msg.WebhookType,
+		int(req.Msg.PageSize),
+		0, // offset
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListWebhookLogsResponse{
+		Logs:          converter.ToWebhookLogs(logs),
+		NextPageToken: generateNextPageToken(logs),
+	}), nil
+}
+
+func generateNextPageToken(logs []*types.WebhookLogInfo) string {
+	if len(logs) == 0 {
+		return ""
+	}
+	return logs[len(logs)-1].ID.String()
+}

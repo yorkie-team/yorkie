@@ -1602,3 +1602,54 @@ func RunDeactivateClientWithAttachingDocumentTest(
 		assert.Equal(t, database.DocumentDetached, ci2.Documents[docInfo.ID].Status)
 	}
 }
+
+// RunAdminListWebhookLogsTest runs the ListWebhookLogs test in admin.
+func RunAdminListWebhookLogsTest(
+	t *testing.T,
+	testAdminClient v1connect.AdminServiceClient,
+	testAdminAuthInterceptor *admin.AuthInterceptor,
+) {
+	projectName := helper.TestSlugName(t)
+
+	// 01. login
+	resp, err := testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: helper.AdminUser,
+			Password: helper.AdminPassword,
+		}),
+	)
+	assert.NoError(t, err)
+	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
+
+	// 02. create a project
+	_, err = testAdminClient.CreateProject(
+		context.Background(),
+		connect.NewRequest(&api.CreateProjectRequest{
+			Name: projectName,
+		}),
+	)
+	assert.NoError(t, err)
+
+	// 03. GET webHookLogs - correct
+	logsResp, err := testAdminClient.ListWebhookLogs(
+		context.Background(),
+		connect.NewRequest(&api.ListWebhookLogsRequest{
+			ProjectName: projectName,
+			PageSize:    10,
+		}),
+	)
+	assert.NoError(t, err)
+	assert.Empty(t, logsResp.Msg.Logs)
+
+	// 04. GET webHookLogs - not found error
+	_, err = testAdminClient.ListWebhookLogs(
+		context.Background(),
+		connect.NewRequest(&api.ListWebhookLogsRequest{
+			ProjectName: invalidSlugName,
+			PageSize:    10,
+		}),
+	)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, database.ErrProjectNotFound.Code(), converter.ErrorCodeOf(err))
+}
