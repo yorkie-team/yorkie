@@ -216,6 +216,69 @@ func tokensBetween[V Value](root *Node[V], from, to int, callback func(token Tre
 	return nil
 }
 
+// tokensBetweenIncludeRemovedNodes iterates the tokens between the given range including removed nodes.
+func tokensBetweenIncludeRemovedNodes[V Value](
+	root *Node[V],
+	from, to int,
+	callback func(token TreeToken[V], ended bool),
+) error {
+	if from > to {
+		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
+	}
+
+	if from > root.LengthIncludeRemovedNodes {
+		return fmt.Errorf("from is out of range %d > %d", from, root.LengthIncludeRemovedNodes)
+	}
+
+	if to > root.LengthIncludeRemovedNodes {
+		return fmt.Errorf("to is out of range %d > %d", to, root.LengthIncludeRemovedNodes)
+	}
+
+	if from == to {
+		return nil
+	}
+
+	pos := 0
+	for _, child := range root.GetChildren() { // all nodes including removed nodes
+		if from-child.PaddedLengthIncludeRemovedNodes() < pos && pos < to {
+			fromChild := from - pos - 1
+			if child.IsText() {
+				fromChild = from - pos
+			}
+			toChild := to - pos - 1
+			if child.IsText() {
+				toChild = to - pos
+			}
+
+			startContained := !child.IsText() && fromChild < 0
+			endContained := !child.IsText() && toChild > child.LengthIncludeRemovedNodes
+			if child.IsText() || startContained {
+				var tokenType TokenType
+				if child.IsText() {
+					tokenType = Text
+				} else {
+					tokenType = Start
+				}
+				callback(TreeToken[V]{child.Value, tokenType}, endContained)
+			}
+			if err := tokensBetweenIncludeRemovedNodes(
+				child,
+				int(math.Max(0, float64(fromChild))),
+				int(math.Min(float64(toChild), float64(child.LengthIncludeRemovedNodes))),
+				callback,
+			); err != nil {
+				return err
+			}
+			if endContained {
+				callback(TreeToken[V]{child.Value, End}, endContained)
+			}
+		}
+		pos += child.PaddedLengthIncludeRemovedNodes()
+	}
+
+	return nil
+}
+
 // ToXML returns the XML representation of this tree.
 func ToXML[V Value](node *Node[V]) string {
 	if node.IsText() {
@@ -258,8 +321,9 @@ type Node[V Value] struct {
 	// use n.Children() instead.
 	children []*Node[V]
 
-	Value  V
-	Length int
+	Value                     V
+	Length                    int
+	LengthIncludeRemovedNodes int
 }
 
 // NewNode creates a new instance of Node.
@@ -269,8 +333,9 @@ func NewNode[V Value](nodeType string, value V, children ...*Node[V]) *Node[V] {
 
 		children: children,
 
-		Length: value.Length(),
-		Value:  value,
+		Length:                    value.Length(),
+		LengthIncludeRemovedNodes: value.Length(),
+		Value:                     value,
 	}
 }
 
@@ -294,6 +359,7 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	for _, newNode := range newNodes {
 		newNode.Parent = n
 		newNode.UpdateAncestorsSize()
+		newNode.UpdateAncestorsSizeIncludeRemovedNodes()
 	}
 
 	return nil
@@ -313,6 +379,11 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	}
 
 	return children
+}
+
+// GetChildren returns the children of the given node.
+func (n *Node[V]) GetChildren() []*Node[V] {
+	return n.children
 }
 
 // SetChildren sets the children of the given node.
@@ -349,6 +420,28 @@ func (n *Node[V]) UpdateAncestorsSize() {
 	}
 }
 
+// UpdateAncestorsSizeIncludeRemovedNodes updates the size of ancestors including removed nodes.
+func (n *Node[V]) UpdateAncestorsSizeIncludeRemovedNodes() {
+	parent := n.Parent
+	if n.Value.IsRemoved() {
+		return
+	}
+
+	for parent != nil {
+		parent.LengthIncludeRemovedNodes += n.PaddedLengthIncludeRemovedNodes()
+		parent = parent.Parent
+	}
+}
+
+func (n *Node[V]) ReduceAncestorsSizeIncludeRemovedNodes() {
+	parent := n.Parent
+
+	for parent != nil {
+		parent.LengthIncludeRemovedNodes -= n.PaddedLengthIncludeRemovedNodes()
+		parent = parent.Parent
+	}
+}
+
 // UpdateDescendantsSize updates the size of descendants. It is used when
 // the tree is newly created and the size of the descendants is not calculated.
 func (n *Node[V]) UpdateDescendantsSize() int {
@@ -367,6 +460,19 @@ func (n *Node[V]) UpdateDescendantsSize() int {
 	return n.PaddedLength()
 }
 
+// UpdateDescendantsSizeIncludeRemovedNodes updates the size of descendants including removed nodes.
+func (n *Node[V]) UpdateDescendantsSizeIncludeRemovedNodes() int {
+	size := 0
+	for _, child := range n.children {
+		childSize := child.UpdateDescendantsSizeIncludeRemovedNodes()
+
+		size += childSize
+	}
+
+	n.LengthIncludeRemovedNodes += size
+	return n.PaddedLengthIncludeRemovedNodes()
+}
+
 // PaddedLength returns the length of the node with padding.
 func (n *Node[V]) PaddedLength() int {
 	length := n.Length
@@ -374,6 +480,15 @@ func (n *Node[V]) PaddedLength() int {
 		length += elementPaddingLength
 	}
 
+	return length
+}
+
+// paddedLengthIncludeRemovedNodes returns the length of the node with padding including removed nodes.
+func (n *Node[V]) PaddedLengthIncludeRemovedNodes() int {
+	length := n.LengthIncludeRemovedNodes
+	if !n.IsText() {
+		length += elementPaddingLength
+	}
 	return length
 }
 
@@ -459,6 +574,23 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 	return -1, ErrChildNotFound
 }
 
+// FindOffsetIncludeRemovedNodes returns the offset of the given node in the children including removed nodes.
+func (n *Node[V]) FindOffsetIncludeRemovedNodes(node *Node[V]) (int, error) {
+	if n.IsText() {
+		return 0, ErrInvalidMethodCallForTextNode
+	}
+
+	offset := 0
+	for _, child := range n.children {
+		if child == node {
+			return offset, nil
+		}
+		offset++
+	}
+
+	return -1, ErrChildNotFound
+}
+
 // IsAncestorOf returns true if the node is an ancestor of the given node.
 func (n *Node[V]) IsAncestorOf(node *Node[V]) bool {
 	return n.ancestorOf(n, node)
@@ -512,6 +644,7 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 	}
 
 	newNode.UpdateAncestorsSize()
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
 
 	return nil
 }
@@ -569,6 +702,7 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	}
 
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
+	child.ReduceAncestorsSizeIncludeRemovedNodes()
 	child.Parent = nil
 
 	return nil
@@ -590,6 +724,7 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 	}
 
 	newNode.UpdateAncestorsSize()
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
 
 	return nil
 }
@@ -610,6 +745,7 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 	}
 
 	newNode.UpdateAncestorsSize()
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
 
 	return nil
 }
@@ -644,6 +780,15 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 // TokensBetween returns the tokens between the given range.
 func (t *Tree[V]) TokensBetween(from int, to int, callback func(token TreeToken[V], ended bool)) error {
 	return tokensBetween(t.root, from, to, callback)
+}
+
+// TokensBetweenIncludeRemovedNodes returns the tokens between the given range including removed nodes.
+func (t *Tree[V]) TokensBetweenIncludeRemovedNodes(
+	from int,
+	to int,
+	callback func(token TreeToken[V], ended bool),
+) error {
+	return tokensBetweenIncludeRemovedNodes(t.root, from, to, callback)
 }
 
 // TreePos is the position of a node in the tree.
@@ -803,6 +948,20 @@ func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) {
 			continue
 		}
 		leftSiblingsSize += children[i].PaddedLength()
+	}
+
+	return leftSiblingsSize, nil
+}
+
+// LeftSiblingsSizeIncludeRemovedNodes returns the size of left siblings of the given node including removed nodes
+func (t *Tree[V]) LeftSiblingsSizeIncludeRemovedNodes(parent *Node[V], offset int) (int, error) {
+	leftSiblingsSize := 0
+	children := parent.GetChildren()
+	for i := range offset {
+		if children[i] == nil {
+			continue
+		}
+		leftSiblingsSize += children[i].PaddedLengthIncludeRemovedNodes()
 	}
 
 	return leftSiblingsSize, nil
@@ -986,6 +1145,57 @@ func (t *Tree[V]) IndexOf(pos *TreePos[V]) (int, error) {
 		}
 
 		leftSiblingsSize, err := t.LeftSiblingsSize(parent, offsetOfNode)
+		if err != nil {
+			return 0, err
+		}
+
+		size += leftSiblingsSize
+		depth++
+		node = node.Parent
+	}
+
+	return size + depth - 1, nil
+}
+
+// IndexOfIncludeRemovedNodes returns the index of the given tree position including removed nodes.
+func (t *Tree[V]) IndexOfIncludeRemovedNodes(pos *TreePos[V]) (int, error) {
+	node, offset := pos.Node, pos.Offset
+
+	size := 0
+	depth := 1
+
+	if node.IsText() {
+		size += offset
+
+		parent := node.Parent
+		offsetOfNode, err := parent.FindOffsetIncludeRemovedNodes(node)
+		if err != nil {
+			return 0, err
+		}
+
+		leftSiblingsSize, err := t.LeftSiblingsSizeIncludeRemovedNodes(parent, offsetOfNode)
+		if err != nil {
+			return 0, err
+		}
+		size += leftSiblingsSize
+
+		node = node.Parent
+	} else {
+		leftSiblingsSize, err := t.LeftSiblingsSizeIncludeRemovedNodes(node, offset)
+		if err != nil {
+			return 0, err
+		}
+		size += leftSiblingsSize
+	}
+
+	for node.Parent != nil {
+		parent := node.Parent
+		offsetOfNode, err := parent.FindOffsetIncludeRemovedNodes(node)
+		if err != nil {
+			return 0, err
+		}
+
+		leftSiblingsSize, err := t.LeftSiblingsSizeIncludeRemovedNodes(parent, offsetOfNode)
 		if err != nil {
 			return 0, err
 		}
