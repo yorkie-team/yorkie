@@ -118,6 +118,9 @@ const (
 	// AdminServiceRotateProjectKeysProcedure is the fully-qualified name of the AdminService's
 	// RotateProjectKeys RPC.
 	AdminServiceRotateProjectKeysProcedure = "/yorkie.v1.AdminService/RotateProjectKeys"
+	// AdminServiceListWebhookLogsProcedure is the fully-qualified name of the AdminService's
+	// ListWebhookLogs RPC.
+	AdminServiceListWebhookLogsProcedure = "/yorkie.v1.AdminService/ListWebhookLogs"
 )
 
 // AdminServiceClient is a client for the yorkie.v1.AdminService service.
@@ -147,6 +150,7 @@ type AdminServiceClient interface {
 	RemoveSchema(context.Context, *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
+	ListWebhookLogs(context.Context, *connect.Request[v1.ListWebhookLogsRequest]) (*connect.Response[v1.ListWebhookLogsResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the yorkie.v1.AdminService service. By default, it
@@ -284,6 +288,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceRotateProjectKeysProcedure,
 			opts...,
 		),
+		listWebhookLogs: connect.NewClient[v1.ListWebhookLogsRequest, v1.ListWebhookLogsResponse](
+			httpClient,
+			baseURL+AdminServiceListWebhookLogsProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -314,6 +323,7 @@ type adminServiceClient struct {
 	removeSchema          *connect.Client[v1.RemoveSchemaRequest, v1.RemoveSchemaResponse]
 	getServerVersion      *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 	rotateProjectKeys     *connect.Client[v1.RotateProjectKeysRequest, v1.RotateProjectKeysResponse]
+	listWebhookLogs       *connect.Client[v1.ListWebhookLogsRequest, v1.ListWebhookLogsResponse]
 }
 
 // SignUp calls yorkie.v1.AdminService.SignUp.
@@ -441,6 +451,11 @@ func (c *adminServiceClient) RotateProjectKeys(ctx context.Context, req *connect
 	return c.rotateProjectKeys.CallUnary(ctx, req)
 }
 
+// ListWebhookLogs calls yorkie.v1.AdminService.ListWebhookLogs.
+func (c *adminServiceClient) ListWebhookLogs(ctx context.Context, req *connect.Request[v1.ListWebhookLogsRequest]) (*connect.Response[v1.ListWebhookLogsResponse], error) {
+	return c.listWebhookLogs.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the yorkie.v1.AdminService service.
 type AdminServiceHandler interface {
 	SignUp(context.Context, *connect.Request[v1.SignUpRequest]) (*connect.Response[v1.SignUpResponse], error)
@@ -468,6 +483,7 @@ type AdminServiceHandler interface {
 	RemoveSchema(context.Context, *connect.Request[v1.RemoveSchemaRequest]) (*connect.Response[v1.RemoveSchemaResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
+	ListWebhookLogs(context.Context, *connect.Request[v1.ListWebhookLogsRequest]) (*connect.Response[v1.ListWebhookLogsResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -601,6 +617,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.RotateProjectKeys,
 		opts...,
 	)
+	adminServiceListWebhookLogsHandler := connect.NewUnaryHandler(
+		AdminServiceListWebhookLogsProcedure,
+		svc.ListWebhookLogs,
+		opts...,
+	)
 	return "/yorkie.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceSignUpProcedure:
@@ -653,6 +674,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		case AdminServiceRotateProjectKeysProcedure:
 			adminServiceRotateProjectKeysHandler.ServeHTTP(w, r)
+		case AdminServiceListWebhookLogsProcedure:
+			adminServiceListWebhookLogsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -760,4 +783,8 @@ func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *conne
 
 func (UnimplementedAdminServiceHandler) RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RotateProjectKeys is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) ListWebhookLogs(context.Context, *connect.Request[v1.ListWebhookLogsRequest]) (*connect.Response[v1.ListWebhookLogsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ListWebhookLogs is not implemented"))
 }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -778,4 +779,52 @@ func (s *adminServer) RotateProjectKeys(
 	return connect.NewResponse(&api.RotateProjectKeysResponse{
 		Project: converter.ToProject(newProject),
 	}), nil
+}
+
+func (s *adminServer) ListWebhookLogs(
+	ctx context.Context,
+	req *connect.Request[api.ListWebhookLogsRequest],
+) (*connect.Response[api.ListWebhookLogsResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	// parse offset from page_token (defaults to 0)
+	offset := 0
+	if req.Msg.PageToken != "" {
+		if o, convErr := strconv.Atoi(req.Msg.PageToken); convErr != nil || o < 0 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+		} else {
+			offset = o
+		}
+	}
+	pageSize := int(req.Msg.PageSize)
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+
+	logs, err := s.backend.DB.ListWebhookLogs(
+		ctx,
+		project.ID,
+		req.Msg.WebhookType,
+		pageSize,
+		offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListWebhookLogsResponse{
+		Logs:          converter.ToWebhookLogs(logs),
+		NextPageToken: generateNextPageToken(offset, pageSize, logs),
+	}), nil
+}
+
+func generateNextPageToken(offset, pageSize int, logs []*types.WebhookLogInfo) string {
+	if len(logs) < pageSize {
+		return ""
+	}
+	return strconv.Itoa(offset + len(logs))
 }

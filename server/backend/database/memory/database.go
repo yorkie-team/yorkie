@@ -2268,3 +2268,75 @@ func (d *DB) IsSchemaAttached(
 
 	return false, nil
 }
+
+// CreateWebhookLog creates a new webhook log entry.
+func (d *DB) CreateWebhookLog(
+	ctx context.Context,
+	webhookLog *types.WebhookLogInfo,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if webhookLog.ID == "" {
+		webhookLog.ID = newID()
+	}
+
+	responseBody := webhookLog.ResponseBody
+	if len(responseBody) > 10*1024 {
+		responseBody = responseBody[:10*1024] // 10kb
+	}
+
+	logCopy := webhookLog.DeepCopy()
+	logCopy.ResponseBody = responseBody
+
+	if err := txn.Insert(tblWebhookLogs, logCopy); err != nil {
+		return fmt.Errorf("insert webhook log: %w", err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// ListWebhookLogs returns webhook logs for a project.
+func (d *DB) ListWebhookLogs(
+	_ context.Context,
+	projectID types.ID,
+	webhookType string,
+	pageSize int,
+	offset int,
+) ([]*types.WebhookLogInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iterator, err := txn.Get(tblWebhookLogs, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("fetch webhook logs: %w", err)
+	}
+
+	var logs []*types.WebhookLogInfo
+	skipped := 0
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		log := raw.(*types.WebhookLogInfo)
+
+		if webhookType != "" && log.WebhookType != webhookType {
+			continue
+		}
+
+		if skipped < offset {
+			skipped++
+			continue
+		}
+
+		if len(logs) >= pageSize {
+			break
+		}
+
+		logs = append(logs, log.DeepCopy())
+	}
+
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].CreatedAt.After(logs[j].CreatedAt)
+	})
+
+	return logs, nil
+}

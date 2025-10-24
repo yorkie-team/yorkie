@@ -44,6 +44,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColWebhookLogs represents the webhook logs collection in the database.
+	ColWebhookLogs = "webhooklogs"
 )
 
 // Collections represents the list of all collections in the database.
@@ -57,6 +59,7 @@ var Collections = []string{
 	ColChanges,
 	ColSnapshots,
 	ColVersionVectors,
+	ColWebhookLogs,
 }
 
 type collectionInfo struct {
@@ -199,6 +202,20 @@ var collectionInfos = []collectionInfo{
 				{Key: "client_id", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
+		}},
+	}, {
+		name: ColWebhookLogs,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "webhook_type", Value: int32(1)},
+				{Key: "created_at", Value: int32(-1)}, // desc
+			},
+		}, {
+			Keys: bson.D{
+				{Key: "created_at", Value: int32(1)},
+			},
+			Options: options.Index().SetExpireAfterSeconds(2592000), // TTL: 30day
 		}},
 	},
 }

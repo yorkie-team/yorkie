@@ -28,6 +28,7 @@ var (
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
+	tblWebhookLogs    = "webhooklogs"
 )
 
 var schema = &memdb.DBSchema{
@@ -303,6 +304,40 @@ var schema = &memdb.DBSchema{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "ServerSeq"},
+						},
+					},
+				},
+			},
+		},
+
+		tblWebhookLogs: {
+			Name: tblWebhookLogs,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
+				},
+				"project_id_created_at": {
+					Name: "project_id_created_at",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.TimeFieldIndex{Field: "CreatedAt"},
+						},
+					},
+				},
+				"project_id_type_created_at": {
+					Name: "project_id_type_created_at",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "WebhookType"},
+							&memdb.TimeFieldIndex{Field: "CreatedAt"},
 						},
 					},
 				},

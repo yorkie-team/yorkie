@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/limit"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -41,13 +42,15 @@ const (
 type Manager struct {
 	limiter       *limit.Limiter[types.EventRefKey]
 	webhookClient *webhook.Client[types.EventWebhookRequest, int]
+	db            database.Database
 }
 
 // NewManager creates a new instance of Manager with the provided webhook client.
-func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
+func NewManager(cli *webhook.Client[types.EventWebhookRequest, int], db database.Database) *Manager {
 	return &Manager{
 		limiter:       limit.NewLimiter[types.EventRefKey](expireBatchSize, expireInterval, throttleWindow, debouncingTime),
 		webhookClient: cli,
+		db:            db,
 	}
 }
 
@@ -60,6 +63,8 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 			m.webhookClient,
 			info.EventRefKey.EventWebhookType,
 			info.Attribute,
+			info.EventRefKey.ProjectID,
+			m.db,
 			info.Options,
 		); err != nil {
 			logging.From(ctx).Error(err)
@@ -68,7 +73,15 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options)
+		return SendWebhook(
+			ctx,
+			m.webhookClient,
+			info.EventRefKey.EventWebhookType,
+			info.Attribute,
+			info.EventRefKey.ProjectID,
+			m.db,
+			info.Options,
+		)
 	}
 	return nil
 }
@@ -89,6 +102,8 @@ func SendWebhook(
 	cli *webhook.Client[types.EventWebhookRequest, int],
 	event types.EventWebhookType,
 	attr types.WebhookAttribute,
+	projectID types.ID,
+	db database.Database,
 	options webhook.Options,
 ) error {
 	body, err := types.NewRequestBody(attr.DocKey, event)
@@ -96,7 +111,28 @@ func SendWebhook(
 		return fmt.Errorf("create webhook request body: %w", err)
 	}
 
-	_, status, err := cli.Send(ctx, attr.URL, attr.SigningKey, body, options)
+	_, status, responseBody, err := cli.Send(ctx, attr.URL, attr.SigningKey, body, options)
+	if (err != nil || status != http.StatusOK) && db != nil {
+		errorMessage := ""
+		if err != nil {
+			errorMessage = err.Error()
+		}
+
+		webhookLog := &types.WebhookLogInfo{
+			ProjectID:    projectID,
+			WebhookType:  "event",
+			WebhookURL:   attr.URL,
+			RequestBody:  body,
+			StatusCode:   status,
+			ResponseBody: responseBody,
+			ErrorMessage: errorMessage,
+			CreatedAt:    time.Now().UTC(),
+		}
+		if logErr := db.CreateWebhookLog(ctx, webhookLog); logErr != nil {
+			logging.From(ctx).Error(logErr)
+		}
+	}
+
 	if err != nil {
 		return fmt.Errorf("send webhook event: %w", err)
 	}

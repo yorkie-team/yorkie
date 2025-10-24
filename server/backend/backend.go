@@ -129,7 +129,6 @@ func New(
 
 	// 04. Create webhook clients and cluster client.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
-	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
 
 	clusterClient, err := cluster.Dial(conf.GatewayAddr)
 	if err != nil {
@@ -150,6 +149,8 @@ func New(
 			return nil, err
 		}
 	}
+
+	eventWebhookManager := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](), db)
 
 	// 06. Create the membership manager and the housekeeping instance.
 	membership := membership.New(db, conf.RPCAddr, membershipConf)
@@ -199,7 +200,7 @@ func New(
 		Housekeeping: housekeeper,
 
 		AuthWebhookClient:   authWebhookClient,
-		EventWebhookManager: eventWebhookManger,
+		EventWebhookManager: eventWebhookManager,
 		ClusterClient:       clusterClient,
 
 		Metrics:   metrics,

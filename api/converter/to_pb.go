@@ -720,3 +720,26 @@ func ToSchemas(schemas []*types.Schema) []*api.Schema {
 	}
 	return pbSchemas
 }
+
+// ToWebhookLog converts WebhookLogInfo to protobuf format.
+func ToWebhookLog(log *types.WebhookLogInfo) *api.WebhookLog {
+	return &api.WebhookLog{
+		Id:           log.ID.String(),
+		WebhookType:  log.WebhookType,
+		WebhookUrl:   log.WebhookURL,
+		RequestBody:  log.RequestBody,
+		StatusCode:   int32(log.StatusCode),
+		ResponseBody: log.ResponseBody,
+		ErrorMessage: log.ErrorMessage,
+		CreatedAt:    timestamppb.New(log.CreatedAt),
+	}
+}
+
+// ToWebhookLogs converts multiple WebhookLogInfo to protobuf format.
+func ToWebhookLogs(logs []*types.WebhookLogInfo) []*api.WebhookLog {
+	pbLogs := make([]*api.WebhookLog, len(logs))
+	for i, log := range logs {
+		pbLogs[i] = ToWebhookLog(log)
+	}
+	return pbLogs
+}

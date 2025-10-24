@@ -18,6 +18,7 @@ syntax = "proto3";
 package yorkie.v1;
 
 import "yorkie/v1/resources.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/yorkie-team/yorkie/api/yorkie/v1;v1";
 
@@ -57,6 +58,8 @@ service AdminService {
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 
   rpc RotateProjectKeys(RotateProjectKeysRequest) returns (RotateProjectKeysResponse) {}
+
+  rpc ListWebhookLogs(ListWebhookLogsRequest) returns (ListWebhookLogsResponse) {}
 }
 
 message SignUpRequest {
@@ -287,4 +290,27 @@ message RotateProjectKeysRequest {
 
 message RotateProjectKeysResponse {
   Project project = 1;
+}
+
+message ListWebhookLogsRequest {  
+  string project_name = 1;  
+  int32 page_size = 2;  
+  string page_token = 3;  
+  string webhook_type = 4; // "auth", "event", or "" for all  
+}  
+  
+message ListWebhookLogsResponse {  
+  repeated WebhookLog logs = 1;  
+  string next_page_token = 2;  
+}  
+  
+message WebhookLog {  
+  string id = 1;  
+  string webhook_type = 2;  
+  string webhook_url = 3;  
+  bytes request_body = 4;  
+  int32 status_code = 5;  
+  bytes response_body = 6;  
+  string error_message = 7;  
+  google.protobuf.Timestamp created_at = 8;  
 }

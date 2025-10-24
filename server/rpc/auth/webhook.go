@@ -21,12 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -66,13 +68,28 @@ func verifyAccess(
 		return fmt.Errorf("verify access: %w", err)
 	}
 
-	res, status, err := be.AuthWebhookClient.Send(
-		ctx,
-		prj.AuthWebhookURL,
-		"",
-		body,
-		options,
-	)
+	res, status, responseBody, err := be.AuthWebhookClient.Send(ctx, prj.AuthWebhookURL, "", body, options)
+	if err != nil || status != http.StatusOK {
+		errorMessage := ""
+		if err != nil {
+			errorMessage = err.Error()
+		}
+
+		webhookLog := &types.WebhookLogInfo{
+			ProjectID:    prj.ID,
+			WebhookType:  "auth",
+			WebhookURL:   prj.AuthWebhookURL,
+			RequestBody:  body,
+			StatusCode:   status,
+			ResponseBody: responseBody,
+			ErrorMessage: errorMessage,
+			CreatedAt:    time.Now(),
+		}
+		if logErr := be.DB.CreateWebhookLog(ctx, webhookLog); logErr != nil {
+			logging.From(ctx).Error(logErr)
+		}
+	}
+
 	if err != nil {
 		return fmt.Errorf("verify access: %w", err)
 	}
