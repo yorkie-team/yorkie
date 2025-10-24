@@ -237,39 +237,47 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 }
 
 func TestWebhookLogs(t *testing.T) {
-	// Given
 	ctx := context.Background()
 	cli := setupTestWithDummyData(t)
 	defer func() { assert.NoError(t, cli.Close()) }()
 
-	webhookLog := &types.WebhookLogInfo{
-		ProjectID:    dummyProjectID,
-		WebhookType:  "event",
-		WebhookURL:   "https://example.com/webhook",
-		RequestBody:  []byte(`{"event":"test"}`),
-		StatusCode:   500,
-		ResponseBody: []byte(`{"error":"internal error"}`),
-		ErrorMessage: "webhook failed",
-		CreatedAt:    time.Now(),
-	}
+	t.Run("success: create & list webhook logs", func(t *testing.T) {
+		// Given
+		webhookLog := &types.WebhookLogInfo{
+			ProjectID:    dummyProjectID,
+			WebhookType:  "event",
+			WebhookURL:   "https://example.com/webhook",
+			RequestBody:  []byte(`{"event":"test"}`),
+			StatusCode:   500,
+			ResponseBody: []byte(`{"error":"internal error"}`),
+			ErrorMessage: "webhook failed",
+			CreatedAt:    time.Now(),
+		}
 
-	// When & Then
-	err := cli.CreateWebhookLog(ctx, webhookLog)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, webhookLog.ID)
+		// When
+		err := cli.CreateWebhookLog(ctx, webhookLog)
 
-	logs, err := cli.ListWebhookLogs(ctx, dummyProjectID, "", 10, 0)
-	assert.NoError(t, err)
-	assert.Len(t, logs, 1)
-	assert.Equal(t, "event", logs[0].WebhookType)
-	assert.Equal(t, 500, logs[0].StatusCode)
-	assert.Equal(t, webhookLog.ID, logs[0].ID)
+		// Then
+		assert.NoError(t, err)
+		assert.NotEmpty(t, webhookLog.ID)
 
-	logs, err = cli.ListWebhookLogs(ctx, dummyProjectID, "event", 10, 0)
-	assert.NoError(t, err)
-	assert.Len(t, logs, 1)
+		logs, err := cli.ListWebhookLogs(ctx, dummyProjectID, "", 10, 0)
+		assert.NoError(t, err)
+		assert.Len(t, logs, 1)
+		assert.Equal(t, "event", logs[0].WebhookType)
+		assert.Equal(t, 500, logs[0].StatusCode)
+		assert.Equal(t, webhookLog.ID, logs[0].ID)
+	})
 
-	logs, err = cli.ListWebhookLogs(ctx, dummyProjectID, "auth", 10, 0)
-	assert.NoError(t, err)
-	assert.Len(t, logs, 0)
+	t.Run("success: filter by EventWebHook type", func(t *testing.T) {
+		logs, err := cli.ListWebhookLogs(ctx, dummyProjectID, "event", 10, 0)
+		assert.NoError(t, err)
+		assert.Len(t, logs, 1)
+	})
+
+	t.Run("success: filter by AuthWebHook type (returns empty)", func(t *testing.T) {
+		logs, err := cli.ListWebhookLogs(ctx, dummyProjectID, "auth", 10, 0)
+		assert.NoError(t, err)
+		assert.Len(t, logs, 0)
+	})
 }
