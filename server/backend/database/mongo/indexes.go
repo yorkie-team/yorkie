@@ -44,7 +44,7 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
-	// todo
+	// ColWebhookLogs represents the webhook logs collection in the database.
 	ColWebhookLogs = "webhookLogs"
 )
 
@@ -208,6 +208,7 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
 				{Key: "project_id", Value: int32(1)},
+				{Key: "webhook_type", Value: int32(1)},
 				{Key: "created_at", Value: int32(-1)}, // desc
 			},
 		}, {

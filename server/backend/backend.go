@@ -150,7 +150,7 @@ func New(
 		}
 	}
 
-	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](), db)
+	eventWebhookManager := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int](), db)
 
 	// 06. Create the membership manager and the housekeeping instance.
 	membership := membership.New(db, conf.RPCAddr, membershipConf)
@@ -200,7 +200,7 @@ func New(
 		Housekeeping: housekeeper,
 
 		AuthWebhookClient:   authWebhookClient,
-		EventWebhookManager: eventWebhookManger,
+		EventWebhookManager: eventWebhookManager,
 		ClusterClient:       clusterClient,
 
 		Metrics:   metrics,

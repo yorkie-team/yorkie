@@ -121,6 +121,8 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 						SigningKey: signingKey,
 						URL:        endpoints[i].URL,
 					},
+					types.ID("test-project-id"),
+					nil,
 					pkgwebhook.Options{
 						MaxRetries:      0,
 						MinWaitInterval: 100 * time.Millisecond,
@@ -153,7 +155,7 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 	logging.DefaultLogger()
 
 	for range b.N {
-		manager := webhook.NewManager(cli)
+		manager := webhook.NewManager(cli, nil)
 		for range webhookNum {
 			for i := range endpointNum {
 				err := manager.Send(

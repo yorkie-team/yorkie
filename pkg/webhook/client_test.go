@@ -289,7 +289,7 @@ func TestErrorHandling(t *testing.T) {
 			MaxWaitInterval: 0,
 			RequestTimeout:  15 * time.Millisecond,
 		}
-		resp, statusCode, err := unreachableClient.Send(context.Background(), invalidJSONServer.URL, "", body, options)
+		resp, statusCode, _, err := unreachableClient.Send(context.Background(), invalidJSONServer.URL, "", body, options)
 		assert.Error(t, err)
 		assert.Equal(t, http.StatusOK, statusCode)
 		assert.Nil(t, resp)

@@ -115,15 +115,10 @@ func (c *Client[Req, Res]) Send(
 			return resp.StatusCode, nil
 		}
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return resp.StatusCode, fmt.Errorf("send webhook: %w", err)
-		}
-
-		if err := json.Unmarshal(body, &res); err != nil {
+		if err := json.Unmarshal(responseBody, &res); err != nil {
 			logger := logging.From(ctx)
 			if logger != nil {
-				logger.Errorf("send webhook url=%s, status=%d, body=%s", url, resp.StatusCode, string(body))
+				logger.Errorf("send webhook url=%s, status=%d, body=%s", url, resp.StatusCode, string(responseBody))
 			}
 
 			return resp.StatusCode, ErrInvalidJSONResponse

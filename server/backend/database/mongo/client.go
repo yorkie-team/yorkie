@@ -60,15 +60,15 @@ type Client struct {
 }
 
 type webhookLogDoc struct {
-	ID           types.ID    `bson:"_id"`
-	ProjectID    types.ID    `bson:"project_id"`
-	WebhookType  string      `bson:"webhook_type"`
-	WebhookURL   string      `bson:"webhook_url"`
-	RequestBody  []byte      `bson:"request_body"`
-	StatusCode   int         `bson:"status_code"`
-	ResponseBody []byte      `bson:"response_body"`
-	ErrorMessage string      `bson:"error_message"`
-	CreatedAt    gotime.Time `bson:"created_at"`
+	ID           bson.ObjectID `bson:"_id,omitempty"`
+	ProjectID    types.ID      `bson:"project_id"`
+	WebhookType  string        `bson:"webhook_type"`
+	WebhookURL   string        `bson:"webhook_url"`
+	RequestBody  []byte        `bson:"request_body"`
+	StatusCode   int           `bson:"status_code"`
+	ResponseBody []byte        `bson:"response_body"`
+	ErrorMessage string        `bson:"error_message"`
+	CreatedAt    gotime.Time   `bson:"created_at"`
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -2398,6 +2398,15 @@ func (c *Client) ListWebhookLogs(
 		filter["webhook_type"] = webhookType
 	}
 
+	if pageSize <= 0 {
+		pageSize = 50
+	} else if pageSize > 100 {
+		pageSize = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	opts := options.Find().
 		SetSort(bson.D{{Key: "created_at", Value: -1}}).
 		SetLimit(int64(pageSize)).
@@ -2416,7 +2425,7 @@ func (c *Client) ListWebhookLogs(
 	infos := make([]*types.WebhookLogInfo, len(docs))
 	for i, doc := range docs {
 		infos[i] = &types.WebhookLogInfo{
-			ID:           types.ID(doc.ID),
+			ID:           types.ID(doc.ID.Hex()),
 			ProjectID:    doc.ProjectID,
 			WebhookType:  doc.WebhookType,
 			WebhookURL:   doc.WebhookURL,

@@ -73,7 +73,15 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.EventRefKey.ProjectID, m.db, info.Options)
+		return SendWebhook(
+			ctx,
+			m.webhookClient,
+			info.EventRefKey.EventWebhookType,
+			info.Attribute,
+			info.EventRefKey.ProjectID,
+			m.db,
+			info.Options,
+		)
 	}
 	return nil
 }
@@ -118,7 +126,7 @@ func SendWebhook(
 			StatusCode:   status,
 			ResponseBody: responseBody,
 			ErrorMessage: errorMessage,
-			CreatedAt:    time.Now(),
+			CreatedAt:    time.Now().UTC(),
 		}
 		if logErr := db.CreateWebhookLog(ctx, webhookLog); logErr != nil {
 			logging.From(ctx).Error(logErr)

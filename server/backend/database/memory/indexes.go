@@ -28,7 +28,7 @@ var (
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
-	tblWebhookLogs    = "webhookLogs"
+	tblWebhookLogs    = "webhooklogs"
 )
 
 var schema = &memdb.DBSchema{
@@ -327,6 +327,16 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.TimeFieldIndex{Field: "CreatedAt"},
+						},
+					},
+				},
+				"project_id_type_created_at": {
+					Name: "project_id_type_created_at",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "WebhookType"},
 							&memdb.TimeFieldIndex{Field: "CreatedAt"},
 						},
 					},

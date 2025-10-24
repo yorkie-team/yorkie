@@ -425,7 +425,7 @@ type Database interface {
 		schema string,
 	) (bool, error)
 
-	// CreateWebhookLog creates a new new wbhook logs.
+	// CreateWebhookLog creates a new webhook log.
 	CreateWebhookLog(ctx context.Context, webhookLog *types.WebhookLogInfo) error
 
 	// ListWebhookLogs returns webhook logs for a project.
