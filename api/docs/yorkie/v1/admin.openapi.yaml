@@ -214,7 +214,19 @@ paths:
         default:
           $ref: "#/components/responses/connect.error"
       tags:
-        - yorkie.v1.AdminService
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/ListWebhookLogs:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListWebhookLogs.yorkie.v1.ListWebhookLogsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ListWebhookLogs.yorkie.v1.ListWebhookLogsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/LogIn:
     post:
       description: ""
@@ -466,6 +478,15 @@ components:
           schema:
             $ref: "#/components/schemas/yorkie.v1.ListSchemasRequest"
       required: true
+    yorkie.v1.AdminService.ListWebhookLogs.yorkie.v1.ListWebhookLogsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListWebhookLogsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListWebhookLogsRequest'
+      required: true
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInRequest:
       content:
         application/json:
@@ -700,6 +721,15 @@ components:
         application/proto:
           schema:
             $ref: "#/components/schemas/yorkie.v1.ListSchemasResponse"
+      description: ""
+    yorkie.v1.AdminService.ListWebhookLogs.yorkie.v1.ListWebhookLogsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListWebhookLogsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListWebhookLogsResponse'
       description: ""
     yorkie.v1.AdminService.LogIn.yorkie.v1.LogInResponse:
       content:
@@ -1706,6 +1736,51 @@ components:
           title: schemas
           type: array
       title: ListSchemasResponse
+      type: object
+    yorkie.v1.ListWebhookLogsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        pageSize:
+          additionalProperties: false
+          description: ""
+          title: page_size
+          type: integer
+        pageToken:
+          additionalProperties: false
+          description: ""
+          title: page_token
+          type: string
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        webhookType:
+          additionalProperties: false
+          description: '"auth", "event", or "" for all'
+          title: webhook_type
+          type: string
+      title: ListWebhookLogsRequest
+      type: object
+    yorkie.v1.ListWebhookLogsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        logs:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.WebhookLog'
+            type: object
+          title: logs
+          type: array
+        nextPageToken:
+          additionalProperties: false
+          description: ""
+          title: next_page_token
+          type: string
+      title: ListWebhookLogsResponse
       type: object
     yorkie.v1.LogInRequest:
       additionalProperties: false
@@ -3179,6 +3254,53 @@ components:
             - type: number
           title: value
       title: VectorEntry
+      type: object
+    yorkie.v1.WebhookLog:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        errorMessage:
+          additionalProperties: false
+          description: ""
+          title: error_message
+          type: string
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        requestBody:
+          additionalProperties: false
+          description: ""
+          title: request_body
+          type: string
+        responseBody:
+          additionalProperties: false
+          description: ""
+          title: response_body
+          type: string
+        statusCode:
+          additionalProperties: false
+          description: ""
+          title: status_code
+          type: integer
+        webhookType:
+          additionalProperties: false
+          description: ""
+          title: webhook_type
+          type: string
+        webhookUrl:
+          additionalProperties: false
+          description: ""
+          title: webhook_url
+          type: string
+      title: WebhookLog
       type: object
   securitySchemes:
     ApiKeyAuth:
