@@ -3640,8 +3640,8 @@ func TestTree(t *testing.T) {
 				isRemoved: node.Value.IsRemoved(),
 			})
 		})
-		assert.ObjectsAreEqual(d1Nodes, d2Nodes)
-		assert.ObjectsAreEqual(d1Nodes, sNodes)
+		assert.Equal(t, d1Nodes, d2Nodes)
+		assert.Equal(t, d1Nodes, sNodes)
 	})
 
 	t.Run("can split and merge with empty paragraph: left", func(t *testing.T) {
