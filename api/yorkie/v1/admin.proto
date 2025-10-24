@@ -308,9 +308,9 @@ message WebhookLog {
   string id = 1;  
   string webhook_type = 2;  
   string webhook_url = 3;  
-  string request_body = 4;  
+  bytes request_body = 4;  
   int32 status_code = 5;  
-  string response_body = 6;  
+  bytes response_body = 6;  
   string error_message = 7;  
   google.protobuf.Timestamp created_at = 8;  
 }

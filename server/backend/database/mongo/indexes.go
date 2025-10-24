@@ -207,7 +207,7 @@ var collectionInfos = []collectionInfo{
 		name: ColWebhookLogs,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)},
+				{Key: "project_id", Value: int32(1)}, // shard key
 				{Key: "webhook_type", Value: int32(1)},
 				{Key: "created_at", Value: int32(-1)}, // desc
 			},

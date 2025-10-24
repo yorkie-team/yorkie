@@ -727,9 +727,9 @@ func ToWebhookLog(log *types.WebhookLogInfo) *api.WebhookLog {
 		Id:           log.ID.String(),
 		WebhookType:  log.WebhookType,
 		WebhookUrl:   log.WebhookURL,
-		RequestBody:  string(log.RequestBody),
+		RequestBody:  log.RequestBody,
 		StatusCode:   int32(log.StatusCode),
-		ResponseBody: string(log.ResponseBody),
+		ResponseBody: log.ResponseBody,
 		ErrorMessage: log.ErrorMessage,
 		CreatedAt:    timestamppb.New(log.CreatedAt),
 	}
