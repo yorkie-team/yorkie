@@ -431,12 +431,7 @@ func (n *TreeNode) SplitElement(
 }
 
 // remove marks the node as removed.
-func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
-	// NOTE(sigmaith): Skip if the node's creation was not visible to this operation.
-	if !creationKnown {
-		return false
-	}
-
+func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.removedAt == nil {
 		n.removedAt = removedAt
 		n.Index.UpdateAncestorsSize()
@@ -446,7 +441,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket, creationKnown, tombstoneKnown 
 
 	// NOTE(sigmaith): Overwrite only if prior tombstone was not known
 	// (concurrent or unseen) and newer.
-	if !tombstoneKnown && removedAt.After(n.removedAt) {
+	if removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
 	}
 	return false
@@ -896,27 +891,7 @@ func (t *Tree) Edit(
 	// 02. Delete: delete the nodes that are marked as removed.
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
-		isLocal := len(versionVector) == 0
-
-		// NOTE(sigmaith): Determine if the node's creation event was visible.
-		creationKnown := false
-		if isLocal {
-			creationKnown = true
-		} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
-			creationKnown = true
-		}
-
-		// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-		tombstoneKnown := false
-		if node.removedAt != nil {
-			if isLocal {
-				tombstoneKnown = true
-			} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
-				tombstoneKnown = true
-			}
-		}
-
-		if node.remove(editedAt, creationKnown, tombstoneKnown) {
+		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
 				Parent: t,
 				Child:  node,
@@ -963,7 +938,7 @@ func (t *Tree) Edit(
 				// if insertion happens during concurrent editing and parent node has been removed,
 				// make new nodes as tombstone immediately
 				if fromParent.IsRemoved() {
-					node.Value.remove(editedAt, true, false)
+					node.Value.remove(editedAt)
 					pairs = append(pairs, GCPair{
 						Parent: t,
 						Child:  node.Value,
@@ -989,7 +964,6 @@ func (t *Tree) collectBetween(
 ) ([]*TreeNode, []*TreeNode, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
-	isLocal := len(versionVector) == 0
 
 	if err := t.traverseInPosRangeIncludeRemovedNodes(
 		fromParent, fromLeft,
@@ -1014,6 +988,7 @@ func (t *Tree) collectBetween(
 			}
 
 			// NOTE(sigmaith): Determine if the node's creation event was visible.
+			isLocal := len(versionVector) == 0
 			creationKnown := false
 			if isLocal {
 				creationKnown = true
