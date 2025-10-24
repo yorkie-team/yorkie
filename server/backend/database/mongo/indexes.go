@@ -45,7 +45,7 @@ const (
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
 	// ColWebhookLogs represents the webhook logs collection in the database.
-	ColWebhookLogs = "webhookLogs"
+	ColWebhookLogs = "webhooklogs"
 )
 
 // Collections represents the list of all collections in the database.

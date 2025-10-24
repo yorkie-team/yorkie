@@ -112,7 +112,7 @@ func SendWebhook(
 	}
 
 	_, status, responseBody, err := cli.Send(ctx, attr.URL, attr.SigningKey, body, options)
-	if err != nil || status != http.StatusOK {
+	if (err != nil || status != http.StatusOK) && db != nil {
 		errorMessage := ""
 		if err != nil {
 			errorMessage = err.Error()

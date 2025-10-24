@@ -2360,8 +2360,12 @@ func (c *Client) CreateWebhookLog(
 	webhookLog *types.WebhookLogInfo,
 ) error {
 	responseBody := webhookLog.ResponseBody
-	if len(responseBody) > 10*1024 {
-		responseBody = responseBody[:10*1024] // 10kb
+	const maxRespBodyBytes = 10 * 1024
+	if len(responseBody) > maxRespBodyBytes {
+		responseBody = responseBody[:maxRespBodyBytes]
+	}
+	if webhookLog.CreatedAt.IsZero() {
+		webhookLog.CreatedAt = gotime.Now().UTC()
 	}
 
 	doc := &webhookLogDoc{

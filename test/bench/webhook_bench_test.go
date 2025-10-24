@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/webhook"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -101,6 +102,13 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 		docKey     = "doc-key"
 		signingKey = "sign-key"
 	)
+
+	memDB, err := memory.New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer memDB.Close()
+
 	endpoints := setupWebhookServer(b, endpointNum)
 	defer func() {
 		for _, server := range endpoints {
@@ -122,7 +130,7 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 						URL:        endpoints[i].URL,
 					},
 					types.ID("test-project-id"),
-					nil,
+					memDB,
 					pkgwebhook.Options{
 						MaxRetries:      0,
 						MinWaitInterval: 100 * time.Millisecond,
@@ -143,6 +151,12 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 		signingKey = "sign-key"
 	)
 
+	memDB, err := memory.New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer memDB.Close()
+
 	endpoints := setupWebhookServer(b, endpointNum)
 	defer func() {
 		for _, server := range endpoints {
@@ -155,7 +169,7 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 	logging.DefaultLogger()
 
 	for range b.N {
-		manager := webhook.NewManager(cli, nil)
+		manager := webhook.NewManager(cli, memDB)
 		for range webhookNum {
 			for i := range endpointNum {
 				err := manager.Send(

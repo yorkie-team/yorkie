@@ -2286,17 +2286,8 @@ func (d *DB) CreateWebhookLog(
 		responseBody = responseBody[:10*1024] // 10kb
 	}
 
-	logCopy := &types.WebhookLogInfo{
-		ID:           webhookLog.ID,
-		ProjectID:    webhookLog.ProjectID,
-		WebhookType:  webhookLog.WebhookType,
-		WebhookURL:   webhookLog.WebhookURL,
-		RequestBody:  webhookLog.RequestBody,
-		StatusCode:   webhookLog.StatusCode,
-		ResponseBody: responseBody,
-		ErrorMessage: webhookLog.ErrorMessage,
-		CreatedAt:    webhookLog.CreatedAt,
-	}
+	logCopy := webhookLog.DeepCopy()
+	logCopy.ResponseBody = responseBody
 
 	if err := txn.Insert(tblWebhookLogs, logCopy); err != nil {
 		return fmt.Errorf("insert webhook log: %w", err)
