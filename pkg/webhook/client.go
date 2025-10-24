@@ -74,13 +74,14 @@ func (c *Client[Req, Res]) Send(
 	url, hmacKey string,
 	body []byte,
 	options Options,
-) (*Res, int, error) {
+) (*Res, int, []byte, error) {
 	signature, err := createSignature(body, hmacKey)
 	if err != nil {
-		return nil, 0, fmt.Errorf("send webhook: %w", err)
+		return nil, 0, nil, fmt.Errorf("send webhook: %w", err)
 	}
 
 	var res Res
+	var responseBody []byte
 	status, err := c.withExponentialBackoff(ctx, options, func() (int, error) {
 		req, cancel, err := c.buildRequest(ctx, url, signature, options, body)
 		if cancel != nil {
@@ -100,6 +101,11 @@ func (c *Client[Req, Res]) Send(
 				logging.From(ctx).Error(err)
 			}
 		}()
+
+		responseBody, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return resp.StatusCode, fmt.Errorf("read response body: %w", err)
+		}
 
 		if !isExpectedStatus(resp.StatusCode) {
 			return resp.StatusCode, ErrUnexpectedStatusCode
@@ -126,10 +132,10 @@ func (c *Client[Req, Res]) Send(
 		return resp.StatusCode, nil
 	})
 	if err != nil {
-		return nil, status, err
+		return nil, status, responseBody, err
 	}
 
-	return &res, status, nil
+	return &res, status, responseBody, nil
 }
 
 // Close closes the httpClient.
