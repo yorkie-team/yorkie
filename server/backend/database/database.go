@@ -424,4 +424,16 @@ type Database interface {
 		projectID types.ID,
 		schema string,
 	) (bool, error)
+
+	// CreateWebhookLog creates a new new wbhook logs.
+	CreateWebhookLog(ctx context.Context, webhookLog *types.WebhookLogInfo) error
+
+	// ListWebhookLogs returns webhook logs for a project.
+	ListWebhookLogs(
+		ctx context.Context,
+		projectID types.ID,
+		webhookType string,
+		pageSize int,
+		offset int,
+	) ([]*types.WebhookLogInfo, error)
 }
