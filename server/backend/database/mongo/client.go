@@ -2364,16 +2364,18 @@ func (c *Client) CreateWebhookLog(
 		responseBody = responseBody[:10*1024] // 10kb
 	}
 
-	result, err := c.collection(ColWebhookLogs).InsertOne(ctx, bson.M{
-		"project_id":    webhookLog.ProjectID,
-		"webhook_type":  webhookLog.WebhookType,
-		"webhook_url":   webhookLog.WebhookURL,
-		"request_body":  webhookLog.RequestBody,
-		"status_code":   webhookLog.StatusCode,
-		"response_body": responseBody,
-		"error_message": webhookLog.ErrorMessage,
-		"created_at":    webhookLog.CreatedAt,
-	})
+	doc := &webhookLogDoc{
+		ProjectID:    webhookLog.ProjectID,
+		WebhookType:  webhookLog.WebhookType,
+		WebhookURL:   webhookLog.WebhookURL,
+		RequestBody:  webhookLog.RequestBody,
+		StatusCode:   webhookLog.StatusCode,
+		ResponseBody: responseBody,
+		ErrorMessage: webhookLog.ErrorMessage,
+		CreatedAt:    webhookLog.CreatedAt,
+	}
+
+	result, err := c.collection(ColWebhookLogs).InsertOne(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("create webhook log: %w", err)
 	}
@@ -2390,9 +2392,7 @@ func (c *Client) ListWebhookLogs(
 	pageSize int,
 	offset int,
 ) ([]*types.WebhookLogInfo, error) {
-	filter := bson.M{
-		"project_id": projectID,
-	}
+	filter := bson.M{"project_id": projectID}
 
 	if webhookType != "" {
 		filter["webhook_type"] = webhookType
