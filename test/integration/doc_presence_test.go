@@ -193,8 +193,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -401,8 +401,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -414,7 +414,7 @@ func TestDocPresence(t *testing.T) {
 			},
 		})
 		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 		wgEvents.Wait()
 
 		cancel2()
@@ -490,8 +490,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -505,7 +505,7 @@ func TestDocPresence(t *testing.T) {
 		cancel2()
 
 		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 
 		wgEvents.Wait()
 		assert.Equal(t, expected, responsePairs)
@@ -699,7 +699,7 @@ func TestDocPresence(t *testing.T) {
 		})
 		_, cancel2, err := c2.WatchStream(d2)
 		assert.NoError(t, err)
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
 
 		_, cancel3, err := c2.WatchStream(d3)
 		assert.NoError(t, err)

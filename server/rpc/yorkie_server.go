@@ -382,7 +382,16 @@ func (s *yorkieServer) RefreshPresence(
 		return nil, err
 	}
 
-	response := &api.RefreshPresenceResponse{}
+	// 03. Get current count from backend
+	refKey := types.PresenceRefKey{
+		ProjectID:   project.ID,
+		PresenceKey: presenceKey,
+	}
+	count := s.backend.Presence.Count(refKey)
+
+	response := &api.RefreshPresenceResponse{
+		Count: count,
+	}
 	return connect.NewResponse(response), nil
 }
 

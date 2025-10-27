@@ -69,11 +69,6 @@ type Options struct {
 	PresenceHeartbeatInterval gotime.Duration
 }
 
-// WithKey configures the key of the client.
-func WithKey(key string) Option {
-	return func(o *Options) { o.Key = key }
-}
-
 // WithAPIKey configures the API key of the client.
 func WithAPIKey(apiKey string) Option {
 	return func(o *Options) { o.APIKey = apiKey }
@@ -137,11 +132,15 @@ type AttachOption func(*AttachOptions)
 
 // AttachOptions configures how we set up the document.
 type AttachOptions struct {
-	// Presence is the presence of the client.
+	IsRealtime  bool
 	Presence    presence.Data
 	InitialRoot yson.Object
-	IsRealtime  bool
 	Schema      string
+}
+
+// WithRealtimeSync configures the manual sync of the client.
+func WithRealtimeSync() AttachOption {
+	return func(o *AttachOptions) { o.IsRealtime = true }
 }
 
 // WithPresence configures the presence of the client.
@@ -158,14 +157,25 @@ func WithInitialRoot(root yson.Object) AttachOption {
 	}
 }
 
-// WithRealtimeSync configures the manual sync of the client.
-func WithRealtimeSync() AttachOption {
-	return func(o *AttachOptions) { o.IsRealtime = true }
-}
-
 // WithSchema configures the schema of the document.
 func WithSchema(schema string) AttachOption {
 	return func(o *AttachOptions) { o.Schema = schema }
+}
+
+// AttachPresenceOption configures AttachPresenceOptions.
+type AttachPresenceOption func(*AttachPresenceOptions)
+
+// AttachPresenceOptions configures how we set up the presence counter.
+type AttachPresenceOptions struct {
+	// IsRealtime determines whether the presence counter is in realtime mode.
+	// If true, the client will watch for presence count changes via streaming.
+	// If false, the client must manually refresh to get count updates.
+	IsRealtime bool
+}
+
+// WithPresenceRealtimeSync configures the presence counter to be in realtime mode.
+func WithPresenceRealtimeSync() AttachPresenceOption {
+	return func(o *AttachPresenceOptions) { o.IsRealtime = true }
 }
 
 // DetachOption configures DetachOptions.
@@ -181,15 +191,15 @@ func WithRemoveIfNotAttached() DetachOption {
 	return func(o *DetachOptions) { o.removeIfNotAttached = true }
 }
 
-// SyncOptions is an option for sync. It contains the key of the document to
-// sync and the sync mode.
+// SyncOptions is an option for sync. It contains the key of the resource to
+// sync and the sync mode. It can be used for both documents and presence counters.
 type SyncOptions struct {
 	key  key.Key
 	mode types.SyncMode
 }
 
-// WithDocKey creates a SyncOptions with the given document key.
-func WithDocKey(k key.Key) SyncOptions {
+// WithKey creates a SyncOptions with the given resource key.
+func WithKey(k key.Key) SyncOptions {
 	return SyncOptions{
 		key:  k,
 		mode: types.SyncModePushPull,

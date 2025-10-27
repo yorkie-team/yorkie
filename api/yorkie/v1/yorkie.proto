@@ -157,6 +157,7 @@ message RefreshPresenceRequest {
 }
 
 message RefreshPresenceResponse {
+  int64 count = 1;
 }
 
 message WatchPresenceRequest {

@@ -418,7 +418,14 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...in
 		return ErrInvalidResource
 	}
 
-	return c.attachPresence(ctx, p)
+	attachPresenceOpts := &AttachPresenceOptions{}
+	for _, opt := range opts {
+		if attachOpt, ok := opt.(AttachPresenceOption); ok {
+			attachOpt(attachPresenceOpts)
+		}
+	}
+
+	return c.attachPresence(ctx, p, attachPresenceOpts)
 }
 
 // Detach detaches the given resource from this client.
@@ -608,7 +615,7 @@ func (c *Client) detachDocument(ctx context.Context, d *document.Document, opts 
 }
 
 // attachPresence attaches a presence counter to the server.
-func (c *Client) attachPresence(ctx context.Context, p *presence.Presence) error {
+func (c *Client) attachPresence(ctx context.Context, p *presence.Presence, opts *AttachPresenceOptions) error {
 	res, err := c.client.AttachPresence(
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachPresenceRequest{
@@ -620,10 +627,16 @@ func (c *Client) attachPresence(ctx context.Context, p *presence.Presence) error
 	}
 
 	p.SetStatus(attachable.StatusAttached)
+
+	syncMode := SyncModeManual
+	if opts.IsRealtime {
+		syncMode = SyncModeRealtime
+	}
+
 	attachment := &Attachment{
 		resource:     p,
 		resourceID:   types.ID(res.Msg.PresenceId),
-		syncMode:     SyncModeRealtime,
+		syncMode:     syncMode,
 		lastSyncTime: gotime.Now(),
 	}
 	c.attachments.Set(p.Key(), attachment)
@@ -634,14 +647,14 @@ func (c *Client) attachPresence(ctx context.Context, p *presence.Presence) error
 	return nil
 }
 
-// refreshPresence refreshes the TTL of the given presence counter.
+// refreshPresence refreshes the TTL of the given presence counter and returns the current count.
 func (c *Client) refreshPresence(ctx context.Context, p *presence.Presence) error {
 	attachment, ok := c.attachments.Get(p.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	_, err := c.client.RefreshPresence(
+	res, err := c.client.RefreshPresence(
 		ctx,
 		withShardKey(connect.NewRequest(&api.RefreshPresenceRequest{
 			ClientId:    c.id.String(),
@@ -649,7 +662,14 @@ func (c *Client) refreshPresence(ctx context.Context, p *presence.Presence) erro
 			PresenceKey: p.Key().String(),
 		}), c.options.APIKey, p.Key().String()))
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Update count from refresh response
+	p.UpdateCount(res.Msg.Count, 0)
+
+	return nil
 }
 
 // detachPresence detaches a presence counter from the server.
@@ -772,11 +792,12 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
-// local documents.
+// local documents. For presence counters, it refreshes the TTL and retrieves
+// the current count.
 func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 	if len(opts) == 0 {
 		for _, attachment := range c.attachments.Values() {
-			opts = append(opts, WithDocKey(attachment.resource.Key()))
+			opts = append(opts, WithKey(attachment.resource.Key()))
 		}
 	}
 
