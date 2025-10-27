@@ -533,6 +533,12 @@ func TestTextLWW(t *testing.T) {
 			}
 		}
 
+		assert.NotNil(t, aNode1, "c1 a node should not be nil")
+		assert.NotNil(t, bcNode1, "c1 bc node should not be nil")
+		assert.NotNil(t, dNode1, "c1 d node should not be nil")
+		assert.NotNil(t, aNode2, "c2 a node should not be nil")
+		assert.NotNil(t, bcNode2, "c2 bc node should not be nil")
+		assert.NotNil(t, dNode2, "c2 d node should not be nil")
 		assert.NotNil(t, aNode1.RemovedAt(), "c1 a node should be removed")
 		assert.NotNil(t, bcNode1.RemovedAt(), "c1 bc node should be removed")
 		assert.NotNil(t, dNode1.RemovedAt(), "c1 d node should be removed")
@@ -542,7 +548,7 @@ func TestTextLWW(t *testing.T) {
 
 		earlierExpectedRemovedAt := aNode1.RemovedAt()
 		laterExpectedRemovedAt := bcNode1.RemovedAt()
-		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 i node removedAt should be after c1 b node removedAt")
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 bc node removedAt should be after c1 a node removedAt")
 
 		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
 		assert.Equal(t, earlierExpectedRemovedAt, dNode1.RemovedAt(), "d node should have same removedAt")
@@ -616,6 +622,13 @@ func TestTextLWW(t *testing.T) {
 				dNode2 = node
 			}
 		}
+
+		assert.NotNil(t, aNode1, "c1 a node should not be nil")
+		assert.NotNil(t, bcNode1, "c1 bc node should not be nil")
+		assert.NotNil(t, dNode1, "c1 d node should not be nil")
+		assert.NotNil(t, aNode2, "c2 a node should not be nil")
+		assert.NotNil(t, bcNode2, "c2 bc node should not be nil")
+		assert.NotNil(t, dNode2, "c2 d node should not be nil")
 		assert.NotNil(t, aNode1.RemovedAt(), "c1 a node should be removed")
 		assert.NotNil(t, bcNode1.RemovedAt(), "c1 bc node should be removed")
 		assert.NotNil(t, dNode1.RemovedAt(), "c1 d node should be removed")
@@ -626,7 +639,7 @@ func TestTextLWW(t *testing.T) {
 		// bc and d nodes should have same removedAt
 		earlierExpectedRemovedAt := aNode1.RemovedAt()
 		laterExpectedRemovedAt := bcNode1.RemovedAt()
-		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 d node removedAt should be after c1 bc node removedAt")
+		assert.True(t, laterExpectedRemovedAt.After(earlierExpectedRemovedAt), "c1 bc node removedAt should be after c1 a node removedAt")
 
 		assert.Equal(t, earlierExpectedRemovedAt, aNode2.RemovedAt(), "a nodes should have same removedAt")
 
