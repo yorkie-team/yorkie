@@ -160,17 +160,17 @@ func TestClient(t *testing.T) {
 			r.SetInteger("c2", 1)
 			return nil
 		}))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(d1.Key()).WithPushOnly()))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(d2.Key()).WithPushOnly()))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(d1.Key()).WithPushOnly()))
 		assert.NoError(t, c3.Sync(ctx))
 		assert.NotEqual(t, d1.Marshal(), d2.Marshal())
 		assert.Equal(t, d1.Root().Get("c1").Marshal(), d3.Root().Get("c1").Marshal())
 		assert.Equal(t, d2.Root().Get("c2").Marshal(), d3.Root().Get("c2").Marshal())
 
 		// 04. c1 and c2 sync with push-pull mode.
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key())))
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key())))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(d1.Key())))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(d2.Key())))
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 		assert.Equal(t, d1.Marshal(), d3.Marshal())
 	})
@@ -192,7 +192,7 @@ func TestClient(t *testing.T) {
 			return nil
 		}))
 		assert.Equal(t, change.Checkpoint{ClientSeq: 1, ServerSeq: 1}, doc.Checkpoint())
-		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
+		assert.NoError(t, cli.Sync(ctx, client.WithKey(doc.Key())))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 2, ServerSeq: 2})
 
 		// 03. cli update the document with increasing the counter(0 -> 1)
@@ -202,7 +202,7 @@ func TestClient(t *testing.T) {
 			return nil
 		}))
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
-		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()))
+		assert.NoError(t, cli.Sync(ctx, client.WithKey(doc.Key()).WithPushOnly()))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 3, ServerSeq: 2})
 
 		// 04. cli update the document with increasing the counter(1 -> 2)
@@ -215,7 +215,7 @@ func TestClient(t *testing.T) {
 		// The previous increase(0 -> 1) is already pushed to the server,
 		// so the ChangePack of the request only has the increase(1 -> 2).
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
-		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
+		assert.NoError(t, cli.Sync(ctx, client.WithKey(doc.Key())))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 4, ServerSeq: 4})
 		assert.Equal(t, "2", doc.Root().GetCounter("counter").Marshal())
 	})

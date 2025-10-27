@@ -987,7 +987,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		// sync pushonly
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:1, c2:4], minvv = [c1:1], db.vv {}
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 4))
 
@@ -1003,7 +1003,7 @@ func TestGarbageCollection(t *testing.T) {
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 5))
 		assert.NoError(t, err)
 
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:1, c2:5], minvv = [c1:1, c2:4], db.vv {c1: [c1:6, c2:4], c2: [c1:1, c2:5]}
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 5))
 
@@ -1021,7 +1021,7 @@ func TestGarbageCollection(t *testing.T) {
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 6))
 		assert.NoError(t, err)
 
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(d2.Key()).WithPushOnly()))
 		// d2.vv = [c1:1, c2:6], minvv = [c1:1, c2:4], db.vv {c1: [c1:7, c2:5], c2: [c1:2, c2:7]}
 		assertVectorEquality(t, d2.VersionVector(), versionOf(d1.ActorID(), 1), versionOf(d2.ActorID(), 6))
 

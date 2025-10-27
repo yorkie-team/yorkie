@@ -645,10 +645,12 @@ func TestPresenceIntegration(t *testing.T) {
 		require.NoError(t, cli2.Activate(ctx))
 		defer func() { assert.NoError(t, cli2.Close()) }()
 
-		counter1 := presence.New(helper.TestDocKey(t))
-		counter2 := presence.New(helper.TestDocKey(t))
-		require.NoError(t, cli1.Attach(ctx, counter1))
-		require.NoError(t, cli2.Attach(ctx, counter2))
+		// Use the same presence key for both clients
+		presenceKey := helper.TestDocKey(t)
+		counter1 := presence.New(presenceKey)
+		counter2 := presence.New(presenceKey)
+		require.NoError(t, cli1.Attach(ctx, counter1, client.WithPresenceRealtimeSync()))
+		require.NoError(t, cli2.Attach(ctx, counter2, client.WithPresenceRealtimeSync()))
 
 		// Start watching on cli2 to receive count updates
 		countCh, unwatch, err := cli2.WatchPresence(ctx, counter2)
@@ -687,5 +689,144 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// client2 should still be active
 		assert.True(t, counter2.IsAttached())
+	})
+
+	t.Run("presence manual sync mode test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+
+		client1, client2 := clients[0], clients[1]
+
+		// Create presence counters for the same room
+		presenceKey := helper.TestDocKey(t)
+		counter1 := presence.New(presenceKey)
+		counter2 := presence.New(presenceKey)
+
+		// Attach client1 with manual sync mode (no realtime option)
+		err := client1.Attach(ctx, counter1)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), counter1.Count())
+
+		// Attach client2 with manual sync mode
+		err = client2.Attach(ctx, counter2)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), counter2.Count())
+
+		// In manual mode, counters don't automatically update
+		// counter1 still shows old count
+		assert.Equal(t, int64(1), counter1.Count())
+
+		// Manually sync counter1 to get updated count
+		err = client1.Sync(ctx, client.WithKey(counter1.Key()))
+		require.NoError(t, err)
+
+		// Now counter1 should have the updated count
+		assert.Equal(t, int64(2), counter1.Count())
+
+		// Detach client2
+		require.NoError(t, client2.Detach(ctx, counter2))
+
+		// counter1 still shows old count (manual mode)
+		assert.Equal(t, int64(2), counter1.Count())
+
+		// Sync to get updated count
+		err = client1.Sync(ctx, client.WithKey(counter1.Key()))
+		require.NoError(t, err)
+
+		// Now counter1 should show 1
+		assert.Equal(t, int64(1), counter1.Count())
+
+		// Detach client1
+		require.NoError(t, client1.Detach(ctx, counter1))
+	})
+
+	t.Run("presence realtime sync mode test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+
+		client1, client2 := clients[0], clients[1]
+
+		// Create presence counters for the same room
+		presenceKey := helper.TestDocKey(t)
+		counter1 := presence.New(presenceKey)
+		counter2 := presence.New(presenceKey)
+
+		// Attach client1 with realtime sync mode
+		err := client1.Attach(ctx, counter1, client.WithPresenceRealtimeSync())
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), counter1.Count())
+
+		// Start watching for count changes
+		countChan1, closeWatch1, err := client1.WatchPresence(ctx, counter1)
+		require.NoError(t, err)
+		defer closeWatch1()
+
+		// Wait for initial count
+		select {
+		case count := <-countChan1:
+			assert.Equal(t, int64(1), count)
+		case <-time.After(3 * time.Second):
+			t.Fatal("Timeout waiting for initial count")
+		}
+
+		// Attach client2 with realtime sync mode
+		err = client2.Attach(ctx, counter2, client.WithPresenceRealtimeSync())
+		require.NoError(t, err)
+
+		// client1 should receive updated count automatically
+		select {
+		case count := <-countChan1:
+			assert.Equal(t, int64(2), count)
+			assert.Equal(t, int64(2), counter1.Count())
+		case <-time.After(3 * time.Second):
+			t.Fatal("Timeout waiting for count update after client2 attached")
+		}
+
+		// Detach client2
+		require.NoError(t, client2.Detach(ctx, counter2))
+
+		// client1 should receive updated count automatically
+		select {
+		case count := <-countChan1:
+			assert.Equal(t, int64(1), count)
+			assert.Equal(t, int64(1), counter1.Count())
+		case <-time.After(3 * time.Second):
+			t.Fatal("Timeout waiting for count update after client2 detached")
+		}
+
+		// Detach client1
+		require.NoError(t, client1.Detach(ctx, counter1))
+	})
+
+	t.Run("presence sync all resources test", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+		client1, client2 := clients[0], clients[1]
+
+		// Create document and presence counter
+		doc1 := document.New(helper.TestDocKey(t, 0))
+		counter1 := presence.New(helper.TestDocKey(t, 1))
+
+		// Attach both resources in manual mode
+		require.NoError(t, client1.Attach(ctx, doc1))
+		require.NoError(t, client1.Attach(ctx, counter1))
+
+		// Attach client2 to the same presence
+		counter2 := presence.New(helper.TestDocKey(t, 1))
+		require.NoError(t, client2.Attach(ctx, counter2))
+
+		// counter1 shows old count (manual mode)
+		assert.Equal(t, int64(1), counter1.Count())
+
+		// Sync all resources without specifying keys
+		require.NoError(t, client1.Sync(ctx))
+
+		// Now counter1 should have updated count
+		assert.Equal(t, int64(2), counter1.Count())
+
+		// Cleanup
+		require.NoError(t, client1.Detach(ctx, doc1))
+		require.NoError(t, client1.Detach(ctx, counter1))
+		require.NoError(t, client2.Detach(ctx, counter2))
 	})
 }
