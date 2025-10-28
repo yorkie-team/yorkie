@@ -299,4 +299,53 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).ToXML(), doc.Root().GetTree("t").ToXML())
 	})
+
+	t.Run("object converting to bytes with gc elements test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("o").
+				SetString("1", "a")
+
+			return nil
+		}))
+
+		assert.Equal(t, "\"a\"", doc.Root().GetObject("o").Get("1").Marshal())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("o").
+				SetString("1", "b")
+
+			return nil
+		}))
+
+		assert.Equal(t, "\"b\"", doc.Root().GetObject("o").Get("1").Marshal())
+		assert.True(t, func() bool {
+			for _, pair := range doc.Root().GCElementPairMap() {
+				if elem, ok := pair.Elem().(*crdt.Primitive); ok {
+					if elem.Value() == "a" {
+						return true
+					}
+				}
+			}
+			return false
+		}())
+
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		obj, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
+
+		newRoot := crdt.NewRoot(obj)
+		assert.True(t, func() bool {
+			for _, pair := range newRoot.GCElementPairMap() {
+				if elem, ok := pair.Elem().(*crdt.Primitive); ok {
+					if elem.Value() == "a" {
+						return true
+					}
+				}
+			}
+			return false
+		}())
+	})
 }

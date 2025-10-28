@@ -30,6 +30,11 @@ type ElementPair struct {
 	elem   Element
 }
 
+// Elem returns the element of the ElementPair for testing purposes.
+func (p *ElementPair) Elem() Element {
+	return p.elem
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -255,4 +260,9 @@ func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
 	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
 		diff.Meta += time.TicketSize
 	}
+}
+
+// GCElementPairMap returns the gcElementPairMap for testing purposes.
+func (r *Root) GCElementPairMap() map[string]ElementPair {
+	return r.gcElementPairMap
 }
