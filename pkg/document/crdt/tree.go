@@ -440,8 +440,8 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 		return true
 	}
 
-	// NOTE(sigmaith): Overwrite only if prior tombstone was not known
-	// (concurrent or unseen) and newer.
+	// NOTE(sigmaith): Overwrite if newer tombstone.
+    // This enables LWW for concurrent deletions.
 	if removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
 	}
