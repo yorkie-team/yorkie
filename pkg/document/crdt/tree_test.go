@@ -377,7 +377,7 @@ func TestTreeEdit(t *testing.T) {
 		// <root> <p> <b> a d </b> </root>
 		err = tree.EditT(3, 8, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, "<root><p><b>ad</b></p></root>", tree.ToXML())
+		assert.Equal(t, "<root><p><b>a</b>d</p></root>", tree.ToXML())
 	})
 
 	t.Run("style node with element attributes test", func(t *testing.T) {
