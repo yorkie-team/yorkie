@@ -358,8 +358,8 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	n.children = append(n.children, newNodes...)
 	for _, newNode := range newNodes {
 		newNode.Parent = n
-		newNode.UpdateAncestorsSize()
-		newNode.UpdateAncestorsSizeIncludeRemovedNodes()
+		newNode.UpdateAncestorsSize(newNode.PaddedLength())
+		newNode.UpdateAncestorsSizeIncludeRemovedNodes(newNode.PaddedLengthIncludeRemovedNodes())
 	}
 
 	return nil
@@ -401,43 +401,27 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	return nil
 }
 
-// UpdateAncestorsSize updates the size of ancestors. It is used when
-// the size of the node is changed.
-func (n *Node[V]) UpdateAncestorsSize() {
+// UpdateAncestorsSize updates the size of ancestors.
+// It is used when the size of the node is changed.
+// Only cases that delta is negative is when the node is marked tombstone. It is not for purge node.
+func (n *Node[V]) UpdateAncestorsSize(delta int) {
 	parent := n.Parent
-	sign := 1
-	if n.Value.IsRemoved() {
-		sign = -1
-	}
-
 	for parent != nil {
-		parent.Length += n.PaddedLength() * sign
+		parent.Length += delta
 		if parent.Value.IsRemoved() {
 			break
 		}
-
 		parent = parent.Parent
 	}
 }
 
 // UpdateAncestorsSizeIncludeRemovedNodes updates the size of ancestors including removed nodes.
-func (n *Node[V]) UpdateAncestorsSizeIncludeRemovedNodes() {
+// It is used when the size of the node is changed.
+// Only cases that delta is negative is when the node is purged. It is not for mark tombstone.
+func (n *Node[V]) UpdateAncestorsSizeIncludeRemovedNodes(delta int) {
 	parent := n.Parent
-	if n.Value.IsRemoved() {
-		return
-	}
-
 	for parent != nil {
-		parent.LengthIncludeRemovedNodes += n.PaddedLengthIncludeRemovedNodes()
-		parent = parent.Parent
-	}
-}
-
-func (n *Node[V]) ReduceAncestorsSizeIncludeRemovedNodes() {
-	parent := n.Parent
-
-	for parent != nil {
-		parent.LengthIncludeRemovedNodes -= n.PaddedLengthIncludeRemovedNodes()
+		parent.LengthIncludeRemovedNodes += delta
 		parent = parent.Parent
 	}
 }
@@ -643,8 +627,8 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize()
-	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
+	newNode.UpdateAncestorsSize(newNode.PaddedLength())
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes(newNode.PaddedLengthIncludeRemovedNodes())
 
 	return nil
 }
@@ -702,7 +686,8 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	}
 
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
-	child.ReduceAncestorsSizeIncludeRemovedNodes()
+	// Note(emplam27): only for removed node, decrease ancestors size including removed nodes.
+	child.UpdateAncestorsSizeIncludeRemovedNodes(-(child.PaddedLengthIncludeRemovedNodes()))
 	child.Parent = nil
 
 	return nil
@@ -723,8 +708,8 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize()
-	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
+	newNode.UpdateAncestorsSize(newNode.PaddedLength())
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes(newNode.PaddedLengthIncludeRemovedNodes())
 
 	return nil
 }
@@ -744,8 +729,8 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize()
-	newNode.UpdateAncestorsSizeIncludeRemovedNodes()
+	newNode.UpdateAncestorsSize(newNode.PaddedLength())
+	newNode.UpdateAncestorsSizeIncludeRemovedNodes(newNode.PaddedLengthIncludeRemovedNodes())
 
 	return nil
 }

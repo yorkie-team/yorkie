@@ -380,8 +380,8 @@ func (n *TreeNode) SplitElement(
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, diff, err
 	}
-	split.Index.UpdateAncestorsSize()
-	split.Index.UpdateAncestorsSizeIncludeRemovedNodes()
+	split.Index.UpdateAncestorsSize(split.Index.PaddedLength())
+	split.Index.UpdateAncestorsSizeIncludeRemovedNodes(split.Index.PaddedLengthIncludeRemovedNodes())
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
@@ -434,8 +434,8 @@ func (n *TreeNode) SplitElement(
 func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.removedAt == nil {
 		n.removedAt = removedAt
-		n.Index.UpdateAncestorsSize()
-		n.Index.UpdateAncestorsSizeIncludeRemovedNodes()
+		// Note(emplam27): Update ancestors size without including removed nodes.
+		n.Index.UpdateAncestorsSize(-(n.Index.PaddedLength()))
 		return true
 	}
 
