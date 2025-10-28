@@ -1,6 +1,6 @@
 ---
 title: mongodb-sharding
-target-version: 0.6.20
+target-version: 0.6.38
 ---
 
 # MongoDB Sharding
@@ -28,7 +28,7 @@ This document will only explain the core concepts of the selected sharding strat
 **Relations between Collections**
 
 1. Cluster-wide: `users`, `projects`
-2. Project-wide: `documents`, `clients`
+2. Project-wide: `clients`, `documents`, `schemas`
 3. Document-wide: `changes`, `snapshots`, `versionvectors`
 
 <img src="media/mongodb-sharding-prev-relation.png">
@@ -43,25 +43,23 @@ Shard Project-wide and Document-wide collections due to the large number of data
 
 **Unique Constraint Requirements**
 
-1. `Documents`: `(project_id, key)` with `removed_at: null`
-2. `Clients`: `(project_id, key)`
-3. `Changes`: `(doc_id, server_seq)`
-4. `Snapshots`: `(doc_id, server_seq)`
-5. `Versionvectors`: `(doc_id, client_id)`
+1. `documents`: `(project_id, key, removed_at)`
+2. `changes`: `(doc_id, server_seq)`
+3. `snapshots`: `(doc_id, server_seq)`
+4. `versionvectors`: `(doc_id, client_id)`
 
 **Main Query Patterns**
 
 Project-wide collections contain range queries with a `project_id` filter.
 
 ```go
-// Clients
+// Clients - FindActiveClients for housekeeping
+// Note: This query causes scatter-gather across all shards since it doesn't
+// include project_id in the filter, but it's used infrequently for maintenance.
 cursor, err := c.collection(ColClients).Find(ctx, bson.M{
-    "project_id": project.ID,
-    "status":     database.ClientActivated,
-    "updated_at": bson.M{
-        "$lte": gotime.Now().Add(-clientDeactivateThreshold),
-    },
-}, options.Find().SetLimit(int64(candidatesLimit)))
+    "_id":    bson.M{"$gt": lastClientID},
+    "status": database.ClientActivated,
+}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
 ```
 
 ```go
@@ -98,19 +96,18 @@ Document-wide collections mostly contain range queries with a `doc_id` filter.
 
 ```go
 // Changes
-cursor, err := c.collection(colChanges).Find(ctx, bson.M{
-    "doc_id": encodedDocID,
-    "server_seq": bson.M{
-        "$gte": from,
-        "$lte": to,
-    },
-}, options.Find())
+cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
+    "project_id": docRefKey.ProjectID,
+    "doc_id":     docRefKey.DocID,
+    "server_seq": bson.M{"$gte": current, "$lte": to},
+}, options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}))
 ```
 
 ```go
 // Snapshots
-result := c.collection(colSnapshots).FindOne(ctx, bson.M{
-    "doc_id": encodedDocID,
+result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
+    "project_id": docRefKey.ProjectID,
+    "doc_id":     docRefKey.DocID,
     "server_seq": bson.M{
         "$lte": serverSeq,
     },
@@ -123,16 +120,19 @@ result := c.collection(colSnapshots).FindOne(ctx, bson.M{
 
 The shard keys are selected based on the query patterns and properties (cardinality, frequency) of keys.
 
-1. Project-wide: `project_id`, ranged
+1. Project-wide:
+   - `Clients`: `(project_id, _id)`, hashed on `_id`
+   - `Documents`, `Schemas`: `project_id`, ranged
 2. Document-wide: `doc_id`, hashed
 
 Every unique constraint can be satisfied because each has the shard key as a prefix.
 
-1. `Documents`: `(project_id, key)` with `removed_at: null`
-2. `Clients`: `(project_id, key)`
-3. `Changes`: `(doc_id, server_seq)`
-4. `Snapshots`: `(doc_id, server_seq)`
-5. `Versionvectors`: `(doc_id, client_id)`
+1. `Documents`: `(project_id, key, removed_at)`
+2. `Changes`: `(doc_id, server_seq)`
+3. `Snapshots`: `(doc_id, server_seq)`
+4. `Versionvectors`: `(doc_id, client_id)`
+
+Note: The `Clients` collection uses a composite shard key `(project_id, _id)` with hashed `_id` to ensure even distribution across shards while maintaining query efficiency. The unique constraint on `(project_id, key)` has been removed to support high-concurrency scenarios where clients are frequently created and deactivated.
 
 **Benefits of Hashed Sharding for Document-wide Collections**
 
@@ -146,13 +146,15 @@ Hashed sharding for document-wide collections provides:
 
 Since the uniqueness of `_id` isn't guaranteed across shards, reference keys to indicate a single data in collections should be changed.
 
-1. `Documents`: `_id` -> `(project_id, _id)`
-2. `Clients`: `_id` -> `(project_id, _id)`
-3. `Changes`: `_id` -> `(project_id, doc_id, server_seq)`
-4. `Snapshots`: `_id` -> `(project_id, doc_id, server_seq)`
-5. `Versionvectors`: `_id` -> `(project_id, doc_id, client_id)`
+1. `documents`: `_id` -> `(project_id, _id)`
+2. `clients`: `_id` -> `(project_id, _id)`
+3. `changes`: `_id` -> `(project_id, doc_id, server_seq)`
+4. `snapshots`: `_id` -> `(project_id, doc_id, server_seq)`
+5. `versionvectors`: `_id` -> `(project_id, doc_id, client_id)`
 
-Considering that MongoDB ensures the uniqueness of `_id` per shard, `Documents` and `Clients` can be identified with the combination of `project_id` and `_id`. Note that the reference keys of document-wide collections are also subsequently changed.
+Considering that MongoDB ensures the uniqueness of `_id` per shard, `documents` and `clients` can be identified with the combination of `project_id` and `_id`. Note that the reference keys of document-wide collections are also subsequently changed.
+
+For the `clients` collection specifically, the composite shard key `(project_id, _id)` with hashed `_id` allows multiple clients with the same `key` value to exist across different shards, which is essential for high-load scenarios where clients are frequently created without reusing previous client sessions.
 
 <img src="media/mongodb-sharding-ref-key-changes.png" width="600">
 
@@ -175,24 +177,36 @@ For a production deployment, consider the following to ensure data redundancy an
 
 ### Risks and Mitigation
 
+**Client Key Management**
+
+Previously, the `Clients` collection used `(project_id, key)` as a unique constraint, allowing client sessions to be reused when reconnecting with the same key. With the change to composite shard key `(project_id, _id)` with hashed `_id`:
+
+1. **New behavior**: Each `ActivateClient` call creates a new client document with a unique `_id`, even if the same `key` is provided.
+2. **Benefits**:
+   - Eliminates contention on unique constraint checking across shards
+   - Supports high-concurrency client activation scenarios
+   - Simplifies the activation logic (no upsert required)
+3. **Considerations**:
+   - Client `key` is stored for reference and shard key purposes but is not unique
+   - Deactivated clients should be cleaned up periodically to prevent data accumulation
+   - Applications should not depend on client key uniqueness
+
 **Limited Scalability due to High Value Frequency of `project_id`**
 
 When there are a limited number of projects, it's likely for the data to be concentrated on a small number of chunks and shards.
 This may limit the scalability of MongoDB clusters, which means adding more shards becomes ineffective.
 
-Using a composite shard key like `(project_id, key)` can resolve this issue. After that, it's possible to split large chunks by `key` values, and migrate the splitted chunks to newly added shards.
+For the `Clients` collection, this issue is now addressed by using a composite shard key `(project_id, _id)` with hashed `_id`. This allows:
+
+- Splitting large chunks by `_id` values within the same project
+- Even distribution of clients across shards even with a limited number of projects
+- Effective utilization of newly added shards
+
+For the `Documents` collection, using a composite shard key like `(project_id, key)` could similarly resolve this issue. After that, it's possible to split large chunks by `key` values, and migrate the splitted chunks to newly added shards.
 
 <img src="media/mongodb-sharding-composite-shard-key.png" width="600">
 
-However, this change of shard keys can lead to the value duplication of either `actor_id` or `owner`, which uses `client_id` as a value. Now the values of `client_id` can be duplicated, contrary to the current sharding strategy where locating every client in the same project into the same shard prevents this kind of duplications.
-
-The duplication of `client_id` values can devastate the consistency of documents. There are three expected approaches to resolve this issue:
-
-1. Use `client_key + client_id` as a value.
-   - this may increase the size of CRDT metadata and the size of document snapshots.
-2. Introduce a cluster-level GUID generator.
-3. Depend on the low possibility of duplication of MongoDB ObjectID.
-   - see details in the following contents.
+Note: The duplication concern of `client_id` values mentioned below is addressed by the composite shard key implementation for the `Clients` collection, which uses hashed `_id` to ensure globally unique client identifiers across all shards.
 
 **Duplicate MongoDB ObjectID**
 

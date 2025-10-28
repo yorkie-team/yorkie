@@ -873,23 +873,19 @@ func (c *Client) ActivateClient(
 ) (*database.ClientInfo, error) {
 	now := gotime.Now()
 
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"project_id": projectID,
-		"key":        key,
-	}, bson.M{
-		"$set": bson.M{
-			StatusKey:    database.ClientActivated,
-			"metadata":   metadata,
-			"updated_at": now,
-		},
-		"$setOnInsert": bson.M{
-			"created_at": now,
-		},
-	}, options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After))
+	info := &database.ClientInfo{
+		ID:        types.NewID(),
+		ProjectID: projectID,
+		Key:       key,
+		Status:    database.ClientActivated,
+		Documents: make(database.ClientDocInfoMap),
+		Metadata:  metadata,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
 
-	info := &database.ClientInfo{}
-	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("activate client of %s: %w", key, err)
+	if _, err := c.collection(ColClients).InsertOne(ctx, info); err != nil {
+		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
 	refKey := types.ClientRefKey{ProjectID: projectID, ClientID: info.ID}

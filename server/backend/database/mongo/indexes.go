@@ -115,23 +115,17 @@ var collectionInfos = []collectionInfo{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
-				{Key: "key", Value: int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}, {
-			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)}, // shard key: [project_id, _id]
 				{Key: "status", Value: int32(1)},
 				{Key: "updated_at", Value: int32(1)},
 			},
 		}, {
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)}, // shard key: [project_id, _id]
 				{Key: "attached_docs", Value: int32(1)},
 			},
 		}, {
-			// NOTE(hackerwins): This index is for deactivating clients efficiently.
+			// TODO(hackerwins): This index is for deactivating clients efficiently.
 			// But it skips the shard key to cover all clients in all projects.
 			// We should monitor performance because this may cause scatter-gather.
 			Keys: bson.D{
@@ -144,7 +138,7 @@ var collectionInfos = []collectionInfo{
 		name: ColDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)}, // shard key: [project_id]
 				{Key: "key", Value: int32(1)},
 				{Key: "removed_at", Value: int32(1)},
 			},
@@ -155,7 +149,7 @@ var collectionInfos = []collectionInfo{
 		name: ColSchemas,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "project_id", Value: int32(1)}, // shard key
+				{Key: "project_id", Value: int32(1)}, // shard key: [project_id]
 				{Key: "name", Value: int32(1)},
 				{Key: "version", Value: int32(1)},
 			},
@@ -166,14 +160,14 @@ var collectionInfos = []collectionInfo{
 		name: ColChanges,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "server_seq", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "actor_id", Value: int32(1)},
 				{Key: "server_seq", Value: int32(1)},
@@ -184,7 +178,7 @@ var collectionInfos = []collectionInfo{
 		name: ColSnapshots,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "server_seq", Value: int32(1)},
 			},
@@ -194,7 +188,7 @@ var collectionInfos = []collectionInfo{
 		name: ColVersionVectors,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "client_id", Value: int32(1)},
 			},
