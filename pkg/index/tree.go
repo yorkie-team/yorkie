@@ -381,7 +381,8 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
-// GetChildren returns the children of the given node.
+// GetChildren returns the raw children slice including removed nodes.
+// Do not use this method to modify the children slice. Use Children() method instead.
 func (n *Node[V]) GetChildren() []*Node[V] {
 	return n.children
 }
@@ -403,7 +404,7 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 
 // UpdateAncestorsSize updates the size of ancestors.
 // It is used when the size of the node is changed.
-// Only cases that delta is negative is when the node is marked tombstone. It is not for purge node.
+// Only cases that delta is negative is when the node is marked tombstone. It is not for purging node.
 func (n *Node[V]) UpdateAncestorsSize(delta int) {
 	parent := n.Parent
 	for parent != nil {
@@ -417,7 +418,7 @@ func (n *Node[V]) UpdateAncestorsSize(delta int) {
 
 // UpdateAncestorsSizeIncludeRemovedNodes updates the size of ancestors including removed nodes.
 // It is used when the size of the node is changed.
-// Only cases that delta is negative is when the node is purged. It is not for mark tombstone.
+// Only cases that delta is negative is when the node is purged. It is not for marking tombstone.
 func (n *Node[V]) UpdateAncestorsSizeIncludeRemovedNodes(delta int) {
 	parent := n.Parent
 	for parent != nil {
@@ -686,7 +687,8 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	}
 
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
-	// Note(emplam27): only for removed node, decrease ancestors size including removed nodes.
+	// Note(emplam27): Decrease ancestors' LengthIncludeRemovedNodes
+	// since this node is being purged (physically removed from tree).
 	child.UpdateAncestorsSizeIncludeRemovedNodes(-(child.PaddedLengthIncludeRemovedNodes()))
 	child.Parent = nil
 

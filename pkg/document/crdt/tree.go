@@ -434,7 +434,8 @@ func (n *TreeNode) SplitElement(
 func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.removedAt == nil {
 		n.removedAt = removedAt
-		// Note(emplam27): Update ancestors size without including removed nodes.
+		// Note(emplam27): Decrease ancestors' Length
+		// since this node is being removed (marked as tombstone, not purged).
 		n.Index.UpdateAncestorsSize(-(n.Index.PaddedLength()))
 		return true
 	}
