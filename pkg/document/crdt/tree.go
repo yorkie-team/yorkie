@@ -441,7 +441,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	}
 
 	// NOTE(sigmaith): Overwrite if newer tombstone.
-    // This enables LWW for concurrent deletions.
+	// This enables LWW for concurrent deletions.
 	if removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
 	}
@@ -1339,7 +1339,8 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNo
 	}, nil
 }
 
-// toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
+// toTreePosIncludeRemovedNodes converts the given crdt.TreePos
+// to local index.TreePos<CRDTTreeNode> including removed nodes.
 func (t *Tree) toTreePosIncludeRemovedNodes(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNode], error) {
 	if parentNode == nil || leftNode == nil {
 		return nil, nil
@@ -1352,7 +1353,7 @@ func (t *Tree) toTreePosIncludeRemovedNodes(parentNode, leftNode *TreeNode) (*in
 		}, nil
 	}
 
-	// Find the closest existing leftSibling node.
+	// Find the closest existing leftSibling node including removed nodes.
 	offset, err := parentNode.Index.FindOffsetIncludeRemovedNodes(leftNode.Index)
 	if err != nil {
 		return nil, err
@@ -1390,7 +1391,7 @@ func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
 	return idx, nil
 }
 
-// ToIndex converts the given CRDTTreePos to the index of the tree.
+// ToIndexIncludeRemovedNodes converts the given CRDTTreePos to the index of the tree including removed nodes.
 func (t *Tree) ToIndexIncludeRemovedNodes(parentNode, leftSiblingNode *TreeNode) (int, error) {
 	treePos, err := t.toTreePosIncludeRemovedNodes(parentNode, leftSiblingNode)
 	if err != nil {
