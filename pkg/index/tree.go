@@ -314,8 +314,8 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	n.children = append(n.children, newNodes...)
 	for _, newNode := range newNodes {
 		newNode.Parent = n
-		newNode.UpdateAncestorsSize(newNode.PaddedLength())
-		newNode.UpdateAncestorsSize(newNode.PaddedLength(true), true)
+		newNode.UpdateAncestorsLength(newNode.PaddedLength())
+		newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
 	}
 
 	return nil
@@ -352,10 +352,10 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	return nil
 }
 
-// UpdateAncestorsSize updates the size of ancestors. It is used when
-// the size of the node is changed. If includeRemoved is true, it
+// UpdateAncestorsLength updates the length of ancestors. It is used when
+// the length of the node is changed. If includeRemoved is true, it
 // updates ancestors TotalLength including removed nodes.
-func (n *Node[V]) UpdateAncestorsSize(delta int, includeRemoved ...bool) {
+func (n *Node[V]) UpdateAncestorsLength(delta int, includeRemoved ...bool) {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
 
 	parent := n.Parent
@@ -553,8 +553,8 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize(newNode.PaddedLength())
-	newNode.UpdateAncestorsSize(newNode.PaddedLength(true), true)
+	newNode.UpdateAncestorsLength(newNode.PaddedLength())
+	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
 
 	return nil
 }
@@ -615,7 +615,7 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
 	// NOTE(hackerwins): Decrease TotalLength including removed nodes
 	// since this node is being purged (physically removed from tree).
-	child.UpdateAncestorsSize(-(child.PaddedLength(true)), true)
+	child.UpdateAncestorsLength(-(child.PaddedLength(true)), true)
 	child.Parent = nil
 
 	return nil
@@ -636,8 +636,8 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize(newNode.PaddedLength())
-	newNode.UpdateAncestorsSize(newNode.PaddedLength(true), true)
+	newNode.UpdateAncestorsLength(newNode.PaddedLength())
+	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
 
 	return nil
 }
@@ -657,8 +657,8 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 		return err
 	}
 
-	newNode.UpdateAncestorsSize(newNode.PaddedLength())
-	newNode.UpdateAncestorsSize(newNode.PaddedLength(true), true)
+	newNode.UpdateAncestorsLength(newNode.PaddedLength())
+	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
 
 	return nil
 }
