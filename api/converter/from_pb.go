@@ -659,8 +659,8 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 		depthTable[pbNodes[i].Depth] = nodes[i]
 	}
 
-	root.Index.UpdateDescendantsSize()
-	root.Index.UpdateDescendantsSizeIncludeRemovedNodes()
+	root.Index.UpdateDescendantsLength()
+	root.Index.UpdateDescendantsLength(true)
 
 	// build crdt.Tree from root to construct the links between nodes.
 	return crdt.NewTree(root, nil).Root(), nil

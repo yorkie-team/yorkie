@@ -333,8 +333,8 @@ func (n *TreeNode) SplitText(
 	prevSize := n.DataSize()
 
 	n.Value = string(leftRune)
-	n.Index.Length = len(leftRune)
-	n.Index.LengthIncludeRemovedNodes = len(leftRune)
+	n.Index.VisibleLength = len(leftRune)
+	n.Index.TotalLength = len(leftRune)
 
 	rightNode := NewTreeNode(&TreeNodeID{
 		CreatedAt: n.id.CreatedAt,
@@ -381,7 +381,7 @@ func (n *TreeNode) SplitElement(
 		return nil, diff, err
 	}
 	split.Index.UpdateAncestorsSize(split.Index.PaddedLength())
-	split.Index.UpdateAncestorsSizeIncludeRemovedNodes(split.Index.PaddedLengthIncludeRemovedNodes())
+	split.Index.UpdateAncestorsSize(split.Index.PaddedLength(true), true)
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
@@ -392,33 +392,29 @@ func (n *TreeNode) SplitElement(
 		return nil, diff, err
 	}
 
-	// node length
-	nodeLength := 0
+	// Calculate node length
+	visibleNodeLength := 0
 	for _, child := range n.Index.Children(true) {
-		nodeLength += child.PaddedLength()
+		visibleNodeLength += child.PaddedLength()
 	}
-	n.Index.Length = nodeLength
-
-	// node length include removed nodes
-	nodeLengthIncludeRemovedNodes := 0
+	n.Index.VisibleLength = visibleNodeLength
+	totalNodeLength := 0
 	for _, child := range n.Index.Children(true) {
-		nodeLengthIncludeRemovedNodes += child.PaddedLengthIncludeRemovedNodes()
+		totalNodeLength += child.PaddedLength(true)
 	}
-	n.Index.LengthIncludeRemovedNodes = nodeLengthIncludeRemovedNodes
+	n.Index.TotalLength = totalNodeLength
 
-	// split length
-	splitLength := 0
+	// Calculate split length
+	visibleSplitLength := 0
 	for _, child := range split.Index.Children(true) {
-		splitLength += child.PaddedLength()
+		visibleSplitLength += child.PaddedLength()
 	}
-	split.Index.Length = splitLength
-
-	// split length include removed nodes
-	splitLengthIncludeRemovedNodes := 0
+	split.Index.VisibleLength = visibleSplitLength
+	totalSplitLength := 0
 	for _, child := range split.Index.Children(true) {
-		splitLengthIncludeRemovedNodes += child.PaddedLengthIncludeRemovedNodes()
+		totalSplitLength += child.PaddedLength(true)
 	}
-	split.Index.LengthIncludeRemovedNodes = splitLengthIncludeRemovedNodes
+	split.Index.TotalLength = totalSplitLength
 
 	// NOTE(hackerwins): Calculate data size after node splitting:
 	// Take the sum of the two split nodes(left and right) minus the size of
@@ -434,8 +430,9 @@ func (n *TreeNode) SplitElement(
 func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.removedAt == nil {
 		n.removedAt = removedAt
-		// Note(emplam27): Decrease ancestors' Length
-		// since this node is being removed (marked as tombstone, not purged).
+
+		// NOTE(hackerwins): Decrease only VisibleLength because
+		// this node marked as tombstone, not purged.
 		n.Index.UpdateAncestorsSize(-(n.Index.PaddedLength()))
 		return true
 	}
@@ -490,8 +487,8 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	}
 
 	clone := NewTreeNode(n.id, n.Type(), attrs, n.Value)
-	clone.Index.Length = n.Index.Length
-	clone.Index.LengthIncludeRemovedNodes = n.Index.LengthIncludeRemovedNodes
+	clone.Index.VisibleLength = n.Index.VisibleLength
+	clone.Index.TotalLength = n.Index.TotalLength
 	clone.removedAt = n.removedAt
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
@@ -966,7 +963,7 @@ func (t *Tree) collectBetween(
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
 
-	if err := t.traverseInPosRangeIncludeRemovedNodes(
+	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
 		func(token index.TreeToken[*TreeNode], ended bool) {
@@ -1018,6 +1015,7 @@ func (t *Tree) collectBetween(
 				}
 			}
 		},
+		true,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -1060,35 +1058,24 @@ func (t *Tree) split(
 	return nil
 }
 
+// traverseInPosRange traverses the tree in the given position range.
+// If includeRemoved is true, it includes removed nodes in the traversal.
 func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNode,
 	callback func(token index.TreeToken[*TreeNode], ended bool),
+	includeRemoved ...bool,
 ) error {
-	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	include := len(includeRemoved) > 0 && includeRemoved[0]
+
+	fromIdx, err := t.ToIndex(fromParent, fromLeft, include)
 	if err != nil {
 		return err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft)
-	if err != nil {
-		return err
-	}
-
-	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback)
-}
-
-func (t *Tree) traverseInPosRangeIncludeRemovedNodes(fromParent, fromLeft, toParent, toLeft *TreeNode,
-	callback func(token index.TreeToken[*TreeNode], ended bool),
-) error {
-	fromIdx, err := t.ToIndexIncludeRemovedNodes(fromParent, fromLeft)
+	toIdx, err := t.ToIndex(toParent, toLeft, include)
 	if err != nil {
 		return err
 	}
 
-	toIdx, err := t.ToIndexIncludeRemovedNodes(toParent, toLeft)
-	if err != nil {
-		return err
-	}
-
-	return t.IndexTree.TokensBetweenIncludeRemovedNodes(fromIdx, toIdx, callback)
+	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback, include)
 }
 
 // StyleByIndex applies the given attributes of the given range.
@@ -1286,12 +1273,15 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
-func (t *Tree) toTreePos(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNode], error) {
+// If includeRemoved is true, it includes removed nodes in the calculation.
+func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool) (*index.TreePos[*TreeNode], error) {
+	include := len(includeRemoved) > 0 && includeRemoved[0]
+
 	if parentNode == nil || leftNode == nil {
 		return nil, nil
 	}
 
-	if parentNode.IsRemoved() {
+	if !include && parentNode.IsRemoved() {
 		// If parentNode is removed, treePos is the position of its least alive ancestor.
 		var childNode *TreeNode
 		for parentNode.IsRemoved() {
@@ -1299,7 +1289,7 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNo
 			parentNode = childNode.Index.Parent.Value
 		}
 
-		offset, err := parentNode.Index.FindOffset(childNode.Index)
+		offset, err := parentNode.Index.FindOffset(childNode.Index, include)
 		if err != nil {
 			return nil, nil
 		}
@@ -1318,16 +1308,24 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNo
 	}
 
 	// Find the closest existing leftSibling node.
-	offset, err := parentNode.Index.FindOffset(leftNode.Index)
+	offset, err := parentNode.Index.FindOffset(leftNode.Index, include)
 	if err != nil {
 		return nil, err
 	}
 
-	if !leftNode.IsRemoved() {
+	if !include && !leftNode.IsRemoved() {
 		if leftNode.IsText() {
 			return &index.TreePos[*TreeNode]{
 				Node:   leftNode.Index,
-				Offset: leftNode.Index.PaddedLength(),
+				Offset: leftNode.Index.PaddedLength(include),
+			}, nil
+		}
+		offset++
+	} else if include {
+		if leftNode.IsText() {
+			return &index.TreePos[*TreeNode]{
+				Node:   leftNode.Index,
+				Offset: leftNode.Index.PaddedLength(include),
 			}, nil
 		}
 		offset++
@@ -1339,43 +1337,13 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNo
 	}, nil
 }
 
-// toTreePosIncludeRemovedNodes converts the given crdt.TreePos
-// to local index.TreePos<CRDTTreeNode> including removed nodes.
-func (t *Tree) toTreePosIncludeRemovedNodes(parentNode, leftNode *TreeNode) (*index.TreePos[*TreeNode], error) {
-	if parentNode == nil || leftNode == nil {
-		return nil, nil
-	}
-
-	if parentNode == leftNode {
-		return &index.TreePos[*TreeNode]{
-			Node:   leftNode.Index,
-			Offset: 0,
-		}, nil
-	}
-
-	// Find the closest existing leftSibling node including removed nodes.
-	offset, err := parentNode.Index.FindOffsetIncludeRemovedNodes(leftNode.Index)
-	if err != nil {
-		return nil, err
-	}
-
-	if leftNode.IsText() {
-		return &index.TreePos[*TreeNode]{
-			Node:   leftNode.Index,
-			Offset: leftNode.Index.PaddedLength(),
-		}, nil
-	}
-	offset++
-
-	return &index.TreePos[*TreeNode]{
-		Node:   parentNode.Index,
-		Offset: offset,
-	}, nil
-}
-
 // ToIndex converts the given CRDTTreePos to the index of the tree.
-func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
-	treePos, err := t.toTreePos(parentNode, leftSiblingNode)
+// ToIndex converts the given CRDTTreePos to the index of the tree.
+// If includeRemoved is true, it includes removed nodes in the calculation.
+func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode, includeRemoved ...bool) (int, error) {
+	include := len(includeRemoved) > 0 && includeRemoved[0]
+
+	treePos, err := t.toTreePos(parentNode, leftSiblingNode, include)
 	if err != nil {
 		return 0, err
 	}
@@ -1383,25 +1351,7 @@ func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
 		return -1, nil
 	}
 
-	idx, err := t.IndexTree.IndexOf(treePos)
-	if err != nil {
-		return 0, err
-	}
-
-	return idx, nil
-}
-
-// ToIndexIncludeRemovedNodes converts the given CRDTTreePos to the index of the tree including removed nodes.
-func (t *Tree) ToIndexIncludeRemovedNodes(parentNode, leftSiblingNode *TreeNode) (int, error) {
-	treePos, err := t.toTreePosIncludeRemovedNodes(parentNode, leftSiblingNode)
-	if err != nil {
-		return 0, err
-	}
-	if treePos == nil {
-		return -1, nil
-	}
-
-	idx, err := t.IndexTree.IndexOfIncludeRemovedNodes(treePos)
+	idx, err := t.IndexTree.IndexOf(treePos, include)
 	if err != nil {
 		return 0, err
 	}
