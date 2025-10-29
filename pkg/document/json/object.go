@@ -380,6 +380,11 @@ func (p *Object) GetTree(k string) *Tree {
 	}
 }
 
+// GCElementPairMap returns the gcElementPairMap for testing purposes.
+func (p *Object) GCElementPairMap() map[string]crdt.ElementPair {
+	return p.context.GCElementPairMap()
+}
+
 func (p *Object) setInternal(
 	k string,
 	creator func(ticket *time.Ticket) crdt.Element,

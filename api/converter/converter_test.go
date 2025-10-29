@@ -299,4 +299,45 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).ToXML(), doc.Root().GetTree("t").ToXML())
 	})
+
+	t.Run("object converting to bytes with gc elements test", func(t *testing.T) {
+		containsGCElement := func(gcPairMap map[string]crdt.ElementPair, value string) bool {
+			for _, pair := range gcPairMap {
+				if elem, ok := pair.Elem().(*crdt.Primitive); ok {
+					if elem.Value() == value {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		// Set initial value "a"
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("o").SetString("1", "a")
+			return nil
+		}))
+		assert.Equal(t, `{"o":{"1":"a"}}`, doc.Root().Marshal())
+
+		// Update value to "b", which should mark "a" as GC element
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("o").SetString("1", "b")
+			return nil
+		}))
+		assert.Equal(t, `{"o":{"1":"b"}}`, doc.Root().Marshal())
+		assert.True(t, containsGCElement(doc.Root().GCElementPairMap(), "a"),
+			"old value 'a' should exist in GC elements")
+
+		// Serialize and deserialize
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		obj, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
+
+		// Verify that GC elements are preserved after deserialization
+		newRoot := crdt.NewRoot(obj)
+		assert.True(t, containsGCElement(newRoot.GCElementPairMap(), "a"),
+			"old value 'a' should be preserved in GC elements after deserialization")
+	})
 }

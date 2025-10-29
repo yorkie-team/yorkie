@@ -160,7 +160,7 @@ func (rht *ElementRHT) Elements() map[string]Element {
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *ElementRHT) Nodes() []*ElementRHTNode {
 	var nodes []*ElementRHTNode
-	for _, node := range rht.nodeMapByKey {
+	for _, node := range rht.nodeMapByCreatedAt {
 		nodes = append(nodes, node)
 	}
 

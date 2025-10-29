@@ -129,3 +129,8 @@ func (c *Context) LastTimeTicket() *time.Ticket {
 func (c *Context) SetPresenceChange(presenceChange inner.Change) {
 	c.presenceChange = &presenceChange
 }
+
+// GCElementPairMap returns the gcElementPairMap for testing purposes.
+func (c *Context) GCElementPairMap() map[string]crdt.ElementPair {
+	return c.root.GCElementPairMap()
+}
