@@ -103,6 +103,7 @@ spec:
           {{- if .Values.yorkie.args.kafkaAddresses }}
           "--kafka-addresses",
           "{{ .Values.yorkie.args.kafkaAddresses }}",
+          {{- end }}
           {{- if .Values.yorkie.args.kafkaTopic }}
           "--kafka-topic",
           "{{ .Values.yorkie.args.kafkaTopic }}",
@@ -146,7 +147,6 @@ spec:
           {{- if .Values.yorkie.args.starrocksDSN }}
           "--starrocks-dsn",
           "{{ .Values.yorkie.args.starrocksDSN }}",
-          {{- end }}
           {{- end }}
         ]
         ports:
