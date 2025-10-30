@@ -380,8 +380,8 @@ func (n *TreeNode) SplitElement(
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, diff, err
 	}
-	split.Index.UpdateAncestorsSize(split.Index.PaddedLength())
-	split.Index.UpdateAncestorsSize(split.Index.PaddedLength(true), true)
+	split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
+	split.Index.UpdateAncestorsLength(split.Index.PaddedLength(true), true)
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
@@ -433,7 +433,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 
 		// NOTE(hackerwins): Decrease only VisibleLength because
 		// this node marked as tombstone, not purged.
-		n.Index.UpdateAncestorsSize(-(n.Index.PaddedLength()))
+		n.Index.UpdateAncestorsLength(-(n.Index.PaddedLength()))
 		return true
 	}
 
@@ -1313,15 +1313,7 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 		return nil, err
 	}
 
-	if !include && !leftNode.IsRemoved() {
-		if leftNode.IsText() {
-			return &index.TreePos[*TreeNode]{
-				Node:   leftNode.Index,
-				Offset: leftNode.Index.PaddedLength(include),
-			}, nil
-		}
-		offset++
-	} else if include {
+	if include || !leftNode.IsRemoved() {
 		if leftNode.IsText() {
 			return &index.TreePos[*TreeNode]{
 				Node:   leftNode.Index,
