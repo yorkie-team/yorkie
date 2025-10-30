@@ -842,25 +842,26 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		})
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		info1, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
 
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientActivated, clientInfo.Status)
+		assert.Equal(t, t.Name(), info1.Key)
+		assert.Equal(t, database.ClientActivated, info1.Status)
 
-		// try to activate the client twice.
-		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
+		// activate another client with the same key (now creates a new client).
+		info2, err := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
 		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientActivated, clientInfo.Status)
+		assert.Equal(t, t.Name(), info2.Key)
+		assert.Equal(t, database.ClientActivated, info2.Status)
+		assert.NotEqual(t, info1.ID, info2.ID) // Different client IDs
 
-		clientInfo, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		info1, err = db.DeactivateClient(ctx, info1.RefKey())
 		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
+		assert.Equal(t, t.Name(), info1.Key)
+		assert.Equal(t, database.ClientDeactivated, info1.Status)
 
 		// already deactivated
-		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
+		_, err = db.DeactivateClient(ctx, info1.RefKey())
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 	})
 }
