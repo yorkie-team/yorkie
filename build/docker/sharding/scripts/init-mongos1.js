@@ -16,9 +16,12 @@ function shardOfChunk(minKeyOfChunk) {
 }
 
 // Shard the database for the mongo client test
-const mongoClientDB = "test-yorkie-meta-mongo-client";
+const mongoClientDB = "yorkie-meta";
 sh.enableSharding(mongoClientDB);
-sh.shardCollection(mongoClientDB + ".clients", { key: "hashed" });
+sh.shardCollection(mongoClientDB + ".clients", {
+  project_id: 1,
+  _id: "hashed",
+});
 sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 });
 sh.shardCollection(mongoClientDB + ".schemas", { project_id: 1 });
 sh.shardCollection(mongoClientDB + ".changes", { doc_id: "hashed" });
@@ -36,9 +39,9 @@ db.adminCommand({
 });
 
 // Shard the database for the server test
-const serverDB = "test-yorkie-meta-server";
+const serverDB = "yorkie-meta";
 sh.enableSharding(serverDB);
-sh.shardCollection(serverDB + ".clients", { key: "hashed" });
+sh.shardCollection(serverDB + ".clients", { project_id: 1, _id: "hashed" });
 sh.shardCollection(serverDB + ".documents", { project_id: 1 });
 sh.shardCollection(serverDB + ".schemas", { project_id: 1 });
 sh.shardCollection(serverDB + ".changes", { doc_id: "hashed" });
