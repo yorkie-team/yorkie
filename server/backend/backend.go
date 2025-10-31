@@ -108,8 +108,6 @@ func New(
 	cacheManager, err := cache.New(cache.Options{
 		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
 		AuthWebhookCacheTTL:  conf.ParseAuthWebhookCacheTTL(),
-		ProjectCacheSize:     conf.ProjectCacheSize,
-		ProjectCacheTTL:      conf.ParseProjectCacheTTL(),
 		SnapshotCacheSize:    conf.SnapshotCacheSize,
 	})
 	if err != nil {

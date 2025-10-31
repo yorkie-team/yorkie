@@ -757,7 +757,7 @@ func (s *adminServer) RotateProjectKeys(
 ) (*connect.Response[api.RotateProjectKeysResponse], error) {
 	user := users.From(ctx)
 
-	oldProject, newProject, err := projects.RotateProjectKeys(
+	_, newProject, err := projects.RotateProjectKeys(
 		ctx,
 		s.backend,
 		user.ID,
@@ -772,7 +772,7 @@ func (s *adminServer) RotateProjectKeys(
 	// ensure consistency across the entire cluster.
 	// After introducing broadcasting across the cluster, we need to broadcast
 	// the project cache invalidation event to all nodes.
-	s.backend.Cache.Project.Remove(oldProject.PublicKey)
+	// s.backend.Cache.Project.Remove(oldProject.PublicKey)
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{

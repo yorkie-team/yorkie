@@ -169,17 +169,12 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 		md.Authorization = authorization
 	}
 	ctx = metadata.With(ctx, md)
-	cacheKey := md.APIKey
 
 	// 02. Build Project from API Key
-	if _, ok := i.backend.Cache.Project.Get(cacheKey); !ok {
-		prj, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
-		if err != nil {
-			return nil, connecthelper.ToConnectError(err)
-		}
-		i.backend.Cache.Project.Add(cacheKey, prj)
+	project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
+	if err != nil {
+		return nil, connecthelper.ToConnectError(err)
 	}
-	project, _ := i.backend.Cache.Project.Get(cacheKey)
 	ctx = projects.With(ctx, project)
 
 	// 03. Check CORS after project is loaded

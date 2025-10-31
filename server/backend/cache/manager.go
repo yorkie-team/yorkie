@@ -33,9 +33,6 @@ type Manager struct {
 	// AuthWebhook is used to cache the response of the auth webhook.
 	AuthWebhook *expirable.LRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
 
-	// Project is used to cache the project information.
-	Project *expirable.LRU[string, *types.Project]
-
 	// Snapshot is used to cache the snapshot information.
 	Snapshot *lru.Cache[types.DocRefKey, *document.InternalDocument]
 }
@@ -45,10 +42,6 @@ type Options struct {
 	// Auth related cache options
 	AuthWebhookCacheSize int
 	AuthWebhookCacheTTL  time.Duration
-
-	// Project related cache options
-	ProjectCacheSize int
-	ProjectCacheTTL  time.Duration
 
 	// Document related cache options
 	SnapshotCacheSize int
@@ -62,12 +55,6 @@ func New(opts Options) (*Manager, error) {
 		opts.AuthWebhookCacheTTL,
 	)
 
-	projectCache := expirable.NewLRU[string, *types.Project](
-		opts.ProjectCacheSize,
-		nil,
-		opts.ProjectCacheTTL,
-	)
-
 	snapshotCache, err := lru.New[types.DocRefKey, *document.InternalDocument](
 		opts.SnapshotCacheSize,
 	)
@@ -77,7 +64,6 @@ func New(opts Options) (*Manager, error) {
 
 	return &Manager{
 		AuthWebhook: authWebhookCache,
-		Project:     projectCache,
 		Snapshot:    snapshotCache,
 	}, nil
 }
