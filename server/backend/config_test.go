@@ -28,7 +28,6 @@ func newValidBackendConf() backend.Config {
 	return backend.Config{
 		AdminTokenDuration:  "24h",
 		AuthWebhookCacheTTL: "10s",
-		ProjectCacheTTL:     "10m",
 	}
 }
 func TestConfig(t *testing.T) {
@@ -39,10 +38,6 @@ func TestConfig(t *testing.T) {
 		conf1 := validConf
 		conf1.AuthWebhookCacheTTL = "s"
 		assert.Error(t, conf1.Validate())
-
-		conf2 := validConf
-		conf2.ProjectCacheTTL = "10 minutes"
-		assert.Error(t, conf2.Validate())
 	})
 
 	t.Run("parse test", func(t *testing.T) {
@@ -50,6 +45,5 @@ func TestConfig(t *testing.T) {
 
 		assert.Equal(t, "24h0m0s", validConf.ParseAdminTokenDuration().String())
 		assert.Equal(t, "10s", validConf.ParseAuthWebhookCacheTTL().String())
-		assert.Equal(t, "10m0s", validConf.ParseProjectCacheTTL().String())
 	})
 }

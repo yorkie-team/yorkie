@@ -154,7 +154,7 @@ type Database interface {
 		id types.ID,
 		publicKey string,
 		secretKey string,
-	) (*ProjectInfo, error)
+	) (*ProjectInfo, *ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(

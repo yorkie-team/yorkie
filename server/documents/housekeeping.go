@@ -97,20 +97,13 @@ func FindCompactionCandidates(
 
 	var pairs []CandidatePairDoc
 	for _, candidate := range candidates {
-		// TODO(hackerwins): Consider caching projects in DB layer.
-		project, ok := be.Cache.Project.Get(candidate.ProjectID.String())
-		if !ok {
-			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
-			if err != nil {
-				return database.ZeroID, nil, err
-			}
-
-			project = projectInfo.ToProject()
-			be.Cache.Project.Add(candidate.ProjectID.String(), project)
+		info, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+		if err != nil {
+			return database.ZeroID, nil, err
 		}
 
 		pairs = append(pairs, CandidatePairDoc{
-			Project:  project,
+			Project:  info.ToProject(),
 			Document: candidate,
 		})
 	}

@@ -94,19 +94,13 @@ func FindDeactivateCandidates(
 	now := time.Now()
 
 	for _, candidate := range candidates {
-		// TODO(hackerwins): Consider caching projects in DB layer.
-		project, ok := be.Cache.Project.Get(candidate.ProjectID.String())
-		if !ok {
-			projectInfo, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
-			if err != nil {
-				return database.ZeroID, nil, err
-			}
-
-			project = projectInfo.ToProject()
-			be.Cache.Project.Add(candidate.ProjectID.String(), project)
+		info, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
+		if err != nil {
+			return database.ZeroID, nil, err
 		}
 
 		// Check if client needs deactivation based on project's threshold
+		project := info.ToProject()
 		threshold, err := project.ClientDeactivateThresholdAsTimeDuration()
 		if err != nil {
 			return database.ZeroID, nil, err

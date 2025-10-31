@@ -27,7 +27,7 @@ import (
 
 func TestLRUWithStats(t *testing.T) {
 	t.Run("basic operations", func(t *testing.T) {
-		c, err := cache.NewLRUWithStats[string, int](3, "test-cache")
+		c, err := cache.NewLRU[string, int](3, "test-cache")
 		assert.NoError(t, err)
 
 		// Test cache miss
@@ -49,7 +49,7 @@ func TestLRUWithStats(t *testing.T) {
 	})
 
 	t.Run("hit rate calculation", func(t *testing.T) {
-		c, err := cache.NewLRUWithStats[string, int](5, "test-cache")
+		c, err := cache.NewLRU[string, int](5, "test-cache")
 		assert.NoError(t, err)
 
 		// Add some data
@@ -75,9 +75,9 @@ func TestCacheManager(t *testing.T) {
 	t.Run("register and log stats", func(t *testing.T) {
 		manager := cache.NewManager(time.Second)
 
-		cache1, err := cache.NewLRUWithStats[string, int](5, "cache1")
+		cache1, err := cache.NewLRU[string, int](5, "cache1")
 		assert.NoError(t, err)
-		cache2, err := cache.NewLRUWithStats[string, string](5, "cache2")
+		cache2, err := cache.NewLRU[string, string](5, "cache2")
 		assert.NoError(t, err)
 
 		manager.RegisterCache(cache1)

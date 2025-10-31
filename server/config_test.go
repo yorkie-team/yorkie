@@ -60,9 +60,6 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultAuthWebhookCacheSize, conf.Backend.AuthWebhookCacheSize)
 	assertDurationEqual(t, server.DefaultAuthWebhookCacheTTL, conf.Backend.AuthWebhookCacheTTL)
 
-	assert.Equal(t, server.DefaultProjectCacheSize, conf.Backend.ProjectCacheSize)
-	assertDurationEqual(t, server.DefaultProjectCacheTTL, conf.Backend.ProjectCacheTTL)
-
 	assert.Equal(t, server.DefaultHostname, conf.Backend.Hostname)
 	assert.Equal(t, server.DefaultGatewayAddr, conf.Backend.GatewayAddr)
 
