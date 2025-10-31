@@ -42,6 +42,8 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 		YorkieDatabase:     helper.TestDBName(),
 		PingTimeout:        "5s",
 		CacheStatsInterval: helper.MongoCacheStatsInterval,
+		ProjectCacheSize:   helper.MongoProjectCacheSize,
+		ProjectCacheTTL:    helper.MongoProjectCacheTTL,
 		ClientCacheSize:    helper.MongoClientCacheSize,
 		DocCacheSize:       helper.MongoDocCacheSize,
 		ChangeCacheSize:    helper.MongoChangeCacheSize,
@@ -170,7 +172,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		originalSecretKey := projectInfo.SecretKey
 
 		// When
-		updatedProject, err := client.RotateProjectKeys(
+		updatedProject, _, err := client.RotateProjectKeys(
 			ctx,
 			dummyProjectID,
 			projectInfo.ID,
@@ -195,7 +197,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		}()
 
 		// When
-		_, err := client.RotateProjectKeys(
+		_, _, err := client.RotateProjectKeys(
 			ctx,
 			dummyProjectID,
 			types.ID("000000000000000000000003"),
@@ -221,7 +223,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		assert.NoError(t, err)
 
 		// When
-		_, err = client.RotateProjectKeys(
+		_, _, err = client.RotateProjectKeys(
 			ctx,
 			types.ID("000000000000000000000003"),
 			projectInfo.ID,

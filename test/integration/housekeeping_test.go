@@ -54,6 +54,8 @@ func setupBackend(t *testing.T) *backend.Backend {
 		PingTimeout:        "5s",
 		CacheStatsEnabled:  false,
 		CacheStatsInterval: "30s",
+		ProjectCacheSize:   helper.MongoProjectCacheSize,
+		ProjectCacheTTL:    helper.MongoProjectCacheTTL,
 		ClientCacheSize:    helper.MongoClientCacheSize,
 		DocCacheSize:       helper.MongoDocCacheSize,
 		ChangeCacheSize:    helper.MongoChangeCacheSize,

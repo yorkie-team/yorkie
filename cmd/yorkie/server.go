@@ -60,6 +60,8 @@ var (
 	mongoMonitoringSlowQueryThreshold string
 	mongoCacheStatsEnabled            bool
 	mongoCacheStatsInterval           time.Duration
+	mongoProjectCacheSize             int
+	mongoProjectCacheTTL              time.Duration
 	mongoClientCacheSize              int
 	mongoDocCacheSize                 int
 	mongoChangeCacheSize              int
@@ -68,7 +70,6 @@ var (
 	pprofEnabled bool
 
 	authWebhookCacheTTL time.Duration
-	projectCacheTTL     time.Duration
 
 	kafkaAddresses    string
 	kafkaTopic        string
@@ -99,7 +100,6 @@ func newServerCmd() *cobra.Command {
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -111,6 +111,8 @@ func newServerCmd() *cobra.Command {
 					MonitoringSlowQueryThreshold: mongoMonitoringSlowQueryThreshold,
 					CacheStatsEnabled:            mongoCacheStatsEnabled,
 					CacheStatsInterval:           mongoCacheStatsInterval.String(),
+					ProjectCacheSize:             mongoProjectCacheSize,
+					ProjectCacheTTL:              mongoProjectCacheTTL.String(),
 					ClientCacheSize:              mongoClientCacheSize,
 					DocCacheSize:                 mongoDocCacheSize,
 					ChangeCacheSize:              mongoChangeCacheSize,
@@ -362,6 +364,18 @@ func init() {
 		"Enable MongoDB cache statistics logging",
 	)
 	cmd.Flags().IntVar(
+		&mongoProjectCacheSize,
+		"mongo-project-cache-size",
+		server.DefaultProjectCacheSize,
+		"MongoDB project cache size",
+	)
+	cmd.Flags().DurationVar(
+		&mongoProjectCacheTTL,
+		"mongo-project-cache-ttl",
+		5*time.Minute,
+		"TTL for MongoDB project cache (e.g. '5m', '60s')",
+	)
+	cmd.Flags().IntVar(
 		&mongoClientCacheSize,
 		"mongo-client-cache-size",
 		server.DefaultMongoClientCacheSize,
@@ -440,18 +454,6 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
-	)
-	cmd.Flags().IntVar(
-		&conf.Backend.ProjectCacheSize,
-		"project-info-cache-size",
-		server.DefaultProjectCacheSize,
-		"The cache size of the project info.",
-	)
-	cmd.Flags().DurationVar(
-		&projectCacheTTL,
-		"project-info-cache-ttl",
-		server.DefaultProjectCacheTTL,
-		"TTL value to set when caching project info.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.Hostname,

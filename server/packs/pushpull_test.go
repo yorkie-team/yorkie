@@ -101,8 +101,6 @@ func TestMain(m *testing.M) {
 			SnapshotCacheSize:    helper.SnapshotCacheSize,
 			AuthWebhookCacheSize: helper.AuthWebhookSize,
 			AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
-			ProjectCacheSize:     helper.ProjectCacheSize,
-			ProjectCacheTTL:      helper.ProjectCacheTTL.String(),
 			AdminTokenDuration:   helper.AdminTokenDuration,
 			RPCAddr:              helper.RPCAddr,
 		}, &mongo.Config{
@@ -111,6 +109,8 @@ func TestMain(m *testing.M) {
 			ConnectionTimeout:  helper.MongoConnectionTimeout,
 			PingTimeout:        helper.MongoPingTimeout,
 			CacheStatsInterval: helper.MongoCacheStatsInterval,
+			ProjectCacheSize:   helper.MongoProjectCacheSize,
+			ProjectCacheTTL:    helper.MongoProjectCacheTTL,
 			ClientCacheSize:    helper.MongoClientCacheSize,
 			DocCacheSize:       helper.MongoDocCacheSize,
 			ChangeCacheSize:    helper.MongoChangeCacheSize,

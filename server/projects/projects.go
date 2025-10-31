@@ -174,20 +174,15 @@ func RotateProjectKeys(
 	owner types.ID,
 	id types.ID,
 ) (*types.Project, *types.Project, error) {
-	// Get the current project to store old API key
-	oldProject, err := be.DB.FindProjectInfoByID(ctx, id)
-	if err != nil {
-		return nil, nil, err
-	}
 	// Generate new API keys
 	publicKey := shortuuid.New()
 	secretKey := shortuuid.New()
 
 	// Update project with new keys
-	info, err := be.DB.RotateProjectKeys(ctx, owner, id, publicKey, secretKey)
+	info, prev, err := be.DB.RotateProjectKeys(ctx, owner, id, publicKey, secretKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return oldProject.ToProject(), info.ToProject(), nil
+	return info.ToProject(), prev.ToProject(), nil
 }

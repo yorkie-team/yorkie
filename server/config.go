@@ -253,12 +253,6 @@ func (c *Config) ensureBackendDefaultValue() {
 		c.Backend.AuthWebhookCacheTTL = DefaultAuthWebhookCacheTTL.String()
 	}
 
-	if c.Backend.ProjectCacheSize == 0 {
-		c.Backend.ProjectCacheSize = DefaultProjectCacheSize
-	}
-	if c.Backend.ProjectCacheTTL == "" {
-		c.Backend.ProjectCacheTTL = DefaultProjectCacheTTL.String()
-	}
 	if c.Backend.GatewayAddr == "" {
 		c.Backend.GatewayAddr = DefaultGatewayAddr
 	}
