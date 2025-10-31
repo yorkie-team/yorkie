@@ -54,12 +54,6 @@ type Config struct {
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
 
-	// ProjectCacheSize is the cache size of the project metadata.
-	ProjectCacheSize int `yaml:"ProjectCacheSize"`
-
-	// ProjectCacheTTL is the TTL value to set when caching the project metadata.
-	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
-
 	// PresenceTTL is the time-to-live duration for presence sessions.
 	// If a presence is not refreshed within this duration, it will be removed.
 	// Default is "60s".
@@ -87,13 +81,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-cache-ttl" flag: %w`,
 			c.AuthWebhookCacheTTL,
-			err,
-		)
-	}
-	if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
-		return fmt.Errorf(
-			`invalid argument "%s" for "--project-info-cache-ttl" flag: %w`,
-			c.ProjectCacheTTL,
 			err,
 		)
 	}
@@ -135,17 +122,6 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
-// ParseProjectCacheTTL returns TTL for project metadata cache.
-func (c *Config) ParseProjectCacheTTL() time.Duration {
-	result, err := time.ParseDuration(c.ProjectCacheTTL)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "parse project metadata cache ttl: %w", err)
 		os.Exit(1)
 	}
 

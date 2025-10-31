@@ -99,7 +99,6 @@ func newServerCmd() *cobra.Command {
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
-			conf.Backend.ProjectCacheTTL = projectCacheTTL.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -440,12 +439,6 @@ func init() {
 		"auth-webhook-cache-auth-ttl",
 		server.DefaultAuthWebhookCacheTTL,
 		"TTL value to set when caching authorization webhook response.",
-	)
-	cmd.Flags().IntVar(
-		&conf.Backend.ProjectCacheSize,
-		"project-info-cache-size",
-		server.DefaultProjectCacheSize,
-		"The cache size of the project info.",
 	)
 	cmd.Flags().DurationVar(
 		&projectCacheTTL,

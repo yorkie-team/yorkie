@@ -52,11 +52,12 @@ type Client struct {
 	client *mongo.Client
 
 	cacheManager  *cache.Manager
-	clientCache   *cache.LRUWithStats[types.ClientRefKey, *database.ClientInfo]
-	docCache      *cache.LRUWithStats[types.DocRefKey, *database.DocInfo]
-	changeCache   *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
-	presenceCache *cache.LRUWithStats[types.DocRefKey, *ChangeStore]
-	vectorCache   *cache.LRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	projectCache  *cache.LRUWithExpires[string, *database.ProjectInfo]
+	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
+	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
+	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
+	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
+	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -102,31 +103,42 @@ func Dial(conf *Config) (*Client, error) {
 	}
 
 	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
-	clientCache, err := cache.NewLRUWithStats[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
+
+	projectCache, err := cache.NewLRUWithExpires[string, *database.ProjectInfo](
+		conf.ProjectCacheSize,
+		conf.ParseProjectCacheTTL(),
+		"projects",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("initialize project cache: %w", err)
+	}
+	cacheManager.RegisterCache(projectCache)
+
+	clientCache, err := cache.NewLRU[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
 	if err != nil {
 		return nil, fmt.Errorf("initialize client cache: %w", err)
 	}
 	cacheManager.RegisterCache(clientCache)
 
-	docCache, err := cache.NewLRUWithStats[types.DocRefKey, *database.DocInfo](conf.DocCacheSize, "docs")
+	docCache, err := cache.NewLRU[types.DocRefKey, *database.DocInfo](conf.DocCacheSize, "docs")
 	if err != nil {
 		return nil, fmt.Errorf("initialize document cache: %w", err)
 	}
 	cacheManager.RegisterCache(docCache)
 
-	changeCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "changes")
+	changeCache, err := cache.NewLRU[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "changes")
 	if err != nil {
 		return nil, fmt.Errorf("initialize change cache: %w", err)
 	}
 	cacheManager.RegisterCache(changeCache)
 
-	presenceCache, err := cache.NewLRUWithStats[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "presences")
+	presenceCache, err := cache.NewLRU[types.DocRefKey, *ChangeStore](conf.ChangeCacheSize, "presences")
 	if err != nil {
 		return nil, fmt.Errorf("initialize presence cache: %w", err)
 	}
 	cacheManager.RegisterCache(presenceCache)
 
-	vectorCache, err := cache.NewLRUWithStats[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](
+	vectorCache, err := cache.NewLRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]](
 		conf.VectorCacheSize, "vectors",
 	)
 	if err != nil {
@@ -147,6 +159,7 @@ func Dial(conf *Config) (*Client, error) {
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
 		vectorCache:   vectorCache,
+		projectCache:  projectCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -169,6 +182,7 @@ func (c *Client) Close() error {
 	c.changeCache.Purge()
 	c.presenceCache.Purge()
 	c.vectorCache.Purge()
+	c.projectCache.Purge()
 
 	return nil
 }
@@ -543,6 +557,10 @@ func (c *Client) ListProjectInfos(
 
 // FindProjectInfoByPublicKey returns a project by public key.
 func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
+	if cached, ok := c.projectCache.Get(publicKey); ok {
+		return cached.DeepCopy(), nil
+	}
+
 	result := c.collection(ColProjects).FindOne(ctx, bson.M{
 		"public_key": publicKey,
 	})
@@ -555,6 +573,8 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 
 		return nil, fmt.Errorf("find project by public key %s: %w", publicKey, err)
 	}
+
+	c.projectCache.Add(publicKey, info.DeepCopy())
 
 	return info, nil
 }
@@ -663,9 +683,15 @@ func (c *Client) RotateProjectKeys(
 	id types.ID,
 	publicKey string,
 	secretKey string,
-) (*database.ProjectInfo, error) {
-	// Update project with new keys
-	res := c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
+) (*database.ProjectInfo, *database.ProjectInfo, error) {
+
+	prevInfo := &database.ProjectInfo{}
+	res := c.collection(ColProjects).FindOne(ctx, bson.M{"_id": id, "owner": owner})
+	if err := res.Decode(prevInfo); err == nil {
+		c.projectCache.Remove(prevInfo.PublicKey)
+	}
+
+	res = c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id":   id,
 		"owner": owner,
 	}, bson.M{
@@ -680,12 +706,12 @@ func (c *Client) RotateProjectKeys(
 	info := &database.ProjectInfo{}
 	if err := res.Decode(info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+			return nil, nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
-		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
+		return nil, nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
 	}
 
-	return info, nil
+	return info, prevInfo, nil
 }
 
 // CreateUserInfo creates a new user.

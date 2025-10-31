@@ -66,9 +66,7 @@ func newWebhookServer(t *testing.T, secretKey, docKey string) (*httptest.Server,
 // newYorkieServer initializes the Yorkie server and admin client.
 func newYorkieServer(t *testing.T, projectCacheTTL string) *server.Yorkie {
 	conf := helper.TestConfig()
-	if projectCacheTTL != "default" {
-		conf.Backend.ProjectCacheTTL = projectCacheTTL
-	}
+	conf.Mongo.ProjectCacheTTL = projectCacheTTL
 	svr, err := server.New(conf)
 	assert.NoError(t, err)
 	assert.NoError(t, svr.Start())
@@ -164,7 +162,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 	t.Run("root element changed test", func(t *testing.T) {
 		ctx := context.Background()
 
-		svr := newYorkieServer(t, "default")
+		svr := newYorkieServer(t, "5s")
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 		project, err := adminCli.CreateProject(ctx, "doc-root-changed-event-webhook")
@@ -201,7 +199,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 	t.Run("presence changed test", func(t *testing.T) {
 		ctx := context.Background()
 
-		svr := newYorkieServer(t, "default")
+		svr := newYorkieServer(t, "5s")
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 		project, err := adminCli.CreateProject(ctx, "presence-changed-event-webhook")
@@ -238,7 +236,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 	t.Run("root element and presence changed test", func(t *testing.T) {
 		ctx := context.Background()
 
-		svr := newYorkieServer(t, "default")
+		svr := newYorkieServer(t, "5s")
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 		project, err := adminCli.CreateProject(ctx, "root-presence-changed-event")
@@ -290,7 +288,7 @@ func TestEventWebhookThrottling(t *testing.T) {
 
 	ctx := context.Background()
 
-	svr := newYorkieServer(t, "default")
+	svr := newYorkieServer(t, "5s")
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 
 	project, err := adminCli.CreateProject(ctx, "event-webhook-throttle-webhook")

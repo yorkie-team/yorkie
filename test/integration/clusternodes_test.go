@@ -73,6 +73,8 @@ func TestClusterNodes(t *testing.T) {
 			YorkieDatabase:     helper.TestDBName() + "-integration",
 			PingTimeout:        helper.MongoPingTimeout,
 			CacheStatsInterval: helper.MongoCacheStatsInterval,
+			ProjectCacheSize:   helper.MongoProjectCacheSize,
+			ProjectCacheTTL:    helper.MongoProjectCacheTTL,
 			ClientCacheSize:    helper.MongoClientCacheSize,
 			DocCacheSize:       helper.MongoDocCacheSize,
 			ChangeCacheSize:    helper.MongoChangeCacheSize,

@@ -53,6 +53,12 @@ type Config struct {
 
 	// ActorCacheSize is the size of the actor cache. It works as LRU cache.
 	VectorCacheSize int `yaml:"VectorCacheSize"`
+
+	// ProjectCacheSize is the size of the project metadata cache.
+	ProjectCacheSize int `yaml:"ProjectCacheSize"`
+
+	// ProjectCacheTTL is the TTL value for the project metadata cache.
+	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
 }
 
 // Validate returns an error if the provided Config is invalidated.
@@ -78,6 +84,16 @@ func (c *Config) Validate() error {
 			return fmt.Errorf(
 				`invalid argument "%s" for cache stats interval: %w`,
 				c.CacheStatsInterval,
+				err,
+			)
+		}
+	}
+
+	if c.ProjectCacheTTL != "" {
+		if _, err := time.ParseDuration(c.ProjectCacheTTL); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for project cache TTL: %w`,
+				c.ProjectCacheTTL,
 				err,
 			)
 		}
@@ -113,6 +129,17 @@ func (c *Config) ParseCacheStatsInterval() time.Duration {
 	result, err := time.ParseDuration(c.CacheStatsInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse cache stats interval: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseProjectCacheTTL returns the TTL duration for the project cache.
+func (c *Config) ParseProjectCacheTTL() time.Duration {
+	result, err := time.ParseDuration(c.ProjectCacheTTL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse project cache TTL: %v\n", err)
 		os.Exit(1)
 	}
 

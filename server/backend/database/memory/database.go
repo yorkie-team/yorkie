@@ -537,36 +537,37 @@ func (d *DB) RotateProjectKeys(
 	id types.ID,
 	publicKey string,
 	secretKey string,
-) (*database.ProjectInfo, error) {
+) (*database.ProjectInfo, *database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	// Find project by ID and owner
 	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
-		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
+		return nil, nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		return nil, nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 	}
 
-	project := raw.(*database.ProjectInfo).DeepCopy()
-	if project.Owner != owner {
-		return nil, database.ErrProjectNotFound
+	prev := raw.(*database.ProjectInfo).DeepCopy()
+	info := prev.DeepCopy()
+	if info.Owner != owner {
+		return nil, nil, database.ErrProjectNotFound
 	}
 
 	// Update project keys
-	project.PublicKey = publicKey
-	project.SecretKey = secretKey
-	project.UpdatedAt = gotime.Now()
+	info.PublicKey = publicKey
+	info.SecretKey = secretKey
+	info.UpdatedAt = gotime.Now()
 
 	// Save updated project
-	if err := txn.Insert(tblProjects, project); err != nil {
-		return nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
+	if err := txn.Insert(tblProjects, info); err != nil {
+		return nil, nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
 	}
 
 	txn.Commit()
-	return project, nil
+	return info, prev, nil
 }
 
 // CreateUserInfo creates a new user.
