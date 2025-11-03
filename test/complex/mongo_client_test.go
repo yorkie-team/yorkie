@@ -37,9 +37,7 @@ const (
 	dummyProjectID              = types.ID("000000000000000000000000")
 	projectOneID                = types.ID("000000000000000000000001")
 	projectTwoID                = types.ID("000000000000000000000002")
-	dummyOwnerID                = types.ID("000000000000000000000000")
 	dummyClientID               = types.ID("000000000000000000000000")
-	clientDeactivateThreshold   = "1h"
 )
 
 func setupMongoClient(databaseName string) (*mongo.Client, error) {
@@ -50,6 +48,8 @@ func setupMongoClient(databaseName string) (*mongo.Client, error) {
 		PingTimeout:        "5s",
 		CacheStatsEnabled:  false,
 		CacheStatsInterval: "30s",
+		ProjectCacheSize:   1000,
+		ProjectCacheTTL:    "5s",
 		ClientCacheSize:    1000,
 		DocCacheSize:       1000,
 		ChangeCacheSize:    1000,

@@ -14,38 +14,38 @@
  * limitations under the License.
  */
 
-// Package cache provides cache implementations with statistics tracking.
+// Package cache provides cache implementations with expiration support.
 package cache
 
 import (
 	"sync/atomic"
+	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
-// LRU is an LRU cache wrapper that tracks hit/miss statistics.
-type LRU[K comparable, V any] struct {
-	cache *lru.Cache[K, V]
+// Note: Stats type and its helpers are defined in lru_with_stats.go; this
+// file only provides an expirable LRU wrapper that uses that Stats type.
+
+// LRUWithExpires is a wrapper over hashicorp's expirable LRU with statistics.
+type LRUWithExpires[K comparable, V any] struct {
+	cache *expirable.LRU[K, V]
 	stats *Stats
 	name  string
 }
 
-// NewLRU creates a new LRU cache with statistics tracking.
-func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
-	cache, err := lru.New[K, V](size)
-	if err != nil {
-		return nil, err
-	}
-
-	return &LRU[K, V]{
-		cache: cache,
+// NewLRUWithExpires creates a new expirable LRU with the given size and ttl.
+func NewLRUWithExpires[K comparable, V any](size int, ttl time.Duration, name string) (*LRUWithExpires[K, V], error) {
+	c := expirable.NewLRU[K, V](size, nil, ttl)
+	return &LRUWithExpires[K, V]{
+		cache: c,
 		stats: &Stats{},
 		name:  name,
 	}, nil
 }
 
 // Get retrieves a value from the cache and updates statistics.
-func (c *LRU[K, V]) Get(key K) (V, bool) {
+func (c *LRUWithExpires[K, V]) Get(key K) (V, bool) {
 	value, ok := c.cache.Get(key)
 	if ok {
 		atomic.AddInt64(&c.stats.hits, 1)
@@ -56,41 +56,41 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 }
 
 // Add adds a value to the cache.
-func (c *LRU[K, V]) Add(key K, value V) bool {
+func (c *LRUWithExpires[K, V]) Add(key K, value V) bool {
 	return c.cache.Add(key, value)
 }
 
 // Contains checks if a key exists in the cache without updating statistics.
-func (c *LRU[K, V]) Contains(key K) bool {
+func (c *LRUWithExpires[K, V]) Contains(key K) bool {
 	return c.cache.Contains(key)
 }
 
 // Peek retrieves a value from the cache without updating LRU or statistics.
-func (c *LRU[K, V]) Peek(key K) (V, bool) {
+func (c *LRUWithExpires[K, V]) Peek(key K) (V, bool) {
 	return c.cache.Peek(key)
 }
 
 // Remove removes a key from the cache.
-func (c *LRU[K, V]) Remove(key K) bool {
+func (c *LRUWithExpires[K, V]) Remove(key K) bool {
 	return c.cache.Remove(key)
 }
 
 // Purge clears all entries from the cache.
-func (c *LRU[K, V]) Purge() {
+func (c *LRUWithExpires[K, V]) Purge() {
 	c.cache.Purge()
 }
 
 // Len returns the number of items in the cache.
-func (c *LRU[K, V]) Len() int {
+func (c *LRUWithExpires[K, V]) Len() int {
 	return c.cache.Len()
 }
 
 // Stats returns the cache statistics.
-func (c *LRU[K, V]) Stats() *Stats {
+func (c *LRUWithExpires[K, V]) Stats() *Stats {
 	return c.stats
 }
 
 // Name returns the cache name.
-func (c *LRU[K, V]) Name() string {
+func (c *LRUWithExpires[K, V]) Name() string {
 	return c.name
 }

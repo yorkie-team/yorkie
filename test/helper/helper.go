@@ -91,8 +91,6 @@ var (
 	AuthWebhookSize           = 100
 	AuthWebhookCacheTTL       = 10 * gotime.Second
 	EventWebhookSize          = 100
-	ProjectCacheSize          = 256
-	ProjectCacheTTL           = 5 * gotime.Second
 	GatewayAddr               = fmt.Sprintf("localhost:%d", RPCPort)
 	RPCAddr                   = fmt.Sprintf("localhost:%d", RPCPort)
 
@@ -100,6 +98,8 @@ var (
 	MongoConnectionURI      = "mongodb://localhost:27017"
 	MongoPingTimeout        = "5s"
 	MongoCacheStatsInterval = "30s"
+	MongoProjectCacheSize   = 256
+	MongoProjectCacheTTL    = "5s"
 	MongoClientCacheSize    = 1000
 	MongoDocCacheSize       = 1000
 	MongoChangeCacheSize    = 1000
@@ -302,8 +302,6 @@ func TestConfig() *server.Config {
 			SnapshotCacheSize:       SnapshotCacheSize,
 			AuthWebhookCacheSize:    AuthWebhookSize,
 			AuthWebhookCacheTTL:     AuthWebhookCacheTTL.String(),
-			ProjectCacheSize:        ProjectCacheSize,
-			ProjectCacheTTL:         ProjectCacheTTL.String(),
 			GatewayAddr:             fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			RPCAddr:                 fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			PresenceTTL:             PresenceTTL,
@@ -316,6 +314,8 @@ func TestConfig() *server.Config {
 			PingTimeout:        MongoPingTimeout,
 			CacheStatsEnabled:  false,
 			CacheStatsInterval: "30s",
+			ProjectCacheSize:   MongoProjectCacheSize,
+			ProjectCacheTTL:    MongoProjectCacheTTL,
 			ClientCacheSize:    MongoClientCacheSize,
 			DocCacheSize:       MongoDocCacheSize,
 			ChangeCacheSize:    MongoChangeCacheSize,
@@ -462,6 +462,8 @@ func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 		YorkieDatabase:     databaseName,
 		PingTimeout:        "5s",
 		CacheStatsInterval: MongoCacheStatsInterval,
+		ProjectCacheSize:   MongoProjectCacheSize,
+		ProjectCacheTTL:    MongoProjectCacheTTL,
 		ClientCacheSize:    MongoClientCacheSize,
 		DocCacheSize:       MongoDocCacheSize,
 		ChangeCacheSize:    MongoChangeCacheSize,

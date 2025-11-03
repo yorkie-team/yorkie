@@ -20,10 +20,8 @@ package cache
 import (
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/hashicorp/golang-lru/v2/expirable"
-
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 )
@@ -31,13 +29,11 @@ import (
 // Manager manages all caches used in the backend.
 type Manager struct {
 	// AuthWebhook is used to cache the response of the auth webhook.
-	AuthWebhook *expirable.LRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
-
-	// Project is used to cache the project information.
-	Project *expirable.LRU[string, *types.Project]
+	// Use our expirable wrapper that exposes statistics.
+	AuthWebhook *cache.LRUWithExpires[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]]
 
 	// Snapshot is used to cache the snapshot information.
-	Snapshot *lru.Cache[types.DocRefKey, *document.InternalDocument]
+	Snapshot *cache.LRU[types.DocRefKey, *document.InternalDocument]
 }
 
 // Options contains configuration for cache manager.
@@ -46,38 +42,32 @@ type Options struct {
 	AuthWebhookCacheSize int
 	AuthWebhookCacheTTL  time.Duration
 
-	// Project related cache options
-	ProjectCacheSize int
-	ProjectCacheTTL  time.Duration
-
 	// Document related cache options
 	SnapshotCacheSize int
 }
 
 // New creates a new cache manager.
 func New(opts Options) (*Manager, error) {
-	authWebhookCache := expirable.NewLRU[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
+	authWebhookCache, err := cache.NewLRUWithExpires[string, pkgtypes.Pair[int, *types.AuthWebhookResponse]](
 		opts.AuthWebhookCacheSize,
-		nil,
 		opts.AuthWebhookCacheTTL,
-	)
-
-	projectCache := expirable.NewLRU[string, *types.Project](
-		opts.ProjectCacheSize,
-		nil,
-		opts.ProjectCacheTTL,
-	)
-
-	snapshotCache, err := lru.New[types.DocRefKey, *document.InternalDocument](
-		opts.SnapshotCacheSize,
+		"auth-webhook",
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Manager{
+	snapshotCache, err := cache.NewLRU[types.DocRefKey, *document.InternalDocument](
+		opts.SnapshotCacheSize,
+		"snapshots",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	m := &Manager{
 		AuthWebhook: authWebhookCache,
-		Project:     projectCache,
 		Snapshot:    snapshotCache,
-	}, nil
+	}
+	return m, nil
 }
