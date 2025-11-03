@@ -1076,3 +1076,17 @@ func FromSchema(pbSchema *api.Schema) *types.Schema {
 		CreatedAt: pbSchema.CreatedAt.AsTime(),
 	}
 }
+
+// FromCacheType converts the given Protobuf formats to model format.
+func FromCacheType(pbCacheType api.CacheType) types.CacheType {
+	switch pbCacheType {
+	case api.CacheType_CACHE_TYPE_PROJECT:
+		return types.CacheTypeProject
+	case api.CacheType_CACHE_TYPE_CLIENT:
+		return types.CacheTypeClient
+	case api.CacheType_CACHE_TYPE_DOCUMENT:
+		return types.CacheTypeDocument
+	default:
+		return types.CacheTypeUnknown
+	}
+}

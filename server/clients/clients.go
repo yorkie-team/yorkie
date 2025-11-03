@@ -89,8 +89,13 @@ func Deactivate(
 		return nil, err
 	}
 
+	clusterClient, err := be.ClusterClient()
+	if err != nil {
+		return nil, err
+	}
+
 	for _, info := range docInfos {
-		if err := be.ClusterClient.DetachDocument(
+		if err := clusterClient.DetachDocument(
 			ctx,
 			project,
 			actorID,

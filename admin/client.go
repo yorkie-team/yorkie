@@ -238,6 +238,21 @@ func (c *Client) UpdateProject(
 	return converter.FromProject(response.Msg.Project), nil
 }
 
+// RotateProjectKeys rotates the API keys of a project.
+func (c *Client) RotateProjectKeys(
+	ctx context.Context,
+	id string,
+) (*types.Project, error) {
+	response, err := c.client.RotateProjectKeys(ctx, connect.NewRequest(&api.RotateProjectKeysRequest{
+		Id: id,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromProject(response.Msg.Project), nil
+}
+
 // CreateDocument creates a new document.
 func (c *Client) CreateDocument(
 	ctx context.Context,

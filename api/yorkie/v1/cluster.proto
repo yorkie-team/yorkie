@@ -30,6 +30,7 @@ service ClusterService {
   rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
   rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
   rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
+  rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
 
 message ClusterServiceDetachDocumentRequest {
@@ -68,4 +69,21 @@ message ClusterServiceGetDocumentRequest {
 
 message ClusterServiceGetDocumentResponse {
   DocumentSummary document = 1;
+}
+
+enum CacheType {
+  CACHE_TYPE_UNSPECIFIED = 0;
+  CACHE_TYPE_PROJECT = 1;
+  CACHE_TYPE_CLIENT = 2;
+  CACHE_TYPE_DOCUMENT = 3;
+}
+
+message InvalidateCacheRequest {
+
+  CacheType cache_type = 1;
+  string key = 2;
+}
+
+message InvalidateCacheResponse {
+  bool success = 1;
 }

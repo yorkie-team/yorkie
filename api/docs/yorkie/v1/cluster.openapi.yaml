@@ -46,6 +46,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/InvalidateCache:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.InvalidateCache.yorkie.v1.InvalidateCacheRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.InvalidateCache.yorkie.v1.InvalidateCacheResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/PurgeDocument:
     post:
       description: ""
@@ -86,6 +98,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.InvalidateCache.yorkie.v1.InvalidateCacheRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InvalidateCacheRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InvalidateCacheRequest'
       required: true
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
       content:
@@ -132,6 +153,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.InvalidateCache.yorkie.v1.InvalidateCacheResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InvalidateCacheResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InvalidateCacheResponse'
       description: ""
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
       content:
@@ -264,6 +294,19 @@ components:
          http://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()
          ) to obtain a formatter capable of generating timestamps in this format.
       format: date-time
+      type: string
+    yorkie.v1.CacheType:
+      description: ""
+      enum:
+      - - CACHE_TYPE_UNSPECIFIED
+        - 0
+        - CACHE_TYPE_PROJECT
+        - 1
+        - CACHE_TYPE_CLIENT
+        - 2
+        - CACHE_TYPE_DOCUMENT
+        - 3
+      title: CacheType
       type: string
     yorkie.v1.ClusterServiceCompactDocumentRequest:
       additionalProperties: false
@@ -504,6 +547,33 @@ components:
           title: value
           type: object
       title: PresencesEntry
+      type: object
+    yorkie.v1.InvalidateCacheRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        cacheType:
+          $ref: '#/components/schemas/yorkie.v1.CacheType'
+          additionalProperties: false
+          description: ""
+          title: cache_type
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+      title: InvalidateCacheRequest
+      type: object
+    yorkie.v1.InvalidateCacheResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        success:
+          additionalProperties: false
+          description: ""
+          title: success
+          type: boolean
+      title: InvalidateCacheResponse
       type: object
     yorkie.v1.Presence:
       additionalProperties: false

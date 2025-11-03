@@ -211,7 +211,12 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	summary, err := be.ClusterClient.GetDocument(
+	clusterClient, err := be.ClusterClient()
+	if err != nil {
+		return nil, err
+	}
+
+	summary, err := clusterClient.GetDocument(
 		ctx,
 		project,
 		info.Key.String(),
@@ -261,6 +266,11 @@ func GetDocumentSummaries(
 		var wg stdSync.WaitGroup
 		errChan := make(chan error, len(docInfos))
 
+		clusterClient, err := be.ClusterClient()
+		if err != nil {
+			return nil, err
+		}
+
 		// Launch goroutines for parallel cluster API calls
 		for i, docInfo := range docInfos {
 			wg.Add(1)
@@ -268,7 +278,7 @@ func GetDocumentSummaries(
 				defer wg.Done()
 
 				// Call cluster API to get only snapshot/presence data
-				summary, err := be.ClusterClient.GetDocument(
+				summary, err := clusterClient.GetDocument(
 					ctx,
 					project,
 					info.Key.String(),
@@ -561,7 +571,11 @@ func CompactDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) (bool, error) {
-	return be.ClusterClient.CompactDocument(ctx, project, document)
+	clusterClient, err := be.ClusterClient()
+	if err != nil {
+		return false, err
+	}
+	return clusterClient.CompactDocument(ctx, project, document)
 }
 
 // PurgeDocument purges the given document.
@@ -571,5 +585,9 @@ func PurgeDocument(
 	project *types.Project,
 	document *database.DocInfo,
 ) error {
-	return be.ClusterClient.PurgeDocument(ctx, project, document)
+	clusterClient, err := be.ClusterClient()
+	if err != nil {
+		return err
+	}
+	return clusterClient.PurgeDocument(ctx, project, document)
 }

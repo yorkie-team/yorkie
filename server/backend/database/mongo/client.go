@@ -154,12 +154,12 @@ func Dial(conf *Config) (*Client, error) {
 
 		cacheManager: cacheManager,
 
+		projectCache:  projectCache,
 		clientCache:   clientCache,
 		docCache:      docCache,
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
 		vectorCache:   vectorCache,
-		projectCache:  projectCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -177,14 +177,22 @@ func (c *Client) Close() error {
 
 	c.cacheManager.Stop()
 
+	c.projectCache.Purge()
 	c.clientCache.Purge()
 	c.docCache.Purge()
 	c.changeCache.Purge()
 	c.presenceCache.Purge()
 	c.vectorCache.Purge()
-	c.projectCache.Purge()
 
 	return nil
+}
+
+// InvalidateCache invalidates the cache of the given type and key.
+func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
+	switch cacheType {
+	case types.CacheTypeProject:
+		c.projectCache.Remove(key)
+	}
 }
 
 // TryLeadership attempts to acquire or renew leadership with the given lease duration.
