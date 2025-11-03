@@ -720,3 +720,18 @@ func ToSchemas(schemas []*types.Schema) []*api.Schema {
 	}
 	return pbSchemas
 }
+
+// ToCacheType converts the given model format to Protobuf format.
+func ToCacheType(cacheType types.CacheType) api.CacheType {
+	switch cacheType {
+	case types.CacheTypeProject:
+		return api.CacheType_CACHE_TYPE_PROJECT
+	case types.CacheTypeClient:
+		return api.CacheType_CACHE_TYPE_CLIENT
+	case types.CacheTypeDocument:
+		return api.CacheType_CACHE_TYPE_DOCUMENT
+
+	}
+
+	return api.CacheType_CACHE_TYPE_UNSPECIFIED
+}

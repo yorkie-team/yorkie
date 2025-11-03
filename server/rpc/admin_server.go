@@ -235,6 +235,14 @@ func (s *adminServer) UpdateProject(
 		return nil, err
 	}
 
+	if err := s.backend.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeProject,
+		project.PublicKey,
+	); err != nil {
+		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
+	}
+
 	return connect.NewResponse(&api.UpdateProjectResponse{
 		Project: converter.ToProject(project),
 	}), nil
@@ -757,7 +765,7 @@ func (s *adminServer) RotateProjectKeys(
 ) (*connect.Response[api.RotateProjectKeysResponse], error) {
 	user := users.From(ctx)
 
-	project, _, err := projects.RotateProjectKeys(
+	project, prev, err := projects.RotateProjectKeys(
 		ctx,
 		s.backend,
 		user.ID,
@@ -767,12 +775,13 @@ func (s *adminServer) RotateProjectKeys(
 		return nil, err
 	}
 
-	// NOTE(hackerwins): Each node maintains its own in-memory project cache.
-	// So invalidating the cache on a single node may not be sufficient to
-	// ensure consistency across the entire cluster.
-	// After introducing broadcasting across the cluster, we need to broadcast
-	// the project cache invalidation event to all nodes.
-	// s.backend.Cache.Project.Remove(prevProject.PublicKey)
+	if err := s.backend.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeProject,
+		prev.PublicKey,
+	); err != nil {
+		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
+	}
 
 	// Return updated project
 	return connect.NewResponse(&api.RotateProjectKeysResponse{

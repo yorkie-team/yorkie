@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -254,5 +255,20 @@ func (s *clusterServer) GetDocument(
 
 	return connect.NewResponse(&api.ClusterServiceGetDocumentResponse{
 		Document: converter.ToDocumentSummary(summary),
+	}), nil
+}
+
+// InvalidateCache invalidates the cache of the given type and key.
+func (s *clusterServer) InvalidateCache(
+	ctx context.Context,
+	req *connect.Request[api.InvalidateCacheRequest],
+) (*connect.Response[api.InvalidateCacheResponse], error) {
+	cacheType := converter.FromCacheType(req.Msg.CacheType)
+	if mongoClient, ok := s.backend.DB.(*mongo.Client); ok {
+		mongoClient.InvalidateCache(cacheType, req.Msg.Key)
+	}
+
+	return connect.NewResponse(&api.InvalidateCacheResponse{
+		Success: true,
 	}), nil
 }

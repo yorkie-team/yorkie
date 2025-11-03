@@ -200,6 +200,26 @@ func (c *Client) GetDocument(
 	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
+// InvalidateCache invalidates the cache of the given type and key.
+func (c *Client) InvalidateCache(
+	ctx context.Context,
+	cacheType types.CacheType,
+	key string,
+) error {
+	_, err := c.client.InvalidateCache(
+		ctx,
+		connect.NewRequest(&api.InvalidateCacheRequest{
+			CacheType: converter.ToCacheType(cacheType),
+			Key:       key,
+		}),
+	)
+	if err != nil {
+		return fromConnectError(err)
+	}
+
+	return nil
+}
+
 /**
 * withShardKey returns a context with the given shard key in metadata.
  */

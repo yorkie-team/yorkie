@@ -68,8 +68,8 @@ type Backend struct {
 
 	// AuthWebhookClient is used to send auth webhook.
 	AuthWebhookClient *pkgwebhook.Client[types.AuthWebhookRequest, types.AuthWebhookResponse]
-	// ClusterClient is used to send requests to nodes in the cluster.
-	ClusterClient *cluster.Client
+	// ClusterClientPool is used to manage connections to cluster nodes.
+	ClusterClientPool *cluster.ClientPool
 	// EventWebhookManager is used to send event webhook
 	EventWebhookManager *webhook.Manager
 
@@ -125,14 +125,10 @@ func New(
 	)
 	bg := background.New(metrics)
 
-	// 04. Create webhook clients and cluster client.
+	// 04. Create webhook clients and cluster client pool.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
 	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
-
-	clusterClient, err := cluster.Dial(conf.GatewayAddr)
-	if err != nil {
-		return nil, err
-	}
+	clusterClientPool := cluster.NewClientPool()
 
 	// 05. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
@@ -198,7 +194,7 @@ func New(
 
 		AuthWebhookClient:   authWebhookClient,
 		EventWebhookManager: eventWebhookManger,
-		ClusterClient:       clusterClient,
+		ClusterClientPool:   clusterClientPool,
 
 		Metrics:   metrics,
 		DB:        db,
@@ -240,7 +236,7 @@ func (b *Backend) Shutdown() error {
 
 	b.AuthWebhookClient.Close()
 	b.EventWebhookManager.Close()
-	b.ClusterClient.Close()
+	b.ClusterClientPool.Close()
 
 	if err := b.MsgBroker.Close(); err != nil {
 		errs = append(errs, err)
@@ -280,4 +276,54 @@ func (b *Backend) IsLeader() bool {
 // SetMembershipDB sets the database for membership for testing purposes.
 func (h *Backend) SetMembershipDB(db database.Database) {
 	h.Membership.SetDB(db)
+}
+
+// ClusterClient returns the cluster client for the gateway address.
+// This client is used for unicast requests with consistent hashing.
+func (b *Backend) ClusterClient() (*cluster.Client, error) {
+	return b.ClusterClientPool.Get(b.Config.GatewayAddr)
+}
+
+// BroadcastCacheInvalidation broadcasts cache invalidation to all cluster nodes.
+func (b *Backend) BroadcastCacheInvalidation(
+	ctx context.Context,
+	cacheType types.CacheType,
+	key string,
+) error {
+	nodes, err := b.Membership.ClusterNodes(ctx)
+	if err != nil {
+		return fmt.Errorf("broadcast cache invalidation: %w", err)
+	}
+
+	// Prune inactive nodes from the pool (protect gateway address)
+	addrs := []string{b.Config.GatewayAddr}
+	for _, node := range nodes {
+		addrs = append(addrs, node.RPCAddr)
+	}
+	b.ClusterClientPool.Prune(addrs)
+
+	var errs []error
+	for _, node := range nodes {
+		nodeAddr := node.RPCAddr
+
+		cli, err := b.ClusterClientPool.Get(nodeAddr)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("get client for %s: %w", nodeAddr, err))
+			continue
+		}
+
+		if err := cli.InvalidateCache(
+			ctx,
+			cacheType,
+			key,
+		); err != nil {
+			errs = append(errs, fmt.Errorf("invalidate on %s: %w", nodeAddr, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	return nil
 }
