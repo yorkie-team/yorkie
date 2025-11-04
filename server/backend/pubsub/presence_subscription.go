@@ -138,7 +138,7 @@ func (s *PresenceSubscription) Publish(event events.PresenceEvent) bool {
 	select {
 	case s.Events() <- event:
 		return true
-	case <-gotime.After(publishTimeout):
+	case <-gotime.After(100 * gotime.Millisecond):
 		return false
 	}
 }

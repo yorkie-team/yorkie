@@ -434,11 +434,15 @@ message PresenceEvent {
   enum Type {
     TYPE_UNSPECIFIED = 0;
     TYPE_COUNT_CHANGED = 1;
+    TYPE_BROADCAST = 2;
   }
 
   Type type = 1;
   int64 count = 2;
   int64 seq = 3;
+  string publisher = 4;
+  string topic = 5;
+  bytes payload = 6;
 }
 
 message DataSize {

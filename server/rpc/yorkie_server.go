@@ -456,7 +456,7 @@ func (s *yorkieServer) WatchPresence(
 		return err
 	}
 
-	// 05. Stream presence count updates
+	// 05. Stream presence count updates and broadcast events
 	for {
 		select {
 		case event, ok := <-subscription.Events():
@@ -465,9 +465,24 @@ func (s *yorkieServer) WatchPresence(
 				return nil
 			}
 
-			// Send count update (skip if it's the initial event with Seq 0)
-			if event.Seq > 0 {
-				response := &api.WatchPresenceResponse{
+			var response *api.WatchPresenceResponse
+
+			// Check event type and create appropriate response
+			if event.Type == events.PresenceBroadcast {
+				// Send broadcast event
+				response = &api.WatchPresenceResponse{
+					Body: &api.WatchPresenceResponse_Event{
+						Event: &api.PresenceEvent{
+							Type:      api.PresenceEvent_TYPE_BROADCAST,
+							Publisher: event.Publisher.String(),
+							Topic:     event.Topic,
+							Payload:   event.Payload,
+						},
+					},
+				}
+			} else if event.Seq > 0 {
+				// Send count update (skip if it's the initial event with Seq 0)
+				response = &api.WatchPresenceResponse{
 					Body: &api.WatchPresenceResponse_Event{
 						Event: &api.PresenceEvent{
 							Type:  api.PresenceEvent_TYPE_COUNT_CHANGED,
@@ -476,7 +491,9 @@ func (s *yorkieServer) WatchPresence(
 						},
 					},
 				}
+			}
 
+			if response != nil {
 				if err := stream.Send(response); err != nil {
 					return err
 				}
@@ -486,6 +503,57 @@ func (s *yorkieServer) WatchPresence(
 			return ctx.Err()
 		}
 	}
+}
+
+// Broadcast broadcasts a message to all clients watching the presence.
+func (s *yorkieServer) Broadcast(
+	ctx context.Context,
+	req *connect.Request[api.BroadcastRequest],
+) (*connect.Response[api.BroadcastResponse], error) {
+	// 01. Validate the request
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	presenceKey := key.Key(req.Msg.PresenceKey)
+	if err := presenceKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	// 02. Verify access
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.Broadcast,
+		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+
+	// 03. Verify active client
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(actorID),
+	}); err != nil {
+		return nil, err
+	}
+
+	// 04. Publish broadcast event
+	refKey := types.PresenceRefKey{
+		ProjectID:   project.ID,
+		PresenceKey: presenceKey,
+	}
+
+	s.backend.PubSub.PublishPresence(ctx, events.PresenceEvent{
+		Type:      events.PresenceBroadcast,
+		Key:       refKey,
+		Publisher: actorID,
+		Topic:     req.Msg.Topic,
+		Payload:   req.Msg.Payload,
+	})
+
+	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }
 
 // DetachDocument detaches the given document to the client.
@@ -859,60 +927,4 @@ func (s *yorkieServer) unwatchDoc(
 	)
 
 	return nil
-}
-
-// Broadcast sends the given payload to all clients watching the document.
-func (s *yorkieServer) Broadcast(
-	ctx context.Context,
-	req *connect.Request[api.BroadcastRequest],
-) (*connect.Response[api.BroadcastResponse], error) {
-	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
-	if err != nil {
-		return nil, err
-	}
-
-	project := projects.From(ctx)
-	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
-	if err != nil {
-		return nil, err
-	}
-
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(sejongk): It seems better to use a separate auth attributes for broadcast later
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.Broadcast,
-		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
-	}); err != nil {
-		return nil, err
-	}
-
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
-		return nil, err
-	}
-
-	s.backend.PubSub.Publish(ctx, clientID, events.DocEvent{
-		Type:  events.DocBroadcast,
-		Actor: clientID,
-		Key:   docKey,
-		Body: events.DocEventBody{
-			Topic:   req.Msg.Topic,
-			Payload: req.Msg.Payload,
-		},
-	})
-	s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
-		s.backend.Config.Hostname,
-		project,
-		events.DocBroadcast,
-		len(req.Msg.Payload),
-	)
-
-	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }

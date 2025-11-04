@@ -82,7 +82,7 @@ func (bp *PresencePublisher) publish() {
 		return
 	}
 
-	events := bp.events
+	presenceEvents := bp.events
 	bp.events = nil
 
 	bp.mutex.Unlock()
@@ -90,14 +90,19 @@ func (bp *PresencePublisher) publish() {
 	if logging.Enabled(zap.DebugLevel) {
 		bp.logger.Infof(
 			"Publishing batch of %d presence events for key %s",
-			len(events),
+			len(presenceEvents),
 			bp.subs.refKey,
 		)
 	}
 
 	// Send all events to all subscribers
 	for _, sub := range bp.subs.Values() {
-		for _, event := range events {
+		for _, event := range presenceEvents {
+			// Skip sending broadcast events to the publisher themselves
+			if event.Type == events.PresenceBroadcast && event.Publisher == sub.Subscriber() {
+				continue
+			}
+
 			if ok := sub.Publish(event); !ok {
 				bp.logger.Infof(
 					"Publish presence event to %s timeout or closed",
