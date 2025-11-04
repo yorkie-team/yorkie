@@ -1429,6 +1429,17 @@ components:
           - type: string
           - type: number
           title: count
+        payload:
+          additionalProperties: false
+          description: ""
+          format: byte
+          title: payload
+          type: string
+        publisher:
+          additionalProperties: false
+          description: ""
+          title: publisher
+          type: string
         seq:
           additionalProperties: false
           description: ""
@@ -1436,6 +1447,11 @@ components:
           - type: string
           - type: number
           title: seq
+        topic:
+          additionalProperties: false
+          description: ""
+          title: topic
+          type: string
         type:
           $ref: '#/components/schemas/yorkie.v1.PresenceEvent.Type'
           additionalProperties: false
@@ -1450,6 +1466,8 @@ components:
         - 0
         - TYPE_COUNT_CHANGED
         - 1
+        - TYPE_BROADCAST
+        - 2
       title: Type
       type: string
     yorkie.v1.Project:

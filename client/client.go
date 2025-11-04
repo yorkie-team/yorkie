@@ -114,7 +114,6 @@ const (
 	DocumentWatched   WatchDocResponseType = "document-watched"
 	DocumentUnwatched WatchDocResponseType = "document-unwatched"
 	PresenceChanged   WatchDocResponseType = "presence-changed"
-	DocumentBroadcast WatchDocResponseType = "document-broadcast"
 )
 
 // WatchDocResponse is the response of watching document.
@@ -768,7 +767,13 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 				case *api.WatchPresenceResponse_Event:
 					// Let Counter decide whether to accept the update based on sequence
 					if body.Event != nil {
-						if p.UpdateCount(body.Event.Count, body.Event.Seq) {
+						// Handle broadcast events
+						if body.Event.Type == api.PresenceEvent_TYPE_BROADCAST {
+							// If the handler exists, it means that the broadcast topic has been subscribed to.
+							if handler, ok := p.BroadcastEventHandlers()[body.Event.Topic]; ok && handler != nil {
+								_ = handler(body.Event.Topic, body.Event.Publisher, body.Event.Payload)
+							}
+						} else if p.UpdateCount(body.Event.Count, body.Event.Seq) {
 							// Only send to channel if Counter accepted the update
 							select {
 							case countChan <- body.Event.Count:
@@ -786,6 +791,18 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 	closeFunc := func() {
 		cancel()
 	}
+
+	// Start goroutine to handle broadcast requests
+	go func() {
+		for {
+			select {
+			case r := <-p.BroadcastRequests():
+				p.BroadcastResponses() <- c.broadcast(ctx, p, r.Topic, r.Payload)
+			case <-watchCtx.Done():
+				return
+			}
+		}
+	}()
 
 	return countChan, closeFunc, nil
 }
@@ -931,17 +948,6 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		}
 	}()
 
-	go func() {
-		for {
-			select {
-			case r := <-d.BroadcastRequests():
-				d.BroadcastResponses() <- c.broadcast(ctx, d, r.Topic, r.Payload)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	return nil
 }
 
@@ -1006,19 +1012,6 @@ func handleResponse(pbResp *api.WatchDocumentResponse, d *document.Document) (*W
 					cli.String(): p,
 				},
 			}, nil
-		case events.DocBroadcast:
-			eventBody := resp.Event.Body
-			// If the handler exists, it means that the broadcast topic has been subscribed to.
-			if handler, ok := d.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
-				err := handler(eventBody.Topic, resp.Event.Publisher, eventBody.Payload)
-				if err != nil {
-					return &WatchDocResponse{
-						Type: DocumentBroadcast,
-						Err:  err,
-					}, nil
-				}
-			}
-			return nil, nil
 		}
 	}
 	return nil, ErrUnsupportedWatchResponseType
@@ -1130,7 +1123,7 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 
 func (c *Client) broadcast(
 	ctx context.Context,
-	d *document.Document,
+	p *presence.Presence,
 	topic string,
 	payload []byte,
 ) error {
@@ -1138,7 +1131,7 @@ func (c *Client) broadcast(
 		return ErrNotActivated
 	}
 
-	attachment, ok := c.attachments.Get(d.Key())
+	_, ok := c.attachments.Get(p.Key())
 	if !ok {
 		return ErrNotAttached
 	}
@@ -1146,11 +1139,11 @@ func (c *Client) broadcast(
 	_, err := c.client.Broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.resourceID.String(),
-			Topic:      topic,
-			Payload:    payload,
-		}), c.options.APIKey, d.Key().String()))
+			ClientId:    c.id.String(),
+			PresenceKey: p.Key().String(),
+			Topic:       topic,
+			Payload:     payload,
+		}), c.options.APIKey, p.Key().String()))
 	if err != nil {
 		return err
 	}

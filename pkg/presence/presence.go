@@ -18,6 +18,8 @@
 package presence
 
 import (
+	gojson "encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -43,12 +45,33 @@ type Presence struct {
 
 	// seq is the last seen sequence number for ordering.
 	seq atomic.Int64
+
+	// broadcastRequests is the send-only channel to send broadcast requests.
+	broadcastRequests chan BroadcastRequest
+
+	// broadcastResponses is the receive-only channel to receive broadcast responses.
+	broadcastResponses chan error
+
+	// broadcastEventHandlers is a map of registered event handlers for broadcast events.
+	broadcastEventHandlers map[string]func(
+		topic, publisher string,
+		payload []byte,
+	) error
+}
+
+// BroadcastRequest represents a broadcast request that will be delivered to the client.
+type BroadcastRequest struct {
+	Topic   string
+	Payload []byte
 }
 
 // New creates a new instance of Presence.
 func New(k key.Key) *Presence {
 	counter := &Presence{
-		key: k,
+		key:                    k,
+		broadcastRequests:      make(chan BroadcastRequest, 1),
+		broadcastResponses:     make(chan error, 1),
+		broadcastEventHandlers: make(map[string]func(topic, publisher string, payload []byte) error),
 	}
 	counter.status.Store(int32(attachable.StatusDetached))
 	return counter
@@ -114,4 +137,54 @@ func (c *Presence) UpdateCount(count int64, seq int64) bool {
 	}
 
 	return false
+}
+
+// BroadcastRequests returns the broadcast requests of this presence.
+func (c *Presence) BroadcastRequests() <-chan BroadcastRequest {
+	return c.broadcastRequests
+}
+
+// BroadcastResponses returns the broadcast responses of this presence.
+func (c *Presence) BroadcastResponses() chan error {
+	return c.broadcastResponses
+}
+
+// Broadcast encodes the given payload and sends a Broadcast request.
+func (c *Presence) Broadcast(topic string, payload any) error {
+	marshaled, err := gojson.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("broadcast payload: %w", err)
+	}
+
+	c.broadcastRequests <- BroadcastRequest{
+		Topic:   topic,
+		Payload: marshaled,
+	}
+	return <-c.broadcastResponses
+}
+
+// SubscribeBroadcastEvent subscribes to the given topic and registers
+// an event handler.
+func (c *Presence) SubscribeBroadcastEvent(
+	topic string,
+	handler func(topic, publisher string, payload []byte) error,
+) {
+	c.broadcastEventHandlers[topic] = handler
+}
+
+// UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
+// the event handler.
+func (c *Presence) UnsubscribeBroadcastEvent(
+	topic string,
+) {
+	delete(c.broadcastEventHandlers, topic)
+}
+
+// BroadcastEventHandlers returns the registered handlers for broadcast events.
+func (c *Presence) BroadcastEventHandlers() map[string]func(
+	topic string,
+	publisher string,
+	payload []byte,
+) error {
+	return c.broadcastEventHandlers
 }

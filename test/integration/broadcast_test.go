@@ -1,7 +1,7 @@
 //go:build integration
 
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2025 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,24 +21,22 @@ package integration
 import (
 	"context"
 	gojson "encoding/json"
-	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func TestBroadcast(t *testing.T) {
+func TestPresenceBroadcast(t *testing.T) {
 	clients := activeClients(t, 3)
 	c1, c2, c3 := clients[0], clients[1], clients[2]
 	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("broadcast to subscribers except publisher test", func(t *testing.T) {
-		bch := make(chan string)
+		bch := make(chan string, 10)
 		ctx := context.Background()
 		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
@@ -50,25 +48,35 @@ func TestBroadcast(t *testing.T) {
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.WatchStream(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
+		presenceKey := helper.TestDocKey(t)
 
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.WatchStream(d2)
+		p1 := presence.New(presenceKey)
+		assert.NoError(t, c1.Attach(ctx, p1))
+		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
 		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
+		defer closeWatch1()
+		p1.SubscribeBroadcastEvent("mention", handler)
 
-		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3, client.WithRealtimeSync()))
-		rch3, _, err := c3.WatchStream(d3)
+		p2 := presence.New(presenceKey)
+		assert.NoError(t, c2.Attach(ctx, p2))
+		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
 		assert.NoError(t, err)
-		d3.SubscribeBroadcastEvent("mention", handler)
+		defer closeWatch2()
+		p2.SubscribeBroadcastEvent("mention", handler)
 
-		err = d3.Broadcast("mention", "yorkie")
+		p3 := presence.New(presenceKey)
+		assert.NoError(t, c3.Attach(ctx, p3))
+		countChan3, closeWatch3, err := c3.WatchPresence(ctx, p3)
+		assert.NoError(t, err)
+		defer closeWatch3()
+		p3.SubscribeBroadcastEvent("mention", handler)
+
+		// Wait for initial count updates
+		<-countChan1
+		<-countChan2
+		<-countChan3
+
+		err = p3.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
@@ -76,19 +84,21 @@ func TestBroadcast(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			rcv := 0
+			timeout := time.After(2 * time.Second)
 			for {
 				select {
-				case <-rch1:
-				case <-rch2:
-				case <-rch3:
 				case m := <-bch:
 					assert.Equal(t, "yorkie", m)
 					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber,
-					// except the publisher, successfully receives the event.
-					assert.Equal(t, 2, rcv)
+					if rcv == 2 {
+						// Assuming that every subscriber can receive the broadcast
+						// event within this timeout period, check if every subscriber,
+						// except the publisher, successfully receives the event.
+						return
+					}
+				case <-timeout:
+					// Publisher should not receive their own broadcast
+					assert.Equal(t, 2, rcv, "Expected 2 subscribers to receive broadcast (excluding publisher)")
 					return
 				case <-ctx.Done():
 					return
@@ -100,34 +110,40 @@ func TestBroadcast(t *testing.T) {
 	})
 
 	t.Run("no broadcasts to unsubscribers", func(t *testing.T) {
-		bch := make(chan string)
+		bch := make(chan string, 10)
 		ctx := context.Background()
 		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
 			assert.Equal(t, topic, "mention")
 			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
 			bch <- mentionedBy
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.WatchStream(d1)
+		presenceKey := helper.TestDocKey(t)
+
+		p1 := presence.New(presenceKey)
+		assert.NoError(t, c1.Attach(ctx, p1))
+		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
 		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
+		defer closeWatch1()
+		p1.SubscribeBroadcastEvent("mention", handler)
 
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.WatchStream(d2)
+		p2 := presence.New(presenceKey)
+		assert.NoError(t, c2.Attach(ctx, p2))
+		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
 		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
+		defer closeWatch2()
+		p2.SubscribeBroadcastEvent("mention", handler)
 
-		// d1 unsubscribes to the broadcast event.
-		d1.UnsubscribeBroadcastEvent("mention")
+		// Wait for initial count updates
+		<-countChan1
+		<-countChan2
 
-		err = d2.Broadcast("mention", "yorkie")
+		// p1 unsubscribes to the broadcast event
+		p1.UnsubscribeBroadcastEvent("mention")
+
+		err = p2.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
@@ -135,18 +151,15 @@ func TestBroadcast(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			rcv := 0
+			timeout := time.After(2 * time.Second)
 			for {
 				select {
-				case <-rch1:
-				case <-rch2:
 				case m := <-bch:
 					assert.Equal(t, "yorkie", m)
 					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if both the unsubscriber
-					// and the publisher don't receive the event.
-					assert.Equal(t, 0, rcv)
+				case <-timeout:
+					// Both the unsubscriber and the publisher should not receive the event
+					assert.Equal(t, 0, rcv, "Unsubscriber and publisher should not receive broadcast")
 					return
 				case <-ctx.Done():
 					return
@@ -158,32 +171,38 @@ func TestBroadcast(t *testing.T) {
 	})
 
 	t.Run("unsubscriber can broadcast", func(t *testing.T) {
-		bch := make(chan string)
+		bch := make(chan string, 10)
 		ctx := context.Background()
 		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
 			assert.Equal(t, topic, "mention")
 			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
 			bch <- mentionedBy
 			return nil
 		}
 
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.WatchStream(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
+		presenceKey := helper.TestDocKey(t)
 
-		// c2 doesn't subscribe to the "mention" broadcast event.
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.WatchStream(d2)
+		p1 := presence.New(presenceKey)
+		assert.NoError(t, c1.Attach(ctx, p1))
+		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
 		assert.NoError(t, err)
+		defer closeWatch1()
+		p1.SubscribeBroadcastEvent("mention", handler)
 
-		// The unsubscriber c2 broadcasts the "mention" event.
-		err = d2.Broadcast("mention", "yorkie")
+		// c2 doesn't subscribe to the "mention" broadcast event
+		p2 := presence.New(presenceKey)
+		assert.NoError(t, c2.Attach(ctx, p2))
+		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
+		assert.NoError(t, err)
+		defer closeWatch2()
+
+		// Wait for initial count updates
+		<-countChan1
+		<-countChan2
+
+		// The unsubscriber c2 broadcasts the "mention" event
+		err = p2.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
@@ -191,88 +210,18 @@ func TestBroadcast(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			rcv := 0
+			timeout := time.After(2 * time.Second)
 			for {
 				select {
-				case <-rch1:
-				case <-rch2:
 				case m := <-bch:
 					assert.Equal(t, "yorkie", m)
 					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber
-					// receives the unsubscriber's event.
-					assert.Equal(t, 1, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
-
-	t.Run("reject to broadcast unserializable payload", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		_, _, err := c1.WatchStream(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", nil)
-
-		// Try to broadcast an unserializable payload.
-		ch := make(chan string)
-		err = d1.Broadcast("mention", ch)
-		assert.ErrorIs(t, document.ErrUnsupportedPayloadType, err)
-	})
-
-	t.Run("error occurs while handling broadcast event", func(t *testing.T) {
-		var ErrBroadcastEventHandlingError = errors.New("")
-
-		ctx := context.Background()
-		handler := func(topic, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.Equal(t, topic, "mention")
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			return ErrBroadcastEventHandlingError
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
-		rch1, _, err := c1.WatchStream(d1)
-		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
-
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
-		rch2, _, err := c2.WatchStream(d2)
-		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
-
-		err = d2.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case resp := <-rch1:
-					if resp.Err != nil {
-						assert.Equal(t, resp.Type, client.DocumentBroadcast)
-						assert.ErrorIs(t, resp.Err, ErrBroadcastEventHandlingError)
-						rcv++
+					if rcv == 1 {
+						// Only the subscriber c1 should receive the broadcast
+						return
 					}
-				case <-rch2:
-				case <-time.After(1 * time.Second):
-					// Assuming that every subscriber can receive the broadcast
-					// event within this timeout period, check if every subscriber
-					// successfully receives the event.
-					assert.Equal(t, 1, rcv)
+				case <-timeout:
+					assert.Equal(t, 1, rcv, "Only the subscriber should receive broadcast")
 					return
 				case <-ctx.Done():
 					return

@@ -18,7 +18,6 @@
 package document
 
 import (
-	gojson "encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -37,9 +36,6 @@ import (
 )
 
 var (
-	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
-	ErrUnsupportedPayloadType = errors.InvalidArgument("unsupported payload type")
-
 	// ErrDocumentSizeExceedsLimit is returned when the document size exceeds the limit.
 	ErrDocumentSizeExceedsLimit = errors.ResourceExhausted("document size exceeds the limit")
 
@@ -81,12 +77,6 @@ type Presence = presence.Presence
 
 // PresenceData represents the data of a client's presence.
 type PresenceData = presence.Data
-
-// BroadcastRequest represents a broadcast request that will be delivered to the client.
-type BroadcastRequest struct {
-	Topic   string
-	Payload []byte
-}
 
 // Option configures Options.
 type Option func(*Options)
@@ -139,18 +129,6 @@ type Document struct {
 
 	// events is the channel to send events that occurred in the document.
 	events chan DocEvent
-
-	// broadcastRequests is the send-only channel to send broadcast requests.
-	broadcastRequests chan BroadcastRequest
-
-	// broadcastResponses is the receive-only channel to receive broadcast responses.
-	broadcastResponses chan error
-
-	// broadcastEventHandlers is a map of registered event handlers for events.
-	broadcastEventHandlers map[string]func(
-		topic, publisher string,
-		payload []byte,
-	) error
 }
 
 // New creates a new instance of Document.
@@ -161,14 +139,9 @@ func New(key key.Key, opts ...Option) *Document {
 	}
 
 	return &Document{
-		doc:                NewInternalDocument(key),
-		options:            options,
-		events:             make(chan DocEvent, 1),
-		broadcastRequests:  make(chan BroadcastRequest, 1),
-		broadcastResponses: make(chan error, 1),
-		broadcastEventHandlers: make(map[string]func(
-			topic, publisher string,
-			payload []byte) error),
+		doc:     NewInternalDocument(key),
+		options: options,
+		events:  make(chan DocEvent, 1),
 	}
 }
 
@@ -494,56 +467,6 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 // Events returns the events of this document.
 func (d *Document) Events() <-chan DocEvent {
 	return d.events
-}
-
-// BroadcastRequests returns the broadcast requests of this document.
-func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
-	return d.broadcastRequests
-}
-
-// BroadcastResponses returns the broadcast responses of this document.
-func (d *Document) BroadcastResponses() chan error {
-	return d.broadcastResponses
-}
-
-// Broadcast encodes the given payload and sends a Broadcast request.
-func (d *Document) Broadcast(topic string, payload any) error {
-	marshaled, err := gojson.Marshal(payload)
-	if err != nil {
-		return ErrUnsupportedPayloadType
-	}
-
-	d.broadcastRequests <- BroadcastRequest{
-		Topic:   topic,
-		Payload: marshaled,
-	}
-	return <-d.broadcastResponses
-}
-
-// SubscribeBroadcastEvent subscribes to the given topic and registers
-// an event handler.
-func (d *Document) SubscribeBroadcastEvent(
-	topic string,
-	handler func(topic, publisher string, payload []byte) error,
-) {
-	d.broadcastEventHandlers[topic] = handler
-}
-
-// UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
-// the event handler.
-func (d *Document) UnsubscribeBroadcastEvent(
-	topic string,
-) {
-	delete(d.broadcastEventHandlers, topic)
-}
-
-// BroadcastEventHandlers returns the registered handlers for broadcast events.
-func (d *Document) BroadcastEventHandlers() map[string]func(
-	topic string,
-	publisher string,
-	payload []byte,
-) error {
-	return d.broadcastEventHandlers
 }
 
 func (d *Document) setInternalDoc(internalDoc *InternalDocument) {

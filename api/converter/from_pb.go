@@ -244,8 +244,6 @@ func FromEventType(pbDocEventType api.DocEventType) (events.DocEventType, error)
 		return events.DocWatched, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED:
 		return events.DocUnwatched, nil
-	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST:
-		return events.DocBroadcast, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

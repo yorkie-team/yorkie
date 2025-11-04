@@ -49,10 +49,6 @@ const (
 	// DocUnwatched is an event that occurs when document is
 	// unwatched by other clients.
 	DocUnwatched DocEventType = "document-unwatched"
-
-	// DocBroadcast is an event that occurs when a payload is broadcasted
-	// on a specific topic.
-	DocBroadcast DocEventType = "document-broadcast"
 )
 
 // WebhookType returns a matched event webhook type.
@@ -91,14 +87,38 @@ type DocEvent struct {
 	Body DocEventBody
 }
 
-// PresenceEvent represents a presence count change event.
+// PresenceEventType represents the type of the presence event.
+type PresenceEventType string
+
+const (
+	// PresenceCountChanged is an event that occurs when presence count changes.
+	PresenceCountChanged PresenceEventType = "presence-count-changed"
+
+	// PresenceBroadcast is an event that occurs when a payload is broadcasted
+	// on a specific topic in a presence.
+	PresenceBroadcast PresenceEventType = "presence-broadcast"
+)
+
+// PresenceEvent represents a presence event (count change or broadcast).
 type PresenceEvent struct {
+	// Type is the type of the presence event.
+	Type PresenceEventType
+
 	// Key is the key of the presence that the event occurred.
 	Key types.PresenceRefKey
 
-	// Seq is the sequence number of the presence event.
+	// Seq is the sequence number of the presence event (for count changes).
 	Seq int64
 
-	// Count is the current count of the presence.
+	// Count is the current count of the presence (for count changes).
 	Count int64
+
+	// Publisher is the actor who published the broadcast (for broadcasts).
+	Publisher time.ActorID
+
+	// Topic is the topic of the broadcast (for broadcasts).
+	Topic string
+
+	// Payload is the payload of the broadcast (for broadcasts).
+	Payload []byte
 }
