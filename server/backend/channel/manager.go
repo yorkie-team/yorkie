@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package presence provides presence management for real-time user tracking.
-package presence
+// Package channel provides channel management implementation.
+package channel
 
 import (
 	"context"
@@ -36,29 +36,29 @@ var (
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
 )
 
-// PubSub is an interface for publishing presence events.
+// PubSub is an interface for publishing channel events.
 type PubSub interface {
-	PublishPresence(ctx context.Context, event events.PresenceEvent)
+	PublishChannel(ctx context.Context, event events.ChannelEvent)
 }
 
 // Session represents a single session.
 type Session struct {
-	ID        types.ID             // Unique session ID
-	Key       types.PresenceRefKey // Reference to the presence counter
-	Actor     time.ActorID         // Client who created this presence
-	UpdatedAt gotime.Time          // Last activity time for TTL calculation
+	ID        types.ID            // Unique session ID
+	Key       types.ChannelRefKey // Reference to the channel
+	Actor     time.ActorID        // Client who created this session
+	UpdatedAt gotime.Time         // Last activity time for TTL calculation
 }
 
-// Manager manages presence counters for real-time user tracking.
+// Manager manages channel.
 type Manager struct {
-	// presences maps key to a map of unique presence IDs.
-	presences *cmap.Map[types.PresenceRefKey, *cmap.Map[types.ID, *Session]]
+	// channels maps channel keys to their active sessions.
+	channels *cmap.Map[types.ChannelRefKey, *cmap.Map[types.ID, *Session]]
 
-	// clientToPresence maps clientID to their presence IDs for quick lookup.
-	clientToPresence *cmap.Map[time.ActorID, *cmap.Map[types.PresenceRefKey, types.ID]]
+	// clientToSession maps client IDs to their associated channel keys and session IDs.
+	clientToSession *cmap.Map[time.ActorID, *cmap.Map[types.ChannelRefKey, types.ID]]
 
 	// sessionIDToKey is a reverse index for O(1) Detach lookup
-	sessionIDToKey *cmap.Map[types.ID, types.PresenceRefKey]
+	sessionIDToKey *cmap.Map[types.ID, types.ChannelRefKey]
 
 	// pubsub is used to publish presence events
 	pubsub PubSub
@@ -90,9 +90,9 @@ func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Durat
 	}
 
 	return &Manager{
-		presences:        cmap.New[types.PresenceRefKey, *cmap.Map[types.ID, *Session]](),
-		clientToPresence: cmap.New[time.ActorID, *cmap.Map[types.PresenceRefKey, types.ID]](),
-		sessionIDToKey:   cmap.New[types.ID, types.PresenceRefKey](),
+		channels:        cmap.New[types.ChannelRefKey, *cmap.Map[types.ID, *Session]](),
+		clientToSession: cmap.New[time.ActorID, *cmap.Map[types.ChannelRefKey, types.ID]](),
+		sessionIDToKey:  cmap.New[types.ID, types.ChannelRefKey](),
 
 		pubsub: pubsub,
 
@@ -141,20 +141,20 @@ func (m *Manager) nextSeq() int64 {
 	return m.seqCounter.Add(1)
 }
 
-// Attach adds a client to a presence counter and returns the unique presence ID.
+// Attach adds a client to a channel and returns the unique presence ID.
 func (m *Manager) Attach(
 	ctx context.Context,
-	key types.PresenceRefKey,
+	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
 	// Check if client is already attached to this presence
-	if clientPresenceMap, ok := m.clientToPresence.Get(clientID); ok {
-		if presenceID, found := clientPresenceMap.Get(key); found {
-			return presenceID, m.Count(key), nil
+	if sessionMap, ok := m.clientToSession.Get(clientID); ok {
+		if sessionID, found := sessionMap.Get(key); found {
+			return sessionID, m.Count(key), nil
 		}
 	}
 
-	sessionMap := m.presences.Upsert(
+	sessionMap := m.channels.Upsert(
 		key,
 		func(val *cmap.Map[types.ID, *Session], exists bool) *cmap.Map[types.ID, *Session] {
 			if !exists {
@@ -176,24 +176,24 @@ func (m *Manager) Attach(
 	// Add reverse index for O(1) detach lookup
 	m.sessionIDToKey.Set(id, key)
 
-	// Get or create client presence map
-	clientPresenceMap := m.clientToPresence.Upsert(
+	// Get or create client to session map
+	clientSessionMap := m.clientToSession.Upsert(
 		clientID,
-		func(val *cmap.Map[types.PresenceRefKey, types.ID], exists bool) *cmap.Map[types.PresenceRefKey, types.ID] {
+		func(val *cmap.Map[types.ChannelRefKey, types.ID], exists bool) *cmap.Map[types.ChannelRefKey, types.ID] {
 			if !exists {
-				val = cmap.New[types.PresenceRefKey, types.ID]()
+				val = cmap.New[types.ChannelRefKey, types.ID]()
 			}
 
 			return val
 		},
 	)
-	clientPresenceMap.Set(key, id)
+	clientSessionMap.Set(key, id)
 
 	// Get new count immediately after adding to minimize race window
 	newCount := int64(sessionMap.Len())
 
 	// Publish event to PubSub
-	m.pubsub.PublishPresence(ctx, events.PresenceEvent{
+	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
 		Key:   key,
 		Count: newCount,
 		Seq:   m.nextSeq(),
@@ -202,7 +202,7 @@ func (m *Manager) Attach(
 	return id, newCount, nil
 }
 
-// Detach removes a client from a presence counter using presence ID.
+// Detach removes a client from a channel using presence ID.
 func (m *Manager) Detach(
 	ctx context.Context,
 	id types.ID,
@@ -212,7 +212,7 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	sessionMap, ok := m.presences.Get(key)
+	sessionMap, ok := m.channels.Get(key)
 	if !ok {
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
@@ -228,19 +228,19 @@ func (m *Manager) Detach(
 
 	m.sessionIDToKey.Delete(id)
 
-	if clientPresenceMap, ok := m.clientToPresence.Get(session.Actor); ok {
-		clientPresenceMap.Delete(key)
+	if clientSessionMap, ok := m.clientToSession.Get(session.Actor); ok {
+		clientSessionMap.Delete(key)
 
-		if clientPresenceMap.Len() == 0 {
-			m.clientToPresence.Delete(session.Actor)
+		if clientSessionMap.Len() == 0 {
+			m.clientToSession.Delete(session.Actor)
 		}
 	}
 
 	if newCount == 0 {
-		m.presences.Delete(key)
+		m.channels.Delete(key)
 	}
 
-	m.pubsub.PublishPresence(ctx, events.PresenceEvent{
+	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
 		Key:   key,
 		Count: newCount,
 		Seq:   m.nextSeq(),
@@ -259,7 +259,7 @@ func (m *Manager) Refresh(
 		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
 	}
 
-	sessionMap, ok := m.presences.Get(key)
+	sessionMap, ok := m.channels.Get(key)
 	if !ok {
 		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
 	}
@@ -281,8 +281,8 @@ func (m *Manager) Refresh(
 
 // Count returns the current count for a presence key.
 // This is a lock-free operation by directly querying the presence map length.
-func (m *Manager) Count(key types.PresenceRefKey) int64 {
-	if presenceMap, ok := m.presences.Get(key); ok {
+func (m *Manager) Count(key types.ChannelRefKey) int64 {
+	if presenceMap, ok := m.channels.Get(key); ok {
 		return int64(presenceMap.Len())
 	}
 
@@ -295,7 +295,7 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	now := gotime.Now()
 	cleanedCount := 0
 
-	for _, sessionMap := range m.presences.Values() {
+	for _, sessionMap := range m.channels.Values() {
 		expiredIDs := []types.ID{}
 
 		// Check if session has expired (UpdatedAt + TTL < now)
@@ -322,12 +322,12 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 // Stats returns statistics about the presence manager.
 func (m *Manager) Stats() map[string]int {
 	totalSessions := 0
-	for _, presenceMap := range m.presences.Values() {
+	for _, presenceMap := range m.channels.Values() {
 		totalSessions += presenceMap.Len()
 	}
 
 	return map[string]int{
-		"total_presences": m.presences.Len(),
+		"total_presences": m.channels.Len(),
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}

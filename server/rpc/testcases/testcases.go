@@ -106,7 +106,7 @@ func RunAttachAndDetachDocumentTest(
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
@@ -237,12 +237,12 @@ func RunAttachAndDetachRemovedDocumentTest(
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
 	packWithRemoveRequest := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		IsRemoved:   true,
 	}
@@ -306,13 +306,13 @@ func RunPushPullChangeTest(
 	testClient v1connect.YorkieServiceClient,
 ) {
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String()}))
 	assert.NoError(t, err)
 
 	actorID, _ := hex.DecodeString(activateResp.Msg.ClientId)
@@ -322,7 +322,7 @@ func RunPushPullChangeTest(
 		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId: activateResp.Msg.ClientId,
 			ChangePack: &api.ChangePack{
-				DocumentKey: helper.TestDocKey(t).String(),
+				DocumentKey: helper.TestKey(t).String(),
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
@@ -343,7 +343,7 @@ func RunPushPullChangeTest(
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
-				DocumentKey: helper.TestDocKey(t).String(),
+				DocumentKey: helper.TestKey(t).String(),
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
@@ -364,7 +364,7 @@ func RunPushPullChangeTest(
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
-				DocumentKey: helper.TestDocKey(t).String(),
+				DocumentKey: helper.TestKey(t).String(),
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
@@ -427,19 +427,19 @@ func RunPushPullChangeOnRemovedDocumentTest(
 	testClient v1connect.YorkieServiceClient,
 ) {
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
 	packWithRemoveRequest := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		IsRemoved:   true,
 	}
 
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String()}))
 	assert.NoError(t, err)
 
 	resPack, err := testClient.AttachDocument(
@@ -485,12 +485,12 @@ func RunRemoveDocumentTest(
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
 	packWithRemoveRequest := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		IsRemoved:   true,
 	}
@@ -538,12 +538,12 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
 	packWithRemoveRequest := &api.ChangePack{
-		DocumentKey: helper.TestDocKey(t).String(),
+		DocumentKey: helper.TestKey(t).String(),
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		IsRemoved:   true,
 	}
@@ -607,7 +607,7 @@ func RunWatchDocumentTest(
 		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 	assert.NoError(t, err)
 
-	docKey := helper.TestDocKey(t).String()
+	docKey := helper.TestKey(t).String()
 
 	packWithNoChanges := &api.ChangePack{
 		DocumentKey: docKey,
@@ -714,7 +714,7 @@ func RunMaxSubscribersPerDocumentConcurrencyTest(
 	}
 
 	// 04. client attach with document
-	docKey := helper.TestDocKey(t).String()
+	docKey := helper.TestKey(t).String()
 	var successCount atomic.Int32
 	var wg sync.WaitGroup
 	for _, id := range clientIds {
@@ -819,7 +819,7 @@ func RunMaxAttachmentsPerDocumentConcurrencyTest(
 	}
 
 	// 04. client attach with document
-	docKey := helper.TestDocKey(t).String()
+	docKey := helper.TestKey(t).String()
 	var successCount, failCount atomic.Int32
 	var wg sync.WaitGroup
 	for _, id := range clientIds {
@@ -1235,7 +1235,7 @@ func RunAdminGetDocumentTest(
 	testAdminClient v1connect.AdminServiceClient,
 	testAdminAuthInterceptor *admin.AuthInterceptor,
 ) {
-	testDocumentKey := helper.TestDocKey(t).String()
+	testDocumentKey := helper.TestKey(t).String()
 
 	resp, err := testAdminClient.LogIn(
 		context.Background(),
@@ -1304,7 +1304,7 @@ func RunAdminGetDocumentsTest(
 	testAdminClient v1connect.AdminServiceClient,
 	testAdminAuthInterceptor *admin.AuthInterceptor,
 ) {
-	testDocumentKey := helper.TestDocKey(t).String()
+	testDocumentKey := helper.TestKey(t).String()
 
 	resp, err := testAdminClient.LogIn(
 		context.Background(),
@@ -1378,7 +1378,7 @@ func RunAdminListChangesTest(
 	testAdminClient v1connect.AdminServiceClient,
 	testAdminAuthInterceptor *admin.AuthInterceptor,
 ) {
-	testDocumentKey := helper.TestDocKey(t).String()
+	testDocumentKey := helper.TestKey(t).String()
 
 	resp, err := testAdminClient.LogIn(
 		context.Background(),
@@ -1574,7 +1574,7 @@ func RunDeactivateClientWithAttachingDocumentTest(
 		ClientID:  types.IDFromActorID(actorID),
 	}
 
-	docKey := helper.TestDocKey(t)
+	docKey := helper.TestKey(t)
 	docInfo, err := be.DB.FindOrCreateDocInfo(ctx, refKey, docKey)
 	assert.NoError(t, err)
 

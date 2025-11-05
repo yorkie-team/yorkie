@@ -29,8 +29,8 @@ const (
 	// TypeDocument represents a document resource.
 	TypeDocument ResourceType = "document"
 
-	// TypePresence represents a presence resource.
-	TypePresence ResourceType = "presence"
+	// TypeChannel represents a channel resource.
+	TypeChannel ResourceType = "channel"
 )
 
 // StatusType represents the status of the attachable resource.

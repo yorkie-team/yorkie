@@ -28,40 +28,40 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// PresenceSubscriptions is a map of PresenceSubscriptions.
-type PresenceSubscriptions struct {
-	refKey      types.PresenceRefKey
-	internalMap *cmap.Map[string, *PresenceSubscription]
-	publisher   *PresencePublisher
+// ChannelSubscriptions is a map of ChannelSubscriptions.
+type ChannelSubscriptions struct {
+	refKey      types.ChannelRefKey
+	internalMap *cmap.Map[string, *ChannelSubscription]
+	publisher   *ChannelPublisher
 }
 
-func newPresenceSubscriptions(refKey types.PresenceRefKey) *PresenceSubscriptions {
-	s := &PresenceSubscriptions{
+func newChannelSubscriptions(refKey types.ChannelRefKey) *ChannelSubscriptions {
+	s := &ChannelSubscriptions{
 		refKey:      refKey,
-		internalMap: cmap.New[string, *PresenceSubscription](),
+		internalMap: cmap.New[string, *ChannelSubscription](),
 	}
-	s.publisher = NewPresenceBatchPublisher(s, 100*gotime.Millisecond)
+	s.publisher = NewChannelBatchPublisher(s, 100*gotime.Millisecond)
 	return s
 }
 
 // Set adds the given subscription.
-func (s *PresenceSubscriptions) Set(sub *PresenceSubscription) {
+func (s *ChannelSubscriptions) Set(sub *ChannelSubscription) {
 	s.internalMap.Set(sub.ID(), sub)
 }
 
 // Values returns the values of these subscriptions.
-func (s *PresenceSubscriptions) Values() []*PresenceSubscription {
+func (s *ChannelSubscriptions) Values() []*ChannelSubscription {
 	return s.internalMap.Values()
 }
 
 // Publish publishes the given event.
-func (s *PresenceSubscriptions) Publish(event events.PresenceEvent) {
+func (s *ChannelSubscriptions) Publish(event events.ChannelEvent) {
 	s.publisher.Publish(event)
 }
 
 // Delete deletes the subscription of the given id.
-func (s *PresenceSubscriptions) Delete(id string) {
-	s.internalMap.Delete(id, func(sub *PresenceSubscription, exists bool) bool {
+func (s *ChannelSubscriptions) Delete(id string) {
+	s.internalMap.Delete(id, func(sub *ChannelSubscription, exists bool) bool {
 		if exists {
 			sub.Close()
 		}
@@ -70,51 +70,51 @@ func (s *PresenceSubscriptions) Delete(id string) {
 }
 
 // Len returns the length of these subscriptions.
-func (s *PresenceSubscriptions) Len() int {
+func (s *ChannelSubscriptions) Len() int {
 	return s.internalMap.Len()
 }
 
 // Close closes the subscriptions.
-func (s *PresenceSubscriptions) Close() {
+func (s *ChannelSubscriptions) Close() {
 	s.publisher.Close()
 }
 
-// PresenceSubscription represents a subscription of a subscriber to presence events.
-type PresenceSubscription struct {
+// ChannelSubscription represents a subscription of a subscriber to presence events.
+type ChannelSubscription struct {
 	id         string
 	subscriber time.ActorID
 	mu         sync.Mutex
 	closed     bool
-	events     chan events.PresenceEvent
+	events     chan events.ChannelEvent
 }
 
-// NewPresenceSubscription creates a new instance of PresenceSubscription.
-func NewPresenceSubscription(subscriber time.ActorID) *PresenceSubscription {
-	return &PresenceSubscription{
+// NewChannelSubscription creates a new instance of ChannelSubscription.
+func NewChannelSubscription(subscriber time.ActorID) *ChannelSubscription {
+	return &ChannelSubscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
-		events:     make(chan events.PresenceEvent, 10),
+		events:     make(chan events.ChannelEvent, 10),
 		closed:     false,
 	}
 }
 
 // ID returns the id of this subscription.
-func (s *PresenceSubscription) ID() string {
+func (s *ChannelSubscription) ID() string {
 	return s.id
 }
 
 // Events returns the PresenceEvent channel of this subscription.
-func (s *PresenceSubscription) Events() chan events.PresenceEvent {
+func (s *ChannelSubscription) Events() chan events.ChannelEvent {
 	return s.events
 }
 
 // Subscriber returns the subscriber of this subscription.
-func (s *PresenceSubscription) Subscriber() time.ActorID {
+func (s *ChannelSubscription) Subscriber() time.ActorID {
 	return s.subscriber
 }
 
 // Close closes all resources of this PresenceSubscription.
-func (s *PresenceSubscription) Close() {
+func (s *ChannelSubscription) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -125,7 +125,7 @@ func (s *PresenceSubscription) Close() {
 }
 
 // Publish publishes the given event to the subscriber.
-func (s *PresenceSubscription) Publish(event events.PresenceEvent) bool {
+func (s *ChannelSubscription) Publish(event events.ChannelEvent) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

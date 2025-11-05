@@ -44,15 +44,15 @@ func (r DocRefKey) String() string {
 	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
 }
 
-// PresenceRefKey represents an identifier used to reference a presence counter.
-type PresenceRefKey struct {
-	ProjectID   ID
-	PresenceKey key.Key
+// ChannelRefKey represents an identifier used to reference a channel.
+type ChannelRefKey struct {
+	ProjectID  ID
+	ChannelKey key.Key
 }
 
-// String returns the string representation of the given PresenceRefKey.
-func (r PresenceRefKey) String() string {
-	return fmt.Sprintf("Presence (%s.%s)", r.ProjectID, r.PresenceKey)
+// String returns the string representation of the given ChannelRefKey.
+func (r ChannelRefKey) String() string {
+	return fmt.Sprintf("Channel (%s.%s)", r.ProjectID, r.ChannelKey)
 }
 
 // EventRefKey represents an identifier used to reference an event.

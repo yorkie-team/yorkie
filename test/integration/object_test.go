@@ -38,11 +38,11 @@ func TestObject(t *testing.T) {
 	t.Run("causal object.set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -71,7 +71,7 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -84,7 +84,7 @@ func TestObject(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -108,11 +108,11 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object.set test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

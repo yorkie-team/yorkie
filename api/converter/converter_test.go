@@ -270,7 +270,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("properly encode and decode tree test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "r",
@@ -313,7 +313,7 @@ func TestConverter(t *testing.T) {
 		}
 
 		// Set initial value "a"
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("o").SetString("1", "a")
 			return nil

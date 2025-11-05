@@ -177,7 +177,7 @@ func RunFindDocInfoTest(
 		assert.NoError(t, err)
 
 		// 01. Create a document
-		docKey := helper.TestDocKey(t)
+		docKey := helper.TestKey(t)
 		info, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, info.Key)
@@ -1384,7 +1384,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
+		docKey := helper.TestKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
@@ -1403,7 +1403,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
+		docKey := helper.TestKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
@@ -1454,7 +1454,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 	t.Run("set updated_at in docInfo test", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
+		docKey := helper.TestKey(t)
 
 		// 01. Create a client and a document then attach the document to the client.
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name(), map[string]string{"userID": t.Name()})
@@ -1676,7 +1676,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.NoError(t, err)
 		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
 		assert.NoError(t, err)
-		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestDocKey(t))
+		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestKey(t))
 		assert.NoError(t, err)
 
 		// 01. Check if document is attached without attaching
@@ -1729,9 +1729,9 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		// 00. Create a client and two documents
 		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1", map[string]string{"userID": t.Name() + "1"})
 		assert.NoError(t, err)
-		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestDocKey(t)+"1")
+		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestKey(t)+"1")
 		assert.NoError(t, err)
-		d2, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestDocKey(t)+"2")
+		d2, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestKey(t)+"2")
 		assert.NoError(t, err)
 
 		// 01. Check if documents are attached after attaching
@@ -1775,7 +1775,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.NoError(t, err)
 		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2", map[string]string{"userID": t.Name() + "2"})
 		assert.NoError(t, err)
-		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestDocKey(t))
+		d1, err := db.FindOrCreateDocInfo(ctx, c1.RefKey(), helper.TestKey(t))
 		assert.NoError(t, err)
 
 		// 01. Check if document is attached without attaching

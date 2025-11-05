@@ -200,7 +200,7 @@ func TestPacks(t *testing.T) {
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestKey(t).String()}))
 		assert.NoError(t, err)
 
 		clientID, _ := hex.DecodeString(activateResp.Msg.ClientId)
@@ -209,7 +209,7 @@ func TestPacks(t *testing.T) {
 			connect.NewRequest(&api.AttachDocumentRequest{
 				ClientId: activateResp.Msg.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: helper.TestDocKey(t).String(),
+					DocumentKey: helper.TestKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 					Changes:     []*api.Change{{Id: &api.ChangeID{ClientSeq: 1, Lamport: 1, ActorId: clientID}}},
 				},
@@ -241,7 +241,7 @@ func TestPacks(t *testing.T) {
 
 		// 1. Create a ChangePack with a single Change
 		pack, err := converter.FromChangePack(&api.ChangePack{
-			DocumentKey: helper.TestDocKey(t).String(),
+			DocumentKey: helper.TestKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 			Changes: []*api.Change{
 				{Id: &api.ChangeID{ClientSeq: 2, Lamport: 2, ActorId: clientID}},

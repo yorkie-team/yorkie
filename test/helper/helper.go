@@ -374,8 +374,8 @@ func TestServerWithSnapshotCfg(snapshotInterval int64, snapshotThreshold int64) 
 	return y
 }
 
-// TestDocKey returns a new instance of document key for testing.
-func TestDocKey(t testing.TB, prefix ...int) key.Key {
+// TestKey returns a new instance of resource key for testing.
+func TestKey(t testing.TB, prefix ...int) key.Key {
 	name := t.Name()
 
 	if len(prefix) > 0 {
@@ -641,7 +641,7 @@ func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (
 
 	var docs []*document.Document
 	for i := range count {
-		doc := document.New(TestDocKey(t, i))
+		doc := document.New(TestKey(t, i))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		docs = append(docs, doc)
 	}

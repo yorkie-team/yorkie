@@ -138,7 +138,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 	})
 
@@ -244,7 +244,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err = cli.Attach(ctx, doc, client.WithRealtimeSync())
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
@@ -417,7 +417,7 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 	})
@@ -477,7 +477,7 @@ func TestAuthWebhookCache(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 

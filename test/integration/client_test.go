@@ -128,11 +128,11 @@ func TestClient(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. c1, c2, c3 attach to the same document.
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
-		d3 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3))
 
 		// 02. c1, c2 sync with push-pull mode.
@@ -182,7 +182,7 @@ func TestClient(t *testing.T) {
 
 		// 01. cli attach to the same document having counter.
 		ctx := context.Background()
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		// 02. cli update the document with creating a counter
@@ -228,11 +228,11 @@ func TestClient(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. c1 attaches document with realtime sync
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 
 		// 02. c2 attaches the same document and gets watch stream
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
 		stream, _, err := c2.WatchStream(d2)
 		assert.NoError(t, err)

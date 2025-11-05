@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package presence_test
+package channel_test
 
 import (
 	"context"
@@ -26,15 +26,15 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	pkgtime "github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/presence"
+	"github.com/yorkie-team/yorkie/server/backend/channel"
 )
 
 // mockPubSub is a mock implementation of PubSub for testing
 type mockPubSub struct {
-	events []events.PresenceEvent
+	events []events.ChannelEvent
 }
 
-func (m *mockPubSub) PublishPresence(ctx context.Context, event events.PresenceEvent) {
+func (m *mockPubSub) PublishChannel(ctx context.Context, event events.ChannelEvent) {
 	m.events = append(m.events, event)
 }
 
@@ -44,16 +44,16 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Create a presence
-		refKey := types.PresenceRefKey{
-			ProjectID:   types.NewID(),
-			PresenceKey: "test-room",
+		refKey := types.ChannelRefKey{
+			ProjectID:  types.NewID(),
+			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
 
-		presenceID, count, err := manager.Attach(ctx, refKey, clientID)
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
@@ -61,7 +61,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Refresh the presence
-		err = manager.Refresh(ctx, presenceID)
+		err = manager.Refresh(ctx, sessionID)
 		assert.NoError(t, err)
 
 		// Presence should still exist
@@ -73,12 +73,12 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 200 * time.Millisecond // Very short TTL for testing
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Create a presence
-		refKey := types.PresenceRefKey{
-			ProjectID:   types.NewID(),
-			PresenceKey: "test-room",
+		refKey := types.ChannelRefKey{
+			ProjectID:  types.NewID(),
+			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
 
@@ -103,16 +103,16 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 300 * time.Millisecond
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Create a presence
-		refKey := types.PresenceRefKey{
-			ProjectID:   types.NewID(),
-			PresenceKey: "test-room",
+		refKey := types.ChannelRefKey{
+			ProjectID:  types.NewID(),
+			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
 
-		presenceID, count, err := manager.Attach(ctx, refKey, clientID)
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
@@ -120,7 +120,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 
 		// Refresh to extend TTL
-		err = manager.Refresh(ctx, presenceID)
+		err = manager.Refresh(ctx, sessionID)
 		assert.NoError(t, err)
 
 		// Wait another half TTL (total 300ms, but refreshed at 150ms)
@@ -140,12 +140,12 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 300 * time.Millisecond
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Create two presences
-		refKey := types.PresenceRefKey{
-			ProjectID:   types.NewID(),
-			PresenceKey: "test-room",
+		refKey := types.ChannelRefKey{
+			ProjectID:  types.NewID(),
+			ChannelKey: "test-room",
 		}
 		clientID1 := pkgtime.InitialActorID
 		clientID2, err := pkgtime.ActorIDFromHex("000000000000000000000001")
@@ -157,12 +157,12 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		// Wait a bit before creating second presence
 		time.Sleep(200 * time.Millisecond)
 
-		presenceID2, count, err := manager.Attach(ctx, refKey, clientID2)
+		sessionID2, count, err := manager.Attach(ctx, refKey, clientID2)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), count)
 
 		// Refresh only the second presence
-		err = manager.Refresh(ctx, presenceID2)
+		err = manager.Refresh(ctx, sessionID2)
 		assert.NoError(t, err)
 
 		// Wait for first presence to expire
@@ -182,7 +182,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Try to refresh a non-existent presence
 		nonExistentID := types.NewID()
@@ -196,7 +196,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		pubsub := &mockPubSub{}
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
-		manager := presence.NewManager(pubsub, ttl, cleanupInterval)
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 
 		// Run cleanup on empty manager
 		cleanedCount, err := manager.CleanupExpired(ctx)
@@ -206,7 +206,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 
 	t.Run("default TTL is applied when zero", func(t *testing.T) {
 		pubsub := &mockPubSub{}
-		manager := presence.NewManager(pubsub, 0, 0)
+		manager := channel.NewManager(pubsub, 0, 0)
 
 		// Manager should have default TTL (60s)
 		// We can't directly check the internal field, but we can verify it works

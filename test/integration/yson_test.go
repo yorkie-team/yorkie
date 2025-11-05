@@ -39,8 +39,8 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with yson test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
@@ -96,8 +96,8 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with yson sync test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
@@ -128,7 +128,7 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with json literal array type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -152,7 +152,7 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with yson counter type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -177,7 +177,7 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with yson text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -198,7 +198,7 @@ func TestObjectWithYSON(t *testing.T) {
 
 	t.Run("object.set with yson primitive type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {

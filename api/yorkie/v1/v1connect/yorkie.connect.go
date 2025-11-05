@@ -69,18 +69,18 @@ const (
 	// YorkieServiceWatchDocumentProcedure is the fully-qualified name of the YorkieService's
 	// WatchDocument RPC.
 	YorkieServiceWatchDocumentProcedure = "/yorkie.v1.YorkieService/WatchDocument"
-	// YorkieServiceAttachPresenceProcedure is the fully-qualified name of the YorkieService's
-	// AttachPresence RPC.
-	YorkieServiceAttachPresenceProcedure = "/yorkie.v1.YorkieService/AttachPresence"
-	// YorkieServiceDetachPresenceProcedure is the fully-qualified name of the YorkieService's
-	// DetachPresence RPC.
-	YorkieServiceDetachPresenceProcedure = "/yorkie.v1.YorkieService/DetachPresence"
-	// YorkieServiceRefreshPresenceProcedure is the fully-qualified name of the YorkieService's
-	// RefreshPresence RPC.
-	YorkieServiceRefreshPresenceProcedure = "/yorkie.v1.YorkieService/RefreshPresence"
-	// YorkieServiceWatchPresenceProcedure is the fully-qualified name of the YorkieService's
-	// WatchPresence RPC.
-	YorkieServiceWatchPresenceProcedure = "/yorkie.v1.YorkieService/WatchPresence"
+	// YorkieServiceAttachChannelProcedure is the fully-qualified name of the YorkieService's
+	// AttachChannel RPC.
+	YorkieServiceAttachChannelProcedure = "/yorkie.v1.YorkieService/AttachChannel"
+	// YorkieServiceDetachChannelProcedure is the fully-qualified name of the YorkieService's
+	// DetachChannel RPC.
+	YorkieServiceDetachChannelProcedure = "/yorkie.v1.YorkieService/DetachChannel"
+	// YorkieServiceRefreshChannelProcedure is the fully-qualified name of the YorkieService's
+	// RefreshChannel RPC.
+	YorkieServiceRefreshChannelProcedure = "/yorkie.v1.YorkieService/RefreshChannel"
+	// YorkieServiceWatchChannelProcedure is the fully-qualified name of the YorkieService's
+	// WatchChannel RPC.
+	YorkieServiceWatchChannelProcedure = "/yorkie.v1.YorkieService/WatchChannel"
 	// YorkieServiceBroadcastProcedure is the fully-qualified name of the YorkieService's Broadcast RPC.
 	YorkieServiceBroadcastProcedure = "/yorkie.v1.YorkieService/Broadcast"
 )
@@ -94,10 +94,10 @@ type YorkieServiceClient interface {
 	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
 	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
 	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest]) (*connect.ServerStreamForClient[v1.WatchDocumentResponse], error)
-	AttachPresence(context.Context, *connect.Request[v1.AttachPresenceRequest]) (*connect.Response[v1.AttachPresenceResponse], error)
-	DetachPresence(context.Context, *connect.Request[v1.DetachPresenceRequest]) (*connect.Response[v1.DetachPresenceResponse], error)
-	RefreshPresence(context.Context, *connect.Request[v1.RefreshPresenceRequest]) (*connect.Response[v1.RefreshPresenceResponse], error)
-	WatchPresence(context.Context, *connect.Request[v1.WatchPresenceRequest]) (*connect.ServerStreamForClient[v1.WatchPresenceResponse], error)
+	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
+	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
+	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
+	WatchChannel(context.Context, *connect.Request[v1.WatchChannelRequest]) (*connect.ServerStreamForClient[v1.WatchChannelResponse], error)
 	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
@@ -146,24 +146,24 @@ func NewYorkieServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			baseURL+YorkieServiceWatchDocumentProcedure,
 			opts...,
 		),
-		attachPresence: connect.NewClient[v1.AttachPresenceRequest, v1.AttachPresenceResponse](
+		attachChannel: connect.NewClient[v1.AttachChannelRequest, v1.AttachChannelResponse](
 			httpClient,
-			baseURL+YorkieServiceAttachPresenceProcedure,
+			baseURL+YorkieServiceAttachChannelProcedure,
 			opts...,
 		),
-		detachPresence: connect.NewClient[v1.DetachPresenceRequest, v1.DetachPresenceResponse](
+		detachChannel: connect.NewClient[v1.DetachChannelRequest, v1.DetachChannelResponse](
 			httpClient,
-			baseURL+YorkieServiceDetachPresenceProcedure,
+			baseURL+YorkieServiceDetachChannelProcedure,
 			opts...,
 		),
-		refreshPresence: connect.NewClient[v1.RefreshPresenceRequest, v1.RefreshPresenceResponse](
+		refreshChannel: connect.NewClient[v1.RefreshChannelRequest, v1.RefreshChannelResponse](
 			httpClient,
-			baseURL+YorkieServiceRefreshPresenceProcedure,
+			baseURL+YorkieServiceRefreshChannelProcedure,
 			opts...,
 		),
-		watchPresence: connect.NewClient[v1.WatchPresenceRequest, v1.WatchPresenceResponse](
+		watchChannel: connect.NewClient[v1.WatchChannelRequest, v1.WatchChannelResponse](
 			httpClient,
-			baseURL+YorkieServiceWatchPresenceProcedure,
+			baseURL+YorkieServiceWatchChannelProcedure,
 			opts...,
 		),
 		broadcast: connect.NewClient[v1.BroadcastRequest, v1.BroadcastResponse](
@@ -183,10 +183,10 @@ type yorkieServiceClient struct {
 	removeDocument   *connect.Client[v1.RemoveDocumentRequest, v1.RemoveDocumentResponse]
 	pushPullChanges  *connect.Client[v1.PushPullChangesRequest, v1.PushPullChangesResponse]
 	watchDocument    *connect.Client[v1.WatchDocumentRequest, v1.WatchDocumentResponse]
-	attachPresence   *connect.Client[v1.AttachPresenceRequest, v1.AttachPresenceResponse]
-	detachPresence   *connect.Client[v1.DetachPresenceRequest, v1.DetachPresenceResponse]
-	refreshPresence  *connect.Client[v1.RefreshPresenceRequest, v1.RefreshPresenceResponse]
-	watchPresence    *connect.Client[v1.WatchPresenceRequest, v1.WatchPresenceResponse]
+	attachChannel    *connect.Client[v1.AttachChannelRequest, v1.AttachChannelResponse]
+	detachChannel    *connect.Client[v1.DetachChannelRequest, v1.DetachChannelResponse]
+	refreshChannel   *connect.Client[v1.RefreshChannelRequest, v1.RefreshChannelResponse]
+	watchChannel     *connect.Client[v1.WatchChannelRequest, v1.WatchChannelResponse]
 	broadcast        *connect.Client[v1.BroadcastRequest, v1.BroadcastResponse]
 }
 
@@ -225,24 +225,24 @@ func (c *yorkieServiceClient) WatchDocument(ctx context.Context, req *connect.Re
 	return c.watchDocument.CallServerStream(ctx, req)
 }
 
-// AttachPresence calls yorkie.v1.YorkieService.AttachPresence.
-func (c *yorkieServiceClient) AttachPresence(ctx context.Context, req *connect.Request[v1.AttachPresenceRequest]) (*connect.Response[v1.AttachPresenceResponse], error) {
-	return c.attachPresence.CallUnary(ctx, req)
+// AttachChannel calls yorkie.v1.YorkieService.AttachChannel.
+func (c *yorkieServiceClient) AttachChannel(ctx context.Context, req *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error) {
+	return c.attachChannel.CallUnary(ctx, req)
 }
 
-// DetachPresence calls yorkie.v1.YorkieService.DetachPresence.
-func (c *yorkieServiceClient) DetachPresence(ctx context.Context, req *connect.Request[v1.DetachPresenceRequest]) (*connect.Response[v1.DetachPresenceResponse], error) {
-	return c.detachPresence.CallUnary(ctx, req)
+// DetachChannel calls yorkie.v1.YorkieService.DetachChannel.
+func (c *yorkieServiceClient) DetachChannel(ctx context.Context, req *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error) {
+	return c.detachChannel.CallUnary(ctx, req)
 }
 
-// RefreshPresence calls yorkie.v1.YorkieService.RefreshPresence.
-func (c *yorkieServiceClient) RefreshPresence(ctx context.Context, req *connect.Request[v1.RefreshPresenceRequest]) (*connect.Response[v1.RefreshPresenceResponse], error) {
-	return c.refreshPresence.CallUnary(ctx, req)
+// RefreshChannel calls yorkie.v1.YorkieService.RefreshChannel.
+func (c *yorkieServiceClient) RefreshChannel(ctx context.Context, req *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error) {
+	return c.refreshChannel.CallUnary(ctx, req)
 }
 
-// WatchPresence calls yorkie.v1.YorkieService.WatchPresence.
-func (c *yorkieServiceClient) WatchPresence(ctx context.Context, req *connect.Request[v1.WatchPresenceRequest]) (*connect.ServerStreamForClient[v1.WatchPresenceResponse], error) {
-	return c.watchPresence.CallServerStream(ctx, req)
+// WatchChannel calls yorkie.v1.YorkieService.WatchChannel.
+func (c *yorkieServiceClient) WatchChannel(ctx context.Context, req *connect.Request[v1.WatchChannelRequest]) (*connect.ServerStreamForClient[v1.WatchChannelResponse], error) {
+	return c.watchChannel.CallServerStream(ctx, req)
 }
 
 // Broadcast calls yorkie.v1.YorkieService.Broadcast.
@@ -259,10 +259,10 @@ type YorkieServiceHandler interface {
 	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
 	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
 	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest], *connect.ServerStream[v1.WatchDocumentResponse]) error
-	AttachPresence(context.Context, *connect.Request[v1.AttachPresenceRequest]) (*connect.Response[v1.AttachPresenceResponse], error)
-	DetachPresence(context.Context, *connect.Request[v1.DetachPresenceRequest]) (*connect.Response[v1.DetachPresenceResponse], error)
-	RefreshPresence(context.Context, *connect.Request[v1.RefreshPresenceRequest]) (*connect.Response[v1.RefreshPresenceResponse], error)
-	WatchPresence(context.Context, *connect.Request[v1.WatchPresenceRequest], *connect.ServerStream[v1.WatchPresenceResponse]) error
+	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
+	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
+	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
+	WatchChannel(context.Context, *connect.Request[v1.WatchChannelRequest], *connect.ServerStream[v1.WatchChannelResponse]) error
 	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
@@ -307,24 +307,24 @@ func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOp
 		svc.WatchDocument,
 		opts...,
 	)
-	yorkieServiceAttachPresenceHandler := connect.NewUnaryHandler(
-		YorkieServiceAttachPresenceProcedure,
-		svc.AttachPresence,
+	yorkieServiceAttachChannelHandler := connect.NewUnaryHandler(
+		YorkieServiceAttachChannelProcedure,
+		svc.AttachChannel,
 		opts...,
 	)
-	yorkieServiceDetachPresenceHandler := connect.NewUnaryHandler(
-		YorkieServiceDetachPresenceProcedure,
-		svc.DetachPresence,
+	yorkieServiceDetachChannelHandler := connect.NewUnaryHandler(
+		YorkieServiceDetachChannelProcedure,
+		svc.DetachChannel,
 		opts...,
 	)
-	yorkieServiceRefreshPresenceHandler := connect.NewUnaryHandler(
-		YorkieServiceRefreshPresenceProcedure,
-		svc.RefreshPresence,
+	yorkieServiceRefreshChannelHandler := connect.NewUnaryHandler(
+		YorkieServiceRefreshChannelProcedure,
+		svc.RefreshChannel,
 		opts...,
 	)
-	yorkieServiceWatchPresenceHandler := connect.NewServerStreamHandler(
-		YorkieServiceWatchPresenceProcedure,
-		svc.WatchPresence,
+	yorkieServiceWatchChannelHandler := connect.NewServerStreamHandler(
+		YorkieServiceWatchChannelProcedure,
+		svc.WatchChannel,
 		opts...,
 	)
 	yorkieServiceBroadcastHandler := connect.NewUnaryHandler(
@@ -348,14 +348,14 @@ func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOp
 			yorkieServicePushPullChangesHandler.ServeHTTP(w, r)
 		case YorkieServiceWatchDocumentProcedure:
 			yorkieServiceWatchDocumentHandler.ServeHTTP(w, r)
-		case YorkieServiceAttachPresenceProcedure:
-			yorkieServiceAttachPresenceHandler.ServeHTTP(w, r)
-		case YorkieServiceDetachPresenceProcedure:
-			yorkieServiceDetachPresenceHandler.ServeHTTP(w, r)
-		case YorkieServiceRefreshPresenceProcedure:
-			yorkieServiceRefreshPresenceHandler.ServeHTTP(w, r)
-		case YorkieServiceWatchPresenceProcedure:
-			yorkieServiceWatchPresenceHandler.ServeHTTP(w, r)
+		case YorkieServiceAttachChannelProcedure:
+			yorkieServiceAttachChannelHandler.ServeHTTP(w, r)
+		case YorkieServiceDetachChannelProcedure:
+			yorkieServiceDetachChannelHandler.ServeHTTP(w, r)
+		case YorkieServiceRefreshChannelProcedure:
+			yorkieServiceRefreshChannelHandler.ServeHTTP(w, r)
+		case YorkieServiceWatchChannelProcedure:
+			yorkieServiceWatchChannelHandler.ServeHTTP(w, r)
 		case YorkieServiceBroadcastProcedure:
 			yorkieServiceBroadcastHandler.ServeHTTP(w, r)
 		default:
@@ -395,20 +395,20 @@ func (UnimplementedYorkieServiceHandler) WatchDocument(context.Context, *connect
 	return connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.WatchDocument is not implemented"))
 }
 
-func (UnimplementedYorkieServiceHandler) AttachPresence(context.Context, *connect.Request[v1.AttachPresenceRequest]) (*connect.Response[v1.AttachPresenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.AttachPresence is not implemented"))
+func (UnimplementedYorkieServiceHandler) AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.AttachChannel is not implemented"))
 }
 
-func (UnimplementedYorkieServiceHandler) DetachPresence(context.Context, *connect.Request[v1.DetachPresenceRequest]) (*connect.Response[v1.DetachPresenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.DetachPresence is not implemented"))
+func (UnimplementedYorkieServiceHandler) DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.DetachChannel is not implemented"))
 }
 
-func (UnimplementedYorkieServiceHandler) RefreshPresence(context.Context, *connect.Request[v1.RefreshPresenceRequest]) (*connect.Response[v1.RefreshPresenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.RefreshPresence is not implemented"))
+func (UnimplementedYorkieServiceHandler) RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.RefreshChannel is not implemented"))
 }
 
-func (UnimplementedYorkieServiceHandler) WatchPresence(context.Context, *connect.Request[v1.WatchPresenceRequest], *connect.ServerStream[v1.WatchPresenceResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.WatchPresence is not implemented"))
+func (UnimplementedYorkieServiceHandler) WatchChannel(context.Context, *connect.Request[v1.WatchChannelRequest], *connect.ServerStream[v1.WatchChannelResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.WatchChannel is not implemented"))
 }
 
 func (UnimplementedYorkieServiceHandler) Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error) {

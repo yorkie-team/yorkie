@@ -40,7 +40,7 @@ func TestHistory(t *testing.T) {
 
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 

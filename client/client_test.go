@@ -35,9 +35,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/key"
-	"github.com/yorkie-team/yorkie/pkg/presence"
 )
 
 type testYorkieServer struct {
@@ -129,14 +129,14 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 	})
 
 	t.Run("Presence Counter implements Attachable", func(t *testing.T) {
-		presenceKey := key.Key("test-presence")
-		counter := presence.New(presenceKey)
+		channelKey := key.Key("test-presence")
+		counter := channel.New(channelKey)
 
 		// Ensure Presence Counter implements Attachable
 		var _ attachable.Attachable = counter
 
 		assert.Equal(t, "test-presence", counter.Key().String())
-		assert.Equal(t, attachable.TypePresence, counter.Type())
+		assert.Equal(t, attachable.TypeChannel, counter.Type())
 		assert.Equal(t, attachable.StatusDetached, counter.Status())
 		assert.False(t, counter.IsAttached())
 	})
@@ -145,8 +145,8 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 		docKey := key.Key("status-doc")
 		doc := document.New(docKey)
 
-		presenceKey := key.Key("status-presence")
-		counter := presence.New(presenceKey)
+		channelKey := key.Key("status-presence")
+		counter := channel.New(channelKey)
 
 		resources := []attachable.Attachable{doc, counter}
 

@@ -63,7 +63,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("should handle delete operations using document", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			arr := root.SetNewArray("k1")
@@ -82,7 +82,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can push array element after delete operation (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: ["1", "2", "3"]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -113,7 +113,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can push object element after delete operation", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: ["1", "2", "3"]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -144,7 +144,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can push array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: [1,2,3]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -165,7 +165,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can push element then delete it by ID in array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: [4,3,2,1]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -195,7 +195,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can insert an element after the given element in array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: [1,2,4]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -237,7 +237,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can move an element before the given element in array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		var prevID, targetID *time.Ticket
 
 		// Step 1: [0,1,2]
@@ -274,7 +274,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can move an element after the given element in array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		// Step 1: [0,1,2]
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -302,7 +302,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can insert an element at the first of array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		var targetID *time.Ticket
 
 		// Step 1: [0,1,2]
@@ -342,7 +342,7 @@ func TestArray(t *testing.T) {
 	})
 
 	t.Run("can move an element at the last of array (document-based)", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		var targetID *time.Ticket
 
 		// Step 1: [0,1,2]

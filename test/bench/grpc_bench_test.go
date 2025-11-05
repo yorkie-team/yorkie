@@ -144,7 +144,7 @@ func BenchmarkRPC(b *testing.B) {
 		ctx := context.Background()
 
 		// Setup documents with initial content
-		d1 := document.New(helper.TestDocKey(b))
+		d1 := document.New(helper.TestKey(b))
 		err := c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
@@ -154,7 +154,7 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(helper.TestDocKey(b))
+		d2 := document.New(helper.TestKey(b))
 		err = c2.Attach(ctx, d2, client.WithRealtimeSync())
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
@@ -195,8 +195,8 @@ func BenchmarkRPC(b *testing.B) {
 				defer helper.CleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(helper.TestDocKey(b))
-				doc2 := document.New(helper.TestDocKey(b))
+				doc1 := document.New(helper.TestKey(b))
+				doc2 := document.New(helper.TestKey(b))
 
 				err := doc1.Update(func(r *json.Object, p *presence.Presence) error {
 					text := r.SetNewText("k1")

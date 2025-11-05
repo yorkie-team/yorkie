@@ -45,7 +45,7 @@ func benchmarkDeactivate(
 	err = c.Activate(ctx)
 	assert.NoError(b, err)
 	for i := range totalDocCount {
-		d := document.New(helper.TestDocKey(b, i))
+		d := document.New(helper.TestKey(b, i))
 		err = c.Attach(ctx, d)
 		assert.NoError(b, err)
 		if i >= attachedDocCount {

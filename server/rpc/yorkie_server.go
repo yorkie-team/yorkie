@@ -249,23 +249,23 @@ func (s *yorkieServer) AttachDocument(
 	return connect.NewResponse(response), nil
 }
 
-// AttachPresence attaches the given presence counter to the client.
-func (s *yorkieServer) AttachPresence(
+// AttachChannel attaches the given channel to the client.
+func (s *yorkieServer) AttachChannel(
 	ctx context.Context,
-	req *connect.Request[api.AttachPresenceRequest],
-) (*connect.Response[api.AttachPresenceResponse], error) {
+	req *connect.Request[api.AttachChannelRequest],
+) (*connect.Response[api.AttachChannelResponse], error) {
 	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
-	presenceKey := key.Key(req.Msg.PresenceKey)
-	if err := presenceKey.Validate(); err != nil {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
 		return nil, err
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.AttachPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
+		Method:     types.AttachChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
@@ -279,45 +279,45 @@ func (s *yorkieServer) AttachPresence(
 		return nil, err
 	}
 
-	// 02. Create PresenceRefKey and attach to presence counter
-	refKey := types.PresenceRefKey{
-		ProjectID:   project.ID,
-		PresenceKey: presenceKey,
+	// 02. Create ChannelRefKey and attach to channel
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
 	}
 
-	presenceID, count, err := s.backend.Presence.Attach(ctx, refKey, actorID)
+	sessionID, count, err := s.backend.Presence.Attach(ctx, refKey, actorID)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &api.AttachPresenceResponse{
-		PresenceId: presenceID.String(),
-		Count:      count,
+	response := &api.AttachChannelResponse{
+		SessionId: sessionID.String(),
+		Count:     count,
 	}
 	return connect.NewResponse(response), nil
 }
 
-// DetachPresence detaches the given presence counter from the client.
-func (s *yorkieServer) DetachPresence(
+// DetachChannel detaches the given channel from the client.
+func (s *yorkieServer) DetachChannel(
 	ctx context.Context,
-	req *connect.Request[api.DetachPresenceRequest],
-) (*connect.Response[api.DetachPresenceResponse], error) {
+	req *connect.Request[api.DetachChannelRequest],
+) (*connect.Response[api.DetachChannelResponse], error) {
 	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
-	presenceKey := key.Key(req.Msg.PresenceKey)
-	if err := presenceKey.Validate(); err != nil {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
 		return nil, err
 	}
-	presenceID := types.ID(req.Msg.PresenceId)
-	if err := presenceID.Validate(); err != nil {
+	sessionID := types.ID(req.Msg.SessionId)
+	if err := sessionID.Validate(); err != nil {
 		return nil, err
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.DetachPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
+		Method:     types.DetachChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
@@ -332,38 +332,38 @@ func (s *yorkieServer) DetachPresence(
 	}
 
 	// 02. Detach using presence ID
-	count, err := s.backend.Presence.Detach(ctx, presenceID)
+	count, err := s.backend.Presence.Detach(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	response := &api.DetachPresenceResponse{
+	response := &api.DetachChannelResponse{
 		Count: count,
 	}
 	return connect.NewResponse(response), nil
 }
 
-// RefreshPresence refreshes the TTL of the given presence.
-func (s *yorkieServer) RefreshPresence(
+// RefreshChannel refreshes the TTL of the given channel.
+func (s *yorkieServer) RefreshChannel(
 	ctx context.Context,
-	req *connect.Request[api.RefreshPresenceRequest],
-) (*connect.Response[api.RefreshPresenceResponse], error) {
+	req *connect.Request[api.RefreshChannelRequest],
+) (*connect.Response[api.RefreshChannelResponse], error) {
 	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
-	presenceKey := key.Key(req.Msg.PresenceKey)
-	if err := presenceKey.Validate(); err != nil {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
 		return nil, err
 	}
-	presenceID := types.ID(req.Msg.PresenceId)
-	if err := presenceID.Validate(); err != nil {
+	sessionID := types.ID(req.Msg.SessionId)
+	if err := sessionID.Validate(); err != nil {
 		return nil, err
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.RefreshPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.ReadWrite),
+		Method:     types.RefreshChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
@@ -378,41 +378,41 @@ func (s *yorkieServer) RefreshPresence(
 	}
 
 	// 02. Refresh presence using presence ID
-	if err := s.backend.Presence.Refresh(ctx, presenceID); err != nil {
+	if err := s.backend.Presence.Refresh(ctx, sessionID); err != nil {
 		return nil, err
 	}
 
 	// 03. Get current count from backend
-	refKey := types.PresenceRefKey{
-		ProjectID:   project.ID,
-		PresenceKey: presenceKey,
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
 	}
 	count := s.backend.Presence.Count(refKey)
 
-	response := &api.RefreshPresenceResponse{
+	response := &api.RefreshChannelResponse{
 		Count: count,
 	}
 	return connect.NewResponse(response), nil
 }
 
-// WatchPresence connects the stream to deliver presence counter updates.
-func (s *yorkieServer) WatchPresence(
+// WatchChannel connects the stream to deliver channel updates.
+func (s *yorkieServer) WatchChannel(
 	ctx context.Context,
-	req *connect.Request[api.WatchPresenceRequest],
-	stream *connect.ServerStream[api.WatchPresenceResponse],
+	req *connect.Request[api.WatchChannelRequest],
+	stream *connect.ServerStream[api.WatchChannelResponse],
 ) error {
 	// 01. Validate the request and verify access
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return err
 	}
-	presenceKey := key.Key(req.Msg.PresenceKey)
-	if err := presenceKey.Validate(); err != nil {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
 		return err
 	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchPresence,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+		Method:     types.WatchChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.Read),
 	}); err != nil {
 		return err
 	}
@@ -427,27 +427,27 @@ func (s *yorkieServer) WatchPresence(
 		return err
 	}
 
-	// 02. Create PresenceRefKey and subscribe to presence counter updates
-	refKey := types.PresenceRefKey{
-		ProjectID:   project.ID,
-		PresenceKey: presenceKey,
+	// 02. Create ChannelRefKey and subscribe to channel updates
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
 	}
 
-	subscription, _, err := s.backend.PubSub.SubscribePresence(ctx, actorID, refKey)
+	subscription, _, err := s.backend.PubSub.SubscribeChannel(ctx, actorID, refKey)
 	if err != nil {
 		return err
 	}
 
 	// 03. Ensure cleanup when stream ends
 	defer func() {
-		s.backend.PubSub.UnsubscribePresence(ctx, refKey, subscription)
+		s.backend.PubSub.UnsubscribeChannel(ctx, refKey, subscription)
 	}()
 
 	// 04. Send initial count
 	currentCount := s.backend.Presence.Count(refKey)
-	if err := stream.Send(&api.WatchPresenceResponse{
-		Body: &api.WatchPresenceResponse_Initialized{
-			Initialized: &api.WatchPresenceInitialized{
+	if err := stream.Send(&api.WatchChannelResponse{
+		Body: &api.WatchChannelResponse_Initialized{
+			Initialized: &api.WatchChannelInitialized{
 				Count: currentCount,
 				Seq:   0,
 			},
@@ -465,15 +465,15 @@ func (s *yorkieServer) WatchPresence(
 				return nil
 			}
 
-			var response *api.WatchPresenceResponse
+			var response *api.WatchChannelResponse
 
 			// Check event type and create appropriate response
-			if event.Type == events.PresenceBroadcast {
+			if event.Type == events.ChannelBroadcast {
 				// Send broadcast event
-				response = &api.WatchPresenceResponse{
-					Body: &api.WatchPresenceResponse_Event{
-						Event: &api.PresenceEvent{
-							Type:      api.PresenceEvent_TYPE_BROADCAST,
+				response = &api.WatchChannelResponse{
+					Body: &api.WatchChannelResponse_Event{
+						Event: &api.ChannelEvent{
+							Type:      api.ChannelEvent_TYPE_BROADCAST,
 							Publisher: event.Publisher.String(),
 							Topic:     event.Topic,
 							Payload:   event.Payload,
@@ -482,10 +482,10 @@ func (s *yorkieServer) WatchPresence(
 				}
 			} else if event.Seq > 0 {
 				// Send count update (skip if it's the initial event with Seq 0)
-				response = &api.WatchPresenceResponse{
-					Body: &api.WatchPresenceResponse_Event{
-						Event: &api.PresenceEvent{
-							Type:  api.PresenceEvent_TYPE_COUNT_CHANGED,
+				response = &api.WatchChannelResponse{
+					Body: &api.WatchChannelResponse_Event{
+						Event: &api.ChannelEvent{
+							Type:  api.ChannelEvent_TYPE_PRESENCE,
 							Count: event.Count,
 							Seq:   event.Seq,
 						},
@@ -516,15 +516,15 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	presenceKey := key.Key(req.Msg.PresenceKey)
-	if err := presenceKey.Validate(); err != nil {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
 		return nil, err
 	}
 
 	// 02. Verify access
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.Broadcast,
-		Attributes: types.NewAccessAttributes([]key.Key{presenceKey}, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.Read),
 	}); err != nil {
 		return nil, err
 	}
@@ -540,13 +540,13 @@ func (s *yorkieServer) Broadcast(
 	}
 
 	// 04. Publish broadcast event
-	refKey := types.PresenceRefKey{
-		ProjectID:   project.ID,
-		PresenceKey: presenceKey,
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
 	}
 
-	s.backend.PubSub.PublishPresence(ctx, events.PresenceEvent{
-		Type:      events.PresenceBroadcast,
+	s.backend.PubSub.PublishChannel(ctx, events.ChannelEvent{
+		Type:      events.ChannelBroadcast,
 		Key:       refKey,
 		Publisher: actorID,
 		Topic:     req.Msg.Topic,

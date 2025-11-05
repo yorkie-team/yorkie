@@ -39,7 +39,7 @@ func TestTree(t *testing.T) {
 	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("tree", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. Create a tree and insert a paragraph.
 			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
@@ -95,7 +95,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("created from JSON test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -122,7 +122,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("created from JSON with attributes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -142,7 +142,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit its content test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -228,7 +228,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit content with path test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -303,7 +303,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit content with path test 2", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -380,9 +380,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("find correct path after deleting leftNode test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 01. Create a tree and insert a paragraph with text.
@@ -453,7 +453,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("sync its content with other clients test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -469,7 +469,7 @@ func TestTree(t *testing.T) {
 		}))
 
 		assert.NoError(t, c1.Sync(ctx))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.Equal(t, "<doc><p>hello</p></doc>", d1.Root().GetTree("t").ToXML())
@@ -487,7 +487,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("insert multiple text nodes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -513,7 +513,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("insert multiple element nodes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -539,7 +539,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit its content with path when multi tree nodes passed", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -588,7 +588,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("detecting error for empty text test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -621,7 +621,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("detecting error for mixed type insertion test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -654,7 +654,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("detecting correct error order test 1", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -686,7 +686,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("detecting correct error order test 2", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -719,7 +719,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("detecting correct error order test 3", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
 				Type: "doc",
@@ -752,7 +752,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit its content with attributes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{Type: "doc"})
 			assert.Equal(t, "<doc></doc>", root.GetTree("t").ToXML())
@@ -781,7 +781,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("set attributes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
@@ -805,7 +805,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("remove attributes test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
@@ -836,7 +836,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("set/remove style without any attributes", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
@@ -876,7 +876,7 @@ func TestTree(t *testing.T) {
 	// Concurrent editing, overlapping range test
 	t.Run("concurrently delete overlapping elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -898,7 +898,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p></p><i></i><b></b></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -918,7 +918,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete overlapping text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -934,7 +934,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -955,9 +955,9 @@ func TestTree(t *testing.T) {
 	t.Run("overlapping-merge-and-merge", func(t *testing.T) {
 		t.Skip("skip this for lww performance test")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -999,9 +999,9 @@ func TestTree(t *testing.T) {
 	t.Run("overlapping-merge-and-delete-element-node", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1040,9 +1040,9 @@ func TestTree(t *testing.T) {
 	t.Run("overlapping-merge-and-delete-text-nodes", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1081,7 +1081,7 @@ func TestTree(t *testing.T) {
 	// Concurrent editing, contained range test
 	t.Run("concurrently insert and delete contained elements of the same depth test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1100,7 +1100,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1120,7 +1120,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently multiple insert and delete contained elements of the same depth test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1139,7 +1139,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1168,7 +1168,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("detecting error when inserting and deleting contained elements at different depths test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1187,7 +1187,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p><i></i></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1207,7 +1207,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete contained elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1226,7 +1226,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p><i>1234</i></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1246,7 +1246,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert and delete contained text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1262,7 +1262,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1282,7 +1282,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete contained text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1298,7 +1298,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1318,7 +1318,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert and delete contained text and elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1334,7 +1334,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1354,7 +1354,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete contained text and elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1370,7 +1370,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1390,9 +1390,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-split-at-the-same-position", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1427,9 +1427,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-split-at-different-positions-on-the-same-node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1465,9 +1465,9 @@ func TestTree(t *testing.T) {
 	t.Run("contained-split-and-split-at-different-levels", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1508,9 +1508,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-insert-into-the-split-position", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1545,9 +1545,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-insert-into-original-node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1582,9 +1582,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-insert-into-split-node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1619,9 +1619,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-split-and-delete-contents-in-split-node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1657,9 +1657,9 @@ func TestTree(t *testing.T) {
 	t.Run("contained-split-and-delete-the-whole-original-and-split-nodes", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1694,9 +1694,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-merge-and-merge-at-different-levels", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1741,9 +1741,9 @@ func TestTree(t *testing.T) {
 	t.Run("contained-merge-and-merge-at-the-same-level", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1785,9 +1785,9 @@ func TestTree(t *testing.T) {
 	t.Run("contained-merge-and-insert", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1825,9 +1825,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-merge-and-delete-the-whole", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1866,9 +1866,9 @@ func TestTree(t *testing.T) {
 	t.Run("contained-merge-and-delete-contents-in-merged-node", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1906,9 +1906,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-merge-and-delete-sub-range-in-merged-range", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1949,9 +1949,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-merge-and-split-merged-node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1989,9 +1989,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("contained-merge-and-split-at-multi-levels", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2033,7 +2033,7 @@ func TestTree(t *testing.T) {
 	// Concurrent editing, side by side range test
 	t.Run("concurrently insert side by side elements (left) test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2049,7 +2049,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2069,7 +2069,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert side by side elements (middle) test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2085,7 +2085,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2105,7 +2105,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert side by side elements (right) test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2121,7 +2121,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2141,7 +2141,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert and delete side by side elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2160,7 +2160,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p><b></b></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2180,7 +2180,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete and insert side by side elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2199,7 +2199,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p><b></b></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2219,7 +2219,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete side by side elements test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2241,7 +2241,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p><b></b><i></i></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2261,7 +2261,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("insert text to the same position(left) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2277,7 +2277,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2297,7 +2297,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("insert text to the same position(middle) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2313,7 +2313,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2333,7 +2333,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("insert text content to the same position(right) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2349,7 +2349,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2369,7 +2369,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently insert and delete side by side text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2385,7 +2385,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2405,7 +2405,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete and insert side by side text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2421,7 +2421,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2441,7 +2441,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("concurrently delete side by side text blocks test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2457,7 +2457,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2477,7 +2477,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("delete text content at the same position(left) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2493,7 +2493,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>123</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2513,7 +2513,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("delete text content at the same position(middle) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2529,7 +2529,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>123</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2549,7 +2549,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("delete text content at the same position(right) concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2565,7 +2565,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>123</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2585,9 +2585,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("side-by-side-split-and-split", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2626,9 +2626,9 @@ func TestTree(t *testing.T) {
 	t.Run("side-by-side-split-and-insert", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2667,9 +2667,9 @@ func TestTree(t *testing.T) {
 	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2707,9 +2707,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("side-by-side-split-and-merge", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2753,9 +2753,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("side-by-side-merge-and-insert", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2796,9 +2796,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("side-by-side-merge-and-delete", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2839,9 +2839,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("side-by-side-merge-and-split", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2883,7 +2883,7 @@ func TestTree(t *testing.T) {
 	// Concurrent editing, complex cases test
 	t.Run("delete text content anchored to another concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2899,7 +2899,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>123</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2919,7 +2919,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("produce complete deletion concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2935,7 +2935,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>123</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2955,7 +2955,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle block delete concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2971,7 +2971,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12345</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -2991,7 +2991,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle insert within block delete concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3007,7 +3007,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12345</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3027,7 +3027,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle insert within block delete concurrently test 2", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3043,7 +3043,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12345</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3063,7 +3063,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle block element insertion within delete test 2", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3082,7 +3082,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>1234</p><p>5678</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3108,7 +3108,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle concurrent element insert/deletion (left) test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3124,7 +3124,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12345</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3150,7 +3150,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle concurrent element insert/deletion (right) test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3166,7 +3166,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12345</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3192,7 +3192,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle deletion of insertion anchor concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3208,7 +3208,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3228,7 +3228,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle deletion after insertion concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3244,7 +3244,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3264,7 +3264,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("handle deletion before insertion concurrently test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3280,7 +3280,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3300,7 +3300,7 @@ func TestTree(t *testing.T) {
 
 	// Edge cases test
 	t.Run("delete very first text when there is tombstone in front of target text test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. Create a tree and insert a paragraph.
 			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
@@ -3341,7 +3341,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("delete node when there is more than one text node in front which has size bigger than 1 test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. Create a tree and insert a paragraph.
 			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
@@ -3389,7 +3389,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("split link can transmitted through rpc", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3412,7 +3412,7 @@ func TestTree(t *testing.T) {
 		}))
 
 		assert.NoError(t, c1.Sync(ctx))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3455,7 +3455,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("can calculate size of index tree correctly", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3504,7 +3504,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>a0123789456123b</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.NoError(t, c1.Sync(ctx))
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		size := d1.Root().GetTree("t").IndexTree.Root().Len()
 		assert.Equal(t, size, d2.Root().GetTree("t").IndexTree.Root().Len())
@@ -3512,9 +3512,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("can calculate size of index tree correctly during concurrent editing", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3559,9 +3559,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("can keep index tree consistent from snapshot", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3646,7 +3646,7 @@ func TestTree(t *testing.T) {
 
 	t.Run("can split and merge with empty paragraph: left", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3675,14 +3675,14 @@ func TestTree(t *testing.T) {
 
 		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("can split and merge with empty paragraph: right", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3711,14 +3711,14 @@ func TestTree(t *testing.T) {
 
 		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("can split and merge with empty paragraph and multiple split level: left", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3751,14 +3751,14 @@ func TestTree(t *testing.T) {
 		}))
 		assert.Equal(t, "<root><p><p>ab</p></p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("split at the same offset multiple times", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3802,16 +3802,16 @@ func TestTree(t *testing.T) {
 		}))
 		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("can concurrently split and insert into original node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3853,9 +3853,9 @@ func TestTree(t *testing.T) {
 
 	t.Run("can concurrently split and insert into split node", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -3903,7 +3903,7 @@ func TestTreeLWW(t *testing.T) {
 
 	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -3925,7 +3925,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -3988,7 +3988,7 @@ func TestTreeLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - same level complete inclusion (larger range later)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -4010,7 +4010,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -4104,7 +4104,7 @@ func TestTreeLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - same level complete inclusion (smaller range later)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -4126,7 +4126,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -4221,7 +4221,7 @@ func TestTreeLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - same level partial overlap", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -4243,7 +4243,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -4334,7 +4334,7 @@ func TestTreeLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - ancestor descendant (ancestor later)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -4361,7 +4361,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -4444,7 +4444,7 @@ func TestTreeLWW(t *testing.T) {
 	t.Run("concurrent deletion test for LWW behavior - ancestor descendant (descendant later)", func(t *testing.T) {
 
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -4471,7 +4471,7 @@ func TestTreeLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

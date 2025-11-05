@@ -99,7 +99,7 @@ func TestRegisterEventWebhook(t *testing.T) {
 	project, err := adminCli.CreateProject(ctx, "register-event-webhook")
 	assert.NoError(t, err)
 
-	doc := document.New(helper.TestDocKey(t))
+	doc := document.New(helper.TestKey(t))
 	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 
 	cli := newActivatedClient(t, ctx, svr.RPCAddr(), project.PublicKey)
@@ -168,7 +168,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(ctx, "doc-root-changed-event-webhook")
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 
 		project.EventWebhookURL = userServer.URL
@@ -205,7 +205,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(ctx, "presence-changed-event-webhook")
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 
 		project.EventWebhookURL = userServer.URL
@@ -242,7 +242,7 @@ func TestDocRootChangedEventWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(ctx, "root-presence-changed-event")
 		assert.NoError(t, err)
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 
 		project.EventWebhookURL = userServer.URL
@@ -294,7 +294,7 @@ func TestEventWebhookThrottling(t *testing.T) {
 	project, err := adminCli.CreateProject(ctx, "event-webhook-throttle-webhook")
 	assert.NoError(t, err)
 
-	doc := document.New(helper.TestDocKey(t))
+	doc := document.New(helper.TestKey(t))
 	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
 		EventWebhookURL:    &userServer.URL,
@@ -360,7 +360,7 @@ func TestCloseEventManager(t *testing.T) {
 	project, err := adminCli.CreateProject(ctx, "close-event-webhook-webhook")
 	assert.NoError(t, err)
 
-	doc := document.New(helper.TestDocKey(t))
+	doc := document.New(helper.TestKey(t))
 	userServer, getReqCnt := newWebhookServer(t, project.SecretKey, doc.Key().String())
 	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
 		EventWebhookURL:    &userServer.URL,

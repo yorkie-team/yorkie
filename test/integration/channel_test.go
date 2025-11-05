@@ -28,82 +28,82 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func TestPresenceIntegration(t *testing.T) {
+func TestChannelIntegration(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("single client presence counter test", func(t *testing.T) {
+	t.Run("single client channel test", func(t *testing.T) {
 		clients := activeClients(t, 1)
 		defer deactivateAndCloseClients(t, clients)
 
 		cli := clients[0]
 
-		// Create presence counter
-		presenceKey := helper.TestDocKey(t)
-		p := presence.New(presenceKey)
+		// Create channel
+		channelKey := helper.TestKey(t)
+		ch := channel.New(channelKey)
 
 		// Test initial state
-		assert.Equal(t, presenceKey, p.Key())
-		assert.Equal(t, attachable.TypePresence, p.Type())
-		assert.Equal(t, attachable.StatusDetached, p.Status())
-		assert.False(t, p.IsAttached())
+		assert.Equal(t, channelKey, ch.Key())
+		assert.Equal(t, attachable.TypeChannel, ch.Type())
+		assert.Equal(t, attachable.StatusDetached, ch.Status())
+		assert.False(t, ch.IsAttached())
 
-		// Attach presence counter
-		err := cli.Attach(ctx, p)
+		// Attach channel
+		err := cli.Attach(ctx, ch)
 		require.NoError(t, err)
 
 		// Verify attached state
-		assert.Equal(t, attachable.StatusAttached, p.Status())
-		assert.True(t, p.IsAttached())
+		assert.Equal(t, attachable.StatusAttached, ch.Status())
+		assert.True(t, ch.IsAttached())
 
-		// Detach presence counter
-		require.NoError(t, cli.Detach(ctx, p))
+		// Detach channel
+		require.NoError(t, cli.Detach(ctx, ch))
 
 		// Verify detached state
-		assert.Equal(t, attachable.StatusDetached, p.Status())
-		assert.False(t, p.IsAttached())
+		assert.Equal(t, attachable.StatusDetached, ch.Status())
+		assert.False(t, ch.IsAttached())
 	})
 
-	t.Run("multiple clients presence counter test", func(t *testing.T) {
+	t.Run("multiple clients channel test", func(t *testing.T) {
 		clients := activeClients(t, 3)
 		defer deactivateAndCloseClients(t, clients)
 
 		client1, client2, client3 := clients[0], clients[1], clients[2]
 
-		// Create presence counters for the same room
-		presenceKey := helper.TestDocKey(t)
-		counter1 := presence.New(presenceKey)
-		counter2 := presence.New(presenceKey)
-		counter3 := presence.New(presenceKey)
+		// Create channels for the same room
+		channelKey := helper.TestKey(t)
+		ch1 := channel.New(channelKey)
+		ch2 := channel.New(channelKey)
+		ch3 := channel.New(channelKey)
 
 		// Attach first client
-		err := client1.Attach(ctx, counter1)
+		err := client1.Attach(ctx, ch1)
 		require.NoError(t, err)
 
 		// Attach second client
-		err = client2.Attach(ctx, counter2)
+		err = client2.Attach(ctx, ch2)
 		require.NoError(t, err)
 
 		// Attach third client
-		err = client3.Attach(ctx, counter3)
+		err = client3.Attach(ctx, ch3)
 		require.NoError(t, err)
 
 		// All should be attached
-		assert.True(t, counter1.IsAttached())
-		assert.True(t, counter2.IsAttached())
-		assert.True(t, counter3.IsAttached())
+		assert.True(t, ch1.IsAttached())
+		assert.True(t, ch2.IsAttached())
+		assert.True(t, ch3.IsAttached())
 
 		// Detach clients
-		require.NoError(t, client1.Detach(ctx, counter1))
-		assert.False(t, counter1.IsAttached())
-		require.NoError(t, client2.Detach(ctx, counter2))
-		assert.False(t, counter2.IsAttached())
-		require.NoError(t, client3.Detach(ctx, counter3))
-		assert.False(t, counter3.IsAttached())
+		require.NoError(t, client1.Detach(ctx, ch1))
+		assert.False(t, ch1.IsAttached())
+		require.NoError(t, client2.Detach(ctx, ch2))
+		assert.False(t, ch2.IsAttached())
+		require.NoError(t, client3.Detach(ctx, ch3))
+		assert.False(t, ch3.IsAttached())
 	})
 
 	t.Run("presence count value verification test", func(t *testing.T) {
@@ -111,13 +111,13 @@ func TestPresenceIntegration(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 		cli := clients[0]
 
-		// Create presence counter
-		counter := presence.New(helper.TestDocKey(t))
+		// Create channel
+		ch := channel.New(helper.TestKey(t))
 
 		// Attach and start watching to get count updates
-		require.NoError(t, cli.Attach(ctx, counter))
+		require.NoError(t, cli.Attach(ctx, ch))
 
-		countChan, closeWatch, err := cli.WatchPresence(ctx, counter)
+		countChan, closeWatch, err := cli.WatchChannel(ctx, ch)
 		require.NoError(t, err)
 		defer closeWatch()
 
@@ -136,7 +136,7 @@ func TestPresenceIntegration(t *testing.T) {
 		assert.Equal(t, int64(1), receivedCount, "Initial count should be 1")
 
 		// Validate Counter object holds the actual count value
-		assert.Equal(t, int64(1), counter.Count(), "Counter object should reflect actual count")
+		assert.Equal(t, int64(1), ch.Count(), "Counter object should reflect actual count")
 	})
 
 	t.Run("presence count changes with multiple clients test", func(t *testing.T) {
@@ -146,16 +146,16 @@ func TestPresenceIntegration(t *testing.T) {
 		watcherClient := clients[0]
 		participantClients := clients[1:]
 
-		// Create presence counters for the same room
-		presenceKey := helper.TestDocKey(t)
-		watcherCounter := presence.New(presenceKey)
+		// Create presence channels for the same room
+		channelKey := helper.TestKey(t)
+		watcher := channel.New(channelKey)
 
 		// Attach watcher first
-		err := watcherClient.Attach(ctx, watcherCounter)
+		err := watcherClient.Attach(ctx, watcher)
 		require.NoError(t, err)
 
 		// Start watching count changes
-		countChan, closeWatch, err := watcherClient.WatchPresence(ctx, watcherCounter)
+		countChan, closeWatch, err := watcherClient.WatchChannel(ctx, watcher)
 		require.NoError(t, err)
 		defer closeWatch()
 
@@ -193,12 +193,12 @@ func TestPresenceIntegration(t *testing.T) {
 		getLatestCount()
 
 		// Add participants one by one and verify count increases
-		participantCounters := make([]*presence.Presence, len(participantClients))
+		participants := make([]*channel.Channel, len(participantClients))
 		for i, client := range participantClients {
-			participantCounters[i] = presence.New(presenceKey)
+			participants[i] = channel.New(channelKey)
 
 			t.Logf("Attaching participant %d", i+1)
-			err := client.Attach(ctx, participantCounters[i])
+			err := client.Attach(ctx, participants[i])
 			require.NoError(t, err)
 
 			expectedCount := int64(2 + i) // watcher + participants so far
@@ -220,7 +220,7 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// Remove participants one by one and verify count decreases
 		for i, client := range participantClients {
-			err := client.Detach(ctx, participantCounters[i])
+			err := client.Detach(ctx, participants[i])
 			require.NoError(t, err)
 
 			expectedCount := int64(3 - 1 - i) // remaining clients
@@ -237,32 +237,32 @@ func TestPresenceIntegration(t *testing.T) {
 		}, time.Second, 50*time.Millisecond, "Final count should be 1")
 
 		// Validate Counter object reflects the final count
-		assert.Equal(t, int64(1), watcherCounter.Count(), "Watcher counter should reflect final count")
+		assert.Equal(t, int64(1), watcher.Count(), "Watcher counter should reflect final count")
 	})
 
 	t.Run("out-of-order event handling test", func(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 
-		// Create presence counters for two clients
-		presenceKey := helper.TestDocKey(t)
-		counter1 := presence.New(presenceKey)
-		counter2 := presence.New(presenceKey)
+		// Create presence channels for two clients
+		channelKey := helper.TestKey(t)
+		ch1 := channel.New(channelKey)
+		ch2 := channel.New(channelKey)
 
 		// Attach the first counter first
-		err := clients[0].Attach(ctx, counter1)
+		err := clients[0].Attach(ctx, ch1)
 		require.NoError(t, err)
-		defer func() { _ = clients[0].Detach(ctx, counter1) }()
+		defer func() { _ = clients[0].Detach(ctx, ch1) }()
 
-		// Now we can watch from the attached counter
-		countCh, cancelWatch, err := clients[0].WatchPresence(ctx, counter1)
+		// Now we can watch from the attached channel
+		countCh, cancelWatch, err := clients[0].WatchChannel(ctx, ch1)
 		require.NoError(t, err)
 		defer cancelWatch()
 
-		// Attach the second counter
-		err = clients[1].Attach(ctx, counter2)
+		// Attach the second channel
+		err = clients[1].Attach(ctx, ch2)
 		require.NoError(t, err)
-		defer func() { _ = clients[1].Detach(ctx, counter2) }()
+		defer func() { _ = clients[1].Detach(ctx, ch2) }()
 
 		// Track the last received count
 		var lastCount int64
@@ -282,7 +282,7 @@ func TestPresenceIntegration(t *testing.T) {
 		// to ensure presence state is properly synchronized
 		for i := 0; i < 5; i++ {
 			// Detach
-			err = clients[1].Detach(ctx, counter2)
+			err = clients[1].Detach(ctx, ch2)
 			require.NoError(t, err)
 
 			// Wait for count to stabilize at 1
@@ -301,7 +301,7 @@ func TestPresenceIntegration(t *testing.T) {
 			}
 
 			// Re-attach
-			err = clients[1].Attach(ctx, counter2)
+			err = clients[1].Attach(ctx, ch2)
 			require.NoError(t, err)
 
 			// Wait for count to stabilize at 2
@@ -336,11 +336,11 @@ func TestPresenceIntegration(t *testing.T) {
 		// Final count should be 2 (both attached)
 		require.Equal(t, int64(2), lastCount, "Final count should be 2 after all operations")
 
-		// Note: Counter objects only reflect server state if they have WatchPresence active
-		// counter1 has WatchPresence active, so it should reflect the count
-		assert.Equal(t, int64(2), counter1.Count(), "Counter1 should reflect final count")
-		// counter2 doesn't have WatchPresence, so we can't verify its internal count
-		// This is expected behavior - Counter objects need WatchPresence to stay synchronized
+		// Note: Counter objects only reflect server state if they have WatchChannel active
+		// counter1 has WatchChannel active, so it should reflect the count
+		assert.Equal(t, int64(2), ch1.Count(), "Counter1 should reflect final count")
+		// counter2 doesn't have WatchChannel, so we can't verify its internal count
+		// This is expected behavior - Counter objects need WatchChannel to stay synchronized
 	})
 
 	t.Run("concurrent count consistency test", func(t *testing.T) {
@@ -348,25 +348,25 @@ func TestPresenceIntegration(t *testing.T) {
 		clients := activeClients(t, clientCount)
 		defer deactivateAndCloseClients(t, clients)
 
-		presenceKey := helper.TestDocKey(t)
-		counters := make([]*presence.Presence, clientCount)
+		channelKey := helper.TestKey(t)
+		channels := make([]*channel.Channel, clientCount)
 
-		// Create counters for all clients
+		// Create channels for all clients
 		for i := range clientCount {
-			counters[i] = presence.New(presenceKey)
+			channels[i] = channel.New(channelKey)
 		}
 
 		// Attach all clients concurrently
 		for i := range clientCount {
 			go func(idx int) {
-				assert.NoError(t, clients[idx].Attach(ctx, counters[idx]))
+				assert.NoError(t, clients[idx].Attach(ctx, channels[idx]))
 			}(i)
 		}
 
 		// Wait for all to be attached
 		assert.Eventually(t, func() bool {
 			for i := range clientCount {
-				if !counters[i].IsAttached() {
+				if !channels[i].IsAttached() {
 					return false
 				}
 			}
@@ -379,7 +379,7 @@ func TestPresenceIntegration(t *testing.T) {
 		closeWatches := make([]func(), len(watchClients))
 
 		for i, client := range watchClients {
-			countChan, closeWatch, err := client.WatchPresence(ctx, counters[i])
+			countChan, closeWatch, err := client.WatchChannel(ctx, channels[i])
 			require.NoError(t, err)
 			countChans[i] = countChan
 			closeWatches[i] = closeWatch
@@ -419,23 +419,23 @@ func TestPresenceIntegration(t *testing.T) {
 		t.Logf("All %d watchers consistently see count = %d", len(watchClients), clientCount)
 	})
 
-	t.Run("presence watch integration test", func(t *testing.T) {
+	t.Run("channel watch integration test", func(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 
 		watcherClient, participantClient := clients[0], clients[1]
 
-		// Create presence counters
-		presenceKey := helper.TestDocKey(t)
-		watcherCounter := presence.New(presenceKey)
-		participantCounter := presence.New(presenceKey)
+		// Create channels
+		channelKey := helper.TestKey(t)
+		watcher := channel.New(channelKey)
+		participant := channel.New(channelKey)
 
 		// Attach watcher first
-		err := watcherClient.Attach(ctx, watcherCounter)
+		err := watcherClient.Attach(ctx, watcher)
 		require.NoError(t, err)
 
 		// Start watching presence changes
-		countChan, closeWatch, err := watcherClient.WatchPresence(ctx, watcherCounter)
+		countChan, closeWatch, err := watcherClient.WatchChannel(ctx, watcher)
 		require.NoError(t, err)
 		defer closeWatch()
 
@@ -466,7 +466,7 @@ func TestPresenceIntegration(t *testing.T) {
 		initialCountLen := len(counts)
 
 		// Attach participant (should trigger count update)
-		err = participantClient.Attach(ctx, participantCounter)
+		err = participantClient.Attach(ctx, participant)
 		require.NoError(t, err)
 
 		// Wait for count update after attach
@@ -478,7 +478,7 @@ func TestPresenceIntegration(t *testing.T) {
 		attachCountLen := len(counts)
 
 		// Detach participant (should trigger another count update)
-		err = participantClient.Detach(ctx, participantCounter)
+		err = participantClient.Detach(ctx, participant)
 		require.NoError(t, err)
 
 		// Wait for count update after detach
@@ -492,25 +492,25 @@ func TestPresenceIntegration(t *testing.T) {
 		t.Logf("Received count updates: %v", counts)
 	})
 
-	t.Run("presence counter stress test", func(t *testing.T) {
+	t.Run("channel stress test", func(t *testing.T) {
 		clientCount := 5
 
 		clients := activeClients(t, clientCount)
 		defer deactivateAndCloseClients(t, clients)
 
-		presenceKey := helper.TestDocKey(t)
-		counters := make([]*presence.Presence, clientCount)
+		channelKey := helper.TestKey(t)
+		channels := make([]*channel.Channel, clientCount)
 
 		// Create and activate multiple clients
 		for i := range clientCount {
-			counters[i] = presence.New(presenceKey)
+			channels[i] = channel.New(channelKey)
 		}
 
 		// Attach all clients concurrently
 		for i := range clientCount {
 			go func(idx int) {
-				if err := clients[idx].Attach(ctx, counters[idx]); err != nil {
-					t.Errorf("Failed to attach client %d: %v", idx, err)
+				if err := clients[idx].Attach(ctx, channels[idx]); err != nil {
+					t.Errorf("Failed to attach channel %d: %v", idx, err)
 				}
 			}(i)
 		}
@@ -518,7 +518,7 @@ func TestPresenceIntegration(t *testing.T) {
 		// Wait for all attachments using assert.Eventually
 		assert.Eventually(t, func() bool {
 			for i := range clientCount {
-				if !counters[i].IsAttached() {
+				if !channels[i].IsAttached() {
 					return false
 				}
 			}
@@ -527,13 +527,13 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// Verify all are attached
 		for i := range clientCount {
-			assert.True(t, counters[i].IsAttached())
+			assert.True(t, channels[i].IsAttached())
 		}
 
 		// Detach all clients concurrently
 		for i := range clientCount {
 			go func(idx int) {
-				err := clients[idx].Detach(ctx, counters[idx])
+				err := clients[idx].Detach(ctx, channels[idx])
 				if err != nil {
 					t.Errorf("Failed to detach client %d: %v", idx, err)
 				}
@@ -543,7 +543,7 @@ func TestPresenceIntegration(t *testing.T) {
 		// Wait for all detachments using assert.Eventually
 		assert.Eventually(t, func() bool {
 			for i := range clientCount {
-				if counters[i].IsAttached() {
+				if channels[i].IsAttached() {
 					return false
 				}
 			}
@@ -552,11 +552,11 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// Verify all are detached
 		for i := range clientCount {
-			assert.False(t, counters[i].IsAttached())
+			assert.False(t, channels[i].IsAttached())
 		}
 
 		// Note: Detached counters may not immediately reflect zero count
-		// without active WatchPresence. This is expected behavior.
+		// without active WatchChannel. This is expected behavior.
 	})
 
 	t.Run("mixed resource test", func(t *testing.T) {
@@ -566,14 +566,14 @@ func TestPresenceIntegration(t *testing.T) {
 		cli := clients[0]
 
 		// Create both document and presence counter
-		docKey := helper.TestDocKey(t, 1)
-		presenceKey := helper.TestDocKey(t, 2)
+		docKey := helper.TestKey(t, 1)
+		channelKey := helper.TestKey(t, 2)
 
 		doc := document.New(docKey)
-		counter := presence.New(presenceKey)
+		channel := channel.New(channelKey)
 
 		// Test polymorphic usage
-		resources := []attachable.Attachable{doc, counter}
+		resources := []attachable.Attachable{doc, channel}
 
 		// Attach all resources
 		var err error
@@ -585,7 +585,7 @@ func TestPresenceIntegration(t *testing.T) {
 
 		// Verify types
 		assert.Equal(t, attachable.TypeDocument, doc.Type())
-		assert.Equal(t, attachable.TypePresence, counter.Type())
+		assert.Equal(t, attachable.TypeChannel, channel.Type())
 
 		// Detach all resources
 		for _, resource := range resources {
@@ -595,11 +595,11 @@ func TestPresenceIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("presence TTL refresh test", func(t *testing.T) {
+	t.Run("channel TTL refresh test", func(t *testing.T) {
 		// Use custom heartbeat interval for faster testing
 		cli, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithPresenceHeartbeatInterval(1*time.Second),
+			client.WithChannelHeartbeatInterval(1*time.Second),
 		)
 		require.NoError(t, err)
 		require.NoError(t, cli.Activate(ctx))
@@ -608,52 +608,52 @@ func TestPresenceIntegration(t *testing.T) {
 			assert.NoError(t, cli.Close())
 		}()
 
-		presenceKey := helper.TestDocKey(t)
-		counter := presence.New(presenceKey)
+		channelKey := helper.TestKey(t)
+		ch := channel.New(channelKey)
 
 		// Attach presence counter
-		err = cli.Attach(ctx, counter)
+		err = cli.Attach(ctx, ch)
 		require.NoError(t, err)
-		assert.True(t, counter.IsAttached())
+		assert.True(t, ch.IsAttached())
 
 		// Wait for a few heartbeat cycles (3 seconds)
 		// The client should automatically send refresh requests via heartbeat
 		time.Sleep(3 * time.Second)
 
-		// Presence should still be active after multiple refresh cycles
-		assert.True(t, counter.IsAttached())
+		// Channel should still be active after multiple refresh cycles
+		assert.True(t, ch.IsAttached())
 
 		// Detach
-		require.NoError(t, cli.Detach(ctx, counter))
-		assert.False(t, counter.IsAttached())
+		require.NoError(t, cli.Detach(ctx, ch))
+		assert.False(t, ch.IsAttached())
 	})
 
-	t.Run("presence expires after TTL without refresh", func(t *testing.T) {
-		// This test verifies that presence sessions expire when clients don't send refresh.
+	t.Run("channel expires after TTL without refresh", func(t *testing.T) {
+		// This test verifies that channel sessions expire when clients don't send refresh.
 		// We use a short TTL (5s) configured in test helper.
 		ctx := context.Background()
 
 		// cli1 has heartbeat disabled (long interval) to simulate a crash.
-		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithPresenceHeartbeatInterval(1*time.Hour))
+		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithChannelHeartbeatInterval(1*time.Hour))
 		require.NoError(t, err)
 		require.NoError(t, cli1.Activate(ctx))
 		defer func() { assert.NoError(t, cli1.Close()) }()
 
 		// cli2 has normal heartbeat to stay active and observe cli1's expiration.
-		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithPresenceHeartbeatInterval(2*time.Second))
+		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithChannelHeartbeatInterval(2*time.Second))
 		require.NoError(t, err)
 		require.NoError(t, cli2.Activate(ctx))
 		defer func() { assert.NoError(t, cli2.Close()) }()
 
 		// Use the same presence key for both clients
-		presenceKey := helper.TestDocKey(t)
-		counter1 := presence.New(presenceKey)
-		counter2 := presence.New(presenceKey)
-		require.NoError(t, cli1.Attach(ctx, counter1, client.WithPresenceRealtimeSync()))
-		require.NoError(t, cli2.Attach(ctx, counter2, client.WithPresenceRealtimeSync()))
+		channelKey := helper.TestKey(t)
+		counter1 := channel.New(channelKey)
+		counter2 := channel.New(channelKey)
+		require.NoError(t, cli1.Attach(ctx, counter1, client.WithChannelRealtimeSync()))
+		require.NoError(t, cli2.Attach(ctx, counter2, client.WithChannelRealtimeSync()))
 
 		// Start watching on cli2 to receive count updates
-		countCh, unwatch, err := cli2.WatchPresence(ctx, counter2)
+		countCh, unwatch, err := cli2.WatchChannel(ctx, counter2)
 		require.NoError(t, err)
 		defer unwatch()
 
@@ -698,9 +698,9 @@ func TestPresenceIntegration(t *testing.T) {
 		client1, client2 := clients[0], clients[1]
 
 		// Create presence counters for the same room
-		presenceKey := helper.TestDocKey(t)
-		counter1 := presence.New(presenceKey)
-		counter2 := presence.New(presenceKey)
+		channelKey := helper.TestKey(t)
+		counter1 := channel.New(channelKey)
+		counter2 := channel.New(channelKey)
 
 		// Attach client1 with manual sync mode (no realtime option)
 		err := client1.Attach(ctx, counter1)
@@ -747,17 +747,17 @@ func TestPresenceIntegration(t *testing.T) {
 		client1, client2 := clients[0], clients[1]
 
 		// Create presence counters for the same room
-		presenceKey := helper.TestDocKey(t)
-		counter1 := presence.New(presenceKey)
-		counter2 := presence.New(presenceKey)
+		channelKey := helper.TestKey(t)
+		ch1 := channel.New(channelKey)
+		ch2 := channel.New(channelKey)
 
 		// Attach client1 with realtime sync mode
-		err := client1.Attach(ctx, counter1, client.WithPresenceRealtimeSync())
+		err := client1.Attach(ctx, ch1, client.WithChannelRealtimeSync())
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), counter1.Count())
+		assert.Equal(t, int64(1), ch1.Count())
 
 		// Start watching for count changes
-		countChan1, closeWatch1, err := client1.WatchPresence(ctx, counter1)
+		countChan1, closeWatch1, err := client1.WatchChannel(ctx, ch1)
 		require.NoError(t, err)
 		defer closeWatch1()
 
@@ -770,32 +770,32 @@ func TestPresenceIntegration(t *testing.T) {
 		}
 
 		// Attach client2 with realtime sync mode
-		err = client2.Attach(ctx, counter2, client.WithPresenceRealtimeSync())
+		err = client2.Attach(ctx, ch2, client.WithChannelRealtimeSync())
 		require.NoError(t, err)
 
 		// client1 should receive updated count automatically
 		select {
 		case count := <-countChan1:
 			assert.Equal(t, int64(2), count)
-			assert.Equal(t, int64(2), counter1.Count())
+			assert.Equal(t, int64(2), ch1.Count())
 		case <-time.After(3 * time.Second):
 			t.Fatal("Timeout waiting for count update after client2 attached")
 		}
 
 		// Detach client2
-		require.NoError(t, client2.Detach(ctx, counter2))
+		require.NoError(t, client2.Detach(ctx, ch2))
 
 		// client1 should receive updated count automatically
 		select {
 		case count := <-countChan1:
 			assert.Equal(t, int64(1), count)
-			assert.Equal(t, int64(1), counter1.Count())
+			assert.Equal(t, int64(1), ch1.Count())
 		case <-time.After(3 * time.Second):
 			t.Fatal("Timeout waiting for count update after client2 detached")
 		}
 
 		// Detach client1
-		require.NoError(t, client1.Detach(ctx, counter1))
+		require.NoError(t, client1.Detach(ctx, ch1))
 	})
 
 	t.Run("presence sync all resources test", func(t *testing.T) {
@@ -804,15 +804,15 @@ func TestPresenceIntegration(t *testing.T) {
 		client1, client2 := clients[0], clients[1]
 
 		// Create document and presence counter
-		doc1 := document.New(helper.TestDocKey(t, 0))
-		counter1 := presence.New(helper.TestDocKey(t, 1))
+		doc1 := document.New(helper.TestKey(t, 0))
+		counter1 := channel.New(helper.TestKey(t, 1))
 
 		// Attach both resources in manual mode
 		require.NoError(t, client1.Attach(ctx, doc1))
 		require.NoError(t, client1.Attach(ctx, counter1))
 
 		// Attach client2 to the same presence
-		counter2 := presence.New(helper.TestDocKey(t, 1))
+		counter2 := channel.New(helper.TestKey(t, 1))
 		require.NoError(t, client2.Attach(ctx, counter2))
 
 		// counter1 shows old count (manual mode)

@@ -63,10 +63,10 @@ type Options struct {
 	// The default value is 1000ms.
 	RetrySyncLoopDelay gotime.Duration
 
-	// PresenceHeartbeatInterval is the interval of the presence heartbeat.
+	// ChannelHeartbeatInterval is the interval of the presence heartbeat.
 	// The client sends a heartbeat to the server to refresh the presence TTL.
 	// The default value is 30 seconds.
-	PresenceHeartbeatInterval gotime.Duration
+	ChannelHeartbeatInterval gotime.Duration
 }
 
 // WithAPIKey configures the API key of the client.
@@ -109,9 +109,9 @@ func WithRetrySyncLoopDelay(delay gotime.Duration) Option {
 	return func(o *Options) { o.RetrySyncLoopDelay = delay }
 }
 
-// WithPresenceHeartbeatInterval configures the interval of the presence heartbeat.
-func WithPresenceHeartbeatInterval(interval gotime.Duration) Option {
-	return func(o *Options) { o.PresenceHeartbeatInterval = interval }
+// WithChannelHeartbeatInterval configures the interval of the channel heartbeat.
+func WithChannelHeartbeatInterval(interval gotime.Duration) Option {
+	return func(o *Options) { o.ChannelHeartbeatInterval = interval }
 }
 
 // DeactivateOption configures DeactivateOptions.
@@ -162,20 +162,20 @@ func WithSchema(schema string) AttachOption {
 	return func(o *AttachOptions) { o.Schema = schema }
 }
 
-// AttachPresenceOption configures AttachPresenceOptions.
-type AttachPresenceOption func(*AttachPresenceOptions)
+// AttachChannelOption configures AttachChannelOptions.
+type AttachChannelOption func(*AttachChannelOptions)
 
-// AttachPresenceOptions configures how we set up the presence counter.
-type AttachPresenceOptions struct {
-	// IsRealtime determines whether the presence counter is in realtime mode.
-	// If true, the client will watch for presence count changes via streaming.
+// AttachChannelOptions configures how we set up the channel.
+type AttachChannelOptions struct {
+	// IsRealtime determines whether the channel is in realtime mode.
+	// If true, the client will watch for channel changes via streaming.
 	// If false, the client must manually refresh to get count updates.
 	IsRealtime bool
 }
 
-// WithPresenceRealtimeSync configures the presence counter to be in realtime mode.
-func WithPresenceRealtimeSync() AttachPresenceOption {
-	return func(o *AttachPresenceOptions) { o.IsRealtime = true }
+// WithChannelRealtimeSync configures the channel to be in realtime mode.
+func WithChannelRealtimeSync() AttachChannelOption {
+	return func(o *AttachChannelOptions) { o.IsRealtime = true }
 }
 
 // DetachOption configures DetachOptions.
@@ -192,7 +192,7 @@ func WithRemoveIfNotAttached() DetachOption {
 }
 
 // SyncOptions is an option for sync. It contains the key of the resource to
-// sync and the sync mode. It can be used for both documents and presence counters.
+// sync and the sync mode. It can be used for both documents and channels.
 type SyncOptions struct {
 	key  key.Key
 	mode types.SyncMode

@@ -106,7 +106,7 @@ func TestRESTAPI(t *testing.T) {
 
 				var docs []*document.Document
 				for i := range numDocs {
-					doc := document.New(helper.TestDocKey(t, i))
+					doc := document.New(helper.TestKey(t, i))
 					assert.NoError(t, cli.Attach(ctx, doc,
 						client.WithInitialRoot(yson.ParseObject(`{"counter": Counter(Long(0))}`)),
 						client.WithPresence(presence.Data{"key": cli.Key()}),
@@ -166,7 +166,7 @@ func TestRESTAPI(t *testing.T) {
 		assert.NoError(t, cli1.Activate(ctx))
 		assert.NoError(t, cli2.Activate(ctx))
 
-		key1, key2 := helper.TestDocKey(t, 1), helper.TestDocKey(t, 2)
+		key1, key2 := helper.TestKey(t, 1), helper.TestKey(t, 2)
 		doc1, doc2 := document.New(key1), document.New(key1)
 		assert.NoError(t, cli1.Attach(ctx, doc1))
 		assert.NoError(t, cli2.Attach(ctx, doc2))

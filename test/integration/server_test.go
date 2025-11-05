@@ -42,7 +42,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithRealtimeSync()))
 
 		// Subscribe to watch stream to verify it closes properly on server shutdown
