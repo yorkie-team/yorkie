@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package presence provides presence implementation.
-package presence
+// Package channel provides channel implementation.
+package channel
 
 import (
 	gojson "encoding/json"
@@ -28,15 +28,15 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-// Presence represents a presence in a document.
-type Presence struct {
-	// key is the key of the presence.
+// Channel represents lightweight channel.
+type Channel struct {
+	// key is the key of the channel.
 	key key.Key
 
-	// status is the status of the presence.
+	// status is the status of the channel.
 	status atomic.Int32
 
-	// actorID is the ID of the actor currently working with this presence.
+	// actorID is the ID of the actor currently working with this channel.
 	actorMu sync.RWMutex
 	actorID time.ActorID
 
@@ -66,8 +66,8 @@ type BroadcastRequest struct {
 }
 
 // New creates a new instance of Presence.
-func New(k key.Key) *Presence {
-	counter := &Presence{
+func New(k key.Key) *Channel {
+	counter := &Channel{
 		key:                    k,
 		broadcastRequests:      make(chan BroadcastRequest, 1),
 		broadcastResponses:     make(chan error, 1),
@@ -77,57 +77,57 @@ func New(k key.Key) *Presence {
 	return counter
 }
 
-// Key returns the key of this presence.
-func (c *Presence) Key() key.Key {
+// Key returns the key of this channel.
+func (c *Channel) Key() key.Key {
 	return c.key
 }
 
 // Type returns the type of this resource.
-func (c *Presence) Type() attachable.ResourceType {
-	return attachable.TypePresence
+func (c *Channel) Type() attachable.ResourceType {
+	return attachable.TypeChannel
 }
 
-// Status returns the status of this presence.
-func (c *Presence) Status() attachable.StatusType {
+// Status returns the status of this channel.
+func (c *Channel) Status() attachable.StatusType {
 	return attachable.StatusType(c.status.Load())
 }
 
-// SetStatus updates the status of this presence.
-func (c *Presence) SetStatus(status attachable.StatusType) {
+// SetStatus updates the status of this channel.
+func (c *Channel) SetStatus(status attachable.StatusType) {
 	c.status.Store(int32(status))
 }
 
-// IsAttached returns whether this presence is attached or not.
-func (c *Presence) IsAttached() bool {
+// IsAttached returns whether this channel is attached or not.
+func (c *Channel) IsAttached() bool {
 	return attachable.StatusType(c.status.Load()) == attachable.StatusAttached
 }
 
-// ActorID returns ID of the actor currently working with this presence.
-func (c *Presence) ActorID() time.ActorID {
+// ActorID returns ID of the actor currently working with this channel.
+func (c *Channel) ActorID() time.ActorID {
 	c.actorMu.RLock()
 	defer c.actorMu.RUnlock()
 	return c.actorID
 }
 
-// SetActor sets actor into this presence.
-func (c *Presence) SetActor(actor time.ActorID) {
+// SetActor sets actor into this channel.
+func (c *Channel) SetActor(actor time.ActorID) {
 	c.actorMu.Lock()
 	defer c.actorMu.Unlock()
 	c.actorID = actor
 }
 
 // Count returns the current count value.
-func (c *Presence) Count() int64 {
+func (c *Channel) Count() int64 {
 	return c.count.Load()
 }
 
 // Seq returns the last seen sequence number.
-func (c *Presence) Seq() int64 {
+func (c *Channel) Seq() int64 {
 	return c.seq.Load()
 }
 
 // UpdateCount updates the count and sequence number if the sequence is newer.
-func (c *Presence) UpdateCount(count int64, seq int64) bool {
+func (c *Channel) UpdateCount(count int64, seq int64) bool {
 	// Only update if sequence is newer (or initial state with seq=0)
 	currentSeq := c.seq.Load()
 	if seq > currentSeq || seq == 0 {
@@ -139,18 +139,18 @@ func (c *Presence) UpdateCount(count int64, seq int64) bool {
 	return false
 }
 
-// BroadcastRequests returns the broadcast requests of this presence.
-func (c *Presence) BroadcastRequests() <-chan BroadcastRequest {
+// BroadcastRequests returns the broadcast requests of this channel.
+func (c *Channel) BroadcastRequests() <-chan BroadcastRequest {
 	return c.broadcastRequests
 }
 
-// BroadcastResponses returns the broadcast responses of this presence.
-func (c *Presence) BroadcastResponses() chan error {
+// BroadcastResponses returns the broadcast responses of this channel.
+func (c *Channel) BroadcastResponses() chan error {
 	return c.broadcastResponses
 }
 
 // Broadcast encodes the given payload and sends a Broadcast request.
-func (c *Presence) Broadcast(topic string, payload any) error {
+func (c *Channel) Broadcast(topic string, payload any) error {
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("broadcast payload: %w", err)
@@ -165,7 +165,7 @@ func (c *Presence) Broadcast(topic string, payload any) error {
 
 // SubscribeBroadcastEvent subscribes to the given topic and registers
 // an event handler.
-func (c *Presence) SubscribeBroadcastEvent(
+func (c *Channel) SubscribeBroadcastEvent(
 	topic string,
 	handler func(topic, publisher string, payload []byte) error,
 ) {
@@ -174,14 +174,14 @@ func (c *Presence) SubscribeBroadcastEvent(
 
 // UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
 // the event handler.
-func (c *Presence) UnsubscribeBroadcastEvent(
+func (c *Channel) UnsubscribeBroadcastEvent(
 	topic string,
 ) {
 	delete(c.broadcastEventHandlers, topic)
 }
 
 // BroadcastEventHandlers returns the registered handlers for broadcast events.
-func (c *Presence) BroadcastEventHandlers() map[string]func(
+func (c *Channel) BroadcastEventHandlers() map[string]func(
 	topic string,
 	publisher string,
 	payload []byte,

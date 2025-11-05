@@ -101,7 +101,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 		assert.Equal(t, schemaRule1, doc.SchemaRules)
 		cli.Deactivate(ctx)
@@ -113,7 +113,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err = cli.Attach(ctx, doc, client.WithSchema("not-exist-schema@1"))
 		assert.Error(t, err)
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -133,12 +133,12 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli2.Activate(ctx))
 
 		// cli attach without schema
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 
 		// cli2 try to attach schema
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		err = cli2.Attach(ctx, doc2, client.WithSchema(schemaName1+"@1"))
 		assert.NoError(t, err)
 		assert.Equal(t, []types.Rule(nil), doc2.SchemaRules)
@@ -150,7 +150,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, err)
 
 		// cli2 attach schema after all clients detach
-		doc3 := document.New(helper.TestDocKey(t))
+		doc3 := document.New(helper.TestKey(t))
 		err = cli2.Attach(ctx, doc3, client.WithSchema(schemaName1+"@1"))
 		assert.NoError(t, err)
 		assert.Equal(t, schemaRule1, doc3.SchemaRules)
@@ -167,12 +167,12 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli2.Activate(ctx))
 
 		// cli attach with schema1
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 		assert.Equal(t, schemaRule1, doc.SchemaRules)
 
 		// cli2 try to attach schema2 to document that already has schema1
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		err = cli2.Attach(ctx, doc2, client.WithSchema(schemaName2+"@1"))
 		assert.NoError(t, err)
 		assert.Equal(t, schemaRule1, doc2.SchemaRules)
@@ -184,7 +184,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		// update with invalid schema
@@ -214,12 +214,12 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli2.Activate(ctx))
 
 		// client1 attaches document with schema1
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli1.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 		assert.Equal(t, schemaRule1, doc.SchemaRules)
 
 		// client2 attaches document
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli2.Attach(ctx, doc2))
 		assert.Equal(t, schemaRule1, doc2.SchemaRules)
 
@@ -280,7 +280,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.Equal(t, 0, len(schemas))
 
 		// Cannot remove schema that is attached to a document
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName4+"@1")))
 		err = adminCli.RemoveSchema(ctx, "default", schemaName4, 1)
 		assert.Error(t, err)
@@ -346,7 +346,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -366,7 +366,7 @@ func TestDocumentSchema(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":123}`, doc2.Marshal())
 
@@ -379,7 +379,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		_, err = adminCli.UpdateDocument(
@@ -401,7 +401,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -431,7 +431,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -464,7 +464,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Verify schema is detached
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":"hello"}`, doc2.Marshal())
 		assert.Equal(t, []types.Rule(nil), doc2.SchemaRules)
@@ -485,7 +485,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -529,7 +529,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Verify schema is attached
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":"hello"}`, doc2.Marshal())
 		assert.Equal(t, schemaRule1, doc2.SchemaRules)
@@ -550,7 +550,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -582,7 +582,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -604,7 +604,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli.Detach(ctx, doc))
 
 		// Verify root is updated
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":123}`, doc2.Marshal())
 
@@ -617,7 +617,7 @@ func TestDocumentSchema(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(schemaName1+"@1")))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -651,7 +651,7 @@ func TestDocumentSchema(t *testing.T) {
 		assert.NoError(t, cli.Detach(ctx, doc))
 
 		// Verify root is updated and schema is still attached
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc2))
 		assert.Equal(t, `{"title":"world"}`, doc2.Marshal())
 

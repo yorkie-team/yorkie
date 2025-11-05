@@ -46,15 +46,15 @@ const (
 
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	docSubsMap      *cmap.Map[types.DocRefKey, *DocSubscriptions]
-	presenceSubsMap *cmap.Map[types.PresenceRefKey, *PresenceSubscriptions]
+	docSubsMap     *cmap.Map[types.DocRefKey, *DocSubscriptions]
+	channelSubsMap *cmap.Map[types.ChannelRefKey, *ChannelSubscriptions]
 }
 
 // New creates an instance of PubSub.
 func New() *PubSub {
 	return &PubSub{
-		docSubsMap:      cmap.New[types.DocRefKey, *DocSubscriptions](),
-		presenceSubsMap: cmap.New[types.PresenceRefKey, *PresenceSubscriptions](),
+		docSubsMap:     cmap.New[types.DocRefKey, *DocSubscriptions](),
+		channelSubsMap: cmap.New[types.ChannelRefKey, *ChannelSubscriptions](),
 	}
 }
 
@@ -195,12 +195,12 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
 	return ids
 }
 
-// SubscribePresence subscribes to the given presence key.
-func (m *PubSub) SubscribePresence(
+// SubscribeChannel subscribes to the given channel key.
+func (m *PubSub) SubscribeChannel(
 	ctx context.Context,
 	subscriber time.ActorID,
-	refKey types.PresenceRefKey,
-) (*PresenceSubscription, int64, error) {
+	refKey types.ChannelRefKey,
+) (*ChannelSubscription, int64, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`SubscribePresence(%s,%s) Start`,
@@ -209,14 +209,14 @@ func (m *PubSub) SubscribePresence(
 		)
 	}
 
-	var newSub *PresenceSubscription
+	var newSub *ChannelSubscription
 
-	_ = m.presenceSubsMap.Upsert(refKey, func(subs *PresenceSubscriptions, exists bool) *PresenceSubscriptions {
+	_ = m.channelSubsMap.Upsert(refKey, func(subs *ChannelSubscriptions, exists bool) *ChannelSubscriptions {
 		if !exists {
-			subs = newPresenceSubscriptions(refKey)
+			subs = newChannelSubscriptions(refKey)
 		}
 
-		newSub = NewPresenceSubscription(subscriber)
+		newSub = NewChannelSubscription(subscriber)
 		subs.Set(newSub)
 		return subs
 	})
@@ -232,11 +232,11 @@ func (m *PubSub) SubscribePresence(
 	return newSub, 0, nil
 }
 
-// UnsubscribePresence unsubscribes the given presence key.
-func (m *PubSub) UnsubscribePresence(
+// UnsubscribeChannel unsubscribes the given channel key.
+func (m *PubSub) UnsubscribeChannel(
 	ctx context.Context,
-	refKey types.PresenceRefKey,
-	sub *PresenceSubscription,
+	refKey types.ChannelRefKey,
+	sub *ChannelSubscription,
 ) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -248,10 +248,10 @@ func (m *PubSub) UnsubscribePresence(
 
 	sub.Close()
 
-	if subs, ok := m.presenceSubsMap.Get(refKey); ok {
+	if subs, ok := m.channelSubsMap.Get(refKey); ok {
 		subs.Delete(sub.ID())
 
-		m.presenceSubsMap.Delete(refKey, func(subs *PresenceSubscriptions, exists bool) bool {
+		m.channelSubsMap.Delete(refKey, func(subs *ChannelSubscriptions, exists bool) bool {
 			if !exists || 0 < subs.Len() {
 				return false
 			}
@@ -270,20 +270,20 @@ func (m *PubSub) UnsubscribePresence(
 	}
 }
 
-// PublishPresence publishes the given presence event.
-func (m *PubSub) PublishPresence(
+// PublishChannel publishes the given channel event.
+func (m *PubSub) PublishChannel(
 	ctx context.Context,
-	event events.PresenceEvent,
+	event events.ChannelEvent,
 ) {
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`PublishPresence(%s) Start`, event.Key)
+		logging.From(ctx).Debugf(`PublishChannel(%s) Start`, event.Key)
 	}
 
-	if subs, ok := m.presenceSubsMap.Get(event.Key); ok {
+	if subs, ok := m.channelSubsMap.Get(event.Key); ok {
 		subs.Publish(event)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`PublishPresence(%s) End`, event.Key)
+		logging.From(ctx).Debugf(`PublishChannel(%s) End`, event.Key)
 	}
 }

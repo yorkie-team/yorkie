@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/pkg/presence"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -48,25 +48,25 @@ func TestPresenceBroadcast(t *testing.T) {
 			return nil
 		}
 
-		presenceKey := helper.TestDocKey(t)
+		channelKey := helper.TestKey(t)
 
-		p1 := presence.New(presenceKey)
+		p1 := channel.New(channelKey)
 		assert.NoError(t, c1.Attach(ctx, p1))
-		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
+		countChan1, closeWatch1, err := c1.WatchChannel(ctx, p1)
 		assert.NoError(t, err)
 		defer closeWatch1()
 		p1.SubscribeBroadcastEvent("mention", handler)
 
-		p2 := presence.New(presenceKey)
+		p2 := channel.New(channelKey)
 		assert.NoError(t, c2.Attach(ctx, p2))
-		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
+		countChan2, closeWatch2, err := c2.WatchChannel(ctx, p2)
 		assert.NoError(t, err)
 		defer closeWatch2()
 		p2.SubscribeBroadcastEvent("mention", handler)
 
-		p3 := presence.New(presenceKey)
+		p3 := channel.New(channelKey)
 		assert.NoError(t, c3.Attach(ctx, p3))
-		countChan3, closeWatch3, err := c3.WatchPresence(ctx, p3)
+		countChan3, closeWatch3, err := c3.WatchChannel(ctx, p3)
 		assert.NoError(t, err)
 		defer closeWatch3()
 		p3.SubscribeBroadcastEvent("mention", handler)
@@ -120,18 +120,18 @@ func TestPresenceBroadcast(t *testing.T) {
 			return nil
 		}
 
-		presenceKey := helper.TestDocKey(t)
+		channelKey := helper.TestKey(t)
 
-		p1 := presence.New(presenceKey)
+		p1 := channel.New(channelKey)
 		assert.NoError(t, c1.Attach(ctx, p1))
-		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
+		countChan1, closeWatch1, err := c1.WatchChannel(ctx, p1)
 		assert.NoError(t, err)
 		defer closeWatch1()
 		p1.SubscribeBroadcastEvent("mention", handler)
 
-		p2 := presence.New(presenceKey)
+		p2 := channel.New(channelKey)
 		assert.NoError(t, c2.Attach(ctx, p2))
-		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
+		countChan2, closeWatch2, err := c2.WatchChannel(ctx, p2)
 		assert.NoError(t, err)
 		defer closeWatch2()
 		p2.SubscribeBroadcastEvent("mention", handler)
@@ -181,19 +181,19 @@ func TestPresenceBroadcast(t *testing.T) {
 			return nil
 		}
 
-		presenceKey := helper.TestDocKey(t)
+		channelKey := helper.TestKey(t)
 
-		p1 := presence.New(presenceKey)
+		p1 := channel.New(channelKey)
 		assert.NoError(t, c1.Attach(ctx, p1))
-		countChan1, closeWatch1, err := c1.WatchPresence(ctx, p1)
+		countChan1, closeWatch1, err := c1.WatchChannel(ctx, p1)
 		assert.NoError(t, err)
 		defer closeWatch1()
 		p1.SubscribeBroadcastEvent("mention", handler)
 
 		// c2 doesn't subscribe to the "mention" broadcast event
-		p2 := presence.New(presenceKey)
+		p2 := channel.New(channelKey)
 		assert.NoError(t, c2.Attach(ctx, p2))
-		countChan2, closeWatch2, err := c2.WatchPresence(ctx, p2)
+		countChan2, closeWatch2, err := c2.WatchChannel(ctx, p2)
 		assert.NoError(t, err)
 		defer closeWatch2()
 

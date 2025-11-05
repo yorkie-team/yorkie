@@ -41,13 +41,13 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
-	"github.com/yorkie-team/yorkie/pkg/presence"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -146,8 +146,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	// Set default heartbeat interval if not configured
-	if options.PresenceHeartbeatInterval == 0 {
-		options.PresenceHeartbeatInterval = 30 * gotime.Second
+	if options.ChannelHeartbeatInterval == 0 {
+		options.ChannelHeartbeatInterval = 30 * gotime.Second
 	}
 
 	conn := &http.Client{}
@@ -321,7 +321,7 @@ func (c *Client) runSyncLoop(ctx context.Context) {
 				return
 			case <-ticker.C:
 				for _, attachment := range c.attachments.Values() {
-					if !attachment.needSync(c.options.PresenceHeartbeatInterval) {
+					if !attachment.needSync(c.options.ChannelHeartbeatInterval) {
 						continue
 					}
 
@@ -369,12 +369,12 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 		return nil
 	}
 
-	p, ok := attachment.resource.(*presence.Presence)
+	p, ok := attachment.resource.(*channel.Channel)
 	if !ok {
 		return ErrInvalidResource
 	}
 
-	if err := c.refreshPresence(ctx, p); err != nil {
+	if err := c.refreshChannel(ctx, p); err != nil {
 		return err
 	}
 
@@ -412,19 +412,19 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...in
 
 	}
 
-	p, ok := r.(*presence.Presence)
+	p, ok := r.(*channel.Channel)
 	if !ok {
 		return ErrInvalidResource
 	}
 
-	attachPresenceOpts := &AttachPresenceOptions{}
+	attachChannelOpts := &AttachChannelOptions{}
 	for _, opt := range opts {
-		if attachOpt, ok := opt.(AttachPresenceOption); ok {
-			attachOpt(attachPresenceOpts)
+		if attachOpt, ok := opt.(AttachChannelOption); ok {
+			attachOpt(attachChannelOpts)
 		}
 	}
 
-	return c.attachPresence(ctx, p, attachPresenceOpts)
+	return c.attachChannel(ctx, p, attachChannelOpts)
 }
 
 // Detach detaches the given resource from this client.
@@ -461,12 +461,12 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...in
 		return c.detachDocument(ctx, d, detachOpts)
 	}
 
-	p, ok := r.(*presence.Presence)
+	p, ok := r.(*channel.Channel)
 	if !ok {
 		return ErrInvalidResource
 	}
 
-	return c.detachPresence(ctx, p)
+	return c.detachChannel(ctx, p)
 }
 
 // attachDocument attaches the given document to this client. It tells the server that
@@ -613,19 +613,19 @@ func (c *Client) detachDocument(ctx context.Context, d *document.Document, opts 
 	return nil
 }
 
-// attachPresence attaches a presence counter to the server.
-func (c *Client) attachPresence(ctx context.Context, p *presence.Presence, opts *AttachPresenceOptions) error {
-	res, err := c.client.AttachPresence(
+// attachChannel attaches a channel to the server.
+func (c *Client) attachChannel(ctx context.Context, ch *channel.Channel, opts *AttachChannelOptions) error {
+	res, err := c.client.AttachChannel(
 		ctx,
-		withShardKey(connect.NewRequest(&api.AttachPresenceRequest{
-			ClientId:    c.id.String(),
-			PresenceKey: p.Key().String(),
-		}), c.options.APIKey, p.Key().String()))
+		withShardKey(connect.NewRequest(&api.AttachChannelRequest{
+			ClientId:   c.id.String(),
+			ChannelKey: ch.Key().String(),
+		}), c.options.APIKey, ch.Key().String()))
 	if err != nil {
 		return err
 	}
 
-	p.SetStatus(attachable.StatusAttached)
+	ch.SetStatus(attachable.StatusAttached)
 
 	syncMode := SyncModeManual
 	if opts.IsRealtime {
@@ -633,75 +633,75 @@ func (c *Client) attachPresence(ctx context.Context, p *presence.Presence, opts 
 	}
 
 	attachment := &Attachment{
-		resource:     p,
-		resourceID:   types.ID(res.Msg.PresenceId),
+		resource:     ch,
+		resourceID:   types.ID(res.Msg.SessionId),
 		syncMode:     syncMode,
 		lastSyncTime: gotime.Now(),
 	}
-	c.attachments.Set(p.Key(), attachment)
+	c.attachments.Set(ch.Key(), attachment)
 
 	// Update initial count from attach response
-	p.UpdateCount(res.Msg.Count, 0)
+	ch.UpdateCount(res.Msg.Count, 0)
 
 	return nil
 }
 
-// refreshPresence refreshes the TTL of the given presence counter and returns the current count.
-func (c *Client) refreshPresence(ctx context.Context, p *presence.Presence) error {
-	attachment, ok := c.attachments.Get(p.Key())
+// refreshChannel refreshes the TTL of the given channel and returns the current count.
+func (c *Client) refreshChannel(ctx context.Context, ch *channel.Channel) error {
+	attachment, ok := c.attachments.Get(ch.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	res, err := c.client.RefreshPresence(
+	res, err := c.client.RefreshChannel(
 		ctx,
-		withShardKey(connect.NewRequest(&api.RefreshPresenceRequest{
-			ClientId:    c.id.String(),
-			PresenceId:  attachment.resourceID.String(),
-			PresenceKey: p.Key().String(),
-		}), c.options.APIKey, p.Key().String()))
+		withShardKey(connect.NewRequest(&api.RefreshChannelRequest{
+			ClientId:   c.id.String(),
+			ChannelKey: ch.Key().String(),
+			SessionId:  attachment.resourceID.String(),
+		}), c.options.APIKey, ch.Key().String()))
 
 	if err != nil {
 		return err
 	}
 
 	// Update count from refresh response
-	p.UpdateCount(res.Msg.Count, 0)
+	ch.UpdateCount(res.Msg.Count, 0)
 
 	return nil
 }
 
-// detachPresence detaches a presence counter from the server.
-func (c *Client) detachPresence(ctx context.Context, p *presence.Presence) error {
-	attachment, ok := c.attachments.Get(p.Key())
+// detachChannel detaches a channel from the server.
+func (c *Client) detachChannel(ctx context.Context, ch *channel.Channel) error {
+	attachment, ok := c.attachments.Get(ch.Key())
 	if !ok {
 		return ErrNotAttached
 	}
 
-	_, err := c.client.DetachPresence(
+	_, err := c.client.DetachChannel(
 		ctx,
-		withShardKey(connect.NewRequest(&api.DetachPresenceRequest{
-			ClientId:    c.id.String(),
-			PresenceId:  attachment.resourceID.String(),
-			PresenceKey: p.Key().String(),
-		}), c.options.APIKey, p.Key().String()))
+		withShardKey(connect.NewRequest(&api.DetachChannelRequest{
+			ClientId:   c.id.String(),
+			ChannelKey: ch.Key().String(),
+			SessionId:  attachment.resourceID.String(),
+		}), c.options.APIKey, ch.Key().String()))
 	if err != nil {
 		return err
 	}
 
 	// Update counter status and reset count to 0
-	p.SetStatus(attachable.StatusDetached)
-	p.UpdateCount(0, 0) // Reset count and seq when detached
+	ch.SetStatus(attachable.StatusDetached)
+	ch.UpdateCount(0, 0) // Reset count and seq when detached
 
-	c.attachments.Delete(p.Key())
+	c.attachments.Delete(ch.Key())
 
 	return nil
 }
 
-// WatchPresence starts watching presence count changes for the given counter.
+// WatchChannel starts watching channel count changes for the given counter.
 // It returns a channel that receives count updates and a close function to stop watching.
-func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-chan int64, func(), error) {
-	_, ok := c.attachments.Get(p.Key())
+func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan int64, func(), error) {
+	_, ok := c.attachments.Get(ch.Key())
 	if !ok {
 		return nil, nil, ErrNotAttached
 	}
@@ -710,8 +710,8 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 		return nil, nil, ErrNotActivated
 	}
 
-	if p.Status() != attachable.StatusAttached {
-		return nil, nil, fmt.Errorf("presence counter must be attached before watching")
+	if ch.Status() != attachable.StatusAttached {
+		return nil, nil, fmt.Errorf("channel must be attached before watching")
 	}
 
 	// Create buffered channel for count updates
@@ -720,13 +720,13 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 	// Create context for the watch stream
 	watchCtx, cancel := context.WithCancel(ctx)
 
-	// Start the watch stream using presence_key
-	stream, err := c.client.WatchPresence(
+	// Start the watch stream using channel key
+	stream, err := c.client.WatchChannel(
 		watchCtx,
-		withShardKey(connect.NewRequest(&api.WatchPresenceRequest{
-			ClientId:    c.id.String(),
-			PresenceKey: p.Key().String(),
-		}), c.options.APIKey, p.Key().String()))
+		withShardKey(connect.NewRequest(&api.WatchChannelRequest{
+			ClientId:   c.id.String(),
+			ChannelKey: ch.Key().String(),
+		}), c.options.APIKey, ch.Key().String()))
 	if err != nil {
 		cancel()
 		return nil, nil, err
@@ -746,7 +746,7 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 					if err := stream.Err(); err != nil {
 						// Log error and return to exit the goroutine
 						if c.logger != nil {
-							c.logger.Error("WatchPresence stream error", zap.Error(err))
+							c.logger.Error("WatchChannel stream error", zap.Error(err))
 						}
 						return
 					}
@@ -756,24 +756,24 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 
 				msg := stream.Msg()
 				switch body := msg.Body.(type) {
-				case *api.WatchPresenceResponse_Initialized:
+				case *api.WatchChannelResponse_Initialized:
 					// Always accept initial count and update counter
-					p.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
+					ch.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
 					select {
 					case countChan <- body.Initialized.Count:
 					case <-watchCtx.Done():
 						return
 					}
-				case *api.WatchPresenceResponse_Event:
+				case *api.WatchChannelResponse_Event:
 					// Let Counter decide whether to accept the update based on sequence
 					if body.Event != nil {
 						// Handle broadcast events
-						if body.Event.Type == api.PresenceEvent_TYPE_BROADCAST {
+						if body.Event.Type == api.ChannelEvent_TYPE_BROADCAST {
 							// If the handler exists, it means that the broadcast topic has been subscribed to.
-							if handler, ok := p.BroadcastEventHandlers()[body.Event.Topic]; ok && handler != nil {
+							if handler, ok := ch.BroadcastEventHandlers()[body.Event.Topic]; ok && handler != nil {
 								_ = handler(body.Event.Topic, body.Event.Publisher, body.Event.Payload)
 							}
-						} else if p.UpdateCount(body.Event.Count, body.Event.Seq) {
+						} else if ch.UpdateCount(body.Event.Count, body.Event.Seq) {
 							// Only send to channel if Counter accepted the update
 							select {
 							case countChan <- body.Event.Count:
@@ -796,8 +796,8 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 	go func() {
 		for {
 			select {
-			case r := <-p.BroadcastRequests():
-				p.BroadcastResponses() <- c.broadcast(ctx, p, r.Topic, r.Payload)
+			case r := <-ch.BroadcastRequests():
+				ch.BroadcastResponses() <- c.broadcast(ctx, ch, r.Topic, r.Payload)
 			case <-watchCtx.Done():
 				return
 			}
@@ -809,7 +809,7 @@ func (c *Client) WatchPresence(ctx context.Context, p *presence.Presence) (<-cha
 
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
-// local documents. For presence counters, it refreshes the TTL and retrieves
+// local documents. For channels, it refreshes the TTL and retrieves
 // the current count.
 func (c *Client) Sync(ctx context.Context, opts ...SyncOptions) error {
 	if len(opts) == 0 {
@@ -1123,7 +1123,7 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 
 func (c *Client) broadcast(
 	ctx context.Context,
-	p *presence.Presence,
+	p *channel.Channel,
 	topic string,
 	payload []byte,
 ) error {
@@ -1139,10 +1139,10 @@ func (c *Client) broadcast(
 	_, err := c.client.Broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
-			ClientId:    c.id.String(),
-			PresenceKey: p.Key().String(),
-			Topic:       topic,
-			Payload:     payload,
+			ClientId:   c.id.String(),
+			ChannelKey: p.Key().String(),
+			Topic:      topic,
+			Payload:    payload,
 		}), c.options.APIKey, p.Key().String()))
 	if err != nil {
 		return err

@@ -70,7 +70,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
 	})
@@ -100,7 +100,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c1.Close()) }()
 		assert.NoError(t, c1.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc))
 		assert.Equal(t, sizeLimit, doc.MaxSizeLimit)
 
@@ -121,7 +121,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Close()) }()
 		assert.NoError(t, c2.Activate(ctx))
 
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, doc2))
 		assert.Equal(t, newSizeLimit, doc2.MaxSizeLimit)
 	})
@@ -153,7 +153,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -200,7 +200,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c1.Close()) }()
 		assert.NoError(t, c1.Activate(ctx))
 
-		doc1 := document.New(helper.TestDocKey(t))
+		doc1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc1))
 
 		c2, err := client.Dial(
@@ -211,7 +211,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Close()) }()
 		assert.NoError(t, c2.Activate(ctx))
 
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, doc2))
 
 		// Client 1 creates content (below limit)
@@ -290,7 +290,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c1.Close()) }()
 		assert.NoError(t, c1.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, doc))
 
 		c2, err := client.Dial(
@@ -301,7 +301,7 @@ func TestDocSize(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Close()) }()
 		assert.NoError(t, c2.Activate(ctx))
 
-		doc2 := document.New(helper.TestDocKey(t))
+		doc2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, doc2))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {

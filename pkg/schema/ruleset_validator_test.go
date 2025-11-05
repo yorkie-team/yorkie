@@ -27,7 +27,7 @@ func TestRulesetValidator(t *testing.T) {
 			{Path: "$.field7", Type: "date"},
 			{Path: "$.field8", Type: "bytes"},
 		}
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNull("field1")
@@ -72,7 +72,7 @@ func TestRulesetValidator(t *testing.T) {
 		ruleset := []types.Rule{
 			{Path: "$.user", Type: "object"},
 		}
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewObject("user").SetString("name", "test")
@@ -95,7 +95,7 @@ func TestRulesetValidator(t *testing.T) {
 
 	t.Run("validate array type test", func(t *testing.T) {
 		ruleset := []types.Rule{{Path: "$.items", Type: "array"}}
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewArray("items").AddInteger(1, 2, 3)
@@ -123,7 +123,7 @@ func TestRulesetValidator(t *testing.T) {
 			{Path: "$.user.name", Type: "string"},
 			{Path: "$.user.age", Type: "integer"},
 		}
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewObject("user").SetString("name", "test").SetInteger("age", 25)
@@ -151,7 +151,7 @@ func TestRulesetValidator(t *testing.T) {
 			{Path: "$.tree", Type: "yorkie.Tree"},
 			{Path: "$.counter", Type: "yorkie.Counter"},
 		}
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewText("text")

@@ -1,4 +1,4 @@
-package presence_test
+package channel_test
 
 import (
 	"testing"
@@ -6,26 +6,26 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/attachable"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/key"
-	"github.com/yorkie-team/yorkie/pkg/presence"
 )
 
 func TestPresenceAttachableInterface(t *testing.T) {
 	t.Run("implements Attachable interface", func(t *testing.T) {
-		p := presence.New(key.Key("test-presence"))
+		p := channel.New(key.Key("test-presence"))
 
 		// Verify it implements Attachable interface
 		var _ attachable.Attachable = p
 
 		assert.Equal(t, "test-presence", p.Key().String())
-		assert.Equal(t, attachable.TypePresence, p.Type())
+		assert.Equal(t, attachable.TypeChannel, p.Type())
 		assert.Equal(t, attachable.StatusDetached, p.Status())
 		assert.False(t, p.IsAttached())
 	})
 
 	t.Run("status changes work correctly", func(t *testing.T) {
-		p := presence.New(key.Key("test-presence"))
+		p := channel.New(key.Key("test-presence"))
 
 		assert.Equal(t, attachable.StatusDetached, p.Status())
 		assert.False(t, p.IsAttached())
@@ -43,7 +43,7 @@ func TestPresenceAttachableInterface(t *testing.T) {
 func TestAttachableInterfaceCompatibility(t *testing.T) {
 	t.Run("Document and Presence both implement Attachable", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		p := presence.New(key.Key("test-presence"))
+		p := channel.New(key.Key("test-presence"))
 
 		for i, resource := range []attachable.Attachable{doc, p} {
 			assert.NotNil(t, resource.Key())
@@ -55,14 +55,14 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 			if i == 0 {
 				assert.Equal(t, attachable.TypeDocument, resource.Type())
 			} else {
-				assert.Equal(t, attachable.TypePresence, resource.Type())
+				assert.Equal(t, attachable.TypeChannel, resource.Type())
 			}
 		}
 	})
 
 	t.Run("status changes work for both types", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		counter := presence.New(key.Key("test-presence"))
+		counter := channel.New(key.Key("test-presence"))
 
 		for _, resource := range []attachable.Attachable{doc, counter} {
 			resource.SetStatus(attachable.StatusAttached)

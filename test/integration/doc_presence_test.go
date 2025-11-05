@@ -45,10 +45,10 @@ func TestDocPresence(t *testing.T) {
 	t.Run("update presence by calling Document.Update test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -73,10 +73,10 @@ func TestDocPresence(t *testing.T) {
 	t.Run("presence with snapshot test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -103,9 +103,9 @@ func TestDocPresence(t *testing.T) {
 	t.Run("presence with attach and detach test", func(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()})))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()})))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -126,8 +126,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("presence-related events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -193,8 +193,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -214,8 +214,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("watch after attach events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -274,8 +274,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("attach after watch events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -335,8 +335,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("unwatch after detach events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -401,8 +401,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -414,7 +414,7 @@ func TestDocPresence(t *testing.T) {
 			},
 		})
 		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 		wgEvents.Wait()
 
 		cancel2()
@@ -424,8 +424,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("detach after unwatch events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -490,8 +490,8 @@ func TestDocPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c2.Sync(ctx, client.WithKey(helper.TestKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 		wgEvents.Wait()
 		wgEvents.Add(1)
 
@@ -505,7 +505,7 @@ func TestDocPresence(t *testing.T) {
 		cancel2()
 
 		assert.NoError(t, c2.Detach(ctx, d2))
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 
 		wgEvents.Wait()
 		assert.Equal(t, expected, responsePairs)
@@ -514,8 +514,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("watch after update events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -580,8 +580,8 @@ func TestDocPresence(t *testing.T) {
 	t.Run("watch after detach events test", func(t *testing.T) {
 		// 01. Create two clients and documents and attach them.
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithRealtimeSync()))
@@ -639,9 +639,9 @@ func TestDocPresence(t *testing.T) {
 
 		// 01. Two clients attach two documents with the same key, and watch them.
 		// But the second client also attaches another document.
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t) + "2")
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
+		d3 := document.New(helper.TestKey(t) + "2")
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
@@ -699,7 +699,7 @@ func TestDocPresence(t *testing.T) {
 		})
 		_, cancel2, err := c2.WatchStream(d2)
 		assert.NoError(t, err)
-		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithKey(helper.TestKey(t))))
 
 		_, cancel3, err := c2.WatchStream(d3)
 		assert.NoError(t, err)
@@ -735,10 +735,10 @@ func TestDocPresence(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. Create two document instances with the same key and attach clients
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(presence.Data{"key": c1.Key()}), client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(presence.Data{"key": c2.Key()}), client.WithRealtimeSync()))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -761,7 +761,7 @@ func TestDocPresence(t *testing.T) {
 			t,
 			project,
 			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
+			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestKey(t)),
 		)
 
 		summaries := &documentSummaries{}
@@ -783,7 +783,7 @@ func TestDocPresence(t *testing.T) {
 			t,
 			project,
 			fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr()),
-			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestDocKey(t)),
+			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s"], "include_presences": true}`, project.Name, helper.TestKey(t)),
 		)
 
 		summaries = &documentSummaries{}

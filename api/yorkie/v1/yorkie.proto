@@ -35,10 +35,10 @@ service YorkieService {
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
 
-  rpc AttachPresence (AttachPresenceRequest) returns (AttachPresenceResponse) {}
-  rpc DetachPresence (DetachPresenceRequest) returns (DetachPresenceResponse) {}
-  rpc RefreshPresence (RefreshPresenceRequest) returns (RefreshPresenceResponse) {}
-  rpc WatchPresence (WatchPresenceRequest) returns (stream WatchPresenceResponse) {}
+  rpc AttachChannel (AttachChannelRequest) returns (AttachChannelResponse) {}
+  rpc DetachChannel (DetachChannelRequest) returns (DetachChannelResponse) {}
+  rpc RefreshChannel (RefreshChannelRequest) returns (RefreshChannelResponse) {}
+  rpc WatchChannel (WatchChannelRequest) returns (stream WatchChannelResponse) {}
   rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
 }
 
@@ -120,56 +120,56 @@ message PushPullChangesResponse {
   ChangePack change_pack = 1;
 }
 
-message AttachPresenceRequest {
+message AttachChannelRequest {
   string client_id = 1;
-  string presence_key = 2;
+  string channel_key = 2;
 }
 
-message AttachPresenceResponse {
-  string presence_id = 1;
+message AttachChannelResponse {
+  string session_id = 1;
   int64 count = 2;
 }
 
-message DetachPresenceRequest {
+message DetachChannelRequest {
   string client_id = 1;
-  string presence_id = 2;
-  string presence_key = 3;
+  string channel_key = 2;
+  string session_id = 3;
 }
 
-message DetachPresenceResponse {
+message DetachChannelResponse {
   int64 count = 1;
 }
 
-message RefreshPresenceRequest {
+message RefreshChannelRequest {
   string client_id = 1;
-  string presence_id = 2;
-  string presence_key = 3;
+  string channel_key = 2;
+  string session_id = 3;
 }
 
-message RefreshPresenceResponse {
+message RefreshChannelResponse {
   int64 count = 1;
 }
 
-message WatchPresenceRequest {
+message WatchChannelRequest {
   string client_id = 1;
-  string presence_key = 2;
+  string channel_key = 2;
 }
 
-message WatchPresenceResponse {
+message WatchChannelResponse {
   oneof body {
-    WatchPresenceInitialized initialized = 1;
-    PresenceEvent event = 2;
+    WatchChannelInitialized initialized = 1;
+    ChannelEvent event = 2;
   }
 }
 
-message WatchPresenceInitialized {
+message WatchChannelInitialized {
   int64 count = 1;
   int64 seq = 2;
 }
 
 message BroadcastRequest {
   string client_id = 1;
-  string presence_key = 2;
+  string channel_key = 2;
   string topic = 3;
   bytes payload = 4;
 }

@@ -38,7 +38,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("causal nested array test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -50,7 +50,7 @@ func TestArray(t *testing.T) {
 		}, "nested update by c1")
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -59,7 +59,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("concurrent array add/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -93,7 +93,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("concurrent array add/delete test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -105,7 +105,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -127,7 +127,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("concurrent array delete test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -139,7 +139,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -166,7 +166,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("concurrent array move test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("concurrent array move with the same position test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
@@ -214,7 +214,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -238,7 +238,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("array.set with value add, delete test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -268,9 +268,9 @@ func TestArray(t *testing.T) {
 
 	t.Run("array.set with value sync test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -292,7 +292,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("array.set with Counter, Text, Tree slice test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		// 01. set array with value
@@ -373,9 +373,9 @@ func TestArrayConcurrency(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	d0 := document.New(helper.TestDocKey(t))
+	d0 := document.New(helper.TestKey(t))
 	assert.NoError(t, c0.Attach(ctx, d0))
-	d1 := document.New(helper.TestDocKey(t))
+	d1 := document.New(helper.TestKey(t))
 	assert.NoError(t, c1.Attach(ctx, d1))
 
 	for _, op1 := range operations {
@@ -443,9 +443,9 @@ func TestComplicatedArrayConcurrency(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	d0 := document.New(helper.TestDocKey(t))
+	d0 := document.New(helper.TestKey(t))
 	assert.NoError(t, c0.Attach(ctx, d0))
-	d1 := document.New(helper.TestDocKey(t))
+	d1 := document.New(helper.TestKey(t))
 	assert.NoError(t, c1.Attach(ctx, d1))
 
 	for _, op := range operations {
@@ -484,11 +484,11 @@ func TestArraySetByIndex(t *testing.T) {
 
 	t.Run("array set simple test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

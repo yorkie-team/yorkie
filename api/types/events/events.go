@@ -87,34 +87,34 @@ type DocEvent struct {
 	Body DocEventBody
 }
 
-// PresenceEventType represents the type of the presence event.
-type PresenceEventType string
+// ChannelEventType represents the type of the channel event.
+type ChannelEventType string
 
 const (
-	// PresenceCountChanged is an event that occurs when presence count changes.
-	PresenceCountChanged PresenceEventType = "presence-count-changed"
+	// ChannelPresenceChanged is an event that occurs when presence changes.
+	ChannelPresenceChanged ChannelEventType = "presence-changed"
 
-	// PresenceBroadcast is an event that occurs when a payload is broadcasted
-	// on a specific topic in a presence.
-	PresenceBroadcast PresenceEventType = "presence-broadcast"
+	// ChannelBroadcast is an event that occurs when a payload is broadcasted
+	// on a specific topic in a channel.
+	ChannelBroadcast ChannelEventType = "channel-broadcast"
 )
 
-// PresenceEvent represents a presence event (count change or broadcast).
-type PresenceEvent struct {
-	// Type is the type of the presence event.
-	Type PresenceEventType
+// ChannelEvent represents a channel event (count change or broadcast).
+type ChannelEvent struct {
+	// Type is the type of the channel event.
+	Type ChannelEventType
 
-	// Key is the key of the presence that the event occurred.
-	Key types.PresenceRefKey
+	// Key is the key of the channel that the event occurred.
+	Key types.ChannelRefKey
 
-	// Seq is the sequence number of the presence event (for count changes).
+	// Seq is the sequence number of the channel event.
 	Seq int64
-
-	// Count is the current count of the presence (for count changes).
-	Count int64
 
 	// Publisher is the actor who published the broadcast (for broadcasts).
 	Publisher time.ActorID
+
+	// Count is the current presence count of the channel.
+	Count int64
 
 	// Topic is the topic of the broadcast (for broadcasts).
 	Topic string

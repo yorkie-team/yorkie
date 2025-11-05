@@ -430,17 +430,17 @@ message DocEvent {
   DocEventBody body = 3;
 }
 
-message PresenceEvent {
+message ChannelEvent {
   enum Type {
     TYPE_UNSPECIFIED = 0;
-    TYPE_COUNT_CHANGED = 1;
+    TYPE_PRESENCE = 1;
     TYPE_BROADCAST = 2;
   }
 
   Type type = 1;
-  int64 count = 2;
-  int64 seq = 3;
-  string publisher = 4;
+  string publisher = 2;
+  int64 count = 3;
+  int64 seq = 4;
   string topic = 5;
   bytes payload = 6;
 }

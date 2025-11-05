@@ -1,39 +1,40 @@
 ---
 title: presence
-target-version: 0.6.34
+target-version: 0.6.36
 ---
 
 # Presence
 
 ## Summary
 
-This document describes Yorkie's Presence system, a lightweight real-time user tracking mechanism designed for scalable applications. Presence provides two types of functionality:
+This document describes Yorkie's Presence, a lightweight real-time user tracking mechanism designed for scalable applications. Presence provides two types of functionality:
 
-1. **Document Presence**: Attached to documents for tracking user metadata and states in collaborative editing
-2. **Presence**: A standalone counter for tracking online user counts in high-scale scenarios
+1. **Document**: Attached to documents for tracking user metadata and states in collaborative editing
+2. **Channel**: A pub/sub system for real-time communication, including presence counting and broadcasting
 
-This document focuses on the overall Presence architecture and how both types work within the Yorkie ecosystem.
+This document focuses on the overall Presence-related architecture and how both types work within the Yorkie ecosystem.
 
 ## Background
 
-### Document Presence (Existing)
+### Presence in Document
 
 Yorkie originally provided Presence as part of Document attachment, where each client can set and update their presence data (e.g., cursor position, user info) that is synchronized with other clients via CRDT operations. This approach works well for collaboration features but has overhead for simple use cases like counting online users.
 
-### Presence (New)
+### Presence in Channel
 
-For applications requiring real-time user count display (e.g., "1,234 users online"), the Document Presence approach becomes inefficient:
+For applications requiring real-time user count display (e.g., "1,234 users online") and pub/sub messaging, the Presence in Document approach becomes inefficient:
 
 - Full CRDT synchronization is unnecessary for simple counters
 - Each user attachment creates document overhead
 - Presence data synchronization impacts performance at scale
 
-The Presence Counter provides a dedicated, lightweight pipeline for approximate counting without CRDT overhead, designed for scenarios with hundreds of thousands to millions of concurrent users.
+The Presence in Channel provides a dedicated, lightweight pipeline for real-time communication including presence counting and broadcasting, designed for scenarios with hundreds of thousands to millions of concurrent users.
 
 ## Goals
 
-- Provide unified Attachment API for both Documents and Presences
+- Provide unified Attachment API for both Documents and Channels
 - Support scalable, approximate counting for high-concurrency scenarios
+- Enable real-time pub/sub messaging with broadcast capabilities
 - Enable real-time subscription to presence count changes
 - Automatically handle stale sessions through TTL and heartbeat mechanisms
 - Minimize performance impact on existing Document functionality
@@ -45,42 +46,40 @@ The Presence Counter provides a dedicated, lightweight pipeline for approximate 
 The Presence system consists of three main layers:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Client Layer (SDK)                          │
-│  ┌────────────────────────┐  ┌──────────────────────────────┐  │
-│  │   Document             │  │   Presence                    │  │
-│  │   + Presence Data      │  │   (Standalone)                │  │
-│  │   (CRDT-based)         │  │   (Lightweight)               │  │
-│  └────────────────────────┘  └──────────────────────────────┘  │
-│               │                           │                      │
-│        Attach/Detach              Attach/Detach                 │
-│        Update Presence            Subscribe to Count            │
-│               │                           │                      │
-└───────────────┼───────────────────────────┼──────────────────────┘
-                │                           │
+┌─────────────────────────────────────────────────────────────┐
+│                      Client Layer (SDK)                     │
+│  ┌────────────────────────┐  ┌───────────────────────────┐  │
+│  │   Document             │  │   Channel                 │  │
+│  │   + Presence Data      │  │   (Pub/Sub + Presence)    │  │
+│  │   (CRDT-based)         │  │   (Lightweight)           │  │
+│  └────────────────────────┘  └───────────────────────────┘  │
+│               │                           │                 │
+│        Attach/Detach              Attach/Detach             │
+│        PushPull                   Subscribe/Broadcast       │
+│               │                           │                 │
+└───────────────┼───────────────────────────┼─────────────────┘
                 ↓                           ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                      Server Layer (Go)                           │
-│  ┌─────────────────────┐          ┌──────────────────────────┐ │
-│  │  Document Manager   │          │  Presence Manager        │ │
-│  │  - CRDT Operations  │          │  - In-memory Counters    │ │
-│  │  - Presence Sync    │          │  - TTL Management        │ │
-│  │                     │          │  - Heartbeat Tracking    │ │
-│  └─────────────────────┘          └──────────────────────────┘ │
-│               │                            │                    │
-│               └────────────┬───────────────┘                    │
-│                            ↓                                    │
-│                   ┌─────────────────┐                           │
-│                   │  PubSub System  │                           │
-│                   │  - Doc Events   │                           │
-│                   │  - Presence Evt │                           │
-│                   └─────────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                      Server Layer (Go)                      │
+│  ┌─────────────────────┐          ┌───────────────────────┐ │
+│  │  Document Manager   │          │  Channel Manager      │ │
+│  │  - CRDT Operations  │          │  - In-memory Sessions │ │
+│  │  - Presence Sync    │          │  - TTL Management     │ │
+│  │                     │          │  - Broadcast Routing  │ │
+│  └─────────────────────┘          └───────────────────────┘ │
+│               └────────────┬───────────────┘                │
+│                            ↓                                │
+│                   ┌─────────────────┐                       │
+│                   │  PubSub System  │                       │
+│                   │  - Doc Events   │                       │
+│                   │  - Channel Evt  │                       │
+│                   └─────────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Resource Type Abstraction
 
-Both Document and Presence Counter implement the `attachable.Attachable` interface:
+Both Document and Channel implement the `attachable.Attachable` interface:
 
 ```go
 type Attachable interface {
@@ -95,7 +94,7 @@ type Attachable interface {
 
 const (
     TypeDocument ResourceType = "document"
-    TypePresence ResourceType = "presence"
+    TypeChannel  ResourceType = "channel"
 )
 ```
 
@@ -103,55 +102,58 @@ This abstraction allows the Client to handle both resource types uniformly throu
 
 ### Client-Side Implementation
 
-The client provides a unified `Attach()` API that works for both Documents and Presence Counters. Each attachment tracks its lifecycle, watch stream, and heartbeat timer for TTL management.
+The client provides a unified `Attach()` API that works for both Documents and Channels. Each attachment tracks its lifecycle, watch stream, and heartbeat timer for TTL management.
 
 **Key Components:**
 
 - Unified attachment management through `attachable.Attachable` interface
-- Automatic heartbeat for presence TTL refresh
+- Automatic heartbeat for session TTL refresh
 - Watch stream handling for real-time updates
 
 ### Server-Side Implementation
 
-#### Presence Manager
+#### Channel Manager
 
-The `presence.Manager` handles in-memory presence tracking with the following structure:
+The `channel.Manager` handles in-memory channel tracking with the following structure:
 
 **Data Storage:**
 
-- Main storage: `PresenceRefKey → [PresenceID → PresenceInfo]`
-- Reverse index: `ClientID → [PresenceRefKey → PresenceID]`
-- Reverse index: `PresenceID → PresenceRefKey` (for O(1) detach)
+- Main storage: `ChannelRefKey → [SessionID → SessionInfo]`
+- Reverse index: `ClientID → [ChannelRefKey → SessionID]`
+- Reverse index: `SessionID → ChannelRefKey` (for O(1) detach)
 
 **Key Operations:**
 
-1. **Attach**: Registers a new presence session, generates unique presenceID, publishes event via PubSub
-2. **Detach**: Removes a presence session using O(1) lookup, publishes event via PubSub
+1. **Attach**: Registers a new channel session, generates unique sessionID, publishes event via PubSub
+2. **Detach**: Removes a channel session using O(1) lookup, publishes event via PubSub
 3. **Refresh**: Updates TTL for active sessions by updating timestamp
-4. **CleanupExpired**: Background task (runs every 10s) to remove stale sessions
+4. **Broadcast**: Routes messages to all subscribers in the channel
+5. **CleanupExpired**: Background task (runs every 10s) to remove stale sessions
 
 #### PubSub System
 
-The PubSub system handles event distribution for both documents and presence counters, providing subscribe/unsubscribe/publish operations for presence events.
+The PubSub system handles event distribution for both documents and channels, providing subscribe/unsubscribe/publish operations for channel events and broadcast messages.
 
 ### RPC API
 
-The server exposes dedicated RPC methods for presence operations:
+The server exposes dedicated RPC methods for channel operations:
 
-- `AttachPresence`: Attach to a presence counter
-- `DetachPresence`: Detach from a presence counter
-- `RefreshPresence`: Refresh TTL of an active session
-- `WatchPresence`: Stream real-time count updates
+- `AttachChannel`: Attach to a channel
+- `DetachChannel`: Detach from a channel
+- `RefreshChannel`: Refresh TTL of an active session
+- `WatchChannel`: Stream real-time count updates and broadcast messages
+- `Broadcast`: Send messages to all channel subscribers
 
 ### How It Works
 
-#### Presence Counter Flow
+#### Channel Flow
 
-1. **Attach**: Client → AttachPresence RPC → Server generates presenceID → PubSub broadcasts count
-2. **Subscribe**: Client → WatchPresence RPC → Server creates subscription → Streams count updates
-3. **Heartbeat**: Client timer (30s) → RefreshPresence RPC → Server updates timestamp
-4. **Cleanup**: Server timer (10s) → Scans expired sessions → Detach and broadcast updates
-5. **Detach**: Client → DetachPresence RPC → Server removes session → Broadcasts count update
+1. **Attach**: Client → AttachChannel RPC → Server generates sessionID → PubSub broadcasts count
+2. **Subscribe**: Client → WatchChannel RPC → Server creates subscription → Streams count updates and broadcast events
+3. **Broadcast**: Client → Broadcast RPC → Server routes message to all subscribers (except sender)
+4. **Heartbeat**: Client timer (30s) → RefreshChannel RPC → Server updates timestamp
+5. **Cleanup**: Server timer (10s) → Scans expired sessions → Detach and broadcast updates
+6. **Detach**: Client → DetachChannel RPC → Server removes session → Broadcasts count update
 
 #### Document Presence Flow (Existing)
 
@@ -161,11 +163,11 @@ The server exposes dedicated RPC methods for presence operations:
 
 ### TTL and Heartbeat Mechanism
 
-To handle abnormal disconnections (crashes, network failures), the Presence Counter uses TTL-based expiration:
+To handle abnormal disconnections (crashes, network failures), the Channel uses TTL-based expiration:
 
 **Server-Side:**
 
-- Each `PresenceInfo` has an `UpdatedAt` timestamp
+- Each `SessionInfo` has an `UpdatedAt` timestamp
 - Default TTL: 60 seconds
 - Cleanup runs every 10 seconds
 - Sessions expire when `now - UpdatedAt > TTL`
@@ -173,7 +175,7 @@ To handle abnormal disconnections (crashes, network failures), the Presence Coun
 **Client-Side:**
 
 - Heartbeat timer fires every 30 seconds (default)
-- Calls `RefreshPresence()` to update server timestamp
+- Calls `RefreshChannel()` to update server timestamp
 - Continues until detachment or context cancellation
 
 **Design Choices:**
@@ -184,22 +186,22 @@ To handle abnormal disconnections (crashes, network failures), the Presence Coun
 
 ### Data Structures
 
-**PresenceInfo** (Server): Stores session ID, reference key, actor ID, and last update timestamp
+**SessionInfo** (Server): Stores session ID, reference key, actor ID, and last update timestamp
 
-**PresenceRefKey**: Identifies a presence counter by project ID and user-defined key (e.g., "room-123")
+**ChannelRefKey**: Identifies a channel by project ID and user-defined key (e.g., "room-123")
 
-**Counter** (Client): Tracks presence key, attachment status, actor ID, current count, and sequence number
+**Presence** (Client): Tracks channel key, attachment status, actor ID, current count, sequence number, and broadcast event handlers
 
 ### Configuration
 
 **Server:**
 
-- `presence_ttl`: Session expiration time (default: 60s)
-- `presence_cleanup_interval`: Cleanup task frequency (default: 10s)
+- `session_ttl`: Session expiration time (default: 60s)
+- `session_cleanup_interval`: Cleanup task frequency (default: 10s)
 
 **Client:**
 
-- `heartbeatInterval`: Heartbeat timer interval (default: 30s, must be < presenceTTL)
+- `heartbeatInterval`: Heartbeat timer interval (default: 30s, must be < sessionTTL)
 
 ### Performance Considerations
 
@@ -223,18 +225,18 @@ To handle abnormal disconnections (crashes, network failures), the Presence Coun
 - Acceptable for UI display ("~1,234 users online")
 - Not suitable for critical business logic requiring exact counts
 
-### Comparison: Document Presence vs Presence Counter
+### Comparison: Document Presence vs Channel
 
-| Feature             | Document Presence                          | Presence Counter                   |
+| Feature             | Document Presence                          | Channel                            |
 | ------------------- | ------------------------------------------ | ---------------------------------- |
-| **Use Case**        | Collaborative editing, cursor tracking     | Online user count display          |
-| **Data Type**       | Rich presence data (object)                | Simple counter (int64)             |
+| **Use Case**        | Collaborative editing, cursor tracking     | User count + pub/sub messaging     |
+| **Data Type**       | Rich presence data (object)                | Counter + broadcast messages       |
 | **Synchronization** | CRDT-based, strongly consistent            | Approximate, eventually consistent |
 | **Scalability**     | Good (up to thousands)                     | Excellent (millions)               |
 | **Overhead**        | Higher (document storage, CRDT ops)        | Lower (in-memory only)             |
 | **Persistence**     | Persisted with document                    | In-memory only                     |
-| **API**             | `doc.update((root, p) => p.set(...))`      | `counter.Count()`                  |
-| **Events**          | `watched`, `unwatched`, `presence-changed` | `count-changed`                    |
+| **API**             | `doc.update((root, p) => p.set(...))`      | `channel.Broadcast()`              |
+| **Events**          | `watched`, `unwatched`, `presence-changed` | `presence`, `broadcast`            |
 
 ### Risks and Mitigation
 
@@ -280,6 +282,8 @@ To handle abnormal disconnections (crashes, network failures), the Presence Coun
 
 ### Future Enhancements
 
-1. **Presence Analytics**: Historical count data for analytics
-2. **Custom TTL per Counter**: Allow per-counter TTL configuration
-3. **Presence Metrics**: Prometheus metrics for monitoring
+1. **Channel Analytics**: Historical count data and message analytics
+2. **Custom TTL per Channel**: Allow per-channel TTL configuration
+3. **Channel Metrics**: Prometheus metrics for monitoring
+4. **Message Persistence**: Optional message history for channels
+5. **Channel Types**: Explicit channel types (counter, pubsub, hybrid)

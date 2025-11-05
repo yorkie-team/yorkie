@@ -40,7 +40,7 @@ func TestDocumentCompaction(t *testing.T) {
 		ctx := context.Background()
 
 		// 1. Create a document
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
 			yson.ParseObject(`{"text": Text()}`),
 		)))
@@ -56,7 +56,7 @@ func TestDocumentCompaction(t *testing.T) {
 		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key()))
 
 		// 3. Create another changes to create a snapshot
-		docB := document.New(helper.TestDocKey(t))
+		docB := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, docB))
 		for i := 0; i < int(helper.SnapshotThreshold); i++ {
 			assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
@@ -69,7 +69,7 @@ func TestDocumentCompaction(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 
 		// 4. Attach the document and try to delete its contents
-		docC := document.New(helper.TestDocKey(t))
+		docC := document.New(helper.TestKey(t))
 		assert.NoError(t, c3.Attach(ctx, docC))
 		assert.NoError(t, docC.Update(func(r *json.Object, p *presence.Presence) error {
 			r.GetText("text").Edit(0, len("initial"), "")

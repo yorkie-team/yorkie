@@ -30,13 +30,13 @@ import (
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/cache"
+	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
-	"github.com/yorkie-team/yorkie/server/backend/presence"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
@@ -56,8 +56,8 @@ type Backend struct {
 	PubSub *pubsub.PubSub
 	// Lockers is used to lock/unlock resources.
 	Lockers *sync.LockerManager
-	// Presence is used to manage real-time presence counters.
-	Presence *presence.Manager
+	// Presence is used to manage real-time channels.
+	Presence *channel.Manager
 
 	// Background is used to manage background tasks.
 	Background *background.Background
@@ -118,7 +118,7 @@ func New(
 
 	// 03. Create the presence manager for real-time user tracking and background
 	// task manager.
-	presenceManager := presence.NewManager(
+	presenceManager := channel.NewManager(
 		pubsub,
 		conf.ParsePresenceTTL(),
 		conf.ParsePresenceCleanupInterval(),

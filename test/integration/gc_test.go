@@ -63,12 +63,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv = {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [], minvv = [], db.vv = {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -137,12 +137,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [], minvv = [], db.vv = {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -218,7 +218,7 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
-		doc := document.New(helper.TestDocKey(t))
+		doc := document.New(helper.TestKey(t))
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", json.TreeNode{
@@ -290,12 +290,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -381,12 +381,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -446,7 +446,7 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("GarbageLen should return the actual number of elements garbage-collected", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
+		docKey := helper.TestKey(t)
 		d1 := document.New(docKey)
 		d2 := document.New(docKey)
 
@@ -516,7 +516,7 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assertVectorEquality(t, d1.VersionVector())
@@ -535,13 +535,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("Should work properly when there are multiple nodes to be collected in text type", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -660,13 +660,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("Should work properly when there are multiple nodes to be collected in tree type", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d1.vv = [], minvv = [], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -807,7 +807,7 @@ func TestGarbageCollection(t *testing.T) {
 		}()
 
 		// 02. Create a document and update it to check if the garbage is collected
-		d1 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		d1 := document.New(helper.TestKey(t), document.WithDisableGC())
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() {
 			assert.NoError(t, c1.Detach(ctx, d1))
@@ -837,7 +837,7 @@ func TestGarbageCollection(t *testing.T) {
 			assert.NoError(t, c2.Close())
 		}()
 
-		d2 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		d2 := document.New(helper.TestKey(t), document.WithDisableGC())
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() {
 			assert.NoError(t, c2.Detach(ctx, d2))
@@ -847,12 +847,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("concurrent garbage collection test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d1.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -926,13 +926,13 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("concurrent garbage collection test(with pushonly)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[], minvv =[], db.vv {}
@@ -1058,12 +1058,12 @@ func TestGarbageCollection(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
+		d3 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c2.Attach(ctx, d2))
 		assert.NoError(t, c3.Attach(ctx, d3))
@@ -1128,12 +1128,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("gc targeting nodes made by deactivated client", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -1191,9 +1191,9 @@ func TestGarbageCollection(t *testing.T) {
 		c1, c2, c3 := clients[0], clients[1], clients[2]
 		defer deactivateAndCloseClients(t, clients)
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
+		d3 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -1299,12 +1299,12 @@ func TestGarbageCollection(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d1.VersionVector())
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		// d2.vv =[], minvv =[], db.vv {}
 		assertVectorEquality(t, d2.VersionVector())
@@ -1393,9 +1393,9 @@ func TestGarbageCollection(t *testing.T) {
 		c1, c2, c3 := clients[0], clients[1], clients[2]
 		defer deactivateAndCloseClients(t, clients)
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		d3 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
+		d2 := document.New(helper.TestKey(t))
+		d3 := document.New(helper.TestKey(t))
 
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -1444,7 +1444,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -1456,11 +1456,11 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		d3 := document.New(helper.TestDocKey(t))
+		d3 := document.New(helper.TestKey(t))
 		err = c3.Attach(ctx, d3)
 		assert.NoError(t, err)
 

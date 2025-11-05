@@ -105,7 +105,7 @@ func BenchmarkGetDocuments(b *testing.B) {
 
 	var docKeys []string
 	for i := range 1000 {
-		_, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), helper.TestDocKey(b, i))
+		_, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), helper.TestKey(b, i))
 		assert.NoError(b, err)
 		docKeys = append(docKeys, doc.Key().String())
 	}

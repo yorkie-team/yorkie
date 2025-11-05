@@ -38,7 +38,7 @@ func TestText(t *testing.T) {
 
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -50,7 +50,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -99,7 +99,7 @@ func TestText(t *testing.T) {
 
 	t.Run("concurrent insertion and deletion test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"AB"}]}`, d2.Marshal())
@@ -136,7 +136,7 @@ func TestText(t *testing.T) {
 
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -148,7 +148,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -171,7 +171,7 @@ func TestText(t *testing.T) {
 
 	t.Run("concurrent block deletions test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -183,7 +183,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestText(t *testing.T) {
 
 	t.Run("new creation then concurrent deletion test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -229,7 +229,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -270,7 +270,7 @@ func TestText(t *testing.T) {
 	// Peritext test
 	t.Run("ex2. concurrent formatting and insertion test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -282,7 +282,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"The fox jumped."}]}`, d2.Marshal())
@@ -316,7 +316,7 @@ func TestTextLWW(t *testing.T) {
 
 	t.Run("causal deletion preserves original timestamps", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -328,7 +328,7 @@ func TestTextLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -389,7 +389,7 @@ func TestTextLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - complete inclusion (larger range later)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -401,7 +401,7 @@ func TestTextLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -472,7 +472,7 @@ func TestTextLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - complete inclusion (smaller range later)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -484,7 +484,7 @@ func TestTextLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -562,7 +562,7 @@ func TestTextLWW(t *testing.T) {
 
 	t.Run("concurrent deletion test for LWW behavior - partial overlap", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		d1 := document.New(helper.TestKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -574,7 +574,7 @@ func TestTextLWW(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

@@ -20,10 +20,10 @@ import { Counter, Rate, Trend } from "k6/metrics";
 
 const API_URL = __ENV.API_URL || "http://localhost:8080";
 const API_KEY = __ENV.API_KEY || "";
-const PRESENCE_KEY_PREFIX = __ENV.PRESENCE_KEY_PREFIX || "test-presence";
+const CHANNEL_KEY_PREFIX = __ENV.CHANNEL_KEY_PREFIX || "test-channel";
 const TEST_MODE = __ENV.TEST_MODE || "skew"; // skew | even
 const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500", 10);
-const VU_PER_PRESENCE = parseInt(__ENV.VU_PER_PRESENCE || "10", 10);
+const VU_PER_CHANNEL = parseInt(__ENV.VU_PER_CHANNEL || "10", 10);
 const ATTACH_ITERATIONS = parseInt(__ENV.ATTACH_ITERATIONS || "5", 10);
 
 export const options = {
@@ -36,8 +36,8 @@ export const options = {
     transaction_success_rate: ["rate>0.99"], // 99% success rate
     http_req_duration: ["p(95)<5000"], // 95% of requests under 5s
     active_clients_time: ["p(95)<500"], // 95% under 500ms
-    attach_presence_time: ["p(95)<1000"], // 95% under 1s
-    detach_presence_time: ["p(95)<1000"], // 95% under 1s
+    attach_channel_time: ["p(95)<1000"], // 95% under 1s
+    detach_channel_time: ["p(95)<1000"], // 95% under 1s
     transaction_time: ["p(95)<20000"], // 95% under 20s
   },
   setupTimeout: "30s",
@@ -49,13 +49,17 @@ const activeClients = new Counter("active_clients");
 const activeClientsSuccessRate = new Rate("active_clients_success_rate");
 const activeClientsTime = new Trend("active_clients_time", true);
 
-const attachPresences = new Counter("attach_presences");
-const attachPresencesSuccessRate = new Rate("attach_presences_success_rate");
-const attachPresenceTime = new Trend("attach_presence_time", true);
+const attachChannels = new Counter("attach_channels");
+const attachChannelsSuccessRate = new Rate("attach_channels_success_rate");
+const attachChannelTime = new Trend("attach_channel_time", true);
 
-const detachPresences = new Counter("detach_presences");
-const detachPresencesSuccessRate = new Rate("detach_presences_success_rate");
-const detachPresenceTime = new Trend("detach_presence_time", true);
+const refreshChannels = new Counter("refresh_channels");
+const refreshChannelsSuccessRate = new Rate("refresh_channels_success_rate");
+const refreshChannelTime = new Trend("refresh_channel_time", true);
+
+const detachChannels = new Counter("detach_channels");
+const detachChannelsSuccessRate = new Rate("detach_channels_success_rate");
+const detachChannelTime = new Trend("detach_channel_time", true);
 
 const deactivateClients = new Counter("deactivate_clients");
 const deactivateClientsSuccessRate = new Rate(
@@ -67,9 +71,6 @@ const transactionFaileds = new Counter("transaction_faileds");
 const transactionSuccessRate = new Rate("transaction_success_rate");
 const transactionTime = new Trend("transaction_time", true);
 
-const countMismatches = new Counter("count_mismatches");
-const countMismatchRate = new Rate("count_mismatch_rate");
-
 export default function () {
   const startTime = new Date().getTime();
   let success = false;
@@ -77,14 +78,13 @@ export default function () {
 
   try {
     const [clientID, clientKey] = activateClient();
+    const [sessionID] = attachChannel(clientID, key);
 
     for (let i = 0; i < ATTACH_ITERATIONS; i++) {
-      const [presenceID] = attachPresence(clientID, key);
-
       sleep(1);
-
-      detachPresence(clientID, presenceID, key);
+      refreshChannel(clientID, key, sessionID);
     }
+    detachChannel(clientID, key, sessionID);
 
     deactivateClient(clientID, clientKey);
 
@@ -100,9 +100,9 @@ export default function () {
 }
 
 function getKey() {
-  if (TEST_MODE === "skew") return PRESENCE_KEY_PREFIX;
-  const cnt = CONCURRENCY / VU_PER_PRESENCE;
-  return `${PRESENCE_KEY_PREFIX}-${__VU % cnt}`;
+  if (TEST_MODE === "skew") return CHANNEL_KEY_PREFIX;
+  const cnt = CONCURRENCY / VU_PER_CHANNEL;
+  return `${CHANNEL_KEY_PREFIX}-${__VU % cnt}`;
 }
 
 // Common headers that can be reused across requests
@@ -216,79 +216,100 @@ function deactivateClient(clientID: string, clientKey: string): void {
   deactivateClientsTime.add(duration);
 }
 
-function attachPresence(
-  clientID: string,
-  presenceKey: string
-): [string, number] {
+function attachChannel(clientID: string, channelKey: string): [string, number] {
   const startTime = new Date().getTime();
 
   const payload = {
     clientId: clientID,
-    presenceKey: presenceKey,
+    channelKey: channelKey,
   };
 
   const resp = makeRequest(
-    `${API_URL}/yorkie.v1.YorkieService/AttachPresence`,
+    `${API_URL}/yorkie.v1.YorkieService/AttachChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${presenceKey}` }
+    { "x-shard-key": `${API_KEY}/${channelKey}` }
   );
   if (!resp) {
-    throw new Error("Failed to attach presence");
+    throw new Error("Failed to attach channel");
   }
 
-  const presenceID = resp.presenceId;
+  const sessionID = resp.sessionId;
   const count = Number(resp.count);
 
   const endTime = new Date().getTime();
   const duration = endTime - startTime;
 
-  attachPresences.add(1);
-  attachPresencesSuccessRate.add(true);
-  attachPresenceTime.add(duration);
+  attachChannels.add(1);
+  attachChannelsSuccessRate.add(true);
+  attachChannelTime.add(duration);
 
-  return [presenceID, count];
+  return [sessionID, count];
 }
 
-function detachPresence(
+function refreshChannel(
   clientID: string,
-  presenceID: string,
-  presenceKey: string
+  channelKey: string,
+  sessionID: string
 ): number {
   const startTime = new Date().getTime();
 
   const payload = {
     clientId: clientID,
-    presenceId: presenceID,
-    presenceKey: presenceKey,
+    channelKey: channelKey,
+    sessionId: sessionID,
   };
 
   const resp = makeRequest(
-    `${API_URL}/yorkie.v1.YorkieService/DetachPresence`,
+    `${API_URL}/yorkie.v1.YorkieService/RefreshChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${presenceKey}` }
+    { "x-shard-key": `${API_KEY}/${channelKey}` }
   );
   if (!resp) {
-    throw new Error("Failed to detach presence");
+    throw new Error("Failed to refresh channel");
   }
 
   const count = Number(resp.count);
 
-  // In a concurrent environment, we can't predict the exact count
-  // Only verify that the count is valid (non-negative)
-  if (count < 0) {
-    console.error(`Invalid count: ${count} (should not be negative)`);
-    countMismatches.add(1);
-    countMismatchRate.add(false);
-  } else {
-    countMismatchRate.add(true);
+  const endTime = new Date().getTime();
+  const duration = endTime - startTime;
+
+  refreshChannels.add(1);
+  refreshChannelsSuccessRate.add(true);
+  refreshChannelTime.add(duration);
+
+  return count;
+}
+
+function detachChannel(
+  clientID: string,
+  channelKey: string,
+  sessionID: string
+): number {
+  const startTime = new Date().getTime();
+
+  const payload = {
+    clientId: clientID,
+    channelKey: channelKey,
+    sessionId: sessionID,
+  };
+
+  const resp = makeRequest(
+    `${API_URL}/yorkie.v1.YorkieService/DetachChannel`,
+    payload,
+    { "x-shard-key": `${API_KEY}/${channelKey}` }
+  );
+  if (!resp) {
+    throw new Error("Failed to detach channel");
   }
+
+  const count = Number(resp.count);
 
   const endTime = new Date().getTime();
   const duration = endTime - startTime;
 
-  detachPresences.add(1);
-  detachPresencesSuccessRate.add(true);
-  detachPresenceTime.add(duration);
+  detachChannels.add(1);
+  detachChannelsSuccessRate.add(true);
+  detachChannelTime.add(duration);
 
   return count;
 }

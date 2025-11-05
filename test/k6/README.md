@@ -26,9 +26,9 @@ There are three types of load tests available:
 
 ### Dedicated Presence Test (`dedicated-presence.ts`)
 
-- Tests the dedicated Presence API (AttachPresence, DetachPresence)
-- Simulates clients repeatedly attaching and detaching from presence counters
-- Ideal for testing presence counter accuracy and attach/detach performance
+- Tests the dedicated Channel API (AttachChannel, DetachChannel)
+- Simulates clients repeatedly attaching and detaching from channels
+- Ideal for testing channel presence count accuracy and attach/detach performance
 - Verifies that presence count increments/decrements correctly under load
 
 ## Running the Yorkie Server
@@ -80,23 +80,23 @@ k6 run -e DOC_KEY_PREFIX=stream-skew-1 -e TEST_MODE=skew -e CONCURRENCY=500 -e W
 
 This creates a high-contention scenario with 150 watchers and 350 updaters all on the same document.
 
-### Dedicated Presence Test
+### Channel Presence Test
 
-Run the dedicated presence API test in **even mode** (distributed across multiple presence counters):
-
-```bash
-k6 run -e PRESENCE_KEY_PREFIX=presence-1 -e TEST_MODE=even -e CONCURRENCY=500 -e VU_PER_PRESENCE=10 -e ATTACH_ITERATIONS=5 dedicated-presence.ts
-```
-
-This runs the test with 50 presence counters, each with 10 virtual users, where each user performs 5 attach/detach cycles.
-
-Run the test in **skew mode** (all users on a single presence counter for high contention):
+Run the channel API test in **even mode** (distributed across multiple channels):
 
 ```bash
-k6 run -e PRESENCE_KEY_PREFIX=presence-skew-1 -e TEST_MODE=skew -e CONCURRENCY=500 -e ATTACH_ITERATIONS=5 dedicated-presence.ts
+k6 run -e CHANNEL_KEY_PREFIX=channel-1 -e TEST_MODE=even -e CONCURRENCY=500 -e VU_PER_CHANNEL=10 -e ATTACH_ITERATIONS=5 channel-presence.ts
 ```
 
-This creates a high-contention scenario with 500 users all attaching/detaching from the same presence counter, ideal for testing counter accuracy under heavy concurrent access.
+This runs the test with 50 channels, each with 10 virtual users, where each user performs 5 attach/detach cycles.
+
+Run the test in **skew mode** (all users on a single channel for high contention):
+
+```bash
+k6 run -e CHANNEL_KEY_PREFIX=channel-skew-1 -e TEST_MODE=skew -e CONCURRENCY=500 -e ATTACH_ITERATIONS=5 channel-presence.ts
+```
+
+This creates a high-contention scenario with 500 users all attaching/detaching from the same channel, ideal for testing presence count accuracy under heavy concurrent access.
 
 ## Test Parameters
 
@@ -116,8 +116,8 @@ This creates a high-contention scenario with 500 users all attaching/detaching f
 
 ### Dedicated Presence Test Parameters
 
-- `PRESENCE_KEY_PREFIX`: Prefix for presence keys (creates unique keys for each test run)
-- `VU_PER_PRESENCE`: Number of virtual users per presence counter (only in `even` mode)
+- `PRESENCE_KEY_PREFIX`: Prefix for channel keys (creates unique keys for each test run)
+- `VU_PER_PRESENCE`: Number of virtual users per channel (only in `even` mode)
 - `ATTACH_ITERATIONS`: Number of attach/detach cycles each user performs (default: 5)
 
 ## Profiling with pprof
@@ -150,4 +150,8 @@ Open the interactive pprof web tool:
 
 ```bash
 go tool pprof -http=:9090 mem.out
+```
+
+```
+
 ```
