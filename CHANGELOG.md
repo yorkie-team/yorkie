@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.36] - 2025-11-06
+
+### Added
+
+- Add InvalidateCache RPC for cluster-wide cache invalidation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1553
+
+### Changed
+
+- Move project cache to DB layer by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1552
+- Move Broadcast from Document to Presence by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1556
+- Rename Presence to Channel by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1557
+
+### Fixed
+
+- Fix incorrect condition placement in deployment.yaml by @raararaara in https://github.com/yorkie-team/yorkie/pull/1551
+
 ## [v0.6.35] - 2025-10-30
 
 ### Added
