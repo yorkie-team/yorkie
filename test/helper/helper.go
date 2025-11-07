@@ -41,11 +41,13 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	documentPresence "github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -238,7 +240,7 @@ func BuildIndexTree(node json.TreeNode) *index.Tree[*crdt.TreeNode] {
 // BuildTreeNode builds a crdt.TreeNode from the given tree node.
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
-	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+	err := doc.Update(func(root *json.Object, p *documentPresence.Presence) error {
 		root.SetNewTree("test", *node)
 
 		return nil
@@ -689,6 +691,48 @@ func ClientsAndAttachedDocs(
 		docs = append(docs, doc)
 	}
 	return clients, docs, nil
+}
+
+// ClientAndAttachedChannel creates a new client and attaches it to a new channel.
+func ClientAndAttachedChannel(
+	ctx context.Context,
+	rpcAddr string,
+	channelKey key.Key,
+) (*client.Client, *channel.Channel, error) {
+	c, err := client.Dial(rpcAddr, client.WithLogger(logger))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.Activate(ctx); err != nil {
+		return nil, nil, err
+	}
+	p := channel.New(channelKey)
+	if err := c.Attach(ctx, p); err != nil {
+		return nil, nil, err
+	}
+	return c, p, nil
+}
+
+// ClientsAndAttacheChannels creates n clients and attaches them to a new channel.
+func ClientsAndAttacheChannels(
+	ctx context.Context,
+	rpcAddr string,
+	channelKey key.Key,
+	n int,
+) ([]*client.Client, []*channel.Channel, error) {
+	var clients []*client.Client
+	var channels []*channel.Channel
+
+	for range n {
+		c, p, err := ClientAndAttachedChannel(ctx, rpcAddr, channelKey)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		clients = append(clients, c)
+		channels = append(channels, p)
+	}
+	return clients, channels, nil
 }
 
 // ActiveClients is a helper function to create n active clients.

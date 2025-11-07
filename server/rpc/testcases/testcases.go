@@ -1602,3 +1602,77 @@ func RunDeactivateClientWithAttachingDocumentTest(
 		assert.Equal(t, database.DocumentDetached, ci2.Documents[docInfo.ID].Status)
 	}
 }
+
+// RunAdminGetPresencesTest runs the GetPresences test in admin.
+func RunAdminGetChannelsTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+) {
+	testChannelKey := "test-channel-key"
+
+	resp1, err := testAdminClient.GetProject(
+		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		},
+		))
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	activateResp1, err := testClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name() + "1"}))
+	assert.NoError(t, err)
+
+	_, err = testClient.AttachChannel(
+		context.Background(),
+		connect.NewRequest(&api.AttachChannelRequest{
+			ClientId:   activateResp1.Msg.ClientId,
+			ChannelKey: testChannelKey,
+		},
+		))
+	assert.NoError(t, err)
+
+	resp, err := testAdminClient.GetChannels(
+		ctx,
+		connect.NewRequest(&api.GetChannelsRequest{
+			ChannelKeys:    []string{testChannelKey},
+			IncludeSubPath: true,
+		}),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp.Msg.Channels)
+	assert.Equal(t, 1, len(resp.Msg.Channels))
+	assert.Equal(t, testChannelKey, resp.Msg.Channels[0].Key)
+	assert.Equal(t, 1, int(resp.Msg.Channels[0].PresenceCount))
+
+	activateResp2, err := testClient.ActivateClient(
+		context.Background(),
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name() + "2"}))
+	assert.NoError(t, err)
+
+	_, err = testClient.AttachChannel(
+		context.Background(),
+		connect.NewRequest(&api.AttachChannelRequest{
+			ClientId:   activateResp2.Msg.ClientId,
+			ChannelKey: testChannelKey,
+		},
+		))
+	assert.NoError(t, err)
+
+	resp2, err := testAdminClient.GetChannels(
+		ctx,
+		connect.NewRequest(&api.GetChannelsRequest{
+			ChannelKeys:    []string{testChannelKey},
+			IncludeSubPath: true,
+		}),
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp2.Msg.Channels)
+	assert.Equal(t, 1, len(resp2.Msg.Channels))
+	assert.Equal(t, testChannelKey, resp2.Msg.Channels[0].Key)
+	assert.Equal(t, 2, int(resp2.Msg.Channels[0].PresenceCount))
+}

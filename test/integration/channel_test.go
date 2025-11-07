@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -828,5 +830,181 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, client1.Detach(ctx, doc1))
 		require.NoError(t, client1.Detach(ctx, counter1))
 		require.NoError(t, client2.Detach(ctx, counter2))
+	})
+
+	t.Run("hierarchical path channel test", func(t *testing.T) {
+		clients := activeClients(t, 5)
+		defer deactivateAndCloseClients(t, clients)
+
+		// Create hierarchical channel keys
+		// room-1: 2 clients
+		// room-1.section-1: 1 client
+		// room-1.section-1.desk-1: 1 client
+		// room-1.section-2: 1 client
+		channelKeys := []string{
+			"channel-test-hierarchical-room-1",
+			"channel-test-hierarchical-room-1.section-1",
+			"channel-test-hierarchical-room-1.section-1.desk-1",
+			"channel-test-hierarchical-room-1.section-2",
+			"channel-test-hierarchical-room-1",
+		}
+
+		channels := make([]*channel.Channel, len(clients))
+		for i, client := range clients {
+			channels[i] = channel.New(key.Key(channelKeys[i]))
+			err := client.Attach(ctx, channels[i])
+			require.NoError(t, err)
+		}
+
+		// Wait for all attachments to complete
+		time.Sleep(500 * time.Millisecond)
+
+		// Verify counts
+		// room-1 should have 2 direct presences
+		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct presences")
+		assert.Equal(t, int64(1), channels[1].Count(), "room-1.section-1 should have 1 direct presences")
+		assert.Equal(t, int64(1), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct presences")
+		assert.Equal(t, int64(1), channels[3].Count(), "room-1.section-2 should have 1 direct presences")
+		assert.Equal(t, int64(2), channels[4].Count(), "room-1 should have 2 direct presences")
+
+		// Note: Client-side Count() only shows direct count for the exact path
+		// The hierarchical counting (includeSubPath) is a server-side feature
+		// and would need to be exposed through the API to test from client
+
+		// Cleanup
+		for i, client := range clients {
+			require.NoError(t, client.Detach(ctx, channels[i]))
+		}
+
+		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 1 direct presences")
+		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 1 direct presences")
+		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct presences")
+		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 1 direct presences")
+		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 2 direct presences")
+	})
+
+	t.Run("channel path cleanup test", func(t *testing.T) {
+		clients := activeClients(t, 3)
+		defer deactivateAndCloseClients(t, clients)
+
+		// Create nested path presences
+		paths := []string{
+			"channel-test-cleanup-room-1",
+			"channel-test-cleanup-room-1.section-1",
+			"channel-test-cleanup-room-1.section-1.desk-1",
+		}
+
+		channels := make([]*channel.Channel, len(paths))
+		for i, path := range paths {
+			channels[i] = channel.New(key.Key(path))
+			err := clients[i].Attach(ctx, channels[i])
+			require.NoError(t, err)
+			assert.True(t, channels[i].IsAttached())
+		}
+
+		// Detach in reverse order (leaf to root)
+		for i := len(channels) - 1; i >= 0; i-- {
+			err := clients[i].Detach(ctx, channels[i])
+			require.NoError(t, err)
+			assert.False(t, channels[i].IsAttached())
+		}
+
+		// Re-attach and detach in different order
+		for i, path := range paths {
+			channels[i] = channel.New(key.Key(path))
+			err := clients[i].Attach(ctx, channels[i])
+			require.NoError(t, err)
+		}
+
+		// Detach root first (should not affect children)
+		err := clients[0].Detach(ctx, channels[0])
+		require.NoError(t, err)
+
+		// Children should still be attached
+		assert.True(t, channels[1].IsAttached())
+		assert.True(t, channels[2].IsAttached())
+
+		// Cleanup remaining
+		for i := 1; i < len(channels); i++ {
+			require.NoError(t, clients[i].Detach(ctx, channels[i]))
+		}
+
+		for _, counter := range channels {
+			assert.False(t, counter.IsAttached())
+		}
+	})
+
+	t.Run("multiple paths concurrent operations test", func(t *testing.T) {
+		clientCount := 9
+		clients := activeClients(t, clientCount)
+		defer deactivateAndCloseClients(t, clients)
+
+		// Create presence keys with different path depths
+		channelKeys := make([]string, clientCount)
+		for i := range clientCount {
+			switch i % 3 {
+			case 0:
+				channelKeys[i] = "channel-test-concurrent-operations-space-1"
+			case 1:
+				channelKeys[i] = "channel-test-concurrent-operations-space-1.room-1"
+			case 2:
+				channelKeys[i] = "channel-test-concurrent-operations-space-1.room-1.desk-1"
+			}
+		}
+
+		channels := make([]*channel.Channel, clientCount)
+
+		// Attach all concurrently
+		var wg sync.WaitGroup
+		for i := range clientCount {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				channels[idx] = channel.New(key.Key(channelKeys[idx]))
+				err := clients[idx].Attach(ctx, channels[idx])
+				assert.NoError(t, err)
+			}(i)
+		}
+		wg.Wait()
+
+		// Wait for all to be attached
+		assert.Eventually(t, func() bool {
+			for i := range clientCount {
+				if !channels[i].IsAttached() {
+					return false
+				}
+			}
+			return true
+		}, 2*time.Second, 100*time.Millisecond)
+
+		for _, channel := range channels {
+			assert.True(t, channel.IsAttached())
+		}
+
+		// Detach all concurrently
+		for i := range clientCount {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				err := clients[idx].Detach(ctx, channels[idx])
+				assert.NoError(t, err)
+			}(i)
+		}
+		wg.Wait()
+
+		// Wait for all to be detached
+		assert.Eventually(t, func() bool {
+			for i := range clientCount {
+				if channels[i].IsAttached() {
+					return false
+				}
+			}
+			return true
+		}, 2*time.Second, 100*time.Millisecond)
+
+		for _, channel := range channels {
+			assert.False(t, channel.IsAttached())
+			assert.Equal(t, int64(0), channel.Count())
+		}
 	})
 }

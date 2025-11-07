@@ -18,6 +18,7 @@ package channel_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -65,7 +66,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Presence should still exist
-		assert.Equal(t, int64(1), manager.Count(refKey))
+		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
 	})
 
 	t.Run("cleanup removes expired presences", func(t *testing.T) {
@@ -95,7 +96,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.Equal(t, 1, cleanedCount)
 
 		// Presence should be removed
-		assert.Equal(t, int64(0), manager.Count(refKey))
+		assert.Equal(t, int64(0), manager.PresenceCount(refKey, false))
 	})
 
 	t.Run("refresh extends TTL and prevents cleanup", func(t *testing.T) {
@@ -132,7 +133,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.Equal(t, 0, cleanedCount)
 
 		// Presence should still exist
-		assert.Equal(t, int64(1), manager.Count(refKey))
+		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
 	})
 
 	t.Run("cleanup removes only expired presences", func(t *testing.T) {
@@ -174,7 +175,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.Equal(t, 1, cleanedCount)
 
 		// Only second presence should remain
-		assert.Equal(t, int64(1), manager.Count(refKey))
+		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
 	})
 
 	t.Run("refresh non-existent presence returns error", func(t *testing.T) {
@@ -213,4 +214,138 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		stats := manager.Stats()
 		assert.NotNil(t, stats)
 	})
+}
+
+func TestPresenceManager_Count(t *testing.T) {
+	t.Run("get presencecount - hierarchical path ", func(t *testing.T) {
+		ctx := context.Background()
+		pubsub := &mockPubSub{}
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		channelIDs := make([]types.ID, 0)
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-1"}
+		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-2"}
+
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey1, 10, "1")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey2, 10, "2")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey3, 10, "3")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey4, 10, "4")...)
+
+		// Check presence counts
+		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
+
+		// Detach first level
+		_, err := manager.Detach(ctx, channelIDs[0])
+		assert.NoError(t, err)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{39, 30, 10, 10}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 10, 10, 10}, false)
+
+		// Detach second level
+		_, err = manager.Detach(ctx, channelIDs[10])
+		assert.NoError(t, err)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{38, 29, 10, 10}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 9, 10, 10}, false)
+
+		// Detach third level
+		_, err = manager.Detach(ctx, channelIDs[20])
+		assert.NoError(t, err)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{37, 28, 9, 10}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 9, 9, 10}, false)
+
+		// Cleanup all presences
+		for _, channelID := range channelIDs {
+			_, _ = manager.Detach(ctx, channelID)
+		}
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
+	})
+
+	t.Run("get presencecount - wrong path ", func(t *testing.T) {
+		ctx := context.Background()
+		pubsub := &mockPubSub{}
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager := channel.NewManager(pubsub, ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		channelIDs := make([]types.ID, 0)
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-1"}
+		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-2"}
+
+		wrongRefKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-"}
+		wrongRefKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-"}
+		wrongRefKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-"}
+		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-3"}
+
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey1, 10, "1")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey2, 10, "2")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey3, 10, "3")...)
+		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey4, 10, "4")...)
+
+		// Check presence counts
+		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
+
+		// Check wrong presence counts
+		wrongChannelRefKeys := []types.ChannelRefKey{wrongRefKey1, wrongRefKey2, wrongRefKey3, wrongRefKey4}
+		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
+
+		// Cleanup all presences
+		for _, channelID := range channelIDs {
+			_, _ = manager.Detach(ctx, channelID)
+		}
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
+		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
+	})
+}
+
+func attachPresences(
+	t *testing.T,
+	ctx context.Context,
+	manager *channel.Manager,
+	refKey types.ChannelRefKey,
+	count int,
+	clientIDPrefix string,
+) []types.ID {
+	channelIDs := make([]types.ID, 0)
+	for i := range count {
+		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s0000000000000000000000%d", clientIDPrefix, i))
+		assert.NoError(t, err)
+		channelID, _, err := manager.Attach(ctx, refKey, clientID)
+		assert.NoError(t, err)
+		channelIDs = append(channelIDs, channelID)
+	}
+	return channelIDs
+}
+
+func assertPresenceCounts(
+	t *testing.T,
+	manager *channel.Manager,
+	refkeys []types.ChannelRefKey,
+	expectedCounts []int64,
+	includeSubPath bool,
+) {
+	for i, refKey := range refkeys {
+		expectedCount := expectedCounts[i]
+		message := ""
+		if includeSubPath {
+			message = fmt.Sprintf("%s total presence count should be %d", refKey.ChannelKey, expectedCount)
+		} else {
+			message = fmt.Sprintf("%s direct presence count should be %d", refKey.ChannelKey, expectedCount)
+		}
+		assert.Equal(t, expectedCount, manager.PresenceCount(refKey, includeSubPath), message)
+	}
 }
