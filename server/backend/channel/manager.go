@@ -391,7 +391,8 @@ func ParseKeyPath(key key.Key) []string {
 
 // IsValidChannelKeyPath checks if a channel key is valid.
 func IsValidChannelKeyPath(key key.Key) bool {
-	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) || strings.HasSuffix(key.String(), ChannelKeyPathSeparator) {
+	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) ||
+		strings.HasSuffix(key.String(), ChannelKeyPathSeparator) {
 		return false
 	}
 
