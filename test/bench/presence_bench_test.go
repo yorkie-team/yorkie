@@ -133,7 +133,7 @@ func parseAndMergeKeyPath(key key.Key) []string {
 			mergedKeyPaths = append(mergedKeyPaths, keyPath)
 			continue
 		}
-		mergedKeyPaths = append(mergedKeyPaths, channel.MergeKeyPath([]string{mergedKeyPaths[i], keyPath}))
+		mergedKeyPaths = append(mergedKeyPaths, channel.MergeKeyPath([]string{mergedKeyPaths[i-1], keyPath}))
 	}
 
 	return mergedKeyPaths
@@ -165,7 +165,7 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	project := types.Project{ID: types.NewID()}
 
 	for i, keyPath := range allKeyPaths {
-		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("00000000000000000000000%d", i))
+		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 		refkey := types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(keyPath)}
 		channelID, count, err := manager.Attach(ctx, refkey, clientID)
 		if err != nil {
@@ -223,13 +223,13 @@ func BenchmarkChannelHierarchicalPresenceCount(b *testing.B) {
 		},
 		{
 			name:           "2-level-1x100=100 includeSubPath true",
-			levelCounts:    []int{10, 10}, // 10 roots * 10 children = 100 leaf presences
+			levelCounts:    []int{1, 100}, // 1 root * 100 children = 100 leaf presences
 			includeSubPath: true,
 		},
 		{
 			name:           "2-level-10x10=100 includeSubPath false",
 			levelCounts:    []int{10, 10}, // 10 roots * 10 children = 100 leaf presences
-			includeSubPath: true,
+			includeSubPath: false,
 		},
 		{
 			name:           "2-level-10x10=100 includeSubPath true",
@@ -237,13 +237,23 @@ func BenchmarkChannelHierarchicalPresenceCount(b *testing.B) {
 			includeSubPath: true,
 		},
 		{
-			name:           "3-level-1x10x30=300 includeSubPath false",
-			levelCounts:    []int{1, 10, 30}, // 1 * 10 * 30 = 300 leaf presences
+			name:           "3-level-1x1x1000=1000 includeSubPath false",
+			levelCounts:    []int{1, 1, 1000}, // 1 * 1 * 1000 = 1000 leaf presences
 			includeSubPath: false,
 		},
 		{
-			name:           "3-level-1x10x30=300 includeSubPath true",
-			levelCounts:    []int{1, 10, 30}, // 1 * 10 * 30 = 300 leaf presences
+			name:           "3-level-1x1x1000=1000 includeSubPath true",
+			levelCounts:    []int{1, 1, 1000}, // 1 * 1 * 1000 = 1000 leaf presences
+			includeSubPath: true,
+		},
+		{
+			name:           "3-level-1x10x100=1000 includeSubPath false",
+			levelCounts:    []int{1, 10, 100}, // 1 * 10 * 100 = 1000 leaf presences
+			includeSubPath: false,
+		},
+		{
+			name:           "3-level-1x10x100=1000 includeSubPath true",
+			levelCounts:    []int{1, 10, 100}, // 1 * 10 * 100 = 1000 leaf presences
 			includeSubPath: true,
 		},
 		{

@@ -322,7 +322,7 @@ func attachChannels(
 ) []types.ID {
 	channelIDs := make([]types.ID, 0)
 	for i := range count {
-		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s0000000000000000000000%d", clientIDPrefix, i))
+		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%022x", clientIDPrefix, i))
 		assert.NoError(t, err)
 		channelID, _, err := manager.Attach(ctx, refKey, clientID)
 		assert.NoError(t, err)

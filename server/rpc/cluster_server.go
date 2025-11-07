@@ -258,7 +258,7 @@ func (s *clusterServer) GetDocument(
 	}), nil
 }
 
-// GetPresence gets the presence for a single presence.
+// GetChannel gets the channel for a single channel.
 func (s *clusterServer) GetChannel(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceGetChannelRequest],

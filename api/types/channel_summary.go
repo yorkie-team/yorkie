@@ -4,11 +4,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-// PresenceSummary represents a summary of presence.
+// ChannelSummary represents a summary of channel.
 type ChannelSummary struct {
 	// Key is the key of the channel.
 	Key key.Key
 
-	// PresenceCount is the count of presence.
+	// PresenceCount is the count of channel.
 	PresenceCount int64
 }

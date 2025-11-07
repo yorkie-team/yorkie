@@ -1603,7 +1603,7 @@ func RunDeactivateClientWithAttachingDocumentTest(
 	}
 }
 
-// RunAdminGetPresencesTest runs the GetPresences test in admin.
+// RunAdminGetChannelsTest runs the GetChannels test in admin.
 func RunAdminGetChannelsTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
