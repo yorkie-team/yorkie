@@ -21,7 +21,6 @@ package bench
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	gotime "time"
 
@@ -52,7 +51,7 @@ func benchmarkChannelAttachDetach(b *testing.B, svr *server.Yorkie, clientCount 
 	for i := range b.N {
 		b.StopTimer()
 
-		// Generate hierarchical paths and create document keys
+		// Generate channel keys and create document keys
 		channelKey := key.Key(fmt.Sprintf("channel-test-attach-detach-bench-%d-%d", clientCount, i))
 
 		b.StartTimer()
@@ -93,15 +92,15 @@ func BenchmarkPresencePathOperations(b *testing.B) {
 	})
 }
 
-// generateHierarchicalPaths generates all leaf paths for a hierarchical structure.
+// generateHierarchicalKeyPaths generates all leaf key paths for a hierarchical structure.
 // For example, with levelCounts = [2, 3], it generates:
 // sub-0/sub-0, sub-0/sub-1, sub-0/sub-2, sub-1/sub-0, sub-1/sub-1, sub-1/sub-2
-func generateHierarchicalPaths(prefix string, levelCounts []int) []string {
+func generateHierarchicalKeyPaths(prefix string, levelCounts []int) []string {
 	if len(levelCounts) == 0 {
 		return []string{prefix}
 	}
 
-	var paths []string
+	var keyPaths []string
 	currentLevelCount := levelCounts[0]
 	remainingLevels := levelCounts[1:]
 
@@ -115,29 +114,29 @@ func generateHierarchicalPaths(prefix string, levelCounts []int) []string {
 
 		if len(remainingLevels) == 0 {
 			// Leaf node
-			paths = append(paths, currentPath)
+			keyPaths = append(keyPaths, currentPath)
 		} else {
 			// Recurse for next level
-			subPaths := generateHierarchicalPaths(currentPath, remainingLevels)
-			paths = append(paths, subPaths...)
+			subPaths := generateHierarchicalKeyPaths(currentPath, remainingLevels)
+			keyPaths = append(keyPaths, subPaths...)
 		}
 	}
 
-	return paths
+	return keyPaths
 }
 
-func parseAndMergePath(key string) []string {
-	paths := strings.Split(key, channel.ChannelPathSeparator)
-	mergedPaths := make([]string, 0, len(paths))
-	for i, path := range paths {
+func parseAndMergeKeyPath(key key.Key) []string {
+	keyPaths := channel.ParseKeyPath(key)
+	mergedKeyPaths := make([]string, 0, len(keyPaths))
+	for i, keyPath := range keyPaths {
 		if i == 0 {
-			mergedPaths = append(mergedPaths, path)
+			mergedKeyPaths = append(mergedKeyPaths, keyPath)
 			continue
 		}
-		mergedPaths = append(mergedPaths, fmt.Sprintf("%s%s%s", mergedPaths[i], channel.ChannelPathSeparator, path))
+		mergedKeyPaths = append(mergedKeyPaths, channel.MergeKeyPath([]string{mergedKeyPaths[i], keyPath}))
 	}
 
-	return mergedPaths
+	return mergedKeyPaths
 }
 
 // benchmarkHierarchicalPresenceCount measures count performance with hierarchical presence structure.
@@ -147,12 +146,12 @@ func parseAndMergePath(key string) []string {
 // - 10 intermediate nodes (sub-0/sub-0 ~ sub-0/sub-9)
 // - 200 leaf nodes (sub-0/sub-0/sub-0 ~ sub-0/sub-9/sub-19)
 // Count all Presence count of paths root to last leaf(sub-0 ~ sub-0/sub-9/sub-19).
-func benchmarkHierarchicalPresenceCount(b *testing.B, levelCounts []int, includeSubPath bool) {
+func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, includeSubPath bool) {
 	ctx := context.Background()
 	b.StopTimer()
 
-	allPaths := generateHierarchicalPaths("", levelCounts)
-	totalChannels := len(allPaths)
+	allKeyPaths := generateHierarchicalKeyPaths("", levelCounts)
+	totalChannels := len(allKeyPaths)
 
 	if totalChannels == 0 {
 		b.Skip("No channels generated")
@@ -165,16 +164,16 @@ func benchmarkHierarchicalPresenceCount(b *testing.B, levelCounts []int, include
 	manager := channel.NewManager(pubsub, ttl, cleanupInterval)
 	project := types.Project{ID: types.NewID()}
 
-	for i, path := range allPaths {
+	for i, keyPath := range allKeyPaths {
 		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("00000000000000000000000%d", i))
-		refkey := types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(path)}
+		refkey := types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(keyPath)}
 		channelID, count, err := manager.Attach(ctx, refkey, clientID)
 		if err != nil {
-			b.Fatalf("Failed to create and attach client %d at path %s: %v", i, path, err)
+			b.Fatalf("Failed to create and attach client %d at path %s: %v", i, keyPath, err)
 		}
 		channels[i] = channelID
 		if count == 0 {
-			b.Fatalf("Failed to attach client %d at path %s: %v", i, path, err)
+			b.Fatalf("Failed to attach client %d at path %s: %v", i, keyPath, err)
 		}
 	}
 
@@ -182,9 +181,9 @@ func benchmarkHierarchicalPresenceCount(b *testing.B, levelCounts []int, include
 
 	// Benchmark: Measure count operation performance
 	for i := 0; i < b.N; i++ {
-		for _, path := range allPaths {
-			for _, mergedPath := range parseAndMergePath(path) {
-				_ = manager.PresenceCount(types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(mergedPath)}, includeSubPath)
+		for _, keyPath := range allKeyPaths {
+			for _, mergedKeyPath := range parseAndMergeKeyPath(key.Key(keyPath)) {
+				_ = manager.PresenceCount(types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(mergedKeyPath)}, includeSubPath)
 			}
 		}
 	}
@@ -192,7 +191,7 @@ func benchmarkHierarchicalPresenceCount(b *testing.B, levelCounts []int, include
 	b.StopTimer()
 }
 
-func BenchmarkHierarchicalPresenceCount(b *testing.B) {
+func BenchmarkChannelHierarchicalPresenceCount(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
 	svr := helper.TestServerWithSnapshotCfg(100_000, 100_000)
@@ -261,7 +260,7 @@ func BenchmarkHierarchicalPresenceCount(b *testing.B) {
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			benchmarkHierarchicalPresenceCount(b, tc.levelCounts, tc.includeSubPath)
+			benchmarkChannelHierarchicalPresenceCount(b, tc.levelCounts, tc.includeSubPath)
 		})
 	}
 }

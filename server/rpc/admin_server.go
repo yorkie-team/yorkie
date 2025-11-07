@@ -593,7 +593,7 @@ func (s *adminServer) GetChannels(
 		channel, err := clusterClient.GetChannel(
 			ctx,
 			project,
-			channelKey,
+			key.Key(channelKey),
 			includeSubPath,
 		)
 		if err != nil {

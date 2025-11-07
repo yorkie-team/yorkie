@@ -29,12 +29,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
-	// ChannelPathSeparator is the separator for channel paths.
-	ChannelPathSeparator = "."
+	// ChannelKeyPathSeparator is the separator for channel key paths.
+	ChannelKeyPathSeparator = "."
 
 	// ErrSessionNotFound is returned when a session is not found.
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
@@ -294,16 +295,16 @@ func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) in
 		return 0
 	}
 
-	paths := parsePath(key)
-	if len(paths) == 0 {
+	targetKeyPaths := ParseKeyPath(key.ChannelKey)
+	if len(targetKeyPaths) == 0 {
 		return 0
 	}
 
 	totalCount := 0
 	for _, channelKey := range m.channels.Keys() {
-		channelPaths := parsePath(channelKey)
+		channelKeyPaths := ParseKeyPath(channelKey.ChannelKey)
 
-		if !isSubChannelPath(channelPaths, paths) {
+		if !isSubKeyPath(channelKeyPaths, targetKeyPaths) {
 			continue
 		}
 
@@ -358,18 +359,33 @@ func (m *Manager) Stats() map[string]int {
 	}
 }
 
-func parsePath(key types.ChannelRefKey) []string {
-	return strings.Split(key.ChannelKey.String(), ChannelPathSeparator)
+// FirstKeyPath returns the first key path of the given channel key.
+func FirstKeyPath(key key.Key) string {
+	keyPaths := ParseKeyPath(key)
+	if len(keyPaths) == 0 {
+		return ""
+	}
+	return keyPaths[0]
 }
 
-// isSubChannelPath checks if channelPaths is a sub path of paths.
-func isSubChannelPath(channelPaths, paths []string) bool {
-	if len(paths) > len(channelPaths) {
+// MergeKeyPath merges the given key paths into a single key path.
+func MergeKeyPath(keyPaths []string) string {
+	return strings.Join(keyPaths, ChannelKeyPathSeparator)
+}
+
+// ParseKeyPath splits a channel key into key path components.
+func ParseKeyPath(key key.Key) []string {
+	return strings.Split(key.String(), ChannelKeyPathSeparator)
+}
+
+// isSubKeyPath checks if channelKeyPaths is a sub path of keyPaths.
+func isSubKeyPath(channelKeyPaths, keyPaths []string) bool {
+	if len(keyPaths) > len(channelKeyPaths) {
 		return false
 	}
 
-	for i, path := range paths {
-		if path != channelPaths[i] {
+	for i, keyPath := range keyPaths {
+		if keyPath != channelKeyPaths[i] {
 			return false
 		}
 	}

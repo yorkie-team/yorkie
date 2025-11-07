@@ -888,15 +888,15 @@ func TestChannelIntegration(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		// Create nested path presences
-		paths := []string{
+		channelKeys := []string{
 			"channel-test-cleanup-room-1",
 			"channel-test-cleanup-room-1.section-1",
 			"channel-test-cleanup-room-1.section-1.desk-1",
 		}
 
-		channels := make([]*channel.Channel, len(paths))
-		for i, path := range paths {
-			channels[i] = channel.New(key.Key(path))
+		channels := make([]*channel.Channel, len(channelKeys))
+		for i, k := range channelKeys {
+			channels[i] = channel.New(key.Key(k))
 			err := clients[i].Attach(ctx, channels[i])
 			require.NoError(t, err)
 			assert.True(t, channels[i].IsAttached())
@@ -910,8 +910,8 @@ func TestChannelIntegration(t *testing.T) {
 		}
 
 		// Re-attach and detach in different order
-		for i, path := range paths {
-			channels[i] = channel.New(key.Key(path))
+		for i, k := range channelKeys {
+			channels[i] = channel.New(key.Key(k))
 			err := clients[i].Attach(ctx, channels[i])
 			require.NoError(t, err)
 		}
@@ -934,7 +934,7 @@ func TestChannelIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("multiple paths concurrent operations test", func(t *testing.T) {
+	t.Run("multiple key paths concurrent operations test", func(t *testing.T) {
 		clientCount := 9
 		clients := activeClients(t, clientCount)
 		defer deactivateAndCloseClients(t, clients)
