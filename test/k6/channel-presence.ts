@@ -224,10 +224,12 @@ function attachChannel(clientID: string, channelKey: string): [string, number] {
     channelKey: channelKey,
   };
 
+  const firstChannelKeyPath = channelKey.split(".")[0];
+
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/AttachChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": `${API_KEY}/${firstChannelKeyPath}` }
   );
   if (!resp) {
     throw new Error("Failed to attach channel");
@@ -259,10 +261,12 @@ function refreshChannel(
     sessionId: sessionID,
   };
 
+  const firstChannelKeyPath = channelKey.split(".")[0];
+
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/RefreshChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": `${API_KEY}/${firstChannelKeyPath}` }
   );
   if (!resp) {
     throw new Error("Failed to refresh channel");
@@ -293,10 +297,12 @@ function detachChannel(
     sessionId: sessionID,
   };
 
+  const firstChannelKeyPath = channelKey.split(".")[0];
+
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/DetachChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": `${API_KEY}/${firstChannelKeyPath}` }
   );
   if (!resp) {
     throw new Error("Failed to detach channel");
