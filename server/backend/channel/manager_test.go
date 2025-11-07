@@ -231,10 +231,10 @@ func TestPresenceManager_Count(t *testing.T) {
 		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-1"}
 		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-2"}
 
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey1, 10, "1")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey2, 10, "2")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey3, 10, "3")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey4, 10, "4")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey1, 10, "1")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey2, 10, "2")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey3, 10, "3")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey4, 10, "4")...)
 
 		// Check presence counts
 		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
@@ -286,10 +286,10 @@ func TestPresenceManager_Count(t *testing.T) {
 		wrongRefKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-"}
 		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-3"}
 
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey1, 10, "1")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey2, 10, "2")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey3, 10, "3")...)
-		channelIDs = append(channelIDs, attachPresences(t, ctx, manager, refKey4, 10, "4")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey1, 10, "1")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey2, 10, "2")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey3, 10, "3")...)
+		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey4, 10, "4")...)
 
 		// Check presence counts
 		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
@@ -312,7 +312,7 @@ func TestPresenceManager_Count(t *testing.T) {
 	})
 }
 
-func attachPresences(
+func attachChannels(
 	t *testing.T,
 	ctx context.Context,
 	manager *channel.Manager,
