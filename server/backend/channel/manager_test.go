@@ -225,6 +225,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.False(t, channel.IsValidChannelKeyPath(".room-1."))
 		assert.False(t, channel.IsValidChannelKeyPath("room-1."))
 		assert.False(t, channel.IsValidChannelKeyPath("room-1.section-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1..section-1"))
 	})
 
 	t.Run("first key path is returned correctly", func(t *testing.T) {
@@ -237,7 +238,10 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.Equal(t, "", channel.FirstKeyPath(""))
 		assert.Equal(t, "", channel.FirstKeyPath("."))
 		assert.Equal(t, "", channel.FirstKeyPath(".."))
+		assert.Equal(t, "", channel.FirstKeyPath("a.."))
 		assert.Equal(t, "", channel.FirstKeyPath("..a"))
+		assert.Equal(t, "", channel.FirstKeyPath(".a."))
+		assert.Equal(t, "", channel.FirstKeyPath("a..a"))
 	})
 
 	t.Run("merge key path is returned correctly", func(t *testing.T) {

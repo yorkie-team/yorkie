@@ -20,6 +20,7 @@ package channel
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	gotime "time"
@@ -396,7 +397,12 @@ func IsValidChannelKeyPath(key key.Key) bool {
 		return false
 	}
 
-	return len(ParseKeyPath(key)) > 0
+	keyPaths := ParseKeyPath(key)
+	if slices.Contains(keyPaths, "") {
+		return false
+	}
+
+	return len(keyPaths) > 0
 }
 
 // isSubKeyPath checks if channelKeyPaths is a sub path of keyPaths.
