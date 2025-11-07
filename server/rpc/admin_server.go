@@ -575,6 +575,38 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
 }
 
+// GetChannels gets the channels for the given keys.
+func (s *adminServer) GetChannels(
+	ctx context.Context,
+	req *connect.Request[api.GetChannelsRequest],
+) (*connect.Response[api.GetChannelsResponse], error) {
+	project := projects.From(ctx)
+
+	includeSubPath := req.Msg.IncludeSubPath
+	channels := make([]*types.ChannelSummary, 0)
+	clusterClient, err := s.backend.ClusterClient()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, channelKey := range req.Msg.ChannelKeys {
+		channel, err := clusterClient.GetChannel(
+			ctx,
+			project,
+			channelKey,
+			includeSubPath,
+		)
+		if err != nil {
+			return nil, err
+		}
+		channels = append(channels, channel)
+	}
+
+	return connect.NewResponse(&api.GetChannelsResponse{
+		Channels: converter.ToChannelSummaries(channels),
+	}), nil
+}
+
 // ListChanges lists of changes for the given document.
 func (s *adminServer) ListChanges(
 	ctx context.Context,

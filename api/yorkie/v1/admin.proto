@@ -46,6 +46,8 @@ service AdminService {
   rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
+  rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
+
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 
   rpc CreateSchema (CreateSchemaRequest) returns (CreateSchemaResponse) {}
@@ -218,6 +220,15 @@ message SearchDocumentsRequest {
 message SearchDocumentsResponse {
   int32 total_count = 1;
   repeated DocumentSummary documents = 2;
+}
+
+message GetChannelsRequest {
+  repeated string channel_keys = 1;
+  bool include_sub_path = 2;
+}
+
+message GetChannelsResponse {
+  repeated ChannelSummary channels = 1;
 }
 
 message ListChangesRequest {

@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-// Package channel provides channel management implementation.
+// Package channel provides channel management for real-time user tracking.
 package channel
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	gotime "time"
 
@@ -32,6 +33,9 @@ import (
 )
 
 var (
+	// ChannelPathSeparator is the separator for channel paths.
+	ChannelPathSeparator = "."
+
 	// ErrSessionNotFound is returned when a session is not found.
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
 )
@@ -60,7 +64,7 @@ type Manager struct {
 	// sessionIDToKey is a reverse index for O(1) Detach lookup
 	sessionIDToKey *cmap.Map[types.ID, types.ChannelRefKey]
 
-	// pubsub is used to publish presence events
+	// pubsub is used to publish channel events
 	pubsub PubSub
 
 	// seqCounter is a monotonic counter for ordering events
@@ -141,16 +145,16 @@ func (m *Manager) nextSeq() int64 {
 	return m.seqCounter.Add(1)
 }
 
-// Attach adds a client to a channel and returns the unique presence ID.
+// Attach adds a client to a channel and returns the unique session ID.
 func (m *Manager) Attach(
 	ctx context.Context,
 	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
-	// Check if client is already attached to this presence
+	// Check if client is already attached to this channel
 	if sessionMap, ok := m.clientToSession.Get(clientID); ok {
 		if sessionID, found := sessionMap.Get(key); found {
-			return sessionID, m.Count(key), nil
+			return sessionID, m.PresenceCount(key, false), nil
 		}
 	}
 
@@ -202,7 +206,7 @@ func (m *Manager) Attach(
 	return id, newCount, nil
 }
 
-// Detach removes a client from a channel using presence ID.
+// Detach removes a client from a channel using session ID.
 func (m *Manager) Detach(
 	ctx context.Context,
 	id types.ID,
@@ -279,14 +283,35 @@ func (m *Manager) Refresh(
 	return nil
 }
 
-// Count returns the current count for a presence key.
-// This is a lock-free operation by directly querying the presence map length.
-func (m *Manager) Count(key types.ChannelRefKey) int64 {
-	if presenceMap, ok := m.channels.Get(key); ok {
-		return int64(presenceMap.Len())
+// PresenceCount returns the current presence count for a channel key.
+// This is a lock-free operation by directly querying the session map length.
+// If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
+func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) int64 {
+	if !includeSubPath {
+		if sessionMap, ok := m.channels.Get(key); ok {
+			return int64(sessionMap.Len())
+		}
+		return 0
 	}
 
-	return 0
+	paths := parsePath(key)
+	if len(paths) == 0 {
+		return 0
+	}
+
+	totalCount := 0
+	for _, channelKey := range m.channels.Keys() {
+		channelPaths := parsePath(channelKey)
+
+		if !isSubChannelPath(channelPaths, paths) {
+			continue
+		}
+
+		if sessionMap, ok := m.channels.Get(channelKey); ok {
+			totalCount += sessionMap.Len()
+		}
+	}
+	return int64(totalCount)
 }
 
 // CleanupExpired removes sessions that have exceeded their TTL.
@@ -319,11 +344,11 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	return cleanedCount, nil
 }
 
-// Stats returns statistics about the presence manager.
+// Stats returns statistics about the channel manager.
 func (m *Manager) Stats() map[string]int {
 	totalSessions := 0
-	for _, presenceMap := range m.channels.Values() {
-		totalSessions += presenceMap.Len()
+	for _, sessionMap := range m.channels.Values() {
+		totalSessions += sessionMap.Len()
 	}
 
 	return map[string]int{
@@ -331,4 +356,23 @@ func (m *Manager) Stats() map[string]int {
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}
+}
+
+func parsePath(key types.ChannelRefKey) []string {
+	return strings.Split(key.ChannelKey.String(), ChannelPathSeparator)
+}
+
+// isSubChannelPath checks if channelPaths is a sub path of paths.
+func isSubChannelPath(channelPaths, paths []string) bool {
+	if len(paths) > len(channelPaths) {
+		return false
+	}
+
+	for i, path := range paths {
+		if path != channelPaths[i] {
+			return false
+		}
+	}
+
+	return true
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -200,6 +201,28 @@ func (c *Client) GetDocument(
 	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
+// GetChannel gets the channel for the given key.
+func (c *Client) GetChannel(
+	ctx context.Context,
+	project *types.Project,
+	channelKey string,
+	includeSubPath bool,
+) (*types.ChannelSummary, error) {
+	response, err := c.client.GetChannel(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ClusterServiceGetChannelRequest{
+			ProjectId:      project.ID.String(),
+			ChannelKey:     channelKey,
+			IncludeSubPath: includeSubPath,
+		}), project.PublicKey, firstSubPath(channelKey)),
+	)
+	if err != nil {
+		return nil, fromConnectError(err)
+	}
+
+	return converter.FromChannelSummary(response.Msg.Channel), nil
+}
+
 // InvalidateCache invalidates the cache of the given type and key.
 func (c *Client) InvalidateCache(
 	ctx context.Context,
@@ -261,4 +284,13 @@ func fromConnectError(err error) error {
 		// For codes without direct mapping, return the original connect error
 		return err
 	}
+}
+
+// firstSubPath parses the given channel key.
+func firstSubPath(channelKey string) string {
+	paths := strings.Split(channelKey, channel.ChannelPathSeparator)
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0]
 }

@@ -387,7 +387,7 @@ func (s *yorkieServer) RefreshChannel(
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
 	}
-	count := s.backend.Presence.Count(refKey)
+	count := s.backend.Presence.PresenceCount(refKey, false)
 
 	response := &api.RefreshChannelResponse{
 		Count: count,
@@ -444,7 +444,7 @@ func (s *yorkieServer) WatchChannel(
 	}()
 
 	// 04. Send initial count
-	currentCount := s.backend.Presence.Count(refKey)
+	currentCount := s.backend.Presence.PresenceCount(refKey, false)
 	if err := stream.Send(&api.WatchChannelResponse{
 		Body: &api.WatchChannelResponse_Initialized{
 			Initialized: &api.WatchChannelInitialized{
