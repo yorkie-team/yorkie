@@ -173,7 +173,7 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 		}
 		channels[i] = channelID
 		if count == 0 {
-			b.Fatalf("Failed to attach client %d at path %s: %v", i, keyPath, err)
+			b.Fatalf("Attach returned zero count for client %d at path %s", i, keyPath)
 		}
 	}
 

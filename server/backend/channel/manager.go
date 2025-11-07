@@ -39,6 +39,9 @@ var (
 
 	// ErrSessionNotFound is returned when a session is not found.
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
+
+	// ErrInvalidChannelKey is returned when a channel key is invalid.
+	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
 )
 
 // PubSub is an interface for publishing channel events.
@@ -152,6 +155,10 @@ func (m *Manager) Attach(
 	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
+	if !IsValidChannelKeyPath(key.ChannelKey) {
+		return types.ID(""), 0, fmt.Errorf("attach %s: %w", key, ErrInvalidChannelKey)
+	}
+
 	// Check if client is already attached to this channel
 	if sessionMap, ok := m.clientToSession.Get(clientID); ok {
 		if sessionID, found := sessionMap.Get(key); found {
@@ -288,6 +295,10 @@ func (m *Manager) Refresh(
 // This is a lock-free operation by directly querying the session map length.
 // If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
 func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) int64 {
+	if !IsValidChannelKeyPath(key.ChannelKey) {
+		return 0
+	}
+
 	if !includeSubPath {
 		if sessionMap, ok := m.channels.Get(key); ok {
 			return int64(sessionMap.Len())
@@ -295,12 +306,8 @@ func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) in
 		return 0
 	}
 
-	targetKeyPaths := ParseKeyPath(key.ChannelKey)
-	if len(targetKeyPaths) == 0 {
-		return 0
-	}
-
 	totalCount := 0
+	targetKeyPaths := ParseKeyPath(key.ChannelKey)
 	for _, channelKey := range m.channels.Keys() {
 		channelKeyPaths := ParseKeyPath(channelKey.ChannelKey)
 
@@ -361,21 +368,34 @@ func (m *Manager) Stats() map[string]int {
 
 // FirstKeyPath returns the first key path of the given channel key.
 func FirstKeyPath(key key.Key) string {
-	keyPaths := ParseKeyPath(key)
-	if len(keyPaths) == 0 {
+	if !IsValidChannelKeyPath(key) {
 		return ""
 	}
-	return keyPaths[0]
+
+	return ParseKeyPath(key)[0]
 }
 
 // MergeKeyPath merges the given key paths into a single key path.
 func MergeKeyPath(keyPaths []string) string {
+	if len(keyPaths) == 0 {
+		return ""
+	}
+
 	return strings.Join(keyPaths, ChannelKeyPathSeparator)
 }
 
 // ParseKeyPath splits a channel key into key path components.
 func ParseKeyPath(key key.Key) []string {
 	return strings.Split(key.String(), ChannelKeyPathSeparator)
+}
+
+// IsValidChannelKeyPath checks if a channel key is valid.
+func IsValidChannelKeyPath(key key.Key) bool {
+	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) || strings.HasSuffix(key.String(), ChannelKeyPathSeparator) {
+		return false
+	}
+
+	return len(ParseKeyPath(key)) > 0
 }
 
 // isSubKeyPath checks if channelKeyPaths is a sub path of keyPaths.

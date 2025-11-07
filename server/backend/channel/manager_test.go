@@ -214,6 +214,40 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		stats := manager.Stats()
 		assert.NotNil(t, stats)
 	})
+
+	t.Run("invalid channel key path returns error", func(t *testing.T) {
+		assert.True(t, channel.IsValidChannelKeyPath("room-1"))
+		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1"))
+		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1.user-1"))
+
+		assert.False(t, channel.IsValidChannelKeyPath("......."))
+		assert.False(t, channel.IsValidChannelKeyPath(".room-1"))
+		assert.False(t, channel.IsValidChannelKeyPath(".room-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1.section-1."))
+	})
+
+	t.Run("first key path is returned correctly", func(t *testing.T) {
+		// Correct paths
+		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1"))
+		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1.section-1"))
+		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1.section-1.user-1"))
+
+		// Wrong paths
+		assert.Equal(t, "", channel.FirstKeyPath(""))
+		assert.Equal(t, "", channel.FirstKeyPath("."))
+		assert.Equal(t, "", channel.FirstKeyPath(".."))
+		assert.Equal(t, "", channel.FirstKeyPath("..a"))
+	})
+
+	t.Run("merge key path is returned correctly", func(t *testing.T) {
+		assert.Equal(t, "room-1", channel.MergeKeyPath([]string{"room-1"}))
+		assert.Equal(t, "room-1.section-1", channel.MergeKeyPath([]string{"room-1", "section-1"}))
+		assert.Equal(t, "room-1.section-1.user-1", channel.MergeKeyPath([]string{"room-1", "section-1", "user-1"}))
+
+		// Wrong paths
+		assert.Equal(t, "", channel.MergeKeyPath([]string{}))
+	})
 }
 
 func TestPresenceManager_Count(t *testing.T) {
@@ -281,10 +315,10 @@ func TestPresenceManager_Count(t *testing.T) {
 		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-1"}
 		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-2"}
 
-		wrongRefKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-"}
-		wrongRefKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-"}
-		wrongRefKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-"}
-		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-3"}
+		wrongRefKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: ""}
+		wrongRefKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-"}
+		wrongRefKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-"}
+		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-"}
 
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey1, 10, "1")...)
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey2, 10, "2")...)
@@ -322,7 +356,7 @@ func attachChannels(
 ) []types.ID {
 	channelIDs := make([]types.ID, 0)
 	for i := range count {
-		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%022x", clientIDPrefix, i))
+		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", clientIDPrefix, i))
 		assert.NoError(t, err)
 		channelID, _, err := manager.Attach(ctx, refKey, clientID)
 		assert.NoError(t, err)
