@@ -60,6 +60,9 @@ const (
 	// ClusterServiceGetDocumentProcedure is the fully-qualified name of the ClusterService's
 	// GetDocument RPC.
 	ClusterServiceGetDocumentProcedure = "/yorkie.v1.ClusterService/GetDocument"
+	// ClusterServiceGetChannelProcedure is the fully-qualified name of the ClusterService's GetChannel
+	// RPC.
+	ClusterServiceGetChannelProcedure = "/yorkie.v1.ClusterService/GetChannel"
 	// ClusterServiceInvalidateCacheProcedure is the fully-qualified name of the ClusterService's
 	// InvalidateCache RPC.
 	ClusterServiceInvalidateCacheProcedure = "/yorkie.v1.ClusterService/InvalidateCache"
@@ -71,6 +74,7 @@ type ClusterServiceClient interface {
 	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
 	PurgeDocument(context.Context, *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.ClusterServiceGetDocumentRequest]) (*connect.Response[v1.ClusterServiceGetDocumentResponse], error)
+	GetChannel(context.Context, *connect.Request[v1.ClusterServiceGetChannelRequest]) (*connect.Response[v1.ClusterServiceGetChannelResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
 
@@ -104,6 +108,11 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			baseURL+ClusterServiceGetDocumentProcedure,
 			opts...,
 		),
+		getChannel: connect.NewClient[v1.ClusterServiceGetChannelRequest, v1.ClusterServiceGetChannelResponse](
+			httpClient,
+			baseURL+ClusterServiceGetChannelProcedure,
+			opts...,
+		),
 		invalidateCache: connect.NewClient[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse](
 			httpClient,
 			baseURL+ClusterServiceInvalidateCacheProcedure,
@@ -118,6 +127,7 @@ type clusterServiceClient struct {
 	compactDocument *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
 	purgeDocument   *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
 	getDocument     *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
+	getChannel      *connect.Client[v1.ClusterServiceGetChannelRequest, v1.ClusterServiceGetChannelResponse]
 	invalidateCache *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
 }
 
@@ -141,6 +151,11 @@ func (c *clusterServiceClient) GetDocument(ctx context.Context, req *connect.Req
 	return c.getDocument.CallUnary(ctx, req)
 }
 
+// GetChannel calls yorkie.v1.ClusterService.GetChannel.
+func (c *clusterServiceClient) GetChannel(ctx context.Context, req *connect.Request[v1.ClusterServiceGetChannelRequest]) (*connect.Response[v1.ClusterServiceGetChannelResponse], error) {
+	return c.getChannel.CallUnary(ctx, req)
+}
+
 // InvalidateCache calls yorkie.v1.ClusterService.InvalidateCache.
 func (c *clusterServiceClient) InvalidateCache(ctx context.Context, req *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error) {
 	return c.invalidateCache.CallUnary(ctx, req)
@@ -152,6 +167,7 @@ type ClusterServiceHandler interface {
 	CompactDocument(context.Context, *connect.Request[v1.ClusterServiceCompactDocumentRequest]) (*connect.Response[v1.ClusterServiceCompactDocumentResponse], error)
 	PurgeDocument(context.Context, *connect.Request[v1.ClusterServicePurgeDocumentRequest]) (*connect.Response[v1.ClusterServicePurgeDocumentResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.ClusterServiceGetDocumentRequest]) (*connect.Response[v1.ClusterServiceGetDocumentResponse], error)
+	GetChannel(context.Context, *connect.Request[v1.ClusterServiceGetChannelRequest]) (*connect.Response[v1.ClusterServiceGetChannelResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
 
@@ -181,6 +197,11 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		svc.GetDocument,
 		opts...,
 	)
+	clusterServiceGetChannelHandler := connect.NewUnaryHandler(
+		ClusterServiceGetChannelProcedure,
+		svc.GetChannel,
+		opts...,
+	)
 	clusterServiceInvalidateCacheHandler := connect.NewUnaryHandler(
 		ClusterServiceInvalidateCacheProcedure,
 		svc.InvalidateCache,
@@ -196,6 +217,8 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 			clusterServicePurgeDocumentHandler.ServeHTTP(w, r)
 		case ClusterServiceGetDocumentProcedure:
 			clusterServiceGetDocumentHandler.ServeHTTP(w, r)
+		case ClusterServiceGetChannelProcedure:
+			clusterServiceGetChannelHandler.ServeHTTP(w, r)
 		case ClusterServiceInvalidateCacheProcedure:
 			clusterServiceInvalidateCacheHandler.ServeHTTP(w, r)
 		default:
@@ -221,6 +244,10 @@ func (UnimplementedClusterServiceHandler) PurgeDocument(context.Context, *connec
 
 func (UnimplementedClusterServiceHandler) GetDocument(context.Context, *connect.Request[v1.ClusterServiceGetDocumentRequest]) (*connect.Response[v1.ClusterServiceGetDocumentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.GetDocument is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) GetChannel(context.Context, *connect.Request[v1.ClusterServiceGetChannelRequest]) (*connect.Response[v1.ClusterServiceGetChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.GetChannel is not implemented"))
 }
 
 func (UnimplementedClusterServiceHandler) InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error) {

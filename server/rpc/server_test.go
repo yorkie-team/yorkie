@@ -255,6 +255,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 	t.Run("admin rotate project keys test", func(t *testing.T) {
 		testcases.RunAdminRotateProjectKeysTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
+
+	t.Run("admin get channels test", func(t *testing.T) {
+		testcases.RunAdminGetChannelsTest(t, testClient, testAdminClient)
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {

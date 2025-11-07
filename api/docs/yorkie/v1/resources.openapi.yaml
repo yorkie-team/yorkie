@@ -388,6 +388,22 @@ components:
         - 2
       title: Type
       type: string
+    yorkie.v1.ChannelSummary:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        presenceCount:
+          additionalProperties: false
+          description: ""
+          title: presence_count
+          type: integer
+      title: ChannelSummary
+      type: object
     yorkie.v1.Checkpoint:
       additionalProperties: false
       description: ""

@@ -258,6 +258,28 @@ func (s *clusterServer) GetDocument(
 	}), nil
 }
 
+// GetChannel gets the channel for a single channel.
+func (s *clusterServer) GetChannel(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceGetChannelRequest],
+) (*connect.Response[api.ClusterServiceGetChannelResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	channelKey := key.Key(req.Msg.ChannelKey)
+	channelCount := s.backend.Presence.PresenceCount(
+		types.ChannelRefKey{
+			ProjectID:  projectID,
+			ChannelKey: channelKey,
+		},
+		req.Msg.IncludeSubPath,
+	)
+	return connect.NewResponse(&api.ClusterServiceGetChannelResponse{
+		Channel: &api.ChannelSummary{
+			Key:           string(channelKey),
+			PresenceCount: int32(channelCount),
+		},
+	}), nil
+}
+
 // InvalidateCache invalidates the cache of the given type and key.
 func (s *clusterServer) InvalidateCache(
 	ctx context.Context,

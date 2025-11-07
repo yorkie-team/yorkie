@@ -105,6 +105,11 @@ function getKey() {
   return `${CHANNEL_KEY_PREFIX}-${__VU % cnt}`;
 }
 
+function getChannelShardKey(channelKey: string): string {
+  const firstChannelKeyPath = channelKey.split(".")[0];
+  return `${API_KEY}/${firstChannelKeyPath}`;
+}
+
 // Common headers that can be reused across requests
 function getCommonHeaders() {
   return {
@@ -227,7 +232,7 @@ function attachChannel(clientID: string, channelKey: string): [string, number] {
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/AttachChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": getChannelShardKey(channelKey) }
   );
   if (!resp) {
     throw new Error("Failed to attach channel");
@@ -262,7 +267,7 @@ function refreshChannel(
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/RefreshChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": getChannelShardKey(channelKey) }
   );
   if (!resp) {
     throw new Error("Failed to refresh channel");
@@ -296,7 +301,7 @@ function detachChannel(
   const resp = makeRequest(
     `${API_URL}/yorkie.v1.YorkieService/DetachChannel`,
     payload,
-    { "x-shard-key": `${API_KEY}/${channelKey}` }
+    { "x-shard-key": getChannelShardKey(channelKey) }
   );
   if (!resp) {
     throw new Error("Failed to detach channel");

@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
-// Package channel provides channel management implementation.
+// Package channel provides channel management for real-time user tracking.
 package channel
 
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync/atomic"
 	gotime "time"
 
@@ -28,12 +30,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
+	// ChannelKeyPathSeparator is the separator for channel key paths.
+	ChannelKeyPathSeparator = "."
+
 	// ErrSessionNotFound is returned when a session is not found.
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
+
+	// ErrInvalidChannelKey is returned when a channel key is invalid.
+	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
 )
 
 // PubSub is an interface for publishing channel events.
@@ -60,7 +69,7 @@ type Manager struct {
 	// sessionIDToKey is a reverse index for O(1) Detach lookup
 	sessionIDToKey *cmap.Map[types.ID, types.ChannelRefKey]
 
-	// pubsub is used to publish presence events
+	// pubsub is used to publish channel events
 	pubsub PubSub
 
 	// seqCounter is a monotonic counter for ordering events
@@ -141,16 +150,20 @@ func (m *Manager) nextSeq() int64 {
 	return m.seqCounter.Add(1)
 }
 
-// Attach adds a client to a channel and returns the unique presence ID.
+// Attach adds a client to a channel and returns the unique session ID.
 func (m *Manager) Attach(
 	ctx context.Context,
 	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
-	// Check if client is already attached to this presence
+	if !IsValidChannelKeyPath(key.ChannelKey) {
+		return types.ID(""), 0, fmt.Errorf("attach %s: %w", key, ErrInvalidChannelKey)
+	}
+
+	// Check if client is already attached to this channel
 	if sessionMap, ok := m.clientToSession.Get(clientID); ok {
 		if sessionID, found := sessionMap.Get(key); found {
-			return sessionID, m.Count(key), nil
+			return sessionID, m.PresenceCount(key, false), nil
 		}
 	}
 
@@ -202,7 +215,7 @@ func (m *Manager) Attach(
 	return id, newCount, nil
 }
 
-// Detach removes a client from a channel using presence ID.
+// Detach removes a client from a channel using session ID.
 func (m *Manager) Detach(
 	ctx context.Context,
 	id types.ID,
@@ -279,14 +292,35 @@ func (m *Manager) Refresh(
 	return nil
 }
 
-// Count returns the current count for a presence key.
-// This is a lock-free operation by directly querying the presence map length.
-func (m *Manager) Count(key types.ChannelRefKey) int64 {
-	if presenceMap, ok := m.channels.Get(key); ok {
-		return int64(presenceMap.Len())
+// PresenceCount returns the current presence count for a channel key.
+// This is a lock-free operation by directly querying the session map length.
+// If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
+func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) int64 {
+	if !IsValidChannelKeyPath(key.ChannelKey) {
+		return 0
 	}
 
-	return 0
+	if !includeSubPath {
+		if sessionMap, ok := m.channels.Get(key); ok {
+			return int64(sessionMap.Len())
+		}
+		return 0
+	}
+
+	totalCount := 0
+	targetKeyPaths := ParseKeyPath(key.ChannelKey)
+	for _, channelKey := range m.channels.Keys() {
+		channelKeyPaths := ParseKeyPath(channelKey.ChannelKey)
+
+		if !isSubKeyPath(channelKeyPaths, targetKeyPaths) {
+			continue
+		}
+
+		if sessionMap, ok := m.channels.Get(channelKey); ok {
+			totalCount += sessionMap.Len()
+		}
+	}
+	return int64(totalCount)
 }
 
 // CleanupExpired removes sessions that have exceeded their TTL.
@@ -319,11 +353,11 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	return cleanedCount, nil
 }
 
-// Stats returns statistics about the presence manager.
+// Stats returns statistics about the channel manager.
 func (m *Manager) Stats() map[string]int {
 	totalSessions := 0
-	for _, presenceMap := range m.channels.Values() {
-		totalSessions += presenceMap.Len()
+	for _, sessionMap := range m.channels.Values() {
+		totalSessions += sessionMap.Len()
 	}
 
 	return map[string]int{
@@ -331,4 +365,57 @@ func (m *Manager) Stats() map[string]int {
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}
+}
+
+// FirstKeyPath returns the first key path of the given channel key.
+func FirstKeyPath(key key.Key) string {
+	if !IsValidChannelKeyPath(key) {
+		return ""
+	}
+
+	return ParseKeyPath(key)[0]
+}
+
+// MergeKeyPath merges the given key paths into a single key path.
+func MergeKeyPath(keyPaths []string) string {
+	if len(keyPaths) == 0 {
+		return ""
+	}
+
+	return strings.Join(keyPaths, ChannelKeyPathSeparator)
+}
+
+// ParseKeyPath splits a channel key into key path components.
+func ParseKeyPath(key key.Key) []string {
+	return strings.Split(key.String(), ChannelKeyPathSeparator)
+}
+
+// IsValidChannelKeyPath checks if a channel key is valid.
+func IsValidChannelKeyPath(key key.Key) bool {
+	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) ||
+		strings.HasSuffix(key.String(), ChannelKeyPathSeparator) {
+		return false
+	}
+
+	keyPaths := ParseKeyPath(key)
+	if slices.Contains(keyPaths, "") {
+		return false
+	}
+
+	return len(keyPaths) > 0
+}
+
+// isSubKeyPath checks if channelKeyPaths is a sub path of keyPaths.
+func isSubKeyPath(channelKeyPaths, keyPaths []string) bool {
+	if len(keyPaths) > len(channelKeyPaths) {
+		return false
+	}
+
+	for i, keyPath := range keyPaths {
+		if keyPath != channelKeyPaths[i] {
+			return false
+		}
+	}
+
+	return true
 }

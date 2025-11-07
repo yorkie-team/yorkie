@@ -96,6 +96,9 @@ const (
 	// AdminServiceSearchDocumentsProcedure is the fully-qualified name of the AdminService's
 	// SearchDocuments RPC.
 	AdminServiceSearchDocumentsProcedure = "/yorkie.v1.AdminService/SearchDocuments"
+	// AdminServiceGetChannelsProcedure is the fully-qualified name of the AdminService's GetChannels
+	// RPC.
+	AdminServiceGetChannelsProcedure = "/yorkie.v1.AdminService/GetChannels"
 	// AdminServiceListChangesProcedure is the fully-qualified name of the AdminService's ListChanges
 	// RPC.
 	AdminServiceListChangesProcedure = "/yorkie.v1.AdminService/ListChanges"
@@ -139,6 +142,7 @@ type AdminServiceClient interface {
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
+	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
@@ -244,6 +248,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceSearchDocumentsProcedure,
 			opts...,
 		),
+		getChannels: connect.NewClient[v1.GetChannelsRequest, v1.GetChannelsResponse](
+			httpClient,
+			baseURL+AdminServiceGetChannelsProcedure,
+			opts...,
+		),
 		listChanges: connect.NewClient[v1.ListChangesRequest, v1.ListChangesResponse](
 			httpClient,
 			baseURL+AdminServiceListChangesProcedure,
@@ -306,6 +315,7 @@ type adminServiceClient struct {
 	removeDocumentByAdmin *connect.Client[v1.RemoveDocumentByAdminRequest, v1.RemoveDocumentByAdminResponse]
 	getSnapshotMeta       *connect.Client[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse]
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
+	getChannels           *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
 	listChanges           *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
 	createSchema          *connect.Client[v1.CreateSchemaRequest, v1.CreateSchemaResponse]
 	listSchemas           *connect.Client[v1.ListSchemasRequest, v1.ListSchemasResponse]
@@ -401,6 +411,11 @@ func (c *adminServiceClient) SearchDocuments(ctx context.Context, req *connect.R
 	return c.searchDocuments.CallUnary(ctx, req)
 }
 
+// GetChannels calls yorkie.v1.AdminService.GetChannels.
+func (c *adminServiceClient) GetChannels(ctx context.Context, req *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
+	return c.getChannels.CallUnary(ctx, req)
+}
+
 // ListChanges calls yorkie.v1.AdminService.ListChanges.
 func (c *adminServiceClient) ListChanges(ctx context.Context, req *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error) {
 	return c.listChanges.CallUnary(ctx, req)
@@ -460,6 +475,7 @@ type AdminServiceHandler interface {
 	RemoveDocumentByAdmin(context.Context, *connect.Request[v1.RemoveDocumentByAdminRequest]) (*connect.Response[v1.RemoveDocumentByAdminResponse], error)
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
+	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
 	CreateSchema(context.Context, *connect.Request[v1.CreateSchemaRequest]) (*connect.Response[v1.CreateSchemaResponse], error)
 	ListSchemas(context.Context, *connect.Request[v1.ListSchemasRequest]) (*connect.Response[v1.ListSchemasResponse], error)
@@ -561,6 +577,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.SearchDocuments,
 		opts...,
 	)
+	adminServiceGetChannelsHandler := connect.NewUnaryHandler(
+		AdminServiceGetChannelsProcedure,
+		svc.GetChannels,
+		opts...,
+	)
 	adminServiceListChangesHandler := connect.NewUnaryHandler(
 		AdminServiceListChangesProcedure,
 		svc.ListChanges,
@@ -637,6 +658,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetSnapshotMetaHandler.ServeHTTP(w, r)
 		case AdminServiceSearchDocumentsProcedure:
 			adminServiceSearchDocumentsHandler.ServeHTTP(w, r)
+		case AdminServiceGetChannelsProcedure:
+			adminServiceGetChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceListChangesProcedure:
 			adminServiceListChangesHandler.ServeHTTP(w, r)
 		case AdminServiceCreateSchemaProcedure:
@@ -728,6 +751,10 @@ func (UnimplementedAdminServiceHandler) GetSnapshotMeta(context.Context, *connec
 
 func (UnimplementedAdminServiceHandler) SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.SearchDocuments is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetChannels is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error) {

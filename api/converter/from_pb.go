@@ -127,6 +127,14 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary 
 	return summary
 }
 
+// FromChannelSummary converts the given Protobuf formats to model format.
+func FromChannelSummary(pbChannelSummary *api.ChannelSummary) *types.ChannelSummary {
+	return &types.ChannelSummary{
+		Key:           key.Key(pbChannelSummary.Key),
+		PresenceCount: int64(pbChannelSummary.PresenceCount),
+	}
+}
+
 // FromChangePack converts the given Protobuf formats to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {

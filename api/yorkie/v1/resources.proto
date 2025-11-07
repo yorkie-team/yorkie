@@ -378,6 +378,11 @@ message Presence {
   map<string, string> data = 1;
 }
 
+message ChannelSummary {
+  string key = 1;
+  int32 presence_count = 2;
+}
+
 message Checkpoint {
   int64 server_seq = 1; 
   uint32 client_seq = 2;

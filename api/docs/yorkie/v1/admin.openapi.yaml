@@ -70,6 +70,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/GetChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetChannels.yorkie.v1.GetChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.GetChannels.yorkie.v1.GetChannelsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetDocument:
     post:
       description: ""
@@ -357,6 +369,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DeleteAccountRequest'
       required: true
+    yorkie.v1.AdminService.GetChannels.yorkie.v1.GetChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetChannelsRequest'
+      required: true
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentRequest:
       content:
         application/json:
@@ -591,6 +612,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DeleteAccountResponse'
+      description: ""
+    yorkie.v1.AdminService.GetChannels.yorkie.v1.GetChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetChannelsResponse'
       description: ""
     yorkie.v1.AdminService.GetDocument.yorkie.v1.GetDocumentResponse:
       content:
@@ -1063,6 +1093,22 @@ components:
       description: ""
       title: ChangePasswordResponse
       type: object
+    yorkie.v1.ChannelSummary:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        presenceCount:
+          additionalProperties: false
+          description: ""
+          title: presence_count
+          type: integer
+      title: ChannelSummary
+      type: object
     yorkie.v1.CreateDocumentRequest:
       additionalProperties: false
       description: ""
@@ -1286,6 +1332,38 @@ components:
           title: value
           type: object
       title: PresencesEntry
+      type: object
+    yorkie.v1.GetChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKeys:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: channel_keys
+          type: array
+        includeSubPath:
+          additionalProperties: false
+          description: ""
+          title: include_sub_path
+          type: boolean
+      title: GetChannelsRequest
+      type: object
+    yorkie.v1.GetChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: GetChannelsResponse
       type: object
     yorkie.v1.GetDocumentRequest:
       additionalProperties: false

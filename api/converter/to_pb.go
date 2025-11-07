@@ -148,6 +148,18 @@ func ToPresence(p presence.Data) *api.Presence {
 	}
 }
 
+// ToChannelSummaries converts the given model to Protobuf format.
+func ToChannelSummaries(channels []*types.ChannelSummary) []*api.ChannelSummary {
+	pbChannels := make([]*api.ChannelSummary, 0, len(channels))
+	for _, v := range channels {
+		pbChannels = append(pbChannels, &api.ChannelSummary{
+			Key:           v.Key.String(),
+			PresenceCount: int32(v.PresenceCount),
+		})
+	}
+	return pbChannels
+}
+
 // ToPresenceChange converts the given model to Protobuf format.
 func ToPresenceChange(p *presence.Change) *api.PresenceChange {
 	if p == nil {

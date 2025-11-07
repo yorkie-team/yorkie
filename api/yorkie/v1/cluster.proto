@@ -30,6 +30,7 @@ service ClusterService {
   rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
   rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
   rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
+  rpc GetChannel (ClusterServiceGetChannelRequest) returns (ClusterServiceGetChannelResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
 
@@ -69,6 +70,16 @@ message ClusterServiceGetDocumentRequest {
 
 message ClusterServiceGetDocumentResponse {
   DocumentSummary document = 1;
+}
+
+message ClusterServiceGetChannelRequest {
+  string project_id = 1;
+  string channel_key = 2;
+  bool include_sub_path = 3;
+}
+
+message ClusterServiceGetChannelResponse {
+  ChannelSummary channel = 1;
 }
 
 enum CacheType {
