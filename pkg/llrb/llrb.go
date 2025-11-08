@@ -37,12 +37,11 @@ type Value interface {
 
 // Node is a node of Tree.
 type Node[K Key, V Value] struct {
-	key    K
-	value  V
-	parent *Node[K, V]
-	left   *Node[K, V]
-	right  *Node[K, V]
-	isRed  bool
+	key   K
+	value V
+	left  *Node[K, V]
+	right *Node[K, V]
+	isRed bool
 }
 
 // NewNode creates a new instance of Node.
@@ -101,39 +100,22 @@ func (t *Tree[K, V]) Remove(key K) {
 // Floor returns the greatest key less than or equal to the given key.
 func (t *Tree[K, V]) Floor(key K) (K, V) {
 	node := t.root
+	var resultK K
+	var resultV V
 
 	for node != nil {
-		compare := key.Compare(node.key)
-		if compare > 0 {
-			if node.right != nil {
-				node.right.parent = node
-				node = node.right
-			} else {
-				return node.key, node.value
-			}
-		} else if compare < 0 {
-			if node.left != nil {
-				node.left.parent = node
-				node = node.left
-			} else {
-				parent := node.parent
-				child := node
-				for parent != nil && child == parent.left {
-					child = parent
-					parent = parent.parent
-				}
-
-				// TODO(hackerwins): check below warning
-				return parent.key, parent.value
-			}
-		} else {
+		switch key.Compare(node.key) {
+		case 0:
 			return node.key, node.value
+		case -1:
+			node = node.left
+		case 1:
+			resultK, resultV = node.key, node.value
+			node = node.right
 		}
 	}
 
-	var zeroK K
-	var zeroV V
-	return zeroK, zeroV
+	return resultK, resultV
 }
 
 // Len returns the length of the tree.
