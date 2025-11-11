@@ -214,44 +214,6 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		stats := manager.Stats()
 		assert.NotNil(t, stats)
 	})
-
-	t.Run("invalid channel key path returns error", func(t *testing.T) {
-		assert.True(t, channel.IsValidChannelKeyPath("room-1"))
-		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1"))
-		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1.user-1"))
-
-		assert.False(t, channel.IsValidChannelKeyPath("......."))
-		assert.False(t, channel.IsValidChannelKeyPath(".room-1"))
-		assert.False(t, channel.IsValidChannelKeyPath(".room-1."))
-		assert.False(t, channel.IsValidChannelKeyPath("room-1."))
-		assert.False(t, channel.IsValidChannelKeyPath("room-1.section-1."))
-		assert.False(t, channel.IsValidChannelKeyPath("room-1..section-1"))
-	})
-
-	t.Run("first key path is returned correctly", func(t *testing.T) {
-		// Correct paths
-		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1"))
-		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1.section-1"))
-		assert.Equal(t, "room-1", channel.FirstKeyPath("room-1.section-1.user-1"))
-
-		// Wrong paths
-		assert.Equal(t, "", channel.FirstKeyPath(""))
-		assert.Equal(t, "", channel.FirstKeyPath("."))
-		assert.Equal(t, "", channel.FirstKeyPath(".."))
-		assert.Equal(t, "", channel.FirstKeyPath("a.."))
-		assert.Equal(t, "", channel.FirstKeyPath("..a"))
-		assert.Equal(t, "", channel.FirstKeyPath(".a."))
-		assert.Equal(t, "", channel.FirstKeyPath("a..a"))
-	})
-
-	t.Run("merge key path is returned correctly", func(t *testing.T) {
-		assert.Equal(t, "room-1", channel.MergeKeyPath([]string{"room-1"}))
-		assert.Equal(t, "room-1.section-1", channel.MergeKeyPath([]string{"room-1", "section-1"}))
-		assert.Equal(t, "room-1.section-1.user-1", channel.MergeKeyPath([]string{"room-1", "section-1", "user-1"}))
-
-		// Wrong paths
-		assert.Equal(t, "", channel.MergeKeyPath([]string{}))
-	})
 }
 
 func TestPresenceManager_Count(t *testing.T) {
@@ -320,9 +282,10 @@ func TestPresenceManager_Count(t *testing.T) {
 		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-2"}
 
 		wrongRefKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: ""}
-		wrongRefKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-"}
+		wrongRefKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
 		wrongRefKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-"}
-		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1.user-"}
+		// not start with room-1
+		wrongRefKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "section-1.user-1"}
 
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey1, 10, "1")...)
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey2, 10, "2")...)

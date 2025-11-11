@@ -46,7 +46,8 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create channel
 		channelKey := helper.TestKey(t)
-		ch := channel.New(channelKey)
+		ch, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Test initial state
 		assert.Equal(t, channelKey, ch.Key())
@@ -55,7 +56,7 @@ func TestChannelIntegration(t *testing.T) {
 		assert.False(t, ch.IsAttached())
 
 		// Attach channel
-		err := cli.Attach(ctx, ch)
+		err = cli.Attach(ctx, ch)
 		require.NoError(t, err)
 
 		// Verify attached state
@@ -78,12 +79,16 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create channels for the same room
 		channelKey := helper.TestKey(t)
-		ch1 := channel.New(channelKey)
-		ch2 := channel.New(channelKey)
-		ch3 := channel.New(channelKey)
+		ch1, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		ch2, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		ch3, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach first client
-		err := client1.Attach(ctx, ch1)
+		err = client1.Attach(ctx, ch1)
+		assert.NoError(t, err)
 		require.NoError(t, err)
 
 		// Attach second client
@@ -114,7 +119,8 @@ func TestChannelIntegration(t *testing.T) {
 		cli := clients[0]
 
 		// Create channel
-		ch := channel.New(helper.TestKey(t))
+		ch, err := channel.New(helper.TestKey(t))
+		assert.NoError(t, err)
 
 		// Attach and start watching to get count updates
 		require.NoError(t, cli.Attach(ctx, ch))
@@ -150,10 +156,11 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create presence channels for the same room
 		channelKey := helper.TestKey(t)
-		watcher := channel.New(channelKey)
+		watcher, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach watcher first
-		err := watcherClient.Attach(ctx, watcher)
+		err = watcherClient.Attach(ctx, watcher)
 		require.NoError(t, err)
 
 		// Start watching count changes
@@ -197,7 +204,8 @@ func TestChannelIntegration(t *testing.T) {
 		// Add participants one by one and verify count increases
 		participants := make([]*channel.Channel, len(participantClients))
 		for i, client := range participantClients {
-			participants[i] = channel.New(channelKey)
+			participants[i], err = channel.New(channelKey)
+			assert.NoError(t, err)
 
 			t.Logf("Attaching participant %d", i+1)
 			err := client.Attach(ctx, participants[i])
@@ -248,11 +256,13 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create presence channels for two clients
 		channelKey := helper.TestKey(t)
-		ch1 := channel.New(channelKey)
-		ch2 := channel.New(channelKey)
+		ch1, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		ch2, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach the first counter first
-		err := clients[0].Attach(ctx, ch1)
+		err = clients[0].Attach(ctx, ch1)
 		require.NoError(t, err)
 		defer func() { _ = clients[0].Detach(ctx, ch1) }()
 
@@ -355,7 +365,9 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create channels for all clients
 		for i := range clientCount {
-			channels[i] = channel.New(channelKey)
+			var err error
+			channels[i], err = channel.New(channelKey)
+			assert.NoError(t, err)
 		}
 
 		// Attach all clients concurrently
@@ -429,11 +441,13 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create channels
 		channelKey := helper.TestKey(t)
-		watcher := channel.New(channelKey)
-		participant := channel.New(channelKey)
+		watcher, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		participant, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach watcher first
-		err := watcherClient.Attach(ctx, watcher)
+		err = watcherClient.Attach(ctx, watcher)
 		require.NoError(t, err)
 
 		// Start watching presence changes
@@ -505,7 +519,9 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create and activate multiple clients
 		for i := range clientCount {
-			channels[i] = channel.New(channelKey)
+			var err error
+			channels[i], err = channel.New(channelKey)
+			assert.NoError(t, err)
 		}
 
 		// Attach all clients concurrently
@@ -572,13 +588,13 @@ func TestChannelIntegration(t *testing.T) {
 		channelKey := helper.TestKey(t, 2)
 
 		doc := document.New(docKey)
-		channel := channel.New(channelKey)
+		channel, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Test polymorphic usage
 		resources := []attachable.Attachable{doc, channel}
 
 		// Attach all resources
-		var err error
 		for _, resource := range resources {
 			err = cli.Attach(ctx, resource)
 			require.NoError(t, err)
@@ -611,7 +627,8 @@ func TestChannelIntegration(t *testing.T) {
 		}()
 
 		channelKey := helper.TestKey(t)
-		ch := channel.New(channelKey)
+		ch, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach presence counter
 		err = cli.Attach(ctx, ch)
@@ -649,8 +666,10 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Use the same presence key for both clients
 		channelKey := helper.TestKey(t)
-		counter1 := channel.New(channelKey)
-		counter2 := channel.New(channelKey)
+		counter1, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		counter2, err := channel.New(channelKey)
+		assert.NoError(t, err)
 		require.NoError(t, cli1.Attach(ctx, counter1, client.WithChannelRealtimeSync()))
 		require.NoError(t, cli2.Attach(ctx, counter2, client.WithChannelRealtimeSync()))
 
@@ -701,11 +720,13 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create presence counters for the same room
 		channelKey := helper.TestKey(t)
-		counter1 := channel.New(channelKey)
-		counter2 := channel.New(channelKey)
+		counter1, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		counter2, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach client1 with manual sync mode (no realtime option)
-		err := client1.Attach(ctx, counter1)
+		err = client1.Attach(ctx, counter1)
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), counter1.Count())
 
@@ -750,11 +771,13 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create presence counters for the same room
 		channelKey := helper.TestKey(t)
-		ch1 := channel.New(channelKey)
-		ch2 := channel.New(channelKey)
+		ch1, err := channel.New(channelKey)
+		assert.NoError(t, err)
+		ch2, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Attach client1 with realtime sync mode
-		err := client1.Attach(ctx, ch1, client.WithChannelRealtimeSync())
+		err = client1.Attach(ctx, ch1, client.WithChannelRealtimeSync())
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), ch1.Count())
 
@@ -807,14 +830,16 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Create document and presence counter
 		doc1 := document.New(helper.TestKey(t, 0))
-		counter1 := channel.New(helper.TestKey(t, 1))
+		counter1, err := channel.New(helper.TestKey(t, 1))
+		assert.NoError(t, err)
 
 		// Attach both resources in manual mode
 		require.NoError(t, client1.Attach(ctx, doc1))
 		require.NoError(t, client1.Attach(ctx, counter1))
 
 		// Attach client2 to the same presence
-		counter2 := channel.New(helper.TestKey(t, 1))
+		counter2, err := channel.New(helper.TestKey(t, 1))
+		assert.NoError(t, err)
 		require.NoError(t, client2.Attach(ctx, counter2))
 
 		// counter1 shows old count (manual mode)
@@ -851,8 +876,10 @@ func TestChannelIntegration(t *testing.T) {
 
 		channels := make([]*channel.Channel, len(clients))
 		for i, client := range clients {
-			channels[i] = channel.New(key.Key(channelKeys[i]))
-			err := client.Attach(ctx, channels[i])
+			var err error
+			channels[i], err = channel.New(key.Key(channelKeys[i]))
+			assert.NoError(t, err)
+			err = client.Attach(ctx, channels[i])
 			require.NoError(t, err)
 		}
 
@@ -896,8 +923,10 @@ func TestChannelIntegration(t *testing.T) {
 
 		channels := make([]*channel.Channel, len(channelKeys))
 		for i, k := range channelKeys {
-			channels[i] = channel.New(key.Key(k))
-			err := clients[i].Attach(ctx, channels[i])
+			var err error
+			channels[i], err = channel.New(key.Key(k))
+			assert.NoError(t, err)
+			err = clients[i].Attach(ctx, channels[i])
 			require.NoError(t, err)
 			assert.True(t, channels[i].IsAttached())
 		}
@@ -911,8 +940,10 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Re-attach and detach in different order
 		for i, k := range channelKeys {
-			channels[i] = channel.New(key.Key(k))
-			err := clients[i].Attach(ctx, channels[i])
+			var err error
+			channels[i], err = channel.New(key.Key(k))
+			assert.NoError(t, err)
+			err = clients[i].Attach(ctx, channels[i])
 			require.NoError(t, err)
 		}
 
@@ -960,8 +991,10 @@ func TestChannelIntegration(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				channels[idx] = channel.New(key.Key(channelKeys[idx]))
-				err := clients[idx].Attach(ctx, channels[idx])
+				var err error
+				channels[idx], err = channel.New(key.Key(channelKeys[idx]))
+				assert.NoError(t, err)
+				err = clients[idx].Attach(ctx, channels[idx])
 				assert.NoError(t, err)
 			}(i)
 		}

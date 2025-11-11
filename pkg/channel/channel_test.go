@@ -13,39 +13,42 @@ import (
 
 func TestPresenceAttachableInterface(t *testing.T) {
 	t.Run("implements Attachable interface", func(t *testing.T) {
-		p := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-presence"))
+		assert.NoError(t, err)
 
 		// Verify it implements Attachable interface
-		var _ attachable.Attachable = p
+		var _ attachable.Attachable = ch
 
-		assert.Equal(t, "test-presence", p.Key().String())
-		assert.Equal(t, attachable.TypeChannel, p.Type())
-		assert.Equal(t, attachable.StatusDetached, p.Status())
-		assert.False(t, p.IsAttached())
+		assert.Equal(t, "test-presence", ch.Key().String())
+		assert.Equal(t, attachable.TypeChannel, ch.Type())
+		assert.Equal(t, attachable.StatusDetached, ch.Status())
+		assert.False(t, ch.IsAttached())
 	})
 
 	t.Run("status changes work correctly", func(t *testing.T) {
-		p := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-presence"))
+		assert.NoError(t, err)
 
-		assert.Equal(t, attachable.StatusDetached, p.Status())
-		assert.False(t, p.IsAttached())
+		assert.Equal(t, attachable.StatusDetached, ch.Status())
+		assert.False(t, ch.IsAttached())
 
-		p.SetStatus(attachable.StatusAttached)
-		assert.Equal(t, attachable.StatusAttached, p.Status())
-		assert.True(t, p.IsAttached())
+		ch.SetStatus(attachable.StatusAttached)
+		assert.Equal(t, attachable.StatusAttached, ch.Status())
+		assert.True(t, ch.IsAttached())
 
-		p.SetStatus(attachable.StatusRemoved)
-		assert.Equal(t, attachable.StatusRemoved, p.Status())
-		assert.False(t, p.IsAttached())
+		ch.SetStatus(attachable.StatusRemoved)
+		assert.Equal(t, attachable.StatusRemoved, ch.Status())
+		assert.False(t, ch.IsAttached())
 	})
 }
 
 func TestAttachableInterfaceCompatibility(t *testing.T) {
 	t.Run("Document and Presence both implement Attachable", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		p := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-presence"))
+		assert.NoError(t, err)
 
-		for i, resource := range []attachable.Attachable{doc, p} {
+		for i, resource := range []attachable.Attachable{doc, ch} {
 			assert.NotNil(t, resource.Key())
 			assert.NotEmpty(t, resource.Type())
 			assert.Equal(t, attachable.StatusDetached, resource.Status())
@@ -62,7 +65,8 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 
 	t.Run("status changes work for both types", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		counter := channel.New(key.Key("test-presence"))
+		counter, err := channel.New(key.Key("test-presence"))
+		assert.NoError(t, err)
 
 		for _, resource := range []attachable.Attachable{doc, counter} {
 			resource.SetStatus(attachable.StatusAttached)
@@ -77,5 +81,54 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 			assert.Equal(t, attachable.StatusDetached, resource.Status())
 			assert.False(t, resource.IsAttached())
 		}
+	})
+
+	t.Run("channel key path validation", func(t *testing.T) {
+		assert.True(t, channel.IsValidChannelKeyPath("room-1"))
+		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1"))
+		assert.True(t, channel.IsValidChannelKeyPath("room-1.section-1.user-1"))
+
+		assert.False(t, channel.IsValidChannelKeyPath(""))
+		assert.False(t, channel.IsValidChannelKeyPath(" "))
+		assert.False(t, channel.IsValidChannelKeyPath("......."))
+		assert.False(t, channel.IsValidChannelKeyPath(".room-1"))
+		assert.False(t, channel.IsValidChannelKeyPath(".room-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1.section-1."))
+		assert.False(t, channel.IsValidChannelKeyPath("room-1..section-1"))
+	})
+
+	t.Run("parse channel key path", func(t *testing.T) {
+		paths, err := channel.ParseKeyPath(key.Key("room-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"room-1"}, paths)
+		paths, err = channel.ParseKeyPath(key.Key("room-1.section-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"room-1", "section-1"}, paths)
+		paths, err = channel.ParseKeyPath(key.Key("room-1.section-1.user-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"room-1", "section-1", "user-1"}, paths)
+	})
+
+	t.Run("first key path is returned correctly", func(t *testing.T) {
+		ch, err := channel.New(key.Key("room-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", ch.FirstKeyPath())
+		ch, err = channel.New(key.Key("room-1.section-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", ch.FirstKeyPath())
+		ch, err = channel.New(key.Key("room-1.section-1.user-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", ch.FirstKeyPath())
+
+		firstKeyPath, err := channel.FirstKeyPath(key.Key("room-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", firstKeyPath)
+		firstKeyPath, err = channel.FirstKeyPath(key.Key("room-1.section-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", firstKeyPath)
+		firstKeyPath, err = channel.FirstKeyPath(key.Key("room-1.section-1.user-1"))
+		assert.NoError(t, err)
+		assert.Equal(t, "room-1", firstKeyPath)
 	})
 }
