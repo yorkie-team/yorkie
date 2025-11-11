@@ -21,16 +21,18 @@ package bench
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/backend/channel"
+	backendChannel "github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -69,7 +71,7 @@ func benchmarkChannelAttachDetach(b *testing.B, svr *server.Yorkie, clientCount 
 	}
 }
 
-func BenchmarkPresencePathOperations(b *testing.B) {
+func BenchmarkChannelAttachDetach(b *testing.B) {
 	assert.NoError(b, logging.SetLogLevel("error"))
 
 	svr := helper.TestServerWithSnapshotCfg(100_000, 100_000)
@@ -94,7 +96,7 @@ func BenchmarkPresencePathOperations(b *testing.B) {
 
 // generateHierarchicalKeyPaths generates all leaf key paths for a hierarchical structure.
 // For example, with levelCounts = [2, 3], it generates:
-// sub-0/sub-0, sub-0/sub-1, sub-0/sub-2, sub-1/sub-0, sub-1/sub-1, sub-1/sub-2
+// sub-0.sub-0, sub-0.sub-1, sub-0.sub-2, sub-1.sub-0, sub-1.sub-1, sub-1.sub-2
 func generateHierarchicalKeyPaths(prefix string, levelCounts []int) []string {
 	if len(levelCounts) == 0 {
 		return []string{prefix}
@@ -109,7 +111,7 @@ func generateHierarchicalKeyPaths(prefix string, levelCounts []int) []string {
 		if prefix == "" {
 			currentPath = fmt.Sprintf("sub-%d", i)
 		} else {
-			currentPath = fmt.Sprintf("%s/sub-%d", prefix, i)
+			currentPath = fmt.Sprintf("%s.sub-%d", prefix, i)
 		}
 
 		if len(remainingLevels) == 0 {
@@ -126,26 +128,37 @@ func generateHierarchicalKeyPaths(prefix string, levelCounts []int) []string {
 }
 
 func parseAndMergeKeyPath(key key.Key) []string {
-	keyPaths := channel.ParseKeyPath(key)
+	keyPaths, err := channel.ParseKeyPath(key)
+	if err != nil {
+		return nil
+	}
 	mergedKeyPaths := make([]string, 0, len(keyPaths))
 	for i, keyPath := range keyPaths {
 		if i == 0 {
 			mergedKeyPaths = append(mergedKeyPaths, keyPath)
 			continue
 		}
-		mergedKeyPaths = append(mergedKeyPaths, channel.MergeKeyPath([]string{mergedKeyPaths[i-1], keyPath}))
+		mergedKeyPaths = append(mergedKeyPaths, mergeKeyPath([]string{mergedKeyPaths[i-1], keyPath}))
 	}
 
 	return mergedKeyPaths
+}
+
+func mergeKeyPath(keyPaths []string) string {
+	if len(keyPaths) == 0 {
+		return ""
+	}
+
+	return strings.Join(keyPaths, channel.ChannelKeyPathSeparator)
 }
 
 // benchmarkHierarchicalPresenceCount measures count performance with hierarchical presence structure.
 // levelCounts defines the number of nodes at each depth level.
 // For example, levelCounts=[1, 10, 20] creates:
 // - 1 root node (sub-0)
-// - 10 intermediate nodes (sub-0/sub-0 ~ sub-0/sub-9)
-// - 200 leaf nodes (sub-0/sub-0/sub-0 ~ sub-0/sub-9/sub-19)
-// Count all Presence count of paths root to last leaf(sub-0 ~ sub-0/sub-9/sub-19).
+// - 10 intermediate nodes (sub-0.sub-0 ~ sub-0.sub-9)
+// - 200 leaf nodes (sub-0.sub-0.sub-0 ~ sub-0.sub-9.sub-19)
+// Count all Presence count of paths root to last leaf(sub-0 ~ sub-0.sub-9.sub-19).
 func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, includeSubPath bool) {
 	ctx := context.Background()
 	b.StopTimer()
@@ -161,7 +174,7 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	ttl := 60 * gotime.Second
 	cleanupInterval := 60 * gotime.Second
 	pubsub := &mockPubSub{}
-	manager := channel.NewManager(pubsub, ttl, cleanupInterval)
+	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval)
 	project := types.Project{ID: types.NewID()}
 
 	for i, keyPath := range allKeyPaths {

@@ -705,7 +705,10 @@ func ClientAndAttachedChannel(
 	if err := c.Activate(ctx); err != nil {
 		return nil, nil, err
 	}
-	p := channel.New(channelKey)
+	p, err := channel.New(channelKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := c.Attach(ctx, p); err != nil {
 		return nil, nil, err
 	}

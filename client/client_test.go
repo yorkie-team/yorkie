@@ -130,7 +130,8 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 
 	t.Run("Presence Counter implements Attachable", func(t *testing.T) {
 		channelKey := key.Key("test-presence")
-		counter := channel.New(channelKey)
+		counter, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		// Ensure Presence Counter implements Attachable
 		var _ attachable.Attachable = counter
@@ -146,7 +147,8 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 		doc := document.New(docKey)
 
 		channelKey := key.Key("status-presence")
-		counter := channel.New(channelKey)
+		counter, err := channel.New(channelKey)
+		assert.NoError(t, err)
 
 		resources := []attachable.Attachable{doc, counter}
 

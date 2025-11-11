@@ -20,24 +20,19 @@ package channel
 import (
 	"context"
 	"fmt"
-	"slices"
-	"strings"
 	"sync/atomic"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
-	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
-	// ChannelKeyPathSeparator is the separator for channel key paths.
-	ChannelKeyPathSeparator = "."
-
 	// ErrSessionNotFound is returned when a session is not found.
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
 
@@ -156,8 +151,8 @@ func (m *Manager) Attach(
 	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
-	if !IsValidChannelKeyPath(key.ChannelKey) {
-		return types.ID(""), 0, fmt.Errorf("attach %s: %w", key, ErrInvalidChannelKey)
+	if !channel.IsValidChannelKeyPath(key.ChannelKey) {
+		return types.ID(""), 0, channel.ErrInvalidChannelKey
 	}
 
 	// Check if client is already attached to this channel
@@ -296,7 +291,7 @@ func (m *Manager) Refresh(
 // This is a lock-free operation by directly querying the session map length.
 // If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
 func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) int64 {
-	if !IsValidChannelKeyPath(key.ChannelKey) {
+	if !channel.IsValidChannelKeyPath(key.ChannelKey) {
 		return 0
 	}
 
@@ -308,11 +303,17 @@ func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) in
 	}
 
 	totalCount := 0
-	targetKeyPaths := ParseKeyPath(key.ChannelKey)
+	targetKeyPaths, err := channel.ParseKeyPath(key.ChannelKey)
+	if err != nil {
+		return 0
+	}
 	for _, channelKey := range m.channels.Keys() {
-		channelKeyPaths := ParseKeyPath(channelKey.ChannelKey)
+		channelKeyPaths, err := channel.ParseKeyPath(channelKey.ChannelKey)
+		if err != nil {
+			continue
+		}
 
-		if !isSubKeyPath(channelKeyPaths, targetKeyPaths) {
+		if !isKeyPathPrefix(channelKeyPaths, targetKeyPaths) {
 			continue
 		}
 
@@ -367,52 +368,14 @@ func (m *Manager) Stats() map[string]int {
 	}
 }
 
-// FirstKeyPath returns the first key path of the given channel key.
-func FirstKeyPath(key key.Key) string {
-	if !IsValidChannelKeyPath(key) {
-		return ""
-	}
-
-	return ParseKeyPath(key)[0]
-}
-
-// MergeKeyPath merges the given key paths into a single key path.
-func MergeKeyPath(keyPaths []string) string {
-	if len(keyPaths) == 0 {
-		return ""
-	}
-
-	return strings.Join(keyPaths, ChannelKeyPathSeparator)
-}
-
-// ParseKeyPath splits a channel key into key path components.
-func ParseKeyPath(key key.Key) []string {
-	return strings.Split(key.String(), ChannelKeyPathSeparator)
-}
-
-// IsValidChannelKeyPath checks if a channel key is valid.
-func IsValidChannelKeyPath(key key.Key) bool {
-	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) ||
-		strings.HasSuffix(key.String(), ChannelKeyPathSeparator) {
+// isKeyPathPrefix checks if baseKeyPaths is a prefix of targetKeyPaths.
+func isKeyPathPrefix(baseKeyPaths, targetKeyPaths []string) bool {
+	if len(baseKeyPaths) < len(targetKeyPaths) {
 		return false
 	}
 
-	keyPaths := ParseKeyPath(key)
-	if slices.Contains(keyPaths, "") {
-		return false
-	}
-
-	return len(keyPaths) > 0
-}
-
-// isSubKeyPath checks if channelKeyPaths is a sub path of keyPaths.
-func isSubKeyPath(channelKeyPaths, keyPaths []string) bool {
-	if len(keyPaths) > len(channelKeyPaths) {
-		return false
-	}
-
-	for i, keyPath := range keyPaths {
-		if keyPath != channelKeyPaths[i] {
+	for i, keyPath := range targetKeyPaths {
+		if keyPath != baseKeyPaths[i] {
 			return false
 		}
 	}

@@ -32,10 +32,10 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
-	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -208,13 +208,18 @@ func (c *Client) GetChannel(
 	channelKey key.Key,
 	includeSubPath bool,
 ) (*types.ChannelSummary, error) {
+	channelFirstKeyPath, err := channel.FirstKeyPath(channelKey)
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := c.client.GetChannel(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceGetChannelRequest{
 			ProjectId:      project.ID.String(),
 			ChannelKey:     channelKey.String(),
 			IncludeSubPath: includeSubPath,
-		}), project.PublicKey, channel.FirstKeyPath(channelKey)),
+		}), project.PublicKey, channelFirstKeyPath),
 	)
 	if err != nil {
 		return nil, fromConnectError(err)

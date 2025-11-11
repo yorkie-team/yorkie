@@ -20,12 +20,22 @@ package channel
 import (
 	gojson "encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
+)
+
+var (
+	// ChannelKeyPathSeparator is the separator for channel key paths.
+	ChannelKeyPathSeparator = "."
+
+	// ErrInvalidChannelKey is returned when a channel key is invalid.
+	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
 )
 
 // Channel represents lightweight channel.
@@ -66,7 +76,11 @@ type BroadcastRequest struct {
 }
 
 // New creates a new instance of Presence.
-func New(k key.Key) *Channel {
+func New(k key.Key) (*Channel, error) {
+	if !IsValidChannelKeyPath(k) {
+		return nil, ErrInvalidChannelKey
+	}
+
 	counter := &Channel{
 		key:                    k,
 		broadcastRequests:      make(chan BroadcastRequest, 1),
@@ -74,7 +88,7 @@ func New(k key.Key) *Channel {
 		broadcastEventHandlers: make(map[string]func(topic, publisher string, payload []byte) error),
 	}
 	counter.status.Store(int32(attachable.StatusDetached))
-	return counter
+	return counter, nil
 }
 
 // Key returns the key of this channel.
@@ -187,4 +201,40 @@ func (c *Channel) BroadcastEventHandlers() map[string]func(
 	payload []byte,
 ) error {
 	return c.broadcastEventHandlers
+}
+
+// FirstKeyPath returns the first key path of the given channel key.
+func (c *Channel) FirstKeyPath() string {
+	return strings.Split(c.key.String(), ChannelKeyPathSeparator)[0]
+}
+
+func FirstKeyPath(key key.Key) (string, error) {
+	paths, err := ParseKeyPath(key)
+	if err != nil {
+		return "", err
+	}
+	return paths[0], nil
+}
+
+// ParseKeyPath splits a channel key into key path components.
+func ParseKeyPath(key key.Key) ([]string, error) {
+	if !IsValidChannelKeyPath(key) {
+		return nil, ErrInvalidChannelKey
+	}
+	return strings.Split(key.String(), ChannelKeyPathSeparator), nil
+}
+
+// IsValidChannelKeyPath checks if a channel key is valid.
+func IsValidChannelKeyPath(key key.Key) bool {
+	if err := key.Validate(); err != nil {
+		return false
+	}
+
+	if strings.HasPrefix(key.String(), ChannelKeyPathSeparator) ||
+		strings.HasSuffix(key.String(), ChannelKeyPathSeparator) ||
+		strings.Contains(key.String(), ChannelKeyPathSeparator+ChannelKeyPathSeparator) {
+		return false
+	}
+
+	return len(strings.Split(key.String(), ChannelKeyPathSeparator)) > 0
 }
