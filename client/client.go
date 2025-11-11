@@ -620,7 +620,7 @@ func (c *Client) attachChannel(ctx context.Context, ch *channel.Channel, opts *A
 		withShardKey(connect.NewRequest(&api.AttachChannelRequest{
 			ClientId:   c.id.String(),
 			ChannelKey: ch.Key().String(),
-		}), c.options.APIKey, ch.Key().String()))
+		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		return err
 	}
@@ -659,7 +659,7 @@ func (c *Client) refreshChannel(ctx context.Context, ch *channel.Channel) error 
 			ClientId:   c.id.String(),
 			ChannelKey: ch.Key().String(),
 			SessionId:  attachment.resourceID.String(),
-		}), c.options.APIKey, ch.Key().String()))
+		}), c.options.APIKey, ch.FirstKeyPath()))
 
 	if err != nil {
 		return err
@@ -684,7 +684,7 @@ func (c *Client) detachChannel(ctx context.Context, ch *channel.Channel) error {
 			ClientId:   c.id.String(),
 			ChannelKey: ch.Key().String(),
 			SessionId:  attachment.resourceID.String(),
-		}), c.options.APIKey, ch.Key().String()))
+		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		return err
 	}
@@ -726,7 +726,7 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 		withShardKey(connect.NewRequest(&api.WatchChannelRequest{
 			ClientId:   c.id.String(),
 			ChannelKey: ch.Key().String(),
-		}), c.options.APIKey, ch.Key().String()))
+		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		cancel()
 		return nil, nil, err
@@ -1123,7 +1123,7 @@ func (c *Client) Remove(ctx context.Context, d *document.Document) error {
 
 func (c *Client) broadcast(
 	ctx context.Context,
-	p *channel.Channel,
+	ch *channel.Channel,
 	topic string,
 	payload []byte,
 ) error {
@@ -1131,7 +1131,7 @@ func (c *Client) broadcast(
 		return ErrNotActivated
 	}
 
-	_, ok := c.attachments.Get(p.Key())
+	_, ok := c.attachments.Get(ch.Key())
 	if !ok {
 		return ErrNotAttached
 	}
@@ -1140,10 +1140,10 @@ func (c *Client) broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
 			ClientId:   c.id.String(),
-			ChannelKey: p.Key().String(),
+			ChannelKey: ch.Key().String(),
 			Topic:      topic,
 			Payload:    payload,
-		}), c.options.APIKey, p.Key().String()))
+		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		return err
 	}
