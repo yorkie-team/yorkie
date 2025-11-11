@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.37] - 2025-11-11
+
+### Added
+
+- Introduce hierarchical channel keys by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1559
+- Use FirstKeyPath for shard key in channel methods by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1566
+
+### Fixed
+
+- Fix nil pointer dereference in LLRB Floor function by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1561
+
 ## [v0.6.36] - 2025-11-06
 
 ### Added
