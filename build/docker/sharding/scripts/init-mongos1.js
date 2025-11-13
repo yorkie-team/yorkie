@@ -4,9 +4,9 @@ sh.addShard("shard-rs-2/shard2-1:27017");
 function findAnotherShard(shard) {
   if (shard == "shard-rs-1") {
     return "shard-rs-2";
-  } else {
-    return "shard-rs-1";
   }
+
+  return "shard-rs-1";
 }
 
 function shardOfChunk(minKeyOfChunk) {
@@ -15,32 +15,32 @@ function shardOfChunk(minKeyOfChunk) {
     .chunks.findOne({ min: { project_id: minKeyOfChunk } }).shard;
 }
 
-// Shard the database for the mongo client test
-const mongoClientDB = "test-yorkie-meta-mongo-client";
-sh.enableSharding(mongoClientDB);
-sh.shardCollection(mongoClientDB + ".clients", { project_id: 1 });
-sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 });
-sh.shardCollection(mongoClientDB + ".schemas", { project_id: 1 });
-sh.shardCollection(mongoClientDB + ".changes", { doc_id: "hashed" });
-sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: "hashed" });
-sh.shardCollection(mongoClientDB + ".versionvectors", { doc_id: "hashed" });
+// Sharded DB for the client test
+const clientTestDB = "test-yorkie-meta-mongo-client";
+sh.enableSharding(clientTestDB);
+sh.shardCollection(clientTestDB + ".clients", { project_id: 1, _id: "hashed" });
+sh.shardCollection(clientTestDB + ".documents", { project_id: 1 });
+sh.shardCollection(clientTestDB + ".schemas", { project_id: 1 });
+sh.shardCollection(clientTestDB + ".changes", { doc_id: "hashed" });
+sh.shardCollection(clientTestDB + ".snapshots", { doc_id: "hashed" });
+sh.shardCollection(clientTestDB + ".versionvectors", { doc_id: "hashed" });
 
 // Split the inital range at `splitPoint` to allow doc_ids duplicate in different shards.
 const splitPoint = ObjectId("500000000000000000000000");
-sh.splitAt(mongoClientDB + ".documents", { project_id: splitPoint });
+sh.splitAt(clientTestDB + ".documents", { project_id: splitPoint });
 // Move the chunk to another shard.
 db.adminCommand({
-  moveChunk: mongoClientDB + ".documents",
+  moveChunk: clientTestDB + ".documents",
   find: { project_id: splitPoint },
   to: findAnotherShard(shardOfChunk(splitPoint)),
 });
 
-// Shard the database for the server test
-const serverDB = "test-yorkie-meta-server";
-sh.enableSharding(serverDB);
-sh.shardCollection(serverDB + ".clients", { project_id: 1 });
-sh.shardCollection(serverDB + ".documents", { project_id: 1 });
-sh.shardCollection(serverDB + ".schemas", { project_id: 1 });
-sh.shardCollection(serverDB + ".changes", { doc_id: "hashed" });
-sh.shardCollection(serverDB + ".snapshots", { doc_id: "hashed" });
-sh.shardCollection(serverDB + ".versionvectors", { doc_id: "hashed" });
+// Sharded DB for the server test
+const serverTestDB = "test-yorkie-meta-server";
+sh.enableSharding(serverTestDB);
+sh.shardCollection(serverTestDB + ".clients", { project_id: 1, _id: "hashed" });
+sh.shardCollection(serverTestDB + ".documents", { project_id: 1 });
+sh.shardCollection(serverTestDB + ".schemas", { project_id: 1 });
+sh.shardCollection(serverTestDB + ".changes", { doc_id: "hashed" });
+sh.shardCollection(serverTestDB + ".snapshots", { doc_id: "hashed" });
+sh.shardCollection(serverTestDB + ".versionvectors", { doc_id: "hashed" });

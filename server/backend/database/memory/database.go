@@ -746,32 +746,21 @@ func (d *DB) ActivateClient(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "project_id_key", projectID.String(), key)
-	if err != nil {
-		return nil, fmt.Errorf("activate client of %s: %w", key, err)
-	}
-
 	now := gotime.Now()
 
 	clientInfo := &database.ClientInfo{
+		ID:        types.NewID(),
 		ProjectID: projectID,
 		Key:       key,
 		Metadata:  metadata,
 		Status:    database.ClientActivated,
+		Documents: make(database.ClientDocInfoMap),
+		CreatedAt: now,
 		UpdatedAt: now,
 	}
 
-	if raw == nil {
-		clientInfo.ID = newID()
-		clientInfo.CreatedAt = now
-	} else {
-		loaded := raw.(*database.ClientInfo)
-		clientInfo.ID = loaded.ID
-		clientInfo.CreatedAt = loaded.CreatedAt
-	}
-
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, fmt.Errorf("activate client of %s: %w", key, err)
+		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
 	txn.Commit()
