@@ -370,12 +370,14 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 		cleanedCount += cleanUpExpiredSessions(ctx, m, expiredSessionIDs)
 
 		// Update for metrics
-		addChannelsCount(channelsCountByProjectID, key)
-		addChannelSessions(channelSessionsCountByProjectID, key, alivedSessions)
-		pushTopSessions(topChannelSessionsCount, key, alivedSessions)
+		if alivedSessions > 0 {
+			addChannelsCount(channelsCountByProjectID, key)
+			addChannelSessions(channelSessionsCountByProjectID, key, alivedSessions)
+			pushTopSessions(topChannelSessionsCount, key, alivedSessions)
+		}
 	}
 
-	if m.metrics != nil {
+	if m.metrics != nil && m.metrics.Metrics != nil {
 		metricsChannelTotal(m.metrics, channelsCountByProjectID)
 		metricsChannelSessionsTotal(m.metrics, channelSessionsCountByProjectID)
 		metricsChannelSessionsTopN(m.metrics, topChannelSessionsCount)
