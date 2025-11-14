@@ -122,6 +122,10 @@ func New(
 		pubsub,
 		conf.ParsePresenceTTL(),
 		conf.ParsePresenceCleanupInterval(),
+		&channel.Metrics{
+			Hostname: conf.Hostname,
+			Metrics:  metrics,
+		},
 	)
 	bg := background.New(metrics)
 

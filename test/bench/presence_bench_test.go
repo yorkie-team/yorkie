@@ -174,7 +174,7 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	ttl := 60 * gotime.Second
 	cleanupInterval := 60 * gotime.Second
 	pubsub := &mockPubSub{}
-	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval)
+	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval, nil)
 	project := types.Project{ID: types.NewID()}
 
 	for i, keyPath := range allKeyPaths {
