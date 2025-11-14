@@ -29,7 +29,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/pkg/heap"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
 
 var (
@@ -38,6 +40,9 @@ var (
 
 	// ErrInvalidChannelKey is returned when a channel key is invalid.
 	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
+
+	// TopChannelSessionsMaxSize is the maximum size of top channel sessions.
+	TopChannelSessionsMaxSize = 10
 )
 
 // PubSub is an interface for publishing channel events.
@@ -81,10 +86,19 @@ type Manager struct {
 
 	// cleanupDone is the channel to signal cleanup goroutine to stop
 	cleanupDone chan struct{}
+
+	// metrics is used to collect prometheus metrics
+	metrics *Metrics
+}
+
+// Metrics is used to collect prometheus metrics.
+type Metrics struct {
+	Hostname string
+	Metrics  *prometheus.Metrics
 }
 
 // NewManager creates a new presence manager.
-func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Duration) *Manager {
+func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Duration, metrics *Metrics) *Manager {
 	if ttl == 0 {
 		ttl = 60 * gotime.Second
 	}
@@ -103,6 +117,8 @@ func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Durat
 		presenceTTL:     ttl,
 		cleanupInterval: cleanupInterval,
 		cleanupDone:     make(chan struct{}),
+
+		metrics: metrics,
 	}
 }
 
@@ -324,34 +340,141 @@ func (m *Manager) PresenceCount(key types.ChannelRefKey, includeSubPath bool) in
 	return int64(totalCount)
 }
 
+type ChannelSessionCount struct {
+	Key      types.ChannelRefKey
+	Sessions int
+}
+
 // CleanupExpired removes sessions that have exceeded their TTL.
 // Returns the number of cleaned up sessions.
 func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	now := gotime.Now()
 	cleanedCount := 0
 
-	for _, sessionMap := range m.channels.Values() {
-		expiredIDs := []types.ID{}
+	channelsCountByProjectID := make(map[types.ID]int)
+	channelSessionsCountByProjectID := make(map[types.ID]int)
+	topChannelSessionsCount := heap.New(TopChannelSessionsMaxSize, func(a, b ChannelSessionCount) bool {
+		return a.Sessions < b.Sessions
+	})
+
+	for _, key := range m.channels.Keys() {
+		sessionMap, ok := m.channels.Get(key)
+		if !ok {
+			continue
+		}
 
 		// Check if session has expired (UpdatedAt + TTL < now)
-		for _, session := range sessionMap.Values() {
-			if now.Sub(session.UpdatedAt) > m.presenceTTL {
-				expiredIDs = append(expiredIDs, session.ID)
-			}
-		}
+		expiredSessionIDs, alivedSessions := classifyExpiredSessions(now, m.presenceTTL, sessionMap)
 
 		// Remove expired sessions
-		for _, id := range expiredIDs {
-			if _, err := m.Detach(ctx, id); err != nil {
-				logging.From(ctx).Warnf("detach expired session of %s: %v", id, err)
-				continue
-			}
+		cleanedCount += cleanUpExpiredSessions(ctx, m, expiredSessionIDs)
 
-			cleanedCount++
-		}
+		// Update for metrics
+		addChannelsCount(channelsCountByProjectID, key)
+		addChannelSessions(channelSessionsCountByProjectID, key, alivedSessions)
+		pushTopSessions(topChannelSessionsCount, key, alivedSessions)
+	}
+
+	if m.metrics != nil {
+		metricsChannelTotal(m.metrics, channelsCountByProjectID)
+		metricsChannelSessionsTotal(m.metrics, channelSessionsCountByProjectID)
+		metricsChannelSessionsTopN(m.metrics, topChannelSessionsCount)
 	}
 
 	return cleanedCount, nil
+}
+
+func classifyExpiredSessions(
+	now gotime.Time,
+	presenceTTL gotime.Duration,
+	sessionMap *cmap.Map[types.ID, *Session],
+) ([]types.ID, int) {
+	expiredIDs := []types.ID{}
+	alivedSessions := 0
+	for _, session := range sessionMap.Values() {
+		if now.Sub(session.UpdatedAt) > presenceTTL {
+			expiredIDs = append(expiredIDs, session.ID)
+		} else {
+			alivedSessions++
+		}
+	}
+
+	return expiredIDs, alivedSessions
+}
+
+func cleanUpExpiredSessions(ctx context.Context, manager *Manager, expiredSessionIDs []types.ID) int {
+	cleanedCount := 0
+	for _, id := range expiredSessionIDs {
+		if _, err := manager.Detach(ctx, id); err != nil {
+			logging.From(ctx).Warnf("detach expired session of %s: %v", id, err)
+			continue
+		}
+		cleanedCount++
+	}
+	return cleanedCount
+}
+
+func addChannelsCount(channelsCountByProjectID map[types.ID]int, key types.ChannelRefKey) {
+	if _, ok := channelsCountByProjectID[key.ProjectID]; !ok {
+		channelsCountByProjectID[key.ProjectID] = 0
+	}
+	channelsCountByProjectID[key.ProjectID] += 1
+}
+
+// addChannelSessions adds the channel sessions by project ID.
+func addChannelSessions(channelSessionsByProjectID map[types.ID]int, key types.ChannelRefKey, alivedSessions int) {
+	if _, ok := channelSessionsByProjectID[key.ProjectID]; !ok {
+		channelSessionsByProjectID[key.ProjectID] = 0
+	}
+	channelSessionsByProjectID[key.ProjectID] += alivedSessions
+}
+
+// pushTopSessions pushes the top channels by session count.
+func pushTopSessions(topChannelSessions *heap.Heap[ChannelSessionCount], key types.ChannelRefKey, alivedSessions int) {
+	topChannelSessions.Push(ChannelSessionCount{
+		Key:      key,
+		Sessions: alivedSessions,
+	})
+}
+
+// metricsChannelTotal updates metrics for the channel total.
+func metricsChannelTotal(metrics *Metrics, channelsCountByProjectID map[types.ID]int) {
+	for projectID, channelCount := range channelsCountByProjectID {
+		metrics.Metrics.SetChannelTotal(
+			metrics.Hostname,
+			projectID,
+			channelCount,
+		)
+	}
+}
+
+// metricsChannelSessionsTotal updates metrics for the channel sessions by project ID.
+func metricsChannelSessionsTotal(metrics *Metrics, channelSessionsCountByProjectID map[types.ID]int) {
+	for projectID, sessionCount := range channelSessionsCountByProjectID {
+		metrics.Metrics.SetChannelSessionsTotal(
+			metrics.Hostname,
+			projectID,
+			sessionCount,
+		)
+	}
+}
+
+// metricsChannelSessionsTopN updates metrics for the top channels by session count.
+func metricsChannelSessionsTopN(metrics *Metrics, topChannelSessionsCount *heap.Heap[ChannelSessionCount]) {
+	metrics.Metrics.ResetChannelSessionsTopN()
+
+	if topChannelSessionsCount.IsEmpty() {
+		return
+	}
+
+	for _, ch := range topChannelSessionsCount.Items() {
+		metrics.Metrics.SetChannelSessionsTopN(
+			metrics.Hostname,
+			ch.Key.ProjectID,
+			ch.Key.ChannelKey.String(),
+			ch.Sessions,
+		)
+	}
 }
 
 // Stats returns statistics about the channel manager.
