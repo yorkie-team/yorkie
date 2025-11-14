@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.38] - 2025-11-14
+
+### Changed
+
+- Update clients shard key and indexing by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1548
+
 ## [v0.6.37] - 2025-11-11
 
 ### Added
