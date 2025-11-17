@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Add channel metrics and heap-based top-N session tracking by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1569
+
 ## [v0.6.38] - 2025-11-14
 
 ### Changed
