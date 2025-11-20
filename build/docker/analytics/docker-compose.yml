@@ -52,7 +52,7 @@ services:
     ports:
       - "29092:29092"
     volumes:
-      - "kafka_data:/kafka-data"
+      - "kafka_data:/var/lib/kafka/data"
     environment:
       # KRaft settings
       - KAFKA_NODE_ID=0
