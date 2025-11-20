@@ -48,7 +48,7 @@ The initialization services will:
 
 ## For Setup Kafka Cluster Mode
 
-To set up Kafka in cluster mode, refer to the [Bitnami Kafka README.md](https://github.com/bitnami/containers/blob/main/bitnami/kafka/README.md) and [docker-compose-cluster.yml](https://github.com/bitnami/containers/blob/main/bitnami/kafka/docker-compose-cluster.yml) for detailed instructions on setting up Kafka in cluster mode using Docker Compose.
+To set up Kafka in cluster mode, refer to the [Docker Hub Apache Kafka](https://hub.docker.com/r/apache/kafka) for detailed instructions on setting up Kafka in cluster mode using Docker Compose.
 
 ## About StarRocks with Kafka Routine Load
 
@@ -67,7 +67,7 @@ To check routine load status or fix a paused routine load, follow these steps:
 2. Check the status of the routine load:
 
    ```sql
-   StarRocks > SHOW ROUTINE LOAD FROM yorkie;
+   StarRocks > SHOW ROUTINE LOAD FROM yorkie \G;
    ```
 
    Example output:
@@ -90,13 +90,14 @@ To check routine load status or fix a paused routine load, follow these steps:
 3. Resume the paused routine load:
 
    ```sql
+   StarRocks > USE yorkie;
    StarRocks > RESUME ROUTINE LOAD FOR events;
    ```
 
 4. Verify that the routine load is running:
 
    ```sql
-   StarRocks > SHOW ROUTINE LOAD FROM yorkie;
+   StarRocks > SHOW ROUTINE LOAD FROM yorkie \G;
    ```
 
    Example output:
