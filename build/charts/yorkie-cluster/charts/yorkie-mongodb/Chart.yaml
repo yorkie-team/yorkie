@@ -16,5 +16,6 @@ kubeVersion: ">=1.23.0-0"
 dependencies:
   - name: mongodb-sharded
     version: "9.0.1"
-    repository: "https://charts.bitnami.com/bitnami"
+    # Using bitnamilegacy as temporary workaround (no updates, migration needed)
+    repository: "oci://registry-1.docker.io/bitnamilegacy"
     condition: sharded.enabled

@@ -14,7 +14,8 @@ yorkie-analytics:
   kafka:
     enabled: true
     image:
-      repository: bitnami/kafka
+      # Using bitnamilegacy as temporary workaround (no updates, migration needed)
+      repository: bitnamilegacy/kafka
       tag: latest
     topic:
       name: user-events

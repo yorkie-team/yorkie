@@ -45,17 +45,17 @@ sharded:
       - collectionName: changes
         shardKeys:
           - name: doc_id
-            method: "\"hashed\""
+            method: '"hashed"'
         unique: false
       - collectionName: snapshots
         shardKeys:
           - name: doc_id
-            method: "\"hashed\""
+            method: '"hashed"'
         unique: false
       - collectionName: versionvectors
         shardKeys:
           - name: doc_id
-            method: "\"hashed\""
+            method: '"hashed"'
         unique: false
 
 # Configuration for manual dmongodb sharded stack
@@ -75,6 +75,14 @@ mongodb-sharded:
     registry: *imageRegistry
     repository: *imageRepository
     tag: *imageTag
+
+  # Override Bitnami helper images to use legacy repository
+  volumePermissions:
+    enabled: false
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/os-shell
+      tag: latest
 
   common:
     containerPorts:
@@ -227,6 +235,10 @@ mongodb-sharded:
   # Configuration for Prometheus monitoring
   metrics:
     enabled: true
+    image:
+      registry: docker.io
+      repository: bitnamilegacy/mongodb-exporter
+      tag: latest
     namespace: monitoring
     podMonitor:
       enabled: false
