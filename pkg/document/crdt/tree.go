@@ -1044,7 +1044,7 @@ func (t *Tree) split(
 		var err error
 		offset := 0
 		if left != parent {
-			offset, err = parent.Index.FindOffset(left.Index)
+			offset, err = parent.Index.FindOffsetOfChild(left.Index)
 			if err != nil {
 				return err
 			}
@@ -1261,7 +1261,11 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	// node. This is similar to RGA.
 	idx := 0
 	if !isLeftMost {
-		idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
+		offset, err := realParentNode.Index.FindOffsetOfChild(leftNode.Index, true)
+		if err != nil {
+			return nil, nil, diff, err
+		}
+		idx = offset + 1
 	}
 
 	parentChildren := realParentNode.Index.Children(true)
@@ -1293,7 +1297,7 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 			parentNode = childNode.Index.Parent.Value
 		}
 
-		offset, err := parentNode.Index.FindOffset(childNode.Index, include)
+		offset, err := parentNode.Index.FindOffsetOfChild(childNode.Index, include)
 		if err != nil {
 			return nil, nil
 		}
@@ -1312,7 +1316,7 @@ func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool)
 	}
 
 	// Find the closest existing leftSibling node.
-	offset, err := parentNode.Index.FindOffset(leftNode.Index, include)
+	offset, err := parentNode.Index.FindOffsetOfChild(leftNode.Index, include)
 	if err != nil {
 		return nil, err
 	}

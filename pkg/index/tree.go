@@ -445,9 +445,9 @@ func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 		return ErrInvalidMethodCallForTextNode
 	}
 
-	offset := n.OffsetOfChild(prevNode)
-	if offset == -1 {
-		return errors.New("prevNode is not a child of the node")
+	offset, err := n.FindOffsetOfChild(prevNode, true)
+	if err != nil {
+		return err
 	}
 
 	// TODO(hackerwins, krapie): Needs to inspect this code later
@@ -460,7 +460,7 @@ func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 
 // nextSibling returns the next sibling of the node.
 func (n *Node[V]) nextSibling() (*Node[V], error) {
-	offset, err := n.Parent.FindOffset(n)
+	offset, err := n.Parent.FindOffsetOfChild(n)
 	if err != nil {
 		return nil, err
 	}
@@ -478,9 +478,9 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 	return nil, nil
 }
 
-// FindOffset returns the offset of the given node in the children.
+// FindOffsetOfChild returns the offset of the given node in the children.
 // If includeRemoved is true, it includes removed nodes in the calculation.
-func (n *Node[V]) FindOffset(node *Node[V], includeRemoved ...bool) (int, error) {
+func (n *Node[V]) FindOffsetOfChild(node *Node[V], includeRemoved ...bool) (int, error) {
 	if n.IsText() {
 		return 0, ErrInvalidMethodCallForTextNode
 	}
@@ -531,7 +531,7 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) (int, error) {
 
 	current := node
 	for current != nil {
-		offset := n.OffsetOfChild(current)
+		offset, _ := n.FindOffsetOfChild(current, true)
 		if offset != -1 {
 			return offset, nil
 		}
@@ -595,19 +595,8 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 // RemoveChild removes the given child from the children. In this method,
 // the child is physically removed from the tree.
 func (n *Node[V]) RemoveChild(child *Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-	offset := -1
-
-	for i, c := range n.children {
-		if c == child {
-			offset = i
-			break
-		}
-	}
-
-	if offset == -1 {
+	offset, err := n.FindOffsetOfChild(child, true)
+	if err != nil {
 		return ErrChildNotFound
 	}
 
@@ -622,13 +611,9 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 
 // InsertBefore inserts the given node before the given child.
 func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-
-	offset := n.OffsetOfChild(referenceNode)
-	if offset == -1 {
-		return ErrChildNotFound
+	offset, err := n.FindOffsetOfChild(referenceNode, true)
+	if err != nil {
+		return err
 	}
 
 	if err := n.insertAtInternal(newNode, offset); err != nil {
@@ -643,13 +628,9 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 
 // InsertAfter inserts the given node after the given child.
 func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-
-	offset := n.OffsetOfChild(referenceNode)
-	if offset == -1 {
-		return ErrChildNotFound
+	offset, err := n.FindOffsetOfChild(referenceNode, true)
+	if err != nil {
+		return err
 	}
 
 	if err := n.insertAtInternal(newNode, offset+1); err != nil {
@@ -676,17 +657,6 @@ func (n *Node[V]) HasTextChild() bool {
 	}
 
 	return true
-}
-
-// OffsetOfChild returns offset of children of the given node.
-func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
-	for i, child := range n.children {
-		if child == node {
-			return i
-		}
-	}
-
-	return -1
 }
 
 // TokensBetween returns the tokens between the given range.
@@ -797,9 +767,9 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 	node := treePos.Node
 
 	if node.IsText() {
-		offset := node.Parent.OffsetOfChild(node)
-		if offset == -1 {
-			return nil, ErrInvalidTreePos
+		offset, err := node.Parent.FindOffsetOfChild(node, true)
+		if err != nil {
+			return nil, err
 		}
 
 		leftSiblingsSize, err := t.LeftSiblingsSize(node.Parent, offset)
@@ -1023,7 +993,7 @@ func (t *Tree[V]) IndexOf(pos *TreePos[V], includeRemoved ...bool) (int, error) 
 		size += offset
 
 		parent := node.Parent
-		offsetOfNode, err := parent.FindOffset(node, include)
+		offsetOfNode, err := parent.FindOffsetOfChild(node, include)
 		if err != nil {
 			return 0, err
 		}
@@ -1045,7 +1015,7 @@ func (t *Tree[V]) IndexOf(pos *TreePos[V], includeRemoved ...bool) (int, error) 
 
 	for node.Parent != nil {
 		parent := node.Parent
-		offsetOfNode, err := parent.FindOffset(node, include)
+		offsetOfNode, err := parent.FindOffsetOfChild(node, include)
 		if err != nil {
 			return 0, err
 		}
