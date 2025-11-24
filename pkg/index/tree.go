@@ -424,19 +424,18 @@ func (n *Node[V]) Child(index int) (*Node[V], error) {
 		return nil, ErrInvalidMethodCallForTextNode
 	}
 
-	return n.Children()[index], nil
-}
-
-// FirstChild returns the first child of the given node.
-func (n *Node[V]) FirstChild() *Node[V] {
+	offset := 0
 	for _, child := range n.children {
 		if child.Value.IsRemoved() {
 			continue
 		}
-		return child
+		if offset == index {
+			return child, nil
+		}
+		offset++
 	}
 
-	return nil
+	return nil, ErrChildNotFound
 }
 
 // InsertAfterInternal inserts the given node after the given child.
