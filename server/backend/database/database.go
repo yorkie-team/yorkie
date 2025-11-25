@@ -68,6 +68,12 @@ var (
 
 	// ErrInvalidLeaseToken is returned when the provided token is invalid.
 	ErrInvalidLeaseToken = errors.InvalidArgument("invalid lease token").WithCode("ErrInvalidLeaseToken")
+
+	// ErrRevisionNotFound is returned when the revision could not be found.
+	ErrRevisionNotFound = errors.NotFound("revision not found").WithCode("ErrRevisionNotFound")
+
+	// ErrRevisionAlreadyExists is returned when a revision with the same label already exists.
+	ErrRevisionAlreadyExists = errors.AlreadyExists("revision already exists").WithCode("ErrRevisionAlreadyExists")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -424,4 +430,35 @@ type Database interface {
 		projectID types.ID,
 		schema string,
 	) (bool, error)
+
+	// CreateRevisionInfo creates a new revision for the given document.
+	// Seq is auto-incremented per document.
+	CreateRevisionInfo(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		label string,
+		description string,
+		snapshot []byte,
+	) (*RevisionInfo, error)
+
+	// FindRevisionInfosByPaging returns all revisions for the given document.
+	// If includeSnapshot is false, Snapshot field will be nil for efficiency.
+	FindRevisionInfosByPaging(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		paging types.Paging[int],
+		includeSnapshot bool,
+	) ([]*RevisionInfo, error)
+
+	// FindRevisionInfoByID returns a revision by its ID.
+	FindRevisionInfoByID(
+		ctx context.Context,
+		revisionID types.ID,
+	) (*RevisionInfo, error)
+
+	// DeleteRevisionInfo deletes a revision by its ID.
+	DeleteRevisionInfo(
+		ctx context.Context,
+		revisionID types.ID,
+	) error
 }

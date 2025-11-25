@@ -248,6 +248,32 @@ func storeSnapshot(
 		doc.Checkpoint().ServerSeq,
 	)
 
+	// 06. create auto revision if enabled for the project
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, docInfo.ProjectID)
+	if err != nil {
+		logging.From(ctx).Warnf("failed to find project for auto revision: %v", err)
+	} else if projectInfo.AutoRevisionEnabled {
+		// Generate snapshot from the root object (YSON format)
+		snapshot := []byte(doc.RootObject().Marshal())
+
+		// Create auto revision with timestamp-based label
+		label := fmt.Sprintf("auto-%d", doc.Checkpoint().ServerSeq)
+		description := fmt.Sprintf("Auto-created revision at snapshot (serverSeq: %d)", doc.Checkpoint().ServerSeq)
+
+		if _, err := be.DB.CreateRevisionInfo(
+			ctx,
+			docRefKey,
+			label,
+			description,
+			snapshot,
+		); err != nil {
+			// Log error but don't fail the snapshot creation
+			logging.From(ctx).Warnf("failed to create auto revision: %v", err)
+		} else {
+			logging.From(ctx).Infof("AUTO-REV: '%s', label: %s", docInfo.Key, label)
+		}
+	}
+
 	be.Metrics.ObservePushPullSnapshotDurationSeconds(gotime.Since(start).Seconds())
 
 	return nil

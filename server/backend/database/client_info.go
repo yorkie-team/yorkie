@@ -91,6 +91,23 @@ type ClientInfo struct {
 	UpdatedAt gotime.Time `bson:"updated_at"`
 }
 
+// SystemClientInfo returns a ClientInfo instance representing a system client.
+// It is used for server-side operations such as restoring documents.
+func SystemClientInfo(projectID types.ID, docInfo *DocInfo) *ClientInfo {
+	clientInfo := &ClientInfo{
+		ID:        types.IDFromActorID(time.InitialActorID),
+		ProjectID: projectID,
+		Documents: map[types.ID]*ClientDocInfo{
+			docInfo.ID: {
+				Status:    DocumentAttached,
+				ServerSeq: docInfo.ServerSeq,
+				ClientSeq: 0,
+			},
+		},
+	}
+	return clientInfo
+}
+
 // CheckIfInProject checks if the client is in the project.
 func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 	if i.ProjectID != projectID {

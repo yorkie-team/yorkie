@@ -1673,6 +1673,46 @@ components:
           type: string
       title: RHTNode
       type: object
+    yorkie.v1.RevisionSummary:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        description:
+          additionalProperties: false
+          description: ""
+          title: description
+          type: string
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        label:
+          additionalProperties: false
+          description: ""
+          title: label
+          type: string
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        snapshot:
+          additionalProperties: false
+          description: ""
+          format: byte
+          title: snapshot
+          type: string
+      title: RevisionSummary
+      type: object
     yorkie.v1.Rule:
       additionalProperties: false
       description: ""

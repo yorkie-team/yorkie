@@ -129,6 +129,9 @@ type ProjectInfo struct {
 	// RemoveOnDetach is the flag to remove the document on detach.
 	RemoveOnDetach bool `bson:"remove_on_detach"`
 
+	// AutoRevisionEnabled is the flag to automatically create revisions during snapshot.
+	AutoRevisionEnabled bool `bson:"auto_revision_enabled"`
+
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `bson:"allowed_origins"`
 
@@ -159,6 +162,7 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		MaxAttachmentsPerDocument:   0,
 		MaxSizePerDocument:          10 * units.MiB,
 		RemoveOnDetach:              false,
+		AutoRevisionEnabled:         true,
 		PublicKey:                   shortuuid.New(),
 		SecretKey:                   shortuuid.New(),
 		CreatedAt:                   time.Now(),
@@ -196,6 +200,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:          i.MaxSizePerDocument,
 		RemoveOnDetach:              i.RemoveOnDetach,
+		AutoRevisionEnabled:         i.AutoRevisionEnabled,
 		AllowedOrigins:              i.AllowedOrigins,
 		CreatedAt:                   i.CreatedAt,
 		UpdatedAt:                   i.UpdatedAt,
@@ -264,6 +269,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.RemoveOnDetach != nil {
 		i.RemoveOnDetach = *fields.RemoveOnDetach
 	}
+	if fields.AutoRevisionEnabled != nil {
+		i.AutoRevisionEnabled = *fields.AutoRevisionEnabled
+	}
 	if fields.AllowedOrigins != nil {
 		i.AllowedOrigins = *fields.AllowedOrigins
 	}
@@ -294,6 +302,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		MaxAttachmentsPerDocument:   i.MaxAttachmentsPerDocument,
 		MaxSizePerDocument:          i.MaxSizePerDocument,
 		RemoveOnDetach:              i.RemoveOnDetach,
+		AutoRevisionEnabled:         i.AutoRevisionEnabled,
 		AllowedOrigins:              i.AllowedOrigins,
 		PublicKey:                   i.PublicKey,
 		SecretKey:                   i.SecretKey,

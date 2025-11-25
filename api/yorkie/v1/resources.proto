@@ -473,3 +473,16 @@ message Rule {
   string path = 1;
   string type = 2;
 }
+
+/////////////////////////////////////////
+// Messages for Revision               //
+/////////////////////////////////////////
+
+message RevisionSummary {
+  string id = 1;
+  int64 seq = 2;
+  string label = 3;
+  string description = 4;
+  bytes snapshot = 5;
+  google.protobuf.Timestamp created_at = 6;
+}

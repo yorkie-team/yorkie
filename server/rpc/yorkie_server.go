@@ -37,6 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/revisions"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/schemas"
 )
@@ -880,6 +881,120 @@ func (s *yorkieServer) WatchDocument(
 			)
 		}
 	}
+}
+
+// CreateRevision creates a new revision for the given document.
+func (s *yorkieServer) CreateRevision(
+	ctx context.Context,
+	req *connect.Request[api.CreateRevisionRequest],
+) (*connect.Response[api.CreateRevisionResponse], error) {
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	docKey := types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     docID,
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.CreateRevision,
+	}); err != nil {
+		return nil, err
+	}
+
+	revision, err := revisions.Create(
+		ctx,
+		s.backend,
+		docKey,
+		req.Msg.Label,
+		req.Msg.Description,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateRevisionResponse{
+		Revision: converter.ToRevisionSummary(revision),
+	}), nil
+}
+
+// ListRevisions returns all revisions for the given document.
+func (s *yorkieServer) ListRevisions(
+	ctx context.Context,
+	req *connect.Request[api.ListRevisionsRequest],
+) (*connect.Response[api.ListRevisionsResponse], error) {
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	paging := types.Paging[int]{
+		Offset:    int(req.Msg.Offset),
+		PageSize:  int(req.Msg.PageSize),
+		IsForward: req.Msg.IsForward,
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.ListRevisions,
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	docKey := types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     docID,
+	}
+
+	summaries, err := revisions.List(ctx, s.backend, docKey, paging, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListRevisionsResponse{
+		Revisions: converter.ToRevisionSummaries(summaries),
+	}), nil
+}
+
+// RestoreRevision restores a document to a specific revision.
+func (s *yorkieServer) RestoreRevision(
+	ctx context.Context,
+	req *connect.Request[api.RestoreRevisionRequest],
+) (*connect.Response[api.RestoreRevisionResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	revisionActorID, err := time.ActorIDFromHex(req.Msg.RevisionId)
+	if err != nil {
+		return nil, err
+	}
+	revisionID := types.IDFromActorID(revisionActorID)
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.RestoreRevision,
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := revisions.Restore(ctx, s.backend, project, revisionID); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RestoreRevisionResponse{}), nil
 }
 
 func (s *yorkieServer) watchDoc(

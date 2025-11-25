@@ -434,18 +434,6 @@ func UpdateDocument(
 	schema *types.Schema,
 	updateMode string,
 ) (*types.DocumentSummary, error) {
-	clientInfo := &database.ClientInfo{
-		ID:        types.IDFromActorID(time.InitialActorID),
-		ProjectID: project.ID,
-		Documents: map[types.ID]*database.ClientDocInfo{
-			docInfo.ID: {
-				Status:    database.DocumentAttached,
-				ServerSeq: docInfo.ServerSeq,
-				ClientSeq: 0,
-			},
-		},
-	}
-
 	doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, change.Checkpoint{
 		ServerSeq: docInfo.ServerSeq,
 		ClientSeq: 0,
@@ -482,7 +470,7 @@ func UpdateDocument(
 			ctx,
 			be,
 			project,
-			clientInfo,
+			database.SystemClientInfo(project.ID, docInfo),
 			docInfo.RefKey(),
 			doc.CreateChangePack(),
 			packs.PushPullOptions{

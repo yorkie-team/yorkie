@@ -107,9 +107,6 @@ func NewInternalDocumentFromSnapshot(
 		return nil, err
 	}
 
-	changeID := change.InitialID()
-	changeID.SetClocks(lamport, vector)
-
 	return &InternalDocument{
 		key:           k,
 		status:        StatusDetached,
@@ -117,7 +114,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:     presences,
 		onlineClients: make(map[string]bool),
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      changeID,
+		changeID:      change.InitialID().SetClocks(lamport, vector),
 	}, nil
 }
 
