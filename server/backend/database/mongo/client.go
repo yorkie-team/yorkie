@@ -473,6 +473,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"client_deactivate_threshold":     candidate.ClientDeactivateThreshold,
 			"snapshot_threshold":              candidate.SnapshotThreshold,
 			"snapshot_interval":               candidate.SnapshotInterval,
+			"auto_revision_enabled":           candidate.AutoRevisionEnabled,
 			"max_subscribers_per_document":    candidate.MaxSubscribersPerDocument,
 			"max_attachments_per_document":    candidate.MaxAttachmentsPerDocument,
 			"max_size_per_document":           candidate.MaxSizePerDocument,
@@ -2370,4 +2371,146 @@ func (c *Client) IsSchemaAttached(
 	}
 
 	return true, nil
+}
+
+// CreateRevisionInfo creates a new revision for the given document.
+func (c *Client) CreateRevisionInfo(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	label string,
+	description string,
+	snapshot []byte,
+) (*database.RevisionInfo, error) {
+	// Get next sequence number for this document
+	filter := bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}
+	findOptions := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
+	var lastRevision database.RevisionInfo
+	err := c.collection(ColRevisions).FindOne(ctx, filter, findOptions).Decode(&lastRevision)
+	nextSeq := int64(1)
+	if err == nil {
+		nextSeq = lastRevision.Seq + 1
+	} else if err != mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("get last revision seq: %w", err)
+	}
+
+	now := gotime.Now()
+	revisionInfo := &database.RevisionInfo{
+		ID:          types.NewID(),
+		ProjectID:   docRefKey.ProjectID,
+		DocID:       docRefKey.DocID,
+		Seq:         nextSeq,
+		Label:       label,
+		Description: description,
+		Snapshot:    snapshot,
+		CreatedAt:   now,
+	}
+
+	result, err := c.collection(ColRevisions).InsertOne(ctx, bson.M{
+		"_id":         revisionInfo.ID,
+		"project_id":  revisionInfo.ProjectID,
+		"doc_id":      revisionInfo.DocID,
+		"seq":         revisionInfo.Seq,
+		"label":       revisionInfo.Label,
+		"description": revisionInfo.Description,
+		"snapshot":    revisionInfo.Snapshot,
+		"created_at":  revisionInfo.CreatedAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("insert revision: %w", err)
+	}
+
+	revisionInfo.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return revisionInfo, nil
+}
+
+// FindRevisionInfosByPaging returns the revision summaries of the given paging.
+func (c *Client) FindRevisionInfosByPaging(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	paging types.Paging[int],
+	includeSnapshot bool,
+) ([]*database.RevisionInfo, error) {
+	filter := bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}
+
+	findOptions := options.Find()
+	if paging.PageSize > 0 {
+		findOptions.SetLimit(int64(paging.PageSize))
+	}
+	if paging.Offset > 0 {
+		findOptions.SetSkip(int64(paging.Offset))
+	}
+
+	// Exclude snapshot field if not needed for efficiency
+	if !includeSnapshot {
+		findOptions.SetProjection(bson.M{"snapshot": 0})
+	}
+
+	// Sort by seq descending (newest first)
+	sortOrder := -1
+	if paging.IsForward {
+		sortOrder = 1
+	}
+	findOptions.SetSort(bson.D{{Key: "seq", Value: sortOrder}})
+
+	cursor, err := c.collection(ColRevisions).Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, fmt.Errorf("find revisions: %w", err)
+	}
+	defer func() {
+		if err := cursor.Close(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	var revisions []*database.RevisionInfo
+	if err := cursor.All(ctx, &revisions); err != nil {
+		return nil, fmt.Errorf("decode revisions: %w", err)
+	}
+
+	return revisions, nil
+}
+
+// FindRevisionInfoByID returns a revision by its ID.
+func (c *Client) FindRevisionInfoByID(
+	ctx context.Context,
+	revisionID types.ID,
+) (*database.RevisionInfo, error) {
+	filter := bson.M{"_id": revisionID}
+
+	result := c.collection(ColRevisions).FindOne(ctx, filter)
+
+	revisionInfo := &database.RevisionInfo{}
+	if err := result.Decode(revisionInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, database.ErrRevisionNotFound
+		}
+		return nil, fmt.Errorf("find revision by id %s: %w", revisionID, err)
+	}
+
+	return revisionInfo, nil
+}
+
+// DeleteRevisionInfo deletes a revision by its ID.
+func (c *Client) DeleteRevisionInfo(
+	ctx context.Context,
+	revisionID types.ID,
+) error {
+	filter := bson.M{"_id": revisionID}
+
+	result, err := c.collection(ColRevisions).DeleteOne(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("delete revision %s: %w", revisionID, err)
+	}
+
+	if result.DeletedCount == 0 {
+		return database.ErrRevisionNotFound
+	}
+
+	return nil
 }

@@ -745,3 +745,24 @@ func ToCacheType(cacheType types.CacheType) api.CacheType {
 
 	return api.CacheType_CACHE_TYPE_UNSPECIFIED
 }
+
+// ToRevisionSummary converts the given model format to Protobuf format.
+func ToRevisionSummary(revision *types.RevisionSummary) *api.RevisionSummary {
+	return &api.RevisionSummary{
+		Id:          revision.ID.String(),
+		Seq:         revision.Seq,
+		Label:       revision.Label,
+		Description: revision.Description,
+		Snapshot:    revision.Snapshot,
+		CreatedAt:   timestamppb.New(revision.CreatedAt),
+	}
+}
+
+// ToRevisionSummaries converts the given model format to Protobuf format.
+func ToRevisionSummaries(revisions []*types.RevisionSummary) []*api.RevisionSummary {
+	var pbRevisions []*api.RevisionSummary
+	for _, revision := range revisions {
+		pbRevisions = append(pbRevisions, ToRevisionSummary(revision))
+	}
+	return pbRevisions
+}

@@ -35,6 +35,10 @@ service YorkieService {
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
 
+  rpc CreateRevision (CreateRevisionRequest) returns (CreateRevisionResponse) {}
+  rpc ListRevisions (ListRevisionsRequest) returns (ListRevisionsResponse) {}
+  rpc RestoreRevision (RestoreRevisionRequest) returns (RestoreRevisionResponse) {}
+
   rpc AttachChannel (AttachChannelRequest) returns (AttachChannelResponse) {}
   rpc DetachChannel (DetachChannelRequest) returns (DetachChannelResponse) {}
   rpc RefreshChannel (RefreshChannelRequest) returns (RefreshChannelResponse) {}
@@ -118,6 +122,37 @@ message PushPullChangesRequest {
 
 message PushPullChangesResponse {
   ChangePack change_pack = 1;
+}
+
+message CreateRevisionRequest {
+  string client_id = 1;
+  string document_id = 2;
+  string label = 3;
+  string description = 4;
+}
+
+message CreateRevisionResponse {
+  RevisionSummary revision = 1;
+}
+
+message ListRevisionsRequest {
+  string project_id = 1;
+  string document_id = 2;
+  int32 page_size = 3;
+  int32 offset = 4;
+  bool is_forward = 5;
+}
+
+message ListRevisionsResponse {
+  repeated RevisionSummary revisions = 1;
+}
+
+message RestoreRevisionRequest {
+  string client_id = 1;
+  string revision_id = 2;
+}
+
+message RestoreRevisionResponse {
 }
 
 message AttachChannelRequest {

@@ -2258,3 +2258,197 @@ func (d *DB) IsSchemaAttached(
 
 	return false, nil
 }
+
+// CreateRevisionInfo creates a new revision for the given document.
+func (d *DB) CreateRevisionInfo(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	label string,
+	description string,
+	snapshot []byte,
+) (*database.RevisionInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Check if label already exists for this document (if label is provided)
+	if label != "" {
+		iter, err := txn.Get(
+			tblRevisions,
+			"doc_id_label",
+			docRefKey.DocID.String(),
+			label,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("check label: %w", err)
+		}
+		if iter.Next() != nil {
+			return nil, database.ErrRevisionAlreadyExists
+		}
+	}
+
+	// Get next sequence number for this document
+	iter, err := txn.Get(
+		tblRevisions,
+		"doc_id",
+		docRefKey.DocID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get revisions for seq: %w", err)
+	}
+
+	nextSeq := int64(1)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		revision := raw.(*database.RevisionInfo)
+		if revision.ProjectID == docRefKey.ProjectID && revision.Seq >= nextSeq {
+			nextSeq = revision.Seq + 1
+		}
+	}
+
+	now := gotime.Now()
+	revisionInfo := &database.RevisionInfo{
+		ID:          newID(),
+		ProjectID:   docRefKey.ProjectID,
+		DocID:       docRefKey.DocID,
+		Seq:         nextSeq,
+		Label:       label,
+		Description: description,
+		Snapshot:    snapshot,
+		CreatedAt:   now,
+	}
+
+	if err := txn.Insert(tblRevisions, revisionInfo); err != nil {
+		return nil, fmt.Errorf("insert revision: %w", err)
+	}
+
+	txn.Commit()
+	return revisionInfo.DeepCopy(), nil
+}
+
+// FindRevisionInfosByPaging returns the revisions of the given document by paging.
+func (d *DB) FindRevisionInfosByPaging(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	paging types.Paging[int],
+	includeSnapshot bool,
+) ([]*database.RevisionInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblRevisions,
+		"doc_id",
+		docRefKey.DocID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find revisions: %w", err)
+	}
+
+	var revisions []*database.RevisionInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		revision := raw.(*database.RevisionInfo)
+		if revision.ProjectID == docRefKey.ProjectID {
+			if !includeSnapshot {
+				revisionCopy := *revision
+				revisionCopy.Snapshot = nil
+				revisions = append(revisions, &revisionCopy)
+			} else {
+				revisions = append(revisions, revision.DeepCopy())
+			}
+		}
+	}
+
+	// Sort by seq descending (newest first)
+	sort.Slice(revisions, func(i, j int) bool {
+		if paging.IsForward {
+			return revisions[i].Seq < revisions[j].Seq
+		}
+		return revisions[i].Seq > revisions[j].Seq
+	})
+
+	// Apply paging
+	start := paging.Offset
+	if start > len(revisions) {
+		start = len(revisions)
+	}
+	end := start + paging.PageSize
+	if paging.PageSize == 0 || end > len(revisions) {
+		end = len(revisions)
+	}
+
+	return revisions[start:end], nil
+}
+
+// FindRevisionInfoByID returns a revision by its ID.
+func (d *DB) FindRevisionInfoByID(
+	_ context.Context,
+	revisionID types.ID,
+) (*database.RevisionInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblRevisions, "id", revisionID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find revision by id %s: %w", revisionID, err)
+	}
+	if raw == nil {
+		return nil, database.ErrRevisionNotFound
+	}
+
+	return raw.(*database.RevisionInfo).DeepCopy(), nil
+}
+
+// FindRevisionInfoByLabel returns a revision by its label.
+func (d *DB) FindRevisionInfoByLabel(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+	label string,
+) (*database.RevisionInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(
+		tblRevisions,
+		"doc_id_label",
+		docRefKey.DocID.String(),
+		label,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find revision by label %s: %w", label, err)
+	}
+
+	raw := iter.Next()
+	if raw == nil {
+		return nil, database.ErrRevisionNotFound
+	}
+
+	revision := raw.(*database.RevisionInfo)
+	if revision.ProjectID != docRefKey.ProjectID {
+		return nil, database.ErrRevisionNotFound
+	}
+
+	return revision.DeepCopy(), nil
+}
+
+// DeleteRevisionInfo deletes a revision by its ID.
+func (d *DB) DeleteRevisionInfo(
+	_ context.Context,
+	revisionID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblRevisions, "id", revisionID.String())
+	if err != nil {
+		return fmt.Errorf("find revision %s: %w", revisionID, err)
+	}
+	if raw == nil {
+		return database.ErrRevisionNotFound
+	}
+
+	if err := txn.Delete(tblRevisions, raw); err != nil {
+		return fmt.Errorf("delete revision %s: %w", revisionID, err)
+	}
+
+	txn.Commit()
+	return nil
+}

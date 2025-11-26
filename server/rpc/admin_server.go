@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/revisions"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 	"github.com/yorkie-team/yorkie/server/schemas"
@@ -819,4 +820,114 @@ func (s *adminServer) RotateProjectKeys(
 	return connect.NewResponse(&api.RotateProjectKeysResponse{
 		Project: converter.ToProject(project),
 	}), nil
+}
+
+// ListRevisionsByAdmin returns a list of revisions for the given document.
+func (s *adminServer) ListRevisionsByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.ListRevisionsByAdminRequest],
+) (*connect.Response[api.ListRevisionsByAdminResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	docRefKey := types.DocRefKey{
+		ProjectID: project.ID,
+		DocID:     docInfo.ID,
+	}
+
+	paging := types.Paging[int]{
+		Offset:    int(req.Msg.Offset),
+		PageSize:  int(req.Msg.PageSize),
+		IsForward: req.Msg.IsForward,
+	}
+
+	revisions, err := s.backend.DB.FindRevisionInfosByPaging(ctx, docRefKey, paging, false)
+	if err != nil {
+		return nil, err
+	}
+
+	var pbRevisions []*api.RevisionSummary
+	for _, rev := range revisions {
+		pbRevisions = append(pbRevisions, converter.ToRevisionSummary(rev.ToTypesRevisionSummary()))
+	}
+
+	return connect.NewResponse(&api.ListRevisionsByAdminResponse{
+		Revisions:  pbRevisions,
+		TotalCount: int32(len(pbRevisions)),
+	}), nil
+}
+
+// GetRevisionByAdmin returns a specific revision with its full snapshot data.
+func (s *adminServer) GetRevisionByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.GetRevisionByAdminRequest],
+) (*connect.Response[api.GetRevisionByAdminResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	revision, err := s.backend.DB.FindRevisionInfoByID(ctx, types.ID(req.Msg.RevisionId))
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify revision belongs to this document
+	if revision.ProjectID != project.ID || revision.DocID != docInfo.ID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("revision not found"))
+	}
+
+	return connect.NewResponse(&api.GetRevisionByAdminResponse{
+		Revision: converter.ToRevisionSummary(revision.ToTypesRevisionSummary()),
+	}), nil
+}
+
+// RestoreRevisionByAdmin restores a document to a specific revision by admin.
+func (s *adminServer) RestoreRevisionByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.RestoreRevisionByAdminRequest],
+) (*connect.Response[api.RestoreRevisionByAdminResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	revision, err := s.backend.DB.FindRevisionInfoByID(ctx, types.ID(req.Msg.RevisionId))
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify revision belongs to this document
+	if revision.ProjectID != project.ID || revision.DocID != docInfo.ID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("revision not found"))
+	}
+
+	if err := revisions.Restore(ctx, s.backend, project, revision.ID); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RestoreRevisionByAdminResponse{}), nil
 }

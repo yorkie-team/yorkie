@@ -36,18 +36,16 @@ service AdminService {
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
   rpc GetProjectStats(GetProjectStatsRequest) returns (GetProjectStatsResponse) {}
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
+  rpc RotateProjectKeys(RotateProjectKeysRequest) returns (RotateProjectKeysResponse) {}
 
   rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse) {}
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
   rpc GetDocuments (GetDocumentsRequest) returns (GetDocumentsResponse) {}
+  rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
   rpc UpdateDocument (UpdateDocumentRequest) returns (UpdateDocumentResponse) {}
   rpc RemoveDocumentByAdmin (RemoveDocumentByAdminRequest) returns (RemoveDocumentByAdminResponse) {}
   rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
-  rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
-
-  rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
-
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 
   rpc CreateSchema (CreateSchemaRequest) returns (CreateSchemaResponse) {}
@@ -56,9 +54,13 @@ service AdminService {
   rpc GetSchemas (GetSchemasRequest) returns (GetSchemasResponse) {}
   rpc RemoveSchema (RemoveSchemaRequest) returns (RemoveSchemaResponse) {}
 
-  rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
+  rpc ListRevisionsByAdmin (ListRevisionsByAdminRequest) returns (ListRevisionsByAdminResponse) {}
+  rpc GetRevisionByAdmin (GetRevisionByAdminRequest) returns (GetRevisionByAdminResponse) {}
+  rpc RestoreRevisionByAdmin (RestoreRevisionByAdminRequest) returns (RestoreRevisionByAdminResponse) {}
 
-  rpc RotateProjectKeys(RotateProjectKeysRequest) returns (RotateProjectKeysResponse) {}
+  rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
+
+  rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
 
 message SignUpRequest {
@@ -298,4 +300,36 @@ message RotateProjectKeysRequest {
 
 message RotateProjectKeysResponse {
   Project project = 1;
+}
+
+message ListRevisionsByAdminRequest {
+  string project_name = 1;
+  string document_key = 2;
+  int32 page_size = 3;
+  int32 offset = 4;
+  bool is_forward = 5;
+}
+
+message ListRevisionsByAdminResponse {
+  repeated RevisionSummary revisions = 1;
+  int32 total_count = 2;
+}
+
+message GetRevisionByAdminRequest {
+  string project_name = 1;
+  string document_key = 2;
+  string revision_id = 3;
+}
+
+message GetRevisionByAdminResponse {
+  RevisionSummary revision = 1;
+}
+
+message RestoreRevisionByAdminRequest {
+  string project_name = 1;
+  string document_key = 2;
+  string revision_id = 3;
+}
+
+message RestoreRevisionByAdminResponse {
 }

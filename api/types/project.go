@@ -105,6 +105,9 @@ type Project struct {
 	// RemoveOnDetach is the flag to remove the document on detach.
 	RemoveOnDetach bool `json:"remove_on_detach"`
 
+	// AutoRevisionEnabled is the flag to automatically create revisions during snapshot.
+	AutoRevisionEnabled bool `json:"auto_revision_enabled"`
+
 	// AllowedOrigins is the list of allowed origins.
 	AllowedOrigins []string `json:"allowed_origins"`
 

@@ -28,6 +28,7 @@ var (
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
+	tblRevisions      = "revisions"
 )
 
 var schema = &memdb.DBSchema{
@@ -293,6 +294,31 @@ var schema = &memdb.DBSchema{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "ServerSeq"},
+						},
+					},
+				},
+			},
+		},
+		tblRevisions: {
+			Name: tblRevisions,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"doc_id": {
+					Name:    "doc_id",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
+				},
+				"doc_id_label": {
+					Name:   "doc_id_label",
+					Unique: false,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.StringFieldIndex{Field: "Label"},
 						},
 					},
 				},

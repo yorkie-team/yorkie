@@ -94,6 +94,9 @@ type UpdatableProjectFields struct {
 	// RemoveOnDetach is the flag to remove the document on detach.
 	RemoveOnDetach *bool `bson:"remove_on_detach,omitempty" validate:"omitempty,boolean"`
 
+	// AutoRevisionEnabled is the flag to automatically create revisions during snapshot.
+	AutoRevisionEnabled *bool `bson:"auto_revision_enabled,omitempty" validate:"omitempty,boolean"`
+
 	// AllowedOrigins is the list of origins that are allowed to access the project.
 	AllowedOrigins *[]string `bson:"allowed_origins,omitempty" validate:"omitempty,dive,valid_origin"`
 }
@@ -120,6 +123,7 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.MaxAttachmentsPerDocument == nil &&
 		i.MaxSizePerDocument == nil &&
 		i.RemoveOnDetach == nil &&
+		i.AutoRevisionEnabled == nil &&
 		i.AllowedOrigins == nil {
 		return ErrEmptyProjectFields
 	}

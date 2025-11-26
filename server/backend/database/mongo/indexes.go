@@ -44,6 +44,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColRevisions represents the revisions collection in the database.
+	ColRevisions = "revisions"
 )
 
 // Collections represents the list of all collections in the database.
@@ -57,6 +59,7 @@ var Collections = []string{
 	ColChanges,
 	ColSnapshots,
 	ColVersionVectors,
+	ColRevisions,
 }
 
 type collectionInfo struct {
@@ -193,6 +196,26 @@ var collectionInfos = []collectionInfo{
 				{Key: "client_id", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
+		}},
+	}, {
+		name: ColRevisions,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
+				{Key: "project_id", Value: int32(1)},
+				{Key: "created_at", Value: int32(-1)},
+			},
+		}, {
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
+				{Key: "project_id", Value: int32(1)},
+				{Key: "label", Value: int32(1)},
+			},
+			Options: options.Index().
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{
+					"label": bson.M{"$exists": true, "$gt": ""},
+				}),
 		}},
 	},
 }

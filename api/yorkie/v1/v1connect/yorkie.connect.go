@@ -69,6 +69,15 @@ const (
 	// YorkieServiceWatchDocumentProcedure is the fully-qualified name of the YorkieService's
 	// WatchDocument RPC.
 	YorkieServiceWatchDocumentProcedure = "/yorkie.v1.YorkieService/WatchDocument"
+	// YorkieServiceCreateRevisionProcedure is the fully-qualified name of the YorkieService's
+	// CreateRevision RPC.
+	YorkieServiceCreateRevisionProcedure = "/yorkie.v1.YorkieService/CreateRevision"
+	// YorkieServiceListRevisionsProcedure is the fully-qualified name of the YorkieService's
+	// ListRevisions RPC.
+	YorkieServiceListRevisionsProcedure = "/yorkie.v1.YorkieService/ListRevisions"
+	// YorkieServiceRestoreRevisionProcedure is the fully-qualified name of the YorkieService's
+	// RestoreRevision RPC.
+	YorkieServiceRestoreRevisionProcedure = "/yorkie.v1.YorkieService/RestoreRevision"
 	// YorkieServiceAttachChannelProcedure is the fully-qualified name of the YorkieService's
 	// AttachChannel RPC.
 	YorkieServiceAttachChannelProcedure = "/yorkie.v1.YorkieService/AttachChannel"
@@ -94,6 +103,9 @@ type YorkieServiceClient interface {
 	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
 	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
 	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest]) (*connect.ServerStreamForClient[v1.WatchDocumentResponse], error)
+	CreateRevision(context.Context, *connect.Request[v1.CreateRevisionRequest]) (*connect.Response[v1.CreateRevisionResponse], error)
+	ListRevisions(context.Context, *connect.Request[v1.ListRevisionsRequest]) (*connect.Response[v1.ListRevisionsResponse], error)
+	RestoreRevision(context.Context, *connect.Request[v1.RestoreRevisionRequest]) (*connect.Response[v1.RestoreRevisionResponse], error)
 	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
 	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
 	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
@@ -146,6 +158,21 @@ func NewYorkieServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			baseURL+YorkieServiceWatchDocumentProcedure,
 			opts...,
 		),
+		createRevision: connect.NewClient[v1.CreateRevisionRequest, v1.CreateRevisionResponse](
+			httpClient,
+			baseURL+YorkieServiceCreateRevisionProcedure,
+			opts...,
+		),
+		listRevisions: connect.NewClient[v1.ListRevisionsRequest, v1.ListRevisionsResponse](
+			httpClient,
+			baseURL+YorkieServiceListRevisionsProcedure,
+			opts...,
+		),
+		restoreRevision: connect.NewClient[v1.RestoreRevisionRequest, v1.RestoreRevisionResponse](
+			httpClient,
+			baseURL+YorkieServiceRestoreRevisionProcedure,
+			opts...,
+		),
 		attachChannel: connect.NewClient[v1.AttachChannelRequest, v1.AttachChannelResponse](
 			httpClient,
 			baseURL+YorkieServiceAttachChannelProcedure,
@@ -183,6 +210,9 @@ type yorkieServiceClient struct {
 	removeDocument   *connect.Client[v1.RemoveDocumentRequest, v1.RemoveDocumentResponse]
 	pushPullChanges  *connect.Client[v1.PushPullChangesRequest, v1.PushPullChangesResponse]
 	watchDocument    *connect.Client[v1.WatchDocumentRequest, v1.WatchDocumentResponse]
+	createRevision   *connect.Client[v1.CreateRevisionRequest, v1.CreateRevisionResponse]
+	listRevisions    *connect.Client[v1.ListRevisionsRequest, v1.ListRevisionsResponse]
+	restoreRevision  *connect.Client[v1.RestoreRevisionRequest, v1.RestoreRevisionResponse]
 	attachChannel    *connect.Client[v1.AttachChannelRequest, v1.AttachChannelResponse]
 	detachChannel    *connect.Client[v1.DetachChannelRequest, v1.DetachChannelResponse]
 	refreshChannel   *connect.Client[v1.RefreshChannelRequest, v1.RefreshChannelResponse]
@@ -225,6 +255,21 @@ func (c *yorkieServiceClient) WatchDocument(ctx context.Context, req *connect.Re
 	return c.watchDocument.CallServerStream(ctx, req)
 }
 
+// CreateRevision calls yorkie.v1.YorkieService.CreateRevision.
+func (c *yorkieServiceClient) CreateRevision(ctx context.Context, req *connect.Request[v1.CreateRevisionRequest]) (*connect.Response[v1.CreateRevisionResponse], error) {
+	return c.createRevision.CallUnary(ctx, req)
+}
+
+// ListRevisions calls yorkie.v1.YorkieService.ListRevisions.
+func (c *yorkieServiceClient) ListRevisions(ctx context.Context, req *connect.Request[v1.ListRevisionsRequest]) (*connect.Response[v1.ListRevisionsResponse], error) {
+	return c.listRevisions.CallUnary(ctx, req)
+}
+
+// RestoreRevision calls yorkie.v1.YorkieService.RestoreRevision.
+func (c *yorkieServiceClient) RestoreRevision(ctx context.Context, req *connect.Request[v1.RestoreRevisionRequest]) (*connect.Response[v1.RestoreRevisionResponse], error) {
+	return c.restoreRevision.CallUnary(ctx, req)
+}
+
 // AttachChannel calls yorkie.v1.YorkieService.AttachChannel.
 func (c *yorkieServiceClient) AttachChannel(ctx context.Context, req *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error) {
 	return c.attachChannel.CallUnary(ctx, req)
@@ -259,6 +304,9 @@ type YorkieServiceHandler interface {
 	RemoveDocument(context.Context, *connect.Request[v1.RemoveDocumentRequest]) (*connect.Response[v1.RemoveDocumentResponse], error)
 	PushPullChanges(context.Context, *connect.Request[v1.PushPullChangesRequest]) (*connect.Response[v1.PushPullChangesResponse], error)
 	WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest], *connect.ServerStream[v1.WatchDocumentResponse]) error
+	CreateRevision(context.Context, *connect.Request[v1.CreateRevisionRequest]) (*connect.Response[v1.CreateRevisionResponse], error)
+	ListRevisions(context.Context, *connect.Request[v1.ListRevisionsRequest]) (*connect.Response[v1.ListRevisionsResponse], error)
+	RestoreRevision(context.Context, *connect.Request[v1.RestoreRevisionRequest]) (*connect.Response[v1.RestoreRevisionResponse], error)
 	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
 	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
 	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
@@ -307,6 +355,21 @@ func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOp
 		svc.WatchDocument,
 		opts...,
 	)
+	yorkieServiceCreateRevisionHandler := connect.NewUnaryHandler(
+		YorkieServiceCreateRevisionProcedure,
+		svc.CreateRevision,
+		opts...,
+	)
+	yorkieServiceListRevisionsHandler := connect.NewUnaryHandler(
+		YorkieServiceListRevisionsProcedure,
+		svc.ListRevisions,
+		opts...,
+	)
+	yorkieServiceRestoreRevisionHandler := connect.NewUnaryHandler(
+		YorkieServiceRestoreRevisionProcedure,
+		svc.RestoreRevision,
+		opts...,
+	)
 	yorkieServiceAttachChannelHandler := connect.NewUnaryHandler(
 		YorkieServiceAttachChannelProcedure,
 		svc.AttachChannel,
@@ -348,6 +411,12 @@ func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOp
 			yorkieServicePushPullChangesHandler.ServeHTTP(w, r)
 		case YorkieServiceWatchDocumentProcedure:
 			yorkieServiceWatchDocumentHandler.ServeHTTP(w, r)
+		case YorkieServiceCreateRevisionProcedure:
+			yorkieServiceCreateRevisionHandler.ServeHTTP(w, r)
+		case YorkieServiceListRevisionsProcedure:
+			yorkieServiceListRevisionsHandler.ServeHTTP(w, r)
+		case YorkieServiceRestoreRevisionProcedure:
+			yorkieServiceRestoreRevisionHandler.ServeHTTP(w, r)
 		case YorkieServiceAttachChannelProcedure:
 			yorkieServiceAttachChannelHandler.ServeHTTP(w, r)
 		case YorkieServiceDetachChannelProcedure:
@@ -393,6 +462,18 @@ func (UnimplementedYorkieServiceHandler) PushPullChanges(context.Context, *conne
 
 func (UnimplementedYorkieServiceHandler) WatchDocument(context.Context, *connect.Request[v1.WatchDocumentRequest], *connect.ServerStream[v1.WatchDocumentResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.WatchDocument is not implemented"))
+}
+
+func (UnimplementedYorkieServiceHandler) CreateRevision(context.Context, *connect.Request[v1.CreateRevisionRequest]) (*connect.Response[v1.CreateRevisionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.CreateRevision is not implemented"))
+}
+
+func (UnimplementedYorkieServiceHandler) ListRevisions(context.Context, *connect.Request[v1.ListRevisionsRequest]) (*connect.Response[v1.ListRevisionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.ListRevisions is not implemented"))
+}
+
+func (UnimplementedYorkieServiceHandler) RestoreRevision(context.Context, *connect.Request[v1.RestoreRevisionRequest]) (*connect.Response[v1.RestoreRevisionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.RestoreRevision is not implemented"))
 }
 
 func (UnimplementedYorkieServiceHandler) AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error) {
