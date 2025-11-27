@@ -77,7 +77,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
-		if err := s.backend.MsgBroker.Produce(
+		if err := s.backend.MsgBrokers.UserEvents().Produce(
 			ctx,
 			messagebroker.UserEventMessage{
 				UserID:    userID,

@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -41,6 +42,24 @@ type UserEventMessage struct {
 	UserAgent string                 `json:"user_agent"`
 }
 
+// ChannelEventsMessage represents a message for channel events
+type ChannelEventsMessage struct {
+	ProjectID  string                  `json:"project_id"`
+	EventType  events.ChannelEventType `json:"event_type"`
+	Timestamp  time.Time               `json:"timestamp"`
+	ChannelKey string                  `json:"channel_key"`
+}
+
+// SessionEventsMessage represents a message for session events
+type SessionEventsMessage struct {
+	ProjectID  string                  `json:"project_id"`
+	SessionID  string                  `json:"session_id"`
+	Timestamp  time.Time               `json:"timestamp"`
+	UserID     string                  `json:"user_id"`
+	ChannelKey string                  `json:"channel_key"`
+	EventType  events.ChannelEventType `json:"event_type"`
+}
+
 // Marshal marshals the user event message to JSON.
 func (m UserEventMessage) Marshal() ([]byte, error) {
 	encoded, err := json.Marshal(m)
@@ -51,6 +70,57 @@ func (m UserEventMessage) Marshal() ([]byte, error) {
 	return encoded, nil
 }
 
+// Marshal marshals the channel events message to JSON.
+func (m ChannelEventsMessage) Marshal() ([]byte, error) {
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+
+	return encoded, nil
+}
+
+// Marshal marshals the session events message to JSON.
+func (m SessionEventsMessage) Marshal() ([]byte, error) {
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+
+	return encoded, nil
+}
+
+// Brokers manages message brokers for different event types.
+type Brokers struct {
+	userEvents    Broker
+	channelEvents Broker
+	sessionEvents Broker
+}
+
+// UserEvents returns the broker for user events.
+func (b *Brokers) UserEvents() Broker {
+	return b.userEvents
+}
+
+// ChannelEvents returns the broker for channel events.
+func (b *Brokers) ChannelEvents() Broker {
+	return b.channelEvents
+}
+
+// SessionEvents returns the broker for session events.
+func (b *Brokers) SessionEvents() Broker {
+	return b.sessionEvents
+}
+
+// NewBrokers creates a new Brokers instance with the given brokers.
+func NewBrokers(user, channel, session Broker) *Brokers {
+	return &Brokers{
+		userEvents:    user,
+		channelEvents: channel,
+		sessionEvents: session,
+	}
+}
+
 // Broker is an interface for the message broker.
 type Broker interface {
 	Produce(ctx context.Context, msg Message) error
@@ -58,20 +128,60 @@ type Broker interface {
 }
 
 // Ensure creates a message broker based on the given configuration.
-func Ensure(kafkaConf *Config) Broker {
+// If the configuration is nil or invalid, it returns a Brokers instance with
+// DummyBroker for all fields, allowing callers to use the brokers without nil checks.
+func Ensure(kafkaConf *Config) *Brokers {
+	dummy := &DummyBroker{}
+
 	if kafkaConf == nil {
-		return &DummyBroker{}
+		return &Brokers{
+			userEvents:    dummy,
+			channelEvents: dummy,
+			sessionEvents: dummy,
+		}
 	}
 
 	if err := kafkaConf.Validate(); err != nil {
-		return &DummyBroker{}
+		logging.DefaultLogger().Warnf("invalid kafka configuration: %v", err)
+		return &Brokers{
+			userEvents:    dummy,
+			channelEvents: dummy,
+			sessionEvents: dummy,
+		}
+	}
+
+	var topics []string
+	if kafkaConf.UserEventsTopic != "" {
+		topics = append(topics, kafkaConf.UserEventsTopic)
+	}
+	if kafkaConf.ChannelEventsTopic != "" {
+		topics = append(topics, kafkaConf.ChannelEventsTopic)
+	}
+	if kafkaConf.SessionEventsTopic != "" {
+		topics = append(topics, kafkaConf.SessionEventsTopic)
 	}
 
 	logging.DefaultLogger().Infof(
-		"connecting to kafka: %s, topic: %s",
+		"connecting to kafka: %s, topics: %s",
 		kafkaConf.Addresses,
-		kafkaConf.Topic,
+		strings.Join(topics, ","),
 	)
 
-	return newKafkaBroker(kafkaConf)
+	brokers := &Brokers{
+		userEvents:    dummy,
+		channelEvents: dummy,
+		sessionEvents: dummy,
+	}
+
+	if kafkaConf.UserEventsTopic != "" {
+		brokers.userEvents = newKafkaBroker(kafkaConf, kafkaConf.UserEventsTopic)
+	}
+	if kafkaConf.ChannelEventsTopic != "" {
+		brokers.channelEvents = newKafkaBroker(kafkaConf, kafkaConf.ChannelEventsTopic)
+	}
+	if kafkaConf.SessionEventsTopic != "" {
+		brokers.sessionEvents = newKafkaBroker(kafkaConf, kafkaConf.SessionEventsTopic)
+	}
+
+	return brokers
 }
