@@ -7,7 +7,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.39] - 2025-11-27
+
+- Add document revision management by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1582
 - Update Kafka and MongoDB to use legacy Bitnami by @hackerwins
+- Update Docker Compose configuration for Yorkie Analytics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1576
 - Add channel metrics and heap-based top-N session tracking by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1569
 
 ## [v0.6.38] - 2025-11-14
