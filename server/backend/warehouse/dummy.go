@@ -36,6 +36,36 @@ func (w *DummyWarehouse) GetActiveUsersCount(id types.ID, from, to time.Time) (i
 	return 0, nil
 }
 
+// GetActiveChannels does nothing.
+func (w *DummyWarehouse) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	return nil, nil
+}
+
+// GetActiveChannelsCount does nothing.
+func (w *DummyWarehouse) GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error) {
+	return 0, nil
+}
+
+// GetSessions does nothing.
+func (w *DummyWarehouse) GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	return nil, nil
+}
+
+// GetSessionsCount does nothing.
+func (w *DummyWarehouse) GetSessionsCount(id types.ID, from, to time.Time) (int, error) {
+	return 0, nil
+}
+
+// GetPeakSessionsPerChannel does nothing.
+func (w *DummyWarehouse) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	return nil, nil
+}
+
+// GetPeakSessionsPerChannelCount does nothing.
+func (w *DummyWarehouse) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error) {
+	return 0, nil
+}
+
 // GetDocs does nothing.
 func (w *DummyWarehouse) Close() error {
 	return nil

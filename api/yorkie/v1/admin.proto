@@ -146,6 +146,12 @@ message GetProjectStatsResponse {
   repeated MetricPoint active_users = 2;
   int64 documents_count = 3;
   int64 clients_count = 4;
+  int32 active_channels_count = 5;
+  repeated MetricPoint active_channels = 6;
+  int32 sessions_count = 7;
+  repeated MetricPoint sessions = 8;
+  int32 peak_sessions_per_channel_count = 9;
+  repeated MetricPoint peak_sessions_per_channel = 10;
 }
 
 message CreateDocumentRequest {

@@ -38,6 +38,24 @@ type Warehouse interface {
 
 	// GetActiveUsersCount returns the active users count of the given project.
 	GetActiveUsersCount(id types.ID, from, to time.Time) (int, error)
+
+	// GetActiveChannels returns the active channels of the given project.
+	GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+
+	// GetActiveChannelsCount returns the active channels count of the given project.
+	GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error)
+
+	// GetSessions returns the sessions of the given project.
+	GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+
+	// GetSessionsCount returns the sessions count of the given project.
+	GetSessionsCount(id types.ID, from, to time.Time) (int, error)
+
+	// GetPeakSessionsPerChannel returns the peak sessions per channel of the given project.
+	GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+
+	// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
+	GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error)
 }
 
 // Ensure creates a warehouse instance.

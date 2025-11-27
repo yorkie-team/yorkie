@@ -78,7 +78,7 @@ type Backend struct {
 	// DB is the database instance.
 	DB database.Database
 	// MsgBroker is the message producer instance.
-	MsgBroker messagebroker.Broker
+	MsgBrokers *messagebroker.Brokers
 	// Warehouse is the warehouse instance.
 	Warehouse warehouse.Warehouse
 }
@@ -116,25 +116,14 @@ func New(
 	lockers := sync.New()
 	pubsub := pubsub.New()
 
-	// 03. Create the presence manager for real-time user tracking and background
-	// task manager.
-	presenceManager := channel.NewManager(
-		pubsub,
-		conf.ParsePresenceTTL(),
-		conf.ParsePresenceCleanupInterval(),
-		&channel.Metrics{
-			Hostname: conf.Hostname,
-			Metrics:  metrics,
-		},
-	)
 	bg := background.New(metrics)
 
-	// 04. Create webhook clients and cluster client pool.
+	// 03. Create webhook clients and cluster client pool.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
 	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
 	clusterClientPool := cluster.NewClientPool()
 
-	// 05. Create the database instance. If the MongoDB configuration is given,
+	// 04. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var db database.Database
 	if mongoConf != nil {
@@ -149,21 +138,34 @@ func New(
 		}
 	}
 
-	// 06. Create the membership manager and the housekeeping instance.
+	// 05. Create the membership manager and the housekeeping instance.
 	membership := membership.New(db, conf.RPCAddr, membershipConf)
 	housekeeper, err := housekeeping.New(housekeepingConf, membership)
 	if err != nil {
 		return nil, err
 	}
 
-	// 07. Create the message broker instance.
-	broker := messagebroker.Ensure(kafkaConf)
+	// 06. Create the message broker instance.
+	brokers := messagebroker.Ensure(kafkaConf)
 
-	// 08. Ensure the warehouse instance.
+	// 07. Ensure the warehouse instance.
 	warehouse, err := warehouse.Ensure(rocksConf)
 	if err != nil {
 		return nil, err
 	}
+
+	// 08. Create the presence manager for real-time user tracking and background
+	// task manager.
+	presenceManager := channel.NewManager(
+		pubsub,
+		conf.ParsePresenceTTL(),
+		conf.ParsePresenceCleanupInterval(),
+		&channel.Metrics{
+			Hostname: conf.Hostname,
+			Metrics:  metrics,
+		},
+		brokers,
+	)
 
 	// 09. Ensure the default user and project. If the default user and project
 	// do not exist, create them.
@@ -200,10 +202,10 @@ func New(
 		EventWebhookManager: eventWebhookManger,
 		ClusterClientPool:   clusterClientPool,
 
-		Metrics:   metrics,
-		DB:        db,
-		MsgBroker: broker,
-		Warehouse: warehouse,
+		Metrics:    metrics,
+		DB:         db,
+		MsgBrokers: brokers,
+		Warehouse:  warehouse,
 	}, nil
 }
 
@@ -242,8 +244,16 @@ func (b *Backend) Shutdown() error {
 	b.EventWebhookManager.Close()
 	b.ClusterClientPool.Close()
 
-	if err := b.MsgBroker.Close(); err != nil {
-		errs = append(errs, err)
+	if b.MsgBrokers != nil {
+		if err := b.MsgBrokers.UserEvents().Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := b.MsgBrokers.ChannelEvents().Close(); err != nil {
+			errs = append(errs, err)
+		}
+		if err := b.MsgBrokers.SessionEvents().Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if err := b.Warehouse.Close(); err != nil {
 		errs = append(errs, err)

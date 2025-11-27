@@ -33,6 +33,24 @@ type ProjectStats struct {
 	// ActiveUsersCount is the number of active users in the project.
 	ActiveUsersCount int `json:"active_users_count"`
 
+	// ActiveChannels is the number of active channels in the project.
+	ActiveChannels []MetricPoint `json:"active_channels"`
+
+	// ActiveChannelsCount is the number of active channels in the project.
+	ActiveChannelsCount int `json:"active_channels_count"`
+
+	// Sessions is the number of sessions in the project.
+	Sessions []MetricPoint `json:"sessions"`
+
+	// SessionsCount is the number of sessions in the project.
+	SessionsCount int `json:"sessions_count"`
+
+	// PeakSessionsPerChannel is the peak sessions per channel in the project.
+	PeakSessionsPerChannel []MetricPoint `json:"peak_sessions_per_channel"`
+
+	// PeakSessionsPerChannelCount is the peak sessions per channel count in the project.
+	PeakSessionsPerChannelCount int `json:"peak_sessions_per_channel_count"`
+
 	// DocumentsCount is the number of documents in the project.
 	DocumentsCount int64 `json:"documents_count"`
 
