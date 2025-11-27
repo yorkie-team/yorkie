@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Update revision creation with YSON format by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1584
+
 ## [v0.6.39] - 2025-11-27
 
 - Add document revision management by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1582
