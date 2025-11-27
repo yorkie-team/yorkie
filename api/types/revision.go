@@ -39,8 +39,7 @@ type RevisionSummary struct {
 
 	// Snapshot is the serialized document content (YSON format) at this revision point.
 	// This contains only the pure data without CRDT metadata.
-	// This field may be nil when listing revisions (for efficiency).
-	Snapshot []byte
+	Snapshot string
 
 	// CreatedAt is the time when this revision was created.
 	CreatedAt time.Time

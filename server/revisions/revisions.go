@@ -45,24 +45,32 @@ func Create(
 	// Find the document info
 	docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docRefKey)
 	if err != nil {
-		return nil, fmt.Errorf("find document: %w", err)
+		return nil, fmt.Errorf("create revision of %s: %w", docRefKey, err)
 	}
 
 	// Build the internal document at the current server sequence
 	doc, err := packs.BuildInternalDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 	if err != nil {
-		return nil, fmt.Errorf("build document: %w", err)
+		return nil, fmt.Errorf("create revision of %s: %w", docRefKey, err)
 	}
 
 	// Generate snapshot from the root object (YSON format)
-	snapshot := []byte(doc.RootObject().Marshal())
+	ysonRoot, err := yson.FromCRDT(doc.RootObject())
+	if err != nil {
+		return nil, fmt.Errorf("create revision of %s: %w", docRefKey, err)
+	}
+	ysonObj := ysonRoot.(yson.Object)
+	snapshot, err := ysonObj.Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("create revision of %s: %w", docRefKey, err)
+	}
 
 	revision, err := be.DB.CreateRevisionInfo(
 		ctx,
 		docRefKey,
 		label,
 		description,
-		snapshot,
+		[]byte(snapshot),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create revision: %w", err)
