@@ -60,7 +60,7 @@ func (r *RevisionInfo) ToTypesRevisionSummary() *types.RevisionSummary {
 		Seq:         r.Seq,
 		Label:       r.Label,
 		Description: r.Description,
-		Snapshot:    r.Snapshot,
+		Snapshot:    string(r.Snapshot),
 		CreatedAt:   r.CreatedAt,
 	}
 }

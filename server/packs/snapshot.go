@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -254,7 +255,15 @@ func storeSnapshot(
 		logging.From(ctx).Warnf("failed to find project for auto revision: %v", err)
 	} else if projectInfo.AutoRevisionEnabled {
 		// Generate snapshot from the root object (YSON format)
-		snapshot := []byte(doc.RootObject().Marshal())
+		ysonRoot, err := yson.FromCRDT(doc.RootObject())
+		if err != nil {
+			logging.From(ctx).Warnf("create revision of %s: %v", docRefKey, err)
+		}
+		ysonObj := ysonRoot.(yson.Object)
+		snapshot, err := ysonObj.Marshal()
+		if err != nil {
+			logging.From(ctx).Warnf("create revision of %s: %v", docRefKey, err)
+		}
 
 		// Create auto revision with timestamp-based label
 		label := fmt.Sprintf("auto-%d", doc.Checkpoint().ServerSeq)
@@ -265,7 +274,7 @@ func storeSnapshot(
 			docRefKey,
 			label,
 			description,
-			snapshot,
+			[]byte(snapshot),
 		); err != nil {
 			// Log error but don't fail the snapshot creation
 			logging.From(ctx).Warnf("failed to create auto revision: %v", err)

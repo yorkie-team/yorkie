@@ -2865,7 +2865,6 @@ components:
         snapshot:
           additionalProperties: false
           description: ""
-          format: byte
           title: snapshot
           type: string
       title: RevisionSummary

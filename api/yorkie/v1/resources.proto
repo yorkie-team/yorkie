@@ -483,6 +483,6 @@ message RevisionSummary {
   int64 seq = 2;
   string label = 3;
   string description = 4;
-  bytes snapshot = 5;
+  string snapshot = 5;
   google.protobuf.Timestamp created_at = 6;
 }
