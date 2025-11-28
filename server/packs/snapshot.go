@@ -35,6 +35,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+var (
+	// ErrUnexpectedRevisionType is returned when the revision type is unexpected.
+	ErrUnexpectedRevisionType = fmt.Errorf("unexpected revision type")
+)
+
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
 func SnapshotKey(projectID types.ID, docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("snapshot-%s-%s", projectID, docKey))
@@ -280,7 +285,10 @@ func storeRevision(
 	if err != nil {
 		return fmt.Errorf("store revision of %s: %w", docRefKey, err)
 	}
-	ysonObj := ysonRoot.(yson.Object)
+	ysonObj, ok := ysonRoot.(yson.Object)
+	if !ok {
+		return fmt.Errorf("store revision of %s: %w", docRefKey, ErrUnexpectedRevisionType)
+	}
 	snapshot, err := ysonObj.Marshal()
 	if err != nil {
 		return fmt.Errorf("store revision of %s: %w", docRefKey, err)

@@ -260,12 +260,12 @@ func TestRevision(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 06. Verify at least one auto revision was created
-		// Check that auto revision labels start with "auto-"
+		// Check that auto revision labels start with "snapshot-"
 		foundAutoRevision := false
 		for _, rev := range revs {
-			if strings.HasPrefix(rev.Label, "auto-") {
+			if strings.HasPrefix(rev.Label, "snapshot-") {
 				foundAutoRevision = true
-				assert.Contains(t, rev.Description, "Auto-created revision")
+				assert.Contains(t, rev.Description, "Auto created revision")
 				break
 			}
 		}

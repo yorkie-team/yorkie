@@ -726,6 +726,11 @@ components:
           description: ""
           title: auth_webhook_url
           type: string
+        autoRevisionEnabled:
+          additionalProperties: false
+          description: ""
+          title: auto_revision_enabled
+          type: boolean
         clientDeactivateThreshold:
           additionalProperties: false
           description: ""
