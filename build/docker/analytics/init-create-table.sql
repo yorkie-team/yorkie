@@ -2,7 +2,7 @@ CREATE DATABASE IF NOT EXISTS yorkie;
 
 USE yorkie;
 
-CREATE TABLE user_events (
+CREATE TABLE IF NOT EXISTS user_events (
     user_id VARCHAR(64),
     timestamp DATETIME, 
     event_type VARCHAR(32),
@@ -15,7 +15,7 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
-CREATE TABLE channel_events (
+CREATE TABLE IF NOT EXISTS channel_events (
     project_id VARCHAR(64),
     channel_key VARCHAR(128),
     timestamp DATETIME,
@@ -27,7 +27,7 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
-CREATE TABLE session_events (
+CREATE TABLE IF NOT EXISTS session_events (
     project_id VARCHAR(64),
     session_id VARCHAR(64),
     timestamp DATETIME,
