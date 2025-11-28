@@ -194,15 +194,15 @@ func (m *Manager) Attach(
 		func(val *cmap.Map[types.ID, *Session], exists bool) *cmap.Map[types.ID, *Session] {
 			if !exists {
 				val = cmap.New[types.ID, *Session]()
-			}
 
-			if err := m.brokers.ChannelEvents().Produce(ctx, messagebroker.ChannelEventsMessage{
-				ProjectID:  key.ProjectID.String(),
-				EventType:  events.ChannelCreated,
-				Timestamp:  gotime.Now(),
-				ChannelKey: key.ChannelKey.String(),
-			}); err != nil {
-				logging.From(ctx).Errorf("failed to produce channel event: %v", err)
+				if err := m.brokers.ChannelEvents().Produce(ctx, messagebroker.ChannelEventsMessage{
+					ProjectID:  key.ProjectID.String(),
+					EventType:  events.ChannelCreated,
+					Timestamp:  gotime.Now(),
+					ChannelKey: key.ChannelKey.String(),
+				}); err != nil {
+					logging.From(ctx).Errorf("failed to produce channel event: %v", err)
+				}
 			}
 
 			return val
