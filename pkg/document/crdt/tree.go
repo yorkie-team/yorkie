@@ -342,9 +342,10 @@ func (n *TreeNode) SplitText(
 	}, n.Type(), nil, string(rightRune))
 	rightNode.removedAt = n.removedAt
 
-	if err := n.Index.Parent.InsertAfterInternal(
+	if err := n.Index.Parent.InsertAfter(
 		rightNode.Index,
 		n.Index,
+		false,
 	); err != nil {
 		return nil, diff, err
 	}
@@ -377,11 +378,9 @@ func (n *TreeNode) SplitElement(
 	// TODO(raararaara): We need to check if the attributes are copied correctly when splitting elements.
 	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), nil)
 	split.removedAt = n.removedAt
-	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
+	if err := n.Index.Parent.InsertAfter(split.Index, n.Index, true); err != nil {
 		return nil, diff, err
 	}
-	split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
-	split.Index.UpdateAncestorsLength(split.Index.PaddedLength(true), true)
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
@@ -516,7 +515,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 
 // InsertAfter inserts the given node after the given leftSibling.
 func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
-	return n.Index.InsertAfter(content.Index, children.Index)
+	return n.Index.InsertAfter(content.Index, children.Index, true)
 }
 
 // SetAttr sets the given attribute of the element.

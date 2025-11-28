@@ -21,7 +21,6 @@ package index
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 )
 
@@ -218,8 +217,8 @@ func tokensBetween[V Value](
 			}
 			if err := tokensBetween(
 				child,
-				int(math.Max(0, float64(fromChild))),
-				int(math.Min(float64(toChild), float64(childLength))),
+				max(0, fromChild),
+				min(toChild, childLength),
 				callback,
 				include,
 			); err != nil {
@@ -438,26 +437,6 @@ func (n *Node[V]) Child(index int) (*Node[V], error) {
 	return nil, ErrChildNotFound
 }
 
-// InsertAfterInternal inserts the given node after the given child.
-// This method does not update the size of the ancestors.
-func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-
-	offset, err := n.FindOffsetOfChild(prevNode, true)
-	if err != nil {
-		return err
-	}
-
-	// TODO(hackerwins, krapie): Needs to inspect this code later
-	n.children = append(n.children[:offset+1], n.children[offset:]...)
-	n.children[offset+1] = newNode
-	newNode.Parent = n
-
-	return nil
-}
-
 // nextSibling returns the next sibling of the node.
 func (n *Node[V]) nextSibling() (*Node[V], error) {
 	offset, err := n.Parent.FindOffsetOfChild(n)
@@ -548,19 +527,15 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 		return ErrInvalidMethodCallForTextNode
 	}
 
-	if err := n.insertAtInternal(newNode, offset); err != nil {
+	if err := n.insertAtInternal(newNode, offset, true); err != nil {
 		return err
 	}
-
-	newNode.UpdateAncestorsLength(newNode.PaddedLength())
-	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
-
 	return nil
 }
 
 // insertAtInternal inserts the given node at the given index.
-// This method does not update the size of the ancestors.
-func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
+// If updateAncestorLen is true, it updates the size of the ancestors.
+func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int, updateAncestorLen bool) error {
 	if n.IsText() {
 		return ErrInvalidMethodCallForTextNode
 	}
@@ -574,6 +549,10 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 	}
 	newNode.Parent = n
 
+	if updateAncestorLen {
+		newNode.UpdateAncestorsLength(newNode.PaddedLength())
+		newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
+	}
 	return nil
 }
 
@@ -610,36 +589,28 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 }
 
 // InsertBefore inserts the given node before the given child.
-func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
+func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V], updateAncestorLen bool) error {
 	offset, err := n.FindOffsetOfChild(referenceNode, true)
 	if err != nil {
 		return err
 	}
 
-	if err := n.insertAtInternal(newNode, offset); err != nil {
+	if err := n.insertAtInternal(newNode, offset, updateAncestorLen); err != nil {
 		return err
 	}
-
-	newNode.UpdateAncestorsLength(newNode.PaddedLength())
-	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
-
 	return nil
 }
 
 // InsertAfter inserts the given node after the given child.
-func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
+func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V], updateAncestorLen bool) error {
 	offset, err := n.FindOffsetOfChild(referenceNode, true)
 	if err != nil {
 		return err
 	}
 
-	if err := n.insertAtInternal(newNode, offset+1); err != nil {
+	if err := n.insertAtInternal(newNode, offset+1, updateAncestorLen); err != nil {
 		return err
 	}
-
-	newNode.UpdateAncestorsLength(newNode.PaddedLength())
-	newNode.UpdateAncestorsLength(newNode.PaddedLength(true), true)
-
 	return nil
 }
 
