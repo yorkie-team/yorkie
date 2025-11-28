@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: starrocks
     app.kubernetes.io/part-of: yorkie-analytics
 data:
-  init-user-events-db.sql: |
+  init-create-table.sql: |
     CREATE DATABASE IF NOT EXISTS yorkie;
 
     USE yorkie;
@@ -23,11 +23,38 @@ data:
     DUPLICATE KEY(user_id)  
     DISTRIBUTED BY HASH(user_id) BUCKETS 10
     PROPERTIES (  
-        "replication_num" = "1"  
+        "replication_num" = "1"
     );
 
-  init-routine-load.sql: |
-    CREATE ROUTINE LOAD yorkie.events ON user_events
+    CREATE TABLE channel_events (
+        project_id VARCHAR(64),
+        channel_key VARCHAR(128),
+        timestamp DATETIME,
+        event_type VARCHAR(32)
+    ) ENGINE = OLAP
+    DUPLICATE KEY(project_id, channel_key, timestamp)
+    DISTRIBUTED BY HASH(project_id) BUCKETS 16
+    PROPERTIES (
+        "replication_num" = "1"
+    );
+
+    CREATE TABLE session_events (
+        project_id VARCHAR(64),
+        session_id VARCHAR(64),
+        timestamp DATETIME,
+        user_id VARCHAR(64),
+        channel_key VARCHAR(128),
+        event_type VARCHAR(32)
+    ) ENGINE = OLAP
+    DUPLICATE KEY(project_id, session_id, timestamp)
+    DISTRIBUTED BY HASH(project_id) BUCKETS 16
+    PROPERTIES (
+        "replication_num" = "1"
+    );
+
+
+  init-create-routine-load.sql: |
+    CREATE ROUTINE LOAD yorkie.user_events ON user_events
     PROPERTIES
     (
         "format" = "JSON",
@@ -36,8 +63,34 @@ data:
     FROM KAFKA
     (   
         "kafka_broker_list" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-broker-list" }}",
-        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-topic" }}",
-        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "property-group-id" }}"
+        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-user-events" "topic" }}",
+        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-user-events" "property-group-id" }}"
+    );
+
+    CREATE ROUTINE LOAD yorkie.channel_events ON channel_events
+    PROPERTIES
+    (
+        "format" = "JSON",
+        "desired_concurrent_number"="1"
+    )
+    FROM KAFKA
+    (
+        "kafka_broker_list" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-broker-list" }}",
+        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-channel-events" "topic" }}",
+        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-channel-events" "property-group-id" }}"
+    );
+
+    CREATE ROUTINE LOAD yorkie.session_events ON session_events
+    PROPERTIES
+    (
+        "format" = "JSON",
+        "desired_concurrent_number"="1"
+    )
+    FROM KAFKA
+    (
+        "kafka_broker_list" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-broker-list" }}",
+        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-session-events" "topic" }}",
+        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-session-events" "property-group-id" }}"
     );
 
   init-starrocks-database.sh: |
@@ -52,7 +105,7 @@ data:
 
 
     echo -e 'Creating Yorkie database, tables and routine load'
-    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-user-events-db.sql
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-create-table.sql
 
     echo -e 'Checking Yorkie database'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show databases\G'
@@ -61,15 +114,32 @@ data:
     echo -e 'Checking user_event table'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: channel_events' || echo -e 'channel_events table not found'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: session_events' || echo -e 'session_events table not found'
 
 
     sleep 5s
     echo -e 'Creating routine load'
-    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-routine-load.sql
+    if mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root < /etc/config/init-create-routine-load.sql 2>/dev/null; then
+      echo -e 'Successfully created routine loads'
+    else
+      echo -e 'Routine loads may already exist, continuing...'
+    fi
 
     sleep 10s
-    echo -e 'Checking event routine load'
-
+    echo -e 'Checking and resuming routine loads if needed'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G'
-    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G' | grep -E "State: NEED_SCHEDULE|State: RUNNING" || echo -e 'Routine load is not running'
+
+    routine_loads=(yorkie.user_events yorkie.channel_events yorkie.session_events)
+    for routine_load in ${routine_loads[@]}; do
+      state=$(mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "show routine load for $routine_load\G" 2>/dev/null | grep State: | sed 's/.*State: //')
+      echo "Routine load $routine_load state: $state"
+      if [ "$state" = "PAUSED" ]; then
+        echo "Resuming routine load: $routine_load"
+        mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "RESUME ROUTINE LOAD FOR $routine_load;"
+      fi
+    done
+
+    echo -e 'Final routine load status:'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G'
 {{- end }}

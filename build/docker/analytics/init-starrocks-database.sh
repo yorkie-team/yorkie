@@ -37,8 +37,7 @@ sleep 10s
 echo -e 'Checking and resuming routine loads if needed'
 mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\G'
 
-# variable
-routine_loads=(yorkie.events yorkie.channel_events yorkie.session_events)
+routine_loads=(yorkie.user_events yorkie.channel_events yorkie.session_events)
 for routine_load in ${routine_loads[@]}; do
   state=$(mysql -h starrocks-fe -P 9030 -u root -e "show routine load for $routine_load\G" 2>/dev/null | grep State: | sed 's/.*State: //')
   echo "Routine load $routine_load state: $state"

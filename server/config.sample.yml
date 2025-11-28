@@ -150,8 +150,14 @@ Kafka:
   # Addresses is the URI to connect to message broker.
   Addresses: "localhost:29092,localhost:29093"
 
-  # Topic is the message broker topic to use.
-  Topic: "user-events"
+  # UserEventsTopic is the user events message broker topic to use.
+  UserEventsTopic: "user-events"
+
+  # ChannelEventsTopic is the channel events message broker topic to use.
+  ChannelEventsTopic: "channel-events"
+
+  # SessionEventsTopic is the session events message broker topic to use.
+  SessionEventsTopic: "session-events"
 
   # WriteTimeout is the timeout for writing to the message broker.
   WriteTimeout: "5s"
