@@ -480,9 +480,8 @@ message Rule {
 
 message RevisionSummary {
   string id = 1;
-  int64 seq = 2;
-  string label = 3;
-  string description = 4;
-  string snapshot = 5;
-  google.protobuf.Timestamp created_at = 6;
+  string label = 2;
+  string description = 3;
+  string snapshot = 4;
+  google.protobuf.Timestamp created_at = 5;
 }

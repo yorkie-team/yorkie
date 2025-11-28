@@ -57,6 +57,11 @@ sharded:
           - name: doc_id
             method: '"hashed"'
         unique: false
+      - collectionName: revisions
+        shardKeys:
+          - name: doc_id
+            method: '"hashed"'
+        unique: false
 
 # Configuration for manual dmongodb sharded stack
 mongodb-sharded:

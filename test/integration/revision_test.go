@@ -117,45 +117,6 @@ func TestRevision(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, doc))
 	})
 
-	t.Run("duplicate label should fail test", func(t *testing.T) {
-		ctx := context.Background()
-		doc := document.New(helper.TestKey(t))
-
-		// 01. Attach document
-		assert.NoError(t, c1.Attach(ctx, doc))
-		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
-			r.SetString("k1", "v1")
-			return nil
-		}, "add k1"))
-		assert.NoError(t, c1.Sync(ctx))
-
-		// 02. Create first revision
-		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
-		assert.NoError(t, err)
-
-		_, err = revisions.Create(
-			ctx,
-			be,
-			types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID},
-			"duplicate-label",
-			"First revision",
-		)
-		assert.NoError(t, err)
-
-		// 03. Try to create another revision with same label
-		_, err = revisions.Create(
-			ctx,
-			be,
-			types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID},
-			"duplicate-label",
-			"Second revision with same label",
-		)
-		assert.Error(t, err)
-
-		// 04. Clean up
-		assert.NoError(t, c1.Detach(ctx, doc))
-	})
-
 	t.Run("delete revision test", func(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(helper.TestKey(t))

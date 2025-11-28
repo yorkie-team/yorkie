@@ -29,7 +29,7 @@ This document will only explain the core concepts of the selected sharding strat
 
 1. Cluster-wide: `users`, `projects`
 2. Project-wide: `clients`, `documents`, `schemas`
-3. Document-wide: `changes`, `snapshots`, `versionvectors`
+3. Document-wide: `changes`, `snapshots`, `versionvectors`, `revisions`
 
 <img src="media/mongodb-sharding-prev-relation.png">
 

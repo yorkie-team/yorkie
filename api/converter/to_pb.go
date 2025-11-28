@@ -750,7 +750,6 @@ func ToCacheType(cacheType types.CacheType) api.CacheType {
 func ToRevisionSummary(revision *types.RevisionSummary) *api.RevisionSummary {
 	return &api.RevisionSummary{
 		Id:          revision.ID.String(),
-		Seq:         revision.Seq,
 		Label:       revision.Label,
 		Description: revision.Description,
 		Snapshot:    revision.Snapshot,

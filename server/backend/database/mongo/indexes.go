@@ -197,26 +197,6 @@ var collectionInfos = []collectionInfo{
 			},
 			Options: options.Index().SetUnique(true),
 		}},
-	}, {
-		name: ColRevisions,
-		indexes: []mongo.IndexModel{{
-			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
-				{Key: "project_id", Value: int32(1)},
-				{Key: "created_at", Value: int32(-1)},
-			},
-		}, {
-			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
-				{Key: "project_id", Value: int32(1)},
-				{Key: "label", Value: int32(1)},
-			},
-			Options: options.Index().
-				SetUnique(true).
-				SetPartialFilterExpression(bson.M{
-					"label": bson.M{"$exists": true, "$gt": ""},
-				}),
-		}},
 	},
 }
 

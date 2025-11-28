@@ -36,9 +36,6 @@ type RevisionInfo struct {
 	// DocID is the ID of the document that this revision is for.
 	DocID types.ID `bson:"doc_id"`
 
-	// Seq is the sequence number of the revision for ordering.
-	Seq int64 `bson:"seq"`
-
 	// Label is a user-friendly name for this revision.
 	Label string `bson:"label"`
 
@@ -57,7 +54,6 @@ type RevisionInfo struct {
 func (r *RevisionInfo) ToTypesRevisionSummary() *types.RevisionSummary {
 	return &types.RevisionSummary{
 		ID:          r.ID,
-		Seq:         r.Seq,
 		Label:       r.Label,
 		Description: r.Description,
 		Snapshot:    string(r.Snapshot),
@@ -75,7 +71,6 @@ func (r *RevisionInfo) DeepCopy() *RevisionInfo {
 		ID:          r.ID,
 		ProjectID:   r.ProjectID,
 		DocID:       r.DocID,
-		Seq:         r.Seq,
 		Label:       r.Label,
 		Description: r.Description,
 		Snapshot:    slices.Clone(r.Snapshot),

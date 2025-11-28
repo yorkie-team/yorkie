@@ -2855,13 +2855,6 @@ components:
           description: ""
           title: label
           type: string
-        seq:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
         snapshot:
           additionalProperties: false
           description: ""

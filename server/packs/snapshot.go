@@ -157,7 +157,7 @@ func BuildInternalDocForServerSeq(
 	return clone, nil
 }
 
-// storeSnapshot stores the snapshot of the document in the database.
+// storeSnapshot stores the snapshot for the given document if needed.
 func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
@@ -249,41 +249,58 @@ func storeSnapshot(
 		doc.Checkpoint().ServerSeq,
 	)
 
-	// 06. create auto revision if enabled for the project
-	projectInfo, err := be.DB.FindProjectInfoByID(ctx, docInfo.ProjectID)
-	if err != nil {
-		logging.From(ctx).Warnf("failed to find project for auto revision: %v", err)
-	} else if projectInfo.AutoRevisionEnabled {
-		// Generate snapshot from the root object (YSON format)
-		ysonRoot, err := yson.FromCRDT(doc.RootObject())
-		if err != nil {
-			logging.From(ctx).Warnf("create revision of %s: %v", docRefKey, err)
-		}
-		ysonObj := ysonRoot.(yson.Object)
-		snapshot, err := ysonObj.Marshal()
-		if err != nil {
-			logging.From(ctx).Warnf("create revision of %s: %v", docRefKey, err)
-		}
-
-		// Create auto revision with timestamp-based label
-		label := fmt.Sprintf("auto-%d", doc.Checkpoint().ServerSeq)
-		description := fmt.Sprintf("Auto-created revision at snapshot (serverSeq: %d)", doc.Checkpoint().ServerSeq)
-
-		if _, err := be.DB.CreateRevisionInfo(
-			ctx,
-			docRefKey,
-			label,
-			description,
-			[]byte(snapshot),
-		); err != nil {
-			// Log error but don't fail the snapshot creation
-			logging.From(ctx).Warnf("failed to create auto revision: %v", err)
-		} else {
-			logging.From(ctx).Infof("AUTO-REV: '%s', label: %s", docInfo.Key, label)
-		}
+	if err := storeRevision(ctx, be, docInfo, doc); err != nil {
+		return err
 	}
 
 	be.Metrics.ObservePushPullSnapshotDurationSeconds(gotime.Since(start).Seconds())
+
+	return nil
+}
+
+// storeRevision stores the revision for the given document if needed.
+func storeRevision(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *database.DocInfo,
+	doc *document.InternalDocument,
+) error {
+	docRefKey := docInfo.RefKey()
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, docInfo.ProjectID)
+	if err != nil {
+		return fmt.Errorf("store revision: %w", err)
+	}
+
+	if !projectInfo.AutoRevisionEnabled {
+		return nil
+	}
+
+	// Generate snapshot from the root object (YSON format)
+	ysonRoot, err := yson.FromCRDT(doc.RootObject())
+	if err != nil {
+		return fmt.Errorf("store revision of %s: %w", docRefKey, err)
+	}
+	ysonObj := ysonRoot.(yson.Object)
+	snapshot, err := ysonObj.Marshal()
+	if err != nil {
+		return fmt.Errorf("store revision of %s: %w", docRefKey, err)
+	}
+
+	// Create label and description for the revision.
+	label := fmt.Sprintf("snapshot-%d", doc.Checkpoint().ServerSeq)
+	description := fmt.Sprintf("Auto created revision of snapshot #%d", doc.Checkpoint().ServerSeq)
+
+	if _, err := be.DB.CreateRevisionInfo(
+		ctx,
+		docRefKey,
+		label,
+		description,
+		[]byte(snapshot),
+	); err != nil {
+		return fmt.Errorf("store revision of %s: %w", docRefKey, err)
+	}
+
+	logging.From(ctx).Infof("REV : '%s', label: %s", docInfo.Key, label)
 
 	return nil
 }

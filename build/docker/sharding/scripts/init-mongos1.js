@@ -24,6 +24,7 @@ sh.shardCollection(clientTestDB + ".schemas", { project_id: 1 });
 sh.shardCollection(clientTestDB + ".changes", { doc_id: "hashed" });
 sh.shardCollection(clientTestDB + ".snapshots", { doc_id: "hashed" });
 sh.shardCollection(clientTestDB + ".versionvectors", { doc_id: "hashed" });
+sh.shardCollection(clientTestDB + ".revisions", { doc_id: "hashed" });
 
 // Split the inital range at `splitPoint` to allow doc_ids duplicate in different shards.
 const splitPoint = ObjectId("500000000000000000000000");
@@ -44,3 +45,4 @@ sh.shardCollection(serverTestDB + ".schemas", { project_id: 1 });
 sh.shardCollection(serverTestDB + ".changes", { doc_id: "hashed" });
 sh.shardCollection(serverTestDB + ".snapshots", { doc_id: "hashed" });
 sh.shardCollection(serverTestDB + ".versionvectors", { doc_id: "hashed" });
+sh.shardCollection(serverTestDB + ".revisions", { doc_id: "hashed" });
