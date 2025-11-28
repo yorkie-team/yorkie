@@ -1568,6 +1568,19 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        activeChannels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.MetricPoint'
+            type: object
+          title: active_channels
+          type: array
+        activeChannelsCount:
+          additionalProperties: false
+          description: ""
+          title: active_channels_count
+          type: integer
         activeUsers:
           additionalProperties: false
           description: ""
@@ -1595,6 +1608,32 @@ components:
           - type: string
           - type: number
           title: documents_count
+        peakSessionsPerChannel:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.MetricPoint'
+            type: object
+          title: peak_sessions_per_channel
+          type: array
+        peakSessionsPerChannelCount:
+          additionalProperties: false
+          description: ""
+          title: peak_sessions_per_channel_count
+          type: integer
+        sessions:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.MetricPoint'
+            type: object
+          title: sessions
+          type: array
+        sessionsCount:
+          additionalProperties: false
+          description: ""
+          title: sessions_count
+          type: integer
       title: GetProjectStatsResponse
       type: object
     yorkie.v1.GetRevisionByAdminRequest:

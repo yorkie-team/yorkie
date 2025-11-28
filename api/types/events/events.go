@@ -91,12 +91,18 @@ type DocEvent struct {
 type ChannelEventType string
 
 const (
+	// ChannelCreated is an event that occurs when a channel is created.
+	ChannelCreated ChannelEventType = "channel-created"
+
 	// ChannelPresenceChanged is an event that occurs when presence changes.
 	ChannelPresenceChanged ChannelEventType = "presence-changed"
 
 	// ChannelBroadcast is an event that occurs when a payload is broadcasted
 	// on a specific topic in a channel.
 	ChannelBroadcast ChannelEventType = "channel-broadcast"
+
+	// SessionCreated is an event that occurs when a session is created.
+	SessionCreated ChannelEventType = "session-created"
 )
 
 // ChannelEvent represents a channel event (count change or broadcast).

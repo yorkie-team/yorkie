@@ -111,6 +111,36 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	activeChannels, err := be.Warehouse.GetActiveChannels(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	activeChannelsCount, err := be.Warehouse.GetActiveChannelsCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	sessions, err := be.Warehouse.GetSessions(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionsCount, err := be.Warehouse.GetSessionsCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	peakSessionsPerChannel, err := be.Warehouse.GetPeakSessionsPerChannel(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	peakSessionsPerChannelCount, err := be.Warehouse.GetPeakSessionsPerChannelCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	documentsCount, err := be.DB.GetDocumentsCount(ctx, id)
 	if err != nil {
 		return nil, err
@@ -122,10 +152,16 @@ func GetProjectStats(
 	}
 
 	return &types.ProjectStats{
-		ActiveUsersCount: activeUsersCount,
-		ActiveUsers:      activeUsers,
-		DocumentsCount:   documentsCount,
-		ClientsCount:     clientsCount,
+		ActiveUsersCount:            activeUsersCount,
+		ActiveUsers:                 activeUsers,
+		ActiveChannelsCount:         activeChannelsCount,
+		ActiveChannels:              activeChannels,
+		SessionsCount:               sessionsCount,
+		Sessions:                    sessions,
+		PeakSessionsPerChannelCount: peakSessionsPerChannelCount,
+		PeakSessionsPerChannel:      peakSessionsPerChannel,
+		DocumentsCount:              documentsCount,
+		ClientsCount:                clientsCount,
 	}, nil
 }
 

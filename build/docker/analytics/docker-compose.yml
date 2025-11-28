@@ -1,4 +1,3 @@
-version: "3"
 services:
   starrocks-fe:
     image: starrocks/fe-ubuntu:2.5.4
@@ -14,7 +13,7 @@ services:
       test: 'mysql -u root -h starrocks-fe -P 9030 -e "show frontends\G" | grep "Alive: true"'
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
     volumes:
       # - fe.conf:/opt/starrocks/fe/conf/fe.conf
       - ./starrocks/starrocks-fe/meta:/opt/starrocks/fe/meta
@@ -40,7 +39,7 @@ services:
       test: 'mysql -u root -h starrocks-fe -P 9030 -e "show backends\G" | grep "Alive: true"'
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
     volumes:
       # - be.conf:/opt/starrocks/be/conf/be.conf
       - ./starrocks/starrocks-be/storage:/opt/starrocks/be/storage
@@ -77,18 +76,10 @@ services:
       kafka:
         condition: service_healthy
     working_dir: /opt/kafka/bin
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      echo -e 'Waiting for Kafka to be ready...'
-      ./kafka-topics.sh --bootstrap-server kafka:9092 --list
-
-      echo -e 'Creating kafka topics'
-      ./kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic user-events --replication-factor 1 --partitions 1
-
-      echo -e 'Successfully created the following topics:'
-      ./kafka-topics.sh --bootstrap-server kafka:9092 --list
-      "
+    volumes:
+      - ./init-kafka-topics.sh:/init-kafka-topics.sh
+    entrypoint: ["/bin/bash"]
+    command: ["/init-kafka-topics.sh"]
 
   kafka-ui:
     image: provectuslabs/kafka-ui
@@ -114,38 +105,11 @@ services:
       init-kafka-topics:
         condition: service_completed_successfully
     volumes:
-      - ./init-user-events-db.sql:/init-user-events-db.sql
-      - ./init-routine-load.sql:/init-routine-load.sql
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      sleep 5s
-      echo -e 'Checking Starrocks status'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show frontends\\G' | grep 'Alive: true' || echo -e 'Frontend is not ready'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show backends\\G' | grep 'Alive: true' || echo -e 'Backend is not ready'
-
-
-      echo -e 'Creating Yorkie database, tables and routine load'
-      mysql -h starrocks-fe -P 9030 -u root < /init-user-events-db.sql
-
-      echo -e 'Checking Yorkie database'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show databases\\G'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show databases\\G' | grep 'Database: yorkie' || echo -e 'Yorkie database not found'
-
-      echo -e 'Checking user_event table'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\\G'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\\G' | grep 'Tables_in_yorkie: user_events' || echo -e 'user_events table not found'
-
-
-      sleep 5s
-      echo -e 'Creating routine load'
-      mysql -h starrocks-fe -P 9030 -u root < /init-routine-load.sql
-
-      sleep 10s
-      echo -e 'Checking event routine load'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\\G'
-      mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\\G' | grep -E "State: NEED_SCHEDULE|State: RUNNING" || echo -e 'Routine load is not running'
-      "
+      - ./init-create-table.sql:/init-create-table.sql
+      - ./init-create-routine-load.sql:/init-create-routine-load.sql
+      - ./init-starrocks-database.sh:/init-starrocks-database.sh
+    entrypoint: ["/bin/bash"]
+    command: ["/init-starrocks-database.sh"]
 
 volumes:
   kafka_data:

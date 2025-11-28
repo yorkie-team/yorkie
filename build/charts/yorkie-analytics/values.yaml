@@ -9,8 +9,15 @@ yorkie-analytics:
       tag: &starrocks-fe-tag "3.3-latest"
     routine-load:
       kafka-broker-list: yorkie-analytics-kafka.analytics.svc.cluster.local:9092
-      kafka-topic: user-events
-      property-group-id: user_events_group
+      kafka-user-events:
+        topic: user-events
+        property-group-id: user_events_group
+      kafka-channel-events:
+        topic: channel-events
+        property-group-id: channel_events_group
+      kafka-session-events:
+        topic: session-events
+        property-group-id: session_events_group
   kafka:
     enabled: true
     image:
@@ -18,9 +25,18 @@ yorkie-analytics:
       repository: bitnamilegacy/kafka
       tag: latest
     topic:
-      name: user-events
-      partitions: 1
-      replicationFactor: 1
+      user-events:
+        topic: user-events
+        partitions: 1
+        replicationFactor: 1
+      channel-events:
+        topic: channel-events
+        partitions: 1
+        replicationFactor: 1
+      session-events:
+        topic: session-events
+        partitions: 1
+        replicationFactor: 1
 
 kube-starrocks:
   starrocks:

@@ -267,10 +267,16 @@ func (s *adminServer) GetProjectStats(
 	}
 
 	return connect.NewResponse(&api.GetProjectStatsResponse{
-		ActiveUsers:      converter.ToMetricPoints(stats.ActiveUsers),
-		ActiveUsersCount: int32(stats.ActiveUsersCount),
-		DocumentsCount:   stats.DocumentsCount,
-		ClientsCount:     stats.ClientsCount,
+		ActiveUsers:                 converter.ToMetricPoints(stats.ActiveUsers),
+		ActiveUsersCount:            int32(stats.ActiveUsersCount),
+		ActiveChannels:              converter.ToMetricPoints(stats.ActiveChannels),
+		ActiveChannelsCount:         int32(stats.ActiveChannelsCount),
+		Sessions:                    converter.ToMetricPoints(stats.Sessions),
+		SessionsCount:               int32(stats.SessionsCount),
+		PeakSessionsPerChannel:      converter.ToMetricPoints(stats.PeakSessionsPerChannel),
+		PeakSessionsPerChannelCount: int32(stats.PeakSessionsPerChannelCount),
+		DocumentsCount:              stats.DocumentsCount,
+		ClientsCount:                stats.ClientsCount,
 	}), nil
 }
 
