@@ -304,6 +304,7 @@ message Project {
   int32 max_attachments_per_document = 11;
   int32 max_size_per_document = 15;
   bool remove_on_detach = 16;
+  bool auto_revision_enabled = 27;
   repeated string allowed_origins = 14;
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
@@ -347,6 +348,7 @@ message UpdatableProjectFields {
   google.protobuf.Int32Value max_attachments_per_document = 8;
   google.protobuf.Int32Value max_size_per_document = 10;
   google.protobuf.BoolValue remove_on_detach = 11;
+  google.protobuf.BoolValue auto_revision_enabled = 22;
   AllowedOrigins allowed_origins = 9;
 }
 
@@ -480,9 +482,8 @@ message Rule {
 
 message RevisionSummary {
   string id = 1;
-  int64 seq = 2;
-  string label = 3;
-  string description = 4;
-  string snapshot = 5;
-  google.protobuf.Timestamp created_at = 6;
+  string label = 2;
+  string description = 3;
+  string snapshot = 4;
+  google.protobuf.Timestamp created_at = 5;
 }

@@ -86,6 +86,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		MaxAttachmentsPerDocument:   int(pbProject.MaxAttachmentsPerDocument),
 		MaxSizePerDocument:          int(pbProject.MaxSizePerDocument),
 		RemoveOnDetach:              bool(pbProject.RemoveOnDetach),
+		AutoRevisionEnabled:         bool(pbProject.AutoRevisionEnabled),
 		AllowedOrigins:              pbProject.AllowedOrigins,
 		PublicKey:                   pbProject.PublicKey,
 		SecretKey:                   pbProject.SecretKey,
@@ -989,6 +990,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 	if pbProjectFields.RemoveOnDetach != nil {
 		updatableProjectFields.RemoveOnDetach = &pbProjectFields.RemoveOnDetach.Value
+	}
+	if pbProjectFields.AutoRevisionEnabled != nil {
+		updatableProjectFields.AutoRevisionEnabled = &pbProjectFields.AutoRevisionEnabled.Value
 	}
 	if pbProjectFields.AllowedOrigins != nil {
 		updatableProjectFields.AllowedOrigins = &pbProjectFields.AllowedOrigins.Origins

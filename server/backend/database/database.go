@@ -432,7 +432,6 @@ type Database interface {
 	) (bool, error)
 
 	// CreateRevisionInfo creates a new revision for the given document.
-	// Seq is auto-incremented per document.
 	CreateRevisionInfo(
 		ctx context.Context,
 		docRefKey types.DocRefKey,

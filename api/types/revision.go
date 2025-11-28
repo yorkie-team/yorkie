@@ -28,9 +28,6 @@ type RevisionSummary struct {
 	// ID is the unique identifier of the revision.
 	ID ID
 
-	// Seq is the sequence number of the revision for ordering.
-	Seq int64
-
 	// Label is a user-friendly name for this revision.
 	Label string
 

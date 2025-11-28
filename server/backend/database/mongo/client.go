@@ -2381,27 +2381,11 @@ func (c *Client) CreateRevisionInfo(
 	description string,
 	snapshot []byte,
 ) (*database.RevisionInfo, error) {
-	// Get next sequence number for this document
-	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}
-	findOptions := options.FindOne().SetSort(bson.D{{Key: "seq", Value: -1}})
-	var lastRevision database.RevisionInfo
-	err := c.collection(ColRevisions).FindOne(ctx, filter, findOptions).Decode(&lastRevision)
-	nextSeq := int64(1)
-	if err == nil {
-		nextSeq = lastRevision.Seq + 1
-	} else if err != mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("get last revision seq: %w", err)
-	}
-
 	now := gotime.Now()
-	revisionInfo := &database.RevisionInfo{
+	info := &database.RevisionInfo{
 		ID:          types.NewID(),
 		ProjectID:   docRefKey.ProjectID,
 		DocID:       docRefKey.DocID,
-		Seq:         nextSeq,
 		Label:       label,
 		Description: description,
 		Snapshot:    snapshot,
@@ -2409,21 +2393,20 @@ func (c *Client) CreateRevisionInfo(
 	}
 
 	result, err := c.collection(ColRevisions).InsertOne(ctx, bson.M{
-		"_id":         revisionInfo.ID,
-		"project_id":  revisionInfo.ProjectID,
-		"doc_id":      revisionInfo.DocID,
-		"seq":         revisionInfo.Seq,
-		"label":       revisionInfo.Label,
-		"description": revisionInfo.Description,
-		"snapshot":    revisionInfo.Snapshot,
-		"created_at":  revisionInfo.CreatedAt,
+		"_id":         info.ID,
+		"project_id":  info.ProjectID,
+		"doc_id":      info.DocID,
+		"label":       info.Label,
+		"description": info.Description,
+		"snapshot":    info.Snapshot,
+		"created_at":  info.CreatedAt,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("insert revision: %w", err)
 	}
 
-	revisionInfo.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
-	return revisionInfo, nil
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return info, nil
 }
 
 // FindRevisionInfosByPaging returns the revision summaries of the given paging.
@@ -2433,11 +2416,6 @@ func (c *Client) FindRevisionInfosByPaging(
 	paging types.Paging[int],
 	includeSnapshot bool,
 ) ([]*database.RevisionInfo, error) {
-	filter := bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-	}
-
 	findOptions := options.Find()
 	if paging.PageSize > 0 {
 		findOptions.SetLimit(int64(paging.PageSize))
@@ -2451,22 +2429,20 @@ func (c *Client) FindRevisionInfosByPaging(
 		findOptions.SetProjection(bson.M{"snapshot": 0})
 	}
 
-	// Sort by seq descending (newest first)
+	// Sort by _id descending (newest first, since ObjectId contains timestamp)
 	sortOrder := -1
 	if paging.IsForward {
 		sortOrder = 1
 	}
-	findOptions.SetSort(bson.D{{Key: "seq", Value: sortOrder}})
+	findOptions.SetSort(bson.D{{Key: "_id", Value: sortOrder}})
 
-	cursor, err := c.collection(ColRevisions).Find(ctx, filter, findOptions)
+	cursor, err := c.collection(ColRevisions).Find(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("find revisions: %w", err)
 	}
-	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
 
 	var revisions []*database.RevisionInfo
 	if err := cursor.All(ctx, &revisions); err != nil {

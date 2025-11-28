@@ -2655,6 +2655,11 @@ components:
           description: ""
           title: auth_webhook_url
           type: string
+        autoRevisionEnabled:
+          additionalProperties: false
+          description: ""
+          title: auto_revision_enabled
+          type: boolean
         clientDeactivateThreshold:
           additionalProperties: false
           description: ""
@@ -2855,13 +2860,6 @@ components:
           description: ""
           title: label
           type: string
-        seq:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
         snapshot:
           additionalProperties: false
           description: ""
@@ -3218,6 +3216,12 @@ components:
           additionalProperties: false
           description: ""
           title: auth_webhook_url
+          type: object
+        autoRevisionEnabled:
+          $ref: '#/components/schemas/google.protobuf.BoolValue'
+          additionalProperties: false
+          description: ""
+          title: auto_revision_enabled
           type: object
         clientDeactivateThreshold:
           $ref: '#/components/schemas/google.protobuf.StringValue'

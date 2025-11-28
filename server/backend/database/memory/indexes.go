@@ -312,16 +312,6 @@ var schema = &memdb.DBSchema{
 					Unique:  false,
 					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
 				},
-				"doc_id_label": {
-					Name:   "doc_id_label",
-					Unique: false,
-					Indexer: &memdb.CompoundIndex{
-						Indexes: []memdb.Indexer{
-							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.StringFieldIndex{Field: "Label"},
-						},
-					},
-				},
 			},
 		},
 	},

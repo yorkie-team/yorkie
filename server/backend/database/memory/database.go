@@ -2270,46 +2270,11 @@ func (d *DB) CreateRevisionInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// Check if label already exists for this document (if label is provided)
-	if label != "" {
-		iter, err := txn.Get(
-			tblRevisions,
-			"doc_id_label",
-			docRefKey.DocID.String(),
-			label,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("check label: %w", err)
-		}
-		if iter.Next() != nil {
-			return nil, database.ErrRevisionAlreadyExists
-		}
-	}
-
-	// Get next sequence number for this document
-	iter, err := txn.Get(
-		tblRevisions,
-		"doc_id",
-		docRefKey.DocID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("get revisions for seq: %w", err)
-	}
-
-	nextSeq := int64(1)
-	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		revision := raw.(*database.RevisionInfo)
-		if revision.ProjectID == docRefKey.ProjectID && revision.Seq >= nextSeq {
-			nextSeq = revision.Seq + 1
-		}
-	}
-
 	now := gotime.Now()
 	revisionInfo := &database.RevisionInfo{
 		ID:          newID(),
 		ProjectID:   docRefKey.ProjectID,
 		DocID:       docRefKey.DocID,
-		Seq:         nextSeq,
 		Label:       label,
 		Description: description,
 		Snapshot:    snapshot,
@@ -2357,12 +2322,12 @@ func (d *DB) FindRevisionInfosByPaging(
 		}
 	}
 
-	// Sort by seq descending (newest first)
+	// Sort by ID descending (newest first, since ID contains timestamp)
 	sort.Slice(revisions, func(i, j int) bool {
 		if paging.IsForward {
-			return revisions[i].Seq < revisions[j].Seq
+			return revisions[i].ID > revisions[j].ID
 		}
-		return revisions[i].Seq > revisions[j].Seq
+		return revisions[i].ID < revisions[j].ID
 	})
 
 	// Apply paging

@@ -78,6 +78,7 @@ func ToProject(project *types.Project) *api.Project {
 		MaxAttachmentsPerDocument:   int32(project.MaxAttachmentsPerDocument),
 		MaxSizePerDocument:          int32(project.MaxSizePerDocument),
 		RemoveOnDetach:              project.RemoveOnDetach,
+		AutoRevisionEnabled:         project.AutoRevisionEnabled,
 		AllowedOrigins:              project.AllowedOrigins,
 		PublicKey:                   project.PublicKey,
 		SecretKey:                   project.SecretKey,
@@ -696,6 +697,11 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 			Value: *fields.RemoveOnDetach,
 		}
 	}
+	if fields.AutoRevisionEnabled != nil {
+		pbUpdatableProjectFields.AutoRevisionEnabled = &wrapperspb.BoolValue{
+			Value: *fields.AutoRevisionEnabled,
+		}
+	}
 	return pbUpdatableProjectFields, nil
 }
 
@@ -750,7 +756,6 @@ func ToCacheType(cacheType types.CacheType) api.CacheType {
 func ToRevisionSummary(revision *types.RevisionSummary) *api.RevisionSummary {
 	return &api.RevisionSummary{
 		Id:          revision.ID.String(),
-		Seq:         revision.Seq,
 		Label:       revision.Label,
 		Description: revision.Description,
 		Snapshot:    revision.Snapshot,
