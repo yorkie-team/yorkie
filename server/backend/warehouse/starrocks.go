@@ -66,7 +66,7 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 	WHERE
 		project_id = '%s'
 		AND timestamp >= '%s'
-		AND timestamp <= '%s'
+		AND timestamp < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
@@ -302,6 +302,9 @@ func (r *StarRocks) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Ti
 
 // Close closes the connection to the StarRocks.
 func (r *StarRocks) Close() error {
+	if r.driver == nil {
+		return nil
+	}
 	if err := r.driver.Close(); err != nil {
 		return fmt.Errorf("close: %w", err)
 	}
@@ -348,6 +351,9 @@ func (r *StarRocks) queryMetrics(query string) ([]types.MetricPoint, error) {
 			Value: int(val),
 		})
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
 	return metrics, nil
 }
 
@@ -368,6 +374,9 @@ func (r *StarRocks) queryCount(query string) (int, error) {
 		if err := rows.Scan(&count); err != nil {
 			return 0, fmt.Errorf("scan row: %w", err)
 		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate rows: %w", err)
 	}
 	return count, nil
 }

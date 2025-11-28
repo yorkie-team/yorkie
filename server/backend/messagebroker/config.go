@@ -63,7 +63,7 @@ func (c *Config) MustParseWriteTimeout() time.Duration {
 // Validate validates this config.
 func (c *Config) Validate() error {
 	if c.Addresses == "" {
-		return ErrEmptyAddress
+		return fmt.Errorf("addresses: %w", ErrEmptyAddress)
 	}
 
 	kafkaAddresses := strings.Split(c.Addresses, ",")
@@ -78,15 +78,15 @@ func (c *Config) Validate() error {
 	}
 
 	if c.UserEventsTopic == "" {
-		return ErrEmptyTopic
+		return fmt.Errorf("user events topic: %w", ErrEmptyTopic)
 	}
 
 	if c.ChannelEventsTopic == "" {
-		return ErrEmptyTopic
+		return fmt.Errorf("channel events topic: %w", ErrEmptyTopic)
 	}
 
 	if c.SessionEventsTopic == "" {
-		return ErrEmptyTopic
+		return fmt.Errorf("session events topic: %w", ErrEmptyTopic)
 	}
 
 	if _, err := time.ParseDuration(c.WriteTimeout); err != nil {

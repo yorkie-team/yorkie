@@ -150,15 +150,10 @@ func Ensure(kafkaConf *Config) *Brokers {
 		}
 	}
 
-	var topics []string
-	if kafkaConf.UserEventsTopic != "" {
-		topics = append(topics, kafkaConf.UserEventsTopic)
-	}
-	if kafkaConf.ChannelEventsTopic != "" {
-		topics = append(topics, kafkaConf.ChannelEventsTopic)
-	}
-	if kafkaConf.SessionEventsTopic != "" {
-		topics = append(topics, kafkaConf.SessionEventsTopic)
+	topics := []string{
+		kafkaConf.UserEventsTopic,
+		kafkaConf.ChannelEventsTopic,
+		kafkaConf.SessionEventsTopic,
 	}
 
 	logging.DefaultLogger().Infof(

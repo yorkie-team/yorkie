@@ -11,4 +11,3 @@ echo -e 'Creating kafka topics'
 
 echo -e 'Successfully created the following topics:'
 /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
-

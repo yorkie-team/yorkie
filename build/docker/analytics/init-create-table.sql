@@ -40,4 +40,3 @@ DISTRIBUTED BY HASH(project_id) BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
-

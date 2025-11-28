@@ -49,4 +49,3 @@ done
 
 echo -e 'Final routine load status:'
 mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\G'
-
