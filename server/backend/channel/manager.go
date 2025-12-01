@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/heap"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
@@ -91,8 +91,8 @@ type Manager struct {
 	// metrics is used to collect prometheus metrics
 	metrics *Metrics
 
-	// brokers is used to publish channel events
-	brokers *messagebroker.Brokers
+	// broker is used to publish channel events
+	broker messaging.Broker
 }
 
 // Metrics is used to collect prometheus metrics.
@@ -107,7 +107,7 @@ func NewManager(
 	ttl gotime.Duration,
 	cleanupInterval gotime.Duration,
 	metrics *Metrics,
-	brokers *messagebroker.Brokers,
+	broker messaging.Broker,
 ) *Manager {
 	if ttl == 0 {
 		ttl = 60 * gotime.Second
@@ -129,7 +129,7 @@ func NewManager(
 		cleanupDone:     make(chan struct{}),
 
 		metrics: metrics,
-		brokers: brokers,
+		broker:  broker,
 	}
 }
 
@@ -195,7 +195,7 @@ func (m *Manager) Attach(
 			if !exists {
 				val = cmap.New[types.ID, *Session]()
 
-				if err := m.brokers.ChannelEvents().Produce(ctx, messagebroker.ChannelEventsMessage{
+				if err := m.broker.Produce(ctx, messaging.ChannelEventsMessage{
 					ProjectID:  key.ProjectID.String(),
 					EventType:  events.ChannelCreated,
 					Timestamp:  gotime.Now(),
@@ -233,7 +233,7 @@ func (m *Manager) Attach(
 	)
 	clientSessionMap.Set(key, id)
 
-	if err := m.brokers.SessionEvents().Produce(ctx, messagebroker.SessionEventsMessage{
+	if err := m.broker.Produce(ctx, messaging.SessionEventsMessage{
 		ProjectID:  key.ProjectID.String(),
 		SessionID:  id.String(),
 		Timestamp:  gotime.Now(),

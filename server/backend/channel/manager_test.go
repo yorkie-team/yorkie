@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	pkgtime "github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 )
 
 // mockPubSub is a mock implementation of PubSub for testing
@@ -42,10 +42,10 @@ func (m *mockPubSub) PublishChannel(ctx context.Context, event events.ChannelEve
 
 // MockBroker is a mock implementation of Broker for testing
 type MockBroker struct {
-	Messages []messagebroker.Message
+	Messages []messaging.Message
 }
 
-func (m *MockBroker) Produce(ctx context.Context, msg messagebroker.Message) error {
+func (m *MockBroker) Produce(ctx context.Context, msg messaging.Message) error {
 	m.Messages = append(m.Messages, msg)
 	return nil
 }
@@ -60,7 +60,7 @@ func createManager(
 ) (*channel.Manager, *mockPubSub, *MockBroker) {
 	pubsub := &mockPubSub{}
 	broker := &MockBroker{}
-	brokers := messagebroker.NewBrokers(broker, broker, broker)
+	brokers := messaging.NewBroker(broker, broker, broker)
 	manager := channel.NewManager(pubsub, ttl, cleanupInterval, nil, brokers)
 	return manager, pubsub, broker
 }
@@ -85,8 +85,8 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 
 		// Verify broker events
 		assert.Len(t, broker.Messages, 2)
-		assert.IsType(t, messagebroker.ChannelEventsMessage{}, broker.Messages[0])
-		assert.IsType(t, messagebroker.SessionEventsMessage{}, broker.Messages[1])
+		assert.IsType(t, messaging.ChannelEventsMessage{}, broker.Messages[0])
+		assert.IsType(t, messaging.SessionEventsMessage{}, broker.Messages[1])
 
 		// Wait a bit
 		time.Sleep(100 * time.Millisecond)

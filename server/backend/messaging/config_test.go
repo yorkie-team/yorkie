@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package messagebroker_test
+package messaging_test
 
 import (
 	"testing"
@@ -22,12 +22,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 )
 
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
-		validConf := messagebroker.Config{
+		validConf := messaging.Config{
 			Addresses:          "localhost:8080",
 			UserEventsTopic:    "user-events",
 			ChannelEventsTopic: "channel-events",
@@ -63,7 +63,7 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("test split addresses", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			Addresses: "localhost:8080,localhost:8081",
 		}
 		addrs := c.SplitAddresses()
@@ -71,17 +71,17 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("test must parse write timeout", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			WriteTimeout: "1s",
 		}
 		assert.Equal(t, time.Second, c.MustParseWriteTimeout())
 	})
 
 	t.Run("test must parse write timeout with invalid duration", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			WriteTimeout: "1",
 		}
-		assert.PanicsWithError(t, messagebroker.ErrInvalidDuration.Error(), func() {
+		assert.PanicsWithError(t, messaging.ErrInvalidDuration.Error(), func() {
 			c.MustParseWriteTimeout()
 		})
 	})

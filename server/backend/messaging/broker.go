@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package messagebroker provides the message broker implementation of the Yorkie.
-package messagebroker
+// Package messaging provides the message broker implementation of the Yorkie.
+package messaging
 
 import (
 	"context"
@@ -26,6 +26,20 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/server/logging"
+)
+
+// EventType represents the type of event to be published.
+type EventType string
+
+const (
+	// UserEventsType represents user-related events.
+	UserEventsType EventType = "user"
+
+	// ChannelEventsType represents channel-related events.
+	ChannelEventsType EventType = "channel"
+
+	// SessionEventsType represents session-related events.
+	SessionEventsType EventType = "session"
 )
 
 // Message represents a message that can be sent to the message broker.
@@ -62,63 +76,26 @@ type SessionEventsMessage struct {
 
 // Marshal marshals the user event message to JSON.
 func (m UserEventMessage) Marshal() ([]byte, error) {
-	encoded, err := json.Marshal(m)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	return encoded, nil
+	return marshalMessage(m)
 }
 
 // Marshal marshals the channel events message to JSON.
 func (m ChannelEventsMessage) Marshal() ([]byte, error) {
-	encoded, err := json.Marshal(m)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	return encoded, nil
+	return marshalMessage(m)
 }
 
 // Marshal marshals the session events message to JSON.
 func (m SessionEventsMessage) Marshal() ([]byte, error) {
-	encoded, err := json.Marshal(m)
+	return marshalMessage(m)
+}
+
+// marshalMessage is a helper function to marshal any message to JSON.
+func marshalMessage(msg any) ([]byte, error) {
+	encoded, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
-
 	return encoded, nil
-}
-
-// Brokers manages message brokers for different event types.
-type Brokers struct {
-	userEvents    Broker
-	channelEvents Broker
-	sessionEvents Broker
-}
-
-// UserEvents returns the broker for user events.
-func (b *Brokers) UserEvents() Broker {
-	return b.userEvents
-}
-
-// ChannelEvents returns the broker for channel events.
-func (b *Brokers) ChannelEvents() Broker {
-	return b.channelEvents
-}
-
-// SessionEvents returns the broker for session events.
-func (b *Brokers) SessionEvents() Broker {
-	return b.sessionEvents
-}
-
-// NewBrokers creates a new Brokers instance with the given brokers.
-func NewBrokers(user, channel, session Broker) *Brokers {
-	return &Brokers{
-		userEvents:    user,
-		channelEvents: channel,
-		sessionEvents: session,
-	}
 }
 
 // Broker is an interface for the message broker.
@@ -127,27 +104,24 @@ type Broker interface {
 	Close() error
 }
 
+// Manager manages message brokers for different event types.
+type Manager struct {
+	brokers map[EventType]Broker
+}
+
 // Ensure creates a message broker based on the given configuration.
-// If the configuration is nil or invalid, it returns a Brokers instance with
-// DummyBroker for all fields, allowing callers to use the brokers without nil checks.
-func Ensure(kafkaConf *Config) *Brokers {
+// If the configuration is nil or invalid, it returns a Manager instance with
+// DummyBroker for all event types, allowing callers to use the brokers without nil checks.
+func Ensure(kafkaConf *Config) Broker {
 	dummy := &DummyBroker{}
 
 	if kafkaConf == nil {
-		return &Brokers{
-			userEvents:    dummy,
-			channelEvents: dummy,
-			sessionEvents: dummy,
-		}
+		return newManagerWithDummy(dummy)
 	}
 
 	if err := kafkaConf.Validate(); err != nil {
 		logging.DefaultLogger().Warnf("invalid kafka configuration: %v", err)
-		return &Brokers{
-			userEvents:    dummy,
-			channelEvents: dummy,
-			sessionEvents: dummy,
-		}
+		return newManagerWithDummy(dummy)
 	}
 
 	topics := []string{
@@ -162,21 +136,83 @@ func Ensure(kafkaConf *Config) *Brokers {
 		strings.Join(topics, ","),
 	)
 
-	brokers := &Brokers{
-		userEvents:    dummy,
-		channelEvents: dummy,
-		sessionEvents: dummy,
-	}
+	brokers := make(map[EventType]Broker)
 
 	if kafkaConf.UserEventsTopic != "" {
-		brokers.userEvents = newKafkaBroker(kafkaConf, kafkaConf.UserEventsTopic)
-	}
-	if kafkaConf.ChannelEventsTopic != "" {
-		brokers.channelEvents = newKafkaBroker(kafkaConf, kafkaConf.ChannelEventsTopic)
-	}
-	if kafkaConf.SessionEventsTopic != "" {
-		brokers.sessionEvents = newKafkaBroker(kafkaConf, kafkaConf.SessionEventsTopic)
+		brokers[UserEventsType] = newKafkaBroker(kafkaConf, kafkaConf.UserEventsTopic)
+	} else {
+		brokers[UserEventsType] = dummy
 	}
 
-	return brokers
+	if kafkaConf.ChannelEventsTopic != "" {
+		brokers[ChannelEventsType] = newKafkaBroker(kafkaConf, kafkaConf.ChannelEventsTopic)
+	} else {
+		brokers[ChannelEventsType] = dummy
+	}
+
+	if kafkaConf.SessionEventsTopic != "" {
+		brokers[SessionEventsType] = newKafkaBroker(kafkaConf, kafkaConf.SessionEventsTopic)
+	} else {
+		brokers[SessionEventsType] = dummy
+	}
+
+	return &Manager{brokers: brokers}
+}
+
+// newManagerWithDummy creates a new Manager with dummy brokers for all event types.
+func newManagerWithDummy(dummy *DummyBroker) *Manager {
+	return &Manager{
+		brokers: map[EventType]Broker{
+			UserEventsType:    dummy,
+			ChannelEventsType: dummy,
+			SessionEventsType: dummy,
+		},
+	}
+}
+
+// NewBroker creates a new Manager with the specified brokers for each event type.
+// This is primarily used for testing purposes.
+func NewBroker(user, channel, session Broker) *Manager {
+	return &Manager{
+		brokers: map[EventType]Broker{
+			UserEventsType:    user,
+			ChannelEventsType: channel,
+			SessionEventsType: session,
+		},
+	}
+}
+
+// Close closes all the brokers.
+func (m *Manager) Close() error {
+	var errs []error
+
+	for _, broker := range m.brokers {
+		if err := broker.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("closing brokers: %v", errs)
+	}
+
+	return nil
+}
+
+// Produce produces an event to the appropriate message broker based on message type.
+func (m *Manager) Produce(ctx context.Context, msg Message) error {
+	var eventType EventType
+
+	switch msg.(type) {
+	case UserEventMessage:
+		eventType = UserEventsType
+	case ChannelEventsMessage:
+		eventType = ChannelEventsType
+	case SessionEventsMessage:
+		eventType = SessionEventsType
+	default:
+		return fmt.Errorf("unknown message type: %T", msg)
+	}
+
+	return m.brokers[eventType].Produce(ctx, msg)
 }

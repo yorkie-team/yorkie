@@ -27,7 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -123,7 +123,7 @@ func newServerCmd() *cobra.Command {
 			}
 
 			if kafkaAddresses != "" {
-				conf.Kafka = &messagebroker.Config{
+				conf.Kafka = &messaging.Config{
 					Addresses:          kafkaAddresses,
 					UserEventsTopic:    kafkaUserEventsTopic,
 					ChannelEventsTopic: kafkaChannelEventsTopic,

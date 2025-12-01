@@ -36,7 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
@@ -78,7 +78,7 @@ type Backend struct {
 	// DB is the database instance.
 	DB database.Database
 	// MsgBroker is the message producer instance.
-	MsgBrokers *messagebroker.Brokers
+	MsgBroker messaging.Broker
 	// Warehouse is the warehouse instance.
 	Warehouse warehouse.Warehouse
 }
@@ -90,7 +90,7 @@ func New(
 	membershipConf *membership.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
-	kafkaConf *messagebroker.Config,
+	kafkaConf *messaging.Config,
 	rocksConf *warehouse.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
@@ -104,7 +104,7 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the cache manager, pubsub, and lockers.
+	// 02. Create the cache manager, pubsub, lockers, and background task manager.
 	cacheManager, err := cache.New(cache.Options{
 		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
 		AuthWebhookCacheTTL:  conf.ParseAuthWebhookCacheTTL(),
@@ -115,7 +115,6 @@ func New(
 	}
 	lockers := sync.New()
 	pubsub := pubsub.New()
-
 	bg := background.New(metrics)
 
 	// 03. Create webhook clients and cluster client pool.
@@ -146,7 +145,7 @@ func New(
 	}
 
 	// 06. Create the message broker instance.
-	brokers := messagebroker.Ensure(kafkaConf)
+	broker := messaging.Ensure(kafkaConf)
 
 	// 07. Ensure the warehouse instance.
 	warehouse, err := warehouse.Ensure(rocksConf)
@@ -154,9 +153,8 @@ func New(
 		return nil, err
 	}
 
-	// 08. Create the presence manager for real-time user tracking and background
-	// task manager.
-	presenceManager := channel.NewManager(
+	// 08. Create channel manager for real-time user tracking.
+	channelManager := channel.NewManager(
 		pubsub,
 		conf.ParsePresenceTTL(),
 		conf.ParsePresenceCleanupInterval(),
@@ -164,7 +162,7 @@ func New(
 			Hostname: conf.Hostname,
 			Metrics:  metrics,
 		},
-		brokers,
+		broker,
 	)
 
 	// 09. Ensure the default user and project. If the default user and project
@@ -192,7 +190,7 @@ func New(
 		Cache:    cacheManager,
 		Lockers:  lockers,
 		PubSub:   pubsub,
-		Presence: presenceManager,
+		Presence: channelManager,
 
 		Background:   bg,
 		Membership:   membership,
@@ -202,10 +200,10 @@ func New(
 		EventWebhookManager: eventWebhookManger,
 		ClusterClientPool:   clusterClientPool,
 
-		Metrics:    metrics,
-		DB:         db,
-		MsgBrokers: brokers,
-		Warehouse:  warehouse,
+		Metrics:   metrics,
+		DB:        db,
+		MsgBroker: broker,
+		Warehouse: warehouse,
 	}, nil
 }
 
@@ -244,16 +242,8 @@ func (b *Backend) Shutdown() error {
 	b.EventWebhookManager.Close()
 	b.ClusterClientPool.Close()
 
-	if b.MsgBrokers != nil {
-		if err := b.MsgBrokers.UserEvents().Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := b.MsgBrokers.ChannelEvents().Close(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := b.MsgBrokers.SessionEvents().Close(); err != nil {
-			errs = append(errs, err)
-		}
+	if err := b.MsgBroker.Close(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := b.Warehouse.Close(); err != nil {
 		errs = append(errs, err)
