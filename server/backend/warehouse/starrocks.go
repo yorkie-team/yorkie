@@ -369,7 +369,7 @@ func (r *StarRocks) queryCount(query string) (int, error) {
 		}
 	}()
 
-	var count int
+	var count sql.NullInt64
 	if rows.Next() {
 		if err := rows.Scan(&count); err != nil {
 			return 0, fmt.Errorf("scan row: %w", err)
@@ -378,5 +378,8 @@ func (r *StarRocks) queryCount(query string) (int, error) {
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("iterate rows: %w", err)
 	}
-	return count, nil
+	if !count.Valid {
+		return 0, nil
+	}
+	return int(count.Int64), nil
 }
