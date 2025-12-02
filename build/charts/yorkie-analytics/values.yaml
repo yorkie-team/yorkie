@@ -68,6 +68,9 @@ kube-starrocks:
         type: LoadBalancer
 
 kafka:
+  image:
+    repository: bitnamilegacy/kafka
+    tag: latest
   controller:
     replicaCount: 1
   kraft:
