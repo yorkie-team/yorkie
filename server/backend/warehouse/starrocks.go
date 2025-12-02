@@ -50,8 +50,8 @@ func (r *StarRocks) dial(dsn string) error {
 
 // GetActiveUsers returns the number of active users in the given time range.
 func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
-	if from.After(to) {
-		return nil, fmt.Errorf("invalid time range")
+	if err := validateTimeRange(from, to); err != nil {
+		return nil, err
 	}
 
 	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
@@ -66,49 +66,24 @@ func (r *StarRocks) GetActiveUsers(id types.ID, from, to time.Time) ([]types.Met
 	WHERE
 		project_id = '%s'
 		AND timestamp >= '%s'
-		AND timestamp <= '%s'
+		AND timestamp < '%s'
 	GROUP BY 
 	    event_date
 	ORDER BY 
 	    event_date ASC;
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	rows, err := r.driver.Query(query)
+	metrics, err := r.queryMetrics(query)
 	if err != nil {
 		return nil, fmt.Errorf("get active users: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logging.DefaultLogger().Errorf("close rows: %v", err)
-		}
-	}()
-
-	var activeUsers []types.MetricPoint
-	for rows.Next() {
-		var date string
-		var val int32
-
-		if err := rows.Scan(&date, &val); err != nil {
-			return nil, fmt.Errorf("scan row: %w", err)
-		}
-
-		t, err := time.Parse("2006-01-02", date)
-		if err != nil {
-			return nil, fmt.Errorf("parse date: %w", err)
-		}
-
-		activeUsers = append(activeUsers, types.MetricPoint{
-			Time:  t.Unix(),
-			Value: int(val),
-		})
-	}
-	return activeUsers, nil
+	return metrics, nil
 }
 
-// GetActiveUsersCount returns the number of active users in the given time range.
+// GetActiveUsersCount returns the total number of active users in the given time range.
 func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, error) {
-	if from.After(to) {
-		return 0, fmt.Errorf("invalid time range")
+	if err := validateTimeRange(from, to); err != nil {
+		return 0, err
 	}
 
 	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
@@ -125,9 +100,268 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 		AND timestamp < '%s';
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
-	rows, err := r.driver.Query(query)
+	count, err := r.queryCount(query)
 	if err != nil {
 		return 0, fmt.Errorf("get active users count: %w", err)
+	}
+	return count, nil
+}
+
+// GetActiveChannels returns the active channels of the given project.
+func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return nil, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    DATE(timestamp) AS event_date, 
+	    COUNT(DISTINCT channel_key) AS channels
+	FROM 
+	    channel_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s'
+	GROUP BY 
+	    event_date
+	ORDER BY 
+	    event_date ASC;
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	metrics, err := r.queryMetrics(query)
+	if err != nil {
+		return nil, fmt.Errorf("get active channels: %w", err)
+	}
+	return metrics, nil
+}
+
+// GetActiveChannelsCount returns the active channels count of the given project.
+func (r *StarRocks) GetActiveChannelsCount(id types.ID, from, to time.Time) (int, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return 0, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    COUNT(DISTINCT channel_key) AS channels
+	FROM 
+	    channel_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s';
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	count, err := r.queryCount(query)
+	if err != nil {
+		return 0, fmt.Errorf("get active channels count: %w", err)
+	}
+	return count, nil
+}
+
+// GetSessions returns the sessions of the given project.
+func (r *StarRocks) GetSessions(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return nil, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    DATE(timestamp) AS event_date, 
+	    COUNT(DISTINCT session_id) AS sessions
+	FROM 
+	    session_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s'
+	GROUP BY 
+	    event_date
+	ORDER BY 
+	    event_date ASC;
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	metrics, err := r.queryMetrics(query)
+	if err != nil {
+		return nil, fmt.Errorf("get sessions: %w", err)
+	}
+	return metrics, nil
+}
+
+// GetSessionsCount returns the sessions count of the given project.
+func (r *StarRocks) GetSessionsCount(id types.ID, from, to time.Time) (int, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return 0, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    COUNT(DISTINCT session_id) AS sessions
+	FROM 
+	    session_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s';
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	count, err := r.queryCount(query)
+	if err != nil {
+		return 0, fmt.Errorf("get sessions count: %w", err)
+	}
+	return count, nil
+}
+
+// GetPeakSessionsPerChannel returns the peak sessions per channel of the given project.
+func (r *StarRocks) GetPeakSessionsPerChannel(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return nil, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    event_date,
+	    MAX(session_count) AS peak_sessions
+	FROM (
+	    SELECT 
+	        DATE(timestamp) AS event_date,
+	        channel_key,
+	        COUNT(DISTINCT session_id) AS session_count
+	    FROM 
+	        session_events
+	    WHERE
+	        project_id = '%s'
+	        AND timestamp >= '%s'
+	        AND timestamp < '%s'
+	    GROUP BY 
+	        event_date, channel_key
+	) AS channel_sessions
+	GROUP BY 
+	    event_date
+	ORDER BY 
+	    event_date ASC;
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	metrics, err := r.queryMetrics(query)
+	if err != nil {
+		return nil, fmt.Errorf("get peak sessions per channel: %w", err)
+	}
+	return metrics, nil
+}
+
+// GetPeakSessionsPerChannelCount returns the peak sessions per channel count of the given project.
+func (r *StarRocks) GetPeakSessionsPerChannelCount(id types.ID, from, to time.Time) (int, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return 0, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT 
+	    MAX(session_count) AS peak_sessions
+	FROM (
+	    SELECT 
+	        DATE(timestamp) AS event_date,
+	        channel_key,
+	        COUNT(DISTINCT session_id) AS session_count
+	    FROM 
+	        session_events
+	    WHERE
+	        project_id = '%s'
+	        AND timestamp >= '%s'
+	        AND timestamp < '%s'
+	    GROUP BY 
+	        event_date, channel_key
+	) AS channel_sessions;
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	count, err := r.queryCount(query)
+	if err != nil {
+		return 0, fmt.Errorf("get peak sessions per channel count: %w", err)
+	}
+	return count, nil
+}
+
+// Close closes the connection to the StarRocks.
+func (r *StarRocks) Close() error {
+	if r.driver == nil {
+		return nil
+	}
+	if err := r.driver.Close(); err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+
+	return nil
+}
+
+// validateTimeRange validates that the from time is before or equal to the to time.
+func validateTimeRange(from, to time.Time) error {
+	if from.After(to) {
+		return fmt.Errorf("invalid time range")
+	}
+	return nil
+}
+
+// queryMetrics queries the metrics from the StarRocks.
+func (r *StarRocks) queryMetrics(query string) ([]types.MetricPoint, error) {
+	rows, err := r.driver.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("query metrics: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logging.DefaultLogger().Errorf("close rows: %v", err)
+		}
+	}()
+
+	var metrics []types.MetricPoint
+	for rows.Next() {
+		var date string
+		var val int32
+
+		if err := rows.Scan(&date, &val); err != nil {
+			return nil, fmt.Errorf("scan row: %w", err)
+		}
+
+		t, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			return nil, fmt.Errorf("parse date: %w", err)
+		}
+
+		metrics = append(metrics, types.MetricPoint{
+			Time:  t.Unix(),
+			Value: int(val),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rows: %w", err)
+	}
+	return metrics, nil
+}
+
+// queryCount queries the count from the StarRocks.
+func (r *StarRocks) queryCount(query string) (int, error) {
+	rows, err := r.driver.Query(query)
+	if err != nil {
+		return 0, fmt.Errorf("query count: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -141,14 +375,8 @@ func (r *StarRocks) GetActiveUsersCount(id types.ID, from, to time.Time) (int, e
 			return 0, fmt.Errorf("scan row: %w", err)
 		}
 	}
-	return count, nil
-}
-
-// Close closes the connection to the StarRocks.
-func (r *StarRocks) Close() error {
-	if err := r.driver.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate rows: %w", err)
 	}
-
-	return nil
+	return count, nil
 }

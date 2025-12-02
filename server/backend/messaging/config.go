@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package messagebroker
+package messaging
 
 import (
 	"fmt"
@@ -38,9 +38,11 @@ var (
 
 // Config is the configuration for creating a message broker instance.
 type Config struct {
-	Addresses    string `yaml:"Addresses"`
-	Topic        string `yaml:"Topic"`
-	WriteTimeout string `yaml:"WriteTimeout"`
+	Addresses          string `yaml:"Addresses"`
+	UserEventsTopic    string `yaml:"UserEventsTopic"`
+	ChannelEventsTopic string `yaml:"ChannelEventsTopic"`
+	SessionEventsTopic string `yaml:"SessionEventsTopic"`
+	WriteTimeout       string `yaml:"WriteTimeout"`
 }
 
 // SplitAddresses splits the addresses by comma.
@@ -61,7 +63,7 @@ func (c *Config) MustParseWriteTimeout() time.Duration {
 // Validate validates this config.
 func (c *Config) Validate() error {
 	if c.Addresses == "" {
-		return ErrEmptyAddress
+		return fmt.Errorf("addresses: %w", ErrEmptyAddress)
 	}
 
 	kafkaAddresses := strings.Split(c.Addresses, ",")
@@ -75,8 +77,16 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.Topic == "" {
-		return ErrEmptyTopic
+	if c.UserEventsTopic == "" {
+		return fmt.Errorf("user events topic: %w", ErrEmptyTopic)
+	}
+
+	if c.ChannelEventsTopic == "" {
+		return fmt.Errorf("channel events topic: %w", ErrEmptyTopic)
+	}
+
+	if c.SessionEventsTopic == "" {
+		return fmt.Errorf("session events topic: %w", ErrEmptyTopic)
 	}
 
 	if _, err := time.ParseDuration(c.WriteTimeout); err != nil {

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package messagebroker_test
+package messaging_test
 
 import (
 	"testing"
@@ -22,15 +22,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 )
 
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
-		validConf := messagebroker.Config{
-			Addresses:    "localhost:8080",
-			Topic:        "yorkie",
-			WriteTimeout: "1s",
+		validConf := messaging.Config{
+			Addresses:          "localhost:8080",
+			UserEventsTopic:    "user-events",
+			ChannelEventsTopic: "channel-events",
+			SessionEventsTopic: "session-events",
+			WriteTimeout:       "1s",
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -44,16 +46,24 @@ func TestConfig(t *testing.T) {
 		assert.Contains(t, conf2.Validate().Error(), conf2.Addresses)
 
 		conf3 := validConf
-		conf3.Topic = ""
+		conf3.UserEventsTopic = ""
 		assert.Error(t, conf3.Validate())
 
 		conf4 := validConf
-		conf4.WriteTimeout = "invalid"
+		conf4.ChannelEventsTopic = ""
 		assert.Error(t, conf4.Validate())
+
+		conf5 := validConf
+		conf5.SessionEventsTopic = ""
+		assert.Error(t, conf5.Validate())
+
+		conf6 := validConf
+		conf6.WriteTimeout = "invalid"
+		assert.Error(t, conf6.Validate())
 	})
 
 	t.Run("test split addresses", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			Addresses: "localhost:8080,localhost:8081",
 		}
 		addrs := c.SplitAddresses()
@@ -61,17 +71,17 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("test must parse write timeout", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			WriteTimeout: "1s",
 		}
 		assert.Equal(t, time.Second, c.MustParseWriteTimeout())
 	})
 
 	t.Run("test must parse write timeout with invalid duration", func(t *testing.T) {
-		c := &messagebroker.Config{
+		c := &messaging.Config{
 			WriteTimeout: "1",
 		}
-		assert.PanicsWithError(t, messagebroker.ErrInvalidDuration.Error(), func() {
+		assert.PanicsWithError(t, messaging.ErrInvalidDuration.Error(), func() {
 			c.MustParseWriteTimeout()
 		})
 	})

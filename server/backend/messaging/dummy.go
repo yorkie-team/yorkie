@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package messagebroker
+package messaging
 
 import (
 	"context"

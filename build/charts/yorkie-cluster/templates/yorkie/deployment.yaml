@@ -104,9 +104,17 @@ spec:
           "--kafka-addresses",
           "{{ .Values.yorkie.args.kafkaAddresses }}",
           {{- end }}
-          {{- if .Values.yorkie.args.kafkaTopic }}
-          "--kafka-topic",
-          "{{ .Values.yorkie.args.kafkaTopic }}",
+          {{- if .Values.yorkie.args.kafkaUserEventsTopic }}
+          "--kafka-user-events-topic",
+          "{{ .Values.yorkie.args.kafkaUserEventsTopic }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.kafkaChannelEventsTopic }}
+          "--kafka-channel-events-topic",
+          "{{ .Values.yorkie.args.kafkaChannelEventsTopic }}",
+          {{- end }}
+          {{- if .Values.yorkie.args.kafkaSessionEventsTopic }}
+          "--kafka-session-events-topic",
+          "{{ .Values.yorkie.args.kafkaSessionEventsTopic }}",
           {{- end }}
           {{- if .Values.yorkie.args.kafkaWriteTimeout }}
           "--kafka-write-timeout",

@@ -36,7 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
@@ -78,7 +78,7 @@ type Backend struct {
 	// DB is the database instance.
 	DB database.Database
 	// MsgBroker is the message producer instance.
-	MsgBroker messagebroker.Broker
+	MsgBroker messaging.Broker
 	// Warehouse is the warehouse instance.
 	Warehouse warehouse.Warehouse
 }
@@ -90,7 +90,7 @@ func New(
 	membershipConf *membership.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
-	kafkaConf *messagebroker.Config,
+	kafkaConf *messaging.Config,
 	rocksConf *warehouse.Config,
 ) (*Backend, error) {
 	// 01. Build the server info with the given hostname or the hostname of the
@@ -104,7 +104,7 @@ func New(
 		conf.Hostname = hostname
 	}
 
-	// 02. Create the cache manager, pubsub, and lockers.
+	// 02. Create the cache manager, pubsub, lockers, and background task manager.
 	cacheManager, err := cache.New(cache.Options{
 		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
 		AuthWebhookCacheTTL:  conf.ParseAuthWebhookCacheTTL(),
@@ -115,26 +115,14 @@ func New(
 	}
 	lockers := sync.New()
 	pubsub := pubsub.New()
-
-	// 03. Create the presence manager for real-time user tracking and background
-	// task manager.
-	presenceManager := channel.NewManager(
-		pubsub,
-		conf.ParsePresenceTTL(),
-		conf.ParsePresenceCleanupInterval(),
-		&channel.Metrics{
-			Hostname: conf.Hostname,
-			Metrics:  metrics,
-		},
-	)
 	bg := background.New(metrics)
 
-	// 04. Create webhook clients and cluster client pool.
+	// 03. Create webhook clients and cluster client pool.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
 	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
 	clusterClientPool := cluster.NewClientPool()
 
-	// 05. Create the database instance. If the MongoDB configuration is given,
+	// 04. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.
 	var db database.Database
 	if mongoConf != nil {
@@ -149,21 +137,33 @@ func New(
 		}
 	}
 
-	// 06. Create the membership manager and the housekeeping instance.
+	// 05. Create the membership manager and the housekeeping instance.
 	membership := membership.New(db, conf.RPCAddr, membershipConf)
 	housekeeper, err := housekeeping.New(housekeepingConf, membership)
 	if err != nil {
 		return nil, err
 	}
 
-	// 07. Create the message broker instance.
-	broker := messagebroker.Ensure(kafkaConf)
+	// 06. Create the message broker instance.
+	broker := messaging.Ensure(kafkaConf)
 
-	// 08. Ensure the warehouse instance.
+	// 07. Ensure the warehouse instance.
 	warehouse, err := warehouse.Ensure(rocksConf)
 	if err != nil {
 		return nil, err
 	}
+
+	// 08. Create channel manager for real-time user tracking.
+	channelManager := channel.NewManager(
+		pubsub,
+		conf.ParsePresenceTTL(),
+		conf.ParsePresenceCleanupInterval(),
+		&channel.Metrics{
+			Hostname: conf.Hostname,
+			Metrics:  metrics,
+		},
+		broker,
+	)
 
 	// 09. Ensure the default user and project. If the default user and project
 	// do not exist, create them.
@@ -190,7 +190,7 @@ func New(
 		Cache:    cacheManager,
 		Lockers:  lockers,
 		PubSub:   pubsub,
-		Presence: presenceManager,
+		Presence: channelManager,
 
 		Background:   bg,
 		Membership:   membership,

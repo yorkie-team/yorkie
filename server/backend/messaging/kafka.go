@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package messagebroker
+package messaging
 
 import (
 	"context"
@@ -30,12 +30,12 @@ type KafkaBroker struct {
 }
 
 // newKafkaBroker creates a new instance of KafkaProducer.
-func newKafkaBroker(conf *Config) *KafkaBroker {
+func newKafkaBroker(conf *Config, topic string) *KafkaBroker {
 	return &KafkaBroker{
 		conf: conf,
 		writer: &kafka.Writer{
 			Addr:         kafka.TCP(conf.SplitAddresses()...),
-			Topic:        conf.Topic,
+			Topic:        topic,
 			WriteTimeout: conf.MustParseWriteTimeout(),
 			Balancer:     &kafka.LeastBytes{},
 			Async:        true,

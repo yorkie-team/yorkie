@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
@@ -57,8 +57,10 @@ const (
 	DefaultMongoChangeCacheSize              = 10000
 	DefaultMongoVectorCacheSize              = 10000
 
-	DefaultKafkaTopic        = "user-events"
-	DefaultKafkaWriteTimeout = 5 * time.Second
+	DefaultKafkaUserEventsTopic    = "user-events"
+	DefaultKafkaChannelEventsTopic = "channel-events"
+	DefaultKafkaSessionEventsTopic = "session-events"
+	DefaultKafkaWriteTimeout       = 5 * time.Second
 
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
@@ -87,14 +89,14 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC          *rpc.Config           `yaml:"RPC"`
-	Profiling    *profiling.Config     `yaml:"Profiling"`
-	Membership   *membership.Config    `yaml:"Membership"`
-	Housekeeping *housekeeping.Config  `yaml:"Housekeeping"`
-	Backend      *backend.Config       `yaml:"Backend"`
-	Mongo        *mongo.Config         `yaml:"Mongo"`
-	Kafka        *messagebroker.Config `yaml:"Kafka"`
-	StarRocks    *warehouse.Config     `yaml:"StarRocks"`
+	RPC          *rpc.Config          `yaml:"RPC"`
+	Profiling    *profiling.Config    `yaml:"Profiling"`
+	Membership   *membership.Config   `yaml:"Membership"`
+	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
+	Backend      *backend.Config      `yaml:"Backend"`
+	Mongo        *mongo.Config        `yaml:"Mongo"`
+	Kafka        *messaging.Config    `yaml:"Kafka"`
+	StarRocks    *warehouse.Config    `yaml:"StarRocks"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -299,8 +301,17 @@ func (c *Config) ensureMongoDefaultValue() {
 
 // ensureKafkaDefaultValue set the default messagebroker.Config value
 func (c *Config) ensureKafkaDefaultValue() {
-	if c.Kafka.Topic == "" {
-		c.Kafka.Topic = DefaultKafkaTopic
+	if c.Kafka == nil {
+		c.Kafka = &messaging.Config{}
+	}
+	if c.Kafka.UserEventsTopic == "" {
+		c.Kafka.UserEventsTopic = DefaultKafkaUserEventsTopic
+	}
+	if c.Kafka.ChannelEventsTopic == "" {
+		c.Kafka.ChannelEventsTopic = DefaultKafkaChannelEventsTopic
+	}
+	if c.Kafka.SessionEventsTopic == "" {
+		c.Kafka.SessionEventsTopic = DefaultKafkaSessionEventsTopic
 	}
 	if c.Kafka.WriteTimeout == "" {
 		c.Kafka.WriteTimeout = DefaultKafkaWriteTimeout.String()

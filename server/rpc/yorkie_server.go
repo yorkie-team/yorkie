@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/pubsub"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -79,7 +79,7 @@ func (s *yorkieServer) ActivateClient(
 	if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
 		if err := s.backend.MsgBroker.Produce(
 			ctx,
-			messagebroker.UserEventMessage{
+			messaging.UserEventMessage{
 				UserID:    userID,
 				Timestamp: gotime.Now(),
 				EventType: events.ClientActivatedEvent,

@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/heap"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 )
@@ -89,6 +90,9 @@ type Manager struct {
 
 	// metrics is used to collect prometheus metrics
 	metrics *Metrics
+
+	// broker is used to publish channel events
+	broker messaging.Broker
 }
 
 // Metrics is used to collect prometheus metrics.
@@ -98,7 +102,13 @@ type Metrics struct {
 }
 
 // NewManager creates a new presence manager.
-func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Duration, metrics *Metrics) *Manager {
+func NewManager(
+	pubsub PubSub,
+	ttl gotime.Duration,
+	cleanupInterval gotime.Duration,
+	metrics *Metrics,
+	broker messaging.Broker,
+) *Manager {
 	if ttl == 0 {
 		ttl = 60 * gotime.Second
 	}
@@ -119,6 +129,7 @@ func NewManager(pubsub PubSub, ttl gotime.Duration, cleanupInterval gotime.Durat
 		cleanupDone:     make(chan struct{}),
 
 		metrics: metrics,
+		broker:  broker,
 	}
 }
 
@@ -183,6 +194,15 @@ func (m *Manager) Attach(
 		func(val *cmap.Map[types.ID, *Session], exists bool) *cmap.Map[types.ID, *Session] {
 			if !exists {
 				val = cmap.New[types.ID, *Session]()
+
+				if err := m.broker.Produce(ctx, messaging.ChannelEventsMessage{
+					ProjectID:  key.ProjectID.String(),
+					EventType:  events.ChannelCreated,
+					Timestamp:  gotime.Now(),
+					ChannelKey: key.ChannelKey.String(),
+				}); err != nil {
+					logging.From(ctx).Errorf("failed to produce channel event: %v", err)
+				}
 			}
 
 			return val
@@ -212,6 +232,17 @@ func (m *Manager) Attach(
 		},
 	)
 	clientSessionMap.Set(key, id)
+
+	if err := m.broker.Produce(ctx, messaging.SessionEventsMessage{
+		ProjectID:  key.ProjectID.String(),
+		SessionID:  id.String(),
+		Timestamp:  gotime.Now(),
+		UserID:     clientID.String(),
+		ChannelKey: key.ChannelKey.String(),
+		EventType:  events.SessionCreated,
+	}); err != nil {
+		logging.From(ctx).Errorf("failed to produce session event: %v", err)
+	}
 
 	// Get new count immediately after adding to minimize race window
 	newCount := int64(sessionMap.Len())

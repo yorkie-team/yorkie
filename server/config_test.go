@@ -71,7 +71,9 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	}
 
 	if conf.Kafka != nil {
-		assert.Equal(t, server.DefaultKafkaTopic, conf.Kafka.Topic)
+		assert.Equal(t, server.DefaultKafkaUserEventsTopic, conf.Kafka.UserEventsTopic)
+		assert.Equal(t, server.DefaultKafkaChannelEventsTopic, conf.Kafka.ChannelEventsTopic)
+		assert.Equal(t, server.DefaultKafkaSessionEventsTopic, conf.Kafka.SessionEventsTopic)
 		assertDurationEqual(t, server.DefaultKafkaWriteTimeout, conf.Kafka.WriteTimeout)
 	}
 }

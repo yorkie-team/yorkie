@@ -27,7 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
-	"github.com/yorkie-team/yorkie/server/backend/messagebroker"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -71,9 +71,11 @@ var (
 
 	authWebhookCacheTTL time.Duration
 
-	kafkaAddresses    string
-	kafkaTopic        string
-	kafkaWriteTimeout time.Duration
+	kafkaAddresses          string
+	kafkaUserEventsTopic    string
+	kafkaChannelEventsTopic string
+	kafkaSessionEventsTopic string
+	kafkaWriteTimeout       time.Duration
 
 	starRocksDSN string
 
@@ -120,11 +122,13 @@ func newServerCmd() *cobra.Command {
 				}
 			}
 
-			if kafkaAddresses != "" && kafkaTopic != "" {
-				conf.Kafka = &messagebroker.Config{
-					Addresses:    kafkaAddresses,
-					Topic:        kafkaTopic,
-					WriteTimeout: kafkaWriteTimeout.String(),
+			if kafkaAddresses != "" {
+				conf.Kafka = &messaging.Config{
+					Addresses:          kafkaAddresses,
+					UserEventsTopic:    kafkaUserEventsTopic,
+					ChannelEventsTopic: kafkaChannelEventsTopic,
+					SessionEventsTopic: kafkaSessionEventsTopic,
+					WriteTimeout:       kafkaWriteTimeout.String(),
 				}
 			}
 
@@ -480,10 +484,22 @@ func init() {
 		"Comma-separated list of Kafka addresses (e.g., localhost:9092,localhost:9093)",
 	)
 	cmd.Flags().StringVar(
-		&kafkaTopic,
-		"kafka-topic",
-		server.DefaultKafkaTopic,
-		"Kafka topic name to publish events",
+		&kafkaUserEventsTopic,
+		"kafka-user-events-topic",
+		server.DefaultKafkaUserEventsTopic,
+		"Kafka topic name to publish user events",
+	)
+	cmd.Flags().StringVar(
+		&kafkaChannelEventsTopic,
+		"kafka-channel-events-topic",
+		server.DefaultKafkaChannelEventsTopic,
+		"Kafka topic name to publish channel events",
+	)
+	cmd.Flags().StringVar(
+		&kafkaSessionEventsTopic,
+		"kafka-session-events-topic",
+		server.DefaultKafkaSessionEventsTopic,
+		"Kafka topic name to publish session events",
 	)
 	cmd.Flags().DurationVar(
 		&kafkaWriteTimeout,
