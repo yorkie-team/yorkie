@@ -1,0 +1,152 @@
+# Minimal configuration for minikube testing
+# This focuses on MongoDB deployment without Istio
+
+yorkie:
+  name: yorkie
+  namespace: yorkie
+  autoscaling:
+    enabled: false
+    replicaCount: 1
+  image:
+    repository: yorkieteam/yorkie
+    pullPolicy: IfNotPresent
+    tag: "0.6.41-rc"
+  args:
+    useDefaultProject: false
+    dbConnectionUri: mongodb://admin:admin123@mongodb-mongos.yorkie.svc.cluster.local:27017/yorkie-meta?authSource=admin
+    dbName: yorkie-meta
+  ports:
+    rpcPort: 8080
+    profilingPort: 8081
+  logLevel: "info"
+  mongoMonitoringEnabled: false
+  mongoMonitoringSlowQueryThreshold: "100ms"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Disable Istio-related features for minikube
+ingressGateway:
+  enabled: false
+
+ingress:
+  enabled: false
+
+ratelimit:
+  enabled: false
+
+# MongoDB configuration with Percona Operator
+mongodb:
+  enabled: true
+  operator:
+    enabled: true
+    watchNamespace: ""
+
+yorkie-mongodb:
+  fullnameOverride: mongodb
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+
+  crVersion: "1.18.0"
+
+  image:
+    repository: percona/percona-server-mongodb
+    tag: "6.0.19-17"
+
+  imagePullPolicy: IfNotPresent
+
+  secrets:
+    users: mongodb-users
+
+  pmm:
+    enabled: false
+
+  backup:
+    enabled: false
+
+  # Minimal sharding configuration for minikube
+  sharding:
+    enabled: true
+
+    configsvrReplSet:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "none"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "200m"
+          memory: "512M"
+        requests:
+          cpu: "100m"
+          memory: "256M"
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 500Mi
+
+    mongos:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "none"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "200m"
+          memory: "512M"
+        requests:
+          cpu: "100m"
+          memory: "256M"
+
+  replsets:
+    # Shard 1 (minimal for testing)
+    - name: rs0
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "none"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "1G"
+        requests:
+          cpu: "200m"
+          memory: "512M"
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+    # Shard 2 (minimal for testing)
+    - name: rs1
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: "none"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      resources:
+        limits:
+          cpu: "300m"
+          memory: "1G"
+        requests:
+          cpu: "200m"
+          memory: "512M"
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
