@@ -405,9 +405,14 @@ func TestChannelIntegration(t *testing.T) {
 			}
 		}()
 
+		counts := make([]int64, len(watchClients))
+		var mu sync.Mutex
+
 		// Collect counts from all watchers
-		collectCounts := func() []int64 {
-			counts := make([]int64, len(watchClients))
+		collectCounts := func() {
+			mu.Lock()
+			defer mu.Unlock()
+
 			for i, countChan := range countChans {
 				select {
 				case count := <-countChan:
@@ -416,17 +421,20 @@ func TestChannelIntegration(t *testing.T) {
 					// Keep previous count if no new update
 				}
 			}
-			return counts
 		}
 
 		// Eventually all watchers should see count = clientCount
 		assert.Eventually(t, func() bool {
-			counts := collectCounts()
+			collectCounts()
+
+			mu.Lock()
+			defer mu.Unlock()
 			for _, count := range counts {
 				if count != int64(clientCount) {
 					return false
 				}
 			}
+
 			return true
 		}, time.Second, 100*time.Millisecond, "All watchers should see count = %d", clientCount)
 
