@@ -13,7 +13,9 @@ yorkie:
 
   args:
     useDefaultProject: false
-    dbConnectionUri: mongodb://mongodb.mongodb.svc.cluster.local:27017/yorkie-meta
+    # Percona MongoDB uses mongos service for sharded cluster
+    # Connection URI will be generated from mongodb.credentials.databaseAdmin values
+    dbConnectionUri: ""
     dbName: yorkie-meta
 
   ports:
@@ -76,19 +78,144 @@ ratelimit:
   requestsPerUnit: 10000
   domain: yorkie-ratelimit
 
-# Configuration for yorkie-mongodb
-yorkie-mongodb:
-  name: mongodb
-  namespace: mongodb
-  port: 27017
-  image:
-    registry: docker.io
-    repository: mongo
-    tag: "6.0"
-  persistence:
-    dataSize: 1Gi
-    configSize: 500Mi
-    storageClass: standard
-  sharded:
+# Configuration for MongoDB (Percona Operator)
+mongodb:
+  # Enable/disable MongoDB deployment
+  enabled: false
+
+  # MongoDB user credentials
+  credentials:
+    # Database admin user (used by Yorkie application)
+    databaseAdmin:
+      username: admin
+      # Default password - CHANGE THIS for production!
+      password: "admin"
+    # User admin (used for user management)
+    userAdmin:
+      username: useradmin
+      # Default password - CHANGE THIS for production!
+      password: "useradmin"
+    # Cluster admin user (used for sharding setup)
+    clusterAdmin:
+      username: clusteradmin
+      # Default password - CHANGE THIS for production!
+      password: "clusteradmin"
+
+  # Configuration for sharding setup
+  setup:
     enabled: true
-  enabled: true
+    database: yorkie-meta
+    restartPolicy: OnFailure
+    backoffLimit: 5
+    rules:
+      - collectionName: clients
+        shardKeys:
+          - name: project_id
+            method: 1
+          - name: _id
+            method: hashed
+        unique: false
+      - collectionName: documents
+        shardKeys:
+          - name: project_id
+            method: 1
+        unique: false
+      - collectionName: schemas
+        shardKeys:
+          - name: project_id
+            method: 1
+        unique: false
+      - collectionName: changes
+        shardKeys:
+          - name: doc_id
+            method: hashed
+        unique: false
+      - collectionName: snapshots
+        shardKeys:
+          - name: doc_id
+            method: hashed
+        unique: false
+      - collectionName: versionvectors
+        shardKeys:
+          - name: doc_id
+            method: hashed
+        unique: false
+      - collectionName: revisions
+        shardKeys:
+          - name: doc_id
+            method: hashed
+        unique: false
+
+# Configuration for Percona MongoDB Database
+yorkie-mongodb:
+  fullnameOverride: mongodb
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+
+  # Allow single-node replica sets for development/testing
+  unsafeFlags:
+    replsetSize: true
+    tls: true
+
+  # Disable TLS for development/testing
+  tls:
+    mode: disabled
+
+  image:
+    repository: percona/percona-server-mongodb
+    tag: "8.0.12-4"
+
+  imagePullPolicy: IfNotPresent
+
+  # Secrets for MongoDB users
+  secrets:
+    users: mongodb-users
+
+  # PMM (Percona Monitoring and Management) - optional
+  pmm:
+    enabled: false
+
+  # Log collector (FluentBit) - optional
+  logcollector:
+    enabled: false
+
+  # Backup configuration - optional
+  backup:
+    enabled: false
+
+  # Sharding configuration
+  sharding:
+    enabled: true
+
+    configrs:
+      size: 1
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+
+    mongos:
+      size: 1
+
+  replsets:
+    # Shard 1
+    - name: rs0
+      size: 1
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    # Shard 2
+    - name: rs1
+      size: 1
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
