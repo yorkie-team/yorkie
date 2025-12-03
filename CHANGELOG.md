@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+- Change queryCount to use sql.NullInt64 for count handling by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1591
+
 ## [v0.6.40] - 2025-12-02
 
 ### Added
