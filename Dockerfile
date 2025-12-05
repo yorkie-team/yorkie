@@ -23,7 +23,7 @@ COPY . .
 RUN make build
 
 # Stage 2: get ca-certificates
-FROM alpine:3 as certs
+FROM alpine:3.19 as certs
 RUN apk --no-cache add ca-certificates
 
 # Stage 3: copy ca-certificates and binary

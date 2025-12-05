@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.6.40
+  version: v0.6.41-rc
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -102,6 +102,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.YorkieService.DetachDocument.yorkie.v1.DetachDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/GetRevision:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.GetRevision.yorkie.v1.GetRevisionRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.GetRevision.yorkie.v1.GetRevisionResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -264,6 +276,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentRequest'
       required: true
+    yorkie.v1.YorkieService.GetRevision.yorkie.v1.GetRevisionRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetRevisionRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetRevisionRequest'
+      required: true
     yorkie.v1.YorkieService.ListRevisions.yorkie.v1.ListRevisionsRequest:
       content:
         application/json:
@@ -396,6 +417,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.DetachDocumentResponse'
+      description: ""
+    yorkie.v1.YorkieService.GetRevision.yorkie.v1.GetRevisionResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetRevisionResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetRevisionResponse'
       description: ""
     yorkie.v1.YorkieService.ListRevisions.yorkie.v1.ListRevisionsResponse:
       content:
@@ -1102,6 +1132,39 @@ components:
         - 3
       title: DocEventType
       type: string
+    yorkie.v1.GetRevisionRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        revisionId:
+          additionalProperties: false
+          description: ""
+          title: revision_id
+          type: string
+      title: GetRevisionRequest
+      type: object
+    yorkie.v1.GetRevisionResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        revision:
+          $ref: '#/components/schemas/yorkie.v1.RevisionSummary'
+          additionalProperties: false
+          description: ""
+          title: revision
+          type: object
+      title: GetRevisionResponse
+      type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
       description: ""
@@ -1141,6 +1204,11 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
         documentId:
           additionalProperties: false
           description: ""
@@ -1161,11 +1229,6 @@ components:
           description: ""
           title: page_size
           type: integer
-        projectId:
-          additionalProperties: false
-          description: ""
-          title: project_id
-          type: string
       title: ListRevisionsRequest
       type: object
     yorkie.v1.ListRevisionsResponse:
@@ -1905,6 +1968,11 @@ components:
           additionalProperties: false
           description: ""
           title: client_id
+          type: string
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
           type: string
         revisionId:
           additionalProperties: false

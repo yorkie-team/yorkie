@@ -60,6 +60,7 @@ const (
 	WatchDocument  Method = "WatchDocument"
 
 	CreateRevision  Method = "CreateRevision"
+	GetRevision     Method = "GetRevision"
 	ListRevisions   Method = "ListRevisions"
 	RestoreRevision Method = "RestoreRevision"
 
@@ -93,6 +94,7 @@ func AuthMethods() []Method {
 		WatchDocument,
 
 		CreateRevision,
+		GetRevision,
 		ListRevisions,
 		RestoreRevision,
 

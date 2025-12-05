@@ -926,6 +926,11 @@ func (s *yorkieServer) ListRevisions(
 	ctx context.Context,
 	req *connect.Request[api.ListRevisionsRequest],
 ) (*connect.Response[api.ListRevisionsResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
@@ -937,16 +942,25 @@ func (s *yorkieServer) ListRevisions(
 		IsForward: req.Msg.IsForward,
 	}
 
+	project := projects.From(ctx)
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.ListRevisions,
+		Method:     types.ListRevisions,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return nil, err
 	}
 
-	project := projects.From(ctx)
-	docKey := types.DocRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
-		DocID:     docID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return nil, err
 	}
 
 	summaries, err := revisions.List(ctx, s.backend, docKey, paging, false)
@@ -956,6 +970,54 @@ func (s *yorkieServer) ListRevisions(
 
 	return connect.NewResponse(&api.ListRevisionsResponse{
 		Revisions: converter.ToRevisionSummaries(summaries),
+	}), nil
+}
+
+// GetRevision returns a specific revision with its full snapshot data.
+func (s *yorkieServer) GetRevision(
+	ctx context.Context,
+	req *connect.Request[api.GetRevisionRequest],
+) (*connect.Response[api.GetRevisionResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	revisionID := types.ID(req.Msg.RevisionId)
+	project := projects.From(ctx)
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.GetRevision,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return nil, err
+	}
+
+	// Get the revision with full snapshot
+	revision, err := revisions.Get(ctx, s.backend, revisionID)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetRevisionResponse{
+		Revision: converter.ToRevisionSummary(revision),
 	}), nil
 }
 
@@ -969,24 +1031,30 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
-	revisionActorID, err := time.ActorIDFromHex(req.Msg.RevisionId)
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
 	}
-	revisionID := types.IDFromActorID(revisionActorID)
+
+	revisionID := types.ID(req.Msg.RevisionId)
+	project := projects.From(ctx)
+	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.RestoreRevision,
+		Method:     types.RestoreRevision,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.ReadWrite),
 	}); err != nil {
 		return nil, err
 	}
 
-	project := projects.From(ctx)
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
