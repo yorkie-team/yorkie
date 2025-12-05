@@ -1,12 +1,15 @@
-{{- if index .Values "yorkie-mongodb" "sharded" "enabled"}}
+{{- if index .Values "yorkie-mongodb" "sharding" "enabled"}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: {{ index .Values "yorkie-mongodb" "namespace" }}
+  namespace: {{ .Values.yorkie.namespace }}
   name: db-provisioning-job-status-reader
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["psmdb.percona.com"]
+    resources: ["perconaservermongodbs"]
     verbs: ["get", "list"]
 
 ---
@@ -15,7 +18,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: read-db-provisioning-status
-  namespace: {{ index .Values "yorkie-mongodb" "namespace" }}
+  namespace: {{ .Values.yorkie.namespace }}
 subjects:
   - kind: ServiceAccount
     name: yorkie-db-provisioning-job-account

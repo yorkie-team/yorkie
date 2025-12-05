@@ -1,6 +1,9 @@
 dependencies:
-- name: yorkie-mongodb
-  repository: ""
-  version: 0.4.13
-digest: sha256:528f88fd5bbf53fde63242c9a1703d7d3eb21febf4af7fc34485b23096fcc823
-generated: "2024-10-22T18:31:15.468835+09:00"
+- name: psmdb-operator
+  repository: https://percona.github.io/percona-helm-charts/
+  version: 1.17.0
+- name: psmdb-db
+  repository: https://percona.github.io/percona-helm-charts/
+  version: 1.17.0
+digest: sha256:a795746df1447e6dcfae9313d9bf5c34c49fbec92cd9fca753bf9b8372f2bada
+generated: "2025-12-03T19:29:29.924276+09:00"
