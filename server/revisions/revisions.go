@@ -183,7 +183,7 @@ func Restore(
 	if _, err := packs.PushPull(
 		ctx,
 		be,
-		&types.Project{ID: docKey.ProjectID},
+		project,
 		database.SystemClientInfo(docKey.ProjectID, docInfo),
 		docKey,
 		doc.CreateChangePack(),
