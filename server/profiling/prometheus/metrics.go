@@ -456,12 +456,22 @@ func (m *Metrics) SetChannelTotal(hostname string, projectID types.ID, count int
 	}).Set(float64(count))
 }
 
+// ResetChannelTotal resets the number of channels.
+func (m *Metrics) ResetChannelTotal() {
+	m.channelTotal.Reset()
+}
+
 // SetChannelSessionsTotal adds the number of sessions in channel.
 func (m *Metrics) SetChannelSessionsTotal(hostname string, projectID types.ID, count int) {
 	m.channelSessionsTotal.With(prometheus.Labels{
 		projectIDLabel: projectID.String(),
 		hostnameLabel:  hostname,
 	}).Set(float64(count))
+}
+
+// ResetChannelSessionsTotal resets the number of sessions in channel.
+func (m *Metrics) ResetChannelSessionsTotal() {
+	m.channelSessionsTotal.Reset()
 }
 
 // SetChannelSessionsTopN adds the top N channels by session count.
