@@ -81,7 +81,7 @@ ratelimit:
 # Configuration for MongoDB (Percona Operator)
 mongodb:
   # Enable/disable MongoDB deployment
-  enabled: false
+  enabled: true
 
   # MongoDB user credentials
   credentials:
