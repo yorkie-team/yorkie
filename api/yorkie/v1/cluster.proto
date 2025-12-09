@@ -92,7 +92,7 @@ enum CacheType {
 message InvalidateCacheRequest {
 
   CacheType cache_type = 1;
-  string key = 2;
+  repeated string keys = 2;
 }
 
 message InvalidateCacheResponse {

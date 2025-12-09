@@ -287,7 +287,7 @@ func (s *clusterServer) InvalidateCache(
 ) (*connect.Response[api.InvalidateCacheResponse], error) {
 	cacheType := converter.FromCacheType(req.Msg.CacheType)
 	if mongoClient, ok := s.backend.DB.(*mongo.Client); ok {
-		mongoClient.InvalidateCache(cacheType, req.Msg.Key)
+		mongoClient.InvalidateCache(cacheType, req.Msg.Keys)
 	}
 
 	return connect.NewResponse(&api.InvalidateCacheResponse{
