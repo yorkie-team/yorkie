@@ -32,7 +32,7 @@ spec:
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
     spec:
-      {{ if index .Values "yorkie-mongodb" "sharding" "enabled"}}
+      {{ if index .Values "mongodb" "enabled"}}
       initContainers:
       - name: wait-for-mongodb-ready
         image: bitnami/kubectl:latest
