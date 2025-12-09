@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.41] - 2025-12-09
+
+### Added
+
+- Introduce GetRevision RPC and fix revision restore by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1595
+
+### Changed
+
+- Replace Bitnami MongoDB chart with Percona Operator by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1594
+- Bump up Go to 1.24 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1593
+
+### Fixed
+
+- Add missing document locks to RestoreRevision APIs by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1598
+- Implement reset functions for channel metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1597
 - Change queryCount to use sql.NullInt64 for count handling by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1591
 
 ## [v0.6.40] - 2025-12-02
