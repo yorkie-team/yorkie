@@ -1044,6 +1044,9 @@ func (s *yorkieServer) RestoreRevision(
 		return nil, err
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, docInfo.Key))
+	defer locker.RUnlock()
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.RestoreRevision,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.ReadWrite),
