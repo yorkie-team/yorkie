@@ -472,6 +472,8 @@ func pushTopSessions(topChannelSessions *heap.Heap[ChannelSessionCount], key typ
 
 // metricsChannelTotal updates metrics for the channel total.
 func metricsChannelTotal(metrics *Metrics, channelsCountByProjectID map[types.ID]int) {
+	metrics.Metrics.ResetChannelTotal()
+
 	for projectID, channelCount := range channelsCountByProjectID {
 		metrics.Metrics.SetChannelTotal(
 			metrics.Hostname,
@@ -483,6 +485,8 @@ func metricsChannelTotal(metrics *Metrics, channelsCountByProjectID map[types.ID
 
 // metricsChannelSessionsTotal updates metrics for the channel sessions by project ID.
 func metricsChannelSessionsTotal(metrics *Metrics, channelSessionsCountByProjectID map[types.ID]int) {
+	metrics.Metrics.ResetChannelSessionsTotal()
+
 	for projectID, sessionCount := range channelSessionsCountByProjectID {
 		metrics.Metrics.SetChannelSessionsTotal(
 			metrics.Hostname,
