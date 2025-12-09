@@ -921,6 +921,9 @@ func (s *adminServer) RestoreRevisionByAdmin(
 		return nil, err
 	}
 
+	locker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.RUnlock()
+
 	revision, err := s.backend.DB.FindRevisionInfoByID(ctx, types.ID(req.Msg.RevisionId))
 	if err != nil {
 		return nil, err

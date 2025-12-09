@@ -114,6 +114,13 @@ The following sections detail lock acquisition patterns for different types of o
 2. PushPull
 3. 🔓 Release `doc`
 
+**RestoreRevision(by SDK and Admin)**
+
+1. 🔒 Acquire `doc` RLock
+2. `findRevision` / `findDoc`
+3. PushPull (using SystemClient, no client checkpoint update)
+4. 🔓 Release `doc`
+
 #### System Operations
 
 **PurgeDocument/CompactDocument(by System)**
