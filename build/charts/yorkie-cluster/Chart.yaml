@@ -16,9 +16,17 @@ appVersion: "0.6.41-rc"
 kubeVersion: ">=1.23.0-0"
 
 dependencies:
-  - name: yorkie-mongodb
-    version: 0.4.13
-    condition: yorkie-mongodb.enabled
+  # Percona Operator for MongoDB - manages MongoDB clusters
+  - name: psmdb-operator
+    version: "1.21.1"
+    repository: "https://percona.github.io/percona-helm-charts/"
+    condition: mongodb.enabled
+  # Percona MongoDB Database cluster
+  - name: psmdb-db
+    version: "1.21.1"
+    repository: "https://percona.github.io/percona-helm-charts/"
+    condition: mongodb.enabled
+    alias: yorkie-mongodb
 
 keywords:
   - yorkie

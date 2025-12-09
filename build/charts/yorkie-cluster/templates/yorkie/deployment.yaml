@@ -32,36 +32,28 @@ spec:
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
     spec:
-      {{ if index .Values "yorkie-mongodb" "sharded" "enabled"}}
+      {{ if index .Values "yorkie-mongodb" "sharding" "enabled"}}
       initContainers:
-      - name: wait-for-sharded-db-provision
+      - name: wait-for-mongodb-ready
         image: bitnami/kubectl:latest
         command:
           - /bin/sh
           - -c
           - |
-            echo "Wait db start"
+            echo "Waiting for MongoDB to be ready..."
             while true; do
-              job_status=$(kubectl get job -n $NAMESPACE $JOB_NAME -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')
-              if [ "$job_status" = "True" ]; then
-                echo "DB provisioning Job completed successfully!"
+              # Check if PerconaServerMongoDB resource is ready
+              status=$(kubectl get psmdb -n $NAMESPACE {{ index .Values "yorkie-mongodb" "fullnameOverride" }} -o jsonpath='{.status.state}' 2>/dev/null || echo "NotFound")
+              if [ "$status" = "ready" ]; then
+                echo "MongoDB cluster is ready!"
                 break
               fi
-              echo "Waiting for DB provisioning job to complete..."
-              sleep 5
+              echo "Current status: $status. Waiting..."
+              sleep 10
             done
         env:
           - name: NAMESPACE
-            value: "{{ index .Values "yorkie-mongodb" "namespace" }}"
-          - name: JOB_NAME
-            value: "{{ index .Values "yorkie-mongodb" "name" }}-setup-job"
-        volumeMounts:
-          - name: kubeconfig
-            mountPath: /root/.kube
-            subPath: config
-      volumes:
-        - name: kubeconfig
-          emptyDir: { }
+            value: "{{ .Values.yorkie.namespace }}"
       serviceAccountName: yorkie-db-provisioning-job-account
       {{ end }}
       containers:
@@ -76,7 +68,11 @@ spec:
         args: [
           "server",
           "--mongo-connection-uri",
+          {{- if .Values.yorkie.args.dbConnectionUri }}
           "{{ .Values.yorkie.args.dbConnectionUri }}",
+          {{- else }}
+          "mongodb://{{ .Values.mongodb.credentials.databaseAdmin.username }}:{{ .Values.mongodb.credentials.databaseAdmin.password }}@{{ index .Values "yorkie-mongodb" "fullnameOverride" }}-mongos.{{ .Values.yorkie.namespace }}.svc.cluster.local:27017/{{ .Values.yorkie.args.dbName }}?authSource=admin",
+          {{- end }}
           "--mongo-yorkie-database",
           "{{ .Values.yorkie.args.dbName }}",
           "--pprof-enabled",

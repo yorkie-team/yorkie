@@ -33,6 +33,7 @@ jobs:
           helm repo add grafana https://grafana.github.io/helm-charts
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add starrocks https://starrocks.github.io/starrocks-kubernetes-operator
+          helm repo add percona https://percona.github.io/percona-helm-charts/
           helm repo update
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0

@@ -26,17 +26,52 @@ helm repo update
 
 _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentation._
 
-## Install Helm Chart 
+## MongoDB Credentials (Required)
+
+⚠️ **SECURITY NOTICE**: This chart requires MongoDB credentials to be provided at installation time. Passwords are NOT hardcoded for security reasons.
+
+### For Development (Minikube):
 
 ```bash
-# Create mongodb namespace
-kubectl create namespace mongodb
-
-# Install yorkie cluster helm chart
+# Uses pre-configured development credentials (clearly marked as dev-only)
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster
+```
 
-# Install yorkie cluster helm chart with standalone parameter (disable sharding)
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --set=yorkie-mongodb.sharded.enabled=false
+### For Production:
+
+**Use --set flags (Recommended)**
+
+```bash
+# Generate strong random passwords
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
+  --set mongodb.credentials.databaseAdmin.password="$(openssl rand -base64 32)" \
+  --set mongodb.credentials.userAdmin.password="$(openssl rand -base64 32)" \
+  --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
+```
+
+## Install Helm Chart
+
+### With MongoDB (Included)
+
+Install Yorkie cluster with MongoDB deployed by Percona Operator:
+
+```bash
+# Install yorkie cluster with MongoDB
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
+  --set mongodb.enabled=true \
+  --set mongodb.credentials.databaseAdmin.password="<your-password>" \
+  --set mongodb.credentials.userAdmin.password="<your-password>" \
+  --set mongodb.credentials.clusterAdmin.password="<your-password>"
+```
+
+### With External MongoDB
+
+Install Yorkie cluster using an external MongoDB instance:
+
+```bash
+# Install yorkie cluster with external MongoDB
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
+  --set yorkie.args.dbConnectionUri="mongodb://mongodb.mongodb.svc.cluster.local:27017"
 ```
 
 _See [configuration](#configuration) below for custom installation_
