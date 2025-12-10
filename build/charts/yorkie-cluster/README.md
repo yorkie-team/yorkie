@@ -34,7 +34,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Uses pre-configured development credentials (clearly marked as dev-only)
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie
 ```
 
 ### For Production:
@@ -43,7 +43,7 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster
 
 ```bash
 # Generate strong random passwords
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set mongodb.credentials.databaseAdmin.password="$(openssl rand -base64 32)" \
   --set mongodb.credentials.userAdmin.password="$(openssl rand -base64 32)" \
   --set mongodb.credentials.clusterAdmin.password="$(openssl rand -base64 32)"
@@ -55,10 +55,12 @@ helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
 
 Install Yorkie cluster with MongoDB deployed by Percona Operator:
 
+> [!IMPORTANT]
+> Setting namespace is needed to ensure MongoDB is deployed in the same namespace with Yorkie cluster.
+
 ```bash
 # Install yorkie cluster with MongoDB
-helm install [RELEASE_NAME] yorkie-team/yorkie-cluster \
-  --set mongodb.enabled=true \
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster --namespace yorkie \
   --set mongodb.credentials.databaseAdmin.password="<your-password>" \
   --set mongodb.credentials.userAdmin.password="<your-password>" \
   --set mongodb.credentials.clusterAdmin.password="<your-password>"
@@ -81,7 +83,7 @@ _See [`helm install`](https://helm.sh/docs/helm/helm_install/) for command docum
 ## Uninstall Helm Chart
 
 ```bash
-helm uninstall [RELEASE_NAME]
+helm uninstall [RELEASE_NAME] --namespace yorkie
 ```
 
 This removes all the Kubernetes components associated with the chart and deletes the release.
