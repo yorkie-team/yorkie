@@ -292,7 +292,7 @@ func (b *Backend) ClusterClient() (*cluster.Client, error) {
 func (b *Backend) BroadcastCacheInvalidation(
 	ctx context.Context,
 	cacheType types.CacheType,
-	keys []string,
+	key string,
 ) error {
 	nodes, err := b.Membership.ClusterNodes(ctx)
 	if err != nil {
@@ -319,7 +319,7 @@ func (b *Backend) BroadcastCacheInvalidation(
 		if err := cli.InvalidateCache(
 			ctx,
 			cacheType,
-			keys,
+			key,
 		); err != nil {
 			errs = append(errs, fmt.Errorf("invalidate on %s: %w", nodeAddr, err))
 		}

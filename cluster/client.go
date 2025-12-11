@@ -232,13 +232,13 @@ func (c *Client) GetChannel(
 func (c *Client) InvalidateCache(
 	ctx context.Context,
 	cacheType types.CacheType,
-	keys []string,
+	key string,
 ) error {
 	_, err := c.client.InvalidateCache(
 		ctx,
 		connect.NewRequest(&api.InvalidateCacheRequest{
 			CacheType: converter.ToCacheType(cacheType),
-			Keys:      keys,
+			Key:       key,
 		}),
 	)
 	if err != nil {

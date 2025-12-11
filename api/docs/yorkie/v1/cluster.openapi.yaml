@@ -636,13 +636,11 @@ components:
           additionalProperties: false
           description: ""
           title: cache_type
-        keys:
+        key:
           additionalProperties: false
           description: ""
-          items:
-            type: string
-          title: keys
-          type: array
+          title: key
+          type: string
       title: InvalidateCacheRequest
       type: object
     yorkie.v1.InvalidateCacheResponse:

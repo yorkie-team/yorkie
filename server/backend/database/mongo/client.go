@@ -51,14 +51,13 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	cacheManager         *cache.Manager
-	projectCacheByAPIKey *cache.LRUWithExpires[string, *database.ProjectInfo]
-	projectCacheByID     *cache.LRUWithExpires[types.ID, *database.ProjectInfo]
-	clientCache          *cache.LRU[types.ClientRefKey, *database.ClientInfo]
-	docCache             *cache.LRU[types.DocRefKey, *database.DocInfo]
-	changeCache          *cache.LRU[types.DocRefKey, *ChangeStore]
-	presenceCache        *cache.LRU[types.DocRefKey, *ChangeStore]
-	vectorCache          *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	cacheManager  *cache.Manager
+	projectCache  *ProjectCache
+	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
+	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
+	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
+	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
+	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -105,25 +104,11 @@ func Dial(conf *Config) (*Client, error) {
 
 	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
 
-	projectCacheByAPIKey, err := cache.NewLRUWithExpires[string, *database.ProjectInfo](
-		conf.ProjectCacheSize,
-		conf.ParseProjectCacheTTL(),
-		"projects_by_apikey",
-	)
+	projectCache, err := NewProjectCache(conf.ProjectCacheSize, conf.ParseProjectCacheTTL())
 	if err != nil {
-		return nil, fmt.Errorf("initialize project cache by api key: %w", err)
+		return nil, fmt.Errorf("initialize project cache: %w", err)
 	}
-	cacheManager.RegisterCache(projectCacheByAPIKey)
-
-	projectCacheByID, err := cache.NewLRUWithExpires[types.ID, *database.ProjectInfo](
-		conf.ProjectCacheSize,
-		conf.ParseProjectCacheTTL(),
-		"projects_by_id",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("initialize project cache by id: %w", err)
-	}
-	cacheManager.RegisterCache(projectCacheByID)
+	cacheManager.RegisterCache(projectCache)
 
 	clientCache, err := cache.NewLRU[types.ClientRefKey, *database.ClientInfo](conf.ClientCacheSize, "clients")
 	if err != nil {
@@ -163,15 +148,13 @@ func Dial(conf *Config) (*Client, error) {
 		config: conf,
 		client: client,
 
-		cacheManager: cacheManager,
-
-		projectCacheByAPIKey: projectCacheByAPIKey,
-		projectCacheByID:     projectCacheByID,
-		clientCache:          clientCache,
-		docCache:             docCache,
-		changeCache:          changeCache,
-		presenceCache:        presenceCache,
-		vectorCache:          vectorCache,
+		cacheManager:  cacheManager,
+		projectCache:  projectCache,
+		clientCache:   clientCache,
+		docCache:      docCache,
+		changeCache:   changeCache,
+		presenceCache: presenceCache,
+		vectorCache:   vectorCache,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -189,8 +172,7 @@ func (c *Client) Close() error {
 
 	c.cacheManager.Stop()
 
-	c.projectCacheByAPIKey.Purge()
-	c.projectCacheByID.Purge()
+	c.projectCache.Purge()
 	c.clientCache.Purge()
 	c.docCache.Purge()
 	c.changeCache.Purge()
@@ -201,16 +183,11 @@ func (c *Client) Close() error {
 }
 
 // InvalidateCache invalidates the cache of the given type and key.
-func (c *Client) InvalidateCache(cacheType types.CacheType, keys []string) {
+func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 	switch cacheType {
 	case types.CacheTypeProject:
-		for _, key := range keys {
-			c.projectCacheByAPIKey.Remove(key)
-
-			id := types.ID(key)
-			if err := id.Validate(); err == nil {
-				c.projectCacheByID.Remove(id)
-			}
+		if id := types.ID(key); id.Validate() == nil {
+			c.projectCache.Remove(id)
 		}
 	}
 }
@@ -586,7 +563,7 @@ func (c *Client) ListProjectInfos(
 
 // FindProjectInfoByPublicKey returns a project by public key.
 func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
-	if cached, ok := c.projectCacheByAPIKey.Get(publicKey); ok {
+	if cached, ok := c.projectCache.GetByAPIKey(publicKey); ok {
 		return cached.DeepCopy(), nil
 	}
 
@@ -603,9 +580,7 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 		return nil, fmt.Errorf("find project by public key %s: %w", publicKey, err)
 	}
 
-	project := info.DeepCopy()
-	c.projectCacheByAPIKey.Add(publicKey, project)
-	c.projectCacheByID.Add(project.ID, project)
+	c.projectCache.Add(info)
 
 	return info, nil
 }
@@ -653,7 +628,7 @@ func (c *Client) FindProjectInfoByName(
 
 // FindProjectInfoByID returns a project by the given id.
 func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
-	if cached, ok := c.projectCacheByID.Get(id); ok {
+	if cached, ok := c.projectCache.GetByID(id); ok {
 		return cached.DeepCopy(), nil
 	}
 
@@ -669,9 +644,7 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 		return nil, fmt.Errorf("find project by id %s: %w", id, err)
 	}
 
-	project := info.DeepCopy()
-	c.projectCacheByID.Add(id, project)
-	c.projectCacheByAPIKey.Add(project.PublicKey, project)
+	c.projectCache.Add(info)
 
 	return info, nil
 }
@@ -712,8 +685,7 @@ func (c *Client) UpdateProjectInfo(
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
 
-	c.projectCacheByAPIKey.Remove(info.PublicKey)
-	c.projectCacheByID.Remove(info.ID)
+	c.projectCache.Remove(info.ID)
 
 	return info, nil
 }
@@ -730,8 +702,7 @@ func (c *Client) RotateProjectKeys(
 	prevInfo := &database.ProjectInfo{}
 	res := c.collection(ColProjects).FindOne(ctx, bson.M{"_id": id, "owner": owner})
 	if err := res.Decode(prevInfo); err == nil {
-		c.projectCacheByAPIKey.Remove(prevInfo.PublicKey)
-		c.projectCacheByID.Remove(prevInfo.ID)
+		c.projectCache.Remove(prevInfo.ID)
 	}
 
 	res = c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
