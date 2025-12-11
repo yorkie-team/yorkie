@@ -35,8 +35,18 @@ type LRUWithExpires[K comparable, V any] struct {
 }
 
 // NewLRUWithExpires creates a new expirable LRU with the given size and ttl.
-func NewLRUWithExpires[K comparable, V any](size int, ttl time.Duration, name string) (*LRUWithExpires[K, V], error) {
-	c := expirable.NewLRU[K, V](size, nil, ttl)
+func NewLRUWithExpires[K comparable, V any](
+	size int,
+	ttl time.Duration,
+	name string,
+	onEvict ...func(key K, value V),
+) (*LRUWithExpires[K, V], error) {
+	var callback func(key K, value V)
+	if len(onEvict) > 0 {
+		callback = onEvict[0]
+	}
+
+	c := expirable.NewLRU(size, callback, ttl)
 	return &LRUWithExpires[K, V]{
 		cache: c,
 		stats: &Stats{},

@@ -239,7 +239,7 @@ func (s *adminServer) UpdateProject(
 	if err := s.backend.BroadcastCacheInvalidation(
 		ctx,
 		types.CacheTypeProject,
-		project.PublicKey,
+		project.ID.String(),
 	); err != nil {
 		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
 	}
@@ -817,7 +817,7 @@ func (s *adminServer) RotateProjectKeys(
 	if err := s.backend.BroadcastCacheInvalidation(
 		ctx,
 		types.CacheTypeProject,
-		prev.PublicKey,
+		prev.ID.String(),
 	); err != nil {
 		logging.From(ctx).Warnf("failed to broadcast cache invalidation: %v", err)
 	}

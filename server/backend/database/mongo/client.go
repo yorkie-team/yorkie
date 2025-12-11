@@ -52,7 +52,7 @@ type Client struct {
 	client *mongo.Client
 
 	cacheManager  *cache.Manager
-	projectCache  *cache.LRUWithExpires[string, *database.ProjectInfo]
+	projectCache  *ProjectCache
 	clientCache   *cache.LRU[types.ClientRefKey, *database.ClientInfo]
 	docCache      *cache.LRU[types.DocRefKey, *database.DocInfo]
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
@@ -104,11 +104,7 @@ func Dial(conf *Config) (*Client, error) {
 
 	cacheManager := cache.NewManager(conf.ParseCacheStatsInterval())
 
-	projectCache, err := cache.NewLRUWithExpires[string, *database.ProjectInfo](
-		conf.ProjectCacheSize,
-		conf.ParseProjectCacheTTL(),
-		"projects",
-	)
+	projectCache, err := NewProjectCache(conf.ProjectCacheSize, conf.ParseProjectCacheTTL())
 	if err != nil {
 		return nil, fmt.Errorf("initialize project cache: %w", err)
 	}
@@ -152,8 +148,7 @@ func Dial(conf *Config) (*Client, error) {
 		config: conf,
 		client: client,
 
-		cacheManager: cacheManager,
-
+		cacheManager:  cacheManager,
 		projectCache:  projectCache,
 		clientCache:   clientCache,
 		docCache:      docCache,
@@ -191,7 +186,9 @@ func (c *Client) Close() error {
 func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 	switch cacheType {
 	case types.CacheTypeProject:
-		c.projectCache.Remove(key)
+		if id := types.ID(key); id.Validate() == nil {
+			c.projectCache.Remove(id)
+		}
 	}
 }
 
@@ -566,7 +563,7 @@ func (c *Client) ListProjectInfos(
 
 // FindProjectInfoByPublicKey returns a project by public key.
 func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
-	if cached, ok := c.projectCache.Get(publicKey); ok {
+	if cached, ok := c.projectCache.GetByAPIKey(publicKey); ok {
 		return cached.DeepCopy(), nil
 	}
 
@@ -583,7 +580,7 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 		return nil, fmt.Errorf("find project by public key %s: %w", publicKey, err)
 	}
 
-	c.projectCache.Add(publicKey, info.DeepCopy())
+	c.projectCache.Add(info)
 
 	return info, nil
 }
@@ -631,6 +628,10 @@ func (c *Client) FindProjectInfoByName(
 
 // FindProjectInfoByID returns a project by the given id.
 func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
+	if cached, ok := c.projectCache.GetByID(id); ok {
+		return cached.DeepCopy(), nil
+	}
+
 	result := c.collection(ColProjects).FindOne(ctx, bson.M{
 		"_id": id,
 	})
@@ -642,6 +643,8 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 		}
 		return nil, fmt.Errorf("find project by id %s: %w", id, err)
 	}
+
+	c.projectCache.Add(info)
 
 	return info, nil
 }
@@ -682,6 +685,8 @@ func (c *Client) UpdateProjectInfo(
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
 
+	c.projectCache.Remove(info.ID)
+
 	return info, nil
 }
 
@@ -697,7 +702,7 @@ func (c *Client) RotateProjectKeys(
 	prevInfo := &database.ProjectInfo{}
 	res := c.collection(ColProjects).FindOne(ctx, bson.M{"_id": id, "owner": owner})
 	if err := res.Decode(prevInfo); err == nil {
-		c.projectCache.Remove(prevInfo.PublicKey)
+		c.projectCache.Remove(prevInfo.ID)
 	}
 
 	res = c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
