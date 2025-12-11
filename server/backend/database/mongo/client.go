@@ -206,7 +206,11 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, keys []string) {
 	case types.CacheTypeProject:
 		for _, key := range keys {
 			c.projectCacheByAPIKey.Remove(key)
-			c.projectCacheByID.Remove(types.ID(key))
+
+			id := types.ID(key)
+			if err := id.Validate(); err == nil {
+				c.projectCacheByID.Remove(id)
+			}
 		}
 	}
 }
