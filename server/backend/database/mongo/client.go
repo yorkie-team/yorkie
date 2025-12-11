@@ -712,10 +712,8 @@ func (c *Client) UpdateProjectInfo(
 		return nil, fmt.Errorf("decode project: %w", err)
 	}
 
-	if err := res.Decode(info); err == nil {
-		c.projectCacheByAPIKey.Remove(info.PublicKey)
-		c.projectCacheByID.Remove(info.ID)
-	}
+	c.projectCacheByAPIKey.Remove(info.PublicKey)
+	c.projectCacheByID.Remove(info.ID)
 
 	return info, nil
 }
