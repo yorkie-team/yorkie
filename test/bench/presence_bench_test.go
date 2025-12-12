@@ -39,10 +39,6 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var (
-	defaultProjectID = types.ID("000000000000000000000000")
-)
-
 type mockPubSub struct {
 	events []events.ChannelEvent
 }
@@ -181,10 +177,11 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	cleanupInterval := 60 * gotime.Second
 	pubsub := &mockPubSub{}
 	broker := messaging.Ensure(nil)
-	db, _ := memory.New()
-	db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")
+	db, err := memory.New()
+	assert.NoError(b, err)
+	_, project, err := db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")
+	assert.NoError(b, err)
 	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval, nil, broker, db)
-	project := types.Project{ID: defaultProjectID}
 
 	for i, keyPath := range allKeyPaths {
 		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))

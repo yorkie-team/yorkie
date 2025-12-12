@@ -480,7 +480,13 @@ func (m *Metrics) ResetChannelSessionsTotal() {
 }
 
 // SetChannelSessionsTopN adds the top N channels by session count.
-func (m *Metrics) SetChannelSessionsTopN(hostname string, projectID types.ID, projectName string, channelKey string, count int) {
+func (m *Metrics) SetChannelSessionsTopN(
+	hostname string,
+	projectID types.ID,
+	projectName string,
+	channelKey string,
+	count int,
+) {
 	m.channelSessionsTopN.With(prometheus.Labels{
 		channelKeyLabel:  channelKey,
 		projectIDLabel:   projectID.String(),

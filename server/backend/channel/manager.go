@@ -483,7 +483,12 @@ func addChannelSessions(channelSessionsByProjectID map[projectInfo]int, projectI
 }
 
 // pushTopSessions pushes the top channels by session count.
-func pushTopSessions(topChannelSessions *heap.Heap[channelSessionCount], projectInfo projectInfo, channelKey string, alivedSessions int) {
+func pushTopSessions(
+	topChannelSessions *heap.Heap[channelSessionCount],
+	projectInfo projectInfo,
+	channelKey string,
+	alivedSessions int,
+) {
 	topChannelSessions.Push(channelSessionCount{
 		ProjectID:   projectInfo.ID,
 		ProjectName: projectInfo.Name,
