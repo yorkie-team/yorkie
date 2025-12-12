@@ -20,6 +20,7 @@ package channel
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync/atomic"
 	gotime "time"
@@ -45,6 +46,18 @@ var (
 
 	// TopChannelSessionsMaxSize is the maximum size of top channel sessions.
 	TopChannelSessionsMaxSize = 10
+
+	// MinLimit is the minimum limit for channel search query.
+	MinLimit = 10
+
+	// MaxLimitForSearch is the maximum limit for channel search.
+	MaxLimitForSearch = 100
+
+	// MinChannelLimit is the minimum limit for listing channels.
+	MinChannelLimit = 1
+
+	// MaxChannelLimit is the maximum limit for listing channels.
+	MaxChannelLimit = 100
 )
 
 // PubSub is an interface for publishing channel events.
@@ -535,41 +548,10 @@ func (m *Manager) ListChannels(
 	projectID types.ID,
 	limit int,
 ) []ChannelSessionCount {
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 100 {
-		limit = 100
-	}
-
-	var results []ChannelSessionCount
-	count := 0
-
-	for _, key := range m.channels.Keys() {
-		if key.ProjectID != projectID {
-			continue
-		}
-
-		sessionMap, ok := m.channels.Get(key)
-		if !ok {
-			continue
-		}
-
-		sessionCount := sessionMap.Len()
-		if sessionCount > 0 {
-			results = append(results, ChannelSessionCount{
-				Key:      key,
-				Sessions: sessionCount,
-			})
-			count++
-
-			if count >= limit {
-				break
-			}
-		}
-	}
-
-	return results
+	return sortAndLimitChannelSessions(
+		m.collectChannelSessions(projectID, ""),
+		normalizeLimit(limit),
+	)
 }
 
 // SearchChannels searches for channels matching the given query prefix and project ID.
@@ -579,16 +561,18 @@ func (m *Manager) SearchChannels(
 	query string,
 	limit int,
 ) []ChannelSessionCount {
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 100 {
-		limit = 100
-	}
+	return sortAndLimitChannelSessions(
+		m.collectChannelSessions(projectID, query),
+		normalizeLimit(limit),
+	)
+}
 
-	var results []ChannelSessionCount
-	count := 0
-
+// collectChannelSessions collects channel sessions for a given project ID with optional query filter.
+func (m *Manager) collectChannelSessions(
+	projectID types.ID,
+	query string,
+) []ChannelSessionCount {
+	results := make([]ChannelSessionCount, 0)
 	for _, key := range m.channels.Keys() {
 		if key.ProjectID != projectID {
 			continue
@@ -609,14 +593,34 @@ func (m *Manager) SearchChannels(
 				Key:      key,
 				Sessions: sessionCount,
 			})
-			count++
-
-			if count >= limit {
-				break
-			}
 		}
 	}
+	return results
+}
 
+// normalizeLimit ensures the limit is within the valid range.
+func normalizeLimit(limit int) int {
+	if limit <= 0 {
+		return MinChannelLimit
+	}
+	if limit > MaxChannelLimit {
+		return MaxChannelLimit
+	}
+	return limit
+}
+
+// sortAndLimitChannelSessions sorts channel sessions by count (desc) and channel key (asc),
+// then applies the limit.
+func sortAndLimitChannelSessions(results []ChannelSessionCount, limit int) []ChannelSessionCount {
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Sessions != results[j].Sessions {
+			return results[i].Sessions > results[j].Sessions
+		}
+		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
+	})
+	if len(results) > limit {
+		return results[:limit]
+	}
 	return results
 }
 

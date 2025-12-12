@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -582,11 +583,23 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
 }
 
+// validateChannelLimit validates the limit parameter for channel operations.
+func validateChannelLimit(limit int32) error {
+	if limit <= 0 {
+		return errors.InvalidArgument("limit must be greater than 0")
+	}
+	return nil
+}
+
 // ListChannels lists channels for the given project.
 func (s *adminServer) ListChannels(
 	ctx context.Context,
 	req *connect.Request[api.ListChannelsRequest],
 ) (*connect.Response[api.ListChannelsResponse], error) {
+	if err := validateChannelLimit(req.Msg.Limit); err != nil {
+		return nil, err
+	}
+
 	project := projects.From(ctx)
 
 	channels, err := s.backend.BroadcastChannelList(
@@ -640,6 +653,10 @@ func (s *adminServer) SearchChannels(
 	ctx context.Context,
 	req *connect.Request[api.SearchChannelsRequest],
 ) (*connect.Response[api.SearchChannelsResponse], error) {
+	if err := validateChannelLimit(req.Msg.Limit); err != nil {
+		return nil, err
+	}
+
 	project := projects.From(ctx)
 
 	channels, err := s.backend.BroadcastChannelSearch(

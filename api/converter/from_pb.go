@@ -140,6 +140,9 @@ func FromChannelSummary(pbChannelSummary *api.ChannelSummary) *types.ChannelSumm
 func FromChannelSummaries(pbChannelSummaries []*api.ChannelSummary) []*types.ChannelSummary {
 	var summaries []*types.ChannelSummary
 	for _, pbSummary := range pbChannelSummaries {
+		if pbSummary == nil {
+			continue
+		}
 		summaries = append(summaries, FromChannelSummary(pbSummary))
 	}
 	return summaries

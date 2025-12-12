@@ -438,7 +438,11 @@ func (b *Backend) broadcastChannelQuery(
 	}
 
 	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
+		if len(results) == 0 {
+			return nil, errors.Join(errs...)
+		}
+		// Log errors but return partial results if we have any
+		logging.DefaultLogger().Warnf("partial failure in %s: %v", operationName, errors.Join(errs...))
 	}
 
 	return results, nil
