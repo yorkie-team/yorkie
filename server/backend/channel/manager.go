@@ -20,6 +20,8 @@ package channel
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync/atomic"
 	gotime "time"
 
@@ -44,6 +46,12 @@ var (
 
 	// TopChannelSessionsMaxSize is the maximum size of top channel sessions.
 	TopChannelSessionsMaxSize = 10
+
+	// MinChannelLimit is the minimum limit for listing channels.
+	MinChannelLimit = 1
+
+	// MaxChannelLimit is the maximum limit for listing channels.
+	MaxChannelLimit = 100
 )
 
 // PubSub is an interface for publishing channel events.
@@ -526,6 +534,54 @@ func (m *Manager) Stats() map[string]int {
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}
+}
+
+// ListChannels lists channels for the given project ID.
+// If query is not empty, it filters channels by the query prefix.
+// It returns up to limit channels.
+func (m *Manager) ListChannels(
+	projectID types.ID,
+	query string,
+	limit int,
+) []ChannelSessionCount {
+	if limit <= 0 {
+		limit = MinChannelLimit
+	}
+	if limit > MaxChannelLimit {
+		limit = MaxChannelLimit
+	}
+
+	results := make([]ChannelSessionCount, 0)
+	for _, key := range m.channels.Keys() {
+		if key.ProjectID != projectID {
+			continue
+		}
+
+		if query != "" && !strings.HasPrefix(key.ChannelKey.String(), query) {
+			continue
+		}
+
+		sessionMap, ok := m.channels.Get(key)
+		if !ok {
+			continue
+		}
+
+		sessionCount := sessionMap.Len()
+		if sessionCount > 0 {
+			results = append(results, ChannelSessionCount{
+				Key:      key,
+				Sessions: sessionCount,
+			})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
 }
 
 // isKeyPathPrefix checks if baseKeyPaths is a prefix of targetKeyPaths.

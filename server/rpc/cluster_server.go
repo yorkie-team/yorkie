@@ -258,6 +258,30 @@ func (s *clusterServer) GetDocument(
 	}), nil
 }
 
+// ListChannels lists channels for the given project.
+func (s *clusterServer) ListChannels(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceListChannelsRequest],
+) (*connect.Response[api.ClusterServiceListChannelsResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	limit := int(req.Msg.Limit)
+	query := req.Msg.Query
+
+	results := s.backend.Presence.ListChannels(projectID, query, limit)
+
+	var channels []*api.ChannelSummary
+	for _, result := range results {
+		channels = append(channels, &api.ChannelSummary{
+			Key:           result.Key.ChannelKey.String(),
+			PresenceCount: int32(result.Sessions),
+		})
+	}
+
+	return connect.NewResponse(&api.ClusterServiceListChannelsResponse{
+		Channels: channels,
+	}), nil
+}
+
 // GetChannel gets the channel for a single channel.
 func (s *clusterServer) GetChannel(
 	ctx context.Context,

@@ -136,6 +136,18 @@ func FromChannelSummary(pbChannelSummary *api.ChannelSummary) *types.ChannelSumm
 	}
 }
 
+// FromChannelSummaries converts the given Protobuf formats to model format.
+func FromChannelSummaries(pbChannelSummaries []*api.ChannelSummary) []*types.ChannelSummary {
+	var summaries []*types.ChannelSummary
+	for _, pbSummary := range pbChannelSummaries {
+		if pbSummary == nil {
+			continue
+		}
+		summaries = append(summaries, FromChannelSummary(pbSummary))
+	}
+	return summaries
+}
+
 // FromChangePack converts the given Protobuf formats to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {

@@ -30,6 +30,7 @@ service ClusterService {
   rpc CompactDocument (ClusterServiceCompactDocumentRequest) returns (ClusterServiceCompactDocumentResponse) {}
   rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
   rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
+  rpc ListChannels (ClusterServiceListChannelsRequest) returns (ClusterServiceListChannelsResponse) {}
   rpc GetChannel (ClusterServiceGetChannelRequest) returns (ClusterServiceGetChannelResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
@@ -70,6 +71,16 @@ message ClusterServiceGetDocumentRequest {
 
 message ClusterServiceGetDocumentResponse {
   DocumentSummary document = 1;
+}
+
+message ClusterServiceListChannelsRequest {
+  string project_id = 1;
+  string query = 2;
+  int32 limit = 3;
+}
+
+message ClusterServiceListChannelsResponse {
+  repeated ChannelSummary channels = 1;
 }
 
 message ClusterServiceGetChannelRequest {

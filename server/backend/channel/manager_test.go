@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
 	pkgtime "github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 )
@@ -332,6 +333,208 @@ func TestPresenceManager_Count(t *testing.T) {
 		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
 		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
 		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
+	})
+}
+
+func TestPresenceManager_ListChannels(t *testing.T) {
+	t.Run("list all channels without query", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create multiple channels
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "lobby"}
+
+		attachChannels(t, ctx, manager, refKey1, 5, "1")
+		attachChannels(t, ctx, manager, refKey2, 3, "2")
+		attachChannels(t, ctx, manager, refKey3, 7, "3")
+
+		// List all channels (no query)
+		results := manager.ListChannels(projectID, "", 10)
+
+		// Should return all 3 channels
+		assert.Len(t, results, 3)
+
+		// Should be sorted by session count (desc), then channel key (asc)
+		assert.Equal(t, "lobby", results[0].Key.ChannelKey.String())
+		assert.Equal(t, 7, results[0].Sessions)
+		assert.Equal(t, "room-1", results[1].Key.ChannelKey.String())
+		assert.Equal(t, 5, results[1].Sessions)
+		assert.Equal(t, "room-2", results[2].Key.ChannelKey.String())
+		assert.Equal(t, 3, results[2].Sessions)
+	})
+
+	t.Run("list channels with query filter", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create channels with different prefixes
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "lobby"}
+		refKey4 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-3"}
+
+		attachChannels(t, ctx, manager, refKey1, 5, "1")
+		attachChannels(t, ctx, manager, refKey2, 3, "2")
+		attachChannels(t, ctx, manager, refKey3, 7, "3")
+		attachChannels(t, ctx, manager, refKey4, 4, "4")
+
+		// List channels with "room-" prefix
+		results := manager.ListChannels(projectID, "room-", 10)
+
+		// Should return only 3 channels matching "room-" prefix
+		assert.Len(t, results, 3)
+
+		// Verify all results start with "room-"
+		for _, result := range results {
+			assert.Contains(t, result.Key.ChannelKey.String(), "room-")
+		}
+
+		// Should be sorted by session count (desc)
+		assert.Equal(t, "room-1", results[0].Key.ChannelKey.String())
+		assert.Equal(t, 5, results[0].Sessions)
+		assert.Equal(t, "room-2", results[1].Key.ChannelKey.String())
+		assert.Equal(t, 3, results[1].Sessions)
+		assert.Equal(t, "room-3", results[2].Key.ChannelKey.String())
+		assert.Equal(t, 4, results[2].Sessions)
+	})
+
+	t.Run("list channels with limit", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create 5 channels
+		for i := 1; i <= 5; i++ {
+			refKey := types.ChannelRefKey{
+				ProjectID:  projectID,
+				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
+			}
+			attachChannels(t, ctx, manager, refKey, i, fmt.Sprintf("%d", i))
+		}
+
+		// List with limit of 3
+		results := manager.ListChannels(projectID, "", 3)
+
+		// Should return only 3 channels
+		assert.Len(t, results, 3)
+
+		// Should return top 3 by session count
+		assert.Equal(t, "room-1", results[0].Key.ChannelKey.String())
+		assert.Equal(t, 1, results[0].Sessions)
+		assert.Equal(t, "room-2", results[1].Key.ChannelKey.String())
+		assert.Equal(t, 2, results[1].Sessions)
+		assert.Equal(t, "room-3", results[2].Key.ChannelKey.String())
+		assert.Equal(t, 3, results[2].Sessions)
+	})
+
+	t.Run("list channels with same session count sorts by key", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create channels with same session count
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "charlie"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "alpha"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "bravo"}
+
+		attachChannels(t, ctx, manager, refKey1, 3, "1")
+		attachChannels(t, ctx, manager, refKey2, 3, "2")
+		attachChannels(t, ctx, manager, refKey3, 3, "3")
+
+		// List all channels
+		results := manager.ListChannels(projectID, "", 10)
+
+		// Should be sorted alphabetically when session counts are equal
+		assert.Len(t, results, 3)
+		assert.Equal(t, "alpha", results[0].Key.ChannelKey.String())
+		assert.Equal(t, "bravo", results[1].Key.ChannelKey.String())
+		assert.Equal(t, "charlie", results[2].Key.ChannelKey.String())
+	})
+
+	t.Run("list channels returns empty for no matches", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create channels
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		attachChannels(t, ctx, manager, refKey1, 5, "1")
+
+		// List with non-matching query
+		results := manager.ListChannels(projectID, "lobby-", 10)
+
+		// Should return empty list
+		assert.Len(t, results, 0)
+	})
+
+	t.Run("list channels respects project ID isolation", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID1 := types.NewID()
+		projectID2 := types.NewID()
+
+		// Create channels for two different projects
+		refKey1 := types.ChannelRefKey{ProjectID: projectID1, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID2, ChannelKey: "room-1"}
+
+		attachChannels(t, ctx, manager, refKey1, 5, "1")
+		attachChannels(t, ctx, manager, refKey2, 3, "2")
+
+		// List channels for project 1
+		results1 := manager.ListChannels(projectID1, "", 10)
+		assert.Len(t, results1, 1)
+		assert.Equal(t, projectID1, results1[0].Key.ProjectID)
+
+		// List channels for project 2
+		results2 := manager.ListChannels(projectID2, "", 10)
+		assert.Len(t, results2, 1)
+		assert.Equal(t, projectID2, results2[0].Key.ProjectID)
+	})
+
+	t.Run("list channels normalizes limit", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		// Create 5 channels
+		for i := 1; i <= 5; i++ {
+			refKey := types.ChannelRefKey{
+				ProjectID:  projectID,
+				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
+			}
+			attachChannels(t, ctx, manager, refKey, i, fmt.Sprintf("%d", i))
+		}
+
+		// Test with limit 0 (should use MinChannelLimit = 1)
+		results := manager.ListChannels(projectID, "", 0)
+		assert.Len(t, results, 1)
+
+		// Test with limit -1 (should use MinChannelLimit = 1)
+		results = manager.ListChannels(projectID, "", -1)
+		assert.Len(t, results, 1)
+
+		// Test with limit > MaxChannelLimit (should use MaxChannelLimit = 100)
+		// Create only 5 channels, so we should get all 5 even if limit is capped
+		results = manager.ListChannels(projectID, "", 200)
+		assert.Len(t, results, 5)
 	})
 }
 
