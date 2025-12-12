@@ -265,8 +265,9 @@ func (s *clusterServer) ListChannels(
 ) (*connect.Response[api.ClusterServiceListChannelsResponse], error) {
 	projectID := types.ID(req.Msg.ProjectId)
 	limit := int(req.Msg.Limit)
+	query := req.Msg.Query
 
-	results := s.backend.Presence.ListChannels(projectID, limit)
+	results := s.backend.Presence.ListChannels(projectID, query, limit)
 
 	var channels []*api.ChannelSummary
 	for _, result := range results {
@@ -300,30 +301,6 @@ func (s *clusterServer) GetChannel(
 			Key:           string(channelKey),
 			PresenceCount: int32(channelCount),
 		},
-	}), nil
-}
-
-// SearchChannels searches for channels matching the given query.
-func (s *clusterServer) SearchChannels(
-	ctx context.Context,
-	req *connect.Request[api.ClusterServiceSearchChannelsRequest],
-) (*connect.Response[api.ClusterServiceSearchChannelsResponse], error) {
-	projectID := types.ID(req.Msg.ProjectId)
-	query := req.Msg.Query
-	limit := int(req.Msg.Limit)
-
-	results := s.backend.Presence.SearchChannels(projectID, query, limit)
-
-	var channels []*api.ChannelSummary
-	for _, result := range results {
-		channels = append(channels, &api.ChannelSummary{
-			Key:           result.Key.ChannelKey.String(),
-			PresenceCount: int32(result.Sessions),
-		})
-	}
-
-	return connect.NewResponse(&api.ClusterServiceSearchChannelsResponse{
-		Channels: channels,
 	}), nil
 }
 

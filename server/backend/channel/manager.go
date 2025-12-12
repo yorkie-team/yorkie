@@ -537,35 +537,20 @@ func (m *Manager) Stats() map[string]int {
 }
 
 // ListChannels lists channels for the given project ID.
+// If query is not empty, it filters channels by the query prefix.
 // It returns up to limit channels.
 func (m *Manager) ListChannels(
 	projectID types.ID,
-	limit int,
-) []ChannelSessionCount {
-	return sortAndLimitChannelSessions(
-		m.collectChannelSessions(projectID, ""),
-		normalizeLimit(limit),
-	)
-}
-
-// SearchChannels searches for channels matching the given query prefix and project ID.
-// It returns up to limit channels that match the criteria.
-func (m *Manager) SearchChannels(
-	projectID types.ID,
 	query string,
 	limit int,
 ) []ChannelSessionCount {
-	return sortAndLimitChannelSessions(
-		m.collectChannelSessions(projectID, query),
-		normalizeLimit(limit),
-	)
-}
+	if limit <= 0 {
+		limit = MinChannelLimit
+	}
+	if limit > MaxChannelLimit {
+		limit = MaxChannelLimit
+	}
 
-// collectChannelSessions collects channel sessions for a given project ID with optional query filter.
-func (m *Manager) collectChannelSessions(
-	projectID types.ID,
-	query string,
-) []ChannelSessionCount {
 	results := make([]ChannelSessionCount, 0)
 	for _, key := range m.channels.Keys() {
 		if key.ProjectID != projectID {
@@ -589,31 +574,12 @@ func (m *Manager) collectChannelSessions(
 			})
 		}
 	}
-	return results
-}
 
-// normalizeLimit ensures the limit is within the valid range.
-func normalizeLimit(limit int) int {
-	if limit <= 0 {
-		return MinChannelLimit
-	}
-	if limit > MaxChannelLimit {
-		return MaxChannelLimit
-	}
-	return limit
-}
-
-// sortAndLimitChannelSessions sorts channel sessions by count (desc) and channel key (asc),
-// then applies the limit.
-func sortAndLimitChannelSessions(results []ChannelSessionCount, limit int) []ChannelSessionCount {
 	sort.Slice(results, func(i, j int) bool {
-		if results[i].Sessions != results[j].Sessions {
-			return results[i].Sessions > results[j].Sessions
-		}
 		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
 	})
 	if len(results) > limit {
-		return results[:limit]
+		results = results[:limit]
 	}
 	return results
 }

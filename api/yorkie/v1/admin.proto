@@ -60,8 +60,7 @@ service AdminService {
 
   rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {}
   rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
-  rpc SearchChannels (SearchChannelsRequest) returns (SearchChannelsResponse) {}
-
+  
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
 
@@ -233,7 +232,8 @@ message SearchDocumentsResponse {
 }
 
 message ListChannelsRequest {
-  int32 limit = 1;
+  string query = 1;
+  int32 limit = 2;
 }
 
 message ListChannelsResponse {
@@ -246,15 +246,6 @@ message GetChannelsRequest {
 }
 
 message GetChannelsResponse {
-  repeated ChannelSummary channels = 1;
-}
-
-message SearchChannelsRequest {
-  string query = 1;
-  int32 limit = 2;
-}
-
-message SearchChannelsResponse {
   repeated ChannelSummary channels = 1;
 }
 

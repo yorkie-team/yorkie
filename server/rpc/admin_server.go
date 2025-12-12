@@ -584,32 +584,25 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
 }
 
-// validateChannelLimit validates the limit parameter for channel operations.
-func validateChannelLimit(limit int32) error {
-	if limit <= 0 {
-		return errors.InvalidArgument("limit must be greater than 0")
-	}
-	if int(limit) > channel.MaxChannelLimit {
-		return errors.InvalidArgument(fmt.Sprintf("limit must be less than or equal to %d", channel.MaxChannelLimit))
-	}
-	return nil
-}
-
 // ListChannels lists channels for the given project.
 func (s *adminServer) ListChannels(
 	ctx context.Context,
 	req *connect.Request[api.ListChannelsRequest],
 ) (*connect.Response[api.ListChannelsResponse], error) {
-	if err := validateChannelLimit(req.Msg.Limit); err != nil {
-		return nil, err
+	limit := int(req.Msg.Limit)
+	if limit <= 0 {
+		return nil, errors.InvalidArgument("limit must be greater than 0")
+	}
+	if limit > channel.MaxChannelLimit {
+		return nil, errors.InvalidArgument(fmt.Sprintf("limit must be less than or equal to %d", channel.MaxChannelLimit))
 	}
 
 	project := projects.From(ctx)
-
 	channels, err := s.backend.BroadcastChannelList(
 		ctx,
 		project.ID,
-		int(req.Msg.Limit),
+		req.Msg.Query,
+		limit,
 	)
 	if err != nil {
 		return nil, err
@@ -648,32 +641,6 @@ func (s *adminServer) GetChannels(
 	}
 
 	return connect.NewResponse(&api.GetChannelsResponse{
-		Channels: converter.ToChannelSummaries(channels),
-	}), nil
-}
-
-// SearchChannels searches for channels matching the given query.
-func (s *adminServer) SearchChannels(
-	ctx context.Context,
-	req *connect.Request[api.SearchChannelsRequest],
-) (*connect.Response[api.SearchChannelsResponse], error) {
-	if err := validateChannelLimit(req.Msg.Limit); err != nil {
-		return nil, err
-	}
-
-	project := projects.From(ctx)
-
-	channels, err := s.backend.BroadcastChannelSearch(
-		ctx,
-		project.ID,
-		req.Msg.Query,
-		int(req.Msg.Limit),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&api.SearchChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
 	}), nil
 }

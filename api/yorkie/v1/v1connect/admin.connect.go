@@ -130,9 +130,6 @@ const (
 	// AdminServiceGetChannelsProcedure is the fully-qualified name of the AdminService's GetChannels
 	// RPC.
 	AdminServiceGetChannelsProcedure = "/yorkie.v1.AdminService/GetChannels"
-	// AdminServiceSearchChannelsProcedure is the fully-qualified name of the AdminService's
-	// SearchChannels RPC.
-	AdminServiceSearchChannelsProcedure = "/yorkie.v1.AdminService/SearchChannels"
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
@@ -169,7 +166,6 @@ type AdminServiceClient interface {
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
-	SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
@@ -328,11 +324,6 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetChannelsProcedure,
 			opts...,
 		),
-		searchChannels: connect.NewClient[v1.SearchChannelsRequest, v1.SearchChannelsResponse](
-			httpClient,
-			baseURL+AdminServiceSearchChannelsProcedure,
-			opts...,
-		),
 		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
 			httpClient,
 			baseURL+AdminServiceGetServerVersionProcedure,
@@ -372,7 +363,6 @@ type adminServiceClient struct {
 	restoreRevisionByAdmin *connect.Client[v1.RestoreRevisionByAdminRequest, v1.RestoreRevisionByAdminResponse]
 	listChannels           *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
 	getChannels            *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
-	searchChannels         *connect.Client[v1.SearchChannelsRequest, v1.SearchChannelsResponse]
 	getServerVersion       *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 }
 
@@ -521,11 +511,6 @@ func (c *adminServiceClient) GetChannels(ctx context.Context, req *connect.Reque
 	return c.getChannels.CallUnary(ctx, req)
 }
 
-// SearchChannels calls yorkie.v1.AdminService.SearchChannels.
-func (c *adminServiceClient) SearchChannels(ctx context.Context, req *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error) {
-	return c.searchChannels.CallUnary(ctx, req)
-}
-
 // GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
 func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return c.getServerVersion.CallUnary(ctx, req)
@@ -562,7 +547,6 @@ type AdminServiceHandler interface {
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
-	SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
@@ -717,11 +701,6 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetChannels,
 		opts...,
 	)
-	adminServiceSearchChannelsHandler := connect.NewUnaryHandler(
-		AdminServiceSearchChannelsProcedure,
-		svc.SearchChannels,
-		opts...,
-	)
 	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
 		AdminServiceGetServerVersionProcedure,
 		svc.GetServerVersion,
@@ -787,8 +766,6 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceListChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetChannelsProcedure:
 			adminServiceGetChannelsHandler.ServeHTTP(w, r)
-		case AdminServiceSearchChannelsProcedure:
-			adminServiceSearchChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		default:
@@ -914,10 +891,6 @@ func (UnimplementedAdminServiceHandler) ListChannels(context.Context, *connect.R
 
 func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetChannels is not implemented"))
-}
-
-func (UnimplementedAdminServiceHandler) SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.SearchChannels is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {

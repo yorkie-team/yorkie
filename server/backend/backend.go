@@ -327,49 +327,7 @@ func (b *Backend) BroadcastCacheInvalidation(
 }
 
 // BroadcastChannelList broadcasts channel list request to all cluster nodes and aggregates results.
-func (b *Backend) BroadcastChannelList(
-	ctx context.Context,
-	projectID types.ID,
-	limit int,
-) ([]*types.ChannelSummary, error) {
-	return b.broadcastChannelQuery(ctx, projectID, limit, "channel list",
-		func(cli *cluster.Client, projID types.ID, lim int32) ([]*types.ChannelSummary, error) {
-			return cli.ListChannels(ctx, projID, lim)
-		})
-}
-
-// BroadcastChannelSearch broadcasts channel search to all cluster nodes and aggregates results.
-func (b *Backend) BroadcastChannelSearch(
-	ctx context.Context,
-	projectID types.ID,
-	query string,
-	limit int,
-) ([]*types.ChannelSummary, error) {
-	return b.broadcastChannelQuery(ctx, projectID, limit, "channel search",
-		func(cli *cluster.Client, projID types.ID, lim int32) ([]*types.ChannelSummary, error) {
-			return cli.SearchChannels(ctx, projID, query, lim)
-		})
-}
-
-// prepareClusterClients returns cluster nodes and prunes inactive clients.
-func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
-	nodes, err := b.Membership.ClusterNodes(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prune inactive nodes from the pool (protect gateway address)
-	addrs := []string{b.Config.GatewayAddr}
-	for _, node := range nodes {
-		addrs = append(addrs, node.RPCAddr)
-	}
-	b.ClusterClientPool.Prune(addrs)
-
-	return nodes, nil
-}
-
-// broadcastChannelQuery is a generic function to broadcast channel queries to all cluster nodes.
-// It aggregates results by channel key and returns the results in a sorted order.
+// If query is not empty, it filters channels by the query prefix.
 //
 // Note: This uses a "best-effort" approach for distributed data collection.
 // Since channels are distributed across nodes in memory (not in DB), we cannot
@@ -384,16 +342,15 @@ func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.Cluste
 //  2. Aggregate and deduplicate (e.g., 120 channels)
 //  3. Return first 50 channels
 //  4. Client receives exactly 50 channels (or fewer if less exist)
-func (b *Backend) broadcastChannelQuery(
+func (b *Backend) BroadcastChannelList(
 	ctx context.Context,
 	projectID types.ID,
+	query string,
 	limit int,
-	operationName string,
-	fetchChannels func(*cluster.Client, types.ID, int32) ([]*types.ChannelSummary, error),
 ) ([]*types.ChannelSummary, error) {
 	nodes, err := b.prepareClusterClients(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("broadcast %s: %w", operationName, err)
+		return nil, fmt.Errorf("broadcast channel list: %w", err)
 	}
 
 	channelMap := make(map[string]*types.ChannelSummary)
@@ -408,9 +365,9 @@ func (b *Backend) broadcastChannelQuery(
 			continue
 		}
 
-		channels, err := fetchChannels(cli, projectID, int32(limit))
+		channels, err := cli.ListChannels(ctx, projectID, query, int32(limit))
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s on %s: %w", operationName, nodeAddr, err))
+			errs = append(errs, fmt.Errorf("list channels on %s: %w", nodeAddr, err))
 			continue
 		}
 
@@ -442,8 +399,25 @@ func (b *Backend) broadcastChannelQuery(
 			return nil, errors.Join(errs...)
 		}
 		// Log errors but return partial results if we have any
-		logging.DefaultLogger().Warnf("partial failure in %s: %v", operationName, errors.Join(errs...))
+		logging.DefaultLogger().Warnf("partial failure in channel list: %v", errors.Join(errs...))
 	}
 
 	return results, nil
+}
+
+// prepareClusterClients returns cluster nodes and prunes inactive clients.
+func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+	nodes, err := b.Membership.ClusterNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prune inactive nodes from the pool (protect gateway address)
+	addrs := []string{b.Config.GatewayAddr}
+	for _, node := range nodes {
+		addrs = append(addrs, node.RPCAddr)
+	}
+	b.ClusterClientPool.Prune(addrs)
+
+	return nodes, nil
 }

@@ -1789,7 +1789,8 @@ func (x *SearchDocumentsResponse) GetDocuments() []*DocumentSummary {
 
 type ListChannelsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1822,6 +1823,13 @@ func (x *ListChannelsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListChannelsRequest.ProtoReflect.Descriptor instead.
 func (*ListChannelsRequest) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ListChannelsRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
 }
 
 func (x *ListChannelsRequest) GetLimit() int32 {
@@ -1971,102 +1979,6 @@ func (x *GetChannelsResponse) GetChannels() []*ChannelSummary {
 	return nil
 }
 
-type SearchChannelsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SearchChannelsRequest) Reset() {
-	*x = SearchChannelsRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[38]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SearchChannelsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SearchChannelsRequest) ProtoMessage() {}
-
-func (x *SearchChannelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[38]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SearchChannelsRequest.ProtoReflect.Descriptor instead.
-func (*SearchChannelsRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{38}
-}
-
-func (x *SearchChannelsRequest) GetQuery() string {
-	if x != nil {
-		return x.Query
-	}
-	return ""
-}
-
-func (x *SearchChannelsRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-type SearchChannelsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Channels      []*ChannelSummary      `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SearchChannelsResponse) Reset() {
-	*x = SearchChannelsResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[39]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SearchChannelsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SearchChannelsResponse) ProtoMessage() {}
-
-func (x *SearchChannelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[39]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SearchChannelsResponse.ProtoReflect.Descriptor instead.
-func (*SearchChannelsResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *SearchChannelsResponse) GetChannels() []*ChannelSummary {
-	if x != nil {
-		return x.Channels
-	}
-	return nil
-}
-
 type ListChangesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DocumentKey   string                 `protobuf:"bytes,1,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
@@ -2079,7 +1991,7 @@ type ListChangesRequest struct {
 
 func (x *ListChangesRequest) Reset() {
 	*x = ListChangesRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[40]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2091,7 +2003,7 @@ func (x *ListChangesRequest) String() string {
 func (*ListChangesRequest) ProtoMessage() {}
 
 func (x *ListChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[40]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2104,7 +2016,7 @@ func (x *ListChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListChangesRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{40}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ListChangesRequest) GetDocumentKey() string {
@@ -2144,7 +2056,7 @@ type ListChangesResponse struct {
 
 func (x *ListChangesResponse) Reset() {
 	*x = ListChangesResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[41]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2156,7 +2068,7 @@ func (x *ListChangesResponse) String() string {
 func (*ListChangesResponse) ProtoMessage() {}
 
 func (x *ListChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[41]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2169,7 +2081,7 @@ func (x *ListChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListChangesResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{41}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListChangesResponse) GetChanges() []*Change {
@@ -2191,7 +2103,7 @@ type CreateSchemaRequest struct {
 
 func (x *CreateSchemaRequest) Reset() {
 	*x = CreateSchemaRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[42]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2203,7 +2115,7 @@ func (x *CreateSchemaRequest) String() string {
 func (*CreateSchemaRequest) ProtoMessage() {}
 
 func (x *CreateSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[42]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2216,7 +2128,7 @@ func (x *CreateSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSchemaRequest.ProtoReflect.Descriptor instead.
 func (*CreateSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{42}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CreateSchemaRequest) GetSchemaName() string {
@@ -2256,7 +2168,7 @@ type CreateSchemaResponse struct {
 
 func (x *CreateSchemaResponse) Reset() {
 	*x = CreateSchemaResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[43]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2268,7 +2180,7 @@ func (x *CreateSchemaResponse) String() string {
 func (*CreateSchemaResponse) ProtoMessage() {}
 
 func (x *CreateSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[43]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2281,7 +2193,7 @@ func (x *CreateSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSchemaResponse.ProtoReflect.Descriptor instead.
 func (*CreateSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{43}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CreateSchemaResponse) GetSchema() *Schema {
@@ -2299,7 +2211,7 @@ type ListSchemasRequest struct {
 
 func (x *ListSchemasRequest) Reset() {
 	*x = ListSchemasRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[44]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2311,7 +2223,7 @@ func (x *ListSchemasRequest) String() string {
 func (*ListSchemasRequest) ProtoMessage() {}
 
 func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[44]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2324,7 +2236,7 @@ func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
 func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{44}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{42}
 }
 
 type ListSchemasResponse struct {
@@ -2336,7 +2248,7 @@ type ListSchemasResponse struct {
 
 func (x *ListSchemasResponse) Reset() {
 	*x = ListSchemasResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[45]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +2260,7 @@ func (x *ListSchemasResponse) String() string {
 func (*ListSchemasResponse) ProtoMessage() {}
 
 func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[45]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +2273,7 @@ func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
 func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{45}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ListSchemasResponse) GetSchemas() []*Schema {
@@ -2381,7 +2293,7 @@ type GetSchemaRequest struct {
 
 func (x *GetSchemaRequest) Reset() {
 	*x = GetSchemaRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[46]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2393,7 +2305,7 @@ func (x *GetSchemaRequest) String() string {
 func (*GetSchemaRequest) ProtoMessage() {}
 
 func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[46]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2406,7 +2318,7 @@ func (x *GetSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaRequest.ProtoReflect.Descriptor instead.
 func (*GetSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{46}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GetSchemaRequest) GetSchemaName() string {
@@ -2432,7 +2344,7 @@ type GetSchemaResponse struct {
 
 func (x *GetSchemaResponse) Reset() {
 	*x = GetSchemaResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[47]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2444,7 +2356,7 @@ func (x *GetSchemaResponse) String() string {
 func (*GetSchemaResponse) ProtoMessage() {}
 
 func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[47]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2457,7 +2369,7 @@ func (x *GetSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemaResponse.ProtoReflect.Descriptor instead.
 func (*GetSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{47}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetSchemaResponse) GetSchema() *Schema {
@@ -2476,7 +2388,7 @@ type GetSchemasRequest struct {
 
 func (x *GetSchemasRequest) Reset() {
 	*x = GetSchemasRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[48]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2488,7 +2400,7 @@ func (x *GetSchemasRequest) String() string {
 func (*GetSchemasRequest) ProtoMessage() {}
 
 func (x *GetSchemasRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[48]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2501,7 +2413,7 @@ func (x *GetSchemasRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemasRequest.ProtoReflect.Descriptor instead.
 func (*GetSchemasRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{48}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetSchemasRequest) GetSchemaName() string {
@@ -2520,7 +2432,7 @@ type GetSchemasResponse struct {
 
 func (x *GetSchemasResponse) Reset() {
 	*x = GetSchemasResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[49]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2532,7 +2444,7 @@ func (x *GetSchemasResponse) String() string {
 func (*GetSchemasResponse) ProtoMessage() {}
 
 func (x *GetSchemasResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[49]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2545,7 +2457,7 @@ func (x *GetSchemasResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSchemasResponse.ProtoReflect.Descriptor instead.
 func (*GetSchemasResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{49}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetSchemasResponse) GetSchemas() []*Schema {
@@ -2565,7 +2477,7 @@ type RemoveSchemaRequest struct {
 
 func (x *RemoveSchemaRequest) Reset() {
 	*x = RemoveSchemaRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[50]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2577,7 +2489,7 @@ func (x *RemoveSchemaRequest) String() string {
 func (*RemoveSchemaRequest) ProtoMessage() {}
 
 func (x *RemoveSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[50]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2590,7 +2502,7 @@ func (x *RemoveSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSchemaRequest.ProtoReflect.Descriptor instead.
 func (*RemoveSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{50}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *RemoveSchemaRequest) GetSchemaName() string {
@@ -2615,7 +2527,7 @@ type RemoveSchemaResponse struct {
 
 func (x *RemoveSchemaResponse) Reset() {
 	*x = RemoveSchemaResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[51]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2627,7 +2539,7 @@ func (x *RemoveSchemaResponse) String() string {
 func (*RemoveSchemaResponse) ProtoMessage() {}
 
 func (x *RemoveSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[51]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2640,7 +2552,7 @@ func (x *RemoveSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveSchemaResponse.ProtoReflect.Descriptor instead.
 func (*RemoveSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{51}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{49}
 }
 
 type GetServerVersionRequest struct {
@@ -2651,7 +2563,7 @@ type GetServerVersionRequest struct {
 
 func (x *GetServerVersionRequest) Reset() {
 	*x = GetServerVersionRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[52]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2663,7 +2575,7 @@ func (x *GetServerVersionRequest) String() string {
 func (*GetServerVersionRequest) ProtoMessage() {}
 
 func (x *GetServerVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[52]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2676,7 +2588,7 @@ func (x *GetServerVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetServerVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetServerVersionRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{52}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{50}
 }
 
 type GetServerVersionResponse struct {
@@ -2690,7 +2602,7 @@ type GetServerVersionResponse struct {
 
 func (x *GetServerVersionResponse) Reset() {
 	*x = GetServerVersionResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[53]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2702,7 +2614,7 @@ func (x *GetServerVersionResponse) String() string {
 func (*GetServerVersionResponse) ProtoMessage() {}
 
 func (x *GetServerVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[53]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2715,7 +2627,7 @@ func (x *GetServerVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetServerVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetServerVersionResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{53}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GetServerVersionResponse) GetYorkieVersion() string {
@@ -2748,7 +2660,7 @@ type RotateProjectKeysRequest struct {
 
 func (x *RotateProjectKeysRequest) Reset() {
 	*x = RotateProjectKeysRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[54]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2760,7 +2672,7 @@ func (x *RotateProjectKeysRequest) String() string {
 func (*RotateProjectKeysRequest) ProtoMessage() {}
 
 func (x *RotateProjectKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[54]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2773,7 +2685,7 @@ func (x *RotateProjectKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateProjectKeysRequest.ProtoReflect.Descriptor instead.
 func (*RotateProjectKeysRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{54}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RotateProjectKeysRequest) GetId() string {
@@ -2792,7 +2704,7 @@ type RotateProjectKeysResponse struct {
 
 func (x *RotateProjectKeysResponse) Reset() {
 	*x = RotateProjectKeysResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[55]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2804,7 +2716,7 @@ func (x *RotateProjectKeysResponse) String() string {
 func (*RotateProjectKeysResponse) ProtoMessage() {}
 
 func (x *RotateProjectKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[55]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2817,7 +2729,7 @@ func (x *RotateProjectKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateProjectKeysResponse.ProtoReflect.Descriptor instead.
 func (*RotateProjectKeysResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{55}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RotateProjectKeysResponse) GetProject() *Project {
@@ -2840,7 +2752,7 @@ type ListRevisionsByAdminRequest struct {
 
 func (x *ListRevisionsByAdminRequest) Reset() {
 	*x = ListRevisionsByAdminRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[56]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2852,7 +2764,7 @@ func (x *ListRevisionsByAdminRequest) String() string {
 func (*ListRevisionsByAdminRequest) ProtoMessage() {}
 
 func (x *ListRevisionsByAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[56]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2865,7 +2777,7 @@ func (x *ListRevisionsByAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRevisionsByAdminRequest.ProtoReflect.Descriptor instead.
 func (*ListRevisionsByAdminRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{56}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListRevisionsByAdminRequest) GetProjectName() string {
@@ -2913,7 +2825,7 @@ type ListRevisionsByAdminResponse struct {
 
 func (x *ListRevisionsByAdminResponse) Reset() {
 	*x = ListRevisionsByAdminResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[57]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2925,7 +2837,7 @@ func (x *ListRevisionsByAdminResponse) String() string {
 func (*ListRevisionsByAdminResponse) ProtoMessage() {}
 
 func (x *ListRevisionsByAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[57]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2938,7 +2850,7 @@ func (x *ListRevisionsByAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRevisionsByAdminResponse.ProtoReflect.Descriptor instead.
 func (*ListRevisionsByAdminResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{57}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListRevisionsByAdminResponse) GetRevisions() []*RevisionSummary {
@@ -2966,7 +2878,7 @@ type GetRevisionByAdminRequest struct {
 
 func (x *GetRevisionByAdminRequest) Reset() {
 	*x = GetRevisionByAdminRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[58]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2978,7 +2890,7 @@ func (x *GetRevisionByAdminRequest) String() string {
 func (*GetRevisionByAdminRequest) ProtoMessage() {}
 
 func (x *GetRevisionByAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[58]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2991,7 +2903,7 @@ func (x *GetRevisionByAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRevisionByAdminRequest.ProtoReflect.Descriptor instead.
 func (*GetRevisionByAdminRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{58}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetRevisionByAdminRequest) GetProjectName() string {
@@ -3024,7 +2936,7 @@ type GetRevisionByAdminResponse struct {
 
 func (x *GetRevisionByAdminResponse) Reset() {
 	*x = GetRevisionByAdminResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[59]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3036,7 +2948,7 @@ func (x *GetRevisionByAdminResponse) String() string {
 func (*GetRevisionByAdminResponse) ProtoMessage() {}
 
 func (x *GetRevisionByAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[59]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3049,7 +2961,7 @@ func (x *GetRevisionByAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRevisionByAdminResponse.ProtoReflect.Descriptor instead.
 func (*GetRevisionByAdminResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{59}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GetRevisionByAdminResponse) GetRevision() *RevisionSummary {
@@ -3070,7 +2982,7 @@ type RestoreRevisionByAdminRequest struct {
 
 func (x *RestoreRevisionByAdminRequest) Reset() {
 	*x = RestoreRevisionByAdminRequest{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[60]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3082,7 +2994,7 @@ func (x *RestoreRevisionByAdminRequest) String() string {
 func (*RestoreRevisionByAdminRequest) ProtoMessage() {}
 
 func (x *RestoreRevisionByAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[60]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3095,7 +3007,7 @@ func (x *RestoreRevisionByAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreRevisionByAdminRequest.ProtoReflect.Descriptor instead.
 func (*RestoreRevisionByAdminRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{60}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RestoreRevisionByAdminRequest) GetProjectName() string {
@@ -3127,7 +3039,7 @@ type RestoreRevisionByAdminResponse struct {
 
 func (x *RestoreRevisionByAdminResponse) Reset() {
 	*x = RestoreRevisionByAdminResponse{}
-	mi := &file_yorkie_v1_admin_proto_msgTypes[61]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3139,7 +3051,7 @@ func (x *RestoreRevisionByAdminResponse) String() string {
 func (*RestoreRevisionByAdminResponse) ProtoMessage() {}
 
 func (x *RestoreRevisionByAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_admin_proto_msgTypes[61]
+	mi := &file_yorkie_v1_admin_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3152,7 +3064,7 @@ func (x *RestoreRevisionByAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreRevisionByAdminResponse.ProtoReflect.Descriptor instead.
 func (*RestoreRevisionByAdminResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{61}
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{59}
 }
 
 var File_yorkie_v1_admin_proto protoreflect.FileDescriptor
@@ -3265,20 +3177,16 @@ const file_yorkie_v1_admin_proto_rawDesc = "" +
 	"\x17SearchDocumentsResponse\x12\x1f\n" +
 	"\vtotal_count\x18\x01 \x01(\x05R\n" +
 	"totalCount\x128\n" +
-	"\tdocuments\x18\x02 \x03(\v2\x1a.yorkie.v1.DocumentSummaryR\tdocuments\"+\n" +
+	"\tdocuments\x18\x02 \x03(\v2\x1a.yorkie.v1.DocumentSummaryR\tdocuments\"A\n" +
 	"\x13ListChannelsRequest\x12\x14\n" +
-	"\x05limit\x18\x01 \x01(\x05R\x05limit\"M\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"M\n" +
 	"\x14ListChannelsResponse\x125\n" +
 	"\bchannels\x18\x01 \x03(\v2\x19.yorkie.v1.ChannelSummaryR\bchannels\"a\n" +
 	"\x12GetChannelsRequest\x12!\n" +
 	"\fchannel_keys\x18\x01 \x03(\tR\vchannelKeys\x12(\n" +
 	"\x10include_sub_path\x18\x02 \x01(\bR\x0eincludeSubPath\"L\n" +
 	"\x13GetChannelsResponse\x125\n" +
-	"\bchannels\x18\x01 \x03(\v2\x19.yorkie.v1.ChannelSummaryR\bchannels\"C\n" +
-	"\x15SearchChannelsRequest\x12\x14\n" +
-	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"O\n" +
-	"\x16SearchChannelsResponse\x125\n" +
 	"\bchannels\x18\x01 \x03(\v2\x19.yorkie.v1.ChannelSummaryR\bchannels\"\x96\x01\n" +
 	"\x12ListChangesRequest\x12!\n" +
 	"\fdocument_key\x18\x01 \x01(\tR\vdocumentKey\x12!\n" +
@@ -3350,7 +3258,7 @@ const file_yorkie_v1_admin_proto_rawDesc = "" +
 	"\fdocument_key\x18\x02 \x01(\tR\vdocumentKey\x12\x1f\n" +
 	"\vrevision_id\x18\x03 \x01(\tR\n" +
 	"revisionId\" \n" +
-	"\x1eRestoreRevisionByAdminResponse2\x90\x15\n" +
+	"\x1eRestoreRevisionByAdminResponse2\xb7\x14\n" +
 	"\fAdminService\x12?\n" +
 	"\x06SignUp\x12\x18.yorkie.v1.SignUpRequest\x1a\x19.yorkie.v1.SignUpResponse\"\x00\x12<\n" +
 	"\x05LogIn\x12\x17.yorkie.v1.LogInRequest\x1a\x18.yorkie.v1.LogInResponse\"\x00\x12T\n" +
@@ -3382,8 +3290,7 @@ const file_yorkie_v1_admin_proto_rawDesc = "" +
 	"\x12GetRevisionByAdmin\x12$.yorkie.v1.GetRevisionByAdminRequest\x1a%.yorkie.v1.GetRevisionByAdminResponse\"\x00\x12o\n" +
 	"\x16RestoreRevisionByAdmin\x12(.yorkie.v1.RestoreRevisionByAdminRequest\x1a).yorkie.v1.RestoreRevisionByAdminResponse\"\x00\x12Q\n" +
 	"\fListChannels\x12\x1e.yorkie.v1.ListChannelsRequest\x1a\x1f.yorkie.v1.ListChannelsResponse\"\x00\x12N\n" +
-	"\vGetChannels\x12\x1d.yorkie.v1.GetChannelsRequest\x1a\x1e.yorkie.v1.GetChannelsResponse\"\x00\x12W\n" +
-	"\x0eSearchChannels\x12 .yorkie.v1.SearchChannelsRequest\x1a!.yorkie.v1.SearchChannelsResponse\"\x00\x12]\n" +
+	"\vGetChannels\x12\x1d.yorkie.v1.GetChannelsRequest\x1a\x1e.yorkie.v1.GetChannelsResponse\"\x00\x12]\n" +
 	"\x10GetServerVersion\x12\".yorkie.v1.GetServerVersionRequest\x1a#.yorkie.v1.GetServerVersionResponse\"\x00BE\n" +
 	"\x11dev.yorkie.api.v1P\x01Z.github.com/yorkie-team/yorkie/api/yorkie/v1;v1b\x06proto3"
 
@@ -3400,7 +3307,7 @@ func file_yorkie_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_yorkie_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_yorkie_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
+var file_yorkie_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_yorkie_v1_admin_proto_goTypes = []any{
 	(GetProjectStatsRequest_DateRange)(0),  // 0: yorkie.v1.GetProjectStatsRequest.DateRange
 	(*SignUpRequest)(nil),                  // 1: yorkie.v1.SignUpRequest
@@ -3441,140 +3348,135 @@ var file_yorkie_v1_admin_proto_goTypes = []any{
 	(*ListChannelsResponse)(nil),           // 36: yorkie.v1.ListChannelsResponse
 	(*GetChannelsRequest)(nil),             // 37: yorkie.v1.GetChannelsRequest
 	(*GetChannelsResponse)(nil),            // 38: yorkie.v1.GetChannelsResponse
-	(*SearchChannelsRequest)(nil),          // 39: yorkie.v1.SearchChannelsRequest
-	(*SearchChannelsResponse)(nil),         // 40: yorkie.v1.SearchChannelsResponse
-	(*ListChangesRequest)(nil),             // 41: yorkie.v1.ListChangesRequest
-	(*ListChangesResponse)(nil),            // 42: yorkie.v1.ListChangesResponse
-	(*CreateSchemaRequest)(nil),            // 43: yorkie.v1.CreateSchemaRequest
-	(*CreateSchemaResponse)(nil),           // 44: yorkie.v1.CreateSchemaResponse
-	(*ListSchemasRequest)(nil),             // 45: yorkie.v1.ListSchemasRequest
-	(*ListSchemasResponse)(nil),            // 46: yorkie.v1.ListSchemasResponse
-	(*GetSchemaRequest)(nil),               // 47: yorkie.v1.GetSchemaRequest
-	(*GetSchemaResponse)(nil),              // 48: yorkie.v1.GetSchemaResponse
-	(*GetSchemasRequest)(nil),              // 49: yorkie.v1.GetSchemasRequest
-	(*GetSchemasResponse)(nil),             // 50: yorkie.v1.GetSchemasResponse
-	(*RemoveSchemaRequest)(nil),            // 51: yorkie.v1.RemoveSchemaRequest
-	(*RemoveSchemaResponse)(nil),           // 52: yorkie.v1.RemoveSchemaResponse
-	(*GetServerVersionRequest)(nil),        // 53: yorkie.v1.GetServerVersionRequest
-	(*GetServerVersionResponse)(nil),       // 54: yorkie.v1.GetServerVersionResponse
-	(*RotateProjectKeysRequest)(nil),       // 55: yorkie.v1.RotateProjectKeysRequest
-	(*RotateProjectKeysResponse)(nil),      // 56: yorkie.v1.RotateProjectKeysResponse
-	(*ListRevisionsByAdminRequest)(nil),    // 57: yorkie.v1.ListRevisionsByAdminRequest
-	(*ListRevisionsByAdminResponse)(nil),   // 58: yorkie.v1.ListRevisionsByAdminResponse
-	(*GetRevisionByAdminRequest)(nil),      // 59: yorkie.v1.GetRevisionByAdminRequest
-	(*GetRevisionByAdminResponse)(nil),     // 60: yorkie.v1.GetRevisionByAdminResponse
-	(*RestoreRevisionByAdminRequest)(nil),  // 61: yorkie.v1.RestoreRevisionByAdminRequest
-	(*RestoreRevisionByAdminResponse)(nil), // 62: yorkie.v1.RestoreRevisionByAdminResponse
-	(*User)(nil),                           // 63: yorkie.v1.User
-	(*Project)(nil),                        // 64: yorkie.v1.Project
-	(*UpdatableProjectFields)(nil),         // 65: yorkie.v1.UpdatableProjectFields
-	(*MetricPoint)(nil),                    // 66: yorkie.v1.MetricPoint
-	(*DocumentSummary)(nil),                // 67: yorkie.v1.DocumentSummary
-	(*VersionVector)(nil),                  // 68: yorkie.v1.VersionVector
-	(*ChannelSummary)(nil),                 // 69: yorkie.v1.ChannelSummary
-	(*Change)(nil),                         // 70: yorkie.v1.Change
-	(*Rule)(nil),                           // 71: yorkie.v1.Rule
-	(*Schema)(nil),                         // 72: yorkie.v1.Schema
-	(*RevisionSummary)(nil),                // 73: yorkie.v1.RevisionSummary
+	(*ListChangesRequest)(nil),             // 39: yorkie.v1.ListChangesRequest
+	(*ListChangesResponse)(nil),            // 40: yorkie.v1.ListChangesResponse
+	(*CreateSchemaRequest)(nil),            // 41: yorkie.v1.CreateSchemaRequest
+	(*CreateSchemaResponse)(nil),           // 42: yorkie.v1.CreateSchemaResponse
+	(*ListSchemasRequest)(nil),             // 43: yorkie.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),            // 44: yorkie.v1.ListSchemasResponse
+	(*GetSchemaRequest)(nil),               // 45: yorkie.v1.GetSchemaRequest
+	(*GetSchemaResponse)(nil),              // 46: yorkie.v1.GetSchemaResponse
+	(*GetSchemasRequest)(nil),              // 47: yorkie.v1.GetSchemasRequest
+	(*GetSchemasResponse)(nil),             // 48: yorkie.v1.GetSchemasResponse
+	(*RemoveSchemaRequest)(nil),            // 49: yorkie.v1.RemoveSchemaRequest
+	(*RemoveSchemaResponse)(nil),           // 50: yorkie.v1.RemoveSchemaResponse
+	(*GetServerVersionRequest)(nil),        // 51: yorkie.v1.GetServerVersionRequest
+	(*GetServerVersionResponse)(nil),       // 52: yorkie.v1.GetServerVersionResponse
+	(*RotateProjectKeysRequest)(nil),       // 53: yorkie.v1.RotateProjectKeysRequest
+	(*RotateProjectKeysResponse)(nil),      // 54: yorkie.v1.RotateProjectKeysResponse
+	(*ListRevisionsByAdminRequest)(nil),    // 55: yorkie.v1.ListRevisionsByAdminRequest
+	(*ListRevisionsByAdminResponse)(nil),   // 56: yorkie.v1.ListRevisionsByAdminResponse
+	(*GetRevisionByAdminRequest)(nil),      // 57: yorkie.v1.GetRevisionByAdminRequest
+	(*GetRevisionByAdminResponse)(nil),     // 58: yorkie.v1.GetRevisionByAdminResponse
+	(*RestoreRevisionByAdminRequest)(nil),  // 59: yorkie.v1.RestoreRevisionByAdminRequest
+	(*RestoreRevisionByAdminResponse)(nil), // 60: yorkie.v1.RestoreRevisionByAdminResponse
+	(*User)(nil),                           // 61: yorkie.v1.User
+	(*Project)(nil),                        // 62: yorkie.v1.Project
+	(*UpdatableProjectFields)(nil),         // 63: yorkie.v1.UpdatableProjectFields
+	(*MetricPoint)(nil),                    // 64: yorkie.v1.MetricPoint
+	(*DocumentSummary)(nil),                // 65: yorkie.v1.DocumentSummary
+	(*VersionVector)(nil),                  // 66: yorkie.v1.VersionVector
+	(*ChannelSummary)(nil),                 // 67: yorkie.v1.ChannelSummary
+	(*Change)(nil),                         // 68: yorkie.v1.Change
+	(*Rule)(nil),                           // 69: yorkie.v1.Rule
+	(*Schema)(nil),                         // 70: yorkie.v1.Schema
+	(*RevisionSummary)(nil),                // 71: yorkie.v1.RevisionSummary
 }
 var file_yorkie_v1_admin_proto_depIdxs = []int32{
-	63, // 0: yorkie.v1.SignUpResponse.user:type_name -> yorkie.v1.User
-	64, // 1: yorkie.v1.CreateProjectResponse.project:type_name -> yorkie.v1.Project
-	64, // 2: yorkie.v1.GetProjectResponse.project:type_name -> yorkie.v1.Project
-	64, // 3: yorkie.v1.ListProjectsResponse.projects:type_name -> yorkie.v1.Project
-	65, // 4: yorkie.v1.UpdateProjectRequest.fields:type_name -> yorkie.v1.UpdatableProjectFields
-	64, // 5: yorkie.v1.UpdateProjectResponse.project:type_name -> yorkie.v1.Project
+	61, // 0: yorkie.v1.SignUpResponse.user:type_name -> yorkie.v1.User
+	62, // 1: yorkie.v1.CreateProjectResponse.project:type_name -> yorkie.v1.Project
+	62, // 2: yorkie.v1.GetProjectResponse.project:type_name -> yorkie.v1.Project
+	62, // 3: yorkie.v1.ListProjectsResponse.projects:type_name -> yorkie.v1.Project
+	63, // 4: yorkie.v1.UpdateProjectRequest.fields:type_name -> yorkie.v1.UpdatableProjectFields
+	62, // 5: yorkie.v1.UpdateProjectResponse.project:type_name -> yorkie.v1.Project
 	0,  // 6: yorkie.v1.GetProjectStatsRequest.date_range:type_name -> yorkie.v1.GetProjectStatsRequest.DateRange
-	66, // 7: yorkie.v1.GetProjectStatsResponse.active_users:type_name -> yorkie.v1.MetricPoint
-	66, // 8: yorkie.v1.GetProjectStatsResponse.active_channels:type_name -> yorkie.v1.MetricPoint
-	66, // 9: yorkie.v1.GetProjectStatsResponse.sessions:type_name -> yorkie.v1.MetricPoint
-	66, // 10: yorkie.v1.GetProjectStatsResponse.peak_sessions_per_channel:type_name -> yorkie.v1.MetricPoint
-	67, // 11: yorkie.v1.CreateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	67, // 12: yorkie.v1.ListDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	67, // 13: yorkie.v1.GetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	67, // 14: yorkie.v1.GetDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	67, // 15: yorkie.v1.UpdateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	68, // 16: yorkie.v1.GetSnapshotMetaResponse.version_vector:type_name -> yorkie.v1.VersionVector
-	67, // 17: yorkie.v1.SearchDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	69, // 18: yorkie.v1.ListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	69, // 19: yorkie.v1.GetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	69, // 20: yorkie.v1.SearchChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	70, // 21: yorkie.v1.ListChangesResponse.changes:type_name -> yorkie.v1.Change
-	71, // 22: yorkie.v1.CreateSchemaRequest.rules:type_name -> yorkie.v1.Rule
-	72, // 23: yorkie.v1.CreateSchemaResponse.schema:type_name -> yorkie.v1.Schema
-	72, // 24: yorkie.v1.ListSchemasResponse.schemas:type_name -> yorkie.v1.Schema
-	72, // 25: yorkie.v1.GetSchemaResponse.schema:type_name -> yorkie.v1.Schema
-	72, // 26: yorkie.v1.GetSchemasResponse.schemas:type_name -> yorkie.v1.Schema
-	64, // 27: yorkie.v1.RotateProjectKeysResponse.project:type_name -> yorkie.v1.Project
-	73, // 28: yorkie.v1.ListRevisionsByAdminResponse.revisions:type_name -> yorkie.v1.RevisionSummary
-	73, // 29: yorkie.v1.GetRevisionByAdminResponse.revision:type_name -> yorkie.v1.RevisionSummary
-	1,  // 30: yorkie.v1.AdminService.SignUp:input_type -> yorkie.v1.SignUpRequest
-	3,  // 31: yorkie.v1.AdminService.LogIn:input_type -> yorkie.v1.LogInRequest
-	5,  // 32: yorkie.v1.AdminService.DeleteAccount:input_type -> yorkie.v1.DeleteAccountRequest
-	7,  // 33: yorkie.v1.AdminService.ChangePassword:input_type -> yorkie.v1.ChangePasswordRequest
-	9,  // 34: yorkie.v1.AdminService.CreateProject:input_type -> yorkie.v1.CreateProjectRequest
-	13, // 35: yorkie.v1.AdminService.ListProjects:input_type -> yorkie.v1.ListProjectsRequest
-	11, // 36: yorkie.v1.AdminService.GetProject:input_type -> yorkie.v1.GetProjectRequest
-	17, // 37: yorkie.v1.AdminService.GetProjectStats:input_type -> yorkie.v1.GetProjectStatsRequest
-	15, // 38: yorkie.v1.AdminService.UpdateProject:input_type -> yorkie.v1.UpdateProjectRequest
-	55, // 39: yorkie.v1.AdminService.RotateProjectKeys:input_type -> yorkie.v1.RotateProjectKeysRequest
-	19, // 40: yorkie.v1.AdminService.CreateDocument:input_type -> yorkie.v1.CreateDocumentRequest
-	21, // 41: yorkie.v1.AdminService.ListDocuments:input_type -> yorkie.v1.ListDocumentsRequest
-	23, // 42: yorkie.v1.AdminService.GetDocument:input_type -> yorkie.v1.GetDocumentRequest
-	25, // 43: yorkie.v1.AdminService.GetDocuments:input_type -> yorkie.v1.GetDocumentsRequest
-	33, // 44: yorkie.v1.AdminService.SearchDocuments:input_type -> yorkie.v1.SearchDocumentsRequest
-	27, // 45: yorkie.v1.AdminService.UpdateDocument:input_type -> yorkie.v1.UpdateDocumentRequest
-	29, // 46: yorkie.v1.AdminService.RemoveDocumentByAdmin:input_type -> yorkie.v1.RemoveDocumentByAdminRequest
-	31, // 47: yorkie.v1.AdminService.GetSnapshotMeta:input_type -> yorkie.v1.GetSnapshotMetaRequest
-	41, // 48: yorkie.v1.AdminService.ListChanges:input_type -> yorkie.v1.ListChangesRequest
-	43, // 49: yorkie.v1.AdminService.CreateSchema:input_type -> yorkie.v1.CreateSchemaRequest
-	45, // 50: yorkie.v1.AdminService.ListSchemas:input_type -> yorkie.v1.ListSchemasRequest
-	47, // 51: yorkie.v1.AdminService.GetSchema:input_type -> yorkie.v1.GetSchemaRequest
-	49, // 52: yorkie.v1.AdminService.GetSchemas:input_type -> yorkie.v1.GetSchemasRequest
-	51, // 53: yorkie.v1.AdminService.RemoveSchema:input_type -> yorkie.v1.RemoveSchemaRequest
-	57, // 54: yorkie.v1.AdminService.ListRevisionsByAdmin:input_type -> yorkie.v1.ListRevisionsByAdminRequest
-	59, // 55: yorkie.v1.AdminService.GetRevisionByAdmin:input_type -> yorkie.v1.GetRevisionByAdminRequest
-	61, // 56: yorkie.v1.AdminService.RestoreRevisionByAdmin:input_type -> yorkie.v1.RestoreRevisionByAdminRequest
-	35, // 57: yorkie.v1.AdminService.ListChannels:input_type -> yorkie.v1.ListChannelsRequest
-	37, // 58: yorkie.v1.AdminService.GetChannels:input_type -> yorkie.v1.GetChannelsRequest
-	39, // 59: yorkie.v1.AdminService.SearchChannels:input_type -> yorkie.v1.SearchChannelsRequest
-	53, // 60: yorkie.v1.AdminService.GetServerVersion:input_type -> yorkie.v1.GetServerVersionRequest
-	2,  // 61: yorkie.v1.AdminService.SignUp:output_type -> yorkie.v1.SignUpResponse
-	4,  // 62: yorkie.v1.AdminService.LogIn:output_type -> yorkie.v1.LogInResponse
-	6,  // 63: yorkie.v1.AdminService.DeleteAccount:output_type -> yorkie.v1.DeleteAccountResponse
-	8,  // 64: yorkie.v1.AdminService.ChangePassword:output_type -> yorkie.v1.ChangePasswordResponse
-	10, // 65: yorkie.v1.AdminService.CreateProject:output_type -> yorkie.v1.CreateProjectResponse
-	14, // 66: yorkie.v1.AdminService.ListProjects:output_type -> yorkie.v1.ListProjectsResponse
-	12, // 67: yorkie.v1.AdminService.GetProject:output_type -> yorkie.v1.GetProjectResponse
-	18, // 68: yorkie.v1.AdminService.GetProjectStats:output_type -> yorkie.v1.GetProjectStatsResponse
-	16, // 69: yorkie.v1.AdminService.UpdateProject:output_type -> yorkie.v1.UpdateProjectResponse
-	56, // 70: yorkie.v1.AdminService.RotateProjectKeys:output_type -> yorkie.v1.RotateProjectKeysResponse
-	20, // 71: yorkie.v1.AdminService.CreateDocument:output_type -> yorkie.v1.CreateDocumentResponse
-	22, // 72: yorkie.v1.AdminService.ListDocuments:output_type -> yorkie.v1.ListDocumentsResponse
-	24, // 73: yorkie.v1.AdminService.GetDocument:output_type -> yorkie.v1.GetDocumentResponse
-	26, // 74: yorkie.v1.AdminService.GetDocuments:output_type -> yorkie.v1.GetDocumentsResponse
-	34, // 75: yorkie.v1.AdminService.SearchDocuments:output_type -> yorkie.v1.SearchDocumentsResponse
-	28, // 76: yorkie.v1.AdminService.UpdateDocument:output_type -> yorkie.v1.UpdateDocumentResponse
-	30, // 77: yorkie.v1.AdminService.RemoveDocumentByAdmin:output_type -> yorkie.v1.RemoveDocumentByAdminResponse
-	32, // 78: yorkie.v1.AdminService.GetSnapshotMeta:output_type -> yorkie.v1.GetSnapshotMetaResponse
-	42, // 79: yorkie.v1.AdminService.ListChanges:output_type -> yorkie.v1.ListChangesResponse
-	44, // 80: yorkie.v1.AdminService.CreateSchema:output_type -> yorkie.v1.CreateSchemaResponse
-	46, // 81: yorkie.v1.AdminService.ListSchemas:output_type -> yorkie.v1.ListSchemasResponse
-	48, // 82: yorkie.v1.AdminService.GetSchema:output_type -> yorkie.v1.GetSchemaResponse
-	50, // 83: yorkie.v1.AdminService.GetSchemas:output_type -> yorkie.v1.GetSchemasResponse
-	52, // 84: yorkie.v1.AdminService.RemoveSchema:output_type -> yorkie.v1.RemoveSchemaResponse
-	58, // 85: yorkie.v1.AdminService.ListRevisionsByAdmin:output_type -> yorkie.v1.ListRevisionsByAdminResponse
-	60, // 86: yorkie.v1.AdminService.GetRevisionByAdmin:output_type -> yorkie.v1.GetRevisionByAdminResponse
-	62, // 87: yorkie.v1.AdminService.RestoreRevisionByAdmin:output_type -> yorkie.v1.RestoreRevisionByAdminResponse
-	36, // 88: yorkie.v1.AdminService.ListChannels:output_type -> yorkie.v1.ListChannelsResponse
-	38, // 89: yorkie.v1.AdminService.GetChannels:output_type -> yorkie.v1.GetChannelsResponse
-	40, // 90: yorkie.v1.AdminService.SearchChannels:output_type -> yorkie.v1.SearchChannelsResponse
-	54, // 91: yorkie.v1.AdminService.GetServerVersion:output_type -> yorkie.v1.GetServerVersionResponse
-	61, // [61:92] is the sub-list for method output_type
-	30, // [30:61] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	64, // 7: yorkie.v1.GetProjectStatsResponse.active_users:type_name -> yorkie.v1.MetricPoint
+	64, // 8: yorkie.v1.GetProjectStatsResponse.active_channels:type_name -> yorkie.v1.MetricPoint
+	64, // 9: yorkie.v1.GetProjectStatsResponse.sessions:type_name -> yorkie.v1.MetricPoint
+	64, // 10: yorkie.v1.GetProjectStatsResponse.peak_sessions_per_channel:type_name -> yorkie.v1.MetricPoint
+	65, // 11: yorkie.v1.CreateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	65, // 12: yorkie.v1.ListDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	65, // 13: yorkie.v1.GetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	65, // 14: yorkie.v1.GetDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	65, // 15: yorkie.v1.UpdateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	66, // 16: yorkie.v1.GetSnapshotMetaResponse.version_vector:type_name -> yorkie.v1.VersionVector
+	65, // 17: yorkie.v1.SearchDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	67, // 18: yorkie.v1.ListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	67, // 19: yorkie.v1.GetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	68, // 20: yorkie.v1.ListChangesResponse.changes:type_name -> yorkie.v1.Change
+	69, // 21: yorkie.v1.CreateSchemaRequest.rules:type_name -> yorkie.v1.Rule
+	70, // 22: yorkie.v1.CreateSchemaResponse.schema:type_name -> yorkie.v1.Schema
+	70, // 23: yorkie.v1.ListSchemasResponse.schemas:type_name -> yorkie.v1.Schema
+	70, // 24: yorkie.v1.GetSchemaResponse.schema:type_name -> yorkie.v1.Schema
+	70, // 25: yorkie.v1.GetSchemasResponse.schemas:type_name -> yorkie.v1.Schema
+	62, // 26: yorkie.v1.RotateProjectKeysResponse.project:type_name -> yorkie.v1.Project
+	71, // 27: yorkie.v1.ListRevisionsByAdminResponse.revisions:type_name -> yorkie.v1.RevisionSummary
+	71, // 28: yorkie.v1.GetRevisionByAdminResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	1,  // 29: yorkie.v1.AdminService.SignUp:input_type -> yorkie.v1.SignUpRequest
+	3,  // 30: yorkie.v1.AdminService.LogIn:input_type -> yorkie.v1.LogInRequest
+	5,  // 31: yorkie.v1.AdminService.DeleteAccount:input_type -> yorkie.v1.DeleteAccountRequest
+	7,  // 32: yorkie.v1.AdminService.ChangePassword:input_type -> yorkie.v1.ChangePasswordRequest
+	9,  // 33: yorkie.v1.AdminService.CreateProject:input_type -> yorkie.v1.CreateProjectRequest
+	13, // 34: yorkie.v1.AdminService.ListProjects:input_type -> yorkie.v1.ListProjectsRequest
+	11, // 35: yorkie.v1.AdminService.GetProject:input_type -> yorkie.v1.GetProjectRequest
+	17, // 36: yorkie.v1.AdminService.GetProjectStats:input_type -> yorkie.v1.GetProjectStatsRequest
+	15, // 37: yorkie.v1.AdminService.UpdateProject:input_type -> yorkie.v1.UpdateProjectRequest
+	53, // 38: yorkie.v1.AdminService.RotateProjectKeys:input_type -> yorkie.v1.RotateProjectKeysRequest
+	19, // 39: yorkie.v1.AdminService.CreateDocument:input_type -> yorkie.v1.CreateDocumentRequest
+	21, // 40: yorkie.v1.AdminService.ListDocuments:input_type -> yorkie.v1.ListDocumentsRequest
+	23, // 41: yorkie.v1.AdminService.GetDocument:input_type -> yorkie.v1.GetDocumentRequest
+	25, // 42: yorkie.v1.AdminService.GetDocuments:input_type -> yorkie.v1.GetDocumentsRequest
+	33, // 43: yorkie.v1.AdminService.SearchDocuments:input_type -> yorkie.v1.SearchDocumentsRequest
+	27, // 44: yorkie.v1.AdminService.UpdateDocument:input_type -> yorkie.v1.UpdateDocumentRequest
+	29, // 45: yorkie.v1.AdminService.RemoveDocumentByAdmin:input_type -> yorkie.v1.RemoveDocumentByAdminRequest
+	31, // 46: yorkie.v1.AdminService.GetSnapshotMeta:input_type -> yorkie.v1.GetSnapshotMetaRequest
+	39, // 47: yorkie.v1.AdminService.ListChanges:input_type -> yorkie.v1.ListChangesRequest
+	41, // 48: yorkie.v1.AdminService.CreateSchema:input_type -> yorkie.v1.CreateSchemaRequest
+	43, // 49: yorkie.v1.AdminService.ListSchemas:input_type -> yorkie.v1.ListSchemasRequest
+	45, // 50: yorkie.v1.AdminService.GetSchema:input_type -> yorkie.v1.GetSchemaRequest
+	47, // 51: yorkie.v1.AdminService.GetSchemas:input_type -> yorkie.v1.GetSchemasRequest
+	49, // 52: yorkie.v1.AdminService.RemoveSchema:input_type -> yorkie.v1.RemoveSchemaRequest
+	55, // 53: yorkie.v1.AdminService.ListRevisionsByAdmin:input_type -> yorkie.v1.ListRevisionsByAdminRequest
+	57, // 54: yorkie.v1.AdminService.GetRevisionByAdmin:input_type -> yorkie.v1.GetRevisionByAdminRequest
+	59, // 55: yorkie.v1.AdminService.RestoreRevisionByAdmin:input_type -> yorkie.v1.RestoreRevisionByAdminRequest
+	35, // 56: yorkie.v1.AdminService.ListChannels:input_type -> yorkie.v1.ListChannelsRequest
+	37, // 57: yorkie.v1.AdminService.GetChannels:input_type -> yorkie.v1.GetChannelsRequest
+	51, // 58: yorkie.v1.AdminService.GetServerVersion:input_type -> yorkie.v1.GetServerVersionRequest
+	2,  // 59: yorkie.v1.AdminService.SignUp:output_type -> yorkie.v1.SignUpResponse
+	4,  // 60: yorkie.v1.AdminService.LogIn:output_type -> yorkie.v1.LogInResponse
+	6,  // 61: yorkie.v1.AdminService.DeleteAccount:output_type -> yorkie.v1.DeleteAccountResponse
+	8,  // 62: yorkie.v1.AdminService.ChangePassword:output_type -> yorkie.v1.ChangePasswordResponse
+	10, // 63: yorkie.v1.AdminService.CreateProject:output_type -> yorkie.v1.CreateProjectResponse
+	14, // 64: yorkie.v1.AdminService.ListProjects:output_type -> yorkie.v1.ListProjectsResponse
+	12, // 65: yorkie.v1.AdminService.GetProject:output_type -> yorkie.v1.GetProjectResponse
+	18, // 66: yorkie.v1.AdminService.GetProjectStats:output_type -> yorkie.v1.GetProjectStatsResponse
+	16, // 67: yorkie.v1.AdminService.UpdateProject:output_type -> yorkie.v1.UpdateProjectResponse
+	54, // 68: yorkie.v1.AdminService.RotateProjectKeys:output_type -> yorkie.v1.RotateProjectKeysResponse
+	20, // 69: yorkie.v1.AdminService.CreateDocument:output_type -> yorkie.v1.CreateDocumentResponse
+	22, // 70: yorkie.v1.AdminService.ListDocuments:output_type -> yorkie.v1.ListDocumentsResponse
+	24, // 71: yorkie.v1.AdminService.GetDocument:output_type -> yorkie.v1.GetDocumentResponse
+	26, // 72: yorkie.v1.AdminService.GetDocuments:output_type -> yorkie.v1.GetDocumentsResponse
+	34, // 73: yorkie.v1.AdminService.SearchDocuments:output_type -> yorkie.v1.SearchDocumentsResponse
+	28, // 74: yorkie.v1.AdminService.UpdateDocument:output_type -> yorkie.v1.UpdateDocumentResponse
+	30, // 75: yorkie.v1.AdminService.RemoveDocumentByAdmin:output_type -> yorkie.v1.RemoveDocumentByAdminResponse
+	32, // 76: yorkie.v1.AdminService.GetSnapshotMeta:output_type -> yorkie.v1.GetSnapshotMetaResponse
+	40, // 77: yorkie.v1.AdminService.ListChanges:output_type -> yorkie.v1.ListChangesResponse
+	42, // 78: yorkie.v1.AdminService.CreateSchema:output_type -> yorkie.v1.CreateSchemaResponse
+	44, // 79: yorkie.v1.AdminService.ListSchemas:output_type -> yorkie.v1.ListSchemasResponse
+	46, // 80: yorkie.v1.AdminService.GetSchema:output_type -> yorkie.v1.GetSchemaResponse
+	48, // 81: yorkie.v1.AdminService.GetSchemas:output_type -> yorkie.v1.GetSchemasResponse
+	50, // 82: yorkie.v1.AdminService.RemoveSchema:output_type -> yorkie.v1.RemoveSchemaResponse
+	56, // 83: yorkie.v1.AdminService.ListRevisionsByAdmin:output_type -> yorkie.v1.ListRevisionsByAdminResponse
+	58, // 84: yorkie.v1.AdminService.GetRevisionByAdmin:output_type -> yorkie.v1.GetRevisionByAdminResponse
+	60, // 85: yorkie.v1.AdminService.RestoreRevisionByAdmin:output_type -> yorkie.v1.RestoreRevisionByAdminResponse
+	36, // 86: yorkie.v1.AdminService.ListChannels:output_type -> yorkie.v1.ListChannelsResponse
+	38, // 87: yorkie.v1.AdminService.GetChannels:output_type -> yorkie.v1.GetChannelsResponse
+	52, // 88: yorkie.v1.AdminService.GetServerVersion:output_type -> yorkie.v1.GetServerVersionResponse
+	59, // [59:89] is the sub-list for method output_type
+	29, // [29:59] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_admin_proto_init() }
@@ -3589,7 +3491,7 @@ func file_yorkie_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_admin_proto_rawDesc), len(file_yorkie_v1_admin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   62,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
