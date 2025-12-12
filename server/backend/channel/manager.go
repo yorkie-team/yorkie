@@ -47,12 +47,6 @@ var (
 	// TopChannelSessionsMaxSize is the maximum size of top channel sessions.
 	TopChannelSessionsMaxSize = 10
 
-	// MinLimit is the minimum limit for channel search query.
-	MinLimit = 10
-
-	// MaxLimitForSearch is the maximum limit for channel search.
-	MaxLimitForSearch = 100
-
 	// MinChannelLimit is the minimum limit for listing channels.
 	MinChannelLimit = 1
 
