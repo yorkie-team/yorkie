@@ -202,6 +202,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/ListChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListDocuments:
     post:
       description: ""
@@ -306,6 +318,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.RotateProjectKeys.yorkie.v1.RotateProjectKeysResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/SearchChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.SearchChannels.yorkie.v1.SearchChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.SearchChannels.yorkie.v1.SearchChannelsResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -504,6 +528,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListChangesRequest'
       required: true
+    yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsRequest'
+      required: true
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsRequest:
       content:
         application/json:
@@ -584,6 +617,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysRequest'
+      required: true
+    yorkie.v1.AdminService.SearchChannels.yorkie.v1.SearchChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.SearchChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.SearchChannelsRequest'
       required: true
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsRequest:
       content:
@@ -775,6 +817,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListChangesResponse'
       description: ""
+    yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsResponse'
+      description: ""
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse:
       content:
         application/json:
@@ -855,6 +906,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RotateProjectKeysResponse'
+      description: ""
+    yorkie.v1.AdminService.SearchChannels.yorkie.v1.SearchChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.SearchChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.SearchChannelsResponse'
       description: ""
     yorkie.v1.AdminService.SearchDocuments.yorkie.v1.SearchDocumentsResponse:
       content:
@@ -1867,6 +1927,31 @@ components:
           title: changes
           type: array
       title: ListChangesResponse
+      type: object
+    yorkie.v1.ListChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        limit:
+          additionalProperties: false
+          description: ""
+          title: limit
+          type: integer
+      title: ListChannelsRequest
+      type: object
+    yorkie.v1.ListChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: ListChannelsResponse
       type: object
     yorkie.v1.ListDocumentsRequest:
       additionalProperties: false
@@ -2984,6 +3069,36 @@ components:
           title: version
           type: integer
       title: Schema
+      type: object
+    yorkie.v1.SearchChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        limit:
+          additionalProperties: false
+          description: ""
+          title: limit
+          type: integer
+        query:
+          additionalProperties: false
+          description: ""
+          title: query
+          type: string
+      title: SearchChannelsRequest
+      type: object
+    yorkie.v1.SearchChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: SearchChannelsResponse
       type: object
     yorkie.v1.SearchDocumentsRequest:
       additionalProperties: false

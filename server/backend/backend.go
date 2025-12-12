@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -294,17 +295,10 @@ func (b *Backend) BroadcastCacheInvalidation(
 	cacheType types.CacheType,
 	key string,
 ) error {
-	nodes, err := b.Membership.ClusterNodes(ctx)
+	nodes, err := b.prepareClusterClients(ctx)
 	if err != nil {
 		return fmt.Errorf("broadcast cache invalidation: %w", err)
 	}
-
-	// Prune inactive nodes from the pool (protect gateway address)
-	addrs := []string{b.Config.GatewayAddr}
-	for _, node := range nodes {
-		addrs = append(addrs, node.RPCAddr)
-	}
-	b.ClusterClientPool.Prune(addrs)
 
 	var errs []error
 	for _, node := range nodes {
@@ -330,4 +324,122 @@ func (b *Backend) BroadcastCacheInvalidation(
 	}
 
 	return nil
+}
+
+// BroadcastChannelList broadcasts channel list request to all cluster nodes and aggregates results.
+func (b *Backend) BroadcastChannelList(
+	ctx context.Context,
+	projectID types.ID,
+	limit int,
+) ([]*types.ChannelSummary, error) {
+	return b.broadcastChannelQuery(ctx, projectID, limit, "channel list",
+		func(cli *cluster.Client, projID types.ID, lim int32) ([]*types.ChannelSummary, error) {
+			return cli.ListChannels(ctx, projID, lim)
+		})
+}
+
+// BroadcastChannelSearch broadcasts channel search to all cluster nodes and aggregates results.
+func (b *Backend) BroadcastChannelSearch(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	limit int,
+) ([]*types.ChannelSummary, error) {
+	return b.broadcastChannelQuery(ctx, projectID, limit, "channel search",
+		func(cli *cluster.Client, projID types.ID, lim int32) ([]*types.ChannelSummary, error) {
+			return cli.SearchChannels(ctx, projID, query, lim)
+		})
+}
+
+// prepareClusterClients returns cluster nodes and prunes inactive clients.
+func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
+	nodes, err := b.Membership.ClusterNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prune inactive nodes from the pool (protect gateway address)
+	addrs := []string{b.Config.GatewayAddr}
+	for _, node := range nodes {
+		addrs = append(addrs, node.RPCAddr)
+	}
+	b.ClusterClientPool.Prune(addrs)
+
+	return nodes, nil
+}
+
+// broadcastChannelQuery is a generic function to broadcast channel queries to all cluster nodes.
+// It aggregates results by channel key and returns the results in a sorted order.
+//
+// Note: This uses a "best-effort" approach for distributed data collection.
+// Since channels are distributed across nodes in memory (not in DB), we cannot
+// guarantee exact pagination. The limit acts as a maximum result count, not a precise page boundary.
+//
+// Strategy: Request limit from each node to handle skewed data distribution.
+// If channels are concentrated on one node, we still get enough results.
+// If distributed evenly, we may collect more than limit, then trim to limit.
+//
+// Example with 3 nodes and limit=50:
+//  1. Request 50 from each node (max 150 collected)
+//  2. Aggregate and deduplicate (e.g., 120 channels)
+//  3. Return first 50 channels
+//  4. Client receives exactly 50 channels (or fewer if less exist)
+func (b *Backend) broadcastChannelQuery(
+	ctx context.Context,
+	projectID types.ID,
+	limit int,
+	operationName string,
+	fetchChannels func(*cluster.Client, types.ID, int32) ([]*types.ChannelSummary, error),
+) ([]*types.ChannelSummary, error) {
+	nodes, err := b.prepareClusterClients(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast %s: %w", operationName, err)
+	}
+
+	channelMap := make(map[string]*types.ChannelSummary)
+	var errs []error
+
+	for _, node := range nodes {
+		nodeAddr := node.RPCAddr
+
+		cli, err := b.ClusterClientPool.Get(nodeAddr)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("get client for %s: %w", nodeAddr, err))
+			continue
+		}
+
+		channels, err := fetchChannels(cli, projectID, int32(limit))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s on %s: %w", operationName, nodeAddr, err))
+			continue
+		}
+
+		for _, ch := range channels {
+			keyStr := ch.Key.String()
+			if existing, ok := channelMap[keyStr]; ok {
+				existing.PresenceCount += ch.PresenceCount
+			} else {
+				channelMap[keyStr] = ch
+			}
+		}
+	}
+
+	var results []*types.ChannelSummary
+	for _, ch := range channelMap {
+		results = append(results, ch)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key.String() < results[j].Key.String()
+	})
+
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	return results, nil
 }

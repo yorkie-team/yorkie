@@ -70,6 +70,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/ListChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.ListChannels.yorkie.v1.ClusterServiceListChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.ListChannels.yorkie.v1.ClusterServiceListChannelsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/PurgeDocument:
     post:
       description: ""
@@ -78,6 +90,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/SearchChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.SearchChannels.yorkie.v1.ClusterServiceSearchChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.SearchChannels.yorkie.v1.ClusterServiceSearchChannelsResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -129,6 +153,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.InvalidateCacheRequest'
       required: true
+    yorkie.v1.ClusterService.ListChannels.yorkie.v1.ClusterServiceListChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceListChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceListChannelsRequest'
+      required: true
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentRequest:
       content:
         application/json:
@@ -137,6 +170,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentRequest'
+      required: true
+    yorkie.v1.ClusterService.SearchChannels.yorkie.v1.ClusterServiceSearchChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceSearchChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceSearchChannelsRequest'
       required: true
   responses:
     connect.error:
@@ -193,6 +235,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.InvalidateCacheResponse'
       description: ""
+    yorkie.v1.ClusterService.ListChannels.yorkie.v1.ClusterServiceListChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceListChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceListChannelsResponse'
+      description: ""
     yorkie.v1.ClusterService.PurgeDocument.yorkie.v1.ClusterServicePurgeDocumentResponse:
       content:
         application/json:
@@ -201,6 +252,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServicePurgeDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.SearchChannels.yorkie.v1.ClusterServiceSearchChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceSearchChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceSearchChannelsResponse'
       description: ""
   schemas:
     connect.error:
@@ -490,6 +550,36 @@ components:
           type: object
       title: ClusterServiceGetDocumentResponse
       type: object
+    yorkie.v1.ClusterServiceListChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        limit:
+          additionalProperties: false
+          description: ""
+          title: limit
+          type: integer
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServiceListChannelsRequest
+      type: object
+    yorkie.v1.ClusterServiceListChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: ClusterServiceListChannelsResponse
+      type: object
     yorkie.v1.ClusterServicePurgeDocumentRequest:
       additionalProperties: false
       description: ""
@@ -515,6 +605,41 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServicePurgeDocumentResponse
+      type: object
+    yorkie.v1.ClusterServiceSearchChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        limit:
+          additionalProperties: false
+          description: ""
+          title: limit
+          type: integer
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+        query:
+          additionalProperties: false
+          description: ""
+          title: query
+          type: string
+      title: ClusterServiceSearchChannelsRequest
+      type: object
+    yorkie.v1.ClusterServiceSearchChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: ClusterServiceSearchChannelsResponse
       type: object
     yorkie.v1.DataSize:
       additionalProperties: false

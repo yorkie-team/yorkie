@@ -582,6 +582,27 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
 }
 
+// ListChannels lists channels for the given project.
+func (s *adminServer) ListChannels(
+	ctx context.Context,
+	req *connect.Request[api.ListChannelsRequest],
+) (*connect.Response[api.ListChannelsResponse], error) {
+	project := projects.From(ctx)
+
+	channels, err := s.backend.BroadcastChannelList(
+		ctx,
+		project.ID,
+		int(req.Msg.Limit),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListChannelsResponse{
+		Channels: converter.ToChannelSummaries(channels),
+	}), nil
+}
+
 // GetChannels gets the channels for the given keys.
 func (s *adminServer) GetChannels(
 	ctx context.Context,
@@ -610,6 +631,28 @@ func (s *adminServer) GetChannels(
 	}
 
 	return connect.NewResponse(&api.GetChannelsResponse{
+		Channels: converter.ToChannelSummaries(channels),
+	}), nil
+}
+
+// SearchChannels searches for channels matching the given query.
+func (s *adminServer) SearchChannels(
+	ctx context.Context,
+	req *connect.Request[api.SearchChannelsRequest],
+) (*connect.Response[api.SearchChannelsResponse], error) {
+	project := projects.From(ctx)
+
+	channels, err := s.backend.BroadcastChannelSearch(
+		ctx,
+		project.ID,
+		req.Msg.Query,
+		int(req.Msg.Limit),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.SearchChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
 	}), nil
 }

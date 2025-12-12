@@ -20,6 +20,7 @@ package channel
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	gotime "time"
 
@@ -526,6 +527,97 @@ func (m *Manager) Stats() map[string]int {
 		"total_sessions":  totalSessions,
 		"current_seq":     int(m.seqCounter.Load()),
 	}
+}
+
+// ListChannels lists channels for the given project ID.
+// It returns up to limit channels.
+func (m *Manager) ListChannels(
+	projectID types.ID,
+	limit int,
+) []ChannelSessionCount {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	var results []ChannelSessionCount
+	count := 0
+
+	for _, key := range m.channels.Keys() {
+		if key.ProjectID != projectID {
+			continue
+		}
+
+		sessionMap, ok := m.channels.Get(key)
+		if !ok {
+			continue
+		}
+
+		sessionCount := sessionMap.Len()
+		if sessionCount > 0 {
+			results = append(results, ChannelSessionCount{
+				Key:      key,
+				Sessions: sessionCount,
+			})
+			count++
+
+			if count >= limit {
+				break
+			}
+		}
+	}
+
+	return results
+}
+
+// SearchChannels searches for channels matching the given query prefix and project ID.
+// It returns up to limit channels that match the criteria.
+func (m *Manager) SearchChannels(
+	projectID types.ID,
+	query string,
+	limit int,
+) []ChannelSessionCount {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	var results []ChannelSessionCount
+	count := 0
+
+	for _, key := range m.channels.Keys() {
+		if key.ProjectID != projectID {
+			continue
+		}
+
+		if query != "" && !strings.HasPrefix(key.ChannelKey.String(), query) {
+			continue
+		}
+
+		sessionMap, ok := m.channels.Get(key)
+		if !ok {
+			continue
+		}
+
+		sessionCount := sessionMap.Len()
+		if sessionCount > 0 {
+			results = append(results, ChannelSessionCount{
+				Key:      key,
+				Sessions: sessionCount,
+			})
+			count++
+
+			if count >= limit {
+				break
+			}
+		}
+	}
+
+	return results
 }
 
 // isKeyPathPrefix checks if baseKeyPaths is a prefix of targetKeyPaths.

@@ -201,6 +201,31 @@ func (c *Client) GetDocument(
 	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
+// ListChannels lists channels for the given project.
+func (c *Client) ListChannels(
+	ctx context.Context,
+	projectID types.ID,
+	limit int32,
+) ([]*types.ChannelSummary, error) {
+	response, err := c.client.ListChannels(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceListChannelsRequest{
+			ProjectId: projectID.String(),
+			Limit:     limit,
+		}),
+	)
+	if err != nil {
+		return nil, fromConnectError(err)
+	}
+
+	var channels []*types.ChannelSummary
+	for _, ch := range response.Msg.Channels {
+		channels = append(channels, converter.FromChannelSummary(ch))
+	}
+
+	return channels, nil
+}
+
 // GetChannel gets the channel for the given key.
 func (c *Client) GetChannel(
 	ctx context.Context,
@@ -226,6 +251,33 @@ func (c *Client) GetChannel(
 	}
 
 	return converter.FromChannelSummary(response.Msg.Channel), nil
+}
+
+// SearchChannels searches for channels matching the given query.
+func (c *Client) SearchChannels(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	limit int32,
+) ([]*types.ChannelSummary, error) {
+	response, err := c.client.SearchChannels(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceSearchChannelsRequest{
+			ProjectId: projectID.String(),
+			Query:     query,
+			Limit:     limit,
+		}),
+	)
+	if err != nil {
+		return nil, fromConnectError(err)
+	}
+
+	var channels []*types.ChannelSummary
+	for _, ch := range response.Msg.Channels {
+		channels = append(channels, converter.FromChannelSummary(ch))
+	}
+
+	return channels, nil
 }
 
 // InvalidateCache invalidates the cache of the given type and key.

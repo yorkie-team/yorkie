@@ -124,9 +124,15 @@ const (
 	// AdminServiceRestoreRevisionByAdminProcedure is the fully-qualified name of the AdminService's
 	// RestoreRevisionByAdmin RPC.
 	AdminServiceRestoreRevisionByAdminProcedure = "/yorkie.v1.AdminService/RestoreRevisionByAdmin"
+	// AdminServiceListChannelsProcedure is the fully-qualified name of the AdminService's ListChannels
+	// RPC.
+	AdminServiceListChannelsProcedure = "/yorkie.v1.AdminService/ListChannels"
 	// AdminServiceGetChannelsProcedure is the fully-qualified name of the AdminService's GetChannels
 	// RPC.
 	AdminServiceGetChannelsProcedure = "/yorkie.v1.AdminService/GetChannels"
+	// AdminServiceSearchChannelsProcedure is the fully-qualified name of the AdminService's
+	// SearchChannels RPC.
+	AdminServiceSearchChannelsProcedure = "/yorkie.v1.AdminService/SearchChannels"
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
@@ -161,7 +167,9 @@ type AdminServiceClient interface {
 	ListRevisionsByAdmin(context.Context, *connect.Request[v1.ListRevisionsByAdminRequest]) (*connect.Response[v1.ListRevisionsByAdminResponse], error)
 	GetRevisionByAdmin(context.Context, *connect.Request[v1.GetRevisionByAdminRequest]) (*connect.Response[v1.GetRevisionByAdminResponse], error)
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
+	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
+	SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
@@ -310,9 +318,19 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceRestoreRevisionByAdminProcedure,
 			opts...,
 		),
+		listChannels: connect.NewClient[v1.ListChannelsRequest, v1.ListChannelsResponse](
+			httpClient,
+			baseURL+AdminServiceListChannelsProcedure,
+			opts...,
+		),
 		getChannels: connect.NewClient[v1.GetChannelsRequest, v1.GetChannelsResponse](
 			httpClient,
 			baseURL+AdminServiceGetChannelsProcedure,
+			opts...,
+		),
+		searchChannels: connect.NewClient[v1.SearchChannelsRequest, v1.SearchChannelsResponse](
+			httpClient,
+			baseURL+AdminServiceSearchChannelsProcedure,
 			opts...,
 		),
 		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
@@ -352,7 +370,9 @@ type adminServiceClient struct {
 	listRevisionsByAdmin   *connect.Client[v1.ListRevisionsByAdminRequest, v1.ListRevisionsByAdminResponse]
 	getRevisionByAdmin     *connect.Client[v1.GetRevisionByAdminRequest, v1.GetRevisionByAdminResponse]
 	restoreRevisionByAdmin *connect.Client[v1.RestoreRevisionByAdminRequest, v1.RestoreRevisionByAdminResponse]
+	listChannels           *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
 	getChannels            *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
+	searchChannels         *connect.Client[v1.SearchChannelsRequest, v1.SearchChannelsResponse]
 	getServerVersion       *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 }
 
@@ -491,9 +511,19 @@ func (c *adminServiceClient) RestoreRevisionByAdmin(ctx context.Context, req *co
 	return c.restoreRevisionByAdmin.CallUnary(ctx, req)
 }
 
+// ListChannels calls yorkie.v1.AdminService.ListChannels.
+func (c *adminServiceClient) ListChannels(ctx context.Context, req *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error) {
+	return c.listChannels.CallUnary(ctx, req)
+}
+
 // GetChannels calls yorkie.v1.AdminService.GetChannels.
 func (c *adminServiceClient) GetChannels(ctx context.Context, req *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
 	return c.getChannels.CallUnary(ctx, req)
+}
+
+// SearchChannels calls yorkie.v1.AdminService.SearchChannels.
+func (c *adminServiceClient) SearchChannels(ctx context.Context, req *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error) {
+	return c.searchChannels.CallUnary(ctx, req)
 }
 
 // GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
@@ -530,7 +560,9 @@ type AdminServiceHandler interface {
 	ListRevisionsByAdmin(context.Context, *connect.Request[v1.ListRevisionsByAdminRequest]) (*connect.Response[v1.ListRevisionsByAdminResponse], error)
 	GetRevisionByAdmin(context.Context, *connect.Request[v1.GetRevisionByAdminRequest]) (*connect.Response[v1.GetRevisionByAdminResponse], error)
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
+	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
+	SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
@@ -675,9 +707,19 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.RestoreRevisionByAdmin,
 		opts...,
 	)
+	adminServiceListChannelsHandler := connect.NewUnaryHandler(
+		AdminServiceListChannelsProcedure,
+		svc.ListChannels,
+		opts...,
+	)
 	adminServiceGetChannelsHandler := connect.NewUnaryHandler(
 		AdminServiceGetChannelsProcedure,
 		svc.GetChannels,
+		opts...,
+	)
+	adminServiceSearchChannelsHandler := connect.NewUnaryHandler(
+		AdminServiceSearchChannelsProcedure,
+		svc.SearchChannels,
 		opts...,
 	)
 	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
@@ -741,8 +783,12 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetRevisionByAdminHandler.ServeHTTP(w, r)
 		case AdminServiceRestoreRevisionByAdminProcedure:
 			adminServiceRestoreRevisionByAdminHandler.ServeHTTP(w, r)
+		case AdminServiceListChannelsProcedure:
+			adminServiceListChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetChannelsProcedure:
 			adminServiceGetChannelsHandler.ServeHTTP(w, r)
+		case AdminServiceSearchChannelsProcedure:
+			adminServiceSearchChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		default:
@@ -862,8 +908,16 @@ func (UnimplementedAdminServiceHandler) RestoreRevisionByAdmin(context.Context, 
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RestoreRevisionByAdmin is not implemented"))
 }
 
+func (UnimplementedAdminServiceHandler) ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ListChannels is not implemented"))
+}
+
 func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetChannels is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) SearchChannels(context.Context, *connect.Request[v1.SearchChannelsRequest]) (*connect.Response[v1.SearchChannelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.SearchChannels is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
