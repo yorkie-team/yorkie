@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -587,6 +588,9 @@ func (s *adminServer) RemoveDocumentByAdmin(
 func validateChannelLimit(limit int32) error {
 	if limit <= 0 {
 		return errors.InvalidArgument("limit must be greater than 0")
+	}
+	if int(limit) > channel.MaxChannelLimit {
+		return errors.InvalidArgument(fmt.Sprintf("limit must be less than or equal to %d", channel.MaxChannelLimit))
 	}
 	return nil
 }
