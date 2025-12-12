@@ -28,7 +28,12 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	pkgtime "github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
+)
+
+var (
+	defaultProjectID = types.ID("000000000000000000000000")
 )
 
 // mockPubSub is a mock implementation of PubSub for testing
@@ -61,7 +66,9 @@ func createManager(
 	pubsub := &mockPubSub{}
 	broker := &MockBroker{}
 	brokers := messaging.NewBroker(broker, broker, broker)
-	manager := channel.NewManager(pubsub, ttl, cleanupInterval, nil, brokers)
+	db, _ := memory.New()
+	db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")
+	manager := channel.NewManager(pubsub, ttl, cleanupInterval, nil, brokers, db)
 	return manager, pubsub, broker
 }
 
@@ -107,7 +114,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 
 		// Create a presence
 		refKey := types.ChannelRefKey{
-			ProjectID:  types.NewID(),
+			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
@@ -136,7 +143,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 
 		// Create a presence
 		refKey := types.ChannelRefKey{
-			ProjectID:  types.NewID(),
+			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
@@ -172,7 +179,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 
 		// Create two presences
 		refKey := types.ChannelRefKey{
-			ProjectID:  types.NewID(),
+			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
 		}
 		clientID1 := pkgtime.InitialActorID
