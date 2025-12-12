@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server"
 	backendChannel "github.com/yorkie-team/yorkie/server/backend/channel"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -176,8 +177,11 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	cleanupInterval := 60 * gotime.Second
 	pubsub := &mockPubSub{}
 	broker := messaging.Ensure(nil)
-	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval, nil, broker)
-	project := types.Project{ID: types.NewID()}
+	db, err := memory.New()
+	assert.NoError(b, err)
+	_, project, err := db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")
+	assert.NoError(b, err)
+	manager := backendChannel.NewManager(pubsub, ttl, cleanupInterval, nil, broker, db)
 
 	for i, keyPath := range allKeyPaths {
 		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))

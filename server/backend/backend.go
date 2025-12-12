@@ -164,6 +164,7 @@ func New(
 			Metrics:  metrics,
 		},
 		broker,
+		db,
 	)
 
 	// 09. Ensure the default user and project. If the default user and project

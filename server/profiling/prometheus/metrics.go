@@ -241,6 +241,7 @@ func NewMetrics() (*Metrics, error) {
 			Help:      "The total number of channels.",
 		}, []string{
 			projectIDLabel,
+			projectNameLabel,
 			hostnameLabel,
 		}),
 		channelSessionsTotal: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
@@ -250,6 +251,7 @@ func NewMetrics() (*Metrics, error) {
 			Help:      "The total number of sessions in channel.",
 		}, []string{
 			projectIDLabel,
+			projectNameLabel,
 			hostnameLabel,
 		}),
 		channelSessionsTopN: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
@@ -260,6 +262,7 @@ func NewMetrics() (*Metrics, error) {
 		}, []string{
 			channelKeyLabel,
 			projectIDLabel,
+			projectNameLabel,
 			hostnameLabel,
 		}),
 	}
@@ -449,10 +452,11 @@ func (m *Metrics) AddWatchDocumentEventPayloadBytes(hostname string, project *ty
 }
 
 // SetChannelTotal adds the number of channels.
-func (m *Metrics) SetChannelTotal(hostname string, projectID types.ID, count int) {
+func (m *Metrics) SetChannelTotal(hostname string, projectID types.ID, projectName string, count int) {
 	m.channelTotal.With(prometheus.Labels{
-		projectIDLabel: projectID.String(),
-		hostnameLabel:  hostname,
+		projectIDLabel:   projectID.String(),
+		projectNameLabel: projectName,
+		hostnameLabel:    hostname,
 	}).Set(float64(count))
 }
 
@@ -462,10 +466,11 @@ func (m *Metrics) ResetChannelTotal() {
 }
 
 // SetChannelSessionsTotal adds the number of sessions in channel.
-func (m *Metrics) SetChannelSessionsTotal(hostname string, projectID types.ID, count int) {
+func (m *Metrics) SetChannelSessionsTotal(hostname string, projectID types.ID, projectName string, count int) {
 	m.channelSessionsTotal.With(prometheus.Labels{
-		projectIDLabel: projectID.String(),
-		hostnameLabel:  hostname,
+		projectIDLabel:   projectID.String(),
+		projectNameLabel: projectName,
+		hostnameLabel:    hostname,
 	}).Set(float64(count))
 }
 
@@ -475,11 +480,18 @@ func (m *Metrics) ResetChannelSessionsTotal() {
 }
 
 // SetChannelSessionsTopN adds the top N channels by session count.
-func (m *Metrics) SetChannelSessionsTopN(hostname string, projectID types.ID, channelKey string, count int) {
+func (m *Metrics) SetChannelSessionsTopN(
+	hostname string,
+	projectID types.ID,
+	projectName string,
+	channelKey string,
+	count int,
+) {
 	m.channelSessionsTopN.With(prometheus.Labels{
-		channelKeyLabel: channelKey,
-		projectIDLabel:  projectID.String(),
-		hostnameLabel:   hostname,
+		channelKeyLabel:  channelKey,
+		projectIDLabel:   projectID.String(),
+		projectNameLabel: projectName,
+		hostnameLabel:    hostname,
 	}).Set(float64(count))
 }
 
