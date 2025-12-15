@@ -46,18 +46,24 @@ kube-starrocks:
         repository: *starrocks-fe-repo
         tag: *starrocks-fe-tag
       resources:
-        limits:
+        requests:
           cpu: "1"
           memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
       storageSpec:
         name: fe
 
     starrocksBeSpec:
       replicas: 1
       resources:
-        limits:
+        requests:
           cpu: "1"
           memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
       storageSpec:
         name: be
         storageSize: 15Gi
@@ -67,6 +73,7 @@ kube-starrocks:
       service:
         type: LoadBalancer
 
+# Using bitnamilegacy as temporary workaround (no updates, migration needed)
 kafka:
   image:
     repository: bitnamilegacy/kafka
@@ -84,3 +91,6 @@ kafka:
     create: true
   rbac:
     create: true
+  global: # TODO: Remove with bitnamilegacy/kafka image and helm chart
+    security:
+      allowInsecureImages: true
