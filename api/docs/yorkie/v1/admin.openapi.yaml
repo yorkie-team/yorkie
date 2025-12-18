@@ -202,6 +202,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/ListChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListDocuments:
     post:
       description: ""
@@ -504,6 +516,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListChangesRequest'
       required: true
+    yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsRequest'
+      required: true
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsRequest:
       content:
         application/json:
@@ -774,6 +795,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListChangesResponse'
+      description: ""
+    yorkie.v1.AdminService.ListChannels.yorkie.v1.ListChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListChannelsResponse'
       description: ""
     yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse:
       content:
@@ -1867,6 +1897,36 @@ components:
           title: changes
           type: array
       title: ListChangesResponse
+      type: object
+    yorkie.v1.ListChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        limit:
+          additionalProperties: false
+          description: ""
+          title: limit
+          type: integer
+        query:
+          additionalProperties: false
+          description: ""
+          title: query
+          type: string
+      title: ListChannelsRequest
+      type: object
+    yorkie.v1.ListChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: ListChannelsResponse
       type: object
     yorkie.v1.ListDocumentsRequest:
       additionalProperties: false

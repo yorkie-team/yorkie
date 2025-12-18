@@ -30,8 +30,10 @@ import (
 	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -580,6 +582,35 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	)
 
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
+}
+
+// ListChannels lists channels for the given project.
+func (s *adminServer) ListChannels(
+	ctx context.Context,
+	req *connect.Request[api.ListChannelsRequest],
+) (*connect.Response[api.ListChannelsResponse], error) {
+	limit := int(req.Msg.Limit)
+	if limit <= 0 {
+		return nil, errors.InvalidArgument("limit must be greater than 0")
+	}
+	if limit > channel.MaxChannelLimit {
+		return nil, errors.InvalidArgument(fmt.Sprintf("limit must be less than or equal to %d", channel.MaxChannelLimit))
+	}
+
+	project := projects.From(ctx)
+	channels, err := s.backend.BroadcastChannelList(
+		ctx,
+		project.ID,
+		req.Msg.Query,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ListChannelsResponse{
+		Channels: converter.ToChannelSummaries(channels),
+	}), nil
 }
 
 // GetChannels gets the channels for the given keys.

@@ -58,8 +58,9 @@ service AdminService {
   rpc GetRevisionByAdmin (GetRevisionByAdminRequest) returns (GetRevisionByAdminResponse) {}
   rpc RestoreRevisionByAdmin (RestoreRevisionByAdminRequest) returns (RestoreRevisionByAdminResponse) {}
 
+  rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {}
   rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
-
+  
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
 
@@ -228,6 +229,15 @@ message SearchDocumentsRequest {
 message SearchDocumentsResponse {
   int32 total_count = 1;
   repeated DocumentSummary documents = 2;
+}
+
+message ListChannelsRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message ListChannelsResponse {
+  repeated ChannelSummary channels = 1;
 }
 
 message GetChannelsRequest {

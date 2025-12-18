@@ -33,81 +33,86 @@ type Metrics struct {
 	Metrics  *prometheus.Metrics
 }
 
-// channelSessionCount represents channel session count for metrics.
-type channelSessionCount struct {
+// channelMetric represents metrics for a single channel.
+type channelMetric struct {
+	Key         types.ChannelRefKey
 	ProjectName string
-	ProjectID   types.ID
-	ChannelKey  string
 	Sessions    int
 }
 
-// projectInfo holds project ID and name for metrics aggregation.
-type projectInfo struct {
+// projectKey represents pair of project ID and its name.
+type projectKey struct {
 	ID   types.ID
 	Name string
 }
 
-// projectMetrics aggregates channel and session metrics by project.
-type projectMetrics struct {
-	channels map[projectInfo]int
-	sessions map[projectInfo]int
-	top      *heap.Heap[channelSessionCount]
+// channelMetrics aggregates channel and session metrics by project.
+type channelMetrics struct {
+	channelsByProject map[projectKey]int
+	sessionsByProject map[projectKey]int
+	topChannels       *heap.Heap[channelMetric]
 }
 
-// newProjectMetrics creates a new projectMetrics instance.
-func newProjectMetrics() *projectMetrics {
-	return &projectMetrics{
-		channels: make(map[projectInfo]int),
-		sessions: make(map[projectInfo]int),
-		top: heap.New(TopChannelSessionsMaxSize, func(a, b channelSessionCount) bool {
+// newChannelMetrics creates a new channelMetrics instance.
+func newChannelMetrics() *channelMetrics {
+	return &channelMetrics{
+		channelsByProject: make(map[projectKey]int),
+		sessionsByProject: make(map[projectKey]int),
+		topChannels: heap.New(TopChannelSessionsMaxSize, func(a, b channelMetric) bool {
 			return a.Sessions < b.Sessions
 		}),
 	}
 }
 
 // record adds metrics for a single channel.
-func (pm *projectMetrics) record(pInfo projectInfo, channelKey string, sessions int) {
-	pm.channels[pInfo]++
-	pm.sessions[pInfo] += sessions
-	pm.top.Push(channelSessionCount{
-		ProjectID:   pInfo.ID,
-		ProjectName: pInfo.Name,
-		ChannelKey:  channelKey,
+func (pm *channelMetrics) record(project *types.Project, key types.ChannelRefKey, sessions int) {
+	metricKey := projectKey{ID: project.ID, Name: project.Name}
+	pm.channelsByProject[metricKey]++
+	pm.sessionsByProject[metricKey] += sessions
+	pm.topChannels.Push(channelMetric{
+		Key:         key,
+		ProjectName: project.Name,
 		Sessions:    sessions,
 	})
 }
 
 // publish sends all collected metrics to Prometheus.
-func (pm *projectMetrics) publish(m *Metrics) {
+func (pm *channelMetrics) publish(m *Metrics) {
 	pm.publishChannelCounts(m)
 	pm.publishSessionCounts(m)
 	pm.publishTopChannels(m)
 }
 
 // publishChannelCounts updates channel count metrics.
-func (pm *projectMetrics) publishChannelCounts(m *Metrics) {
+func (pm *channelMetrics) publishChannelCounts(m *Metrics) {
 	m.Metrics.ResetChannelTotal()
-	for pInfo, count := range pm.channels {
+	for pInfo, count := range pm.channelsByProject {
 		m.Metrics.SetChannelTotal(m.Hostname, pInfo.ID, pInfo.Name, count)
 	}
 }
 
 // publishSessionCounts updates session count metrics.
-func (pm *projectMetrics) publishSessionCounts(m *Metrics) {
+func (pm *channelMetrics) publishSessionCounts(m *Metrics) {
 	m.Metrics.ResetChannelSessionsTotal()
-	for pInfo, count := range pm.sessions {
+	for pInfo, count := range pm.sessionsByProject {
 		m.Metrics.SetChannelSessionsTotal(m.Hostname, pInfo.ID, pInfo.Name, count)
 	}
 }
 
 // publishTopChannels updates top-N channel metrics.
-func (pm *projectMetrics) publishTopChannels(m *Metrics) {
+func (pm *channelMetrics) publishTopChannels(m *Metrics) {
 	m.Metrics.ResetChannelSessionsTopN()
-	if pm.top.IsEmpty() {
+	if pm.topChannels.IsEmpty() {
 		return
 	}
 
-	for _, ch := range pm.top.Items() {
-		m.Metrics.SetChannelSessionsTopN(m.Hostname, ch.ProjectID, ch.ProjectName, ch.ChannelKey, ch.Sessions)
+	for _, ch := range pm.topChannels.Items() {
+		m.Metrics.SetChannelSessionsTopN(
+			m.Hostname,
+			ch.Key.ProjectID,
+			ch.ProjectName,
+			ch.Key.ChannelKey.String(),
+			ch.Sessions,
+		)
 	}
 }

@@ -20,6 +20,8 @@ package channel
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync/atomic"
 	gotime "time"
 
@@ -40,6 +42,12 @@ var (
 
 	// ErrInvalidChannelKey is returned when a channel key is invalid.
 	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
+
+	// MinChannelLimit is the minimum limit for listing channels.
+	MinChannelLimit = 1
+
+	// MaxChannelLimit is the maximum limit for listing channels.
+	MaxChannelLimit = 100
 )
 
 // PubSub is an interface for publishing channel events.
@@ -53,6 +61,12 @@ type Session struct {
 	Key       types.ChannelRefKey // Reference to the channel
 	Actor     time.ActorID        // Client who created this session
 	UpdatedAt gotime.Time         // Last activity time for TTL calculation
+}
+
+// ChannelInfo represents information about a channel.
+type ChannelInfo struct {
+	Key      types.ChannelRefKey
+	Sessions int
 }
 
 // Manager manages channel.
@@ -395,7 +409,7 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 
 // collectAndPublishMetrics collects channel and session metrics and publishes them to Prometheus.
 func (m *Manager) collectAndPublishMetrics(ctx context.Context) {
-	metrics := newProjectMetrics()
+	metrics := newChannelMetrics()
 
 	for _, key := range m.channels.Keys() {
 		sessionMap, ok := m.channels.Get(key)
@@ -414,8 +428,7 @@ func (m *Manager) collectAndPublishMetrics(ctx context.Context) {
 			continue
 		}
 
-		pInfo := projectInfo{ID: project.ID, Name: project.Name}
-		metrics.record(pInfo, key.ChannelKey.String(), sessionCount)
+		metrics.record(project.ToProject(), key, sessionCount)
 	}
 
 	metrics.publish(m.metrics)
@@ -433,6 +446,54 @@ func (m *Manager) Stats() map[string]int {
 		"total_sessions": totalSessions,
 		"current_seq":    int(m.seqCounter.Load()),
 	}
+}
+
+// ListChannels lists channels for the given project ID.
+// If query is not empty, it filters channels by the query prefix.
+// It returns up to limit channels.
+func (m *Manager) ListChannels(
+	projectID types.ID,
+	query string,
+	limit int,
+) []ChannelInfo {
+	if limit <= 0 {
+		limit = MinChannelLimit
+	}
+	if limit > MaxChannelLimit {
+		limit = MaxChannelLimit
+	}
+
+	results := make([]ChannelInfo, 0)
+	for _, key := range m.channels.Keys() {
+		if key.ProjectID != projectID {
+			continue
+		}
+
+		if query != "" && !strings.HasPrefix(key.ChannelKey.String(), query) {
+			continue
+		}
+
+		sessionMap, ok := m.channels.Get(key)
+		if !ok {
+			continue
+		}
+
+		sessionCount := sessionMap.Len()
+		if sessionCount > 0 {
+			results = append(results, ChannelInfo{
+				Key:      key,
+				Sessions: sessionCount,
+			})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
 }
 
 func classifyExpiredSessions(

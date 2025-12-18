@@ -201,6 +201,34 @@ func (c *Client) GetDocument(
 	return converter.FromDocumentSummary(response.Msg.Document), nil
 }
 
+// ListChannels lists channels for the given project.
+// If query is not empty, it filters channels by the query prefix.
+func (c *Client) ListChannels(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	limit int32,
+) ([]*types.ChannelSummary, error) {
+	response, err := c.client.ListChannels(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceListChannelsRequest{
+			ProjectId: projectID.String(),
+			Query:     query,
+			Limit:     limit,
+		}),
+	)
+	if err != nil {
+		return nil, fromConnectError(err)
+	}
+
+	var channels []*types.ChannelSummary
+	for _, ch := range response.Msg.Channels {
+		channels = append(channels, converter.FromChannelSummary(ch))
+	}
+
+	return channels, nil
+}
+
 // GetChannel gets the channel for the given key.
 func (c *Client) GetChannel(
 	ctx context.Context,
