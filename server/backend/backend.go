@@ -57,8 +57,8 @@ type Backend struct {
 	PubSub *pubsub.PubSub
 	// Lockers is used to lock/unlock resources.
 	Lockers *sync.LockerManager
-	// Presence is used to manage real-time channels.
-	Presence *channel.Manager
+	// Channel is used to manage real-time channels.
+	Channel *channel.Manager
 
 	// Background is used to manage background tasks.
 	Background *background.Background
@@ -164,6 +164,7 @@ func New(
 			Metrics:  metrics,
 		},
 		broker,
+		db,
 	)
 
 	// 09. Ensure the default user and project. If the default user and project
@@ -188,10 +189,10 @@ func New(
 	return &Backend{
 		Config: conf,
 
-		Cache:    cacheManager,
-		Lockers:  lockers,
-		PubSub:   pubsub,
-		Presence: channelManager,
+		Cache:   cacheManager,
+		Lockers: lockers,
+		PubSub:  pubsub,
+		Channel: channelManager,
 
 		Background:   bg,
 		Membership:   membership,
@@ -218,7 +219,7 @@ func (b *Backend) Start(ctx context.Context) error {
 		return err
 	}
 
-	b.Presence.Start()
+	b.Channel.Start()
 
 	logging.DefaultLogger().Infof("backend started")
 	return nil
@@ -228,7 +229,7 @@ func (b *Backend) Start(ctx context.Context) error {
 func (b *Backend) Shutdown() error {
 	var errs []error
 
-	b.Presence.Stop()
+	b.Channel.Stop()
 
 	if err := b.Housekeeping.Stop(); err != nil {
 		errs = append(errs, err)
@@ -374,7 +375,7 @@ func (b *Backend) BroadcastChannelList(
 		for _, ch := range channels {
 			keyStr := ch.Key.String()
 			if existing, ok := channelMap[keyStr]; ok {
-				existing.PresenceCount += ch.PresenceCount
+				existing.SessionCount += ch.SessionCount
 			} else {
 				channelMap[keyStr] = ch
 			}

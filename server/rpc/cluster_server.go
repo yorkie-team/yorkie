@@ -267,13 +267,13 @@ func (s *clusterServer) ListChannels(
 	limit := int(req.Msg.Limit)
 	query := req.Msg.Query
 
-	results := s.backend.Presence.ListChannels(projectID, query, limit)
+	results := s.backend.Channel.ListChannels(projectID, query, limit)
 
 	var channels []*api.ChannelSummary
 	for _, result := range results {
 		channels = append(channels, &api.ChannelSummary{
-			Key:           result.Key.ChannelKey.String(),
-			PresenceCount: int32(result.Sessions),
+			Key:          result.Key.ChannelKey.String(),
+			SessionCount: int32(result.Sessions),
 		})
 	}
 
@@ -289,7 +289,7 @@ func (s *clusterServer) GetChannel(
 ) (*connect.Response[api.ClusterServiceGetChannelResponse], error) {
 	projectID := types.ID(req.Msg.ProjectId)
 	channelKey := key.Key(req.Msg.ChannelKey)
-	channelCount := s.backend.Presence.PresenceCount(
+	sessionCount := s.backend.Channel.SessionCount(
 		types.ChannelRefKey{
 			ProjectID:  projectID,
 			ChannelKey: channelKey,
@@ -298,8 +298,8 @@ func (s *clusterServer) GetChannel(
 	)
 	return connect.NewResponse(&api.ClusterServiceGetChannelResponse{
 		Channel: &api.ChannelSummary{
-			Key:           string(channelKey),
-			PresenceCount: int32(channelCount),
+			Key:          string(channelKey),
+			SessionCount: int32(sessionCount),
 		},
 	}), nil
 }

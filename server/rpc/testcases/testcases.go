@@ -1647,7 +1647,7 @@ func RunAdminGetChannelsTest(
 	assert.NotNil(t, resp.Msg.Channels)
 	assert.Equal(t, 1, len(resp.Msg.Channels))
 	assert.Equal(t, testChannelKey, resp.Msg.Channels[0].Key)
-	assert.Equal(t, 1, int(resp.Msg.Channels[0].PresenceCount))
+	assert.Equal(t, 1, int(resp.Msg.Channels[0].SessionCount))
 
 	activateResp2, err := testClient.ActivateClient(
 		context.Background(),
@@ -1674,5 +1674,5 @@ func RunAdminGetChannelsTest(
 	assert.NotNil(t, resp2.Msg.Channels)
 	assert.Equal(t, 1, len(resp2.Msg.Channels))
 	assert.Equal(t, testChannelKey, resp2.Msg.Channels[0].Key)
-	assert.Equal(t, 2, int(resp2.Msg.Channels[0].PresenceCount))
+	assert.Equal(t, 2, int(resp2.Msg.Channels[0].SessionCount))
 }
