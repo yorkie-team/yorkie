@@ -286,7 +286,7 @@ func (s *yorkieServer) AttachChannel(
 		ChannelKey: channelKey,
 	}
 
-	sessionID, count, err := s.backend.Presence.Attach(ctx, refKey, actorID)
+	sessionID, count, err := s.backend.Channel.Attach(ctx, refKey, actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +333,7 @@ func (s *yorkieServer) DetachChannel(
 	}
 
 	// 02. Detach using presence ID
-	count, err := s.backend.Presence.Detach(ctx, sessionID)
+	count, err := s.backend.Channel.Detach(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (s *yorkieServer) RefreshChannel(
 	}
 
 	// 02. Refresh presence using presence ID
-	if err := s.backend.Presence.Refresh(ctx, sessionID); err != nil {
+	if err := s.backend.Channel.Refresh(ctx, sessionID); err != nil {
 		return nil, err
 	}
 
@@ -388,7 +388,7 @@ func (s *yorkieServer) RefreshChannel(
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
 	}
-	count := s.backend.Presence.PresenceCount(refKey, false)
+	count := s.backend.Channel.SessionCount(refKey, false)
 
 	response := &api.RefreshChannelResponse{
 		Count: count,
@@ -445,7 +445,7 @@ func (s *yorkieServer) WatchChannel(
 	}()
 
 	// 04. Send initial count
-	currentCount := s.backend.Presence.PresenceCount(refKey, false)
+	currentCount := s.backend.Channel.SessionCount(refKey, false)
 	if err := stream.Send(&api.WatchChannelResponse{
 		Body: &api.WatchChannelResponse_Initialized{
 			Initialized: &api.WatchChannelInitialized{
@@ -457,7 +457,7 @@ func (s *yorkieServer) WatchChannel(
 		return err
 	}
 
-	// 05. Stream presence count updates and broadcast events
+	// 05. Stream session count updates and broadcast events
 	for {
 		select {
 		case event, ok := <-subscription.Events():

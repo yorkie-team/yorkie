@@ -75,14 +75,14 @@ func createManager(
 	return manager, pubsub, broker
 }
 
-func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
+func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 	t.Run("refresh updates activity time", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
 		manager, _, broker := createManager(t, ttl, cleanupInterval)
 
-		// Create a presence
+		// Create a channel
 		refKey := types.ChannelRefKey{
 			ProjectID:  types.NewID(),
 			ChannelKey: "test-room",
@@ -101,21 +101,21 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		// Wait a bit
 		time.Sleep(100 * time.Millisecond)
 
-		// Refresh the presence
+		// Refresh the channel
 		err = manager.Refresh(ctx, sessionID)
 		assert.NoError(t, err)
 
-		// Presence should still exist
-		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
+		// Channel should still exist
+		assert.Equal(t, int64(1), manager.SessionCount(refKey, false))
 	})
 
-	t.Run("cleanup removes expired presences", func(t *testing.T) {
+	t.Run("cleanup removes expired channels", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 200 * time.Millisecond // Very short TTL for testing
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Create a presence
+		// Create a channel
 		refKey := types.ChannelRefKey{
 			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
@@ -134,8 +134,8 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, cleanedCount)
 
-		// Presence should be removed
-		assert.Equal(t, int64(0), manager.PresenceCount(refKey, false))
+		// channel should be removed
+		assert.Equal(t, int64(0), manager.SessionCount(refKey, false))
 	})
 
 	t.Run("refresh extends TTL and prevents cleanup", func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Create a presence
+		// Create a channel
 		refKey := types.ChannelRefKey{
 			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
@@ -170,17 +170,17 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, cleanedCount)
 
-		// Presence should still exist
-		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
+		// channel should still exist
+		assert.Equal(t, int64(1), manager.SessionCount(refKey, false))
 	})
 
-	t.Run("cleanup removes only expired presences", func(t *testing.T) {
+	t.Run("cleanup removes only expired channels", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 300 * time.Millisecond
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Create two presences
+		// Create two channels
 		refKey := types.ChannelRefKey{
 			ProjectID:  defaultProjectID,
 			ChannelKey: "test-room",
@@ -192,43 +192,43 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 		_, _, err = manager.Attach(ctx, refKey, clientID1)
 		assert.NoError(t, err)
 
-		// Wait a bit before creating second presence
+		// Wait a bit before creating second channel
 		time.Sleep(200 * time.Millisecond)
 
 		sessionID2, count, err := manager.Attach(ctx, refKey, clientID2)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), count)
 
-		// Refresh only the second presence
+		// Refresh only the second channel
 		err = manager.Refresh(ctx, sessionID2)
 		assert.NoError(t, err)
 
-		// Wait for first presence to expire
+		// Wait for first channel to expire
 		time.Sleep(200 * time.Millisecond)
 
-		// Run cleanup - should remove only the first presence
+		// Run cleanup - should remove only the first channel
 		cleanedCount, err := manager.CleanupExpired(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, cleanedCount)
 
-		// Only second presence should remain
-		assert.Equal(t, int64(1), manager.PresenceCount(refKey, false))
+		// Only second channel should remain
+		assert.Equal(t, int64(1), manager.SessionCount(refKey, false))
 	})
 
-	t.Run("refresh non-existent presence returns error", func(t *testing.T) {
+	t.Run("refresh non-existent channel returns error", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Try to refresh a non-existent presence
+		// Try to refresh a non-existent channel
 		nonExistentID := types.NewID()
 		err := manager.Refresh(ctx, nonExistentID)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "session not found")
 	})
 
-	t.Run("cleanup with no presences does not error", func(t *testing.T) {
+	t.Run("cleanup with no channel does not error", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
@@ -250,8 +250,8 @@ func TestPresenceManager_RefreshAndCleanup(t *testing.T) {
 	})
 }
 
-func TestPresenceManager_Count(t *testing.T) {
-	t.Run("get presencecount - hierarchical path ", func(t *testing.T) {
+func TestChannelManager_Count(t *testing.T) {
+	t.Run("get channelcount - hierarchical path ", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
@@ -269,38 +269,38 @@ func TestPresenceManager_Count(t *testing.T) {
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey3, 10, "3")...)
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey4, 10, "4")...)
 
-		// Check presence counts
+		// Check channel counts
 		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
 
 		// Detach first level
 		_, err := manager.Detach(ctx, channelIDs[0])
 		assert.NoError(t, err)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{39, 30, 10, 10}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 10, 10, 10}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{39, 30, 10, 10}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{9, 10, 10, 10}, false)
 
 		// Detach second level
 		_, err = manager.Detach(ctx, channelIDs[10])
 		assert.NoError(t, err)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{38, 29, 10, 10}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 9, 10, 10}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{38, 29, 10, 10}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{9, 9, 10, 10}, false)
 
 		// Detach third level
 		_, err = manager.Detach(ctx, channelIDs[20])
 		assert.NoError(t, err)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{37, 28, 9, 10}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{9, 9, 9, 10}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{37, 28, 9, 10}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{9, 9, 9, 10}, false)
 
-		// Cleanup all presences
+		// Cleanup all channels
 		for _, channelID := range channelIDs {
 			_, _ = manager.Detach(ctx, channelID)
 		}
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
 	})
 
-	t.Run("get presencecount - wrong path ", func(t *testing.T) {
+	t.Run("get channelcount - wrong path ", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
 		cleanupInterval := 10 * time.Second
@@ -324,24 +324,24 @@ func TestPresenceManager_Count(t *testing.T) {
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey3, 10, "3")...)
 		channelIDs = append(channelIDs, attachChannels(t, ctx, manager, refKey4, 10, "4")...)
 
-		// Check presence counts
+		// Check channel counts
 		channelRefKeys := []types.ChannelRefKey{refKey1, refKey2, refKey3, refKey4}
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{40, 30, 10, 10}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{10, 10, 10, 10}, false)
 
-		// Check wrong presence counts
+		// Check wrong channel counts
 		wrongChannelRefKeys := []types.ChannelRefKey{wrongRefKey1, wrongRefKey2, wrongRefKey3, wrongRefKey4}
-		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
-		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
+		assertChannelCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertChannelCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
 
-		// Cleanup all presences
+		// Cleanup all channels
 		for _, channelID := range channelIDs {
 			_, _ = manager.Detach(ctx, channelID)
 		}
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
-		assertPresenceCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
-		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
-		assertPresenceCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
+		assertChannelCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, true)
+		assertChannelCounts(t, manager, wrongChannelRefKeys, []int64{0, 0, 0, 0}, false)
 	})
 }
 
@@ -364,7 +364,7 @@ func attachChannels(
 	return channelIDs
 }
 
-func assertPresenceCounts(
+func assertChannelCounts(
 	t *testing.T,
 	manager *channel.Manager,
 	refkeys []types.ChannelRefKey,
@@ -375,10 +375,10 @@ func assertPresenceCounts(
 		expectedCount := expectedCounts[i]
 		message := ""
 		if includeSubPath {
-			message = fmt.Sprintf("%s total presence count should be %d", refKey.ChannelKey, expectedCount)
+			message = fmt.Sprintf("%s total channel count should be %d", refKey.ChannelKey, expectedCount)
 		} else {
-			message = fmt.Sprintf("%s direct presence count should be %d", refKey.ChannelKey, expectedCount)
+			message = fmt.Sprintf("%s direct channel count should be %d", refKey.ChannelKey, expectedCount)
 		}
-		assert.Equal(t, expectedCount, manager.PresenceCount(refKey, includeSubPath), message)
+		assert.Equal(t, expectedCount, manager.SessionCount(refKey, includeSubPath), message)
 	}
 }

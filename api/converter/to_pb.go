@@ -154,8 +154,8 @@ func ToChannelSummaries(channels []*types.ChannelSummary) []*api.ChannelSummary 
 	pbChannels := make([]*api.ChannelSummary, 0, len(channels))
 	for _, v := range channels {
 		pbChannels = append(pbChannels, &api.ChannelSummary{
-			Key:           v.Key.String(),
-			PresenceCount: int32(v.PresenceCount),
+			Key:          v.Key.String(),
+			SessionCount: int32(v.SessionCount),
 		})
 	}
 	return pbChannels

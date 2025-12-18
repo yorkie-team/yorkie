@@ -202,7 +202,7 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 	for i := 0; i < b.N; i++ {
 		for _, keyPath := range allKeyPaths {
 			for _, mergedKeyPath := range parseAndMergeKeyPath(key.Key(keyPath)) {
-				_ = manager.PresenceCount(types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(mergedKeyPath)}, includeSubPath)
+				_ = manager.SessionCount(types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(mergedKeyPath)}, includeSubPath)
 			}
 		}
 	}

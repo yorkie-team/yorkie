@@ -347,10 +347,10 @@ components:
           description: ""
           title: key
           type: string
-        presenceCount:
+        sessionCount:
           additionalProperties: false
           description: ""
-          title: presence_count
+          title: session_count
           type: integer
       title: ChannelSummary
       type: object

@@ -382,7 +382,7 @@ message Presence {
 
 message ChannelSummary {
   string key = 1;
-  int32 presence_count = 2;
+  int32 session_count = 2;
 }
 
 message Checkpoint {

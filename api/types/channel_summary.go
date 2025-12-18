@@ -9,6 +9,6 @@ type ChannelSummary struct {
 	// Key is the key of the channel.
 	Key key.Key
 
-	// PresenceCount is the count of channel.
-	PresenceCount int64
+	// SessionCount is the count of channel.
+	SessionCount int64
 }

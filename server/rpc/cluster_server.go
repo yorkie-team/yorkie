@@ -265,7 +265,7 @@ func (s *clusterServer) GetChannel(
 ) (*connect.Response[api.ClusterServiceGetChannelResponse], error) {
 	projectID := types.ID(req.Msg.ProjectId)
 	channelKey := key.Key(req.Msg.ChannelKey)
-	channelCount := s.backend.Presence.PresenceCount(
+	sessionCount := s.backend.Channel.SessionCount(
 		types.ChannelRefKey{
 			ProjectID:  projectID,
 			ChannelKey: channelKey,
@@ -274,8 +274,8 @@ func (s *clusterServer) GetChannel(
 	)
 	return connect.NewResponse(&api.ClusterServiceGetChannelResponse{
 		Channel: &api.ChannelSummary{
-			Key:           string(channelKey),
-			PresenceCount: int32(channelCount),
+			Key:          string(channelKey),
+			SessionCount: int32(sessionCount),
 		},
 	}), nil
 }
