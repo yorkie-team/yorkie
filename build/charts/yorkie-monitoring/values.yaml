@@ -56,67 +56,67 @@ kube-prometheus-stack:
 
     service:
       type: NodePort
-      
+
     # For grafana data persistence
     persistence:
       enabled: true
       type: pvc
       # storageClassName: k8s
       accessModes:
-      - ReadWriteOnce
+        - ReadWriteOnce
       size: 1Gi
       finalizers:
-      - kubernetes.io/pvc-protection
+        - kubernetes.io/pvc-protection
 
     grafana.ini:
       server:
         domain: *apiHost
         root_url: "%(protocol)s://%(domain)s/grafana"
         serve_from_sub_path: true
-      
+
       service:
         type: NodePort
-    
+
     # For grafana dashboards
     dashboardProviders:
       dashboardproviders.yaml:
         apiVersion: 1
         providers:
-        - name: 'yorkie'
-          orgId: 1
-          folder: ''
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            path: /var/lib/grafana/dashboards/yorkie
+          - name: "yorkie"
+            orgId: 1
+            folder: ""
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/yorkie
 
     # For grafana dashboards
     dashboards:
       yorkie:
         yorkie-dashboard:
           gnetId: 18560
-          revision: 2
+          revision: 21
           datasource:
-          - name: DS_PROMETHEUS
-            value: Prometheus
+            - name: DS_PROMETHEUS
+              value: Prometheus
         loki-dashboard:
           gnetId: 13186
           revision: 1
           datasource:
-          - name: DS_PROMETHEUS
-            value: Prometheus
-          - name: DS_LOKI
-            value: Loki
+            - name: DS_PROMETHEUS
+              value: Prometheus
+            - name: DS_LOKI
+              value: Loki
 
   # Component scraping the kube api server
   kubeApiServer:
     enabled: *monitoringEnhancementsEnable
-  
+
   # Component scraping the kubelet and kubelet-hosted cAdvisor
   kubelet:
     enabled: *monitoringEnhancementsEnable
-  
+
   # Component scraping the kube controller manager
   kubeControllerManager:
     enabled: *monitoringEnhancementsEnable
@@ -132,11 +132,11 @@ kube-prometheus-stack:
   # Component scraping etcd
   kubeEtcd:
     enabled: *monitoringEnhancementsEnable
-  
+
   # Component scraping kube scheduler
   kubeScheduler:
     enabled: *monitoringEnhancementsEnable
-  
+
   # Component scraping kube proxy
   kubeProxy:
     enabled: *monitoringEnhancementsEnable
@@ -156,7 +156,7 @@ kube-prometheus-stack:
   # Configuration for thanosRuler
   thanosRuler:
     enabled: *monitoringEnhancementsEnable
-  
+
   # Deploy a Prometheus instance
   prometheus:
     enabled: true
@@ -176,7 +176,7 @@ kube-prometheus-stack:
             resources:
               requests:
                 storage: 1Gi
-  
+
   prometheus-node-exporter:
     # fullnameOverride should be {{monitoring.name}} + "prometheus-node-exporter"
     # TODO(krapie) refactor these values to helper.tpl file
@@ -192,7 +192,7 @@ loki-stack:
   loki:
     isDefault: false
     # fullnameOverride should be {{monitoring.name}} + "loki"
-    # TODO(krapie) refactor these values to helper.tpl file    
+    # TODO(krapie) refactor these values to helper.tpl file
     fullnameOverride: yorkie-monitoring-loki
 
     persistence:
@@ -201,9 +201,9 @@ loki-stack:
 
   promtail:
     # fullnameOverride should be {{monitoring.name}} + "promtail"
-    # TODO(krapie) refactor these values to helper.tpl file  
+    # TODO(krapie) refactor these values to helper.tpl file
     fullnameOverride: yorkie-monitoring-promtail
-    
+
     config:
       clients:
         - url: http://yorkie-monitoring-loki:3100/loki/api/v1/push
