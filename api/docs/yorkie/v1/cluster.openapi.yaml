@@ -46,6 +46,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/GetChannelCount:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/GetDocument:
     post:
       description: ""
@@ -123,6 +135,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelRequest'
       required: true
+    yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountRequest'
+      required: true
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest:
       content:
         application/json:
@@ -195,6 +216,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelResponse'
+      description: ""
+    yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountResponse'
       description: ""
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse:
       content:
@@ -447,6 +477,28 @@ components:
       additionalProperties: false
       description: ""
       title: ClusterServiceDetachDocumentResponse
+      type: object
+    yorkie.v1.ClusterServiceGetChannelCountRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServiceGetChannelCountRequest
+      type: object
+    yorkie.v1.ClusterServiceGetChannelCountResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelCount:
+          additionalProperties: false
+          description: ""
+          title: channel_count
+          type: integer
+      title: ClusterServiceGetChannelCountResponse
       type: object
     yorkie.v1.ClusterServiceGetChannelRequest:
       additionalProperties: false

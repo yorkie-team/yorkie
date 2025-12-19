@@ -32,6 +32,7 @@ service ClusterService {
   rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
   rpc ListChannels (ClusterServiceListChannelsRequest) returns (ClusterServiceListChannelsResponse) {}
   rpc GetChannel (ClusterServiceGetChannelRequest) returns (ClusterServiceGetChannelResponse) {}
+  rpc GetChannelCount (ClusterServiceGetChannelCountRequest) returns (ClusterServiceGetChannelCountResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
 
@@ -91,6 +92,14 @@ message ClusterServiceGetChannelRequest {
 
 message ClusterServiceGetChannelResponse {
   ChannelSummary channel = 1;
+}
+
+message ClusterServiceGetChannelCountRequest {
+  string project_id = 1;
+}
+
+message ClusterServiceGetChannelCountResponse {
+  int32 channel_count = 1;
 }
 
 enum CacheType {

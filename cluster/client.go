@@ -256,6 +256,24 @@ func (c *Client) GetChannel(
 	return converter.FromChannelSummary(response.Msg.Channel), nil
 }
 
+// GetChannelCount gets the channel count for the given project.
+func (c *Client) GetChannelCount(
+	ctx context.Context,
+	projectID types.ID,
+) (int32, error) {
+	response, err := c.client.GetChannelCount(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceGetChannelCountRequest{
+			ProjectId: projectID.String(),
+		}),
+	)
+	if err != nil {
+		return 0, fromConnectError(err)
+	}
+
+	return response.Msg.ChannelCount, nil
+}
+
 // InvalidateCache invalidates the cache of the given type and key.
 func (c *Client) InvalidateCache(
 	ctx context.Context,
