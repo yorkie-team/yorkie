@@ -239,6 +239,19 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	if err := s.backend.MsgBroker.Produce(
+		ctx,
+		messaging.DocumentEventMessage{
+			ProjectID:   project.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+			ActorID:     actorID.String(),
+			Timestamp:   gotime.Now(),
+			EventType:   events.DocAttached,
+		},
+	); err != nil {
+		logging.From(ctx).Errorf("failed to produce document event: %v", err)
+	}
+
 	response := &api.AttachDocumentResponse{
 		ChangePack:         pbChangePack,
 		DocumentId:         docInfo.ID.String(),

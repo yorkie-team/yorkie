@@ -406,6 +406,34 @@ func (b *Backend) BroadcastChannelList(
 	return results, nil
 }
 
+// BroadcastChannelCount broadcasts channel count request to all cluster nodes and aggregates results.
+func (b *Backend) BroadcastChannelCount(
+	ctx context.Context,
+	projectID types.ID,
+) (int, error) {
+	nodes, err := b.prepareClusterClients(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("broadcast channel count: %w", err)
+	}
+
+	channelCount := 0
+	for _, node := range nodes {
+		nodeAddr := node.RPCAddr
+
+		cli, err := b.ClusterClientPool.Get(nodeAddr)
+		if err != nil {
+			return 0, fmt.Errorf("get client for %s: %w", nodeAddr, err)
+		}
+
+		count, err := cli.GetChannelCount(ctx, projectID)
+		if err != nil {
+			return 0, fmt.Errorf("get channel count on %s: %w", nodeAddr, err)
+		}
+		channelCount += int(count)
+	}
+	return channelCount, nil
+}
+
 // prepareClusterClients returns cluster nodes and prunes inactive clients.
 func (b *Backend) prepareClusterClients(ctx context.Context) ([]*database.ClusterNodeInfo, error) {
 	nodes, err := b.Membership.ClusterNodes(ctx)
