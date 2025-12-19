@@ -7,6 +7,24 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.42] - 2025-12-19
+
+### Added
+
+- Improve Project Caching and Invalidation Consistency by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1600
+- Add ListChannels to AdminService and ClusterService by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1602
+- Enhance statistics with active documents and channel count by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1610
+
+### Changed
+
+- Enable MongoDB by Default and Update Installation Guide by @krapie in https://github.com/yorkie-team/yorkie/pull/1601
+- Refactor channel metrics to be project-aware by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1603
+
+### Fixed
+
+- Prevent empty API key routing and disable default tenant in cluster by @raararaara in https://github.com/yorkie-team/yorkie/pull/1586
+- Allow bitnami legacy images explicitly in yorkie-analytics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1609
+
 ## [v0.6.41] - 2025-12-09
 
 ### Added
