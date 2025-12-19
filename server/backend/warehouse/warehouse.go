@@ -39,6 +39,12 @@ type Warehouse interface {
 	// GetActiveUsersCount returns the active users count of the given project.
 	GetActiveUsersCount(id types.ID, from, to time.Time) (int, error)
 
+	// GetActiveDocuments returns the active documents of the given project.
+	GetActiveDocuments(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
+
+	// GetActiveDocumentsCount returns the active documents count of the given project.
+	GetActiveDocumentsCount(id types.ID, from, to time.Time) (int, error)
+
 	// GetActiveChannels returns the active channels of the given project.
 	GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error)
 

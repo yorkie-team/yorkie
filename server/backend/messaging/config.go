@@ -38,11 +38,12 @@ var (
 
 // Config is the configuration for creating a message broker instance.
 type Config struct {
-	Addresses          string `yaml:"Addresses"`
-	UserEventsTopic    string `yaml:"UserEventsTopic"`
-	ChannelEventsTopic string `yaml:"ChannelEventsTopic"`
-	SessionEventsTopic string `yaml:"SessionEventsTopic"`
-	WriteTimeout       string `yaml:"WriteTimeout"`
+	Addresses           string `yaml:"Addresses"`
+	UserEventsTopic     string `yaml:"UserEventsTopic"`
+	DocumentEventsTopic string `yaml:"DocumentEventsTopic"`
+	ChannelEventsTopic  string `yaml:"ChannelEventsTopic"`
+	SessionEventsTopic  string `yaml:"SessionEventsTopic"`
+	WriteTimeout        string `yaml:"WriteTimeout"`
 }
 
 // SplitAddresses splits the addresses by comma.
@@ -79,6 +80,10 @@ func (c *Config) Validate() error {
 
 	if c.UserEventsTopic == "" {
 		return fmt.Errorf("user events topic: %w", ErrEmptyTopic)
+	}
+
+	if c.DocumentEventsTopic == "" {
+		return fmt.Errorf("document events topic: %w", ErrEmptyTopic)
 	}
 
 	if c.ChannelEventsTopic == "" {

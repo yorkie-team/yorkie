@@ -57,10 +57,11 @@ const (
 	DefaultMongoChangeCacheSize              = 10000
 	DefaultMongoVectorCacheSize              = 10000
 
-	DefaultKafkaUserEventsTopic    = "user-events"
-	DefaultKafkaChannelEventsTopic = "channel-events"
-	DefaultKafkaSessionEventsTopic = "session-events"
-	DefaultKafkaWriteTimeout       = 5 * time.Second
+	DefaultKafkaUserEventsTopic     = "user-events"
+	DefaultKafkaDocumentEventsTopic = "document-events"
+	DefaultKafkaChannelEventsTopic  = "channel-events"
+	DefaultKafkaSessionEventsTopic  = "session-events"
+	DefaultKafkaWriteTimeout        = 5 * time.Second
 
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
@@ -306,6 +307,9 @@ func (c *Config) ensureKafkaDefaultValue() {
 	}
 	if c.Kafka.UserEventsTopic == "" {
 		c.Kafka.UserEventsTopic = DefaultKafkaUserEventsTopic
+	}
+	if c.Kafka.DocumentEventsTopic == "" {
+		c.Kafka.DocumentEventsTopic = DefaultKafkaDocumentEventsTopic
 	}
 	if c.Kafka.ChannelEventsTopic == "" {
 		c.Kafka.ChannelEventsTopic = DefaultKafkaChannelEventsTopic

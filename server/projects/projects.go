@@ -111,6 +111,16 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	activeDocuments, err := be.Warehouse.GetActiveDocuments(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	activeDocumentsCount, err := be.Warehouse.GetActiveDocumentsCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	activeChannels, err := be.Warehouse.GetActiveChannels(id, from, to)
 	if err != nil {
 		return nil, err
@@ -151,9 +161,16 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	channelsCount, err := be.BroadcastChannelCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	return &types.ProjectStats{
 		ActiveUsersCount:            activeUsersCount,
 		ActiveUsers:                 activeUsers,
+		ActiveDocumentsCount:        activeDocumentsCount,
+		ActiveDocuments:             activeDocuments,
 		ActiveChannelsCount:         activeChannelsCount,
 		ActiveChannels:              activeChannels,
 		SessionsCount:               sessionsCount,
@@ -162,6 +179,7 @@ func GetProjectStats(
 		PeakSessionsPerChannel:      peakSessionsPerChannel,
 		DocumentsCount:              documentsCount,
 		ClientsCount:                clientsCount,
+		ChannelsCount:               int64(channelsCount),
 	}, nil
 }
 

@@ -11,6 +11,19 @@ FROM KAFKA
     "property.group.id" = "user_events_group"
 );
 
+CREATE ROUTINE LOAD yorkie.document_events ON document_events
+PROPERTIES
+(
+    "format" = "JSON",
+    "desired_concurrent_number"="1"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "kafka:9092",
+    "kafka_topic" = "document-events",
+    "property.group.id" = "document_events_group"
+);
+
 CREATE ROUTINE LOAD yorkie.channel_events ON channel_events
 PROPERTIES
 (

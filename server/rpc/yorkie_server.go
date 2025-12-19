@@ -87,7 +87,7 @@ func (s *yorkieServer) ActivateClient(
 				UserAgent: req.Header().Get("x-yorkie-user-agent"),
 			},
 		); err != nil {
-			logging.From(ctx).Error(err)
+			logging.From(ctx).Errorf("failed to produce user event: %v", err)
 		}
 	}
 
@@ -237,6 +237,19 @@ func (s *yorkieServer) AttachDocument(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
+	}
+
+	if err := s.backend.MsgBroker.Produce(
+		ctx,
+		messaging.DocumentEventMessage{
+			ProjectID:   project.ID.String(),
+			DocumentKey: docInfo.Key.String(),
+			ActorID:     actorID.String(),
+			Timestamp:   gotime.Now(),
+			EventType:   events.DocAttached,
+		},
+	); err != nil {
+		logging.From(ctx).Errorf("failed to produce document event: %v", err)
 	}
 
 	response := &api.AttachDocumentResponse{

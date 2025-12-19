@@ -15,6 +15,19 @@ PROPERTIES (
     "replication_num" = "1"
 );
 
+CREATE TABLE IF NOT EXISTS document_events (
+    project_id VARCHAR(64),
+    document_key VARCHAR(128),
+    actor_id VARCHAR(64),
+    timestamp DATETIME,
+    event_type VARCHAR(32)
+) ENGINE = OLAP  
+DUPLICATE KEY(project_id, document_key, actor_id, timestamp)  
+DISTRIBUTED BY HASH(project_id) BUCKETS 16  
+PROPERTIES (  
+    "replication_num" = "1"  
+);  
+
 CREATE TABLE IF NOT EXISTS channel_events (
     project_id VARCHAR(64),
     channel_key VARCHAR(128),

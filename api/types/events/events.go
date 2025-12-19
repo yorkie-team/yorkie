@@ -34,6 +34,9 @@ const (
 type DocEventType string
 
 const (
+	// DocAttached is an event that occurs when a document is attached to a client.
+	DocAttached DocEventType = "document-attached"
+
 	// DocChanged is an event indicating that document is being
 	// modified by a change.
 	DocChanged DocEventType = "document-changed"

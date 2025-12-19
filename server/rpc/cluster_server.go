@@ -267,7 +267,7 @@ func (s *clusterServer) ListChannels(
 	limit := int(req.Msg.Limit)
 	query := req.Msg.Query
 
-	results := s.backend.Channel.ListChannels(projectID, query, limit)
+	results := s.backend.Channel.List(projectID, query, limit)
 
 	var channels []*api.ChannelSummary
 	for _, result := range results {
@@ -301,6 +301,18 @@ func (s *clusterServer) GetChannel(
 			Key:          string(channelKey),
 			SessionCount: int32(sessionCount),
 		},
+	}), nil
+}
+
+// GetChannelCount gets the channel count for the given project.
+func (s *clusterServer) GetChannelCount(
+	ctx context.Context,
+	req *connect.Request[api.ClusterServiceGetChannelCountRequest],
+) (*connect.Response[api.ClusterServiceGetChannelCountResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	count := s.backend.Channel.Count(projectID)
+	return connect.NewResponse(&api.ClusterServiceGetChannelCountResponse{
+		ChannelCount: int32(count),
 	}), nil
 }
 

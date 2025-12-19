@@ -28,11 +28,12 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := messaging.Config{
-			Addresses:          "localhost:8080",
-			UserEventsTopic:    "user-events",
-			ChannelEventsTopic: "channel-events",
-			SessionEventsTopic: "session-events",
-			WriteTimeout:       "1s",
+			Addresses:           "localhost:8080",
+			UserEventsTopic:     "user-events",
+			DocumentEventsTopic: "document-events",
+			ChannelEventsTopic:  "channel-events",
+			SessionEventsTopic:  "session-events",
+			WriteTimeout:        "1s",
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -50,16 +51,20 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf3.Validate())
 
 		conf4 := validConf
-		conf4.ChannelEventsTopic = ""
+		conf4.DocumentEventsTopic = ""
 		assert.Error(t, conf4.Validate())
 
 		conf5 := validConf
-		conf5.SessionEventsTopic = ""
+		conf5.ChannelEventsTopic = ""
 		assert.Error(t, conf5.Validate())
 
 		conf6 := validConf
-		conf6.WriteTimeout = "invalid"
+		conf6.SessionEventsTopic = ""
 		assert.Error(t, conf6.Validate())
+
+		conf7 := validConf
+		conf7.WriteTimeout = "invalid"
+		assert.Error(t, conf7.Validate())
 	})
 
 	t.Run("test split addresses", func(t *testing.T) {

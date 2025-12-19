@@ -1611,6 +1611,19 @@ components:
           description: ""
           title: active_channels_count
           type: integer
+        activeDocuments:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.MetricPoint'
+            type: object
+          title: active_documents
+          type: array
+        activeDocumentsCount:
+          additionalProperties: false
+          description: ""
+          title: active_documents_count
+          type: integer
         activeUsers:
           additionalProperties: false
           description: ""
@@ -1624,6 +1637,13 @@ components:
           description: ""
           title: active_users_count
           type: integer
+        channelsCount:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: channels_count
         clientsCount:
           additionalProperties: false
           description: ""

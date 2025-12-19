@@ -35,6 +35,9 @@ const (
 	// UserEventsType represents user-related events.
 	UserEventsType EventType = "user"
 
+	// DocumentEventsType represents document-related events.
+	DocumentEventsType EventType = "document"
+
 	// ChannelEventsType represents channel-related events.
 	ChannelEventsType EventType = "channel"
 
@@ -50,32 +53,46 @@ type Message interface {
 // UserEventMessage represents a message for user events
 type UserEventMessage struct {
 	ProjectID string                 `json:"project_id"`
-	EventType events.ClientEventType `json:"event_type"`
 	UserID    string                 `json:"user_id"`
-	Timestamp time.Time              `json:"timestamp"`
 	UserAgent string                 `json:"user_agent"`
+	Timestamp time.Time              `json:"timestamp"`
+	EventType events.ClientEventType `json:"event_type"`
+}
+
+// DocumentEventMessage represents a message for document events
+type DocumentEventMessage struct {
+	ProjectID   string              `json:"project_id"`
+	DocumentKey string              `json:"document_key"`
+	ActorID     string              `json:"actor_id"`
+	Timestamp   time.Time           `json:"timestamp"`
+	EventType   events.DocEventType `json:"event_type"`
 }
 
 // ChannelEventsMessage represents a message for channel events
 type ChannelEventsMessage struct {
 	ProjectID  string                  `json:"project_id"`
-	EventType  events.ChannelEventType `json:"event_type"`
-	Timestamp  time.Time               `json:"timestamp"`
 	ChannelKey string                  `json:"channel_key"`
+	Timestamp  time.Time               `json:"timestamp"`
+	EventType  events.ChannelEventType `json:"event_type"`
 }
 
 // SessionEventsMessage represents a message for session events
 type SessionEventsMessage struct {
 	ProjectID  string                  `json:"project_id"`
 	SessionID  string                  `json:"session_id"`
-	Timestamp  time.Time               `json:"timestamp"`
 	UserID     string                  `json:"user_id"`
 	ChannelKey string                  `json:"channel_key"`
+	Timestamp  time.Time               `json:"timestamp"`
 	EventType  events.ChannelEventType `json:"event_type"`
 }
 
 // Marshal marshals the user event message to JSON.
 func (m UserEventMessage) Marshal() ([]byte, error) {
+	return marshalMessage(m)
+}
+
+// Marshal marshals the document event message to JSON.
+func (m DocumentEventMessage) Marshal() ([]byte, error) {
 	return marshalMessage(m)
 }
 
@@ -126,6 +143,7 @@ func Ensure(kafkaConf *Config) Broker {
 
 	topics := []string{
 		kafkaConf.UserEventsTopic,
+		kafkaConf.DocumentEventsTopic,
 		kafkaConf.ChannelEventsTopic,
 		kafkaConf.SessionEventsTopic,
 	}
@@ -142,6 +160,12 @@ func Ensure(kafkaConf *Config) Broker {
 		brokers[UserEventsType] = newKafkaBroker(kafkaConf, kafkaConf.UserEventsTopic)
 	} else {
 		brokers[UserEventsType] = dummy
+	}
+
+	if kafkaConf.DocumentEventsTopic != "" {
+		brokers[DocumentEventsType] = newKafkaBroker(kafkaConf, kafkaConf.DocumentEventsTopic)
+	} else {
+		brokers[DocumentEventsType] = dummy
 	}
 
 	if kafkaConf.ChannelEventsTopic != "" {
@@ -163,21 +187,23 @@ func Ensure(kafkaConf *Config) Broker {
 func newManagerWithDummy(dummy *DummyBroker) *Manager {
 	return &Manager{
 		brokers: map[EventType]Broker{
-			UserEventsType:    dummy,
-			ChannelEventsType: dummy,
-			SessionEventsType: dummy,
+			UserEventsType:     dummy,
+			DocumentEventsType: dummy,
+			ChannelEventsType:  dummy,
+			SessionEventsType:  dummy,
 		},
 	}
 }
 
 // NewBroker creates a new Manager with the specified brokers for each event type.
 // This is primarily used for testing purposes.
-func NewBroker(user, channel, session Broker) *Manager {
+func NewBroker(user, document, channel, session Broker) *Manager {
 	return &Manager{
 		brokers: map[EventType]Broker{
-			UserEventsType:    user,
-			ChannelEventsType: channel,
-			SessionEventsType: session,
+			UserEventsType:     user,
+			DocumentEventsType: document,
+			ChannelEventsType:  channel,
+			SessionEventsType:  session,
 		},
 	}
 }
@@ -206,6 +232,8 @@ func (m *Manager) Produce(ctx context.Context, msg Message) error {
 	switch msg.(type) {
 	case UserEventMessage:
 		eventType = UserEventsType
+	case DocumentEventMessage:
+		eventType = DocumentEventsType
 	case ChannelEventsMessage:
 		eventType = ChannelEventsType
 	case SessionEventsMessage:

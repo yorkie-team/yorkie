@@ -153,6 +153,9 @@ Kafka:
   # UserEventsTopic is the user events message broker topic to use.
   UserEventsTopic: "user-events"
 
+  # DocumentEventsTopic is the document events message broker topic to use.
+  DocumentEventsTopic: "document-events"
+
   # ChannelEventsTopic is the channel events message broker topic to use.
   ChannelEventsTopic: "channel-events"
 

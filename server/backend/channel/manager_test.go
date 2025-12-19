@@ -67,7 +67,7 @@ func createManager(
 ) (*channel.Manager, *mockPubSub, *MockBroker) {
 	pubsub := &mockPubSub{}
 	broker := &MockBroker{}
-	brokers := messaging.NewBroker(broker, broker, broker)
+	brokers := messaging.NewBroker(broker, broker, broker, broker)
 	db, err := memory.New()
 	assert.NoError(t, err)
 	_, _, err = db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")
@@ -346,7 +346,7 @@ func TestChannelManager_Count(t *testing.T) {
 	})
 }
 
-func TestPresenceManager_ListChannels(t *testing.T) {
+func TestChannelManager_List(t *testing.T) {
 	t.Run("list all channels without query", func(t *testing.T) {
 		ctx := context.Background()
 		ttl := 60 * time.Second
@@ -364,7 +364,7 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		attachChannels(t, ctx, manager, refKey3, 7, "3")
 
 		// List all channels (no query)
-		results := manager.ListChannels(projectID, "", 10)
+		results := manager.List(projectID, "", 10)
 
 		// Should return all 3 channels
 		assert.Len(t, results, 3)
@@ -397,7 +397,7 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		attachChannels(t, ctx, manager, refKey4, 4, "4")
 
 		// List channels with "room-" prefix
-		results := manager.ListChannels(projectID, "room-", 10)
+		results := manager.List(projectID, "room-", 10)
 
 		// Should return only 3 channels matching "room-" prefix
 		assert.Len(t, results, 3)
@@ -433,7 +433,7 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		}
 
 		// List with limit of 3
-		results := manager.ListChannels(projectID, "", 3)
+		results := manager.List(projectID, "", 3)
 
 		// Should return only 3 channels
 		assert.Len(t, results, 3)
@@ -464,7 +464,7 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		attachChannels(t, ctx, manager, refKey3, 3, "3")
 
 		// List all channels
-		results := manager.ListChannels(projectID, "", 10)
+		results := manager.List(projectID, "", 10)
 
 		// Should be sorted alphabetically when session counts are equal
 		assert.Len(t, results, 3)
@@ -485,7 +485,7 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		attachChannels(t, ctx, manager, refKey1, 5, "1")
 
 		// List with non-matching query
-		results := manager.ListChannels(projectID, "lobby-", 10)
+		results := manager.List(projectID, "lobby-", 10)
 
 		// Should return empty list
 		assert.Len(t, results, 0)
@@ -507,12 +507,12 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		attachChannels(t, ctx, manager, refKey2, 3, "2")
 
 		// List channels for project 1
-		results1 := manager.ListChannels(projectID1, "", 10)
+		results1 := manager.List(projectID1, "", 10)
 		assert.Len(t, results1, 1)
 		assert.Equal(t, projectID1, results1[0].Key.ProjectID)
 
 		// List channels for project 2
-		results2 := manager.ListChannels(projectID2, "", 10)
+		results2 := manager.List(projectID2, "", 10)
 		assert.Len(t, results2, 1)
 		assert.Equal(t, projectID2, results2[0].Key.ProjectID)
 	})
@@ -534,17 +534,38 @@ func TestPresenceManager_ListChannels(t *testing.T) {
 		}
 
 		// Test with limit 0 (should use MinChannelLimit = 1)
-		results := manager.ListChannels(projectID, "", 0)
+		results := manager.List(projectID, "", 0)
 		assert.Len(t, results, 1)
 
 		// Test with limit -1 (should use MinChannelLimit = 1)
-		results = manager.ListChannels(projectID, "", -1)
+		results = manager.List(projectID, "", -1)
 		assert.Len(t, results, 1)
 
 		// Test with limit > MaxChannelLimit (should use MaxChannelLimit = 100)
 		// Create only 5 channels, so we should get all 5 even if limit is capped
-		results = manager.ListChannels(projectID, "", 200)
+		results = manager.List(projectID, "", 200)
 		assert.Len(t, results, 5)
+	})
+}
+
+func TestChannelManager_ChannelsCount(t *testing.T) {
+	t.Run("get channels count", func(t *testing.T) {
+		ctx := context.Background()
+		ttl := 60 * time.Second
+		cleanupInterval := 10 * time.Second
+		manager, _, _ := createManager(t, ttl, cleanupInterval)
+		projectID := types.NewID()
+
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "lobby"}
+
+		attachChannels(t, ctx, manager, refKey1, 5, "1")
+		attachChannels(t, ctx, manager, refKey2, 3, "2")
+		attachChannels(t, ctx, manager, refKey3, 7, "3")
+
+		count := manager.Count(projectID)
+		assert.Equal(t, 3, count)
 	})
 }
 

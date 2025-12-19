@@ -448,10 +448,10 @@ func (m *Manager) Stats() map[string]int {
 	}
 }
 
-// ListChannels lists channels for the given project ID.
+// List lists channels for the given project ID.
 // If query is not empty, it filters channels by the query prefix.
 // It returns up to limit channels.
-func (m *Manager) ListChannels(
+func (m *Manager) List(
 	projectID types.ID,
 	query string,
 	limit int,
@@ -494,6 +494,17 @@ func (m *Manager) ListChannels(
 		results = results[:limit]
 	}
 	return results
+}
+
+// Count returns the current channels count.
+func (m *Manager) Count(projectID types.ID) int {
+	count := 0
+	for _, key := range m.channels.Keys() {
+		if key.ProjectID == projectID {
+			count++
+		}
+	}
+	return count
 }
 
 func classifyExpiredSessions(
