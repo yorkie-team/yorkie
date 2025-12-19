@@ -71,11 +71,12 @@ var (
 
 	authWebhookCacheTTL time.Duration
 
-	kafkaAddresses          string
-	kafkaUserEventsTopic    string
-	kafkaChannelEventsTopic string
-	kafkaSessionEventsTopic string
-	kafkaWriteTimeout       time.Duration
+	kafkaAddresses           string
+	kafkaUserEventsTopic     string
+	kafkaDocumentEventsTopic string
+	kafkaChannelEventsTopic  string
+	kafkaSessionEventsTopic  string
+	kafkaWriteTimeout        time.Duration
 
 	starRocksDSN string
 
@@ -124,11 +125,12 @@ func newServerCmd() *cobra.Command {
 
 			if kafkaAddresses != "" {
 				conf.Kafka = &messaging.Config{
-					Addresses:          kafkaAddresses,
-					UserEventsTopic:    kafkaUserEventsTopic,
-					ChannelEventsTopic: kafkaChannelEventsTopic,
-					SessionEventsTopic: kafkaSessionEventsTopic,
-					WriteTimeout:       kafkaWriteTimeout.String(),
+					Addresses:           kafkaAddresses,
+					UserEventsTopic:     kafkaUserEventsTopic,
+					DocumentEventsTopic: kafkaDocumentEventsTopic,
+					ChannelEventsTopic:  kafkaChannelEventsTopic,
+					SessionEventsTopic:  kafkaSessionEventsTopic,
+					WriteTimeout:        kafkaWriteTimeout.String(),
 				}
 			}
 
@@ -488,6 +490,12 @@ func init() {
 		"kafka-user-events-topic",
 		server.DefaultKafkaUserEventsTopic,
 		"Kafka topic name to publish user events",
+	)
+	cmd.Flags().StringVar(
+		&kafkaDocumentEventsTopic,
+		"kafka-document-events-topic",
+		server.DefaultKafkaDocumentEventsTopic,
+		"Kafka topic name to publish document events",
 	)
 	cmd.Flags().StringVar(
 		&kafkaChannelEventsTopic,

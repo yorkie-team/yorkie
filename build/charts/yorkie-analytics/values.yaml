@@ -12,6 +12,9 @@ yorkie-analytics:
       kafka-user-events:
         topic: user-events
         property-group-id: user_events_group
+      kafka-document-events:
+        topic: document-events
+        property-group-id: document_events_group
       kafka-channel-events:
         topic: channel-events
         property-group-id: channel_events_group
@@ -27,6 +30,10 @@ yorkie-analytics:
     topic:
       user-events:
         topic: user-events
+        partitions: 1
+        replicationFactor: 1
+      document-events:
+        topic: document-events
         partitions: 1
         replicationFactor: 1
       channel-events:
@@ -46,18 +53,24 @@ kube-starrocks:
         repository: *starrocks-fe-repo
         tag: *starrocks-fe-tag
       resources:
-        limits:
+        requests:
           cpu: "1"
           memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
       storageSpec:
         name: fe
 
     starrocksBeSpec:
       replicas: 1
       resources:
-        limits:
+        requests:
           cpu: "1"
           memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
       storageSpec:
         name: be
         storageSize: 15Gi
@@ -84,3 +97,6 @@ kafka:
     create: true
   rbac:
     create: true
+  global:
+    security:
+      allowInsecureImages: true
