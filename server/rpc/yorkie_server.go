@@ -87,7 +87,7 @@ func (s *yorkieServer) ActivateClient(
 				UserAgent: req.Header().Get("x-yorkie-user-agent"),
 			},
 		); err != nil {
-			logging.From(ctx).Error(err)
+			logging.From(ctx).Errorf("failed to produce user event: %v", err)
 		}
 	}
 

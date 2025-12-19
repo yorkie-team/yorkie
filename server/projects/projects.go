@@ -111,6 +111,16 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	activeDocuments, err := be.Warehouse.GetActiveDocuments(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	activeDocumentsCount, err := be.Warehouse.GetActiveDocumentsCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	activeChannels, err := be.Warehouse.GetActiveChannels(id, from, to)
 	if err != nil {
 		return nil, err

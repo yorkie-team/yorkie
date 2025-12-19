@@ -36,6 +36,16 @@ func (w *DummyWarehouse) GetActiveUsersCount(id types.ID, from, to time.Time) (i
 	return 0, nil
 }
 
+// GetActiveDocuments does nothing.
+func (w *DummyWarehouse) GetActiveDocuments(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	return nil, nil
+}
+
+// GetActiveDocumentsCount does nothing.
+func (w *DummyWarehouse) GetActiveDocumentsCount(id types.ID, from, to time.Time) (int, error) {
+	return 0, nil
+}
+
 // GetActiveChannels does nothing.
 func (w *DummyWarehouse) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
 	return nil, nil
