@@ -280,6 +280,15 @@ message User {
   google.protobuf.Timestamp created_at = 4;
 }
 
+message Member {
+  string id = 1;
+  string project_id = 2;
+  string user_id = 3;
+  string username = 4;
+  string role = 5;
+  google.protobuf.Timestamp invited_at = 6;
+}
+
 message Project {
   string id = 1;
   string name = 2;

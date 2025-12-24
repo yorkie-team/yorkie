@@ -74,6 +74,12 @@ var (
 
 	// ErrRevisionAlreadyExists is returned when a revision with the same label already exists.
 	ErrRevisionAlreadyExists = errors.AlreadyExists("revision already exists").WithCode("ErrRevisionAlreadyExists")
+
+	// ErrMemberNotFound is returned when the project member could not be found.
+	ErrMemberNotFound = errors.NotFound("project member not found").WithCode("ErrMemberNotFound")
+
+	// ErrMemberAlreadyExists is returned when the project member already exists.
+	ErrMemberAlreadyExists = errors.AlreadyExists("project member already exists").WithCode("ErrMemberAlreadyExists")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -186,6 +192,49 @@ type Database interface {
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
+
+	// CreateMemberInfo creates a new project member.
+	CreateMemberInfo(
+		ctx context.Context,
+		projectID types.ID,
+		userID types.ID,
+		invitedBy types.ID,
+		role string,
+	) (*MemberInfo, error)
+
+	// ListMemberInfos returns all members of the project.
+	ListMemberInfos(
+		ctx context.Context,
+		projectID types.ID,
+	) ([]*MemberInfo, error)
+
+	// FindMemberInfo finds a member of the project.
+	FindMemberInfo(
+		ctx context.Context,
+		projectID types.ID,
+		userID types.ID,
+	) (*MemberInfo, error)
+
+	// UpdateMemberRole updates the role of a project member.
+	UpdateMemberRole(
+		ctx context.Context,
+		projectID types.ID,
+		userID types.ID,
+		role string,
+	) (*MemberInfo, error)
+
+	// DeleteMemberInfo deletes a member from the project.
+	DeleteMemberInfo(
+		ctx context.Context,
+		projectID types.ID,
+		userID types.ID,
+	) error
+
+	// ListProjectInfosByMember returns all projects that the user is a member of.
+	ListProjectInfosByMember(
+		ctx context.Context,
+		userID types.ID,
+	) ([]*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string, metadata map[string]string) (*ClientInfo, error)

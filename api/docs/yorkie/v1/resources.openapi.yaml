@@ -860,6 +860,43 @@ components:
           type: string
       title: JSONElementSimple
       type: object
+    yorkie.v1.Member:
+      additionalProperties: false
+      description: ""
+      properties:
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        invitedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: invited_at
+          type: object
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+        role:
+          additionalProperties: false
+          description: ""
+          title: role
+          type: string
+        userId:
+          additionalProperties: false
+          description: ""
+          title: user_id
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: Member
+      type: object
     yorkie.v1.MetricPoint:
       additionalProperties: false
       description: ""

@@ -43,20 +43,38 @@ func CreateProject(
 	return info.ToProject(), nil
 }
 
-// ListProjects lists all projects.
+// ListProjects lists all projects owned by or accessible to the user.
 func ListProjects(
 	ctx context.Context,
 	be *backend.Backend,
 	owner types.ID,
 ) ([]*types.Project, error) {
-	infos, err := be.DB.ListProjectInfos(ctx, owner)
+	// Get projects owned by the user
+	ownedInfos, err := be.DB.ListProjectInfos(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
 
+	// Get projects where the user is a member
+	memberInfos, err := be.DB.ListProjectInfosByMember(ctx, owner)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine and deduplicate projects
+	projectMap := make(map[types.ID]*types.Project)
+	for _, info := range ownedInfos {
+		projectMap[info.ID] = info.ToProject()
+	}
+	for _, info := range memberInfos {
+		if _, exists := projectMap[info.ID]; !exists {
+			projectMap[info.ID] = info.ToProject()
+		}
+	}
+
 	var projects []*types.Project
-	for _, info := range infos {
-		projects = append(projects, info.ToProject())
+	for _, project := range projectMap {
+		projects = append(projects, project)
 	}
 
 	return projects, nil

@@ -190,6 +190,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/InviteMember:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.InviteMember.yorkie.v1.InviteMemberRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.InviteMember.yorkie.v1.InviteMemberResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/ListChanges:
     post:
       description: ""
@@ -222,6 +234,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.ListDocuments.yorkie.v1.ListDocumentsResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/ListMembers:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.ListMembers.yorkie.v1.ListMembersRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.ListMembers.yorkie.v1.ListMembersResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -282,6 +306,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.RemoveDocumentByAdmin.yorkie.v1.RemoveDocumentByAdminResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/RemoveMember:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.RemoveMember.yorkie.v1.RemoveMemberRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.RemoveMember.yorkie.v1.RemoveMemberResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -354,6 +390,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.AdminService.UpdateDocument.yorkie.v1.UpdateDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/UpdateMemberRole:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.UpdateMemberRole.yorkie.v1.UpdateMemberRoleRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.UpdateMemberRole.yorkie.v1.UpdateMemberRoleResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -507,6 +555,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaRequest'
       required: true
+    yorkie.v1.AdminService.InviteMember.yorkie.v1.InviteMemberRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InviteMemberRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InviteMemberRequest'
+      required: true
     yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesRequest:
       content:
         application/json:
@@ -533,6 +590,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListDocumentsRequest'
+      required: true
+    yorkie.v1.AdminService.ListMembers.yorkie.v1.ListMembersRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListMembersRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListMembersRequest'
       required: true
     yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsRequest:
       content:
@@ -578,6 +644,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminRequest'
+      required: true
+    yorkie.v1.AdminService.RemoveMember.yorkie.v1.RemoveMemberRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveMemberRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveMemberRequest'
       required: true
     yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaRequest:
       content:
@@ -632,6 +707,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.UpdateDocumentRequest'
+      required: true
+    yorkie.v1.AdminService.UpdateMemberRole.yorkie.v1.UpdateMemberRoleRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateMemberRoleRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateMemberRoleRequest'
       required: true
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectRequest:
       content:
@@ -787,6 +871,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetSnapshotMetaResponse'
       description: ""
+    yorkie.v1.AdminService.InviteMember.yorkie.v1.InviteMemberResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InviteMemberResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.InviteMemberResponse'
+      description: ""
     yorkie.v1.AdminService.ListChanges.yorkie.v1.ListChangesResponse:
       content:
         application/json:
@@ -813,6 +906,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListDocumentsResponse'
+      description: ""
+    yorkie.v1.AdminService.ListMembers.yorkie.v1.ListMembersResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListMembersResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ListMembersResponse'
       description: ""
     yorkie.v1.AdminService.ListProjects.yorkie.v1.ListProjectsResponse:
       content:
@@ -858,6 +960,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RemoveDocumentByAdminResponse'
+      description: ""
+    yorkie.v1.AdminService.RemoveMember.yorkie.v1.RemoveMemberResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveMemberResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.RemoveMemberResponse'
       description: ""
     yorkie.v1.AdminService.RemoveSchema.yorkie.v1.RemoveSchemaResponse:
       content:
@@ -912,6 +1023,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.UpdateDocumentResponse'
+      description: ""
+    yorkie.v1.AdminService.UpdateMemberRole.yorkie.v1.UpdateMemberRoleResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateMemberRoleResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.UpdateMemberRoleResponse'
       description: ""
     yorkie.v1.AdminService.UpdateProject.yorkie.v1.UpdateProjectResponse:
       content:
@@ -1841,6 +1961,39 @@ components:
           type: object
       title: GetSnapshotMetaResponse
       type: object
+    yorkie.v1.InviteMemberRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        role:
+          additionalProperties: false
+          description: ""
+          title: role
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: InviteMemberRequest
+      type: object
+    yorkie.v1.InviteMemberResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        member:
+          $ref: '#/components/schemas/yorkie.v1.Member'
+          additionalProperties: false
+          description: ""
+          title: member
+          type: object
+      title: InviteMemberResponse
+      type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
       description: ""
@@ -1988,6 +2141,31 @@ components:
           type: array
       title: ListDocumentsResponse
       type: object
+    yorkie.v1.ListMembersRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+      title: ListMembersRequest
+      type: object
+    yorkie.v1.ListMembersResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        members:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.Member'
+            type: object
+          title: members
+          type: array
+      title: ListMembersResponse
+      type: object
     yorkie.v1.ListProjectsRequest:
       additionalProperties: false
       description: ""
@@ -2102,6 +2280,43 @@ components:
           title: token
           type: string
       title: LogInResponse
+      type: object
+    yorkie.v1.Member:
+      additionalProperties: false
+      description: ""
+      properties:
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        invitedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: invited_at
+          type: object
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+        role:
+          additionalProperties: false
+          description: ""
+          title: role
+          type: string
+        userId:
+          additionalProperties: false
+          description: ""
+          title: user_id
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: Member
       type: object
     yorkie.v1.MetricPoint:
       additionalProperties: false
@@ -2907,6 +3122,27 @@ components:
       description: ""
       title: RemoveDocumentByAdminResponse
       type: object
+    yorkie.v1.RemoveMemberRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: RemoveMemberRequest
+      type: object
+    yorkie.v1.RemoveMemberResponse:
+      additionalProperties: false
+      description: ""
+      title: RemoveMemberResponse
+      type: object
     yorkie.v1.RemoveSchemaRequest:
       additionalProperties: false
       description: ""
@@ -3499,6 +3735,39 @@ components:
           title: document
           type: object
       title: UpdateDocumentResponse
+      type: object
+    yorkie.v1.UpdateMemberRoleRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        projectName:
+          additionalProperties: false
+          description: ""
+          title: project_name
+          type: string
+        role:
+          additionalProperties: false
+          description: ""
+          title: role
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: UpdateMemberRoleRequest
+      type: object
+    yorkie.v1.UpdateMemberRoleResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        member:
+          $ref: '#/components/schemas/yorkie.v1.Member'
+          additionalProperties: false
+          description: ""
+          title: member
+          type: object
+      title: UpdateMemberRoleResponse
       type: object
     yorkie.v1.UpdateProjectRequest:
       additionalProperties: false
