@@ -28,10 +28,12 @@ import (
 const (
 	// ColClusterNodes represents the cluster nodes collection in the database.
 	ColClusterNodes = "clusternodes"
-	// ColProjects represents the projects collection in the database.
-	ColProjects = "projects"
 	// ColUsers represents the users collection in the database.
 	ColUsers = "users"
+	// ColProjects represents the projects collection in the database.
+	ColProjects = "projects"
+	// ColMembers represents the project members collection in the database.
+	ColMembers = "members"
 	// ColClients represents the clients collection in the database.
 	ColClients = "clients"
 	// ColDocuments represents the documents collection in the database.
@@ -53,6 +55,7 @@ var Collections = []string{
 	ColClusterNodes,
 	ColProjects,
 	ColUsers,
+	ColMembers,
 	ColClients,
 	ColDocuments,
 	ColSchemas,
@@ -96,6 +99,20 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys:    bson.D{{Key: "username", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: ColMembers,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)},
+				{Key: "user_id", Value: int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bson.D{{Key: "project_id", Value: int32(1)}},
+		}, {
+			Keys: bson.D{{Key: "user_id", Value: int32(1)}},
 		}},
 	},
 	{

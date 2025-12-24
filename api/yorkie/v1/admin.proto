@@ -38,6 +38,11 @@ service AdminService {
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
   rpc RotateProjectKeys(RotateProjectKeysRequest) returns (RotateProjectKeysResponse) {}
 
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse) {}
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {}
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {}
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse) {}
+
   rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse) {}
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
@@ -156,6 +161,42 @@ message GetProjectStatsResponse {
   repeated MetricPoint peak_sessions_per_channel = 11;
   int32 active_documents_count = 12;
   repeated MetricPoint active_documents = 13;
+}
+
+message InviteMemberRequest {
+  string project_name = 1;
+  string username = 2;
+  string role = 3;
+}
+
+message InviteMemberResponse {
+  Member member = 1;
+}
+
+message RemoveMemberRequest {
+  string project_name = 1;
+  string username = 2;
+}
+
+message RemoveMemberResponse {
+}
+
+message ListMembersRequest {
+  string project_name = 1;
+}
+
+message ListMembersResponse {
+  repeated Member members = 1;
+}
+
+message UpdateMemberRoleRequest {
+  string project_name = 1;
+  string username = 2;
+  string role = 3;
+}
+
+message UpdateMemberRoleResponse {
+  Member member = 1;
 }
 
 message CreateDocumentRequest {

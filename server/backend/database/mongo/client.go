@@ -870,6 +870,162 @@ func (c *Client) ListUserInfos(
 	return infos, nil
 }
 
+// CreateMemberInfo creates a new project member.
+func (c *Client) CreateMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+	invitedBy types.ID,
+	role string,
+) (*database.MemberInfo, error) {
+	info := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	result, err := c.collection(ColMembers).InsertOne(ctx, bson.M{
+		"project_id": info.ProjectID,
+		"user_id":    info.UserID,
+		"role":       info.Role,
+		"invited_by": info.InvitedBy,
+		"invited_at": info.InvitedAt,
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrMemberAlreadyExists
+		}
+		return nil, fmt.Errorf("create project member: %w", err)
+	}
+
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return info, nil
+}
+
+// ListMemberInfos returns all members of the project.
+func (c *Client) ListMemberInfos(
+	ctx context.Context,
+	projectID types.ID,
+) ([]*database.MemberInfo, error) {
+	cursor, err := c.collection(ColMembers).Find(ctx, bson.M{
+		"project_id": projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	var infos []*database.MemberInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	return infos, nil
+}
+
+// FindMemberInfo finds a member of the project.
+func (c *Client) FindMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+) (*database.MemberInfo, error) {
+	result := c.collection(ColMembers).FindOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	})
+
+	info := &database.MemberInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find project member: %w", database.ErrMemberNotFound)
+		}
+		return nil, fmt.Errorf("find project member: %w", err)
+	}
+
+	return info, nil
+}
+
+// UpdateMemberRole updates the role of a project member.
+func (c *Client) UpdateMemberRole(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+	role string,
+) (*database.MemberInfo, error) {
+	result, err := c.collection(ColMembers).UpdateOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	}, bson.M{
+		"$set": bson.M{"role": role},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update project member role: %w", err)
+	}
+	if result.ModifiedCount == 0 {
+		return nil, fmt.Errorf("update project member role: %w", database.ErrMemberNotFound)
+	}
+
+	return c.FindMemberInfo(ctx, projectID, userID)
+}
+
+// DeleteMemberInfo deletes a member from the project.
+func (c *Client) DeleteMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+) error {
+	result, err := c.collection(ColMembers).DeleteOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete project member: %w", err)
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("delete project member: %w", database.ErrMemberNotFound)
+	}
+
+	return nil
+}
+
+// ListProjectInfosByMember returns all projects that the user is a member of.
+func (c *Client) ListProjectInfosByMember(
+	ctx context.Context,
+	userID types.ID,
+) ([]*database.ProjectInfo, error) {
+	// Find all project memberships for the user
+	cursor, err := c.collection(ColMembers).Find(ctx, bson.M{
+		"user_id": userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list projects by member: %w", err)
+	}
+
+	var memberInfos []*database.MemberInfo
+	if err := cursor.All(ctx, &memberInfos); err != nil {
+		return nil, fmt.Errorf("list projects by member: %w", err)
+	}
+
+	// Extract project IDs
+	projectIDs := make([]types.ID, 0, len(memberInfos))
+	for _, memberInfo := range memberInfos {
+		projectIDs = append(projectIDs, memberInfo.ProjectID)
+	}
+
+	if len(projectIDs) == 0 {
+		return []*database.ProjectInfo{}, nil
+	}
+
+	// Find all projects
+	projectCursor, err := c.collection(ColProjects).Find(ctx, bson.M{
+		"_id": bson.M{"$in": projectIDs},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find projects: %w", err)
+	}
+
+	var infos []*database.ProjectInfo
+	if err := projectCursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("find projects: %w", err)
+	}
+
+	return infos, nil
+}
+
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(
 	ctx context.Context,

@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/members"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/revisions"
@@ -282,6 +283,125 @@ func (s *adminServer) GetProjectStats(
 		SessionsCount:               int32(stats.SessionsCount),
 		PeakSessionsPerChannel:      converter.ToMetricPoints(stats.PeakSessionsPerChannel),
 		PeakSessionsPerChannelCount: int32(stats.PeakSessionsPerChannelCount),
+	}), nil
+}
+
+// InviteMember invites a member to the project.
+func (s *adminServer) InviteMember(
+	ctx context.Context,
+	req *connect.Request[api.InviteMemberRequest],
+) (*connect.Response[api.InviteMemberResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	member, err := members.Invite(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.Username,
+		req.Msg.Role,
+		user.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.InviteMemberResponse{
+		Member: converter.ToMember(member),
+	}), nil
+}
+
+// RemoveMember removes a member from the project.
+func (s *adminServer) RemoveMember(
+	ctx context.Context,
+	req *connect.Request[api.RemoveMemberRequest],
+) (*connect.Response[api.RemoveMemberResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := members.Remove(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.Username,
+	); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RemoveMemberResponse{}), nil
+}
+
+// ListMembers lists all members of the project.
+func (s *adminServer) ListMembers(
+	ctx context.Context,
+	req *connect.Request[api.ListMembersRequest],
+) (*connect.Response[api.ListMembersResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	memberList, err := members.List(ctx, s.backend, project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepend owner to the member list
+	ownerInfo, err := s.backend.DB.FindUserInfoByID(ctx, project.Owner)
+	if err != nil {
+		return nil, err
+	}
+
+	owner := &types.Member{
+		ID:        project.Owner,
+		ProjectID: project.ID,
+		UserID:    project.Owner,
+		Username:  ownerInfo.Username,
+		Role:      "owner",
+		InvitedAt: project.CreatedAt,
+	}
+	memberList = append([]*types.Member{owner}, memberList...)
+
+	return connect.NewResponse(&api.ListMembersResponse{
+		Members: converter.ToMembers(memberList),
+	}), nil
+}
+
+// UpdateMemberRole updates the role of a project member.
+func (s *adminServer) UpdateMemberRole(
+	ctx context.Context,
+	req *connect.Request[api.UpdateMemberRoleRequest],
+) (*connect.Response[api.UpdateMemberRoleResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	member, err := members.UpdateRole(
+		ctx,
+		s.backend,
+		project.ID,
+		req.Msg.Username,
+		req.Msg.Role,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.UpdateMemberRoleResponse{
+		Member: converter.ToMember(member),
 	}), nil
 }
 
