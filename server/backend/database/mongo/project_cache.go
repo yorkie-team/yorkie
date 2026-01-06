@@ -43,7 +43,8 @@ type ProjectCache struct {
 // NewProjectCache creates a new project cache with the given size and TTL.
 func NewProjectCache(size int, ttl time.Duration) (*ProjectCache, error) {
 	pc := &ProjectCache{
-		apiKeyToID: sync.Map{},
+		apiKeyToID:    sync.Map{},
+		secretKeyToID: sync.Map{},
 	}
 
 	// Create cache with eviction callback to clean up secondary index
@@ -51,6 +52,7 @@ func NewProjectCache(size int, ttl time.Duration) (*ProjectCache, error) {
 		// When an entry is evicted from primary cache (by TTL or LRU),
 		// remove it from the secondary index as well
 		pc.apiKeyToID.Delete(info.PublicKey)
+		pc.secretKeyToID.Delete(info.SecretKey)
 	}
 
 	c, err := cache.NewLRUWithExpires[types.ID, *database.ProjectInfo](
