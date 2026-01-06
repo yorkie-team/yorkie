@@ -35,6 +35,9 @@ type ProjectCache struct {
 
 	// Secondary index: API key -> ID mapping
 	apiKeyToID sync.Map // map[string]types.ID
+
+	// Third index: Secret key -> ID mapping
+	secretKeyToID sync.Map // map[string]types.ID
 }
 
 // NewProjectCache creates a new project cache with the given size and TTL.
@@ -79,6 +82,11 @@ func (pc *ProjectCache) Len() int {
 	return pc.cache.Len()
 }
 
+// GetByID retrieves a project by ID.
+func (pc *ProjectCache) GetByID(id types.ID) (*database.ProjectInfo, bool) {
+	return pc.cache.Get(id)
+}
+
 // GetByAPIKey retrieves a project by API key.
 func (pc *ProjectCache) GetByAPIKey(apiKey string) (*database.ProjectInfo, bool) {
 	// Look up ID from secondary index
@@ -101,9 +109,25 @@ func (pc *ProjectCache) GetByAPIKey(apiKey string) (*database.ProjectInfo, bool)
 	return info, true
 }
 
-// GetByID retrieves a project by ID.
-func (pc *ProjectCache) GetByID(id types.ID) (*database.ProjectInfo, bool) {
-	return pc.cache.Get(id)
+// GetBySecretKey retrieves a project by secret key.
+func (pc *ProjectCache) GetBySecretKey(secretKey string) (*database.ProjectInfo, bool) {
+	// Look up ID from third index
+	idVal, ok := pc.secretKeyToID.Load(secretKey)
+	if !ok {
+		return nil, false
+	}
+
+	id := idVal.(types.ID)
+
+	// Get from primary cache
+	info, found := pc.cache.Get(id)
+	if !found {
+		// Primary cache entry was evicted but third index still exists
+		// Clean up the stale third index entry
+		pc.secretKeyToID.Delete(secretKey)
+		return nil, false
+	}
+	return info, true
 }
 
 // Add adds a project to the cache.
@@ -115,12 +139,16 @@ func (pc *ProjectCache) Add(info *database.ProjectInfo) {
 
 	// Update secondary index
 	pc.apiKeyToID.Store(info.PublicKey, info.ID)
+
+	// Update third index
+	pc.secretKeyToID.Store(info.SecretKey, info.ID)
 }
 
 // Remove removes a project from the cache using both API key and ID.
 func (pc *ProjectCache) Remove(id types.ID) {
 	if info, ok := pc.cache.Peek(id); ok {
 		pc.apiKeyToID.Delete(info.PublicKey)
+		pc.secretKeyToID.Delete(info.SecretKey)
 	}
 	pc.cache.Remove(id)
 }
@@ -130,6 +158,10 @@ func (pc *ProjectCache) Purge() {
 	pc.cache.Purge()
 	pc.apiKeyToID.Range(func(key, _ any) bool {
 		pc.apiKeyToID.Delete(key)
+		return true
+	})
+	pc.secretKeyToID.Range(func(key, _ any) bool {
+		pc.secretKeyToID.Delete(key)
 		return true
 	})
 }

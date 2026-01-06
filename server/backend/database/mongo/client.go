@@ -587,6 +587,10 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 
 // FindProjectInfoBySecretKey returns a project by secret key.
 func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey string) (*database.ProjectInfo, error) {
+	if cached, ok := c.projectCache.GetBySecretKey(secretKey); ok {
+		return cached.DeepCopy(), nil
+	}
+
 	result := c.collection(ColProjects).FindOne(ctx, bson.M{
 		"secret_key": secretKey,
 	})
@@ -599,6 +603,8 @@ func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey strin
 
 		return nil, fmt.Errorf("find project by secret key: %w", err)
 	}
+
+	c.projectCache.Add(info)
 
 	return info, nil
 }
