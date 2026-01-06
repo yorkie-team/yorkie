@@ -27,7 +27,7 @@ import (
 
 // ProjectCache is a cache for project information with multiple access paths.
 // It uses a single LRU cache with ID as the primary key and maintains a
-// secondary index for API key lookups to minimize memory usage and ensure
+// indices for API key and secret key lookups to minimize memory usage and ensure
 // cache consistency.
 type ProjectCache struct {
 	// Primary cache: ID is the primary key
@@ -47,10 +47,10 @@ func NewProjectCache(size int, ttl time.Duration) (*ProjectCache, error) {
 		secretKeyToID: sync.Map{},
 	}
 
-	// Create cache with eviction callback to clean up secondary index
+	// Create cache with eviction callback to clean up indices
 	onEvict := func(id types.ID, info *database.ProjectInfo) {
 		// When an entry is evicted from primary cache (by TTL or LRU),
-		// remove it from the secondary index as well
+		// remove it from the indices as well
 		pc.apiKeyToID.Delete(info.PublicKey)
 		pc.secretKeyToID.Delete(info.SecretKey)
 	}
