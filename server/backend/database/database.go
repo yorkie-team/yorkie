@@ -80,6 +80,9 @@ var (
 
 	// ErrMemberAlreadyExists is returned when the project member already exists.
 	ErrMemberAlreadyExists = errors.AlreadyExists("project member already exists").WithCode("ErrMemberAlreadyExists")
+
+	// ErrInvalidMemberRole is returned when the project member role is invalid.
+	ErrInvalidMemberRole = errors.InvalidArgument("invalid project member role").WithCode("ErrInvalidMemberRole")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -199,7 +202,7 @@ type Database interface {
 		projectID types.ID,
 		userID types.ID,
 		invitedBy types.ID,
-		role string,
+		role MemberRole,
 	) (*MemberInfo, error)
 
 	// ListMemberInfos returns all members of the project.
@@ -220,7 +223,7 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		userID types.ID,
-		role string,
+		role MemberRole,
 	) (*MemberInfo, error)
 
 	// DeleteMemberInfo deletes a member from the project.

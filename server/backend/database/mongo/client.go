@@ -876,13 +876,16 @@ func (c *Client) CreateMemberInfo(
 	projectID types.ID,
 	userID types.ID,
 	invitedBy types.ID,
-	role string,
+	role database.MemberRole,
 ) (*database.MemberInfo, error) {
-	info := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	if err != nil {
+		return nil, err
+	}
 	result, err := c.collection(ColMembers).InsertOne(ctx, bson.M{
 		"project_id": info.ProjectID,
 		"user_id":    info.UserID,
-		"role":       info.Role,
+		"role":       info.Role.String(),
 		"invited_by": info.InvitedBy,
 		"invited_at": info.InvitedAt,
 	})
@@ -944,18 +947,22 @@ func (c *Client) UpdateMemberRole(
 	ctx context.Context,
 	projectID types.ID,
 	userID types.ID,
-	role string,
+	role database.MemberRole,
 ) (*database.MemberInfo, error) {
+	if err := role.Validate(); err != nil {
+		return nil, err
+	}
+
 	result, err := c.collection(ColMembers).UpdateOne(ctx, bson.M{
 		"project_id": projectID,
 		"user_id":    userID,
 	}, bson.M{
-		"$set": bson.M{"role": role},
+		"$set": bson.M{"role": role.String()},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("update project member role: %w", err)
 	}
-	if result.ModifiedCount == 0 {
+	if result.MatchedCount == 0 {
 		return nil, fmt.Errorf("update project member role: %w", database.ErrMemberNotFound)
 	}
 

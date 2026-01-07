@@ -742,7 +742,7 @@ func (d *DB) CreateMemberInfo(
 	projectID types.ID,
 	userID types.ID,
 	invitedBy types.ID,
-	role string,
+	role database.MemberRole,
 ) (*database.MemberInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -756,7 +756,10 @@ func (d *DB) CreateMemberInfo(
 		return nil, fmt.Errorf("create project member: %w", database.ErrMemberAlreadyExists)
 	}
 
-	info := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	if err != nil {
+		return nil, err
+	}
 	info.ID = newID()
 	if err := txn.Insert(tblMembers, info); err != nil {
 		return nil, fmt.Errorf("insert project member: %w", err)
@@ -816,8 +819,12 @@ func (d *DB) UpdateMemberRole(
 	_ context.Context,
 	projectID types.ID,
 	userID types.ID,
-	role string,
+	role database.MemberRole,
 ) (*database.MemberInfo, error) {
+	if err := role.Validate(); err != nil {
+		return nil, err
+	}
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 

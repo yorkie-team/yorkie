@@ -17,19 +17,48 @@
 package database
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
 const (
-	// RoleOwner is the owner role of the project.
-	RoleOwner = "owner"
-	// RoleAdmin is the admin role of the project.
-	RoleAdmin = "admin"
-	// RoleMember is the member role of the project.
-	RoleMember = "member"
+	// Owner is the owner role of the project.
+	Owner MemberRole = "owner"
+	// Admin is the admin role of the project.
+	Admin MemberRole = "admin"
+	// Member is the member role of the project.
+	Member MemberRole = "member"
 )
+
+// MemberRole represents a role of a project member.
+// It is used only in internal layers (business/db) to avoid persisting invalid values.
+type MemberRole string
+
+// String returns the string representation of the role.
+func (r MemberRole) String() string {
+	return string(r)
+}
+
+// Validate validates the given member role.
+func (r MemberRole) Validate() error {
+	switch r {
+	case Owner, Admin, Member:
+		return nil
+	default:
+		return fmt.Errorf("%s: %w", r, ErrInvalidMemberRole)
+	}
+}
+
+// NewMemberRole parses and validates a role string into MemberRole.
+func NewMemberRole(role string) (MemberRole, error) {
+	r := MemberRole(role)
+	if err := r.Validate(); err != nil {
+		return "", err
+	}
+	return r, nil
+}
 
 // MemberInfo is a struct for project member information.
 type MemberInfo struct {
@@ -43,7 +72,7 @@ type MemberInfo struct {
 	UserID types.ID `bson:"user_id"`
 
 	// Role is the role of the user in the project.
-	Role string `bson:"role"`
+	Role MemberRole `bson:"role"`
 
 	// InvitedBy is the ID of the user who invited this member.
 	InvitedBy types.ID `bson:"invited_by"`
@@ -53,14 +82,18 @@ type MemberInfo struct {
 }
 
 // NewMemberInfo creates a new MemberInfo.
-func NewMemberInfo(projectID, userID, invitedBy types.ID, role string) *MemberInfo {
+func NewMemberInfo(projectID, userID, invitedBy types.ID, role MemberRole) (*MemberInfo, error) {
+	if err := role.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &MemberInfo{
 		ProjectID: projectID,
 		UserID:    userID,
 		Role:      role,
 		InvitedBy: invitedBy,
 		InvitedAt: time.Now(),
-	}
+	}, nil
 }
 
 // DeepCopy returns a deep copy of the MemberInfo.
@@ -85,7 +118,7 @@ func (i *MemberInfo) ToMember() *types.Member {
 		ID:        i.ID,
 		ProjectID: i.ProjectID,
 		UserID:    i.UserID,
-		Role:      i.Role,
+		Role:      i.Role.String(),
 		InvitedAt: i.InvitedAt,
 	}
 }

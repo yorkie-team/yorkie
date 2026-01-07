@@ -22,6 +22,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // Invite invites a user to a project with the specified role.
@@ -33,6 +34,11 @@ func Invite(
 	role string,
 	invitedBy types.ID,
 ) (*types.Member, error) {
+	memberRole, err := database.NewMemberRole(role)
+	if err != nil {
+		return nil, err
+	}
+
 	// Find the user by username
 	userInfo, err := be.DB.FindUserInfoByName(ctx, username)
 	if err != nil {
@@ -40,7 +46,7 @@ func Invite(
 	}
 
 	// Create the member in database
-	memberInfo, err := be.DB.CreateMemberInfo(ctx, projectID, userInfo.ID, invitedBy, role)
+	memberInfo, err := be.DB.CreateMemberInfo(ctx, projectID, userInfo.ID, invitedBy, memberRole)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +110,11 @@ func UpdateRole(
 	username string,
 	role string,
 ) (*types.Member, error) {
+	memberRole, err := database.NewMemberRole(role)
+	if err != nil {
+		return nil, err
+	}
+
 	// Find the user by username
 	userInfo, err := be.DB.FindUserInfoByName(ctx, username)
 	if err != nil {
@@ -111,7 +122,7 @@ func UpdateRole(
 	}
 
 	// Update the role
-	memberInfo, err := be.DB.UpdateMemberRole(ctx, projectID, userInfo.ID, role)
+	memberInfo, err := be.DB.UpdateMemberRole(ctx, projectID, userInfo.ID, memberRole)
 	if err != nil {
 		return nil, err
 	}
