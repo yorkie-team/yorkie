@@ -20,9 +20,12 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -228,5 +232,132 @@ func TestAdmin(t *testing.T) {
 
 		// 02. server should return unauthenticated error.
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	})
+}
+
+func TestAdminMember(t *testing.T) {
+	ctx := context.Background()
+
+	adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
+	defer func() { adminCli.Close() }()
+
+	newSlug := func(prefix string) string {
+		// 01. Build a unique slug (lower-case letters and digits only) to satisfy `slug` validation.
+		return fmt.Sprintf("%s%s", prefix, strconv.FormatInt(time.Now().UnixNano(), 10))
+	}
+
+	newUser := func(t *testing.T) (username, password string) {
+		t.Helper()
+		// 01. Create a new user (signup) for member test cases.
+		username = "user" + strconv.FormatInt(time.Now().UnixNano()%1_000_000_000_000, 10)
+		password = "password123!"
+		_, err := adminCli.SignUp(ctx, username, password)
+		assert.NoError(t, err)
+		return username, password
+	}
+
+	t.Run("InviteMember test", func(t *testing.T) {
+		// 01. Create a project.
+		projectName := newSlug("prj")
+		project, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Create a user to invite.
+		username, _ := newUser(t)
+
+		// 03. Invite the user as a member.
+		member, err := adminCli.InviteMember(ctx, projectName, username, "member")
+		assert.NoError(t, err)
+		assert.Equal(t, project.ID, member.ProjectID)
+		assert.Equal(t, username, member.Username)
+		assert.Equal(t, "member", member.Role)
+
+		// 04. Inviting the same user again should fail with AlreadyExists.
+		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	})
+
+	t.Run("ListMembers test", func(t *testing.T) {
+		// 01. Create a project.
+		projectName := newSlug("prj")
+		project, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Create a user and invite as a member.
+		username, _ := newUser(t)
+
+		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		assert.NoError(t, err)
+
+		// 03. List members and verify owner is prepended.
+		memberList, err := adminCli.ListMembers(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Len(t, memberList, 2)
+
+		assert.Equal(t, project.ID, memberList[0].ProjectID)
+		assert.Equal(t, server.DefaultAdminUser, memberList[0].Username)
+		assert.Equal(t, "owner", memberList[0].Role)
+		assert.NotEmpty(t, memberList[0].UserID)
+		assert.Equal(t, memberList[0].UserID, memberList[0].ID)
+
+		// 04. Verify invited member is included.
+		assert.Equal(t, username, memberList[1].Username)
+		assert.Equal(t, "member", memberList[1].Role)
+	})
+
+	t.Run("RemoveMember test", func(t *testing.T) {
+		// 01. Create a project.
+		projectName := newSlug("prj")
+		_, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Create a user and invite as a member.
+		username, _ := newUser(t)
+
+		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		assert.NoError(t, err)
+
+		// 03. Remove the member.
+		err = adminCli.RemoveMember(ctx, projectName, username)
+		assert.NoError(t, err)
+
+		// 04. Verify the member is removed (only owner remains).
+		memberList, err := adminCli.ListMembers(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Len(t, memberList, 1)
+		assert.Equal(t, "owner", memberList[0].Role)
+
+		// 05. Removing the same user again should fail with NotFound.
+		err = adminCli.RemoveMember(ctx, projectName, username)
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	})
+
+	t.Run("UpdateMemberRole test", func(t *testing.T) {
+		// 01. Create a project.
+		projectName := newSlug("prj")
+		_, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Create a user and invite as a member.
+		username, _ := newUser(t)
+
+		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		assert.NoError(t, err)
+
+		// 03. Update member role and verify the response.
+		updated, err := adminCli.UpdateMemberRole(ctx, projectName, username, "admin")
+		assert.NoError(t, err)
+		assert.Equal(t, username, updated.Username)
+		assert.Equal(t, "admin", updated.Role)
+
+		// 04. Verify the updated role is reflected in list members.
+		memberList, err := adminCli.ListMembers(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Len(t, memberList, 2)
+		assert.Equal(t, "admin", memberList[1].Role)
+
+		// 05. Updating role for a non-existent user should fail with NotFound.
+		_, err = adminCli.UpdateMemberRole(ctx, projectName, "nonexistentuser123", "admin")
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 }
