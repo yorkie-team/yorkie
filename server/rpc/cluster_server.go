@@ -104,7 +104,7 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	// NOTE(hackerwins): If the project does not have an attachment limit,
-	// removing the document by removeIfNotAttached does not guarantee that
+	// removing the document by RemoveOnDetach does not guarantee that
 	// the document is not attached to the client.
 	var status document.StatusType = document.StatusDetached
 	if project.RemoveOnDetach {

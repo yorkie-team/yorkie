@@ -1825,7 +1825,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		// 04. Check exclude client behavior with attaching state
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, c1.ID)
 		assert.NoError(t, err)
-		assert.False(t, attached, "IsDocumentAttachedOrAttaching should return false when excluding the only attaching client")
+		assert.False(t, attached, "should return false when excluding the only attaching client")
 
 		// 05. Complete the attach process
 		c1, err = db.FindClientInfoByRefKey(ctx, c1.RefKey())
