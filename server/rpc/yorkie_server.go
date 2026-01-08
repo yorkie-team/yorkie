@@ -624,7 +624,7 @@ func (s *yorkieServer) DetachDocument(
 	// the document is not attached to the client.
 	var status document.StatusType = document.StatusDetached
 	if req.Msg.RemoveIfNotAttached {
-		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
+		isAttached, err := documents.IsDocumentAttachedOrAttaching(ctx, s.backend, docKey, clientInfo.ID)
 		if err != nil {
 			return nil, err
 		}

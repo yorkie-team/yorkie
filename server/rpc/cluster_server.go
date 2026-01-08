@@ -108,7 +108,7 @@ func (s *clusterServer) DetachDocument(
 	// the document is not attached to the client.
 	var status document.StatusType = document.StatusDetached
 	if project.RemoveOnDetach {
-		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, refKey, clientInfo.ID)
+		isAttached, err := documents.IsDocumentAttachedOrAttaching(ctx, s.backend, refKey, clientInfo.ID)
 		if err != nil {
 			return nil, err
 		}

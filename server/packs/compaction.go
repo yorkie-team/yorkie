@@ -51,7 +51,7 @@ func Compact(
 	docInfo *database.DocInfo,
 ) error {
 	// 1. Check if the document is attached.
-	isAttached, err := be.DB.IsDocumentAttached(ctx, types.DocRefKey{
+	isAttached, err := be.DB.IsDocumentAttachedOrAttaching(ctx, types.DocRefKey{
 		ProjectID: projectID,
 		DocID:     docInfo.ID,
 	}, "")
