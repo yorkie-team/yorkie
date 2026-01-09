@@ -19,6 +19,8 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,6 +41,22 @@ const (
 	deletesKey = "deletes"
 )
 
+const (
+	// projectPrefix is the common prefix for all yorkie packages
+	projectPrefix = "github.com/yorkie-team/yorkie/"
+
+	// trackedPackagePrefix is the prefix for all yorkie server packages
+	trackedPackagePrefix = "server/"
+
+	// maxStackDepth is the maximum number of stack frames to capture
+	maxStackDepth = 10
+)
+
+// excludedPackages contains package patterns to exclude from stack traces.
+var excludedPackages = []string{
+	"backend/database/mongo",
+}
+
 // QueryMonitor represents a MongoDB query monitor.
 type QueryMonitor struct {
 	logger       logging.Logger
@@ -51,6 +69,7 @@ type commandInfo struct {
 	collection string
 	operation  string
 	filter     string
+	pcs        []uintptr // Raw program counters (cheap to capture)
 	startTime  time.Time
 }
 
@@ -95,13 +114,12 @@ func (m *QueryMonitor) CreateCommandMonitor() *event.CommandMonitor {
 
 			if m.config.SlowQueryThreshold > 0 && evt.Duration > m.config.SlowQueryThreshold {
 				if info, exists := m.commandCache.Get(evt.RequestID); exists {
-					m.logger.Warnf("SLOW: %d %s %s %s: %dms",
-						evt.RequestID,
-						evt.CommandName,
-						info.collection,
-						info.filter,
-						duration,
-					)
+					callStack := formatCallStack(info.pcs)
+					if callStack != "" {
+						callStack = fmt.Sprintf("[%s]", callStack)
+					}
+					m.logger.Warnf("SLOW: %d %s %s %s %s: %dms",
+						evt.RequestID, evt.CommandName, info.collection, info.filter, callStack, duration)
 				} else {
 					m.logger.Warnf("SLOW: %d %s: %dms", evt.RequestID, evt.CommandName, duration)
 				}
@@ -155,10 +173,15 @@ func (m *QueryMonitor) isExpectedFailure(evt *event.CommandFailedEvent) bool {
 
 // extractQueryInfo extracts collection name and basic filter information from MongoDB command
 func (m *QueryMonitor) extractQueryInfo(evt *event.CommandStartedEvent) *commandInfo {
+	// Capture raw program counters (cheap operation, ~0.5-1μs)
+	pcs := make([]uintptr, maxStackDepth)
+	n := runtime.Callers(2, pcs)
+
 	info := &commandInfo{
 		collection: evt.DatabaseName,
 		operation:  evt.CommandName,
 		filter:     "{}",
+		pcs:        pcs[:n],
 		startTime:  time.Now(),
 	}
 
@@ -187,6 +210,71 @@ func (m *QueryMonitor) extractQueryInfo(evt *event.CommandStartedEvent) *command
 	}
 
 	return info
+}
+
+// formatCallStack formats the call stack from program counters.
+// This is an expensive operation and should only be called for slow queries.
+func formatCallStack(pcs []uintptr) string {
+	if len(pcs) == 0 {
+		return ""
+	}
+
+	frames := runtime.CallersFrames(pcs)
+	var stack []string
+
+	for {
+		frame, more := frames.Next()
+
+		if isTrackedFrame(frame.Function) {
+			funcName := formatFunctionName(frame.Function)
+			stack = append(stack, funcName)
+		}
+
+		if !more {
+			break
+		}
+	}
+
+	if len(stack) == 0 {
+		return ""
+	}
+
+	// Reverse to show RPC -> ... -> DB order
+	slices.Reverse(stack)
+	return strings.Join(stack, " -> ")
+}
+
+// isTrackedFrame checks if the function belongs to a tracked package
+func isTrackedFrame(fn string) bool {
+	if !strings.HasPrefix(fn, projectPrefix) {
+		return false
+	}
+
+	relativeFn := strings.TrimPrefix(fn, projectPrefix)
+
+	// Check if the function matches any excluded package pattern
+	for _, excluded := range excludedPackages {
+		if strings.Contains(relativeFn, excluded) {
+			return false
+		}
+	}
+
+	if strings.HasPrefix(relativeFn, trackedPackagePrefix) {
+		return true
+	}
+
+	return false
+}
+
+// formatFunctionName formats a full function name to a shorter, readable format
+func formatFunctionName(fn string) string {
+	// Remove project prefix
+	fn = strings.TrimPrefix(fn, projectPrefix)
+
+	// Remove tracked package prefix for brevity
+	fn = strings.TrimPrefix(fn, trackedPackagePrefix)
+
+	return fn
 }
 
 // extractFilterKeys extracts just the field names from filter for logging
