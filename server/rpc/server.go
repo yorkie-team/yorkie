@@ -55,12 +55,16 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	)
 
 	yorkieInterceptor := interceptors.NewYorkieServiceInterceptor(be)
+	adminInterceptor := interceptors.NewAdminServiceInterceptor(be, tokenManager)
+	clusterInterceptor := interceptors.NewClusterServiceInterceptor(be)
+	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []connect.HandlerOption{
 		connect.WithInterceptors(
-			interceptors.NewAdminServiceInterceptor(be, tokenManager),
+			adminInterceptor,
 			yorkieInterceptor,
-			interceptors.NewDefaultInterceptor(),
+			clusterInterceptor,
+			defaultInterceptor,
 		),
 	}
 
