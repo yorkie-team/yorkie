@@ -97,33 +97,6 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, doc3))
 	})
 
-	t.Run("detach removeIfNotAttached flag test", func(t *testing.T) {
-		// 01. create a document and attach it to c1
-		ctx := context.Background()
-		doc := document.New(helper.TestKey(t))
-		err := c1.Attach(ctx, doc)
-		assert.NoError(t, err)
-		assert.True(t, doc.IsAttached())
-
-		// 02. detach with removeIfNotAttached option false
-		err = c1.Detach(ctx, doc)
-		assert.NoError(t, err)
-		assert.False(t, doc.IsAttached())
-		assert.Equal(t, document.StatusDetached, doc.Status())
-
-		// 03. attach again to c1 and check if it is attached normally
-		doc = document.New(helper.TestKey(t))
-		err = c1.Attach(ctx, doc)
-		assert.NoError(t, err)
-		assert.True(t, doc.IsAttached())
-
-		// 04. detach with removeIfNotAttached option true
-		err = c1.Detach(ctx, doc, client.WithRemoveIfNotAttached())
-		assert.NoError(t, err)
-		assert.False(t, doc.IsAttached())
-		assert.Equal(t, document.StatusRemoved, doc.Status())
-	})
-
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))

@@ -138,8 +138,8 @@ func TestClient(t *testing.T) {
 		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("IsDocumentAttached test", func(t *testing.T) {
-		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
+	t.Run("IsDocumentAttachedOrAttaching test", func(t *testing.T) {
+		testcases.RunIsDocumentAttachedOrAttachingTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("FindClientInfosByAttachedDocRefKey test", func(t *testing.T) {

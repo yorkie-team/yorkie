@@ -2095,15 +2095,18 @@ func (c *Client) FindDocInfosByQuery(
 	}, nil
 }
 
-// IsDocumentAttached returns whether the given document is attached to clients.
-func (c *Client) IsDocumentAttached(
+// IsDocumentAttachedOrAttaching returns whether the given document is attached or attaching to clients.
+func (c *Client) IsDocumentAttachedOrAttaching(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
 	filter := bson.M{
-		"project_id":    docRefKey.ProjectID,
-		"attached_docs": docRefKey.DocID,
+		"project_id": docRefKey.ProjectID,
+		"$or": bson.A{
+			bson.M{"attached_docs": docRefKey.DocID},
+			bson.M{clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttaching},
+		},
 	}
 
 	if excludeClientID != "" {

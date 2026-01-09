@@ -614,17 +614,17 @@ func (s *yorkieServer) DetachDocument(
 
 	// 02. Set the document status if it is not attached.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	if project.HasAttachmentLimit() || req.Msg.RemoveIfNotAttached {
+	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 	}
 
 	// NOTE(hackerwins): If the project does not have an attachment limit,
-	// removing the document by removeIfNotAttached does not guarantee that
+	// removing the document by RemoveOnDetach does not guarantee that
 	// the document is not attached to the client.
 	var status document.StatusType = document.StatusDetached
-	if req.Msg.RemoveIfNotAttached {
-		isAttached, err := documents.IsDocumentAttached(ctx, s.backend, docKey, clientInfo.ID)
+	if project.RemoveOnDetach {
+		isAttached, err := documents.IsDocumentAttachedOrAttaching(ctx, s.backend, docKey, clientInfo.ID)
 		if err != nil {
 			return nil, err
 		}

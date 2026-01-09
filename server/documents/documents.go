@@ -517,7 +517,7 @@ func RemoveDocument(
 		return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)
 	}
 
-	isAttached, err := be.DB.IsDocumentAttached(ctx, refKey, "")
+	isAttached, err := be.DB.IsDocumentAttachedOrAttaching(ctx, refKey, "")
 	if err != nil {
 		return err
 	}
@@ -528,14 +528,14 @@ func RemoveDocument(
 	return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)
 }
 
-// IsDocumentAttached returns true if the given document is attached to any client.
-func IsDocumentAttached(
+// IsDocumentAttachedOrAttaching returns true if the given document is attached or attaching to any client.
+func IsDocumentAttachedOrAttaching(
 	ctx context.Context,
 	be *backend.Backend,
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
-	return be.DB.IsDocumentAttached(ctx, docRefKey, excludeClientID)
+	return be.DB.IsDocumentAttachedOrAttaching(ctx, docRefKey, excludeClientID)
 }
 
 // FindAttachedClientCount returns the number of attached clients for the given document.

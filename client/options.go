@@ -183,12 +183,6 @@ type DetachOption func(*DetachOptions)
 
 // DetachOptions configures how we set up the document.
 type DetachOptions struct {
-	removeIfNotAttached bool
-}
-
-// WithRemoveIfNotAttached configures the removeIfNotAttached of the document.
-func WithRemoveIfNotAttached() DetachOption {
-	return func(o *DetachOptions) { o.removeIfNotAttached = true }
 }
 
 // SyncOptions is an option for sync. It contains the key of the resource to

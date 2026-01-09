@@ -191,7 +191,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 
 // RemoveDocument removes the given document from this client.
 func (i *ClientInfo) RemoveDocument(docID types.ID) error {
-	if err := i.EnsureDocumentAttached(docID); err != nil {
+	if err := i.EnsureDocumentAttachedOrAttaching(docID); err != nil {
 		return err
 	}
 

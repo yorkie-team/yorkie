@@ -1054,7 +1054,7 @@ func (d *DB) FindCompactionCandidates(
 		}
 
 		// Check if document is attached to any client
-		isAttached, err := d.IsDocumentAttached(ctx, types.DocRefKey{
+		isAttached, err := d.IsDocumentAttachedOrAttaching(ctx, types.DocRefKey{
 			ProjectID: info.ProjectID,
 			DocID:     info.ID,
 		}, types.ID(""))
@@ -1972,8 +1972,8 @@ func (d *DB) FindDocInfosByQuery(
 	}, nil
 }
 
-// IsDocumentAttached returns whether the document is attached to clients.
-func (d *DB) IsDocumentAttached(
+// IsDocumentAttachedOrAttaching returns whether the document is attached or attaching to clients.
+func (d *DB) IsDocumentAttachedOrAttaching(
 	_ context.Context,
 	refKey types.DocRefKey,
 	excludeClientID types.ID,
@@ -1998,7 +1998,8 @@ func (d *DB) IsDocumentAttached(
 		if clientDocInfo == nil {
 			continue
 		}
-		if clientDocInfo.Status == database.DocumentAttached {
+		if clientDocInfo.Status == database.DocumentAttached ||
+			clientDocInfo.Status == database.DocumentAttaching {
 			return true, nil
 		}
 	}

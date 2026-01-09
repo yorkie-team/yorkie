@@ -588,10 +588,9 @@ func (c *Client) detachDocument(ctx context.Context, d *document.Document, opts 
 	res, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
-			ClientId:            c.id.String(),
-			DocumentId:          attachment.resourceID.String(),
-			ChangePack:          pbChangePack,
-			RemoveIfNotAttached: opts.removeIfNotAttached,
+			ClientId:   c.id.String(),
+			DocumentId: attachment.resourceID.String(),
+			ChangePack: pbChangePack,
 		}), c.options.APIKey, d.Key().String()))
 	if err != nil {
 		return err

@@ -372,8 +372,8 @@ type Database interface {
 		pageSize int,
 	) (*types.SearchResult[*DocInfo], error)
 
-	// IsDocumentAttached returns true if the document is attached to clients.
-	IsDocumentAttached(
+	// IsDocumentAttachedOrAttaching returns true if the document is attached or attaching to clients.
+	IsDocumentAttachedOrAttaching(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,

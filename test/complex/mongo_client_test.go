@@ -132,8 +132,8 @@ func TestClientWithShardedDB(t *testing.T) {
 		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("IsDocumentAttached test", func(t *testing.T) {
-		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
+	t.Run("IsDocumentAttachedOrAttaching test", func(t *testing.T) {
+		testcases.RunIsDocumentAttachedOrAttachingTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("FindDocInfoByRefKey with duplicate ID test", func(t *testing.T) {
