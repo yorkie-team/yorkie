@@ -114,14 +114,12 @@ func (m *QueryMonitor) CreateCommandMonitor() *event.CommandMonitor {
 
 			if m.config.SlowQueryThreshold > 0 && evt.Duration > m.config.SlowQueryThreshold {
 				if info, exists := m.commandCache.Get(evt.RequestID); exists {
-					m.logger.Warnf("SLOW: %d %s %s %s [%s]: %dms ",
-						evt.RequestID,
-						evt.CommandName,
-						info.collection,
-						info.filter,
-						formatCallStack(info.pcs),
-						duration,
-					)
+					callStack := formatCallStack(info.pcs)
+					if callStack != "" {
+						callStack = fmt.Sprintf("[%s]", callStack)
+					}
+					m.logger.Warnf("SLOW: %d %s %s %s %s: %dms",
+						evt.RequestID, evt.CommandName, info.collection, info.filter, callStack, duration)
 				} else {
 					m.logger.Warnf("SLOW: %d %s: %dms", evt.RequestID, evt.CommandName, duration)
 				}
