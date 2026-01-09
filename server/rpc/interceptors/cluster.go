@@ -104,7 +104,6 @@ func (i *ClusterServiceInterceptor) WrapStreamingHandler(
 			return next(ctx, conn)
 		}
 
-		start := gotime.Now()
 		ctx = i.buildContext(ctx)
 
 		err := next(ctx, conn)
@@ -118,14 +117,6 @@ func (i *ClusterServiceInterceptor) WrapStreamingHandler(
 				split[2],
 				code,
 				i.backend.Config.Hostname,
-			)
-			i.backend.Metrics.ObserveServerHandledResponseSeconds(
-				"server_stream",
-				split[1],
-				split[2],
-				code,
-				i.backend.Config.Hostname,
-				gotime.Since(start).Seconds(),
 			)
 		}
 
