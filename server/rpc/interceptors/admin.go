@@ -103,12 +103,13 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
 			code := connecthelper.CodeOf(err)
-			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
+			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code, i.backend.Config.Hostname)
 			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
 				split[1],
 				split[2],
 				code,
+				i.backend.Config.Hostname,
 				gotime.Since(start).Seconds(),
 			)
 		}
@@ -159,6 +160,7 @@ func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHan
 				split[1],
 				split[2],
 				connecthelper.CodeOf(err),
+				i.backend.Config.Hostname,
 			)
 		}
 

@@ -86,12 +86,13 @@ func (i *YorkieServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Una
 
 		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
 			code := connecthelper.CodeOf(err)
-			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code)
+			i.backend.Metrics.AddServerHandledCounter("unary", split[1], split[2], code, i.backend.Config.Hostname)
 			i.backend.Metrics.ObserveServerHandledResponseSeconds(
 				"unary",
 				split[1],
 				split[2],
 				code,
+				i.backend.Config.Hostname,
 				gotime.Since(start).Seconds(),
 			)
 		}
@@ -144,6 +145,7 @@ func (i *YorkieServiceInterceptor) WrapStreamingHandler(
 				split[1],
 				split[2],
 				connecthelper.CodeOf(err),
+				i.backend.Config.Hostname,
 			)
 		}
 
