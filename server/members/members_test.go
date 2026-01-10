@@ -47,15 +47,15 @@ func TestMembers(t *testing.T) {
 		username2 := fmt.Sprintf("%s-u2", t.Name())
 
 		// 01. Create users.
-		_, err := db.CreateUserInfo(ctx, username1, "pw")
+		u1, err := db.CreateUserInfo(ctx, username1, "pw")
 		assert.NoError(t, err)
-		_, err = db.CreateUserInfo(ctx, username2, "pw")
+		u2, err := db.CreateUserInfo(ctx, username2, "pw")
 		assert.NoError(t, err)
 
-		// 02. Create members directly (inviting is link-only).
-		_, err = db.CreateMemberInfo(ctx, projectID, types.ID("000000000000000000000101"), invitedBy, database.Member)
+		// 02. Create members directly
+		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
-		_, err = db.CreateMemberInfo(ctx, projectID, types.ID("000000000000000000000102"), invitedBy, database.Admin)
+		_, err = db.CreateMemberInfo(ctx, projectID, u2.ID, invitedBy, database.Admin)
 		assert.NoError(t, err)
 
 		// 03. List.
