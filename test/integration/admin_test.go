@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -256,6 +257,15 @@ func TestAdminMember(t *testing.T) {
 		return username, password
 	}
 
+	findByUsername := func(list []*types.Member, username string) (*types.Member, bool) {
+		for _, m := range list {
+			if m.Username == username {
+				return m, true
+			}
+		}
+		return nil, false
+	}
+
 	t.Run("Create and Accept the Invite test", func(t *testing.T) {
 		// 01. Create a project.
 		projectName := newSlug("prj")
@@ -290,14 +300,12 @@ func TestAdminMember(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, memberList, 2) // Owner + invited user
 
-		found := false
-		for _, m := range memberList {
-			if m.Username == username {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found)
+		owner, ok := findByUsername(memberList, server.DefaultAdminUser)
+		assert.True(t, ok)
+		assert.Equal(t, "owner", owner.Role)
+
+		_, ok = findByUsername(memberList, username)
+		assert.True(t, ok)
 
 		// 06. Accepting again should be idempotent.
 		member2, err := userCli.AcceptInvite(ctx, token)
@@ -329,20 +337,22 @@ func TestAdminMember(t *testing.T) {
 		_, err = userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 
-		// 03. List members and verify owner is prepended.
+		// 03. List members.
 		memberList, err := adminCli.ListMembers(ctx, projectName)
 		assert.NoError(t, err)
 		assert.Len(t, memberList, 2)
 
-		assert.Equal(t, project.ID, memberList[0].ProjectID)
-		assert.Equal(t, server.DefaultAdminUser, memberList[0].Username)
-		assert.Equal(t, "owner", memberList[0].Role)
-		assert.NotEmpty(t, memberList[0].UserID)
-		assert.Equal(t, memberList[0].UserID, memberList[0].ID)
+		owner, ok := findByUsername(memberList, server.DefaultAdminUser)
+		assert.True(t, ok)
+		assert.Equal(t, project.ID, owner.ProjectID)
+		assert.Equal(t, "owner", owner.Role)
+		assert.NotEmpty(t, owner.UserID)
 
 		// 04. Verify invited member is included.
-		assert.Equal(t, username, memberList[1].Username)
-		assert.Equal(t, "member", memberList[1].Role)
+		invited, ok := findByUsername(memberList, username)
+		assert.True(t, ok)
+		assert.Equal(t, project.ID, invited.ProjectID)
+		assert.Equal(t, "member", invited.Role)
 	})
 
 	t.Run("RemoveMember test", func(t *testing.T) {
@@ -377,7 +387,11 @@ func TestAdminMember(t *testing.T) {
 		memberList, err := adminCli.ListMembers(ctx, projectName)
 		assert.NoError(t, err)
 		assert.Len(t, memberList, 1)
-		assert.Equal(t, "owner", memberList[0].Role)
+		owner, ok := findByUsername(memberList, server.DefaultAdminUser)
+		assert.True(t, ok)
+		assert.Equal(t, "owner", owner.Role)
+		_, ok = findByUsername(memberList, username)
+		assert.False(t, ok)
 
 		// 05. Removing the same user again should fail with NotFound.
 		err = adminCli.RemoveMember(ctx, projectName, username)
@@ -418,7 +432,13 @@ func TestAdminMember(t *testing.T) {
 		memberList, err := adminCli.ListMembers(ctx, projectName)
 		assert.NoError(t, err)
 		assert.Len(t, memberList, 2)
-		assert.Equal(t, "admin", memberList[1].Role)
+		owner, ok := findByUsername(memberList, server.DefaultAdminUser)
+		assert.True(t, ok)
+		assert.Equal(t, "owner", owner.Role)
+
+		invited, ok := findByUsername(memberList, username)
+		assert.True(t, ok)
+		assert.Equal(t, "admin", invited.Role)
 
 		// 05. Updating role for a non-existent user should fail with NotFound.
 		_, err = adminCli.UpdateMemberRole(ctx, projectName, "nonexistentuser123", "admin")

@@ -57,13 +57,19 @@ func NewInviteInfo(projectID types.ID,
 	if err := role.Validate(); err != nil {
 		return nil, err
 	}
+
+	var copiedExpiresAt *time.Time
+	if expiresAt != nil {
+		t := *expiresAt
+		copiedExpiresAt = &t
+	}
 	return &InviteInfo{
 		ProjectID: projectID,
 		Token:     token,
 		Role:      role,
 		CreatedBy: createdBy,
 		CreatedAt: time.Now(),
-		ExpiresAt: expiresAt,
+		ExpiresAt: copiedExpiresAt,
 	}, nil
 }
 

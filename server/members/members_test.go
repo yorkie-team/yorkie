@@ -42,7 +42,11 @@ func TestMembers(t *testing.T) {
 	invitedBy := types.ID("000000000000000000000002")
 
 	t.Run("List test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000011")
+		// 00. Create project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), invitedBy)
+		assert.NoError(t, err)
+		projectID := project.ID
+
 		username1 := fmt.Sprintf("%s-u1", t.Name())
 		username2 := fmt.Sprintf("%s-u2", t.Name())
 
@@ -65,7 +69,11 @@ func TestMembers(t *testing.T) {
 	})
 
 	t.Run("UpdateRole test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000012")
+		// 00. Create project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), invitedBy)
+		assert.NoError(t, err)
+		projectID := project.ID
+
 		username := fmt.Sprintf("%s-u1", t.Name())
 
 		// 01. Create user and member.
@@ -81,7 +89,11 @@ func TestMembers(t *testing.T) {
 	})
 
 	t.Run("Remove test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000013")
+		// 00. Create project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), invitedBy)
+		assert.NoError(t, err)
+		projectID := project.ID
+
 		username := fmt.Sprintf("%s-u1", t.Name())
 
 		// 01. Create user and member.
@@ -100,11 +112,15 @@ func TestMembers(t *testing.T) {
 	})
 
 	t.Run("UpdateRole invalid role test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000015")
+		// 00. Create project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), invitedBy)
+		assert.NoError(t, err)
+		projectID := project.ID
+
 		username := fmt.Sprintf("%s-u1", t.Name())
 
 		// 01. Create user.
-		_, err := db.CreateUserInfo(ctx, username, "pw")
+		_, err = db.CreateUserInfo(ctx, username, "pw")
 		assert.NoError(t, err)
 
 		// 02. UpdateRole with invalid role.
