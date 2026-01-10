@@ -54,6 +54,9 @@ func NewInviteInfo(projectID types.ID,
 	createdBy types.ID,
 	expiresAt *time.Time,
 ) (*InviteInfo, error) {
+	if token == "" {
+		return nil, ErrInvalidInviteToken
+	}
 	if err := role.Validate(); err != nil {
 		return nil, err
 	}

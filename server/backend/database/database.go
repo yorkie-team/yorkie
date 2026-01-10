@@ -95,6 +95,9 @@ var (
 
 	// ErrInvalidInviteExpireOpt is returned when the invite expire option is invalid.
 	ErrInvalidInviteExpireOpt = errors.InvalidArgument("invalid invite expire opt").WithCode("ErrInvalidInviteExpireOpt")
+
+	// ErrInvalidInviteToken is returned when the invite token is invalid.
+	ErrInvalidInviteToken = errors.InvalidArgument("invalid invite token").WithCode("ErrInvalidInviteToken")
 )
 
 // Database represents database which reads or saves Yorkie data.

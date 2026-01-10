@@ -722,6 +722,19 @@ func RunCreateInviteInfoTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("empty token test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Empty token should be rejected.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "", database.Member, dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidInviteToken.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+
 	t.Run("duplicate token test", func(t *testing.T) {
 		ctx := context.Background()
 
