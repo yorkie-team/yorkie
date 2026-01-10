@@ -1,6 +1,6 @@
 ---
 title: document-client-lifecycle
-target-version: 0.6.23
+target-version: 0.6.43
 ---
 
 <!-- Make sure to append document link in design README.md after creating the document. -->
@@ -52,12 +52,14 @@ This diagram consists of the following elements:
 - **Document: Attaching / Client: Activated**
 - The client is attempting to attach to a document.
 - If it fails, `Attach(retry)` is possible. On success, it transitions to the `Attached` state.
+- `Detach`, `Remove`, and `Deactivate` are also allowed from this state (e.g., to clean up partial failure residue).
 
 ### Document Attached
 
 - **Document: Attached / Client: Activated**
 - The document is successfully attached to the client.
-- Only in this state are `Detach`, `Remove`, `Deactivate`, and `PushPull` operations allowed.
+- `Detach`, `Remove`, `Deactivate`, and `PushPull` operations are allowed.
+- `PushPull` is only allowed in this state.
 
 ### Document Detached
 
@@ -99,7 +101,7 @@ From any document state, if the client is deactivated via `Deactivate()`, the sy
 
 ## Document Deletion Behavior
 
-Documents can only be deleted in the `Attached` state. Deletion is soft and proceeds as follows:
+Documents can be deleted in either the `Attaching` or `Attached` state. Deletion is soft and proceeds as follows:
 
 1. The client calls the `RemoveDocument` API to request document deletion (`IsRemoved = true`).
 2. The server sets the document’s `docInfo.RemovedAt` field to the current time, marking it as soft-deleted.
@@ -107,7 +109,7 @@ Documents can only be deleted in the `Attached` state. Deletion is soft and proc
 4. After the configured period, a housekeeping process performs actual deletion (hard delete) of the document and its data.
 
 > [!NOTE]
-> 📌 Documents cannot be removed from the `Detached` state. Deletion requests must be made only in the `Attached` state.
+> 📌 Documents cannot be removed from the `Detached` state. Deletion requests can be made in either the `Attaching` or `Attached` state.
 
 ### Key - ID Mapping Changes
 
@@ -119,10 +121,11 @@ In Yorkie, clients and documents follow the lifecycle below:
 
 - Clients can repeatedly be `Activated` and `Deactivated`.
 - Documents start from the `nil` or `Detached` state, go through the `Attaching` state, and finally reach the `Attached` state.
-  - Only in the Attached state are `Detach`, `Remove`, `Deactivate`, and `PushPull` operations allowed.
+  - `Detach`, `Remove`, and `Deactivate` are allowed from both `Attaching` and `Attached` states.
+  - `PushPull` is only allowed in the `Attached` state.
 
 Reattaching a detached document using the same instance is not allowed; you must create a new Document instance to attach.
 
-Document deletion is only possible in the Attached state. Deleted documents enter the Removed state and are handled as soft-deleted. After a set period, they are physically deleted by a background process.
+Document deletion is possible in either the Attaching or Attached state. Deleted documents enter the Removed state and are handled as soft-deleted. After a set period, they are physically deleted by a background process.
 
 With the introduction of document deletion, the Key-ID relationship has shifted from 1:1 to 1:N, and using the ID is now required for document identification.
