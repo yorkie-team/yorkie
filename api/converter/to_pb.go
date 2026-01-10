@@ -44,6 +44,27 @@ func ToUser(user *types.User) *api.User {
 	}
 }
 
+// ToMember converts the given model format to Protobuf format.
+func ToMember(member *types.Member) *api.Member {
+	return &api.Member{
+		Id:        member.ID.String(),
+		ProjectId: member.ProjectID.String(),
+		UserId:    member.UserID.String(),
+		Username:  member.Username,
+		Role:      member.Role,
+		InvitedAt: timestamppb.New(member.InvitedAt),
+	}
+}
+
+// ToMembers converts the given model format to Protobuf format.
+func ToMembers(members []*types.Member) []*api.Member {
+	var pbMembers []*api.Member
+	for _, member := range members {
+		pbMembers = append(pbMembers, ToMember(member))
+	}
+	return pbMembers
+}
+
 // ToProjects converts the given model to Protobuf.
 func ToProjects(projects []*types.Project) []*api.Project {
 	var pbProjects []*api.Project

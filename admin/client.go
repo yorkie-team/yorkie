@@ -253,6 +253,82 @@ func (c *Client) RotateProjectKeys(
 	return converter.FromProject(response.Msg.Project), nil
 }
 
+// ListMembers lists all members of the project.
+func (c *Client) ListMembers(
+	ctx context.Context,
+	projectName string,
+) ([]*types.Member, error) {
+	response, err := c.client.ListMembers(ctx, connect.NewRequest(&api.ListMembersRequest{
+		ProjectName: projectName,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromMembers(response.Msg.Members), nil
+}
+
+// RemoveMember removes a member from the project.
+func (c *Client) RemoveMember(
+	ctx context.Context,
+	projectName string,
+	username string,
+) error {
+	_, err := c.client.RemoveMember(ctx, connect.NewRequest(&api.RemoveMemberRequest{
+		ProjectName: projectName,
+		Username:    username,
+	}))
+	return err
+}
+
+// UpdateMemberRole updates the role of a project member.
+func (c *Client) UpdateMemberRole(
+	ctx context.Context,
+	projectName string,
+	username string,
+	role string,
+) (*types.Member, error) {
+	response, err := c.client.UpdateMemberRole(ctx, connect.NewRequest(&api.UpdateMemberRoleRequest{
+		ProjectName: projectName,
+		Username:    username,
+		Role:        role,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromMember(response.Msg.Member), nil
+}
+
+// CreateInvite creates a reusable invite for the project.
+func (c *Client) CreateInvite(
+	ctx context.Context,
+	projectName string,
+	role string,
+	expireOption api.InviteExpireOption,
+) (string, error) {
+	response, err := c.client.CreateInvite(ctx, connect.NewRequest(&api.CreateInviteRequest{
+		ProjectName:  projectName,
+		Role:         role,
+		ExpireOption: expireOption,
+	}))
+	if err != nil {
+		return "", err
+	}
+	return response.Msg.Token, nil
+}
+
+// AcceptInvite accepts an invite token and adds the user as a member of the project.
+func (c *Client) AcceptInvite(ctx context.Context, token string) (*types.Member, error) {
+	response, err := c.client.AcceptInvite(ctx, connect.NewRequest(&api.AcceptInviteRequest{
+		Token: token,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return converter.FromMember(response.Msg.Member), nil
+}
+
 // CreateDocument creates a new document.
 func (c *Client) CreateDocument(
 	ctx context.Context,

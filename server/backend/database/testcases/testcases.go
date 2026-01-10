@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	gotime "time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	pkgerrors "github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -475,6 +477,347 @@ func RunFindChangesBetweenServerSeqsTest(
 		)
 		assert.NoError(t, err)
 		assert.Len(t, loadedChanges, 5)
+	})
+}
+
+// RunCreateMemberInfoTest runs the CreateMemberInfo test for the given db.
+func RunCreateMemberInfoTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and a user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create member.
+		m1, err := db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+		assert.Equal(t, database.Member, m1.Role)
+	})
+
+	t.Run("duplicate test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and a user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create member.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+
+		// 03. Duplicate should fail (unique constraint).
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.Equal(t, pkgerrors.ErrCodeAlreadyExists, pkgerrors.StatusOf(err))
+	})
+
+	t.Run("invalid role test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and a user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Invalid role should be rejected.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.MemberRole("invalid-role"))
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidMemberRole.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+
+	t.Run("concurrency test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and a user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Concurrently try to create the same member.
+		const n = 20
+		var wg sync.WaitGroup
+		wg.Add(n)
+		errs := make(chan error, n)
+		for i := 0; i < n; i++ {
+			go func() {
+				defer wg.Done()
+				_, err := db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+				errs <- err
+			}()
+		}
+		wg.Wait()
+		close(errs)
+
+		// 03. Only one should succeed, the rest should be AlreadyExists.
+		success := 0
+		alreadyExists := 0
+		for err := range errs {
+			if err == nil {
+				success++
+				continue
+			}
+			if pkgerrors.StatusOf(err) == pkgerrors.ErrCodeAlreadyExists {
+				alreadyExists++
+			}
+		}
+		assert.Equal(t, 1, success)
+		assert.Equal(t, n-1, alreadyExists)
+
+		// 04. Verify only one member exists (uses ListMemberInfos as an assertion helper).
+		list, err := db.ListMemberInfos(ctx, project.ID)
+		assert.NoError(t, err)
+		assert.Len(t, list, 1)
+	})
+}
+
+// RunListMemberInfosTest runs the ListMemberInfos test for the given db.
+func RunListMemberInfosTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and users.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+		u2, err := db.CreateUserInfo(ctx, t.Name()+"-u2", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create members.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+		_, err = db.CreateMemberInfo(ctx, project.ID, u2.ID, dummyOwnerID, database.Admin)
+		assert.NoError(t, err)
+
+		// 03. List members.
+		list, err := db.ListMemberInfos(ctx, project.ID)
+		assert.NoError(t, err)
+		assert.Len(t, list, 2)
+	})
+
+	t.Run("empty test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project only.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. List should be empty.
+		list, err := db.ListMemberInfos(ctx, project.ID)
+		assert.NoError(t, err)
+		assert.Len(t, list, 0)
+	})
+}
+
+// RunUpdateMemberRoleTest runs the UpdateMemberRole test for the given db.
+func RunUpdateMemberRoleTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create member.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+
+		// 03. Update role.
+		updated, err := db.UpdateMemberRole(ctx, project.ID, u1.ID, database.Admin)
+		assert.NoError(t, err)
+		assert.Equal(t, database.Admin, updated.Role)
+	})
+
+	t.Run("invalid role test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create member.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+
+		// 03. Invalid role should be rejected.
+		_, err = db.UpdateMemberRole(ctx, project.ID, u1.ID, database.MemberRole("invalid-role"))
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidMemberRole.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+
+	t.Run("not found test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and user (but do not create member).
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Update should fail with NotFound.
+		_, err = db.UpdateMemberRole(ctx, project.ID, u1.ID, database.Admin)
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+	})
+}
+
+// RunDeleteMemberInfoTest runs the DeleteMemberInfo test for the given db.
+func RunDeleteMemberInfoTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and user.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Create member.
+		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+
+		// 03. Delete member.
+		assert.NoError(t, db.DeleteMemberInfo(ctx, project.ID, u1.ID))
+
+		// 04. Ensure deleted.
+		_, err = db.FindMemberInfo(ctx, project.ID, u1.ID)
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+	})
+
+	t.Run("not found test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and user (but do not create member).
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		// 02. Delete should fail with NotFound.
+		err = db.DeleteMemberInfo(ctx, project.ID, u1.ID)
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+	})
+}
+
+// RunCreateInviteInfoTest runs the CreateInviteInfo test for the given db.
+func RunCreateInviteInfoTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Create invite.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("empty token test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Empty token should be rejected.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "", database.Member, dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidInviteToken.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+
+	t.Run("duplicate token test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Create invite.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+
+		// 03. Duplicate should fail.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeAlreadyExists, pkgerrors.StatusOf(err))
+	})
+
+	t.Run("invalid role test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Invalid role should be rejected.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.MemberRole("invalid-role"), dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidMemberRole.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+}
+
+// RunFindInviteInfoByTokenTest runs the FindInviteInfoByToken test for the given db.
+func RunFindInviteInfoByTokenTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and invite.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+
+		// 02. Find invite.
+		info, err := db.FindInviteInfoByToken(ctx, "tok-"+t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, project.ID, info.ProjectID)
+		assert.Equal(t, database.Member, info.Role)
+	})
+
+	t.Run("not found test", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := db.FindInviteInfoByToken(ctx, "tok-"+t.Name())
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+	})
+}
+
+// RunDeleteExpiredInviteInfosTest runs the DeleteExpiredInviteInfos test for the given db.
+func RunDeleteExpiredInviteInfosTest(t *testing.T, db database.Database) {
+	t.Run("delete expired invites test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and two invites (one expired, one not).
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		expiredAt := gotime.Now().Add(-1 * gotime.Minute)
+		futureAt := gotime.Now().Add(1 * gotime.Hour)
+
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-expired-"+t.Name(), database.Member, dummyOwnerID, &expiredAt)
+		assert.NoError(t, err)
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-future-"+t.Name(), database.Member, dummyOwnerID, &futureAt)
+		assert.NoError(t, err)
+
+		// 02. Delete expired.
+		deleted, err := db.DeleteExpiredInviteInfos(ctx, gotime.Now())
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), deleted)
+
+		// 03. Validate remaining.
+		_, err = db.FindInviteInfoByToken(ctx, "tok-expired-"+t.Name())
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+
+		_, err = db.FindInviteInfoByToken(ctx, "tok-future-"+t.Name())
+		assert.NoError(t, err)
 	})
 }
 

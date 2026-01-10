@@ -736,6 +736,261 @@ func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	return infos, nil
 }
 
+// CreateMemberInfo creates a new project member.
+func (d *DB) CreateMemberInfo(
+	_ context.Context,
+	projectID types.ID,
+	userID types.ID,
+	invitedBy types.ID,
+	role database.MemberRole,
+) (*database.MemberInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Check if member already exists
+	existing, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("create project member: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("create project member: %w", database.ErrMemberAlreadyExists)
+	}
+
+	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	if err != nil {
+		return nil, err
+	}
+	info.ID = newID()
+	if err := txn.Insert(tblMembers, info); err != nil {
+		return nil, fmt.Errorf("insert project member: %w", err)
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// ListMemberInfos returns all members of the project.
+func (d *DB) ListMemberInfos(
+	_ context.Context,
+	projectID types.ID,
+) ([]*database.MemberInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblMembers, "project_id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	var infos []*database.MemberInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		infos = append(infos, raw.(*database.MemberInfo).DeepCopy())
+	}
+
+	return infos, nil
+}
+
+// FindMemberInfo finds a member of the project.
+func (d *DB) FindMemberInfo(
+	_ context.Context,
+	projectID types.ID,
+	userID types.ID,
+) (*database.MemberInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project member: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("find project member: %w", database.ErrMemberNotFound)
+	}
+
+	return raw.(*database.MemberInfo).DeepCopy(), nil
+}
+
+// UpdateMemberRole updates the role of a project member.
+func (d *DB) UpdateMemberRole(
+	_ context.Context,
+	projectID types.ID,
+	userID types.ID,
+	role database.MemberRole,
+) (*database.MemberInfo, error) {
+	if err := role.Validate(); err != nil {
+		return nil, err
+	}
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("update project member role: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("update project member role: %w", database.ErrMemberNotFound)
+	}
+
+	info := raw.(*database.MemberInfo).DeepCopy()
+	info.Role = role
+
+	if err := txn.Insert(tblMembers, info); err != nil {
+		return nil, fmt.Errorf("update project member role: %w", err)
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// DeleteMemberInfo deletes a member from the project.
+func (d *DB) DeleteMemberInfo(
+	_ context.Context,
+	projectID types.ID,
+	userID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
+	if err != nil {
+		return fmt.Errorf("delete project member: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("delete project member: %w", database.ErrMemberNotFound)
+	}
+
+	if err := txn.Delete(tblMembers, raw); err != nil {
+		return fmt.Errorf("delete project member: %w", err)
+	}
+	txn.Commit()
+
+	return nil
+}
+
+// CreateInviteInfo creates a new reusable invite link for the project.
+func (d *DB) CreateInviteInfo(
+	_ context.Context,
+	projectID types.ID,
+	token string,
+	role database.MemberRole,
+	createdBy types.ID,
+	expiresAt *gotime.Time,
+) (*database.InviteInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Check if invite already exists (token unique).
+	existing, err := txn.First(tblInvites, "token", token)
+	if err != nil {
+		return nil, fmt.Errorf("create invite: %w", err)
+	}
+	if existing != nil {
+		return nil, database.ErrInviteAlreadyExists
+	}
+
+	info, err := database.NewInviteInfo(projectID, token, role, createdBy, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	info.ID = newID()
+	if err := txn.Insert(tblInvites, info); err != nil {
+		return nil, fmt.Errorf("insert invite: %w", err)
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// FindInviteInfoByToken finds an invite by token.
+func (d *DB) FindInviteInfoByToken(_ context.Context, token string) (*database.InviteInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblInvites, "token", token)
+	if err != nil {
+		return nil, fmt.Errorf("find invite: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("find invite: %w", database.ErrInviteNotFound)
+	}
+
+	return raw.(*database.InviteInfo).DeepCopy(), nil
+}
+
+// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
+func (d *DB) DeleteExpiredInviteInfos(_ context.Context, now gotime.Time) (int64, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblInvites, "id")
+	if err != nil {
+		return 0, fmt.Errorf("delete expired invites: %w", err)
+	}
+
+	var deleted int64
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		invite := raw.(*database.InviteInfo)
+		if invite.ExpiresAt == nil {
+			continue
+		}
+		if invite.ExpiresAt.After(now) {
+			continue
+		}
+		if err := txn.Delete(tblInvites, raw); err != nil {
+			return 0, fmt.Errorf("delete expired invites: %w", err)
+		}
+		deleted++
+	}
+
+	txn.Commit()
+	return deleted, nil
+}
+
+// ListProjectInfosByMember returns all projects that the user is a member of.
+func (d *DB) ListProjectInfosByMember(
+	_ context.Context,
+	userID types.ID,
+) ([]*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	// Get all project memberships for the user
+	iter, err := txn.Get(tblMembers, "user_id", userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("list projects by member: %w", err)
+	}
+
+	var infos []*database.ProjectInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		memberInfo := raw.(*database.MemberInfo)
+
+		// Get the project info
+		projectRaw, err := txn.First(tblProjects, "id", memberInfo.ProjectID.String())
+		if err != nil {
+			return nil, fmt.Errorf("find project: %w", err)
+		}
+		if projectRaw != nil {
+			infos = append(infos, projectRaw.(*database.ProjectInfo).DeepCopy())
+		}
+	}
+
+	return infos, nil
+}
+
 // ActivateClient activates a client.
 func (d *DB) ActivateClient(
 	_ context.Context,

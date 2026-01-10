@@ -20,8 +20,10 @@ import "github.com/hashicorp/go-memdb"
 
 var (
 	tblClusterNodes   = "clusternodes"
-	tblProjects       = "projects"
 	tblUsers          = "users"
+	tblProjects       = "projects"
+	tblMembers        = "members"
+	tblInvites        = "invites"
 	tblClients        = "clients"
 	tblDocuments      = "documents"
 	tblSchemas        = "schemas"
@@ -95,6 +97,53 @@ var schema = &memdb.DBSchema{
 					Name:    "username",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "Username"},
+				},
+			},
+		},
+		tblMembers: {
+			Name: tblMembers,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
+				},
+				"user_id": {
+					Name:    "user_id",
+					Indexer: &memdb.StringFieldIndex{Field: "UserID"},
+				},
+				"project_id_user_id": {
+					Name:   "project_id_user_id",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "UserID"},
+						},
+					},
+				},
+			},
+		},
+		tblInvites: {
+			Name: tblInvites,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"token": {
+					Name:    "token",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Token"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
 				},
 			},
 		},
