@@ -88,7 +88,6 @@ func Create(
 }
 
 // Accept accepts an invite token and ensures the user becomes a member of the project.
-// This is idempotent: if the user is already a member, it returns the existing member.
 func Accept(
 	ctx context.Context,
 	be *backend.Backend,
@@ -124,7 +123,6 @@ func Accept(
 }
 
 func newToken() (string, error) {
-	// 32 bytes → 43 chars in base64url (raw, no padding).
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", fmt.Errorf("generate invite token: %w", err)
