@@ -872,6 +872,90 @@ func (d *DB) DeleteMemberInfo(
 	return nil
 }
 
+// CreateInviteInfo creates a new reusable invite link for the project.
+func (d *DB) CreateInviteInfo(
+	_ context.Context,
+	projectID types.ID,
+	token string,
+	role database.MemberRole,
+	createdBy types.ID,
+	expiresAt *gotime.Time,
+) (*database.InviteInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Check if invite already exists (token unique).
+	existing, err := txn.First(tblInvites, "token", token)
+	if err != nil {
+		return nil, fmt.Errorf("create invite: %w", err)
+	}
+	if existing != nil {
+		return nil, database.ErrInviteAlreadyExists
+	}
+
+	info, err := database.NewInviteInfo(projectID, token, role, createdBy, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	info.ID = newID()
+	if err := txn.Insert(tblInvites, info); err != nil {
+		return nil, fmt.Errorf("insert invite: %w", err)
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// FindInviteInfoByToken finds an invite by token.
+func (d *DB) FindInviteInfoByToken(_ context.Context, token string) (*database.InviteInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblInvites, "token", token)
+	if err != nil {
+		return nil, fmt.Errorf("find invite: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("find invite: %w", database.ErrInviteNotFound)
+	}
+
+	return raw.(*database.InviteInfo).DeepCopy(), nil
+}
+
+// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
+func (d *DB) DeleteExpiredInviteInfos(_ context.Context, now gotime.Time) (int64, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblInvites, "id")
+	if err != nil {
+		return 0, fmt.Errorf("delete expired invites: %w", err)
+	}
+
+	var deleted int64
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		invite := raw.(*database.InviteInfo)
+		if invite.ExpiresAt == nil {
+			continue
+		}
+		if invite.ExpiresAt.After(now) {
+			continue
+		}
+		if err := txn.Delete(tblInvites, raw); err != nil {
+			return 0, fmt.Errorf("delete expired invites: %w", err)
+		}
+		deleted++
+	}
+
+	txn.Commit()
+	return deleted, nil
+}
+
 // ListProjectInfosByMember returns all projects that the user is a member of.
 func (d *DB) ListProjectInfosByMember(
 	_ context.Context,

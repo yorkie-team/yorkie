@@ -104,6 +104,18 @@ func TestDB(t *testing.T) {
 		testcases.RunDeleteMemberInfoTest(t, db)
 	})
 
+	t.Run("CreateInviteInfo test", func(t *testing.T) {
+		testcases.RunCreateInviteInfoTest(t, db)
+	})
+
+	t.Run("FindInviteInfoByToken test", func(t *testing.T) {
+		testcases.RunFindInviteInfoByTokenTest(t, db)
+	})
+
+	t.Run("DeleteExpiredInviteInfos test", func(t *testing.T) {
+		testcases.RunDeleteExpiredInviteInfosTest(t, db)
+	})
+
 	t.Run("ActivateClientDeactivateClient test", func(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, db, projectID)
 	})

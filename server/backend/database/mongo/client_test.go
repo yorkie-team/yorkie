@@ -130,6 +130,18 @@ func TestClient(t *testing.T) {
 		testcases.RunDeleteMemberInfoTest(t, cli)
 	})
 
+	t.Run("CreateInviteInfo test", func(t *testing.T) {
+		testcases.RunCreateInviteInfoTest(t, cli)
+	})
+
+	t.Run("FindInviteInfoByToken test", func(t *testing.T) {
+		testcases.RunFindInviteInfoByTokenTest(t, cli)
+	})
+
+	t.Run("DeleteExpiredInviteInfos test", func(t *testing.T) {
+		testcases.RunDeleteExpiredInviteInfosTest(t, cli)
+	})
+
 	t.Run("ActivateClientDeactivateClient test", func(t *testing.T) {
 		testcases.RunActivateClientDeactivateClientTest(t, cli, dummyProjectID)
 	})

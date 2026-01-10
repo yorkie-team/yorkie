@@ -83,6 +83,18 @@ var (
 
 	// ErrInvalidMemberRole is returned when the project member role is invalid.
 	ErrInvalidMemberRole = errors.InvalidArgument("invalid project member role").WithCode("ErrInvalidMemberRole")
+
+	// ErrInviteNotFound is returned when the invite could not be found.
+	ErrInviteNotFound = errors.NotFound("invite not found").WithCode("ErrInviteNotFound")
+
+	// ErrInviteAlreadyExists is returned when an invite with the same token already exists.
+	ErrInviteAlreadyExists = errors.AlreadyExists("invite already exists").WithCode("ErrInviteAlreadyExists")
+
+	// ErrInviteExpired is returned when the invite is expired.
+	ErrInviteExpired = errors.InvalidArgument("invite expired").WithCode("ErrInviteExpired")
+
+	// ErrInvalidInviteExpireOpt is returned when the invite expire option is invalid.
+	ErrInvalidInviteExpireOpt = errors.InvalidArgument("invalid invite expire opt").WithCode("ErrInvalidInviteExpireOpt")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -232,6 +244,22 @@ type Database interface {
 		projectID types.ID,
 		userID types.ID,
 	) error
+
+	// CreateInviteInfo creates a new reusable invite link for the project.
+	CreateInviteInfo(
+		ctx context.Context,
+		projectID types.ID,
+		token string,
+		role MemberRole,
+		createdBy types.ID,
+		expiresAt *gotime.Time,
+	) (*InviteInfo, error)
+
+	// FindInviteInfoByToken finds an invite by token.
+	FindInviteInfoByToken(ctx context.Context, token string) (*InviteInfo, error)
+
+	// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
+	DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error)
 
 	// ListProjectInfosByMember returns all projects that the user is a member of.
 	ListProjectInfosByMember(

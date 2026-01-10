@@ -2493,6 +2493,69 @@ func (c *Client) collection(
 		Collection(name, opts...)
 }
 
+// CreateInviteInfo creates a new reusable invite link for the project.
+func (c *Client) CreateInviteInfo(
+	ctx context.Context,
+	projectID types.ID,
+	token string,
+	role database.MemberRole,
+	createdBy types.ID,
+	expiresAt *gotime.Time,
+) (*database.InviteInfo, error) {
+	info, err := database.NewInviteInfo(projectID, token, role, createdBy, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := bson.M{
+		"project_id": info.ProjectID,
+		"token":      info.Token,
+		"role":       info.Role.String(),
+		"created_by": info.CreatedBy,
+		"created_at": info.CreatedAt,
+	}
+	if info.ExpiresAt != nil {
+		doc["expires_at"] = *info.ExpiresAt
+	}
+
+	result, err := c.collection(ColInvites).InsertOne(ctx, doc)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrInviteAlreadyExists
+		}
+		return nil, fmt.Errorf("create invite: %w", err)
+	}
+
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return info, nil
+}
+
+// FindInviteInfoByToken finds an invite by token.
+func (c *Client) FindInviteInfoByToken(ctx context.Context, token string) (*database.InviteInfo, error) {
+	result := c.collection(ColInvites).FindOne(ctx, bson.M{"token": token})
+
+	info := &database.InviteInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find invite: %w", database.ErrInviteNotFound)
+		}
+		return nil, fmt.Errorf("find invite: %w", err)
+	}
+
+	return info, nil
+}
+
+// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
+func (c *Client) DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error) {
+	res, err := c.collection(ColInvites).DeleteMany(ctx, bson.M{
+		"expires_at": bson.M{"$lte": now},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired invites: %w", err)
+	}
+	return res.DeletedCount, nil
+}
+
 // escapeRegex escapes special characters by putting a backslash in front of it.
 // NOTE(chacha912): (https://github.com/cxr29/scrud/blob/1039f8edaf5eef522275a5a848a0fca0f53224eb/query/util.go#L31-L47)
 func escapeRegex(str string) string {

@@ -41,23 +41,6 @@ func TestMembers(t *testing.T) {
 
 	invitedBy := types.ID("000000000000000000000002")
 
-	t.Run("Invite test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000010")
-		username := fmt.Sprintf("%s-u1", t.Name())
-
-		// 01. Create user to invite.
-		u1, err := db.CreateUserInfo(ctx, username, "pw")
-		assert.NoError(t, err)
-
-		// 02. Invite.
-		member, err := members.Invite(ctx, be, projectID, username, database.Member.String(), invitedBy)
-		assert.NoError(t, err)
-		assert.Equal(t, projectID, member.ProjectID)
-		assert.Equal(t, u1.ID, member.UserID)
-		assert.Equal(t, username, member.Username)
-		assert.Equal(t, database.Member.String(), member.Role)
-	})
-
 	t.Run("List test", func(t *testing.T) {
 		projectID := types.ID("000000000000000000000011")
 		username1 := fmt.Sprintf("%s-u1", t.Name())
@@ -69,10 +52,10 @@ func TestMembers(t *testing.T) {
 		_, err = db.CreateUserInfo(ctx, username2, "pw")
 		assert.NoError(t, err)
 
-		// 02. Invite users.
-		_, err = members.Invite(ctx, be, projectID, username1, database.Member.String(), invitedBy)
+		// 02. Create members directly (inviting is link-only).
+		_, err = db.CreateMemberInfo(ctx, projectID, types.ID("000000000000000000000101"), invitedBy, database.Member)
 		assert.NoError(t, err)
-		_, err = members.Invite(ctx, be, projectID, username2, database.Admin.String(), invitedBy)
+		_, err = db.CreateMemberInfo(ctx, projectID, types.ID("000000000000000000000102"), invitedBy, database.Admin)
 		assert.NoError(t, err)
 
 		// 03. List.
@@ -85,10 +68,10 @@ func TestMembers(t *testing.T) {
 		projectID := types.ID("000000000000000000000012")
 		username := fmt.Sprintf("%s-u1", t.Name())
 
-		// 01. Create user and invite.
-		_, err := db.CreateUserInfo(ctx, username, "pw")
+		// 01. Create user and member.
+		u1, err := db.CreateUserInfo(ctx, username, "pw")
 		assert.NoError(t, err)
-		_, err = members.Invite(ctx, be, projectID, username, database.Member.String(), invitedBy)
+		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
 
 		// 02. Update role.
@@ -101,10 +84,10 @@ func TestMembers(t *testing.T) {
 		projectID := types.ID("000000000000000000000013")
 		username := fmt.Sprintf("%s-u1", t.Name())
 
-		// 01. Create user and invite.
-		_, err := db.CreateUserInfo(ctx, username, "pw")
+		// 01. Create user and member.
+		u1, err := db.CreateUserInfo(ctx, username, "pw")
 		assert.NoError(t, err)
-		_, err = members.Invite(ctx, be, projectID, username, database.Member.String(), invitedBy)
+		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
 
 		// 02. Remove.
@@ -114,20 +97,6 @@ func TestMembers(t *testing.T) {
 		list, err := members.List(ctx, be, projectID)
 		assert.NoError(t, err)
 		assert.Len(t, list, 0)
-	})
-
-	t.Run("Invite invalid role test", func(t *testing.T) {
-		projectID := types.ID("000000000000000000000014")
-		username := fmt.Sprintf("%s-u1", t.Name())
-
-		// 01. Create user to invite.
-		_, err := db.CreateUserInfo(ctx, username, "pw")
-		assert.NoError(t, err)
-
-		// 02. Invite with invalid role.
-		_, err = members.Invite(ctx, be, projectID, username, "invalid-role", invitedBy)
-		assert.Equal(t, errors.ErrCodeInvalidArgument, errors.StatusOf(err))
-		assert.Equal(t, database.ErrInvalidMemberRole.Code(), errors.ErrorInfoOf(err).Code)
 	})
 
 	t.Run("UpdateRole invalid role test", func(t *testing.T) {

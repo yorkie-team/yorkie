@@ -34,7 +34,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/invites"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/members"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -286,35 +288,6 @@ func (s *adminServer) GetProjectStats(
 	}), nil
 }
 
-// InviteMember invites a member to the project.
-func (s *adminServer) InviteMember(
-	ctx context.Context,
-	req *connect.Request[api.InviteMemberRequest],
-) (*connect.Response[api.InviteMemberResponse], error) {
-	user := users.From(ctx)
-
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
-	if err != nil {
-		return nil, err
-	}
-
-	member, err := members.Invite(
-		ctx,
-		s.backend,
-		project.ID,
-		req.Msg.Username,
-		req.Msg.Role,
-		user.ID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return connect.NewResponse(&api.InviteMemberResponse{
-		Member: converter.ToMember(member),
-	}), nil
-}
-
 // RemoveMember removes a member from the project.
 func (s *adminServer) RemoveMember(
 	ctx context.Context,
@@ -401,6 +374,64 @@ func (s *adminServer) UpdateMemberRole(
 	}
 
 	return connect.NewResponse(&api.UpdateMemberRoleResponse{
+		Member: converter.ToMember(member),
+	}), nil
+}
+
+// CreateInvite creates a reusable invite for the project.
+func (s *adminServer) CreateInvite(
+	ctx context.Context,
+	req *connect.Request[api.CreateInviteRequest],
+) (*connect.Response[api.CreateInviteResponse], error) {
+	user := users.From(ctx)
+
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	role, err := database.NewMemberRole(req.Msg.Role)
+	if err != nil {
+		return nil, err
+	}
+
+	var opt invites.ExpireOption
+	switch req.Msg.ExpireOption {
+	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_ONE_HOUR:
+		opt = invites.ExpireOneHour
+	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_TWENTY_FOUR_HOURS:
+		opt = invites.ExpireTwentyFourHours
+	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS:
+		opt = invites.ExpireSevenDays
+	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER:
+		opt = invites.ExpireNever
+	default:
+		return nil, database.ErrInvalidInviteExpireOpt
+	}
+
+	token, _, err := invites.Create(ctx, s.backend, project.ID, role, user.ID, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateInviteResponse{
+		Token: token,
+	}), nil
+}
+
+// AcceptInvite accepts a reusable invite token and adds the user as a member of the project.
+func (s *adminServer) AcceptInvite(
+	ctx context.Context,
+	req *connect.Request[api.AcceptInviteRequest],
+) (*connect.Response[api.AcceptInviteResponse], error) {
+	user := users.From(ctx)
+
+	member, err := invites.Accept(ctx, s.backend, req.Msg.Token, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.AcceptInviteResponse{
 		Member: converter.ToMember(member),
 	}), nil
 }

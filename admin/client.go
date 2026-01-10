@@ -253,25 +253,6 @@ func (c *Client) RotateProjectKeys(
 	return converter.FromProject(response.Msg.Project), nil
 }
 
-// InviteMember invites a member to the project with the specified role.
-func (c *Client) InviteMember(
-	ctx context.Context,
-	projectName string,
-	username string,
-	role string,
-) (*types.Member, error) {
-	response, err := c.client.InviteMember(ctx, connect.NewRequest(&api.InviteMemberRequest{
-		ProjectName: projectName,
-		Username:    username,
-		Role:        role,
-	}))
-	if err != nil {
-		return nil, err
-	}
-
-	return converter.FromMember(response.Msg.Member), nil
-}
-
 // ListMembers lists all members of the project.
 func (c *Client) ListMembers(
 	ctx context.Context,
@@ -316,6 +297,35 @@ func (c *Client) UpdateMemberRole(
 		return nil, err
 	}
 
+	return converter.FromMember(response.Msg.Member), nil
+}
+
+// CreateInvite creates a reusable invite for the project.
+func (c *Client) CreateInvite(
+	ctx context.Context,
+	projectName string,
+	role string,
+	expireOption api.InviteExpireOption,
+) (string, error) {
+	response, err := c.client.CreateInvite(ctx, connect.NewRequest(&api.CreateInviteRequest{
+		ProjectName:  projectName,
+		Role:         role,
+		ExpireOption: expireOption,
+	}))
+	if err != nil {
+		return "", err
+	}
+	return response.Msg.Token, nil
+}
+
+// AcceptInvite accepts an invite token and adds the user as a member of the project.
+func (c *Client) AcceptInvite(ctx context.Context, token string) (*types.Member, error) {
+	response, err := c.client.AcceptInvite(ctx, connect.NewRequest(&api.AcceptInviteRequest{
+		Token: token,
+	}))
+	if err != nil {
+		return nil, err
+	}
 	return converter.FromMember(response.Msg.Member), nil
 }
 

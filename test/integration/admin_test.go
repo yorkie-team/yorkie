@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/admin"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -256,25 +257,42 @@ func TestAdminMember(t *testing.T) {
 		return username, password
 	}
 
-	t.Run("InviteMember test", func(t *testing.T) {
+	t.Run("Create and Accept the Invite test", func(t *testing.T) {
 		// 01. Create a project.
 		projectName := newSlug("prj")
 		project, err := adminCli.CreateProject(ctx, projectName)
 		assert.NoError(t, err)
 
-		// 02. Create a user to invite.
-		username, _ := newUser(t)
+		// 02. Create an invite link (reusable).
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+		)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, token)
 
-		// 03. Invite the user as a member.
-		member, err := adminCli.InviteMember(ctx, projectName, username, "member")
+		// 03. Create a user who will accept the invite.
+		username, password := newUser(t)
+
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+
+		// 04. Accept invite and verify membership.
+		member, err := userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 		assert.Equal(t, project.ID, member.ProjectID)
 		assert.Equal(t, username, member.Username)
 		assert.Equal(t, "member", member.Role)
 
-		// 04. Inviting the same user again should fail with AlreadyExists.
-		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
-		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+		// 05. Accepting again should be idempotent.
+		member2, err := userCli.AcceptInvite(ctx, token)
+		assert.NoError(t, err)
+		assert.Equal(t, member.ID, member2.ID)
 	})
 
 	t.Run("ListMembers test", func(t *testing.T) {
@@ -283,10 +301,22 @@ func TestAdminMember(t *testing.T) {
 		project, err := adminCli.CreateProject(ctx, projectName)
 		assert.NoError(t, err)
 
-		// 02. Create a user and invite as a member.
-		username, _ := newUser(t)
+		// 02. Create invite link and accept as user.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+		)
+		assert.NoError(t, err)
 
-		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		username, password := newUser(t)
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+		_, err = userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 
 		// 03. List members and verify owner is prepended.
@@ -311,10 +341,22 @@ func TestAdminMember(t *testing.T) {
 		_, err := adminCli.CreateProject(ctx, projectName)
 		assert.NoError(t, err)
 
-		// 02. Create a user and invite as a member.
-		username, _ := newUser(t)
+		// 02. Create invite link and accept as user.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+		)
+		assert.NoError(t, err)
 
-		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		username, password := newUser(t)
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+		_, err = userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 
 		// 03. Remove the member.
@@ -338,10 +380,22 @@ func TestAdminMember(t *testing.T) {
 		_, err := adminCli.CreateProject(ctx, projectName)
 		assert.NoError(t, err)
 
-		// 02. Create a user and invite as a member.
-		username, _ := newUser(t)
+		// 02. Create invite link and accept as user.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+		)
+		assert.NoError(t, err)
 
-		_, err = adminCli.InviteMember(ctx, projectName, username, "member")
+		username, password := newUser(t)
+		userCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		assert.NoError(t, err)
+		defer func() { userCli.Close() }()
+		_, err = userCli.LogIn(ctx, username, password)
+		assert.NoError(t, err)
+		_, err = userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 
 		// 03. Update member role and verify the response.

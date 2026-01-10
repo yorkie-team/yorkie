@@ -75,9 +75,6 @@ const (
 	// AdminServiceRotateProjectKeysProcedure is the fully-qualified name of the AdminService's
 	// RotateProjectKeys RPC.
 	AdminServiceRotateProjectKeysProcedure = "/yorkie.v1.AdminService/RotateProjectKeys"
-	// AdminServiceInviteMemberProcedure is the fully-qualified name of the AdminService's InviteMember
-	// RPC.
-	AdminServiceInviteMemberProcedure = "/yorkie.v1.AdminService/InviteMember"
 	// AdminServiceRemoveMemberProcedure is the fully-qualified name of the AdminService's RemoveMember
 	// RPC.
 	AdminServiceRemoveMemberProcedure = "/yorkie.v1.AdminService/RemoveMember"
@@ -87,6 +84,12 @@ const (
 	// AdminServiceUpdateMemberRoleProcedure is the fully-qualified name of the AdminService's
 	// UpdateMemberRole RPC.
 	AdminServiceUpdateMemberRoleProcedure = "/yorkie.v1.AdminService/UpdateMemberRole"
+	// AdminServiceCreateInviteProcedure is the fully-qualified name of the AdminService's CreateInvite
+	// RPC.
+	AdminServiceCreateInviteProcedure = "/yorkie.v1.AdminService/CreateInvite"
+	// AdminServiceAcceptInviteProcedure is the fully-qualified name of the AdminService's AcceptInvite
+	// RPC.
+	AdminServiceAcceptInviteProcedure = "/yorkie.v1.AdminService/AcceptInvite"
 	// AdminServiceCreateDocumentProcedure is the fully-qualified name of the AdminService's
 	// CreateDocument RPC.
 	AdminServiceCreateDocumentProcedure = "/yorkie.v1.AdminService/CreateDocument"
@@ -159,10 +162,11 @@ type AdminServiceClient interface {
 	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	CreateInvite(context.Context, *connect.Request[v1.CreateInviteRequest]) (*connect.Response[v1.CreateInviteResponse], error)
+	AcceptInvite(context.Context, *connect.Request[v1.AcceptInviteRequest]) (*connect.Response[v1.AcceptInviteResponse], error)
 	CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
@@ -245,11 +249,6 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceRotateProjectKeysProcedure,
 			opts...,
 		),
-		inviteMember: connect.NewClient[v1.InviteMemberRequest, v1.InviteMemberResponse](
-			httpClient,
-			baseURL+AdminServiceInviteMemberProcedure,
-			opts...,
-		),
 		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
 			httpClient,
 			baseURL+AdminServiceRemoveMemberProcedure,
@@ -263,6 +262,16 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 		updateMemberRole: connect.NewClient[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse](
 			httpClient,
 			baseURL+AdminServiceUpdateMemberRoleProcedure,
+			opts...,
+		),
+		createInvite: connect.NewClient[v1.CreateInviteRequest, v1.CreateInviteResponse](
+			httpClient,
+			baseURL+AdminServiceCreateInviteProcedure,
+			opts...,
+		),
+		acceptInvite: connect.NewClient[v1.AcceptInviteRequest, v1.AcceptInviteResponse](
+			httpClient,
+			baseURL+AdminServiceAcceptInviteProcedure,
 			opts...,
 		),
 		createDocument: connect.NewClient[v1.CreateDocumentRequest, v1.CreateDocumentResponse](
@@ -380,10 +389,11 @@ type adminServiceClient struct {
 	getProjectStats        *connect.Client[v1.GetProjectStatsRequest, v1.GetProjectStatsResponse]
 	updateProject          *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
 	rotateProjectKeys      *connect.Client[v1.RotateProjectKeysRequest, v1.RotateProjectKeysResponse]
-	inviteMember           *connect.Client[v1.InviteMemberRequest, v1.InviteMemberResponse]
 	removeMember           *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
 	listMembers            *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
 	updateMemberRole       *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
+	createInvite           *connect.Client[v1.CreateInviteRequest, v1.CreateInviteResponse]
+	acceptInvite           *connect.Client[v1.AcceptInviteRequest, v1.AcceptInviteResponse]
 	createDocument         *connect.Client[v1.CreateDocumentRequest, v1.CreateDocumentResponse]
 	listDocuments          *connect.Client[v1.ListDocumentsRequest, v1.ListDocumentsResponse]
 	getDocument            *connect.Client[v1.GetDocumentRequest, v1.GetDocumentResponse]
@@ -456,11 +466,6 @@ func (c *adminServiceClient) RotateProjectKeys(ctx context.Context, req *connect
 	return c.rotateProjectKeys.CallUnary(ctx, req)
 }
 
-// InviteMember calls yorkie.v1.AdminService.InviteMember.
-func (c *adminServiceClient) InviteMember(ctx context.Context, req *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return c.inviteMember.CallUnary(ctx, req)
-}
-
 // RemoveMember calls yorkie.v1.AdminService.RemoveMember.
 func (c *adminServiceClient) RemoveMember(ctx context.Context, req *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
 	return c.removeMember.CallUnary(ctx, req)
@@ -474,6 +479,16 @@ func (c *adminServiceClient) ListMembers(ctx context.Context, req *connect.Reque
 // UpdateMemberRole calls yorkie.v1.AdminService.UpdateMemberRole.
 func (c *adminServiceClient) UpdateMemberRole(ctx context.Context, req *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
 	return c.updateMemberRole.CallUnary(ctx, req)
+}
+
+// CreateInvite calls yorkie.v1.AdminService.CreateInvite.
+func (c *adminServiceClient) CreateInvite(ctx context.Context, req *connect.Request[v1.CreateInviteRequest]) (*connect.Response[v1.CreateInviteResponse], error) {
+	return c.createInvite.CallUnary(ctx, req)
+}
+
+// AcceptInvite calls yorkie.v1.AdminService.AcceptInvite.
+func (c *adminServiceClient) AcceptInvite(ctx context.Context, req *connect.Request[v1.AcceptInviteRequest]) (*connect.Response[v1.AcceptInviteResponse], error) {
+	return c.acceptInvite.CallUnary(ctx, req)
 }
 
 // CreateDocument calls yorkie.v1.AdminService.CreateDocument.
@@ -588,10 +603,11 @@ type AdminServiceHandler interface {
 	GetProjectStats(context.Context, *connect.Request[v1.GetProjectStatsRequest]) (*connect.Response[v1.GetProjectStatsResponse], error)
 	UpdateProject(context.Context, *connect.Request[v1.UpdateProjectRequest]) (*connect.Response[v1.UpdateProjectResponse], error)
 	RotateProjectKeys(context.Context, *connect.Request[v1.RotateProjectKeysRequest]) (*connect.Response[v1.RotateProjectKeysResponse], error)
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
 	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	CreateInvite(context.Context, *connect.Request[v1.CreateInviteRequest]) (*connect.Response[v1.CreateInviteResponse], error)
+	AcceptInvite(context.Context, *connect.Request[v1.AcceptInviteRequest]) (*connect.Response[v1.AcceptInviteResponse], error)
 	CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error)
 	ListDocuments(context.Context, *connect.Request[v1.ListDocumentsRequest]) (*connect.Response[v1.ListDocumentsResponse], error)
 	GetDocument(context.Context, *connect.Request[v1.GetDocumentRequest]) (*connect.Response[v1.GetDocumentResponse], error)
@@ -670,11 +686,6 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.RotateProjectKeys,
 		opts...,
 	)
-	adminServiceInviteMemberHandler := connect.NewUnaryHandler(
-		AdminServiceInviteMemberProcedure,
-		svc.InviteMember,
-		opts...,
-	)
 	adminServiceRemoveMemberHandler := connect.NewUnaryHandler(
 		AdminServiceRemoveMemberProcedure,
 		svc.RemoveMember,
@@ -688,6 +699,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 	adminServiceUpdateMemberRoleHandler := connect.NewUnaryHandler(
 		AdminServiceUpdateMemberRoleProcedure,
 		svc.UpdateMemberRole,
+		opts...,
+	)
+	adminServiceCreateInviteHandler := connect.NewUnaryHandler(
+		AdminServiceCreateInviteProcedure,
+		svc.CreateInvite,
+		opts...,
+	)
+	adminServiceAcceptInviteHandler := connect.NewUnaryHandler(
+		AdminServiceAcceptInviteProcedure,
+		svc.AcceptInvite,
 		opts...,
 	)
 	adminServiceCreateDocumentHandler := connect.NewUnaryHandler(
@@ -812,14 +833,16 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceUpdateProjectHandler.ServeHTTP(w, r)
 		case AdminServiceRotateProjectKeysProcedure:
 			adminServiceRotateProjectKeysHandler.ServeHTTP(w, r)
-		case AdminServiceInviteMemberProcedure:
-			adminServiceInviteMemberHandler.ServeHTTP(w, r)
 		case AdminServiceRemoveMemberProcedure:
 			adminServiceRemoveMemberHandler.ServeHTTP(w, r)
 		case AdminServiceListMembersProcedure:
 			adminServiceListMembersHandler.ServeHTTP(w, r)
 		case AdminServiceUpdateMemberRoleProcedure:
 			adminServiceUpdateMemberRoleHandler.ServeHTTP(w, r)
+		case AdminServiceCreateInviteProcedure:
+			adminServiceCreateInviteHandler.ServeHTTP(w, r)
+		case AdminServiceAcceptInviteProcedure:
+			adminServiceAcceptInviteHandler.ServeHTTP(w, r)
 		case AdminServiceCreateDocumentProcedure:
 			adminServiceCreateDocumentHandler.ServeHTTP(w, r)
 		case AdminServiceListDocumentsProcedure:
@@ -909,10 +932,6 @@ func (UnimplementedAdminServiceHandler) RotateProjectKeys(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RotateProjectKeys is not implemented"))
 }
 
-func (UnimplementedAdminServiceHandler) InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.InviteMember is not implemented"))
-}
-
 func (UnimplementedAdminServiceHandler) RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.RemoveMember is not implemented"))
 }
@@ -923,6 +942,14 @@ func (UnimplementedAdminServiceHandler) ListMembers(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.UpdateMemberRole is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) CreateInvite(context.Context, *connect.Request[v1.CreateInviteRequest]) (*connect.Response[v1.CreateInviteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.CreateInvite is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) AcceptInvite(context.Context, *connect.Request[v1.AcceptInviteRequest]) (*connect.Response[v1.AcceptInviteResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.AcceptInvite is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) CreateDocument(context.Context, *connect.Request[v1.CreateDocumentRequest]) (*connect.Response[v1.CreateDocumentResponse], error) {

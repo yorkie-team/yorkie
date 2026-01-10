@@ -708,6 +708,106 @@ func RunDeleteMemberInfoTest(t *testing.T, db database.Database) {
 	})
 }
 
+// RunCreateInviteInfoTest runs the CreateInviteInfo test for the given db.
+func RunCreateInviteInfoTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Create invite.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("duplicate token test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Create invite.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+
+		// 03. Duplicate should fail.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeAlreadyExists, pkgerrors.StatusOf(err))
+	})
+
+	t.Run("invalid role test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// 02. Invalid role should be rejected.
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.MemberRole("invalid-role"), dummyOwnerID, nil)
+		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
+		assert.Equal(t, database.ErrInvalidMemberRole.Code(), pkgerrors.ErrorInfoOf(err).Code)
+	})
+}
+
+// RunFindInviteInfoByTokenTest runs the FindInviteInfoByToken test for the given db.
+func RunFindInviteInfoByTokenTest(t *testing.T, db database.Database) {
+	t.Run("success test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and invite.
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-"+t.Name(), database.Member, dummyOwnerID, nil)
+		assert.NoError(t, err)
+
+		// 02. Find invite.
+		info, err := db.FindInviteInfoByToken(ctx, "tok-"+t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, project.ID, info.ProjectID)
+		assert.Equal(t, database.Member, info.Role)
+	})
+
+	t.Run("not found test", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := db.FindInviteInfoByToken(ctx, "tok-"+t.Name())
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+	})
+}
+
+// RunDeleteExpiredInviteInfosTest runs the DeleteExpiredInviteInfos test for the given db.
+func RunDeleteExpiredInviteInfosTest(t *testing.T, db database.Database) {
+	t.Run("delete expired invites test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a project and two invites (one expired, one not).
+		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		expiredAt := gotime.Now().Add(-1 * gotime.Minute)
+		futureAt := gotime.Now().Add(1 * gotime.Hour)
+
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-expired-"+t.Name(), database.Member, dummyOwnerID, &expiredAt)
+		assert.NoError(t, err)
+		_, err = db.CreateInviteInfo(ctx, project.ID, "tok-future-"+t.Name(), database.Member, dummyOwnerID, &futureAt)
+		assert.NoError(t, err)
+
+		// 02. Delete expired.
+		deleted, err := db.DeleteExpiredInviteInfos(ctx, gotime.Now())
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), deleted)
+
+		// 03. Validate remaining.
+		_, err = db.FindInviteInfoByToken(ctx, "tok-expired-"+t.Name())
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+
+		_, err = db.FindInviteInfoByToken(ctx, "tok-future-"+t.Name())
+		assert.NoError(t, err)
+	})
+}
+
 // RunFindChangeInfosBetweenServerSeqsTest runs the FindChangeInfosBetweenServerSeqs test for the given db.
 func RunFindChangeInfosBetweenServerSeqsTest(
 	t *testing.T,

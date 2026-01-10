@@ -23,6 +23,7 @@ var (
 	tblUsers          = "users"
 	tblProjects       = "projects"
 	tblMembers        = "members"
+	tblInvites        = "invites"
 	tblClients        = "clients"
 	tblDocuments      = "documents"
 	tblSchemas        = "schemas"
@@ -124,6 +125,25 @@ var schema = &memdb.DBSchema{
 							&memdb.StringFieldIndex{Field: "UserID"},
 						},
 					},
+				},
+			},
+		},
+		tblInvites: {
+			Name: tblInvites,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"token": {
+					Name:    "token",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Token"},
+				},
+				"project_id": {
+					Name:    "project_id",
+					Indexer: &memdb.StringFieldIndex{Field: "ProjectID"},
 				},
 			},
 		},

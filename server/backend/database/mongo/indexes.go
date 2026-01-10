@@ -34,6 +34,8 @@ const (
 	ColProjects = "projects"
 	// ColMembers represents the project members collection in the database.
 	ColMembers = "members"
+	// ColInvites represents the project invites collection in the database.
+	ColInvites = "invites"
 	// ColClients represents the clients collection in the database.
 	ColClients = "clients"
 	// ColDocuments represents the documents collection in the database.
@@ -56,6 +58,7 @@ var Collections = []string{
 	ColProjects,
 	ColUsers,
 	ColMembers,
+	ColInvites,
 	ColClients,
 	ColDocuments,
 	ColSchemas,
@@ -113,6 +116,20 @@ var collectionInfos = []collectionInfo{
 			Keys: bson.D{{Key: "project_id", Value: int32(1)}},
 		}, {
 			Keys: bson.D{{Key: "user_id", Value: int32(1)}},
+		}},
+	},
+	{
+		name: ColInvites,
+		indexes: []mongo.IndexModel{{
+			Keys:    bson.D{{Key: "token", Value: int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bson.D{{Key: "project_id", Value: int32(1)}},
+		}, {
+			Keys: bson.D{{Key: "expires_at", Value: int32(1)}},
+			Options: options.Index().
+				SetExpireAfterSeconds(0).
+				SetName("ttl_expires_at"),
 		}},
 	},
 	{

@@ -25,39 +25,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// Invite invites a user to a project with the specified role.
-func Invite(
-	ctx context.Context,
-	be *backend.Backend,
-	projectID types.ID,
-	username string,
-	role string,
-	invitedBy types.ID,
-) (*types.Member, error) {
-	memberRole, err := database.NewMemberRole(role)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find the user by username
-	userInfo, err := be.DB.FindUserInfoByName(ctx, username)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the member in database
-	memberInfo, err := be.DB.CreateMemberInfo(ctx, projectID, userInfo.ID, invitedBy, memberRole)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to Member and add username
-	member := memberInfo.ToMember()
-	member.Username = userInfo.Username
-
-	return member, nil
-}
-
 // List returns all members of a project.
 func List(
 	ctx context.Context,
