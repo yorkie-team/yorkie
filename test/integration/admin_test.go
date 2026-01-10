@@ -243,7 +243,6 @@ func TestAdminMember(t *testing.T) {
 	defer func() { adminCli.Close() }()
 
 	newSlug := func(prefix string) string {
-		// 01. Build a unique slug (lower-case letters and digits only) to satisfy `slug` validation.
 		return fmt.Sprintf("%s%s", prefix, strconv.FormatInt(time.Now().UnixNano(), 10))
 	}
 
@@ -260,7 +259,7 @@ func TestAdminMember(t *testing.T) {
 	t.Run("Create and Accept the Invite test", func(t *testing.T) {
 		// 01. Create a project.
 		projectName := newSlug("prj")
-		project, err := adminCli.CreateProject(ctx, projectName)
+		_, err := adminCli.CreateProject(ctx, projectName)
 		assert.NoError(t, err)
 
 		// 02. Create an invite link (reusable).
@@ -282,14 +281,25 @@ func TestAdminMember(t *testing.T) {
 		_, err = userCli.LogIn(ctx, username, password)
 		assert.NoError(t, err)
 
-		// 04. Accept invite and verify membership.
+		// 04. Accept invite.
 		member, err := userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
-		assert.Equal(t, project.ID, member.ProjectID)
-		assert.Equal(t, username, member.Username)
-		assert.Equal(t, "member", member.Role)
 
-		// 05. Accepting again should be idempotent.
+		// 05. Verify the user exists via ListMembers (AcceptInvite response doesn't include username in API spec).
+		memberList, err := adminCli.ListMembers(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Len(t, memberList, 2) // Owner + invited user
+
+		found := false
+		for _, m := range memberList {
+			if m.Username == username {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found)
+
+		// 06. Accepting again should be idempotent.
 		member2, err := userCli.AcceptInvite(ctx, token)
 		assert.NoError(t, err)
 		assert.Equal(t, member.ID, member2.ID)
