@@ -37,9 +37,9 @@ import (
 )
 
 func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
-	for i := range b.N {
+	for b.Loop() {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("vv-bench-%d-%d", i, gotime.Now().UnixMilli()))
+		docKey := key.Key(fmt.Sprintf("vv-bench-%d-%d", clientCnt, gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document.
 		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCnt)

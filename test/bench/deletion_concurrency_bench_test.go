@@ -88,9 +88,9 @@ func BenchmarkDeletionConcurrency(b *testing.B) {
 }
 
 func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := range b.N {
+	for b.Loop() {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
+		docKey := key.Key(fmt.Sprintf("text-bench-%d", gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
 		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
@@ -164,9 +164,9 @@ func benchmarkConcurrentTextDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 }
 
 func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := range b.N {
+	for b.Loop() {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
+		docKey := key.Key(fmt.Sprintf("tree-bench-%d", gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
 		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
@@ -244,9 +244,9 @@ func benchmarkConcurrentTreeDeleteRange(b *testing.B, svr *server.Yorkie, cnt, c
 }
 
 func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := range b.N {
+	for b.Loop() {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("text-bench-%d-%d", i, gotime.Now().UnixMilli()))
+		docKey := key.Key(fmt.Sprintf("text-bench-%d", gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
 		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)
@@ -302,9 +302,9 @@ func benchmarkConcurrentTextDeleteAll(b *testing.B, svr *server.Yorkie, cnt, cli
 }
 
 func benchmarkConcurrentTreeDeleteAll(b *testing.B, svr *server.Yorkie, cnt, clientCount int) {
-	for i := range b.N {
+	for b.Loop() {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tree-bench-%d-%d", i, gotime.Now().UnixMilli()))
+		docKey := key.Key(fmt.Sprintf("tree-bench-%d", gotime.Now().UnixMilli()))
 
 		// 1. Activate n clients and attach all clients to the document
 		clients, docs, err := helper.ClientsAndAttachedDocs(ctx, svr.RPCAddr(), docKey, clientCount)

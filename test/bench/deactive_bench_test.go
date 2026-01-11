@@ -56,7 +56,6 @@ func benchmarkDeactivate(
 
 	b.StartTimer()
 	err = c.Deactivate(ctx)
-	b.StopTimer()
 	assert.NoError(b, err)
 }
 
@@ -74,13 +73,13 @@ func BenchmarkDeactivate(b *testing.B) {
 
 	ctx := context.Background()
 	b.Run("deactivate with 100 total 50 attached", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkDeactivate(b, ctx, svr, 100, 50)
 		}
 	})
 
 	b.Run("deactivate with 100 total 100 attached", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkDeactivate(b, ctx, svr, 100, 100)
 		}
 	})

@@ -41,8 +41,8 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func getDocKey(b *testing.B, i int) key.Key {
-	return key.Key(fmt.Sprintf("tests$%s-%d-%d", b.Name(), i, gotime.Now().UnixMilli()))
+func getDocKey(b *testing.B) key.Key {
+	return key.Key(fmt.Sprintf("tests$%s-%d", b.Name(), gotime.Now().UnixMilli()))
 }
 
 func setUpBackend(b *testing.B) *backend.Backend {
@@ -134,10 +134,10 @@ func benchmarkPushChanges(
 	be *backend.Backend,
 	project *types.Project,
 ) {
-	for i := 1; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		ctx := context.Background()
-		docKey := getDocKey(b, i)
+		docKey := getDocKey(b)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		pack := createChangePack(changeCnt, docs[0], b)
 		refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
@@ -157,10 +157,10 @@ func benchmarkPullChanges(
 	be *backend.Backend,
 	project *types.Project,
 ) {
-	for i := 1; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		ctx := context.Background()
-		docKey := getDocKey(b, i)
+		docKey := getDocKey(b)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 2, docKey, b, be)
 		pusherClientInfo, pullerClientInfo := clientInfos[0], clientInfos[1]
 		pusherDoc, pullerDoc := docs[0], docs[1]
@@ -190,10 +190,10 @@ func benchmarkPushSnapshots(
 	be *backend.Backend,
 	project *types.Project,
 ) {
-	for i := 1; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		ctx := context.Background()
-		docKey := getDocKey(b, i)
+		docKey := getDocKey(b)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		docRefKey := types.DocRefKey{
 			ProjectID: project.ID,
@@ -226,10 +226,10 @@ func benchmarkPullSnapshot(
 	be *backend.Backend,
 	project *types.Project,
 ) {
-	for i := 1; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		ctx := context.Background()
-		docKey := getDocKey(b, i)
+		docKey := getDocKey(b)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 2, docKey, b, be)
 		pusherClientInfo, pullerClientInfo := clientInfos[0], clientInfos[1]
 		pusherDoc, pullerDoc := docs[0], docs[1]

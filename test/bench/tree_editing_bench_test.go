@@ -38,13 +38,13 @@ func BenchmarkTree(b *testing.B) {
 		b.ResetTimer()
 
 		b.Run(fmt.Sprintf("%d vertices to protobuf", cnt), func(b *testing.B) {
-			for range b.N {
+			for b.Loop() {
 				_ = converter.ToTreeNodes(root)
 			}
 		})
 
 		b.Run(fmt.Sprintf("%d vertices from protobuf", cnt), func(b *testing.B) {
-			for range b.N {
+			for b.Loop() {
 				pbNodes := converter.ToTreeNodes(root)
 				_, err := converter.FromTreeNodes(pbNodes)
 				assert.NoError(b, err)

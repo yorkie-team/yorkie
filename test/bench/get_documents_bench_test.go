@@ -55,7 +55,6 @@ func benchmarkGetDocuments(
 		ctx,
 		connect.NewRequest(docRequest),
 	)
-	b.StopTimer()
 
 	assert.NoError(b, err)
 	assert.NotNil(b, resp.Msg)
@@ -111,37 +110,37 @@ func BenchmarkGetDocuments(b *testing.B) {
 	}
 
 	b.Run("without root presence 10", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 10, docKeys, testAdminClient, false, false)
 		}
 	})
 
 	b.Run("with root presence 10", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 10, docKeys, testAdminClient, true, true)
 		}
 	})
 
 	b.Run("without root presence 100", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 100, docKeys, testAdminClient, false, false)
 		}
 	})
 
 	b.Run("with root presence 100", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 100, docKeys, testAdminClient, true, true)
 		}
 	})
 
 	b.Run("without root presence 1000", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 1000, docKeys, testAdminClient, false, false)
 		}
 	})
 
 	b.Run("with root presence 1000", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			benchmarkGetDocuments(b, ctx, 1000, docKeys, testAdminClient, true, true)
 		}
 	})
