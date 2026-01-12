@@ -462,14 +462,10 @@ func (d *DB) ListProjectInfos(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.LowerBound(
-		tblProjects,
-		"owner_name",
-		owner.String(),
-		"",
-	)
+	// Get all projects and filter by owner in-memory
+	iter, err := txn.Get(tblProjects, "id")
 	if err != nil {
-		return nil, fmt.Errorf("fetch projects by owner and name: %w", err)
+		return nil, fmt.Errorf("fetch projects: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
