@@ -277,7 +277,7 @@ func TestAdminMember(t *testing.T) {
 			ctx,
 			projectName,
 			"member",
-			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, token)
@@ -324,7 +324,7 @@ func TestAdminMember(t *testing.T) {
 			ctx,
 			projectName,
 			"member",
-			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
 
@@ -366,7 +366,7 @@ func TestAdminMember(t *testing.T) {
 			ctx,
 			projectName,
 			"member",
-			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
 
@@ -409,7 +409,7 @@ func TestAdminMember(t *testing.T) {
 			ctx,
 			projectName,
 			"member",
-			api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER,
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
 
