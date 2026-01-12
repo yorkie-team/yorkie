@@ -715,8 +715,8 @@ func ClientAndAttachedChannel(
 	return c, p, nil
 }
 
-// ClientsAndAttacheChannels creates n clients and attaches them to a new channel.
-func ClientsAndAttacheChannels(
+// ClientsAndAttachedChannels creates n clients and attaches them to a new channel.
+func ClientsAndAttachedChannels(
 	ctx context.Context,
 	rpcAddr string,
 	channelKey key.Key,

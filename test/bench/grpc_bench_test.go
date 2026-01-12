@@ -122,7 +122,7 @@ func BenchmarkRPC(b *testing.B) {
 		cli, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), "doc1")
 		assert.NoError(b, err)
 
-		for range b.N {
+		for b.Loop() {
 			testKey := "testKey"
 			err = doc.Update(func(r *json.Object, p *presence.Presence) error {
 				r.SetNewText(testKey)
@@ -165,7 +165,7 @@ func BenchmarkRPC(b *testing.B) {
 		assert.NoError(b, err)
 
 		// Benchmark: Both clients update their documents concurrently
-		for range b.N {
+		for b.Loop() {
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 
@@ -188,7 +188,7 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("attach large document", func(b *testing.B) {
 		str := strings.Repeat("a", 10485000)
 
-		for range b.N {
+		for b.Loop() {
 			func() {
 				clients := helper.ActiveClients(b, svr.RPCAddr(), 2)
 				c1, c2 := clients[0], clients[1]
@@ -236,7 +236,7 @@ func BenchmarkRPC(b *testing.B) {
 		project, err := adminCli.CreateProject(ctx, "admin-cli-test")
 		assert.NoError(b, err)
 
-		for range b.N {
+		for b.Loop() {
 			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli, project))
 		}
 	})

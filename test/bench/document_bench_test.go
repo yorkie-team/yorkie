@@ -35,7 +35,7 @@ import (
 
 func BenchmarkDocument(b *testing.B) {
 	b.Run("constructor test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 			assert.Equal(b, doc.Checkpoint(), change.InitialCheckpoint)
 			assert.False(b, doc.HasLocalChanges())
@@ -44,7 +44,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("status test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
 			doc.SetStatus(document.StatusAttached)
@@ -53,7 +53,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("equals test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc1 := document.New("d1")
 			doc2 := document.New("d2")
 			doc3 := document.New("d3")
@@ -70,7 +70,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("nested update test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
 			doc := document.New("d1")
@@ -92,7 +92,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("delete test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
@@ -120,7 +120,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("object test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetString("k1", "v1")
@@ -135,7 +135,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("array test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -175,7 +175,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 
 			//           ---------- ins links --------
@@ -219,7 +219,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("text composition test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -239,7 +239,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("rich text test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -333,7 +333,7 @@ func BenchmarkDocument(b *testing.B) {
 	})
 
 	b.Run("counter test", func(b *testing.B) {
-		for range b.N {
+		for b.Loop() {
 			doc := document.New("d1")
 			var integer = 10
 			var long int64 = 5
@@ -531,7 +531,7 @@ func BenchmarkDocumentDeletion(b *testing.B) {
 }
 
 func benchmarkTree(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -552,7 +552,7 @@ func benchmarkTree(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeEditGC(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -584,7 +584,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeSplitGC(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		var builder strings.Builder
@@ -619,7 +619,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkText(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -634,7 +634,7 @@ func benchmarkText(cnt int, b *testing.B) {
 }
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
@@ -662,7 +662,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 }
 
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
@@ -694,7 +694,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 }
 
 func benchmarkArray(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -709,7 +709,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 }
 
 func benchmarkArrayGC(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("1")
@@ -733,7 +733,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 }
 
 func benchmarkCounter(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -748,7 +748,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 }
 
 func benchmarkObject(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -762,7 +762,7 @@ func benchmarkObject(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteAll(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		b.StopTimer()
 		doc := document.New("d1")
 
@@ -788,7 +788,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -816,7 +816,7 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 }
 
 func benchmarkTextDeleteRange(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		// Create text with cnt number of characters
@@ -844,7 +844,7 @@ func benchmarkTextDeleteRange(cnt int, b *testing.B) {
 }
 
 func benchmarkTreeDeleteRange(cnt int, b *testing.B) {
-	for range b.N {
+	for b.Loop() {
 		doc := document.New("d1")
 
 		// Create tree with cnt number of nodes

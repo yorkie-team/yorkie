@@ -60,7 +60,7 @@ func benchmarkChannelAttachDetach(b *testing.B, svr *server.Yorkie, clientCount 
 
 		b.StartTimer()
 		// Create and attach all clients
-		clients, presences, err := helper.ClientsAndAttacheChannels(ctx, svr.RPCAddr(), channelKey, clientCount)
+		clients, presences, err := helper.ClientsAndAttachedChannels(ctx, svr.RPCAddr(), channelKey, clientCount)
 		assert.NoError(b, err)
 
 		// Measure detach performance
@@ -108,7 +108,7 @@ func generateHierarchicalKeyPaths(prefix string, levelCounts []int) []string {
 	currentLevelCount := levelCounts[0]
 	remainingLevels := levelCounts[1:]
 
-	for i := 0; i < currentLevelCount; i++ {
+	for i := range currentLevelCount {
 		var currentPath string
 		if prefix == "" {
 			currentPath = fmt.Sprintf("sub-%d", i)
@@ -163,7 +163,6 @@ func mergeKeyPath(keyPaths []string) string {
 // Count all Presence count of paths root to last leaf(sub-0 ~ sub-0.sub-9.sub-19).
 func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, includeSubPath bool) {
 	ctx := context.Background()
-	b.StopTimer()
 
 	allKeyPaths := generateHierarchicalKeyPaths("", levelCounts)
 	totalChannels := len(allKeyPaths)
@@ -196,18 +195,14 @@ func benchmarkChannelHierarchicalPresenceCount(b *testing.B, levelCounts []int, 
 		}
 	}
 
-	b.StartTimer()
-
 	// Benchmark: Measure count operation performance
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, keyPath := range allKeyPaths {
 			for _, mergedKeyPath := range parseAndMergeKeyPath(key.Key(keyPath)) {
 				_ = manager.SessionCount(types.ChannelRefKey{ProjectID: project.ID, ChannelKey: key.Key(mergedKeyPath)}, includeSubPath)
 			}
 		}
 	}
-
-	b.StopTimer()
 }
 
 func BenchmarkChannelHierarchicalPresenceCount(b *testing.B) {
