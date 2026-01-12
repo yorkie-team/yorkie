@@ -352,7 +352,7 @@ func RunFindProjectInfoByNameTest(
 			assert.NoError(t, err)
 		}
 
-		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
+		_, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-other", t.Name()), otherOwnerID)
 		assert.NoError(t, err)
 
 		// Lists all projects that the dummyOwnerID is the owner.
@@ -360,18 +360,20 @@ func RunFindProjectInfoByNameTest(
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		// Create a new project with unique name
+		projectName := fmt.Sprintf("%s-update-test", t.Name())
+		project, err := db.CreateProjectInfo(ctx, projectName, dummyOwnerID)
 		assert.NoError(t, err)
 
-		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		foundProject, err := db.FindProjectInfoByName(ctx, projectName)
 		assert.NoError(t, err)
-		assert.Equal(t, project.Name, t.Name())
+		assert.Equal(t, foundProject.Name, projectName)
 
 		newName := fmt.Sprintf("%s-%d", t.Name(), 3)
 		fields := &types.UpdatableProjectFields{Name: &newName}
-		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, project.ID, fields)
+		_, err = db.UpdateProjectInfo(ctx, project.ID, fields)
 		assert.NoError(t, err)
-		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, newName)
+		_, err = db.FindProjectInfoByName(ctx, newName)
 		assert.NoError(t, err)
 	})
 
@@ -380,10 +382,9 @@ func RunFindProjectInfoByNameTest(
 
 		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
-		assert.NoError(t, err)
 
-		info2, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		// Now FindProjectInfoByName returns project by name only (no owner filter)
+		info2, err := db.FindProjectInfoByName(ctx, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, info1.ID, info2.ID)
 	})
@@ -1351,7 +1352,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			SnapshotInterval:            &newSnapshotInterval,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err := db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err := db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1378,7 +1379,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			Name: &newName2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1404,7 +1405,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			AuthWebhookURL:  &newAuthWebhookURL2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1443,7 +1444,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1465,7 +1466,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			ClientDeactivateThreshold: &clientDeactivateThreshold2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1485,7 +1486,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			SnapshotInterval:  &newSnapshotInterval2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -1495,13 +1496,8 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 
 		// 07. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		_, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
-
-		// 08. OwnerID not match test
-		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
-		assert.ErrorIs(t, err, database.ErrProjectNotFound)
 	})
 }
 

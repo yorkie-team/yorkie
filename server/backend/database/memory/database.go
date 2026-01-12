@@ -313,15 +313,14 @@ func (d *DB) FindProjectInfoBySecretKey(
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
 	_ context.Context,
-	owner types.ID,
 	name string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "owner_name", owner.String(), name)
+	raw, err := txn.First(tblProjects, "name", name)
 	if err != nil {
-		return nil, fmt.Errorf("find project by owner and name: %w", err)
+		return nil, fmt.Errorf("find project by name: %w", err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
@@ -438,7 +437,7 @@ func (d *DB) CreateProjectInfo(
 
 	// NOTE(hackerwins): Check if the project already exists.
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
-	existing, err := txn.First(tblProjects, "owner_name", owner.String(), name)
+	existing, err := txn.First(tblProjects, "name", name)
 	if err != nil {
 		return nil, fmt.Errorf("find project by owner and name: %w", err)
 	}
@@ -464,24 +463,18 @@ func (d *DB) ListProjectInfos(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.LowerBound(
-		tblProjects,
-		"owner_name",
-		owner.String(),
-		"",
-	)
+	// Get all projects and filter by owner in-memory
+	iter, err := txn.Get(tblProjects, "id")
 	if err != nil {
-		return nil, fmt.Errorf("fetch projects by owner and name: %w", err)
+		return nil, fmt.Errorf("fetch projects: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*database.ProjectInfo).DeepCopy()
-		if info.Owner != owner {
-			break
+		if info.Owner == owner {
+			infos = append(infos, info)
 		}
-
-		infos = append(infos, info)
 	}
 
 	return infos, nil
@@ -490,7 +483,6 @@ func (d *DB) ListProjectInfos(
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(
 	_ context.Context,
-	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -506,14 +498,11 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-	if info.Owner != owner {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
-	}
 
 	if fields.Name != nil {
-		existing, err := txn.First(tblProjects, "owner_name", owner.String(), *fields.Name)
+		existing, err := txn.First(tblProjects, "name", *fields.Name)
 		if err != nil {
-			return nil, fmt.Errorf("find project by owner and name: %w", err)
+			return nil, fmt.Errorf("find project by name: %w", err)
 		}
 		if existing != nil && info.Name != *fields.Name {
 			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectAlreadyExists)
@@ -533,7 +522,6 @@ func (d *DB) UpdateProjectInfo(
 // RotateProjectKeys rotates the API keys of the project.
 func (d *DB) RotateProjectKeys(
 	_ context.Context,
-	owner types.ID,
 	id types.ID,
 	publicKey string,
 	secretKey string,
@@ -541,7 +529,7 @@ func (d *DB) RotateProjectKeys(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// Find project by ID and owner
+	// Find project by ID
 	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
 		return nil, nil, fmt.Errorf("rotate project keys of %s: %w", id, err)
@@ -552,9 +540,6 @@ func (d *DB) RotateProjectKeys(
 
 	prev := raw.(*database.ProjectInfo).DeepCopy()
 	info := prev.DeepCopy()
-	if info.Owner != owner {
-		return nil, nil, database.ErrProjectNotFound
-	}
 
 	// Update project keys
 	info.PublicKey = publicKey

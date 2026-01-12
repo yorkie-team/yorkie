@@ -51,6 +51,18 @@ func (r MemberRole) Validate() error {
 	}
 }
 
+// IsAtLeast checks if the role has at least the given role's permission.
+// Role hierarchy: Owner(3) >= Admin(2) >= Member(1)
+func (r MemberRole) IsAtLeast(role MemberRole) bool {
+	rank := map[MemberRole]int{
+		Owner:  1,
+		Admin:  2,
+		Member: 3,
+	}
+
+	return rank[r] <= rank[role]
+}
+
 // NewMemberRole parses and validates a role string into MemberRole.
 func NewMemberRole(role string) (MemberRole, error) {
 	r := MemberRole(role)

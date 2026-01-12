@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Yorkie Authors. All rights reserved.
+ * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,14 +37,14 @@ func List(
 	}
 
 	members := make([]*types.Member, len(memberInfos))
-	for i, memberInfo := range memberInfos {
+	for i, info := range memberInfos {
 		// Get user info to include username
-		userInfo, err := be.DB.FindUserInfoByID(ctx, memberInfo.UserID)
+		userInfo, err := be.DB.FindUserInfoByID(ctx, info.UserID)
 		if err != nil {
 			return nil, err
 		}
 
-		member := memberInfo.ToMember()
+		member := info.ToMember()
 		member.Username = userInfo.Username
 		members[i] = member
 	}

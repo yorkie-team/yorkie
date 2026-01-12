@@ -202,7 +202,6 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		// When
 		updatedProject, _, err := client.RotateProjectKeys(
 			ctx,
-			dummyProjectID,
 			projectInfo.ID,
 			"new-public-key",
 			"new-secret-key",
@@ -227,34 +226,7 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		// When
 		_, _, err := client.RotateProjectKeys(
 			ctx,
-			dummyProjectID,
 			types.ID("000000000000000000000003"),
-			"new-public-key",
-			"new-secret-key",
-		)
-
-		// Then
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, database.ErrProjectNotFound)
-	})
-
-	t.Run("fail: should return error when user is not owner", func(t *testing.T) {
-		// Given
-		ctx := context.Background()
-		client := setupTestWithDummyData(t)
-		defer func() {
-			assert.NoError(t, client.Close())
-		}()
-
-		// Create a test project
-		projectInfo, err := client.CreateProjectInfo(ctx, "test-project-2", dummyProjectID)
-		assert.NoError(t, err)
-
-		// When
-		_, _, err = client.RotateProjectKeys(
-			ctx,
-			types.ID("000000000000000000000003"),
-			projectInfo.ID,
 			"new-public-key",
 			"new-secret-key",
 		)

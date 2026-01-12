@@ -24,6 +24,7 @@ import (
 	"github.com/lithammer/shortuuid/v4"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/authz"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -80,30 +81,46 @@ func ListProjects(
 	return projects, nil
 }
 
-// GetProject returns a project by the given name.
-func GetProject(
+// ProjectAndRole returns a project by the given name.
+// It checks both ownership and membership to determine access.
+// Returns the project and the user's role (owner, admin, or member).
+func ProjectAndRole(
 	ctx context.Context,
 	be *backend.Backend,
-	owner types.ID,
+	userID types.ID,
 	name string,
-) (*types.Project, error) {
-	info, err := be.DB.FindProjectInfoByName(ctx, owner, name)
+) (*types.Project, database.MemberRole, error) {
+	// Get project and user's role using the authorization helper
+	projectID, role, err := authz.FindUserRoleByName(ctx, be, userID, name)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return info.ToProject(), nil
+	// Get project info
+	info, err := be.DB.FindProjectInfoByID(ctx, projectID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return info.ToProject(), role, nil
 }
 
 // UpdateProject updates a project.
+// Only users with Admin or Owner role can update project settings.
 func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
-	owner types.ID,
+	userID types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {
-	info, err := be.DB.UpdateProjectInfo(ctx, owner, id, fields)
+	// Check permission: Admin or Owner required
+	if err := authz.CheckPermission(ctx, be, userID, id, database.Admin); err != nil {
+		return nil, err
+	}
+
+	// Update project
+	info, err := be.DB.UpdateProjectInfo(ctx, id, fields)
 	if err != nil {
 		return nil, err
 	}
@@ -240,18 +257,24 @@ func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey st
 }
 
 // RotateProjectKeys rotates the API keys of the project.
+// Only users with Admin or Owner role can rotate keys.
 func RotateProjectKeys(
 	ctx context.Context,
 	be *backend.Backend,
-	owner types.ID,
+	userID types.ID,
 	id types.ID,
 ) (*types.Project, *types.Project, error) {
+	// Check permission: Admin or Owner required
+	if err := authz.CheckPermission(ctx, be, userID, id, database.Admin); err != nil {
+		return nil, nil, err
+	}
+
 	// Generate new API keys
 	publicKey := shortuuid.New()
 	secretKey := shortuuid.New()
 
 	// Update project with new keys
-	info, prev, err := be.DB.RotateProjectKeys(ctx, owner, id, publicKey, secretKey)
+	info, prev, err := be.DB.RotateProjectKeys(ctx, id, publicKey, secretKey)
 	if err != nil {
 		return nil, nil, err
 	}
