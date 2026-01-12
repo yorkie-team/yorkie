@@ -365,6 +365,10 @@ func RunFindProjectInfoByNameTest(
 		project, err := db.CreateProjectInfo(ctx, projectName, dummyOwnerID)
 		assert.NoError(t, err)
 
+		// Create a new project with the same name but different owner should fail
+		_, err = db.CreateProjectInfo(ctx, projectName, otherOwnerID)
+		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
+
 		foundProject, err := db.FindProjectInfoByName(ctx, projectName)
 		assert.NoError(t, err)
 		assert.Equal(t, foundProject.Name, projectName)
