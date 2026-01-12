@@ -121,7 +121,6 @@ func TestMain(m *testing.M) {
 
 	project, err = be.DB.UpdateProjectInfo(
 		context.Background(),
-		project.Owner,
 		project.ID,
 		&types.UpdatableProjectFields{
 			SnapshotThreshold: &helper.SnapshotThreshold,

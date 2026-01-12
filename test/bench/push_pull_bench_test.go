@@ -73,7 +73,7 @@ func setUpDefaultProject(b *testing.B, be *backend.Backend, snapshotInterval int
 		SnapshotThreshold: &snapshotThreshold,
 	}
 	ctx := context.Background()
-	projectInfo, err = be.DB.UpdateProjectInfo(ctx, projectInfo.Owner, projectInfo.ID, fields)
+	projectInfo, err = be.DB.UpdateProjectInfo(ctx, projectInfo.ID, fields)
 	assert.NoError(b, err)
 	return projectInfo.ToProject()
 }

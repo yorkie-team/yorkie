@@ -612,12 +612,10 @@ func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey strin
 // FindProjectInfoByName returns a project by name.
 func (c *Client) FindProjectInfoByName(
 	ctx context.Context,
-	owner types.ID,
 	name string,
 ) (*database.ProjectInfo, error) {
 	result := c.collection(ColProjects).FindOne(ctx, bson.M{
-		"name":  name,
-		"owner": owner,
+		"name": name,
 	})
 
 	info := &database.ProjectInfo{}
@@ -658,7 +656,6 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
-	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -674,8 +671,7 @@ func (c *Client) UpdateProjectInfo(
 	updatableFields["updated_at"] = gotime.Now()
 
 	res := c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
-		"_id":   id,
-		"owner": owner,
+		"_id": id,
 	}, bson.M{
 		"$set": updatableFields,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
@@ -699,21 +695,19 @@ func (c *Client) UpdateProjectInfo(
 // RotateProjectKeys rotates the API keys of the project.
 func (c *Client) RotateProjectKeys(
 	ctx context.Context,
-	owner types.ID,
 	id types.ID,
 	publicKey string,
 	secretKey string,
 ) (*database.ProjectInfo, *database.ProjectInfo, error) {
 
 	prevInfo := &database.ProjectInfo{}
-	res := c.collection(ColProjects).FindOne(ctx, bson.M{"_id": id, "owner": owner})
+	res := c.collection(ColProjects).FindOne(ctx, bson.M{"_id": id})
 	if err := res.Decode(prevInfo); err == nil {
 		c.projectCache.Remove(prevInfo.ID)
 	}
 
 	res = c.collection(ColProjects).FindOneAndUpdate(ctx, bson.M{
-		"_id":   id,
-		"owner": owner,
+		"_id": id,
 	}, bson.M{
 		"$set": bson.M{
 			"public_key": publicKey,

@@ -122,29 +122,16 @@ type Database interface {
 	RemoveClusterNodes(ctx context.Context) error
 
 	// FindClusterNodes returns nodes considered active within the given time window.
-	FindClusterNodes(
-		ctx context.Context,
-		window gotime.Duration,
-	) ([]*ClusterNodeInfo, error)
+	FindClusterNodes(ctx context.Context, window gotime.Duration) ([]*ClusterNodeInfo, error)
 
 	// FindProjectInfoByPublicKey returns a project by public key.
-	FindProjectInfoByPublicKey(
-		ctx context.Context,
-		publicKey string,
-	) (*ProjectInfo, error)
+	FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*ProjectInfo, error)
 
 	// FindProjectInfoBySecretKey returns a project by secret key.
-	FindProjectInfoBySecretKey(
-		ctx context.Context,
-		secretKey string,
-	) (*ProjectInfo, error)
+	FindProjectInfoBySecretKey(ctx context.Context, secretKey string) (*ProjectInfo, error)
 
 	// FindProjectInfoByName returns a project by the given name.
-	FindProjectInfoByName(
-		ctx context.Context,
-		owner types.ID,
-		name string,
-	) (*ProjectInfo, error)
+	FindProjectInfoByName(ctx context.Context, name string) (*ProjectInfo, error)
 
 	// FindProjectInfoByID returns a project by the given id. It should not be
 	// used directly by clients because it is not checked if the project is
@@ -153,18 +140,10 @@ type Database interface {
 
 	// EnsureDefaultUserAndProject ensures that the default user and project
 	// exists.
-	EnsureDefaultUserAndProject(
-		ctx context.Context,
-		username,
-		password string,
-	) (*UserInfo, *ProjectInfo, error)
+	EnsureDefaultUserAndProject(ctx context.Context, username, password string) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
-	CreateProjectInfo(
-		ctx context.Context,
-		name string,
-		owner types.ID,
-	) (*ProjectInfo, error)
+	CreateProjectInfo(ctx context.Context, name string, owner types.ID) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all project infos owned by owner.
 	ListProjectInfos(ctx context.Context, owner types.ID) ([]*ProjectInfo, error)
@@ -172,7 +151,6 @@ type Database interface {
 	// UpdateProjectInfo updates the project.
 	UpdateProjectInfo(
 		ctx context.Context,
-		owner types.ID,
 		id types.ID,
 		fields *types.UpdatableProjectFields,
 	) (*ProjectInfo, error)
@@ -180,18 +158,13 @@ type Database interface {
 	// RotateProjectKeys rotates the API keys of the project.
 	RotateProjectKeys(
 		ctx context.Context,
-		owner types.ID,
 		id types.ID,
 		publicKey string,
 		secretKey string,
 	) (*ProjectInfo, *ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
-	CreateUserInfo(
-		ctx context.Context,
-		username string,
-		hashedPassword string,
-	) (*UserInfo, error)
+	CreateUserInfo(ctx context.Context, username string, hashedPassword string) (*UserInfo, error)
 
 	// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
 	GetOrCreateUserInfoByGitHubID(ctx context.Context, githubID string) (*UserInfo, error)
@@ -221,17 +194,10 @@ type Database interface {
 	) (*MemberInfo, error)
 
 	// ListMemberInfos returns all members of the project.
-	ListMemberInfos(
-		ctx context.Context,
-		projectID types.ID,
-	) ([]*MemberInfo, error)
+	ListMemberInfos(ctx context.Context, projectID types.ID) ([]*MemberInfo, error)
 
 	// FindMemberInfo finds a member of the project.
-	FindMemberInfo(
-		ctx context.Context,
-		projectID types.ID,
-		userID types.ID,
-	) (*MemberInfo, error)
+	FindMemberInfo(ctx context.Context, projectID types.ID, userID types.ID) (*MemberInfo, error)
 
 	// UpdateMemberRole updates the role of a project member.
 	UpdateMemberRole(
@@ -242,11 +208,7 @@ type Database interface {
 	) (*MemberInfo, error)
 
 	// DeleteMemberInfo deletes a member from the project.
-	DeleteMemberInfo(
-		ctx context.Context,
-		projectID types.ID,
-		userID types.ID,
-	) error
+	DeleteMemberInfo(ctx context.Context, projectID types.ID, userID types.ID) error
 
 	// CreateInviteInfo creates a new reusable invite link for the project.
 	CreateInviteInfo(
@@ -265,10 +227,7 @@ type Database interface {
 	DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error)
 
 	// ListProjectInfosByMember returns all projects that the user is a member of.
-	ListProjectInfosByMember(
-		ctx context.Context,
-		userID types.ID,
-	) ([]*ProjectInfo, error)
+	ListProjectInfosByMember(ctx context.Context, userID types.ID) ([]*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string, metadata map[string]string) (*ClientInfo, error)
@@ -294,11 +253,7 @@ type Database interface {
 	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
 	// FindActiveClients finds active clients for deactivation checking.
-	FindActiveClients(
-		ctx context.Context,
-		candidatesLimit int,
-		lastClientID types.ID,
-	) ([]*ClientInfo, types.ID, error)
+	FindActiveClients(ctx context.Context, candidatesLimit int, lastClientID types.ID) ([]*ClientInfo, types.ID, error)
 
 	// FindCompactionCandidates finds documents that need compaction.
 	FindCompactionCandidates(
@@ -309,51 +264,25 @@ type Database interface {
 	) ([]*DocInfo, types.ID, error)
 
 	// FindDocInfoByKey finds the document of the given key.
-	FindDocInfoByKey(
-		ctx context.Context,
-		projectID types.ID,
-		docKey key.Key,
-	) (*DocInfo, error)
+	FindDocInfoByKey(ctx context.Context, projectID types.ID, docKey key.Key) (*DocInfo, error)
 
 	// FindDocInfosByKeys finds the documents of the given keys.
-	FindDocInfosByKeys(
-		ctx context.Context,
-		projectID types.ID,
-		docKeys []key.Key,
-	) ([]*DocInfo, error)
+	FindDocInfosByKeys(ctx context.Context, projectID types.ID, docKeys []key.Key) ([]*DocInfo, error)
 
 	// FindDocInfosByIDs finds the documents of the given IDs.
-	FindDocInfosByIDs(
-		ctx context.Context,
-		projectID types.ID,
-		docIDs []types.ID,
-	) ([]*DocInfo, error)
+	FindDocInfosByIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) ([]*DocInfo, error)
 
 	// FindOrCreateDocInfo finds the document or creates it if it does not exist.
-	FindOrCreateDocInfo(
-		ctx context.Context,
-		clientRefKey types.ClientRefKey,
-		docKey key.Key,
-	) (*DocInfo, error)
+	FindOrCreateDocInfo(ctx context.Context, clientRefKey types.ClientRefKey, docKey key.Key) (*DocInfo, error)
 
 	// FindDocInfoByRefKey finds the document of the given refKey.
-	FindDocInfoByRefKey(
-		ctx context.Context,
-		refKey types.DocRefKey,
-	) (*DocInfo, error)
+	FindDocInfoByRefKey(ctx context.Context, refKey types.DocRefKey) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
-	UpdateDocInfoStatusToRemoved(
-		ctx context.Context,
-		refKey types.DocRefKey,
-	) error
+	UpdateDocInfoStatusToRemoved(ctx context.Context, refKey types.DocRefKey) error
 
 	// UpdateDocInfoSchema updates the document schema.
-	UpdateDocInfoSchema(
-		ctx context.Context,
-		refKey types.DocRefKey,
-		schemaKey string,
-	) error
+	UpdateDocInfoSchema(ctx context.Context, refKey types.DocRefKey, schemaKey string) error
 
 	// GetDocumentsCount returns the number of documents in the given project.
 	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)

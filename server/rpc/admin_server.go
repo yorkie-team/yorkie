@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/server/authz"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -206,7 +207,7 @@ func (s *adminServer) GetProject(
 	req *connect.Request[api.GetProjectRequest],
 ) (*connect.Response[api.GetProjectResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.Name)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -295,8 +296,13 @@ func (s *adminServer) RemoveMember(
 ) (*connect.Response[api.RemoveMemberResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
+		return nil, err
+	}
+
+	// Only owner and admin can remove members
+	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -319,7 +325,7 @@ func (s *adminServer) ListMembers(
 ) (*connect.Response[api.ListMembersResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -357,8 +363,13 @@ func (s *adminServer) UpdateMemberRole(
 ) (*connect.Response[api.UpdateMemberRoleResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
+		return nil, err
+	}
+
+	// Only owner and admin can update member roles
+	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -385,8 +396,13 @@ func (s *adminServer) CreateInvite(
 ) (*connect.Response[api.CreateInviteResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
+		return nil, err
+	}
+
+	// Only owner and admin can create invites
+	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -1020,7 +1036,7 @@ func (s *adminServer) ListRevisionsByAdmin(
 ) (*connect.Response[api.ListRevisionsByAdminResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -1064,7 +1080,7 @@ func (s *adminServer) GetRevisionByAdmin(
 ) (*connect.Response[api.GetRevisionByAdminResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -1096,8 +1112,13 @@ func (s *adminServer) RestoreRevisionByAdmin(
 ) (*connect.Response[api.RestoreRevisionByAdminResponse], error) {
 	user := users.From(ctx)
 
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
+		return nil, err
+	}
+
+	// Only owner and admin can restore revisions
+	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
 		return nil, err
 	}
 
