@@ -56,6 +56,9 @@ components:
         Wrapper message for `bool`.
 
          The JSON representation for `BoolValue` is JSON `true` and `false`.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -70,6 +73,9 @@ components:
         Wrapper message for `int32`.
 
          The JSON representation for `Int32Value` is JSON number.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -84,6 +90,9 @@ components:
         Wrapper message for `int64`.
 
          The JSON representation for `Int64Value` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -100,6 +109,9 @@ components:
         Wrapper message for `string`.
 
          The JSON representation for `StringValue` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -208,6 +220,9 @@ components:
         Wrapper message for `uint64`.
 
          The JSON representation for `UInt64Value` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -859,6 +874,43 @@ components:
           title: value
           type: string
       title: JSONElementSimple
+      type: object
+    yorkie.v1.Member:
+      additionalProperties: false
+      description: ""
+      properties:
+        id:
+          additionalProperties: false
+          description: ""
+          title: id
+          type: string
+        invitedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: invited_at
+          type: object
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+        role:
+          additionalProperties: false
+          description: ""
+          title: role
+          type: string
+        userId:
+          additionalProperties: false
+          description: ""
+          title: user_id
+          type: string
+        username:
+          additionalProperties: false
+          description: ""
+          title: username
+          type: string
+      title: Member
       type: object
     yorkie.v1.MetricPoint:
       additionalProperties: false

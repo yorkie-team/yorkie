@@ -876,6 +876,169 @@ func (c *Client) ListUserInfos(
 	return infos, nil
 }
 
+// CreateMemberInfo creates a new project member.
+func (c *Client) CreateMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+	invitedBy types.ID,
+	role database.MemberRole,
+) (*database.MemberInfo, error) {
+	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
+	if err != nil {
+		return nil, err
+	}
+	result, err := c.collection(ColMembers).InsertOne(ctx, bson.M{
+		"project_id": info.ProjectID,
+		"user_id":    info.UserID,
+		"role":       info.Role.String(),
+		"invited_by": info.InvitedBy,
+		"invited_at": info.InvitedAt,
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrMemberAlreadyExists
+		}
+		return nil, fmt.Errorf("create project member: %w", err)
+	}
+
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return info, nil
+}
+
+// ListMemberInfos returns all members of the project.
+func (c *Client) ListMemberInfos(
+	ctx context.Context,
+	projectID types.ID,
+) ([]*database.MemberInfo, error) {
+	cursor, err := c.collection(ColMembers).Find(ctx, bson.M{
+		"project_id": projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	var infos []*database.MemberInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	return infos, nil
+}
+
+// FindMemberInfo finds a member of the project.
+func (c *Client) FindMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+) (*database.MemberInfo, error) {
+	result := c.collection(ColMembers).FindOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	})
+
+	info := &database.MemberInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find project member: %w", database.ErrMemberNotFound)
+		}
+		return nil, fmt.Errorf("find project member: %w", err)
+	}
+
+	return info, nil
+}
+
+// UpdateMemberRole updates the role of a project member.
+func (c *Client) UpdateMemberRole(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+	role database.MemberRole,
+) (*database.MemberInfo, error) {
+	if err := role.Validate(); err != nil {
+		return nil, err
+	}
+
+	result, err := c.collection(ColMembers).UpdateOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	}, bson.M{
+		"$set": bson.M{"role": role.String()},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("update project member role: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return nil, fmt.Errorf("update project member role: %w", database.ErrMemberNotFound)
+	}
+
+	return c.FindMemberInfo(ctx, projectID, userID)
+}
+
+// DeleteMemberInfo deletes a member from the project.
+func (c *Client) DeleteMemberInfo(
+	ctx context.Context,
+	projectID types.ID,
+	userID types.ID,
+) error {
+	result, err := c.collection(ColMembers).DeleteOne(ctx, bson.M{
+		"project_id": projectID,
+		"user_id":    userID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete project member: %w", err)
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("delete project member: %w", database.ErrMemberNotFound)
+	}
+
+	return nil
+}
+
+// ListProjectInfosByMember returns all projects that the user is a member of.
+func (c *Client) ListProjectInfosByMember(
+	ctx context.Context,
+	userID types.ID,
+) ([]*database.ProjectInfo, error) {
+	// Find all project memberships for the user
+	cursor, err := c.collection(ColMembers).Find(ctx, bson.M{
+		"user_id": userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list projects by member: %w", err)
+	}
+
+	var memberInfos []*database.MemberInfo
+	if err := cursor.All(ctx, &memberInfos); err != nil {
+		return nil, fmt.Errorf("list projects by member: %w", err)
+	}
+
+	// Extract project IDs
+	projectIDs := make([]types.ID, 0, len(memberInfos))
+	for _, memberInfo := range memberInfos {
+		projectIDs = append(projectIDs, memberInfo.ProjectID)
+	}
+
+	if len(projectIDs) == 0 {
+		return []*database.ProjectInfo{}, nil
+	}
+
+	// Find all projects
+	projectCursor, err := c.collection(ColProjects).Find(ctx, bson.M{
+		"_id": bson.M{"$in": projectIDs},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find projects: %w", err)
+	}
+
+	var infos []*database.ProjectInfo
+	if err := projectCursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("find projects: %w", err)
+	}
+
+	return infos, nil
+}
+
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(
 	ctx context.Context,
@@ -2337,6 +2500,69 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+// CreateInviteInfo creates a new reusable invite link for the project.
+func (c *Client) CreateInviteInfo(
+	ctx context.Context,
+	projectID types.ID,
+	token string,
+	role database.MemberRole,
+	createdBy types.ID,
+	expiresAt *gotime.Time,
+) (*database.InviteInfo, error) {
+	info, err := database.NewInviteInfo(projectID, token, role, createdBy, expiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := bson.M{
+		"project_id": info.ProjectID,
+		"token":      info.Token,
+		"role":       info.Role.String(),
+		"created_by": info.CreatedBy,
+		"created_at": info.CreatedAt,
+	}
+	if info.ExpiresAt != nil {
+		doc["expires_at"] = *info.ExpiresAt
+	}
+
+	result, err := c.collection(ColInvites).InsertOne(ctx, doc)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrInviteAlreadyExists
+		}
+		return nil, fmt.Errorf("create invite: %w", err)
+	}
+
+	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	return info, nil
+}
+
+// FindInviteInfoByToken finds an invite by token.
+func (c *Client) FindInviteInfoByToken(ctx context.Context, token string) (*database.InviteInfo, error) {
+	result := c.collection(ColInvites).FindOne(ctx, bson.M{"token": token})
+
+	info := &database.InviteInfo{}
+	if err := result.Decode(info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("find invite: %w", database.ErrInviteNotFound)
+		}
+		return nil, fmt.Errorf("find invite: %w", err)
+	}
+
+	return info, nil
+}
+
+// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
+func (c *Client) DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error) {
+	res, err := c.collection(ColInvites).DeleteMany(ctx, bson.M{
+		"expires_at": bson.M{"$lte": now},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired invites: %w", err)
+	}
+	return res.DeletedCount, nil
 }
 
 // escapeRegex escapes special characters by putting a backslash in front of it.

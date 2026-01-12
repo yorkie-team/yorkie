@@ -53,6 +53,27 @@ func FromUser(pbUser *api.User) *types.User {
 	}
 }
 
+// FromMember converts the given Protobuf formats to model format.
+func FromMember(pbMember *api.Member) *types.Member {
+	return &types.Member{
+		ID:        types.ID(pbMember.Id),
+		ProjectID: types.ID(pbMember.ProjectId),
+		UserID:    types.ID(pbMember.UserId),
+		Username:  pbMember.Username,
+		Role:      pbMember.Role,
+		InvitedAt: pbMember.InvitedAt.AsTime(),
+	}
+}
+
+// FromMembers converts the given Protobuf formats to model format.
+func FromMembers(pbMembers []*api.Member) []*types.Member {
+	var members []*types.Member
+	for _, pbMember := range pbMembers {
+		members = append(members, FromMember(pbMember))
+	}
+	return members
+}
+
 // FromProjects converts the given Protobuf formats to model format.
 func FromProjects(pbProjects []*api.Project) []*types.Project {
 	var projects []*types.Project
