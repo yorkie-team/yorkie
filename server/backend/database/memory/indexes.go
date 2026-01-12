@@ -64,8 +64,8 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
 				"name": {
-					Name:   "name",
-					Unique: true,
+					Name:    "name",
+					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "Name"},
 				},
 				"public_key": {
