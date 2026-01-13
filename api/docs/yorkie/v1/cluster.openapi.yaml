@@ -34,18 +34,6 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.ClusterService
-  /yorkie.v1.ClusterService/GetChannel:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.GetChannel.yorkie.v1.ClusterServiceGetChannelRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.ClusterService.GetChannel.yorkie.v1.ClusterServiceGetChannelResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.ClusterService
   /yorkie.v1.ClusterService/GetChannelCount:
     post:
       description: ""
@@ -54,6 +42,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/GetChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.GetChannels.yorkie.v1.ClusterServiceGetChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.GetChannels.yorkie.v1.ClusterServiceGetChannelsResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -126,15 +126,6 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentRequest'
       required: true
-    yorkie.v1.ClusterService.GetChannel.yorkie.v1.ClusterServiceGetChannelRequest:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelRequest'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelRequest'
-      required: true
     yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountRequest:
       content:
         application/json:
@@ -143,6 +134,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountRequest'
+      required: true
+    yorkie.v1.ClusterService.GetChannels.yorkie.v1.ClusterServiceGetChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelsRequest'
       required: true
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentRequest:
       content:
@@ -208,15 +208,6 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachDocumentResponse'
       description: ""
-    yorkie.v1.ClusterService.GetChannel.yorkie.v1.ClusterServiceGetChannelResponse:
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelResponse'
-        application/proto:
-          schema:
-            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelResponse'
-      description: ""
     yorkie.v1.ClusterService.GetChannelCount.yorkie.v1.ClusterServiceGetChannelCountResponse:
       content:
         application/json:
@@ -225,6 +216,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelCountResponse'
+      description: ""
+    yorkie.v1.ClusterService.GetChannels.yorkie.v1.ClusterServiceGetChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceGetChannelsResponse'
       description: ""
     yorkie.v1.ClusterService.GetDocument.yorkie.v1.ClusterServiceGetDocumentResponse:
       content:
@@ -500,15 +500,17 @@ components:
           type: integer
       title: ClusterServiceGetChannelCountResponse
       type: object
-    yorkie.v1.ClusterServiceGetChannelRequest:
+    yorkie.v1.ClusterServiceGetChannelsRequest:
       additionalProperties: false
       description: ""
       properties:
-        channelKey:
+        channelKeys:
           additionalProperties: false
           description: ""
-          title: channel_key
-          type: string
+          items:
+            type: string
+          title: channel_keys
+          type: array
         includeSubPath:
           additionalProperties: false
           description: ""
@@ -519,19 +521,21 @@ components:
           description: ""
           title: project_id
           type: string
-      title: ClusterServiceGetChannelRequest
+      title: ClusterServiceGetChannelsRequest
       type: object
-    yorkie.v1.ClusterServiceGetChannelResponse:
+    yorkie.v1.ClusterServiceGetChannelsResponse:
       additionalProperties: false
       description: ""
       properties:
-        channel:
-          $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+        channels:
           additionalProperties: false
           description: ""
-          title: channel
-          type: object
-      title: ClusterServiceGetChannelResponse
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ChannelSummary'
+            type: object
+          title: channels
+          type: array
+      title: ClusterServiceGetChannelsResponse
       type: object
     yorkie.v1.ClusterServiceGetDocumentRequest:
       additionalProperties: false

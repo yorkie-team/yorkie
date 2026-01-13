@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
+	pkgchannel "github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -787,30 +790,68 @@ func (s *adminServer) GetChannels(
 	req *connect.Request[api.GetChannelsRequest],
 ) (*connect.Response[api.GetChannelsResponse], error) {
 	project := projects.From(ctx)
-
 	includeSubPath := req.Msg.IncludeSubPath
-	channels := make([]*types.ChannelSummary, 0)
+
 	clusterClient, err := s.backend.ClusterClient()
 	if err != nil {
 		return nil, err
 	}
 
-	for _, channelKey := range req.Msg.ChannelKeys {
-		channel, err := clusterClient.GetChannel(
-			ctx,
-			project,
-			key.Key(channelKey),
-			includeSubPath,
-		)
-		if err != nil {
-			return nil, err
-		}
-		channels = append(channels, channel)
+	// Group channel keys by their first key path for istio consistent hash sharding.
+	groups := groupByFirstKeyPath(req.Msg.ChannelKeys)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	channels := make([]*types.ChannelSummary, 0)
+	var firstErr error
+
+	for firstPath, keys := range groups {
+		wg.Add(1)
+		go func(fp string, ks []key.Key) {
+			defer wg.Done()
+
+			result, err := clusterClient.GetChannels(ctx, project, ks, fp, includeSubPath)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			channels = append(channels, result...)
+			mu.Unlock()
+		}(firstPath, keys)
+	}
+
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	return connect.NewResponse(&api.GetChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
 	}), nil
+}
+
+// groupByFirstKeyPath groups channel keys by their first key path segment.
+func groupByFirstKeyPath(channelKeys []string) map[string][]key.Key {
+	groups := make(map[string][]key.Key)
+
+	for _, keyStr := range channelKeys {
+		k := key.Key(keyStr)
+		paths := strings.Split(keyStr, pkgchannel.ChannelKeyPathSeparator)
+		if len(paths) == 0 {
+			continue
+		}
+		firstPath := paths[0]
+		groups[firstPath] = append(groups[firstPath], k)
+	}
+
+	return groups
 }
 
 // ListChanges lists of changes for the given document.

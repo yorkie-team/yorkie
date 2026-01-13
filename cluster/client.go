@@ -32,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -229,31 +228,38 @@ func (c *Client) ListChannels(
 	return channels, nil
 }
 
-// GetChannel gets the channel for the given key.
-func (c *Client) GetChannel(
+// GetChannels gets multiple channels in a single RPC call.
+// All channels should have the same first key path for istio consistent hash sharding.
+func (c *Client) GetChannels(
 	ctx context.Context,
 	project *types.Project,
-	channelKey key.Key,
+	channelKeys []key.Key,
+	firstKeyPath string,
 	includeSubPath bool,
-) (*types.ChannelSummary, error) {
-	channelFirstKeyPath, err := channel.FirstKeyPath(channelKey)
-	if err != nil {
-		return nil, err
+) ([]*types.ChannelSummary, error) {
+	keyStrings := make([]string, len(channelKeys))
+	for i, k := range channelKeys {
+		keyStrings[i] = k.String()
 	}
 
-	response, err := c.client.GetChannel(
+	response, err := c.client.GetChannels(
 		ctx,
-		withShardKey(connect.NewRequest(&api.ClusterServiceGetChannelRequest{
+		withShardKey(connect.NewRequest(&api.ClusterServiceGetChannelsRequest{
 			ProjectId:      project.ID.String(),
-			ChannelKey:     channelKey.String(),
+			ChannelKeys:    keyStrings,
 			IncludeSubPath: includeSubPath,
-		}), project.PublicKey, channelFirstKeyPath),
+		}), project.PublicKey, firstKeyPath),
 	)
 	if err != nil {
 		return nil, fromConnectError(err)
 	}
 
-	return converter.FromChannelSummary(response.Msg.Channel), nil
+	var channels []*types.ChannelSummary
+	for _, ch := range response.Msg.Channels {
+		channels = append(channels, converter.FromChannelSummary(ch))
+	}
+
+	return channels, nil
 }
 
 // GetChannelCount gets the channel count for the given project.

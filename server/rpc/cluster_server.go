@@ -282,25 +282,32 @@ func (s *clusterServer) ListChannels(
 	}), nil
 }
 
-// GetChannel gets the channel for a single channel.
-func (s *clusterServer) GetChannel(
+// GetChannels gets multiple channels in a single RPC call.
+func (s *clusterServer) GetChannels(
 	ctx context.Context,
-	req *connect.Request[api.ClusterServiceGetChannelRequest],
-) (*connect.Response[api.ClusterServiceGetChannelResponse], error) {
+	req *connect.Request[api.ClusterServiceGetChannelsRequest],
+) (*connect.Response[api.ClusterServiceGetChannelsResponse], error) {
 	projectID := types.ID(req.Msg.ProjectId)
-	channelKey := key.Key(req.Msg.ChannelKey)
-	sessionCount := s.backend.Channel.SessionCount(
-		types.ChannelRefKey{
-			ProjectID:  projectID,
-			ChannelKey: channelKey,
-		},
-		req.Msg.IncludeSubPath,
-	)
-	return connect.NewResponse(&api.ClusterServiceGetChannelResponse{
-		Channel: &api.ChannelSummary{
-			Key:          string(channelKey),
+	includeSubPath := req.Msg.IncludeSubPath
+
+	var channels []*api.ChannelSummary
+	for _, channelKeyStr := range req.Msg.ChannelKeys {
+		channelKey := key.Key(channelKeyStr)
+		sessionCount := s.backend.Channel.SessionCount(
+			types.ChannelRefKey{
+				ProjectID:  projectID,
+				ChannelKey: channelKey,
+			},
+			includeSubPath,
+		)
+		channels = append(channels, &api.ChannelSummary{
+			Key:          channelKeyStr,
 			SessionCount: int32(sessionCount),
-		},
+		})
+	}
+
+	return connect.NewResponse(&api.ClusterServiceGetChannelsResponse{
+		Channels: channels,
 	}), nil
 }
 
