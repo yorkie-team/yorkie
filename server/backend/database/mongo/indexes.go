@@ -136,7 +136,7 @@ var collectionInfos = []collectionInfo{
 		name: ColProjects,
 		indexes: []mongo.IndexModel{{
 			Keys:    bson.D{{Key: "name", Value: int32(1)}},
-			Options: options.Index().SetUnique(true).SetName("name_unique"),
+			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bson.D{{Key: "owner", Value: int32(1)}},
 		}, {
