@@ -7,6 +7,27 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.43] - 2026-01-13
+
+### Added
+
+- Enhance project caching with secret key support by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1621
+- Add ClusterServiceInterceptor for internal traffic metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1624
+- Add call path tracing to MongoDB slow query monitoring by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1623
+- Add project member management functionality by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1616
+- Add role-based authorization to project management by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1628
+
+### Changed
+
+- Fix to use b.Loop() in benchmark test introduced in Go 1.24 by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1627
+- Enforce globally unique project names by @kokodak in https://github.com/yorkie-team/yorkie/pull/1629
+- Remove non-expiring option for project invite tokens by @kokodak in https://github.com/yorkie-team/yorkie/pull/1630
+
+### Fixed
+
+- Restore ingress-shard-key-header-filter EnvoyFilter by @raararaara in https://github.com/yorkie-team/yorkie/pull/1620
+- Handle stuck attaching documents during deactivate/detach by @raararaara in https://github.com/yorkie-team/yorkie/pull/1622
+
 ## [v0.6.42] - 2025-12-19
 
 ### Added
