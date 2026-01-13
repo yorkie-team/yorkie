@@ -118,35 +118,6 @@ func selectLevel3ChannelByIndex(cfg *channelScenarioConfig, channels []string, u
 	return channels[idx]
 }
 
-// setupHierarchicalChannels creates a hierarchical channel structure for testing.
-func setupHierarchicalChannels(
-	b *testing.B,
-	rpcAddr string,
-	channelPrefix string,
-	level1Count, level2Count, level3Count int,
-) {
-	b.Helper()
-
-	ctx := context.Background()
-	totalChannels := level1Count * level2Count * level3Count
-
-	// Create clients for all leaf channels
-	clientIdx := 0
-	clients := make([]*client.Client, totalChannels)
-	// Create hierarchical structure: channelPrefix-X.room-Y.user-Z
-	for i := 0; i < level1Count; i++ {
-		for j := 0; j < level2Count; j++ {
-			for k := 0; k < level3Count; k++ {
-				channelKey := fmt.Sprintf("%s-%d.room-%d.user-%d", channelPrefix, i, j, k)
-				cli, _, err := helper.ClientAndAttachedChannel(ctx, rpcAddr, key.Key(channelKey))
-				assert.NoError(b, err)
-				clients[clientIdx] = cli
-				clientIdx++
-			}
-		}
-	}
-}
-
 // runUserJourney simulates a complete user journey through the hierarchical channel system.
 func runUserJourney(
 	b *testing.B,
@@ -156,13 +127,14 @@ func runUserJourney(
 	channelPrefix string,
 	cfg *channelScenarioConfig,
 	userIndex int,
-) {
+) (*client.Client, *channel.Channel, *channel.Channel, error) {
 	cli, err := client.Dial(rpcAddr)
 	assert.NoError(b, err)
 	assert.NoError(b, cli.Activate(ctx))
 
 	// Stage 1: Main Page (Level-1)
 	level1Channels := getLevel1Channels(channelPrefix, cfg)
+	selectedLevel1 := selectLevel1ChannelByIndex(level1Channels, userIndex)
 	_, err = adminClient.GetChannels(
 		ctx,
 		connect.NewRequest(&api.GetChannelsRequest{
@@ -171,8 +143,6 @@ func runUserJourney(
 		}),
 	)
 	assert.NoError(b, err)
-
-	selectedLevel1 := selectLevel1ChannelByIndex(level1Channels, userIndex)
 
 	// Stage 2: Channel Page (Level-2)
 	level2Channels := getLevel2Channels(cfg, selectedLevel1)
@@ -211,6 +181,7 @@ func runUserJourney(
 		}),
 	)
 	assert.NoError(b, err)
+	return cli, ch2, ch3, nil
 }
 
 // benchmarkUserJourneyScenario runs the user journey benchmark for a given scenario.
@@ -254,19 +225,33 @@ func benchmarkUserJourneyScenario(
 
 	channelPrefix := strings.Split(b.Name(), "/")[1]
 
-	// Setup hierarchical channels once
-	setupHierarchicalChannels(b, svr.RPCAddr(), channelPrefix, cfg.channel1LevelCount, cfg.channel2LevelCount, cfg.channel3LevelCount)
-
 	// Wait for channels to be ready
 	gotime.Sleep(100 * gotime.Millisecond)
 
 	// Use iteration index as userIndex for deterministic but varying channel selection.
 	// Each iteration tests a different channel path, ensuring varied load distribution.
 	iterationIdx := 0
+	type ClientAndChannelPair struct {
+		cli *client.Client
+		ch2 *channel.Channel
+		ch3 *channel.Channel
+	}
+	var channelPairs []ClientAndChannelPair
 	for range b.N {
-		runUserJourney(b, ctx, svr.RPCAddr(), testAdminClient, channelPrefix, cfg, iterationIdx)
+		cli, ch2, ch3, err := runUserJourney(b, ctx, svr.RPCAddr(), testAdminClient, channelPrefix, cfg, iterationIdx)
+		assert.NoError(b, err)
+		channelPairs = append(channelPairs, ClientAndChannelPair{cli, ch2, ch3})
 		iterationIdx++
 	}
+
+	b.Cleanup(func() {
+		for _, channelPair := range channelPairs {
+			assert.NoError(b, channelPair.cli.Detach(context.Background(), channelPair.ch2))
+			assert.NoError(b, channelPair.cli.Detach(context.Background(), channelPair.ch3))
+			assert.NoError(b, channelPair.cli.Deactivate(context.Background()))
+			assert.NoError(b, channelPair.cli.Close())
+		}
+	})
 }
 
 // BenchmarkGetChannels benchmarks the GetChannels API in a realistic user journey scenario.
@@ -324,5 +309,19 @@ func BenchmarkGetChannels(b *testing.B) {
 
 	b.Run("10x5x10_channels", func(b *testing.B) {
 		benchmarkUserJourneyScenario(b, svr, largeCfg)
+	})
+
+	// very large scenario: 10 × 10 × 10 = 1000 channels
+	veryLargeCfg := &channelScenarioConfig{
+		channel1LevelCount:      10,
+		channel2LevelCount:      10,
+		channel3LevelCount:      10,
+		level1ChannelQueryCount: 10,
+		level2ChannelQueryCount: 10,
+		level3ChannelQueryCount: 10,
+	}
+
+	b.Run("10x10x10_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, veryLargeCfg)
 	})
 }
