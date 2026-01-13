@@ -22,7 +22,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 	"testing"
 	gotime "time"
 
@@ -485,102 +484,6 @@ func RunFindChangesBetweenServerSeqsTest(
 	})
 }
 
-// RunCreateMemberInfoTest runs the CreateMemberInfo test for the given db.
-func RunCreateMemberInfoTest(t *testing.T, db database.Database) {
-	t.Run("success test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a project and a user.
-		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
-		assert.NoError(t, err)
-		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
-		assert.NoError(t, err)
-
-		// 02. Create member.
-		m1, err := db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
-		assert.NoError(t, err)
-		assert.Equal(t, database.Member, m1.Role)
-	})
-
-	t.Run("duplicate test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a project and a user.
-		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
-		assert.NoError(t, err)
-		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
-		assert.NoError(t, err)
-
-		// 02. Create member.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
-		assert.NoError(t, err)
-
-		// 03. Duplicate should fail (unique constraint).
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
-		assert.Equal(t, pkgerrors.ErrCodeAlreadyExists, pkgerrors.StatusOf(err))
-	})
-
-	t.Run("invalid role test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a project and a user.
-		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
-		assert.NoError(t, err)
-		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
-		assert.NoError(t, err)
-
-		// 02. Invalid role should be rejected.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.MemberRole("invalid-role"))
-		assert.Equal(t, pkgerrors.ErrCodeInvalidArgument, pkgerrors.StatusOf(err))
-		assert.Equal(t, database.ErrInvalidMemberRole.Code(), pkgerrors.ErrorInfoOf(err).Code)
-	})
-
-	t.Run("concurrency test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// 01. Create a project and a user.
-		project, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
-		assert.NoError(t, err)
-		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
-		assert.NoError(t, err)
-
-		// 02. Concurrently try to create the same member.
-		const n = 20
-		var wg sync.WaitGroup
-		wg.Add(n)
-		errs := make(chan error, n)
-		for i := 0; i < n; i++ {
-			go func() {
-				defer wg.Done()
-				_, err := db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
-				errs <- err
-			}()
-		}
-		wg.Wait()
-		close(errs)
-
-		// 03. Only one should succeed, the rest should be AlreadyExists.
-		success := 0
-		alreadyExists := 0
-		for err := range errs {
-			if err == nil {
-				success++
-				continue
-			}
-			if pkgerrors.StatusOf(err) == pkgerrors.ErrCodeAlreadyExists {
-				alreadyExists++
-			}
-		}
-		assert.Equal(t, 1, success)
-		assert.Equal(t, n-1, alreadyExists)
-
-		// 04. Verify only one member exists (uses ListMemberInfos as an assertion helper).
-		list, err := db.ListMemberInfos(ctx, project.ID)
-		assert.NoError(t, err)
-		assert.Len(t, list, 1)
-	})
-}
-
 // RunListMemberInfosTest runs the ListMemberInfos test for the given db.
 func RunListMemberInfosTest(t *testing.T, db database.Database) {
 	t.Run("success test", func(t *testing.T) {
@@ -595,9 +498,9 @@ func RunListMemberInfosTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 
 		// 02. Create members.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
 		assert.NoError(t, err)
-		_, err = db.CreateMemberInfo(ctx, project.ID, u2.ID, dummyOwnerID, database.Admin)
+		_, err = db.UpsertMemberInfo(ctx, project.ID, u2.ID, dummyOwnerID, database.Admin)
 		assert.NoError(t, err)
 
 		// 03. List members.
@@ -632,7 +535,7 @@ func RunUpdateMemberRoleTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 
 		// 02. Create member.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
 		assert.NoError(t, err)
 
 		// 03. Update role.
@@ -651,7 +554,7 @@ func RunUpdateMemberRoleTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 
 		// 02. Create member.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
 		assert.NoError(t, err)
 
 		// 03. Invalid role should be rejected.
@@ -687,7 +590,7 @@ func RunDeleteMemberInfoTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 
 		// 02. Create member.
-		_, err = db.CreateMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, project.ID, u1.ID, dummyOwnerID, database.Member)
 		assert.NoError(t, err)
 
 		// 03. Delete member.

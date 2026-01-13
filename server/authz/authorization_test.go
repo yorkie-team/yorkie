@@ -87,10 +87,10 @@ func TestAuthorization(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Setup: Add members with different roles
-	_, err = be.DB.CreateMemberInfo(ctx, project.ID, admin.ID, owner.ID, database.Admin)
+	_, err = be.DB.UpsertMemberInfo(ctx, project.ID, admin.ID, owner.ID, database.Admin)
 	assert.NoError(t, err)
 
-	_, err = be.DB.CreateMemberInfo(ctx, project.ID, member.ID, owner.ID, database.Member)
+	_, err = be.DB.UpsertMemberInfo(ctx, project.ID, member.ID, owner.ID, database.Member)
 	assert.NoError(t, err)
 
 	t.Run("GetUserRole test", func(t *testing.T) {

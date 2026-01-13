@@ -720,8 +720,8 @@ func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	return infos, nil
 }
 
-// CreateMemberInfo creates a new project member.
-func (d *DB) CreateMemberInfo(
+// UpsertMemberInfo creates a new member or returns the existing member if already exists.
+func (d *DB) UpsertMemberInfo(
 	_ context.Context,
 	projectID types.ID,
 	userID types.ID,
@@ -734,12 +734,14 @@ func (d *DB) CreateMemberInfo(
 	// Check if member already exists
 	existing, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
 	if err != nil {
-		return nil, fmt.Errorf("create project member: %w", err)
+		return nil, fmt.Errorf("upsert project member: %w", err)
 	}
 	if existing != nil {
-		return nil, fmt.Errorf("create project member: %w", database.ErrMemberAlreadyExists)
+		// Member already exists, return it
+		return existing.(*database.MemberInfo).DeepCopy(), nil
 	}
 
+	// Create new member
 	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
 	if err != nil {
 		return nil, err

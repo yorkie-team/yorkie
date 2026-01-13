@@ -870,33 +870,43 @@ func (c *Client) ListUserInfos(
 	return infos, nil
 }
 
-// CreateMemberInfo creates a new project member.
-func (c *Client) CreateMemberInfo(
+// UpsertMemberInfo creates a new member or returns the existing member if already exists.
+func (c *Client) UpsertMemberInfo(
 	ctx context.Context,
 	projectID types.ID,
 	userID types.ID,
 	invitedBy types.ID,
 	role database.MemberRole,
 ) (*database.MemberInfo, error) {
-	info, err := database.NewMemberInfo(projectID, userID, invitedBy, role)
-	if err != nil {
-		return nil, err
-	}
-	result, err := c.collection(ColMembers).InsertOne(ctx, bson.M{
-		"project_id": info.ProjectID,
-		"user_id":    info.UserID,
-		"role":       info.Role.String(),
-		"invited_by": info.InvitedBy,
-		"invited_at": info.InvitedAt,
-	})
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, database.ErrMemberAlreadyExists
-		}
-		return nil, fmt.Errorf("create project member: %w", err)
+	opts := options.FindOneAndUpdate().
+		SetUpsert(true).
+		SetReturnDocument(options.After)
+
+	now := gotime.Now()
+
+	result := c.collection(ColMembers).FindOneAndUpdate(
+		ctx,
+		bson.M{
+			"project_id": projectID,
+			"user_id":    userID,
+		},
+		bson.M{
+			"$setOnInsert": bson.M{
+				"project_id": projectID,
+				"user_id":    userID,
+				"role":       role.String(),
+				"invited_by": invitedBy,
+				"invited_at": now,
+			},
+		},
+		opts,
+	)
+
+	info := &database.MemberInfo{}
+	if err := result.Decode(info); err != nil {
+		return nil, fmt.Errorf("upsert member: %w", err)
 	}
 
-	info.ID = types.ID(result.InsertedID.(bson.ObjectID).Hex())
 	return info, nil
 }
 

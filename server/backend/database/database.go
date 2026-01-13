@@ -90,12 +90,6 @@ var (
 	// ErrInviteAlreadyExists is returned when an invite with the same token already exists.
 	ErrInviteAlreadyExists = errors.AlreadyExists("invite already exists").WithCode("ErrInviteAlreadyExists")
 
-	// ErrInviteExpired is returned when the invite is expired.
-	ErrInviteExpired = errors.InvalidArgument("invite expired").WithCode("ErrInviteExpired")
-
-	// ErrInvalidInviteExpireOpt is returned when the invite expire option is invalid.
-	ErrInvalidInviteExpireOpt = errors.InvalidArgument("invalid invite expire opt").WithCode("ErrInvalidInviteExpireOpt")
-
 	// ErrInvalidInviteToken is returned when the invite token is invalid.
 	ErrInvalidInviteToken = errors.InvalidArgument("invalid invite token").WithCode("ErrInvalidInviteToken")
 )
@@ -184,8 +178,8 @@ type Database interface {
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
-	// CreateMemberInfo creates a new project member.
-	CreateMemberInfo(
+	// UpsertMemberInfo creates a new member or returns the existing member if already exists.
+	UpsertMemberInfo(
 		ctx context.Context,
 		projectID types.ID,
 		userID types.ID,
