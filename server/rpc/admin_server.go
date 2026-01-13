@@ -420,7 +420,7 @@ func (s *adminServer) CreateInvite(
 	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS:
 		opt = invites.ExpireSevenDays
 	default:
-		return nil, database.ErrInvalidInviteExpireOpt
+		return nil, invites.ErrInvalidInviteExpireOpt
 	}
 
 	token, _, err := invites.Create(ctx, s.backend, project.ID, role, user.ID, opt)

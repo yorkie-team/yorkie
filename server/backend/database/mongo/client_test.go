@@ -114,10 +114,6 @@ func TestClient(t *testing.T) {
 		testcases.RunFindProjectInfoByNameTest(t, cli)
 	})
 
-	t.Run("CreateMemberInfo test", func(t *testing.T) {
-		testcases.RunCreateMemberInfoTest(t, cli)
-	})
-
 	t.Run("ListMemberInfos test", func(t *testing.T) {
 		testcases.RunListMemberInfosTest(t, cli)
 	})

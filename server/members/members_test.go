@@ -57,9 +57,9 @@ func TestMembers(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. Create members directly
-		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
-		_, err = db.CreateMemberInfo(ctx, projectID, u2.ID, invitedBy, database.Admin)
+		_, err = db.UpsertMemberInfo(ctx, projectID, u2.ID, invitedBy, database.Admin)
 		assert.NoError(t, err)
 
 		// 03. List.
@@ -79,7 +79,7 @@ func TestMembers(t *testing.T) {
 		// 01. Create user and member.
 		u1, err := db.CreateUserInfo(ctx, username, "pw")
 		assert.NoError(t, err)
-		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
 
 		// 02. Update role.
@@ -99,7 +99,7 @@ func TestMembers(t *testing.T) {
 		// 01. Create user and member.
 		u1, err := db.CreateUserInfo(ctx, username, "pw")
 		assert.NoError(t, err)
-		_, err = db.CreateMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
+		_, err = db.UpsertMemberInfo(ctx, projectID, u1.ID, invitedBy, database.Member)
 		assert.NoError(t, err)
 
 		// 02. Remove.

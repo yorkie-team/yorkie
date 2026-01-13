@@ -26,8 +26,21 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+)
+
+var (
+
+	// ErrInvalidInviteExpireOpt is returned when the invite expire option is invalid.
+	ErrInvalidInviteExpireOpt = errors.InvalidArgument("invalid invite expire opt").WithCode("ErrInvalidInviteExpireOpt")
+
+	// ErrInviteExpired is returned when the invite is expired.
+	ErrInviteExpired = errors.InvalidArgument("invite expired").WithCode("ErrInviteExpired")
+
+	// ErrOwnerCannotAcceptInvite is returned when a project owner tries to accept an invite to their own project.
+	ErrOwnerCannotAcceptInvite = errors.FailedPrecond("owner cannot accept invite").WithCode("ErrOwnerCannotAcceptInvite")
 )
 
 // ExpireOption represents invite expiration options.
@@ -61,7 +74,7 @@ func Create(
 		t := gotime.Now().Add(7 * 24 * gotime.Hour)
 		exp = &t
 	default:
-		return "", nil, database.ErrInvalidInviteExpireOpt
+		return "", nil, ErrInvalidInviteExpireOpt
 	}
 
 	// Retry on token collision.
@@ -97,25 +110,28 @@ func Accept(
 	}
 
 	if invite.ExpiresAt != nil && !invite.ExpiresAt.After(gotime.Now()) {
-		return nil, database.ErrInviteExpired
+		return nil, ErrInviteExpired
 	}
 
-	_, err = be.DB.CreateMemberInfo(ctx, invite.ProjectID, userID, invite.CreatedBy, invite.Role)
-	if err != nil {
-		if goerrors.Is(err, database.ErrMemberAlreadyExists) {
-			memberInfo, err := be.DB.FindMemberInfo(ctx, invite.ProjectID, userID)
-			if err != nil {
-				return nil, err
-			}
-			return memberInfo.ToMember(), nil
-		}
-		return nil, err
-	}
-
-	memberInfo, err := be.DB.FindMemberInfo(ctx, invite.ProjectID, userID)
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, invite.ProjectID)
 	if err != nil {
 		return nil, err
 	}
+	if projectInfo.Owner == userID {
+		return nil, ErrOwnerCannotAcceptInvite
+	}
+
+	memberInfo, err := be.DB.UpsertMemberInfo(
+		ctx,
+		invite.ProjectID,
+		userID,
+		invite.CreatedBy,
+		invite.Role,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return memberInfo.ToMember(), nil
 }
 

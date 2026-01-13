@@ -444,4 +444,35 @@ func TestAdminMember(t *testing.T) {
 		_, err = adminCli.UpdateMemberRole(ctx, projectName, "nonexistentuser123", "admin")
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
+
+	t.Run("Owner cannot accept their own invite link test", func(t *testing.T) {
+		// 01. Create a project as owner.
+		projectName := newSlug("prj")
+		_, err := adminCli.CreateProject(ctx, projectName)
+		assert.NoError(t, err)
+
+		// 02. Owner creates an invite link.
+		token, err := adminCli.CreateInvite(
+			ctx,
+			projectName,
+			"member",
+			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
+		)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, token)
+
+		// 03. Owner tries to accept their own invite link - this should fail.
+		_, err = adminCli.AcceptInvite(ctx, token)
+		assert.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+
+		// 04. Verify only the owner exists in members list (not duplicated).
+		memberList, err := adminCli.ListMembers(ctx, projectName)
+		assert.NoError(t, err)
+		assert.Len(t, memberList, 1, "Owner should not be added as a member")
+
+		owner, ok := findByUsername(memberList, server.DefaultAdminUser)
+		assert.True(t, ok)
+		assert.Equal(t, "owner", owner.Role)
+	})
 }
