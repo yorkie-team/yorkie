@@ -419,8 +419,6 @@ func (s *adminServer) CreateInvite(
 		opt = invites.ExpireTwentyFourHours
 	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS:
 		opt = invites.ExpireSevenDays
-	case api.InviteExpireOption_INVITE_EXPIRE_OPTION_NEVER:
-		opt = invites.ExpireNever
 	default:
 		return nil, database.ErrInvalidInviteExpireOpt
 	}

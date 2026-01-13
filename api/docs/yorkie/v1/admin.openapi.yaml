@@ -2072,8 +2072,6 @@ components:
         - 2
         - INVITE_EXPIRE_OPTION_SEVEN_DAYS
         - 3
-        - INVITE_EXPIRE_OPTION_NEVER
-        - 4
       title: InviteExpireOption
       type: string
     yorkie.v1.JSONElementSimple:

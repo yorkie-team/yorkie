@@ -38,10 +38,9 @@ const (
 	ExpireOneHour
 	ExpireTwentyFourHours
 	ExpireSevenDays
-	ExpireNever
 )
 
-// Create creates a reusable invite link and returns the invite token and expiresAt (nil if never).
+// Create creates a reusable invite link and returns the invite token and expiresAt.
 func Create(
 	ctx context.Context,
 	be *backend.Backend,
@@ -61,8 +60,6 @@ func Create(
 	case ExpireSevenDays:
 		t := gotime.Now().Add(7 * 24 * gotime.Hour)
 		exp = &t
-	case ExpireNever:
-		exp = nil
 	default:
 		return "", nil, database.ErrInvalidInviteExpireOpt
 	}
