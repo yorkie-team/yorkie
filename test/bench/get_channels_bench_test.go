@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	gotime "time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -151,7 +150,7 @@ func runUserJourney(
 	// Stage 2-1: Attach to level-2 channel
 	ch2, err := channel.New(key.Key(selectedLevel2))
 	assert.NoError(b, err)
-	assert.NoError(b, cli.Attach(context.Background(), ch2))
+	assert.NoError(b, cli.Attach(ctx, ch2))
 
 	// Stage 2-2: Get level-2 channels
 	_, err = adminClient.GetChannels(
@@ -170,7 +169,7 @@ func runUserJourney(
 	// Stage 3-1: Attach to level-3 channel
 	ch3, err := channel.New(key.Key(selectedLevel3))
 	assert.NoError(b, err)
-	assert.NoError(b, cli.Attach(context.Background(), ch3))
+	assert.NoError(b, cli.Attach(ctx, ch3))
 
 	// Stage 3-2: Get level-3 channels
 	_, err = adminClient.GetChannels(
@@ -213,7 +212,7 @@ func benchmarkUserJourneyScenario(
 
 	// Get project context
 	resp1, err := testAdminClient.GetProject(
-		context.Background(),
+		ctx,
 		connect.NewRequest(&api.GetProjectRequest{
 			Name: "default",
 		}),
@@ -221,12 +220,15 @@ func benchmarkUserJourneyScenario(
 	assert.NoError(b, err)
 
 	project := converter.FromProject(resp1.Msg.Project)
-	ctx = projects.With(context.Background(), project)
+	ctx = projects.With(ctx, project)
 
-	channelPrefix := strings.Split(b.Name(), "/")[1]
+	channelPrefix := b.Name()
+	parts := strings.Split(b.Name(), "/")
+	if len(parts) > 1 {
+		channelPrefix = parts[1]
+	}
 
-	// Wait for channels to be ready
-	gotime.Sleep(100 * gotime.Millisecond)
+	b.ResetTimer()
 
 	// Use iteration index as userIndex for deterministic but varying channel selection.
 	// Each iteration tests a different channel path, ensuring varied load distribution.
@@ -244,11 +246,13 @@ func benchmarkUserJourneyScenario(
 		iterationIdx++
 	}
 
+	b.StopTimer()
+
 	b.Cleanup(func() {
 		for _, channelPair := range channelPairs {
-			assert.NoError(b, channelPair.cli.Detach(context.Background(), channelPair.ch2))
-			assert.NoError(b, channelPair.cli.Detach(context.Background(), channelPair.ch3))
-			assert.NoError(b, channelPair.cli.Deactivate(context.Background()))
+			assert.NoError(b, channelPair.cli.Detach(ctx, channelPair.ch2))
+			assert.NoError(b, channelPair.cli.Detach(ctx, channelPair.ch3))
+			assert.NoError(b, channelPair.cli.Deactivate(ctx))
 			assert.NoError(b, channelPair.cli.Close())
 		}
 	})
