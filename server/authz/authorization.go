@@ -102,16 +102,7 @@ func CheckPermission(
 		return err
 	}
 
-	if !role.IsAtLeast(required) {
-		return fmt.Errorf(
-			"user has '%s' but '%s' required: %w",
-			role,
-			required,
-			ErrInsufficientPermission,
-		)
-	}
-
-	return nil
+	return ValidatePermission(role, required)
 }
 
 // CheckPermissionByName checks permission by project name.
@@ -128,14 +119,22 @@ func CheckPermissionByName(
 		return "", err
 	}
 
+	if err := ValidatePermission(role, required); err != nil {
+		return "", err
+	}
+
+	return projectID, nil
+}
+
+// ValidatePermission checks if the given role meets the required permission level.
+func ValidatePermission(role database.MemberRole, required database.MemberRole) error {
 	if !role.IsAtLeast(required) {
-		return "", fmt.Errorf(
+		return fmt.Errorf(
 			"user has '%s' but '%s' required: %w",
 			role,
 			required,
 			ErrInsufficientPermission,
 		)
 	}
-
-	return projectID, nil
+	return nil
 }

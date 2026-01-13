@@ -304,12 +304,10 @@ func (c *Client) UpdateMemberRole(
 func (c *Client) CreateInvite(
 	ctx context.Context,
 	projectName string,
-	role string,
 	expireOption api.InviteExpireOption,
 ) (string, error) {
 	response, err := c.client.CreateInvite(ctx, connect.NewRequest(&api.CreateInviteRequest{
 		ProjectName:  projectName,
-		Role:         role,
 		ExpireOption: expireOption,
 	}))
 	if err != nil {

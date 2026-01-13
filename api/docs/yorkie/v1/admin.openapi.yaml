@@ -1459,11 +1459,6 @@ components:
           description: ""
           title: project_name
           type: string
-        role:
-          additionalProperties: false
-          description: ""
-          title: role
-          type: string
       title: CreateInviteRequest
       type: object
     yorkie.v1.CreateInviteResponse:

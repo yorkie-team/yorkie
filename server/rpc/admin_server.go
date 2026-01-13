@@ -296,13 +296,13 @@ func (s *adminServer) RemoveMember(
 ) (*connect.Response[api.RemoveMemberResponse], error) {
 	user := users.From(ctx)
 
-	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, role, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Only owner and admin can remove members
-	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
+	if err := authz.ValidatePermission(role, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -363,13 +363,13 @@ func (s *adminServer) UpdateMemberRole(
 ) (*connect.Response[api.UpdateMemberRoleResponse], error) {
 	user := users.From(ctx)
 
-	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, role, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Only owner and admin can update member roles
-	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
+	if err := authz.ValidatePermission(role, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -396,18 +396,13 @@ func (s *adminServer) CreateInvite(
 ) (*connect.Response[api.CreateInviteResponse], error) {
 	user := users.From(ctx)
 
-	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, role, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Only owner and admin can create invites
-	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
-		return nil, err
-	}
-
-	role, err := database.NewMemberRole(req.Msg.Role)
-	if err != nil {
+	if err := authz.ValidatePermission(role, database.Admin); err != nil {
 		return nil, err
 	}
 
@@ -423,7 +418,7 @@ func (s *adminServer) CreateInvite(
 		return nil, database.ErrInvalidInviteExpireOpt
 	}
 
-	token, _, err := invites.Create(ctx, s.backend, project.ID, role, user.ID, opt)
+	token, _, err := invites.Create(ctx, s.backend, project.ID, database.Member, user.ID, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,13 +1105,13 @@ func (s *adminServer) RestoreRevisionByAdmin(
 ) (*connect.Response[api.RestoreRevisionByAdminResponse], error) {
 	user := users.From(ctx)
 
-	project, _, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, role, err := projects.ProjectAndRole(ctx, s.backend, user.ID, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
 
 	// Only owner and admin can restore revisions
-	if err := authz.CheckPermission(ctx, s.backend, user.ID, project.ID, database.Admin); err != nil {
+	if err := authz.ValidatePermission(role, database.Admin); err != nil {
 		return nil, err
 	}
 

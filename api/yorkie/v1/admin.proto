@@ -80,8 +80,7 @@ enum InviteExpireOption {
 
 message CreateInviteRequest {
   string project_name = 1;
-  string role = 2;
-  InviteExpireOption expire_option = 3;
+  InviteExpireOption expire_option = 2;
 }
 
 message CreateInviteResponse {

@@ -276,7 +276,6 @@ func TestAdminMember(t *testing.T) {
 		token, err := adminCli.CreateInvite(
 			ctx,
 			projectName,
-			"member",
 			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
@@ -323,7 +322,6 @@ func TestAdminMember(t *testing.T) {
 		token, err := adminCli.CreateInvite(
 			ctx,
 			projectName,
-			"member",
 			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
@@ -365,7 +363,6 @@ func TestAdminMember(t *testing.T) {
 		token, err := adminCli.CreateInvite(
 			ctx,
 			projectName,
-			"member",
 			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
@@ -408,7 +405,6 @@ func TestAdminMember(t *testing.T) {
 		token, err := adminCli.CreateInvite(
 			ctx,
 			projectName,
-			"member",
 			api.InviteExpireOption_INVITE_EXPIRE_OPTION_SEVEN_DAYS,
 		)
 		assert.NoError(t, err)
