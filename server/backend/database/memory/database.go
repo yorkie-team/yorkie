@@ -327,7 +327,6 @@ func (d *DB) FindProjectInfoByName(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-
 	return info, nil
 }
 
@@ -439,7 +438,7 @@ func (d *DB) CreateProjectInfo(
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
 	existing, err := txn.First(tblProjects, "name", name)
 	if err != nil {
-		return nil, fmt.Errorf("find project by owner and name: %w", err)
+		return nil, fmt.Errorf("find project by name: %w", err)
 	}
 	if existing != nil {
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
