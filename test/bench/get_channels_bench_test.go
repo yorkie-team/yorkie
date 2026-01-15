@@ -59,7 +59,7 @@ func getLevel1Channels(channelPrefix string, cfg *channelScenarioConfig) []strin
 	keys := make([]string, 0, cfg.level1ChannelQueryCount)
 	interval := max(1, cfg.channel1LevelCount/cfg.level1ChannelQueryCount)
 
-	for i := 0; i < cfg.level1ChannelQueryCount; i++ {
+	for i := range cfg.level1ChannelQueryCount {
 		channelIdx := (i * interval) % cfg.channel1LevelCount
 		keys = append(keys, fmt.Sprintf("%s-%d", channelPrefix, channelIdx))
 	}
@@ -72,7 +72,7 @@ func getLevel2Channels(cfg *channelScenarioConfig, parentChannel string) []strin
 	keys := make([]string, 0, cfg.level2ChannelQueryCount)
 	count := min(cfg.level2ChannelQueryCount, cfg.channel2LevelCount)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		keys = append(keys, fmt.Sprintf("%s.room-%d", parentChannel, i))
 	}
 
@@ -84,7 +84,7 @@ func getLevel3Channels(cfg *channelScenarioConfig, parentChannel string) []strin
 	keys := make([]string, 0, cfg.level3ChannelQueryCount)
 	count := min(cfg.level3ChannelQueryCount, cfg.channel3LevelCount)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		keys = append(keys, fmt.Sprintf("%s.user-%d", parentChannel, i))
 	}
 

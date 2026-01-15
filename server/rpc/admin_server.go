@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
-	"sync"
 
 	"connectrpc.com/connect"
 
@@ -800,33 +799,33 @@ func (s *adminServer) GetChannels(
 	// Group channel keys by their first key path for istio consistent hash sharding.
 	groups := groupByFirstKeyPath(req.Msg.ChannelKeys)
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	channels := make([]*types.ChannelSummary, 0)
-	var firstErr error
+	// Use channels for result collection to work with AttachGoroutine
+	type groupResult struct {
+		channels []*types.ChannelSummary
+		err      error
+	}
+	resultCh := make(chan groupResult, len(groups))
 
 	for firstPath, keys := range groups {
-		wg.Add(1)
-		go func(fp string, ks []key.Key) {
-			defer wg.Done()
-
-			result, err := clusterClient.GetChannels(ctx, project, ks, fp, includeSubPath)
-			if err != nil {
-				mu.Lock()
-				if firstErr == nil {
-					firstErr = err
-				}
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			channels = append(channels, result...)
-			mu.Unlock()
-		}(firstPath, keys)
+		s.backend.Background.AttachGoroutine(func(_ context.Context) {
+			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
+			resultCh <- groupResult{channels: result, err: err}
+		}, "get-channels")
 	}
 
-	wg.Wait()
+	// Collect results from all groups
+	var channels []*types.ChannelSummary
+	var firstErr error
+	for range len(groups) {
+		res := <-resultCh
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
+		}
+		if res.err == nil {
+			channels = append(channels, res.channels...)
+		}
+	}
+	close(resultCh)
 
 	if firstErr != nil {
 		return nil, firstErr
