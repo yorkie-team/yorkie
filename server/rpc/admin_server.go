@@ -797,7 +797,10 @@ func (s *adminServer) GetChannels(
 	}
 
 	// Group channel keys by their first key path for istio consistent hash sharding.
-	groups := groupByFirstKeyPath(req.Msg.ChannelKeys)
+	groups, err := groupByFirstKeyPath(req.Msg.ChannelKeys)
+	if err != nil {
+		return nil, err
+	}
 
 	// Use channels for result collection to work with AttachGoroutine
 	type groupResult struct {
@@ -837,20 +840,20 @@ func (s *adminServer) GetChannels(
 }
 
 // groupByFirstKeyPath groups channel keys by their first key path segment.
-func groupByFirstKeyPath(channelKeys []string) map[string][]key.Key {
+func groupByFirstKeyPath(channelKeys []string) (map[string][]key.Key, error) {
 	groups := make(map[string][]key.Key)
 
 	for _, keyStr := range channelKeys {
 		k := key.Key(keyStr)
-		paths := strings.Split(keyStr, pkgchannel.ChannelKeyPathSeparator)
-		if len(paths) == 0 {
-			continue
+		if err := k.Validate(); err != nil {
+			return nil, err
 		}
+		paths := strings.Split(keyStr, pkgchannel.ChannelKeyPathSeparator)
 		firstPath := paths[0]
 		groups[firstPath] = append(groups[firstPath], k)
 	}
 
-	return groups
+	return groups, nil
 }
 
 // ListChanges lists of changes for the given document.
