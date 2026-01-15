@@ -31,7 +31,7 @@ service ClusterService {
   rpc PurgeDocument (ClusterServicePurgeDocumentRequest) returns (ClusterServicePurgeDocumentResponse) {}
   rpc GetDocument (ClusterServiceGetDocumentRequest) returns (ClusterServiceGetDocumentResponse) {}
   rpc ListChannels (ClusterServiceListChannelsRequest) returns (ClusterServiceListChannelsResponse) {}
-  rpc GetChannel (ClusterServiceGetChannelRequest) returns (ClusterServiceGetChannelResponse) {}
+  rpc GetChannels (ClusterServiceGetChannelsRequest) returns (ClusterServiceGetChannelsResponse) {}
   rpc GetChannelCount (ClusterServiceGetChannelCountRequest) returns (ClusterServiceGetChannelCountResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
@@ -84,14 +84,14 @@ message ClusterServiceListChannelsResponse {
   repeated ChannelSummary channels = 1;
 }
 
-message ClusterServiceGetChannelRequest {
+message ClusterServiceGetChannelsRequest {
   string project_id = 1;
-  string channel_key = 2;
+  repeated string channel_keys = 2;
   bool include_sub_path = 3;
 }
 
-message ClusterServiceGetChannelResponse {
-  ChannelSummary channel = 1;
+message ClusterServiceGetChannelsResponse {
+  repeated ChannelSummary channels = 1;
 }
 
 message ClusterServiceGetChannelCountRequest {

@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types/events"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/internal/version"
+	pkgchannel "github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -787,30 +788,71 @@ func (s *adminServer) GetChannels(
 	req *connect.Request[api.GetChannelsRequest],
 ) (*connect.Response[api.GetChannelsResponse], error) {
 	project := projects.From(ctx)
-
 	includeSubPath := req.Msg.IncludeSubPath
-	channels := make([]*types.ChannelSummary, 0)
+
 	clusterClient, err := s.backend.ClusterClient()
 	if err != nil {
 		return nil, err
 	}
 
-	for _, channelKey := range req.Msg.ChannelKeys {
-		channel, err := clusterClient.GetChannel(
-			ctx,
-			project,
-			key.Key(channelKey),
-			includeSubPath,
-		)
-		if err != nil {
-			return nil, err
+	// Group channel keys by their first key path for istio consistent hash sharding.
+	groups, err := groupByFirstKeyPath(req.Msg.ChannelKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use channels for result collection to work with AttachGoroutine
+	type groupResult struct {
+		channels []*types.ChannelSummary
+		err      error
+	}
+	resultCh := make(chan groupResult, len(groups))
+
+	for firstPath, keys := range groups {
+		s.backend.Background.AttachGoroutine(func(ctx context.Context) {
+			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
+			resultCh <- groupResult{channels: result, err: err}
+		}, "get-channels")
+	}
+
+	// Collect results from all groups
+	var channels []*types.ChannelSummary
+	var firstErr error
+	for range len(groups) {
+		res := <-resultCh
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err
 		}
-		channels = append(channels, channel)
+		if res.err == nil {
+			channels = append(channels, res.channels...)
+		}
+	}
+	close(resultCh)
+
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	return connect.NewResponse(&api.GetChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
 	}), nil
+}
+
+// groupByFirstKeyPath groups channel keys by their first key path segment.
+func groupByFirstKeyPath(channelKeys []string) (map[string][]key.Key, error) {
+	groups := make(map[string][]key.Key)
+
+	for _, keyStr := range channelKeys {
+		k := key.Key(keyStr)
+		paths, err := pkgchannel.ParseKeyPath(k)
+		if err != nil {
+			return nil, err
+		}
+		firstPath := paths[0]
+		groups[firstPath] = append(groups[firstPath], k)
+	}
+
+	return groups, nil
 }
 
 // ListChanges lists of changes for the given document.
