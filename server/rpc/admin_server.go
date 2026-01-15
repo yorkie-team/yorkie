@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 
 	"connectrpc.com/connect"
 
@@ -810,7 +809,7 @@ func (s *adminServer) GetChannels(
 	resultCh := make(chan groupResult, len(groups))
 
 	for firstPath, keys := range groups {
-		s.backend.Background.AttachGoroutine(func(_ context.Context) {
+		s.backend.Background.AttachGoroutine(func(ctx context.Context) {
 			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
 			resultCh <- groupResult{channels: result, err: err}
 		}, "get-channels")
@@ -845,10 +844,10 @@ func groupByFirstKeyPath(channelKeys []string) (map[string][]key.Key, error) {
 
 	for _, keyStr := range channelKeys {
 		k := key.Key(keyStr)
-		if err := k.Validate(); err != nil {
+		paths, err := pkgchannel.ParseKeyPath(k)
+		if err != nil {
 			return nil, err
 		}
-		paths := strings.Split(keyStr, pkgchannel.ChannelKeyPathSeparator)
 		firstPath := paths[0]
 		groups[firstPath] = append(groups[firstPath], k)
 	}
