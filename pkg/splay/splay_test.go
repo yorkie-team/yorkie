@@ -17,6 +17,7 @@
 package splay_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,11 +47,32 @@ func (v *stringValue) String() string {
 	return v.content
 }
 
+type elementValue struct {
+	value   int
+	removed bool
+}
+
+func newArraySplayNode(value int) *splay.Node[*elementValue] {
+	return splay.NewNode(&elementValue{
+		value: value,
+	})
+}
+func (v *elementValue) Len() int {
+	if v.removed {
+		return 0
+	}
+	return 1
+}
+
+func (v *elementValue) String() string {
+	return fmt.Sprintf("%d", v.value)
+}
+
 func TestSplayTree(t *testing.T) {
-	t.Run("insert and splay test", func(t *testing.T) {
+	t.Run("insert and splay for text test", func(t *testing.T) {
 		tree := splay.NewTree[*stringValue](nil)
 
-		node, idx, err := tree.Find(0)
+		node, idx, err := tree.FindForText(0)
 		assert.Nil(t, node)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, idx)
@@ -72,20 +94,60 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, 5, tree.IndexOf(nodeC))
 		assert.Equal(t, 9, tree.IndexOf(nodeD))
 
-		node, offset, err := tree.Find(1)
+		node, offset, err := tree.FindForText(1)
 		assert.Equal(t, nodeA, node)
 		assert.Equal(t, 1, offset)
 		assert.NoError(t, err)
 
-		node, offset, err = tree.Find(7)
+		node, offset, err = tree.FindForText(7)
 		assert.Equal(t, nodeC, node)
 		assert.Equal(t, 2, offset)
 		assert.NoError(t, err)
 
-		node, offset, err = tree.Find(11)
+		node, offset, err = tree.FindForText(11)
 		assert.Equal(t, nodeD, node)
 		assert.Equal(t, 2, offset)
 		assert.NoError(t, err)
+	})
+
+	t.Run("insert, delete and splay for array test", func(t *testing.T) {
+		tree := splay.NewTree[*elementValue](nil)
+
+		node, err := tree.FindForArray(0)
+		assert.Nil(t, node)
+		assert.NoError(t, err)
+
+		nodeA := tree.Insert(newArraySplayNode(2))
+		assert.Equal(t, "[1,1]2", tree.ToTestString())
+		nodeB := tree.Insert(newArraySplayNode(3))
+		assert.Equal(t, "[1,1]2[2,1]3", tree.ToTestString())
+		nodeC := tree.Insert(newArraySplayNode(4))
+		assert.Equal(t, "[1,1]2[2,1]3[3,1]4", tree.ToTestString())
+		nodeD := tree.Insert(newArraySplayNode(5))
+		assert.Equal(t, "[1,1]2[2,1]3[3,1]4[4,1]5", tree.ToTestString())
+
+		nodeB.Value().removed = true
+		tree.Splay(nodeB)
+		assert.Equal(t, 3, tree.Len())
+		assert.Equal(t, "[1,1]2[3,0]3[2,1]4[1,1]5", tree.ToTestString())
+		assert.Equal(t, 0, tree.IndexOf(nodeA))
+		assert.Equal(t, 1, tree.IndexOf(nodeC))
+		assert.Equal(t, 2, tree.IndexOf(nodeD))
+
+		node, err = tree.FindForArray(0)
+		assert.Equal(t, nodeA, node)
+		assert.NoError(t, err)
+
+		node, err = tree.FindForArray(1)
+		assert.Equal(t, nodeC, node)
+		assert.NoError(t, err)
+
+		node, err = tree.FindForArray(2)
+		assert.Equal(t, nodeD, node)
+		assert.NoError(t, err)
+
+		_, err = tree.FindForArray(3)
+		assert.Error(t, err)
 	})
 
 	t.Run("deletion test", func(t *testing.T) {
@@ -114,7 +176,7 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, tree.IndexOf(nodeO), 3)
 	})
 
-	t.Run("range delition test", func(t *testing.T) {
+	t.Run("range deletion test", func(t *testing.T) {
 		tree, nodes := makeSampleTree()
 		// check the filtering of DeleteRange
 		removeNodes(nodes, 7, 8)
