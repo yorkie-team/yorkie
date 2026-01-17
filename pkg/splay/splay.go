@@ -176,8 +176,9 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 	return t.root.leftWeight()
 }
 
-// Find returns the Node and offset of the given index.
-func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
+// FindForText returns the Node and offset of the given position (cursor).
+// Used for Text where cursor placed between characters.
+func (t *Tree[V]) FindForText(index int) (*Node[V], int, error) {
 	if t.root == nil {
 		return nil, 0, nil
 	}
@@ -202,6 +203,32 @@ func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 
 	t.Splay(node)
 	return node, offset, nil
+}
+
+// FindForArray returns the Node of the given position (index).
+// Used for Array where index points to the element.
+func (t *Tree[V]) FindForArray(index int) (*Node[V], error) {
+	if t.root == nil {
+		return nil, nil
+	}
+	if index < 0 || index >= t.Len() {
+		return nil, fmt.Errorf("tree size %d, index %d: %w", t.Len(), index, ErrOutOfIndex)
+	}
+
+	node := t.root
+	for {
+		if index < node.leftWeight() {
+			node = node.left
+		} else if node.right != nil && node.leftWeight()+node.value.Len() <= index {
+			index -= node.leftWeight() + node.value.Len()
+			node = node.right
+		} else {
+			break
+		}
+	}
+
+	t.Splay(node)
+	return node, nil
 }
 
 // String returns a string containing node values.
@@ -301,7 +328,7 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 // by splaying outer boundary nodes.
 // leftBoundary must exist because of 0-indexed initial dummy node of tree,
 // but rightBoundary can be nil means range to delete includes the end of tree.
-// Refer to the design document: ./design/range-deletion-in-slay-tree.md
+// Refer to the design document: ./design/range-deletion-in-splay-tree.md
 func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 	if rightBoundary == nil {
 		t.Splay(leftBoundary)

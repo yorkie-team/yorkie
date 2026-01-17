@@ -198,29 +198,11 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element, exec
 
 // Get returns the element of the given index.
 func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
-	splayNode, offset, err := a.nodeMapByIndex.Find(idx)
+	splayNode, err := a.nodeMapByIndex.FindForArray(idx)
 	if err != nil {
 		return nil, err
 	}
-	node := splayNode.Value()
-
-	if idx == 0 && splayNode == a.dummyHead.indexNode {
-		for {
-			node = node.next
-			if !node.isRemoved() {
-				break
-			}
-		}
-	} else if offset > 0 {
-		for {
-			node = node.next
-			if !node.isRemoved() {
-				break
-			}
-		}
-	}
-
-	return node, nil
+	return splayNode.Value(), nil
 }
 
 // DeleteByCreatedAt deletes the given element.
