@@ -7,6 +7,23 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.44] - 2026-01-19
+
+### Added
+
+- Batch cluster.GetChannels to reduce cluster RPC calls by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1636
+
+### Changed
+
+- Bump yorkie-monitoring version to 0.6.43 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1637
+- Bump yorkie-analytics version to 0.6.43 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1638
+
+### Fixed
+
+- Remove index name from unique constraint to follow conventions by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1634
+- Handle invite error for owner accepting invites by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1635
+- Fix SplayTree Find semantics for CRDT Array by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1639
+
 ## [v0.6.43] - 2026-01-13
 
 ### Added
