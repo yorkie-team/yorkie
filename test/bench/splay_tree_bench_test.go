@@ -80,14 +80,14 @@ func BenchmarkSplayTree(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						_, _, _ = tree.Find(int(index.Int64()))
+						_, _, _ = tree.FindForText(int(index.Int64()))
 					} else {
 						maxVal = big.NewInt(int64(treeSize))
 						index, err := rand.Int(rand.Reader, maxVal)
 						if err != nil {
 							b.Fatal(err)
 						}
-						node, _, _ := tree.Find(int(index.Int64()))
+						node, _, _ := tree.FindForText(int(index.Int64()))
 						if node != nil {
 							tree.Delete(node)
 							treeSize--
@@ -121,7 +121,7 @@ func BenchmarkSplayTree(b *testing.B) {
 				b.StartTimer()
 				// 1000 times random access
 				for i := range loop {
-					_, _, _ = tree.Find(int(indexes[i].Int64()))
+					_, _, _ = tree.FindForText(int(indexes[i].Int64()))
 				}
 			}
 		})
@@ -157,12 +157,12 @@ func BenchmarkSplayTree(b *testing.B) {
 
 				if mode == 0 {
 					strValue, ok := edit[2].(string)
-					node, _, err := tree.Find(cursor)
+					node, _, err := tree.FindForText(cursor)
 					if ok && err != nil && node != nil {
 						tree.InsertAfter(node, newSplayNode(strValue))
 					}
 				} else {
-					node, _, err := tree.Find(cursor)
+					node, _, err := tree.FindForText(cursor)
 					if err != nil && node != nil {
 						tree.Delete(node)
 					}

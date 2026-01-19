@@ -354,7 +354,7 @@ func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGAT
 }
 
 func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
-	splayNode, offset, err := s.treeByIndex.Find(index)
+	splayNode, offset, err := s.treeByIndex.FindForText(index)
 	if err != nil {
 		return nil, err
 	}
