@@ -84,7 +84,7 @@ The following sections detail lock acquisition patterns for different types of o
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
 3. `findClient` / `findOrCreateDoc`
-4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit or schema update is needed)
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit or RemoveOnDetach or schema update is needed)
 5. Count attachments (if applicable)
 6. PushPull
 7. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
