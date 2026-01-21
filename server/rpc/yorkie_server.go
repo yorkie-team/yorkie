@@ -197,7 +197,7 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	if project.HasAttachmentLimit() || (docInfo.Schema == "" && req.Msg.SchemaKey != "") {
+	if project.HasAttachmentLimit() || project.RemoveOnDetach || (docInfo.Schema == "" && req.Msg.SchemaKey != "") {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(docKey))
 		defer locker.Unlock()
 

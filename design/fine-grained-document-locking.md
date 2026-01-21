@@ -1,6 +1,6 @@
 ---
 title: fine-grained-document-locking
-target-version: 0.6.16
+target-version: 0.6.43
 ---
 
 <!-- Make sure to append document link in design README.md after creating the document. -->
@@ -84,7 +84,7 @@ The following sections detail lock acquisition patterns for different types of o
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
 3. `findClient` / `findOrCreateDoc`
-4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit)
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit or RemoveOnDetach or schema update is needed)
 5. Count attachments (if applicable)
 6. PushPull
 7. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
@@ -94,11 +94,11 @@ The following sections detail lock acquisition patterns for different types of o
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
 3. `findClient`
-4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit)
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit or RemoveOnDetach)
 5. PushPull
 6. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
 
-**PushPullChanges/RemoveDocument(by SDK)**
+**PushPullChanges(by SDK)**
 
 1. 🔒 Acquire `doc` RLock
 2. 🔒 Acquire `doc.pull`
@@ -106,13 +106,39 @@ The following sections detail lock acquisition patterns for different types of o
 4. PushPull
 5. 🔓 Release `doc.pull`, `doc`
 
-#### Administrative Operations
-
-**CreateDocument/UpdateDocument(by Admin)**
+**RemoveDocument(by SDK)**
 
 1. 🔒 Acquire `doc` RLock
-2. PushPull
-3. 🔓 Release `doc`
+2. 🔒 Acquire `doc.pull`
+3. `findClient`
+4. 🔒 Acquire `doc.attachment` (Optional, if the project has attachment limit)
+5. PushPull
+6. 🔓 Release `doc.attachment`, `doc.pull`, `doc`
+
+#### Administrative Operations
+
+**CreateDocument(by Admin)**
+
+1. 🔒 Acquire `doc` RLock
+2. `findOrCreateDoc`
+3. Compact changes
+4. 🔓 Release `doc`
+
+**UpdateDocument(by Admin)**
+
+1. 🔒 Acquire `doc` RLock
+2. `findDoc`
+3. 🔒 Acquire `doc.attachment` (Optional, if schema update is involved)
+4. Check attachment count (if applicable)
+5. PushPull (if root update is involved)
+6. 🔓 Release `doc.attachment`, `doc`
+
+**RemoveDocument(by Admin)**
+
+1. 🔒 Acquire `doc` RLock
+2. `findDoc`
+3. Remove document
+4. 🔓 Release `doc`
 
 **RestoreRevision(by SDK and Admin)**
 
