@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"sync/atomic"
 	gotime "time"
 
@@ -66,6 +67,7 @@ type Session struct {
 type Channel struct {
 	Key      types.ChannelRefKey
 	Sessions *cmap.Map[types.ID, *Session]
+	mu       sync.Mutex // Serializes Attach/Detach to prevent race conditions
 }
 
 // ChannelSessionCountInfo represents information about a channel.
@@ -233,57 +235,71 @@ func (m *Manager) Attach(
 		}
 	}
 
-	channel := m.upsertChannel(ctx, key)
-	if channel == nil {
-		return types.ID(""), 0, fmt.Errorf("create channel failed: invalid channel key %s", key.ChannelKey)
+	// Retry loop for double-check pattern: if the channel was deleted by a concurrent
+	// Detach between GetOrInsert and acquiring the lock, we retry with a new channel.
+	for {
+		channel := m.upsertChannel(ctx, key)
+		if channel == nil {
+			return types.ID(""), 0, fmt.Errorf("create channel failed: invalid channel key %s", key.ChannelKey)
+		}
+
+		channel.mu.Lock()
+
+		// Double-check: verify the channel is still in the trie.
+		// A concurrent Detach may have deleted it after upsertChannel but before we acquired the lock.
+		if current := m.channels.Get(key); current != channel {
+			channel.mu.Unlock()
+			continue // Retry with fresh channel
+		}
+
+		id := types.NewID()
+		channel.Sessions.Set(id, &Session{
+			ID:        id,
+			Actor:     clientID,
+			Key:       key,
+			UpdatedAt: gotime.Now(),
+		})
+
+		// Add reverse index for O(1) detach lookup
+		m.sessionIDToKey.Set(id, key)
+
+		// Get or create client to session map
+		clientSessionMap := m.clientToSession.Upsert(
+			clientID,
+			func(val *cmap.Map[types.ChannelRefKey, types.ID], exists bool) *cmap.Map[types.ChannelRefKey, types.ID] {
+				if !exists {
+					val = cmap.New[types.ChannelRefKey, types.ID]()
+				}
+
+				return val
+			},
+		)
+		clientSessionMap.Set(key, id)
+
+		newCount := int64(channel.Sessions.Len())
+
+		channel.mu.Unlock()
+
+		if err := m.broker.Produce(ctx, messaging.SessionEventsMessage{
+			ProjectID:  key.ProjectID.String(),
+			SessionID:  id.String(),
+			Timestamp:  gotime.Now(),
+			UserID:     clientID.String(),
+			ChannelKey: key.ChannelKey.String(),
+			EventType:  events.SessionCreated,
+		}); err != nil {
+			logging.From(ctx).Errorf("failed to produce session event: %v", err)
+		}
+
+		// Publish event to PubSub
+		m.pubsub.PublishChannel(ctx, events.ChannelEvent{
+			Key:   key,
+			Count: newCount,
+			Seq:   m.nextSeq(),
+		})
+
+		return id, newCount, nil
 	}
-
-	id := types.NewID()
-	channel.Sessions.Set(id, &Session{
-		ID:        id,
-		Actor:     clientID,
-		Key:       key,
-		UpdatedAt: gotime.Now(),
-	})
-
-	// Add reverse index for O(1) detach lookup
-	m.sessionIDToKey.Set(id, key)
-
-	// Get or create client to session map
-	clientSessionMap := m.clientToSession.Upsert(
-		clientID,
-		func(val *cmap.Map[types.ChannelRefKey, types.ID], exists bool) *cmap.Map[types.ChannelRefKey, types.ID] {
-			if !exists {
-				val = cmap.New[types.ChannelRefKey, types.ID]()
-			}
-
-			return val
-		},
-	)
-	clientSessionMap.Set(key, id)
-
-	if err := m.broker.Produce(ctx, messaging.SessionEventsMessage{
-		ProjectID:  key.ProjectID.String(),
-		SessionID:  id.String(),
-		Timestamp:  gotime.Now(),
-		UserID:     clientID.String(),
-		ChannelKey: key.ChannelKey.String(),
-		EventType:  events.SessionCreated,
-	}); err != nil {
-		logging.From(ctx).Errorf("failed to produce session event: %v", err)
-	}
-
-	// Get new count immediately after adding to minimize race window
-	newCount := int64(channel.Sessions.Len())
-
-	// Publish event to PubSub
-	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
-		Key:   key,
-		Count: newCount,
-		Seq:   m.nextSeq(),
-	})
-
-	return id, newCount, nil
 }
 
 // Detach removes a client from a channel using session ID.
@@ -301,8 +317,11 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
+	ch.mu.Lock()
+
 	session, ok := ch.Sessions.Get(id)
 	if !ok {
+		ch.mu.Unlock()
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
@@ -320,9 +339,12 @@ func (m *Manager) Detach(
 		}
 	}
 
+	// Delete channel if empty while holding the lock to prevent race with Attach
 	if newCount == 0 {
 		m.channels.Delete(key)
 	}
+
+	ch.mu.Unlock()
 
 	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
 		Key:   key,
