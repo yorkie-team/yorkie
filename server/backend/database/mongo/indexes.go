@@ -161,6 +161,11 @@ var collectionInfos = []collectionInfo{
 				{Key: "attached_docs", Value: int32(1)},
 			},
 		}, {
+			Keys: bson.D{
+				{Key: "project_id", Value: int32(1)}, // shard key: [project_id, _id]
+				{Key: "attaching_docs", Value: int32(1)},
+			},
+		}, {
 			// TODO(hackerwins): This index is for deactivating clients efficiently.
 			// But it skips the shard key to cover all clients in all projects.
 			// We should monitor performance because this may cause scatter-gather.
