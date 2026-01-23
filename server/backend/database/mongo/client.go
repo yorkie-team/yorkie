@@ -1096,6 +1096,9 @@ func (c *Client) TryAttaching(
 				clientDocInfoKey(docID, "client_seq"): uint32(0),
 				"updated_at":                          gotime.Now(),
 			},
+			"$addToSet": bson.M{
+				"attaching_docs": docID,
+			},
 		},
 		options.FindOneAndUpdate().SetReturnDocument(options.After),
 	)
@@ -1247,6 +1250,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			"$addToSet": bson.M{
 				"attached_docs": docInfo.ID,
 			},
+			"$pull": bson.M{
+				"attaching_docs": docInfo.ID,
+			},
 		}
 	} else {
 		updater = bson.M{
@@ -1257,7 +1263,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 				"updated_at":                               info.UpdatedAt,
 			},
 			"$pull": bson.M{
-				"attached_docs": docInfo.ID,
+				"attached_docs":  docInfo.ID,
+				"attaching_docs": docInfo.ID,
 			},
 		}
 	}
@@ -2272,7 +2279,7 @@ func (c *Client) IsDocumentAttachedOrAttaching(
 		"project_id": docRefKey.ProjectID,
 		"$or": bson.A{
 			bson.M{"attached_docs": docRefKey.DocID},
-			bson.M{clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttaching},
+			bson.M{"attaching_docs": docRefKey.DocID},
 		},
 	}
 

@@ -69,7 +69,7 @@ func (s *clusterServer) DetachDocument(
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
+	}, true)
 	if err != nil {
 		return nil, err
 	}
