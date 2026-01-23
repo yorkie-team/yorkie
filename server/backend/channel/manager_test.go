@@ -949,6 +949,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		wg.Wait()
 
 		// Should have 300 channels
+		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
 		assert.Equal(t, concurrency, manager.Count(projectID))
 	})
 
