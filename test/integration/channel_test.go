@@ -895,8 +895,8 @@ func TestChannelIntegration(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// Verify counts
-		// room-1 should have 2 direct sessions
-		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct sessions")
+		// room-1 direct session counts (per-client view)
+		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct session")
 		assert.Equal(t, int64(1), channels[1].Count(), "room-1.section-1 should have 1 direct sessions")
 		assert.Equal(t, int64(1), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct sessions")
 		assert.Equal(t, int64(1), channels[3].Count(), "room-1.section-2 should have 1 direct sessions")
@@ -911,11 +911,11 @@ func TestChannelIntegration(t *testing.T) {
 			require.NoError(t, client.Detach(ctx, channels[i]))
 		}
 
-		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 1 direct sessions")
-		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 1 direct sessions")
-		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct sessions")
-		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 1 direct sessions")
-		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 2 direct sessions")
+		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 0 direct sessions after detach")
 	})
 
 	t.Run("channel path cleanup test", func(t *testing.T) {

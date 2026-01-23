@@ -973,7 +973,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		wg.Wait()
 
-		// Final count should be 50 (all old detached, all new attached)
+		// Final count should be 300 (all old detached, all new attached)
 		assert.Equal(t, int64(300), manager.SessionCount(refKey, false))
 	})
 

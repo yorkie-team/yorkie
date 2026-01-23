@@ -142,7 +142,7 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 			ProjectID:  projectID,
 			ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 		}
-		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("init%022d", i))
+		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 		sessionID, _, err := manager.Attach(ctx, channelKeys[i], clientID)
 		if err != nil {
 			b.Fatalf("Failed to attach initial session: %v", err)
@@ -156,6 +156,7 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 
 	b.ResetTimer()
 
+	var attachErrors int64
 	for b.Loop() {
 		var wg sync.WaitGroup
 
@@ -173,12 +174,15 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 					// Write operation: Attach
 					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", idx))
 					_, _, err := manager.Attach(ctx, channelKey, clientID)
-					assert.NoError(b, err, "attach should succeed")
+					if err != nil {
+						atomic.AddInt64(&attachErrors, 1)
+					}
 				}
 			}(i)
 		}
 
 		wg.Wait()
+		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
 	}
 }
 
@@ -238,7 +242,7 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 			ProjectID:  projectID,
 			ChannelKey: key.Key(keyPath),
 		}
-		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("init%022d", i))
+		clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 		sessionID, _, err := manager.Attach(ctx, channelKeys[i], clientID)
 		if err != nil {
 			b.Fatalf("Failed to attach initial session: %v", err)
@@ -677,29 +681,27 @@ func BenchmarkChannelCleanupExpired(b *testing.B) {
 	testCases := []struct {
 		name          string
 		channelCount  int
-		expiredRatio  float64 // ratio of expired sessions
 		sessionsPerCh int
 	}{
 		// Single session per channel
-		{"100ch_1session_50pct_expired", 100, 0.5, 1},
-		{"100ch_1session_100pct_expired", 100, 1.0, 1},
-		{"500ch_1session_50pct_expired", 500, 0.5, 1},
-		{"1000ch_1session_50pct_expired", 1000, 0.5, 1},
+		{"100ch * 1 session_expired", 100, 1},
+		{"500ch * 1 session_expired", 500, 1},
+		{"1000ch * 1 session_expired", 1000, 1},
 
 		// Multiple sessions per channel
-		{"100ch_5session_50pct_expired", 100, 0.5, 5},
-		{"100ch_10session_50pct_expired", 100, 0.5, 10},
-		{"500ch_5session_50pct_expired", 500, 0.5, 5},
+		{"100ch * 5 sessions_expired", 100, 5},
+		{"100ch * 10 sessions_expired", 100, 10},
+		{"100ch * 20 sessions_expired", 100, 20},
 	}
 
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
-			benchmarkManagerCleanupExpired(b, tc.channelCount, tc.expiredRatio, tc.sessionsPerCh)
+			benchmarkManagerCleanupExpired(b, tc.channelCount, tc.sessionsPerCh)
 		})
 	}
 }
 
-func benchmarkManagerCleanupExpired(b *testing.B, channelCount int, expiredRatio float64, sessionsPerCh int) {
+func benchmarkManagerCleanupExpired(b *testing.B, channelCount int, sessionsPerCh int) {
 	ctx := context.Background()
 
 	// Create manager once with very short TTL
@@ -734,11 +736,6 @@ func benchmarkManagerCleanupExpired(b *testing.B, channelCount int, expiredRatio
 					b.Fatalf("Failed to attach: %v", err)
 				}
 			}
-		}
-
-		// Wait for TTL to expire
-		if expiredRatio > 0 {
-			gotime.Sleep(5 * gotime.Millisecond)
 		}
 
 		b.StartTimer()
