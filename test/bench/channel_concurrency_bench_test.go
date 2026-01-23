@@ -223,6 +223,7 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				var wg sync.WaitGroup
 				var sessionIdx int32
 				var attachCount, detachCount int64
+				var attachErrors, detachErrors int64
 
 				for g := range tc.goroutineCount {
 					wg.Add(1)
@@ -233,14 +234,19 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 							// Detach operation
 							idx := atomic.AddInt32(&sessionIdx, 1) - 1
 							if int(idx) < len(sessionIDs) {
-								_, _ = manager.Detach(ctx, sessionIDs[idx])
+								_, err := manager.Detach(ctx, sessionIDs[idx])
+								if err != nil {
+									atomic.AddInt64(&detachErrors, 1)
+								}
 								atomic.AddInt64(&detachCount, 1)
 							}
 						} else {
 							// Attach operation
 							clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", gIdx))
 							_, _, err := manager.Attach(ctx, channelKey, clientID)
-							assert.NoError(b, err, "attach should succeed")
+							if err != nil {
+								atomic.AddInt64(&attachErrors, 1)
+							}
 							atomic.AddInt64(&attachCount, 1)
 						}
 					}(g)
@@ -249,6 +255,8 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				wg.Wait()
 
 				// Verify operations happened
+				assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
+				assert.Equal(b, int64(0), detachErrors, "no detach errors should occur")
 				assert.Greater(b, attachCount+detachCount, int64(0), "some operations should have occurred")
 			}
 		})
@@ -682,17 +690,24 @@ func BenchmarkChannelConcurrency_DataRaceDetection(b *testing.B) {
 	b.ResetTimer()
 
 	var totalOps int64
+	var goroutineID int64
 	b.RunParallel(func(pb *testing.PB) {
+		// Each goroutine gets its own session for detach/refresh operations
+		gID := atomic.AddInt64(&goroutineID, 1)
+		localClientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024x", gID))
+		localSessionID, _, _ := manager.Attach(ctx, channelKey, localClientID)
+
 		i := 0
 		for pb.Next() {
 			switch i % 10 {
 			case 0, 1, 2:
 				// Attach (30%)
-				cID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i+1000))
+				cID, _ := time.ActorIDFromHex(fmt.Sprintf("%024x", gID*10000+int64(i)))
 				_, _, _ = manager.Attach(ctx, channelKey, cID)
 			case 3:
-				// Detach (10%)
-				_, _ = manager.Detach(ctx, sessionID)
+				// Detach own session then re-attach (10%)
+				_, _ = manager.Detach(ctx, localSessionID)
+				localSessionID, _, _ = manager.Attach(ctx, channelKey, localClientID)
 			case 4, 5:
 				// SessionCount (20%)
 				count := manager.SessionCount(channelKey, i%2 == 0)
@@ -711,8 +726,8 @@ func BenchmarkChannelConcurrency_DataRaceDetection(b *testing.B) {
 				stats := manager.Stats()
 				assert.NotNil(b, stats, "stats should not be nil")
 			case 9:
-				// Refresh (10%)
-				_ = manager.Refresh(ctx, sessionID)
+				// Refresh own session (10%)
+				_ = manager.Refresh(ctx, localSessionID)
 			}
 			atomic.AddInt64(&totalOps, 1)
 			i++

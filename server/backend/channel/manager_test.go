@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -300,9 +301,14 @@ func TestChannelManager_Count(t *testing.T) {
 		assertChannelCounts(t, manager, channelRefKeys, []int64{37, 28, 9, 10}, true)
 		assertChannelCounts(t, manager, channelRefKeys, []int64{9, 9, 9, 10}, false)
 
-		// Cleanup all channels
-		for _, channelID := range channelIDs {
-			_, _ = manager.Detach(ctx, channelID)
+		// Cleanup all channels (skip already detached: indices 0, 10, 20)
+		alreadyDetached := map[int]bool{0: true, 10: true, 20: true}
+		for i, channelID := range channelIDs {
+			if alreadyDetached[i] {
+				continue
+			}
+			_, err := manager.Detach(ctx, channelID)
+			assert.NoError(t, err)
 		}
 		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
 		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
@@ -344,7 +350,8 @@ func TestChannelManager_Count(t *testing.T) {
 
 		// Cleanup all channels
 		for _, channelID := range channelIDs {
-			_, _ = manager.Detach(ctx, channelID)
+			_, err := manager.Detach(ctx, channelID)
+			assert.NoError(t, err)
 		}
 		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, true)
 		assertChannelCounts(t, manager, channelRefKeys, []int64{0, 0, 0, 0}, false)
@@ -850,7 +857,8 @@ func TestChannelManager_Stats(t *testing.T) {
 		assert.Equal(t, 3, stats["total_sessions"])
 
 		// Detach one session
-		_, _ = manager.Detach(ctx, sessionIDs[0])
+		_, err := manager.Detach(ctx, sessionIDs[0])
+		assert.NoError(t, err)
 
 		stats = manager.Stats()
 		assert.Equal(t, 1, stats["total_channels"])
@@ -858,8 +866,10 @@ func TestChannelManager_Stats(t *testing.T) {
 		assert.Equal(t, 4, stats["current_seq"]) // 3 attach + 1 detach
 
 		// Detach all remaining
-		_, _ = manager.Detach(ctx, sessionIDs[1])
-		_, _ = manager.Detach(ctx, sessionIDs[2])
+		_, err = manager.Detach(ctx, sessionIDs[1])
+		assert.NoError(t, err)
+		_, err = manager.Detach(ctx, sessionIDs[2])
+		assert.NoError(t, err)
 
 		stats = manager.Stats()
 		assert.Equal(t, 0, stats["total_channels"])
@@ -951,13 +961,18 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		concurrency := 300
 		var wg sync.WaitGroup
+		var detachErrors int64
+		var attachErrors int64
 
 		// Concurrent detaches
 		for i := range concurrency {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				_, _ = manager.Detach(ctx, initialSessions[idx])
+				_, err := manager.Detach(ctx, initialSessions[idx])
+				if err != nil {
+					atomic.AddInt64(&detachErrors, 1)
+				}
 			}(i)
 		}
 
@@ -967,13 +982,18 @@ func TestChannelManager_Concurrency(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("2%023d", idx))
-				_, _, _ = manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID)
+				if err != nil {
+					atomic.AddInt64(&attachErrors, 1)
+				}
 			}(i)
 		}
 
 		wg.Wait()
 
 		// Final count should be 300 (all old detached, all new attached)
+		assert.Equal(t, int64(0), detachErrors, "no detach errors should occur")
+		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
 		assert.Equal(t, int64(300), manager.SessionCount(refKey, false))
 	})
 
@@ -990,6 +1010,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		}
 
 		var wg sync.WaitGroup
+		var attachErrors int64
 
 		// Concurrent attaches to different hierarchical channels
 		for i := range 100 {
@@ -999,7 +1020,9 @@ func TestChannelManager_Concurrency(t *testing.T) {
 				refKey := refKeys[idx%len(refKeys)]
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
-				assert.NoError(t, err)
+				if err != nil {
+					atomic.AddInt64(&attachErrors, 1)
+				}
 			}(i)
 		}
 		wg.Wait()
@@ -1007,6 +1030,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		// Verify hierarchical counts
 		totalCount := manager.SessionCount(refKeys[0], true)
 		assert.Equal(t, int64(100), totalCount)
+		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
 	})
 }
 
@@ -1082,16 +1106,20 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
 		concurrency := 300
 		var wg sync.WaitGroup
-
+		var attachErrors int64
 		for i := 0; i < concurrency; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
-				_, _, _ = manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID)
+				if err != nil {
+					atomic.AddInt64(&attachErrors, 1)
+				}
 			}(i)
 		}
 		wg.Wait()
+		assert.Equal(t, int64(0), attachErrors, "no attach errors should occur")
 
 		// Verify all seq numbers are unique
 		pubsub.mu.Lock()
@@ -1122,8 +1150,10 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 		assert.Equal(t, 5, stats["current_seq"])
 
 		// After 2 detaches, seq should be 7
-		_, _ = manager.Detach(ctx, sessionIDs[0])
-		_, _ = manager.Detach(ctx, sessionIDs[1])
+		_, err := manager.Detach(ctx, sessionIDs[0])
+		assert.NoError(t, err)
+		_, err = manager.Detach(ctx, sessionIDs[1])
+		assert.NoError(t, err)
 		stats = manager.Stats()
 		assert.Equal(t, 7, stats["current_seq"])
 	})
@@ -1174,7 +1204,8 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 			}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, _ = manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID)
+			assert.NoError(t, err)
 		}
 
 		// Limit 0 should use MinChannelLimit (1)
@@ -1194,7 +1225,8 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 			}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, _ = manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID)
+			assert.NoError(t, err)
 		}
 
 		// Negative limit should use MinChannelLimit (1)
@@ -1212,7 +1244,8 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 		for i, k := range keys {
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, _ = manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID)
+			assert.NoError(t, err)
 		}
 
 		// List all channels

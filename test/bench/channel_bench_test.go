@@ -255,6 +255,7 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 
 	b.ResetTimer()
 
+	var attachErrors int64
 	for b.Loop() {
 		var wg sync.WaitGroup
 
@@ -272,12 +273,15 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 					// Write: Attach
 					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", idx))
 					_, _, err := manager.Attach(ctx, channelKey, clientID)
-					assert.NoError(b, err, "attach should succeed")
+					if err != nil {
+						atomic.AddInt64(&attachErrors, 1)
+					}
 				}
 			}(i)
 		}
 
 		wg.Wait()
+		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
 	}
 }
 
@@ -328,17 +332,21 @@ func benchmarkManagerAttach(b *testing.B, clientCount int) {
 
 		var wg sync.WaitGroup
 
+		var attachErrors int64
 		for j := range clientCount {
 			wg.Add(1)
 			go func(iterIdx, clientIdx int) {
 				defer wg.Done()
 				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", iterIdx, clientIdx))
 				_, _, err := manager.Attach(ctx, channelKey, clientID)
-				assert.NoError(b, err, "attach should succeed")
+				if err != nil {
+					atomic.AddInt64(&attachErrors, 1)
+				}
 			}(i, j)
 		}
 
 		wg.Wait()
+		assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
 	}
 }
 
@@ -374,12 +382,16 @@ func benchmarkManagerDetach(b *testing.B, clientCount int) {
 		b.StartTimer()
 
 		// Concurrent detach
+		var detachErrors int64
 		var wg sync.WaitGroup
 		for j := range clientCount {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				_, _ = manager.Detach(ctx, sessionIDs[idx])
+				_, err := manager.Detach(ctx, sessionIDs[idx])
+				if err != nil {
+					atomic.AddInt64(&detachErrors, 1)
+				}
 			}(j)
 		}
 
@@ -409,6 +421,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 
 		var wg sync.WaitGroup
 		var attachErrors int64
+		var detachErrors int64
 
 		// Concurrent attach
 		sessionIDs := make([]types.ID, clientCount)
@@ -444,13 +457,17 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 				mu.Lock()
 				sessionID := sessionIDs[idx]
 				mu.Unlock()
-				_, _ = manager.Detach(ctx, sessionID)
+				_, err := manager.Detach(ctx, sessionID)
+				if err != nil {
+					atomic.AddInt64(&detachErrors, 1)
+				}
 			}(j)
 		}
 
 		wg.Wait()
 
 		b.StopTimer()
+		assert.Equal(b, int64(0), detachErrors, "no detach errors should occur")
 		assert.Equal(b, int64(0), manager.SessionCount(channelKey, false), "all sessions should be detached")
 		b.StartTimer()
 	}
