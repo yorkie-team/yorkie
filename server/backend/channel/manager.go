@@ -21,13 +21,12 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"sync/atomic"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
-	"github.com/yorkie-team/yorkie/pkg/channel"
+	pkgchannel "github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -41,7 +40,7 @@ var (
 	ErrSessionNotFound = errors.NotFound("session not found").WithCode("ErrSessionNotFound")
 
 	// ErrInvalidChannelKey is returned when a channel key is invalid.
-	ErrInvalidChannelKey = errors.InvalidArgument("channel key is invalid").WithCode("ErrInvalidChannelKey")
+	ErrInvalidChannelKey = pkgchannel.ErrInvalidChannelKey
 
 	// MinChannelLimit is the minimum limit for listing channels.
 	MinChannelLimit = 1
@@ -63,16 +62,22 @@ type Session struct {
 	UpdatedAt gotime.Time         // Last activity time for TTL calculation
 }
 
-// ChannelInfo represents information about a channel.
-type ChannelInfo struct {
+// Channel represents a channel.
+type Channel struct {
+	Key      types.ChannelRefKey
+	Sessions *cmap.Map[types.ID, *Session]
+}
+
+// ChannelSessionCountInfo represents information about a channel.
+type ChannelSessionCountInfo struct {
 	Key      types.ChannelRefKey
 	Sessions int
 }
 
-// Manager manages channel.
+// Manager manages channels and sessions for real-time user tracking.
 type Manager struct {
-	// channels maps channel keys to their active sessions.
-	channels *cmap.Map[types.ChannelRefKey, *cmap.Map[types.ID, *Session]]
+	// channels is a lock-free hierarchical trie that maps channel keys to their active sessions.
+	channels *ChannelTrie
 
 	// clientToSession maps client IDs to their associated channel keys and session IDs.
 	clientToSession *cmap.Map[time.ActorID, *cmap.Map[types.ChannelRefKey, types.ID]]
@@ -108,7 +113,7 @@ type Manager struct {
 	db database.Database
 }
 
-// NewManager creates a new presence manager.
+// NewManager creates a new channel manager.
 func NewManager(
 	pubsub PubSub,
 	ttl gotime.Duration,
@@ -126,7 +131,7 @@ func NewManager(
 	}
 
 	return &Manager{
-		channels:        cmap.New[types.ChannelRefKey, *cmap.Map[types.ID, *Session]](),
+		channels:        NewChannelTrie(),
 		clientToSession: cmap.New[time.ActorID, *cmap.Map[types.ChannelRefKey, types.ID]](),
 		sessionIDToKey:  cmap.New[types.ID, types.ChannelRefKey](),
 
@@ -181,14 +186,44 @@ func (m *Manager) nextSeq() int64 {
 	return m.seqCounter.Add(1)
 }
 
+func (m *Manager) upsertChannel(ctx context.Context, key types.ChannelRefKey) *Channel {
+	// isNew tracks whether this goroutine created the channel.
+	// GetOrInsert uses double-check locking internally:
+	// - Fast path: if the key exists, returns immediately without calling create()
+	// - Slow path: acquires lock, re-checks, and only calls create() if still missing
+	// This ensures create() is called exactly once, so isNew is true for exactly one goroutine.
+	isNew := false
+	value := m.channels.GetOrInsert(key, func() *Channel {
+		isNew = true
+		return &Channel{
+			Key:      key,
+			Sessions: cmap.New[types.ID, *Session](),
+		}
+	})
+
+	// Publish event only for the goroutine that actually created the channel
+	if isNew && value != nil {
+		if err := m.broker.Produce(ctx, messaging.ChannelEventsMessage{
+			ProjectID:  key.ProjectID.String(),
+			EventType:  events.ChannelCreated,
+			Timestamp:  gotime.Now(),
+			ChannelKey: key.ChannelKey.String(),
+		}); err != nil {
+			logging.From(ctx).Errorf("failed to produce channel event: %v", err)
+		}
+	}
+
+	return value
+}
+
 // Attach adds a client to a channel and returns the unique session ID.
 func (m *Manager) Attach(
 	ctx context.Context,
 	key types.ChannelRefKey,
 	clientID time.ActorID,
 ) (types.ID, int64, error) {
-	if !channel.IsValidChannelKeyPath(key.ChannelKey) {
-		return types.ID(""), 0, channel.ErrInvalidChannelKey
+	if !pkgchannel.IsValidChannelKeyPath(key.ChannelKey) {
+		return types.ID(""), 0, ErrInvalidChannelKey
 	}
 
 	// Check if client is already attached to this channel
@@ -198,28 +233,13 @@ func (m *Manager) Attach(
 		}
 	}
 
-	sessionMap := m.channels.Upsert(
-		key,
-		func(val *cmap.Map[types.ID, *Session], exists bool) *cmap.Map[types.ID, *Session] {
-			if !exists {
-				val = cmap.New[types.ID, *Session]()
-
-				if err := m.broker.Produce(ctx, messaging.ChannelEventsMessage{
-					ProjectID:  key.ProjectID.String(),
-					EventType:  events.ChannelCreated,
-					Timestamp:  gotime.Now(),
-					ChannelKey: key.ChannelKey.String(),
-				}); err != nil {
-					logging.From(ctx).Errorf("failed to produce channel event: %v", err)
-				}
-			}
-
-			return val
-		},
-	)
+	channel := m.upsertChannel(ctx, key)
+	if channel == nil {
+		return types.ID(""), 0, fmt.Errorf("create channel failed: invalid channel key %s", key.ChannelKey)
+	}
 
 	id := types.NewID()
-	sessionMap.Set(id, &Session{
+	channel.Sessions.Set(id, &Session{
 		ID:        id,
 		Actor:     clientID,
 		Key:       key,
@@ -254,7 +274,7 @@ func (m *Manager) Attach(
 	}
 
 	// Get new count immediately after adding to minimize race window
-	newCount := int64(sessionMap.Len())
+	newCount := int64(channel.Sessions.Len())
 
 	// Publish event to PubSub
 	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
@@ -276,19 +296,19 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	sessionMap, ok := m.channels.Get(key)
+	ch := m.channels.Get(key)
+	if ch == nil {
+		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
+	}
+
+	session, ok := ch.Sessions.Get(id)
 	if !ok {
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	session, ok := sessionMap.Get(id)
-	if !ok {
-		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
-	}
+	ch.Sessions.Delete(id)
 
-	sessionMap.Delete(id)
-
-	newCount := int64(sessionMap.Len())
+	newCount := int64(ch.Sessions.Len())
 
 	m.sessionIDToKey.Delete(id)
 
@@ -323,17 +343,17 @@ func (m *Manager) Refresh(
 		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
 	}
 
-	sessionMap, ok := m.channels.Get(key)
+	ch := m.channels.Get(key)
+	if ch == nil {
+		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
+	}
+
+	info, ok := ch.Sessions.Get(id)
 	if !ok {
 		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
 	}
 
-	info, ok := sessionMap.Get(id)
-	if !ok {
-		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
-	}
-
-	sessionMap.Set(id, &Session{
+	ch.Sessions.Set(id, &Session{
 		ID:        info.ID,
 		Key:       info.Key,
 		Actor:     info.Actor,
@@ -346,37 +366,26 @@ func (m *Manager) Refresh(
 // SessionCount returns the current session count for a channel key.
 // This is a lock-free operation by directly querying the session map length.
 // If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
-func (m *Manager) SessionCount(key types.ChannelRefKey, includeSubPath bool) int64 {
-	if !channel.IsValidChannelKeyPath(key.ChannelKey) {
+func (m *Manager) SessionCount(channelkey types.ChannelRefKey, includeSubPath bool) int64 {
+	if !pkgchannel.IsValidChannelKeyPath(channelkey.ChannelKey) {
 		return 0
 	}
 
 	if !includeSubPath {
-		if sessionMap, ok := m.channels.Get(key); ok {
-			return int64(sessionMap.Len())
+		ch := m.channels.Get(channelkey)
+		if ch != nil {
+			return int64(ch.Sessions.Len())
 		}
 		return 0
 	}
 
 	totalCount := 0
-	targetKeyPaths, err := channel.ParseKeyPath(key.ChannelKey)
-	if err != nil {
-		return 0
-	}
-	for _, channelKey := range m.channels.Keys() {
-		channelKeyPaths, err := channel.ParseKeyPath(channelKey.ChannelKey)
-		if err != nil {
-			continue
-		}
+	// Use ForEachDescendant to get all child channels in the hierarchy
+	m.channels.ForEachDescendant(channelkey, func(ch *Channel) bool {
+		totalCount += ch.Sessions.Len()
+		return true
+	})
 
-		if !isKeyPathPrefix(channelKeyPaths, targetKeyPaths) {
-			continue
-		}
-
-		if sessionMap, ok := m.channels.Get(channelKey); ok {
-			totalCount += sessionMap.Len()
-		}
-	}
 	return int64(totalCount)
 }
 
@@ -386,14 +395,24 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	now := gotime.Now()
 	cleanedCount := 0
 
-	for _, key := range m.channels.Keys() {
-		sessionMap, ok := m.channels.Get(key)
-		if !ok {
+	// Collect channel keys first - this is now lock-free with HierarchicalTrie
+	channelKeys := make([]types.ChannelRefKey, 0)
+	m.channels.ForEach(func(ch *Channel) bool {
+		if ch != nil {
+			channelKeys = append(channelKeys, ch.Key)
+		}
+		return true
+	})
+
+	// Process each channel with proper locking
+	for _, key := range channelKeys {
+		ch := m.channels.Get(key)
+		if !m.isValidChannel(ch) {
 			continue
 		}
 
 		// Check if session has expired (UpdatedAt + TTL < now)
-		expiredSessionIDs := classifyExpiredSessions(now, m.sessionTTL, sessionMap)
+		expiredSessionIDs := classifyExpiredSessions(now, m.sessionTTL, ch.Sessions)
 
 		// Remove expired sessions
 		cleanedCount += cleanUpExpiredSessions(ctx, m, expiredSessionIDs)
@@ -405,106 +424,6 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 	}
 
 	return cleanedCount, nil
-}
-
-// collectAndPublishMetrics collects channel and session metrics and publishes them to Prometheus.
-func (m *Manager) collectAndPublishMetrics(ctx context.Context) {
-	metrics := newChannelMetrics()
-
-	for _, key := range m.channels.Keys() {
-		sessionMap, ok := m.channels.Get(key)
-		if !ok {
-			continue
-		}
-
-		sessionCount := sessionMap.Len()
-		if sessionCount == 0 {
-			continue
-		}
-
-		project, err := m.db.FindProjectInfoByID(ctx, key.ProjectID)
-		if err != nil {
-			logging.From(ctx).Warnf("collect metrics: find project info %s: %v", key.ProjectID, err)
-			continue
-		}
-
-		metrics.record(project.ToProject(), key, sessionCount)
-	}
-
-	metrics.publish(m.metrics)
-}
-
-// Stats returns statistics about the channel manager.
-func (m *Manager) Stats() map[string]int {
-	totalSessions := 0
-	for _, sessionMap := range m.channels.Values() {
-		totalSessions += sessionMap.Len()
-	}
-
-	return map[string]int{
-		"total_channels": m.channels.Len(),
-		"total_sessions": totalSessions,
-		"current_seq":    int(m.seqCounter.Load()),
-	}
-}
-
-// List lists channels for the given project ID.
-// If query is not empty, it filters channels by the query prefix.
-// It returns up to limit channels.
-func (m *Manager) List(
-	projectID types.ID,
-	query string,
-	limit int,
-) []ChannelInfo {
-	if limit <= 0 {
-		limit = MinChannelLimit
-	}
-	if limit > MaxChannelLimit {
-		limit = MaxChannelLimit
-	}
-
-	results := make([]ChannelInfo, 0)
-	for _, key := range m.channels.Keys() {
-		if key.ProjectID != projectID {
-			continue
-		}
-
-		if query != "" && !strings.HasPrefix(key.ChannelKey.String(), query) {
-			continue
-		}
-
-		sessionMap, ok := m.channels.Get(key)
-		if !ok {
-			continue
-		}
-
-		sessionCount := sessionMap.Len()
-		if sessionCount > 0 {
-			results = append(results, ChannelInfo{
-				Key:      key,
-				Sessions: sessionCount,
-			})
-		}
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
-	})
-	if len(results) > limit {
-		results = results[:limit]
-	}
-	return results
-}
-
-// Count returns the current channels count.
-func (m *Manager) Count(projectID types.ID) int {
-	count := 0
-	for _, key := range m.channels.Keys() {
-		if key.ProjectID == projectID {
-			count++
-		}
-	}
-	return count
 }
 
 func classifyExpiredSessions(
@@ -534,17 +453,124 @@ func cleanUpExpiredSessions(ctx context.Context, manager *Manager, expiredSessio
 	return cleanedCount
 }
 
-// isKeyPathPrefix checks if baseKeyPaths is a prefix of targetKeyPaths.
-func isKeyPathPrefix(baseKeyPaths, targetKeyPaths []string) bool {
-	if len(baseKeyPaths) < len(targetKeyPaths) {
+// collectAndPublishMetrics collects channel and session metrics and publishes them to Prometheus.
+func (m *Manager) collectAndPublishMetrics(ctx context.Context) {
+	metrics := newChannelMetrics()
+
+	m.channels.ForEach(func(ch *Channel) bool {
+		if !m.isValidChannel(ch) {
+			return true
+		}
+
+		sessionCount := ch.Sessions.Len()
+		if sessionCount == 0 {
+			return true
+		}
+
+		key := ch.Key
+
+		project, err := m.db.FindProjectInfoByID(ctx, key.ProjectID)
+		if err != nil {
+			logging.From(ctx).Warnf("collect metrics: find project info %s: %v", key.ProjectID, err)
+			return true
+		}
+
+		metrics.record(project.ToProject(), key, sessionCount)
+		return true
+	})
+
+	metrics.publish(m.metrics)
+}
+
+// Stats returns statistics about the channel manager.
+func (m *Manager) Stats() map[string]int {
+	totalChannels := 0
+	totalSessions := 0
+	m.channels.ForEach(func(ch *Channel) bool {
+		if !m.isValidChannel(ch) {
+			return true
+		}
+		totalChannels++
+		totalSessions += ch.Sessions.Len()
+		return true
+	})
+
+	return map[string]int{
+		"total_channels": totalChannels,
+		"total_sessions": totalSessions,
+		"current_seq":    int(m.seqCounter.Load()),
+	}
+}
+
+// List lists channels for the given project ID.
+// If query is not empty, it filters channels by the query prefix.
+// It returns up to limit channels.
+func (m *Manager) List(
+	projectID types.ID,
+	query string,
+	limit int,
+) []ChannelSessionCountInfo {
+	if limit <= 0 {
+		limit = MinChannelLimit
+	}
+	if limit > MaxChannelLimit {
+		limit = MaxChannelLimit
+	}
+
+	results := make([]ChannelSessionCountInfo, 0)
+	if query != "" {
+		// Query is a channel key prefix
+		m.channels.ForEachPrefix(query, projectID, func(ch *Channel) bool {
+			m.collectActiveChannelInfo(ch, &results)
+			return true
+		})
+	} else {
+		// No query: list all channels for this project
+		m.channels.ForEachInProject(projectID, func(ch *Channel) bool {
+			m.collectActiveChannelInfo(ch, &results)
+			return true
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Key.ChannelKey.String() < results[j].Key.ChannelKey.String()
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
+}
+
+// Count returns the current channels count.
+func (m *Manager) Count(projectID types.ID) int {
+	count := 0
+	m.channels.ForEachInProject(projectID, func(ch *Channel) bool {
+		if ch != nil {
+			count++
+		}
+		return true
+	})
+	return count
+}
+
+// collectActiveChannelInfo collects channel information if it has active sessions.
+// Returns true if the channel was added to results, false otherwise.
+func (m *Manager) collectActiveChannelInfo(ch *Channel, results *[]ChannelSessionCountInfo) bool {
+	if !m.isValidChannel(ch) {
 		return false
 	}
-
-	for i, keyPath := range targetKeyPaths {
-		if keyPath != baseKeyPaths[i] {
-			return false
-		}
+	sessionCount := ch.Sessions.Len()
+	if sessionCount > 0 {
+		*results = append(*results, ChannelSessionCountInfo{
+			Key:      ch.Key,
+			Sessions: sessionCount,
+		})
+		return true
 	}
+	return false
+}
 
-	return true
+// isValidChannel checks if a channel is valid (non-nil with initialized sessions).
+func (m *Manager) isValidChannel(ch *Channel) bool {
+	return ch != nil && ch.Sessions != nil
 }
