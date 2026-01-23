@@ -230,7 +230,7 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 					go func(gIdx int) {
 						defer wg.Done()
 
-						if gIdx%100 < tc.detachRatio {
+						if (gIdx*100)/tc.goroutineCount < tc.detachRatio {
 							// Detach operation
 							idx := atomic.AddInt32(&sessionIdx, 1) - 1
 							if int(idx) < len(sessionIDs) {
@@ -297,7 +297,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 						ChannelKey: key.Key(fmt.Sprintf("room-%d", j)),
 					}
 					// Pre-attach one session
-					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("init%022d", j))
+					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", j))
 					sessionID, _, err := manager.Attach(ctx, channelKeys[j], clientID)
 					assert.NoError(b, err, "pre-attach should succeed")
 					assert.NotEmpty(b, sessionID, "session ID should not be empty")
@@ -308,6 +308,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 
 				var wg sync.WaitGroup
 				done := make(chan struct{})
+				var closeOnce sync.Once
 				var readCount int64
 
 				// Start readers
@@ -344,7 +345,9 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 						atomic.AddInt32(&writeCount, 1)
 
 						if atomic.LoadInt32(&writeCount) >= int32(tc.writers) {
-							close(done)
+							closeOnce.Do(func() {
+								close(done)
+							})
 						}
 					}(w)
 				}
@@ -390,7 +393,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 						ProjectID:  projectID,
 						ChannelKey: key.Key(fmt.Sprintf("room-%d", j)),
 					}
-					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("init%022d", j))
+					clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", j))
 					sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 					assert.NoError(b, err, "pre-create should succeed")
 					assert.NotEmpty(b, sessionID, "session ID should not be empty")
@@ -577,7 +580,7 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 					ProjectID:  projectID,
 					ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 				}
-				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("init%022d", i))
+				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				sessionID, _, err := manager.Attach(ctx, channelKeys[i], clientID)
 				assert.NoError(b, err, "pre-attach should succeed")
 				assert.NotEmpty(b, sessionID, "session ID should not be empty")
