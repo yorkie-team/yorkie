@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The Yorkie Authors. All rights reserved.
+ * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,25 +18,26 @@ package channel
 
 import (
 	"github.com/yorkie-team/yorkie/api/types"
-	pkgchannel "github.com/yorkie-team/yorkie/pkg/channel"
+	"github.com/yorkie-team/yorkie/pkg/channel"
+	"github.com/yorkie-team/yorkie/pkg/trie"
 )
 
 // ChannelTrie wraps PathTrie with Channel-specific methods.
 type ChannelTrie struct {
-	trie *PathTrie[*Channel]
+	trie *trie.PathTrie[*Channel]
 }
 
 // NewChannelTrie creates a new trie for storing channels.
 func NewChannelTrie() *ChannelTrie {
 	return &ChannelTrie{
-		trie: NewPathTrie[*Channel](),
+		trie: trie.NewPathTrie[*Channel](),
 	}
 }
 
 // buildKeyPath constructs a key path with projectID prefix.
 // Returns nil if the channel key is invalid.
 func buildKeyPath(key types.ChannelRefKey) []string {
-	keyPath, err := pkgchannel.ParseKeyPath(key.ChannelKey)
+	keyPath, err := channel.ParseKeyPath(key.ChannelKey)
 	if err != nil {
 		return nil
 	}
