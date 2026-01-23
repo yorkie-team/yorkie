@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.45] - 2026-01-23
+
+### Added
+
+- Introduce lock-free PathTrie for channel and path indexing by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1644
+
+### Fixed
+
+- Update locking and lifecycle design docs to reflect recent changes by @raararaara in https://github.com/yorkie-team/yorkie/pull/1625
+- Index attaching documents to avoid dynamic field scans by @raararaara in https://github.com/yorkie-team/yorkie/pull/1645
+
 ## [v0.6.44] - 2026-01-19
 
 ### Added
