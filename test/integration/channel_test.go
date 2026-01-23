@@ -113,7 +113,7 @@ func TestChannelIntegration(t *testing.T) {
 		assert.False(t, ch3.IsAttached())
 	})
 
-	t.Run("presence count value verification test", func(t *testing.T) {
+	t.Run("session count value verification test", func(t *testing.T) {
 		clients := activeClients(t, 1)
 		defer deactivateAndCloseClients(t, clients)
 		cli := clients[0]
@@ -147,14 +147,14 @@ func TestChannelIntegration(t *testing.T) {
 		assert.Equal(t, int64(1), ch.Count(), "Counter object should reflect actual count")
 	})
 
-	t.Run("presence count changes with multiple clients test", func(t *testing.T) {
+	t.Run("session count changes with multiple clients test", func(t *testing.T) {
 		clients := activeClients(t, 3)
 		defer deactivateAndCloseClients(t, clients)
 
 		watcherClient := clients[0]
 		participantClients := clients[1:]
 
-		// Create presence channels for the same room
+		// Create channels for the same room
 		channelKey := helper.TestKey(t)
 		watcher, err := channel.New(channelKey)
 		assert.NoError(t, err)
@@ -254,7 +254,7 @@ func TestChannelIntegration(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 
-		// Create presence channels for two clients
+		// Create channels for two clients
 		channelKey := helper.TestKey(t)
 		ch1, err := channel.New(channelKey)
 		assert.NoError(t, err)
@@ -291,7 +291,7 @@ func TestChannelIntegration(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Sequential attach/detach operations with proper waiting
-		// to ensure presence state is properly synchronized
+		// to ensure session state is properly synchronized
 		for i := 0; i < 5; i++ {
 			// Detach
 			err = clients[1].Detach(ctx, ch2)
@@ -458,7 +458,7 @@ func TestChannelIntegration(t *testing.T) {
 		err = watcherClient.Attach(ctx, watcher)
 		require.NoError(t, err)
 
-		// Start watching presence changes
+		// Start watching session changes
 		countChan, closeWatch, err := watcherClient.WatchChannel(ctx, watcher)
 		require.NoError(t, err)
 		defer closeWatch()
@@ -591,7 +591,7 @@ func TestChannelIntegration(t *testing.T) {
 
 		cli := clients[0]
 
-		// Create both document and presence counter
+		// Create both document and session counter
 		docKey := helper.TestKey(t, 1)
 		channelKey := helper.TestKey(t, 2)
 
@@ -638,7 +638,7 @@ func TestChannelIntegration(t *testing.T) {
 		ch, err := channel.New(channelKey)
 		assert.NoError(t, err)
 
-		// Attach presence counter
+		// Attach channel
 		err = cli.Attach(ctx, ch)
 		require.NoError(t, err)
 		assert.True(t, ch.IsAttached())
@@ -672,7 +672,7 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, cli2.Activate(ctx))
 		defer func() { assert.NoError(t, cli2.Close()) }()
 
-		// Use the same presence key for both clients
+		// Use the same channel key for both clients
 		channelKey := helper.TestKey(t)
 		counter1, err := channel.New(channelKey)
 		assert.NoError(t, err)
@@ -695,7 +695,7 @@ func TestChannelIntegration(t *testing.T) {
 		}
 
 		// Simulate cli1 crash by deactivating without detach
-		// This stops the client but leaves presence on server
+		// This stops the client but leaves channel on server
 		require.NoError(t, cli1.Deactivate(ctx))
 
 		// Wait for TTL (5s) + cleanup interval (1s) + buffer
@@ -720,13 +720,13 @@ func TestChannelIntegration(t *testing.T) {
 		assert.True(t, counter2.IsAttached())
 	})
 
-	t.Run("presence manual sync mode test", func(t *testing.T) {
+	t.Run("channel manual sync mode test", func(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 
 		client1, client2 := clients[0], clients[1]
 
-		// Create presence counters for the same room
+		// Create channel counters for the same room
 		channelKey := helper.TestKey(t)
 		counter1, err := channel.New(channelKey)
 		assert.NoError(t, err)
@@ -771,13 +771,13 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, client1.Detach(ctx, counter1))
 	})
 
-	t.Run("presence realtime sync mode test", func(t *testing.T) {
+	t.Run("channel realtime sync mode test", func(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 
 		client1, client2 := clients[0], clients[1]
 
-		// Create presence counters for the same room
+		// Create session counters for the same room
 		channelKey := helper.TestKey(t)
 		ch1, err := channel.New(channelKey)
 		assert.NoError(t, err)
@@ -831,12 +831,12 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, client1.Detach(ctx, ch1))
 	})
 
-	t.Run("presence sync all resources test", func(t *testing.T) {
+	t.Run("channel sync all resources test", func(t *testing.T) {
 		clients := activeClients(t, 2)
 		defer deactivateAndCloseClients(t, clients)
 		client1, client2 := clients[0], clients[1]
 
-		// Create document and presence counter
+		// Create document and channel
 		doc1 := document.New(helper.TestKey(t, 0))
 		counter1, err := channel.New(helper.TestKey(t, 1))
 		assert.NoError(t, err)
@@ -845,7 +845,7 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, client1.Attach(ctx, doc1))
 		require.NoError(t, client1.Attach(ctx, counter1))
 
-		// Attach client2 to the same presence
+		// Attach client2 to the same channel
 		counter2, err := channel.New(helper.TestKey(t, 1))
 		assert.NoError(t, err)
 		require.NoError(t, client2.Attach(ctx, counter2))
@@ -895,12 +895,12 @@ func TestChannelIntegration(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// Verify counts
-		// room-1 should have 2 direct presences
-		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct presences")
-		assert.Equal(t, int64(1), channels[1].Count(), "room-1.section-1 should have 1 direct presences")
-		assert.Equal(t, int64(1), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct presences")
-		assert.Equal(t, int64(1), channels[3].Count(), "room-1.section-2 should have 1 direct presences")
-		assert.Equal(t, int64(2), channels[4].Count(), "room-1 should have 2 direct presences")
+		// room-1 direct session counts (per-client view)
+		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct session")
+		assert.Equal(t, int64(1), channels[1].Count(), "room-1.section-1 should have 1 direct sessions")
+		assert.Equal(t, int64(1), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct sessions")
+		assert.Equal(t, int64(1), channels[3].Count(), "room-1.section-2 should have 1 direct sessions")
+		assert.Equal(t, int64(2), channels[4].Count(), "room-1 should have 2 direct sessions")
 
 		// Note: Client-side Count() only shows direct count for the exact path
 		// The hierarchical counting (includeSubPath) is a server-side feature
@@ -911,18 +911,18 @@ func TestChannelIntegration(t *testing.T) {
 			require.NoError(t, client.Detach(ctx, channels[i]))
 		}
 
-		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 1 direct presences")
-		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 1 direct presences")
-		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct presences")
-		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 1 direct presences")
-		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 2 direct presences")
+		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 0 direct sessions after detach")
 	})
 
 	t.Run("channel path cleanup test", func(t *testing.T) {
 		clients := activeClients(t, 3)
 		defer deactivateAndCloseClients(t, clients)
 
-		// Create nested path presences
+		// Create nested path channels
 		channelKeys := []string{
 			"channel-test-cleanup-room-1",
 			"channel-test-cleanup-room-1.section-1",
@@ -978,7 +978,7 @@ func TestChannelIntegration(t *testing.T) {
 		clients := activeClients(t, clientCount)
 		defer deactivateAndCloseClients(t, clients)
 
-		// Create presence keys with different path depths
+		// Create channel keys with different path depths
 		channelKeys := make([]string, clientCount)
 		for i := range clientCount {
 			switch i % 3 {
