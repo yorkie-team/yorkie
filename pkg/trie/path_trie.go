@@ -27,7 +27,7 @@ const (
 	rootSegment = ""
 )
 
-// PathTrie is a lock-free trie that uses path segments as keys.
+// PathTrie is a concurrent trie with lock-free reads that uses path segments as keys.
 // It uses immutable data structures with copy-on-write semantics for concurrent access.
 //
 // Key features:
