@@ -54,8 +54,14 @@ func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
 // Send dispatches a webhook event for the specified document and event reference key.
 // It uses rate limiting to debounce multiple events within a short period.
 func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
+	url := info.Attribute.URL
+	// Validate webhook URL early to prevent SSRF attacks before any processing
+	if err := webhook.ValidateWebhookURL(url); err != nil {
+		return fmt.Errorf("send webhook: %w", err)
+	}
+
 	callback := func() {
-		if err := SendWebhook(
+		if err := sendWebhook(
 			ctx,
 			m.webhookClient,
 			info.EventRefKey.EventWebhookType,
@@ -68,7 +74,7 @@ func (m *Manager) Send(ctx context.Context, info types.EventWebhookInfo) error {
 
 	// If allowed immediately, invoke the callback.
 	if allowed := m.limiter.Allow(info.EventRefKey, callback); allowed {
-		return SendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options)
+		return sendWebhook(ctx, m.webhookClient, info.EventRefKey.EventWebhookType, info.Attribute, info.Options)
 	}
 	return nil
 }
@@ -82,9 +88,9 @@ func (m *Manager) Close() {
 	m.webhookClient.Close()
 }
 
-// SendWebhook sends the webhook event using the provided client.
+// sendWebhook sends the webhook event using the provided client.
 // It builds the request body and checks for a successful HTTP response.
-func SendWebhook(
+func sendWebhook(
 	ctx context.Context,
 	cli *webhook.Client[types.EventWebhookRequest, int],
 	event types.EventWebhookType,
