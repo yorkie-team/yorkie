@@ -51,13 +51,25 @@ spec:
               inline_string:
                 function envoy_on_request(request_handle)
                   local x_shard_key_header = request_handle:headers():get("x-shard-key")
+                  
+                  -- Skip if x-shard-key is already set
+                  if x_shard_key_header ~= nil then
+                    return
+                  end
+                  
+                  local path = request_handle:headers():get(":path")
                   local x_api_key_header = request_handle:headers():get("x-api-key")
                   
-                  if x_shard_key_header == nil then
-                    if x_api_key_header == nil then
-                      request_handle:headers():add("x-shard-key", "default")
-                    else
-                      request_handle:headers():add("x-shard-key", x_api_key_header)
-                    end
+                  -- /auth paths: fixed shard key for session consistency
+                  -- (GitHub OAuth login/callback must hit the same pod)
+                  if path ~= nil and string.match(path, "^/auth") then
+                    request_handle:headers():add("x-shard-key", "auth-session")
+                    return
                   end
+                  
+                  -- AdminService: no shard key for round-robin load balancing
+                  -- (project-scoped APIs don't need document-level affinity)
+                  
+                  -- YorkieService: use x-api-key for document-level sharding
+                  -- (ensures same document operations hit the same pod for locking)
                 end
