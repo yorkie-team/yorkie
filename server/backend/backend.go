@@ -119,8 +119,12 @@ func New(
 	bg := background.New(metrics)
 
 	// 03. Create webhook clients and cluster client pool.
-	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse]()
-	eventWebhookManger := webhook.NewManager(pkgwebhook.NewClient[types.EventWebhookRequest, int]())
+	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
+		conf.DisableWebhookValidation,
+	)
+	eventWebhookManger := webhook.NewManager(
+		pkgwebhook.NewClient[types.EventWebhookRequest, int](conf.DisableWebhookValidation),
+	)
 	clusterClientPool := cluster.NewClientPool()
 
 	// 04. Create the database instance. If the MongoDB configuration is given,

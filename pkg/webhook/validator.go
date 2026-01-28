@@ -30,7 +30,12 @@ var (
 )
 
 // ValidateWebhookURL validates the webhook URL to prevent SSRF attacks.
-func ValidateWebhookURL(rawURL string) error {
+func ValidateWebhookURL(rawURL string, disabled bool) error {
+	// If validation is disabled, skip the validation.
+	if disabled {
+		return nil
+	}
+
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("%w: parse url: %v", ErrInvalidWebhookURL, err)

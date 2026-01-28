@@ -62,7 +62,7 @@ func TestValidateWebhookURL_SSRF(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			err := webhook.ValidateWebhookURL(tc.url)
+			err := webhook.ValidateWebhookURL(tc.url, false)
 			if tc.wantErr {
 				assert.Error(t, err)
 				assert.ErrorContains(t, err, webhook.ErrInvalidWebhookURL.Error())
@@ -73,3 +73,9 @@ func TestValidateWebhookURL_SSRF(t *testing.T) {
 	}
 }
 
+func TestValidateWebhookURL_Disabled(t *testing.T) {
+	t.Run("allow blocked url if validation is disabled", func(t *testing.T) {
+		err := webhook.ValidateWebhookURL("http://localhost/webhook", true)
+		assert.NoError(t, err)
+	})
+}

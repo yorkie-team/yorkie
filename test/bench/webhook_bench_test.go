@@ -108,7 +108,7 @@ func benchmarkSendWebhook(b *testing.B, webhookNum, endpointNum int) {
 		}
 	}()
 
-	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int]()
+	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](true)
 	for b.Loop() {
 		for range webhookNum {
 			for i := range endpointNum {
@@ -148,7 +148,7 @@ func benchmarkSendWebhookWithLimits(b *testing.B, webhookNum, endpointNum int) {
 		}
 	}()
 
-	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int]()
+	cli := pkgwebhook.NewClient[types.EventWebhookRequest, int](true)
 
 	logging.DefaultLogger()
 
