@@ -1674,5 +1674,6 @@ func RunAdminGetChannelsTest(
 	assert.NotNil(t, resp2.Msg.Channels)
 	assert.Equal(t, 1, len(resp2.Msg.Channels))
 	assert.Equal(t, testChannelKey, resp2.Msg.Channels[0].Key)
-	assert.Equal(t, 2, int(resp2.Msg.Channels[0].SessionCount))
+	// Because the session count is cached, it should be 1.
+	assert.Equal(t, 1, int(resp2.Msg.Channels[0].SessionCount))
 }

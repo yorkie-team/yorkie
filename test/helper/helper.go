@@ -81,8 +81,8 @@ var (
 	HousekeepingCandidatesLimit      = 10
 	HousekeepingCompactionMinChanges = 5
 
-	PresenceTTL             = "20s"
-	PresenceCleanupInterval = "10s"
+	PresenceTTL             = "5s"
+	PresenceCleanupInterval = "1s"
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
