@@ -339,7 +339,8 @@ func (m *Manager) Detach(
 		}
 	}
 
-	// Delete channel if empty while holding the lock to prevent race with Attach
+	// Delete channel while holding the lock to prevent race with Attach.
+	// ChannelTrie.Delete also cleans up empty shards internally.
 	if newCount == 0 {
 		m.channels.Delete(key)
 	}

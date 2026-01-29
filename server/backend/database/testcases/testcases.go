@@ -2402,7 +2402,7 @@ func RunFindCandidatesTest(t *testing.T, db database.Database, projectID types.I
 
 		// Create multiple test clients
 		var testClients []*database.ClientInfo
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			clientKey := fmt.Sprintf("pagination-test-client-%d-%d", i, gotime.Now().Unix())
 			client, err := db.ActivateClient(ctx, projectID, clientKey, map[string]string{"page": "test"})
 			assert.NoError(t, err)

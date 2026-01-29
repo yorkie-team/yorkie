@@ -438,7 +438,7 @@ func TestChannelManager_List(t *testing.T) {
 		projectID := types.NewID()
 
 		// Create 5 channels
-		for i := 1; i <= 5; i++ {
+		for i := range 5 {
 			refKey := types.ChannelRefKey{
 				ProjectID:  projectID,
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
@@ -539,12 +539,12 @@ func TestChannelManager_List(t *testing.T) {
 		projectID := types.NewID()
 
 		// Create 5 channels
-		for i := 1; i <= 5; i++ {
+		for i := range 5 {
 			refKey := types.ChannelRefKey{
 				ProjectID:  projectID,
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 			}
-			attachChannels(t, ctx, manager, refKey, i, fmt.Sprintf("%d", i))
+			attachChannels(t, ctx, manager, refKey, i+1, fmt.Sprintf("%d", i))
 		}
 
 		// Test with limit 0 (should use MinChannelLimit = 1)
@@ -1056,7 +1056,7 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 
 		// Attach multiple clients and verify seq is monotonically increasing
 		var lastSeq int64 = 0
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 			assert.NoError(t, err)
 
@@ -1111,7 +1111,7 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 		concurrency := 300
 		var wg sync.WaitGroup
 		var attachErrors int64
-		for i := 0; i < concurrency; i++ {
+		for i := range concurrency {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -1170,7 +1170,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 		projectID := types.NewID()
 
 		// Create 150 channels (more than MaxChannelLimit)
-		for i := 1; i <= 150; i++ {
+		for i := range 150 {
 			refKey := types.ChannelRefKey{
 				ProjectID:  projectID,
 				ChannelKey: key.Key(fmt.Sprintf("room-%03d", i)),
@@ -1202,7 +1202,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 		projectID := types.NewID()
 
 		// Create 5 channels
-		for i := 1; i <= 5; i++ {
+		for i := range 5 {
 			refKey := types.ChannelRefKey{
 				ProjectID:  projectID,
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
@@ -1223,7 +1223,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 		projectID := types.NewID()
 
 		// Create 5 channels
-		for i := 1; i <= 5; i++ {
+		for i := range 5 {
 			refKey := types.ChannelRefKey{
 				ProjectID:  projectID,
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
