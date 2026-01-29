@@ -22,8 +22,10 @@ import (
 	"context"
 	"crypto/tls"
 	goerrors "errors"
+	"net"
 	"net/http"
 	"strings"
+	gotime "time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/net/http2"
@@ -69,7 +71,21 @@ func New(opts ...Option) (*Client, error) {
 	conn := &http.Client{}
 	if options.IsSecure {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
-		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
+		conn.Transport = &http2.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+	} else {
+		// NOTE(hackerwins): Use h2c (HTTP/2 without TLS) for cluster communication
+		// This enables multiplexing and header compression for better performance
+		conn.Transport = &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+			ReadIdleTimeout: 30 * gotime.Second,
+			PingTimeout:     15 * gotime.Second,
+		}
 	}
 
 	return &Client{
