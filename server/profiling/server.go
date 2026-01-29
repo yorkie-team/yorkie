@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"runtime"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -42,6 +43,9 @@ type Server struct {
 func NewServer(conf *Config, metrics *prometheus.Metrics) *Server {
 	serveMux := http.NewServeMux()
 	if conf.PprofEnabled {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
+
 		serveMux.Handle(httpPrefixPProf+"/", http.HandlerFunc(pprof.Index))
 		serveMux.Handle(httpPrefixPProf+"/profile", http.HandlerFunc(pprof.Profile))
 		serveMux.Handle(httpPrefixPProf+"/symbol", http.HandlerFunc(pprof.Symbol))
