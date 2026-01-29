@@ -790,13 +790,39 @@ func (s *adminServer) GetChannels(
 	project := projects.From(ctx)
 	includeSubPath := req.Msg.IncludeSubPath
 
+	// 1. Check cache first for each channel key
+	var channels []*types.ChannelSummary
+	var uncachedKeys []string
+
+	for _, keyStr := range req.Msg.ChannelKeys {
+		cacheKey := makeChannelSessionCountCacheKey(project.ID, key.Key(keyStr), includeSubPath)
+		if count, ok := s.backend.Cache.SessionCount.Get(cacheKey); ok {
+			// Cache hit
+			channels = append(channels, &types.ChannelSummary{
+				Key:          key.Key(keyStr),
+				SessionCount: count,
+			})
+		} else {
+			// Cache miss - need RPC call
+			uncachedKeys = append(uncachedKeys, keyStr)
+		}
+	}
+
+	// 2. If all keys are cached, return early
+	if len(uncachedKeys) == 0 {
+		return connect.NewResponse(&api.GetChannelsResponse{
+			Channels: converter.ToChannelSummaries(channels),
+		}), nil
+	}
+
+	// 3. Query cluster for uncached keys only
 	clusterClient, err := s.backend.ClusterClient()
 	if err != nil {
 		return nil, err
 	}
 
 	// Group channel keys by their first key path for istio consistent hash sharding.
-	groups, err := groupByFirstKeyPath(req.Msg.ChannelKeys)
+	groups, err := groupByFirstKeyPath(uncachedKeys)
 	if err != nil {
 		return nil, err
 	}
@@ -816,7 +842,6 @@ func (s *adminServer) GetChannels(
 	}
 
 	// Collect results from all groups
-	var channels []*types.ChannelSummary
 	var firstErr error
 	for range len(groups) {
 		res := <-resultCh
@@ -824,6 +849,11 @@ func (s *adminServer) GetChannels(
 			firstErr = res.err
 		}
 		if res.err == nil {
+			// 4. Store results in cache
+			for _, ch := range res.channels {
+				cacheKey := makeChannelSessionCountCacheKey(project.ID, ch.Key, includeSubPath)
+				s.backend.Cache.SessionCount.Add(cacheKey, ch.SessionCount)
+			}
 			channels = append(channels, res.channels...)
 		}
 	}
@@ -836,6 +866,11 @@ func (s *adminServer) GetChannels(
 	return connect.NewResponse(&api.GetChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
 	}), nil
+}
+
+// makeChannelSessionCountCacheKey creates a cache key for session count.
+func makeChannelSessionCountCacheKey(projectID types.ID, channelKey key.Key, includeSubPath bool) string {
+	return fmt.Sprintf("%s:%s:%t", projectID, channelKey, includeSubPath)
 }
 
 // groupByFirstKeyPath groups channel keys by their first key path segment.

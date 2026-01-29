@@ -184,10 +184,13 @@ func runUserJourney(
 }
 
 // benchmarkUserJourneyScenario runs the user journey benchmark for a given scenario.
+// If useUniqueKeys is true, each iteration uses unique channel keys (cache miss scenario).
+// If useUniqueKeys is false, all iterations use the same channel keys (cache hit scenario).
 func benchmarkUserJourneyScenario(
 	b *testing.B,
 	svr *server.Yorkie,
 	cfg *channelScenarioConfig,
+	useUniqueKeys bool,
 ) {
 	adminConn := http.DefaultClient
 	testAdminAuthInterceptor := admin.NewAuthInterceptor("")
@@ -231,7 +234,6 @@ func benchmarkUserJourneyScenario(
 	b.ResetTimer()
 
 	// Use iteration index as userIndex for deterministic but varying channel selection.
-	// Each iteration tests a different channel path, ensuring varied load distribution.
 	iterationIdx := 0
 	type ClientAndChannelPair struct {
 		cli *client.Client
@@ -240,7 +242,13 @@ func benchmarkUserJourneyScenario(
 	}
 	var channelPairs []ClientAndChannelPair
 	for range b.N {
-		cli, ch2, ch3, err := runUserJourney(b, ctx, svr.RPCAddr(), testAdminClient, channelPrefix, cfg, iterationIdx)
+		// If useUniqueKeys is true, include iteration index to ensure cache misses.
+		// If false, use same prefix for all iterations to measure cache hit performance.
+		iterChannelPrefix := channelPrefix
+		if useUniqueKeys {
+			iterChannelPrefix = fmt.Sprintf("%s_iter%d", channelPrefix, iterationIdx)
+		}
+		cli, ch2, ch3, err := runUserJourney(b, ctx, svr.RPCAddr(), testAdminClient, iterChannelPrefix, cfg, iterationIdx)
 		assert.NoError(b, err)
 		channelPairs = append(channelPairs, ClientAndChannelPair{cli, ch2, ch3})
 		iterationIdx++
@@ -283,10 +291,6 @@ func BenchmarkGetChannels(b *testing.B) {
 		level3ChannelQueryCount: 5,
 	}
 
-	b.Run("5x5x5_channels", func(b *testing.B) {
-		benchmarkUserJourneyScenario(b, svr, smallCfg)
-	})
-
 	// medium scenario: 10 × 5 × 5 = 250 channels
 	mediumCfg := &channelScenarioConfig{
 		channel1LevelCount:      10,
@@ -296,10 +300,6 @@ func BenchmarkGetChannels(b *testing.B) {
 		level2ChannelQueryCount: 5,
 		level3ChannelQueryCount: 5,
 	}
-
-	b.Run("10x5x5_channels", func(b *testing.B) {
-		benchmarkUserJourneyScenario(b, svr, mediumCfg)
-	})
 
 	// large scenario: 10 × 5 × 10 = 500 channels
 	largeCfg := &channelScenarioConfig{
@@ -311,10 +311,6 @@ func BenchmarkGetChannels(b *testing.B) {
 		level3ChannelQueryCount: 10,
 	}
 
-	b.Run("10x5x10_channels", func(b *testing.B) {
-		benchmarkUserJourneyScenario(b, svr, largeCfg)
-	})
-
 	// very large scenario: 10 × 10 × 10 = 1000 channels
 	veryLargeCfg := &channelScenarioConfig{
 		channel1LevelCount:      10,
@@ -325,7 +321,37 @@ func BenchmarkGetChannels(b *testing.B) {
 		level3ChannelQueryCount: 10,
 	}
 
-	b.Run("10x10x10_channels", func(b *testing.B) {
-		benchmarkUserJourneyScenario(b, svr, veryLargeCfg)
+	// Run benchmarks with unique keys (cache miss scenario - measures RPC performance)
+	b.Run("no_cache/5x5x5_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, smallCfg, true)
+	})
+
+	b.Run("no_cache/10x5x5_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, mediumCfg, true)
+	})
+
+	b.Run("no_cache/10x5x10_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, largeCfg, true)
+	})
+
+	b.Run("no_cache/10x10x10_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, veryLargeCfg, true)
+	})
+
+	// Run benchmarks with same keys (cache hit scenario - measures cache performance)
+	b.Run("with_cache/5x5x5_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, smallCfg, false)
+	})
+
+	b.Run("with_cache/10x5x5_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, mediumCfg, false)
+	})
+
+	b.Run("with_cache/10x5x10_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, largeCfg, false)
+	})
+
+	b.Run("with_cache/10x10x10_channels", func(b *testing.B) {
+		benchmarkUserJourneyScenario(b, svr, veryLargeCfg, false)
 	})
 }

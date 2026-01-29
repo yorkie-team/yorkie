@@ -54,6 +54,12 @@ type Config struct {
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
 
+	// ChannelSessionCountCacheSize is the cache size of the session count.
+	ChannelSessionCountCacheSize int `yaml:"ChannelSessionCountCacheSize"`
+
+	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
+	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
+
 	// PresenceTTL is the time-to-live duration for presence sessions.
 	// If a presence is not refreshed within this duration, it will be removed.
 	// Default is "60s".
@@ -86,6 +92,15 @@ func (c *Config) Validate() error {
 			c.AuthWebhookCacheTTL,
 			err,
 		)
+	}
+	if c.ChannelSessionCountCacheTTL != "" {
+		if _, err := time.ParseDuration(c.ChannelSessionCountCacheTTL); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--session-count-cache-ttl" flag: %w`,
+				c.ChannelSessionCountCacheTTL,
+				err,
+			)
+		}
 	}
 	if c.PresenceTTL != "" {
 		if _, err := time.ParseDuration(c.PresenceTTL); err != nil {
@@ -125,6 +140,21 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheTTL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "parse auth webhook cache ttl: %w", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseChannelSessionCountCacheTTL returns TTL for session count cache.
+func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
+	if c.ChannelSessionCountCacheTTL == "" {
+		return 30 * time.Second // Default: 30 seconds
+	}
+
+	result, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse session count cache ttl: %v\n", err)
 		os.Exit(1)
 	}
 
