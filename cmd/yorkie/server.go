@@ -449,6 +449,12 @@ func init() {
 		server.DefaultSnapshotCacheSize,
 		"The cache size of the snapshots.",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Backend.DisableWebhookValidation,
+		"backend-disable-webhook-validation",
+		false,
+		"Whether to disable webhook validation. This is useful for testing purposes.",
+	)
 	cmd.Flags().IntVar(
 		&conf.Backend.AuthWebhookCacheSize,
 		"auth-webhook-cache-size",

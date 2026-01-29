@@ -73,6 +73,9 @@ type Config struct {
 	// RPCAddr is the address of the RPC server. It is used to broadcast
 	// messages to other nodes in the cluster.
 	RPCAddr string `yaml:"RPCAddr"`
+
+	// DisableWebhookValidation is whether to disable webhook validation.
+	DisableWebhookValidation bool `yaml:"DisableWebhookValidation"`
 }
 
 // Validate validates this config.

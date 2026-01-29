@@ -44,7 +44,9 @@ type Manager struct {
 }
 
 // NewManager creates a new instance of Manager with the provided webhook client.
-func NewManager(cli *webhook.Client[types.EventWebhookRequest, int]) *Manager {
+func NewManager(
+	cli *webhook.Client[types.EventWebhookRequest, int],
+) *Manager {
 	return &Manager{
 		limiter:       limit.NewLimiter[types.EventRefKey](expireBatchSize, expireInterval, throttleWindow, debouncingTime),
 		webhookClient: cli,
