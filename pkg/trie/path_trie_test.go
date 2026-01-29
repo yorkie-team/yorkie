@@ -322,21 +322,6 @@ func TestPathTrie_Traversal(t *testing.T) {
 		assert.Equal(t, 0, count)
 	})
 
-	t.Run("forEachPrefix filters by string prefix", func(t *testing.T) {
-		trie := NewPathTrie[*testValue]()
-
-		trie.Insert([]string{"project-1", "room-1"}, createTestValue(1))
-		trie.Insert([]string{"project-1", "room-10"}, createTestValue(10))
-		trie.Insert([]string{"project-1", "room-2"}, createTestValue(2))
-
-		count := 0
-		trie.ForEachPrefix("project-1.room-1", func(v *testValue) bool {
-			count++
-			return true
-		})
-		assert.Equal(t, 2, count) // room-1 and room-10
-	})
-
 	t.Run("forEach with early termination", func(t *testing.T) {
 		trie := NewPathTrie[*testValue]()
 
@@ -369,21 +354,6 @@ func TestPathTrie_Traversal(t *testing.T) {
 		assert.Equal(t, 3, count)
 	})
 
-	t.Run("forEachPrefix with early termination", func(t *testing.T) {
-		trie := NewPathTrie[*testValue]()
-
-		for i := range 10 {
-			keyPath := []string{"project-1", fmt.Sprintf("room-%d", i)}
-			trie.Insert(keyPath, createTestValue(i))
-		}
-
-		count := 0
-		trie.ForEachPrefix("", func(v *testValue) bool {
-			count++
-			return count < 7
-		})
-		assert.Equal(t, 7, count)
-	})
 }
 
 func TestPathTrie_ProjectIsolation(t *testing.T) {
@@ -405,28 +375,6 @@ func TestPathTrie_ProjectIsolation(t *testing.T) {
 		assert.Same(t, val2, retrieved2)
 		assert.NotSame(t, retrieved1, retrieved2)
 		assert.Equal(t, 2, trie.Len())
-	})
-
-	t.Run("forEachPrefix filters by project prefix", func(t *testing.T) {
-		trie := NewPathTrie[*testValue]()
-
-		trie.Insert([]string{"project-1", "room-1"}, createTestValue(1))
-		trie.Insert([]string{"project-1", "room-2"}, createTestValue(2))
-		trie.Insert([]string{"project-2", "room-1"}, createTestValue(3))
-
-		count1 := 0
-		trie.ForEachPrefix("project-1", func(v *testValue) bool {
-			count1++
-			return true
-		})
-		assert.Equal(t, 2, count1)
-
-		count2 := 0
-		trie.ForEachPrefix("project-2", func(v *testValue) bool {
-			count2++
-			return true
-		})
-		assert.Equal(t, 1, count2)
 	})
 
 	t.Run("delete in one project does not affect another", func(t *testing.T) {
@@ -633,7 +581,10 @@ func TestPathTrie_Concurrency(t *testing.T) {
 					count++
 					return true
 				})
-				assert.Greater(t, count, 0)
+				// At minimum, we should see the initial 10 values
+				// At maximum, we could see all 10 + goroutines values
+				assert.GreaterOrEqual(t, count, 10, "should see at least initial values")
+				assert.LessOrEqual(t, count, 10+goroutines, "should not exceed total values")
 			}()
 		}
 
@@ -698,10 +649,6 @@ func TestPathTrie_Concurrency(t *testing.T) {
 	})
 
 	t.Run("stress test with mixed operations", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping stress test in short mode")
-		}
-
 		trie := NewPathTrie[*testValue]()
 		operations := 1000
 		var wg sync.WaitGroup
@@ -733,6 +680,244 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		}
 
 		wg.Wait()
-		assert.LessOrEqual(t, trie.Len(), 100)
+		// All inserts use room-{idx%100}, so exactly 100 unique keys
+		assert.Equal(t, 100, trie.Len())
+	})
+}
+
+func TestPathTrie_RootValue(t *testing.T) {
+	t.Run("GetRoot on empty trie returns false", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		_, ok := trie.GetRoot()
+		assert.False(t, ok)
+	})
+
+	t.Run("GetOrInsertRoot creates and returns value", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+		createCount := 0
+
+		val := trie.GetOrInsertRoot(func() *testValue {
+			createCount++
+			return createTestValue(1)
+		})
+
+		assert.NotNil(t, val)
+		assert.Equal(t, 1, val.id)
+		assert.Equal(t, 1, createCount)
+		assert.Equal(t, 1, trie.Len())
+	})
+
+	t.Run("GetOrInsertRoot returns existing without calling create", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+		createCount := 0
+
+		// First call creates value
+		val1 := trie.GetOrInsertRoot(func() *testValue {
+			createCount++
+			return createTestValue(1)
+		})
+
+		// Second call returns existing
+		val2 := trie.GetOrInsertRoot(func() *testValue {
+			createCount++
+			return createTestValue(2)
+		})
+
+		assert.Same(t, val1, val2)
+		assert.Equal(t, 1, createCount)
+	})
+
+	t.Run("GetRoot returns value after GetOrInsertRoot", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		inserted := trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(42)
+		})
+
+		retrieved, ok := trie.GetRoot()
+		assert.True(t, ok)
+		assert.Same(t, inserted, retrieved)
+	})
+
+	t.Run("DeleteRoot removes value", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(1)
+		})
+		assert.Equal(t, 1, trie.Len())
+
+		deleted := trie.DeleteRoot()
+		assert.True(t, deleted)
+		assert.Equal(t, 0, trie.Len())
+
+		_, ok := trie.GetRoot()
+		assert.False(t, ok)
+	})
+
+	t.Run("DeleteRoot on empty trie returns false", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		deleted := trie.DeleteRoot()
+		assert.False(t, deleted)
+	})
+
+	t.Run("root value coexists with child values", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		rootVal := trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(0)
+		})
+		trie.Insert([]string{"child"}, createTestValue(1))
+		trie.Insert([]string{"child", "grandchild"}, createTestValue(2))
+
+		assert.Equal(t, 3, trie.Len())
+
+		retrieved, ok := trie.GetRoot()
+		assert.True(t, ok)
+		assert.Same(t, rootVal, retrieved)
+
+		child, ok := trie.Get([]string{"child"})
+		assert.True(t, ok)
+		assert.Equal(t, 1, child.id)
+	})
+
+	t.Run("delete root preserves children", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(0)
+		})
+		trie.Insert([]string{"child"}, createTestValue(1))
+		assert.Equal(t, 2, trie.Len())
+
+		trie.DeleteRoot()
+		assert.Equal(t, 1, trie.Len())
+
+		_, ok := trie.GetRoot()
+		assert.False(t, ok)
+
+		child, ok := trie.Get([]string{"child"})
+		assert.True(t, ok)
+		assert.Equal(t, 1, child.id)
+	})
+
+	t.Run("concurrent GetOrInsertRoot calls create once", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+		var createCount int32 = 0
+		var wg sync.WaitGroup
+
+		for range 100 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				trie.GetOrInsertRoot(func() *testValue {
+					atomic.AddInt32(&createCount, 1)
+					return createTestValue(1)
+				})
+			}()
+		}
+
+		wg.Wait()
+		assert.Equal(t, int32(1), createCount)
+		assert.Equal(t, 1, trie.Len())
+	})
+
+	t.Run("InsertRoot creates value", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		trie.InsertRoot(createTestValue(42))
+
+		retrieved, ok := trie.GetRoot()
+		assert.True(t, ok)
+		assert.Equal(t, 42, retrieved.id)
+		assert.Equal(t, 1, trie.Len())
+	})
+
+	t.Run("InsertRoot overwrites existing value", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		// First insert
+		trie.InsertRoot(createTestValue(100))
+		val, ok := trie.GetRoot()
+		assert.True(t, ok)
+		assert.Equal(t, 100, val.id)
+
+		// Overwrite with new value
+		trie.InsertRoot(createTestValue(200))
+		val, ok = trie.GetRoot()
+		assert.True(t, ok)
+		assert.Equal(t, 200, val.id)
+
+		// Should still be only 1 value
+		assert.Equal(t, 1, trie.Len())
+	})
+
+	t.Run("InsertRoot vs GetOrInsertRoot behavior difference", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		// GetOrInsertRoot creates initial value
+		trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(100)
+		})
+		val, _ := trie.GetRoot()
+		assert.Equal(t, 100, val.id)
+
+		// GetOrInsertRoot does NOT overwrite (returns existing)
+		trie.GetOrInsertRoot(func() *testValue {
+			return createTestValue(200)
+		})
+		val, _ = trie.GetRoot()
+		assert.Equal(t, 100, val.id) // Still 100
+
+		// InsertRoot DOES overwrite
+		trie.InsertRoot(createTestValue(300))
+		val, _ = trie.GetRoot()
+		assert.Equal(t, 300, val.id) // Now 300
+	})
+
+	t.Run("InsertRoot preserves children", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+
+		// Insert children first
+		trie.Insert([]string{"child1"}, createTestValue(1))
+		trie.Insert([]string{"child2"}, createTestValue(2))
+		assert.Equal(t, 2, trie.Len())
+
+		// Insert root value
+		trie.InsertRoot(createTestValue(0))
+		assert.Equal(t, 3, trie.Len())
+
+		// Children should still exist
+		child1, ok := trie.Get([]string{"child1"})
+		assert.True(t, ok)
+		assert.Equal(t, 1, child1.id)
+
+		child2, ok := trie.Get([]string{"child2"})
+		assert.True(t, ok)
+		assert.Equal(t, 2, child2.id)
+	})
+
+	t.Run("concurrent InsertRoot", func(t *testing.T) {
+		trie := NewPathTrie[*testValue]()
+		var wg sync.WaitGroup
+
+		for i := range 100 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				trie.InsertRoot(createTestValue(idx))
+			}(i)
+		}
+
+		wg.Wait()
+
+		// Should have exactly 1 value (last write wins)
+		assert.Equal(t, 1, trie.Len())
+
+		// Value should be one of the inserted values
+		_, ok := trie.GetRoot()
+		assert.True(t, ok)
 	})
 }

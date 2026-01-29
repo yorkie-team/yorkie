@@ -82,7 +82,7 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				// Create fresh manager for each iteration to avoid accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 				channelKey := types.ChannelRefKey{
@@ -141,7 +141,7 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Create fresh manager per iteration to avoid channel accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 				var wg sync.WaitGroup
@@ -197,7 +197,7 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Create fresh manager per iteration to avoid session accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -257,7 +257,8 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				// Verify operations happened
 				assert.Equal(b, int64(0), attachErrors, "no attach errors should occur")
 				assert.Equal(b, int64(0), detachErrors, "no detach errors should occur")
-				assert.Greater(b, attachCount+detachCount, int64(0), "some operations should have occurred")
+				// All goroutines perform exactly one operation (either attach or detach)
+				assert.Equal(b, int64(tc.goroutineCount), attachCount+detachCount, "all operations should have occurred")
 			}
 		})
 	}
@@ -285,7 +286,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Create fresh manager per iteration to avoid session accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -382,7 +383,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				// Create fresh manager per iteration to avoid channel accumulation
 				manager, projectID, _ := createConcurrencyTestManager(b)
 
@@ -452,7 +453,8 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				// Verify operations
 				assert.Greater(b, listCount, int64(0), "some list operations should have occurred")
 				assert.Equal(b, int32(tc.writers), writeCount, "all writes should have completed")
-				assert.GreaterOrEqual(b, manager.Count(projectID), preCreateCount+tc.writers, "channel count should include new channels")
+				// No deletes occur, so channel count should be exactly preCreateCount + writers
+				assert.Equal(b, preCreateCount+tc.writers, manager.Count(projectID), "channel count should equal pre-created + new channels")
 			}
 		})
 	}
@@ -482,7 +484,7 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				var wg sync.WaitGroup
 				sessionIDs := make([]types.ID, tc.goroutines)
 				var mu sync.Mutex
@@ -595,7 +597,7 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				var wg sync.WaitGroup
 				var errorCount int64
 				var attachCount, readCount int64
