@@ -17,7 +17,6 @@
 package trie
 
 import (
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -182,15 +181,22 @@ func (t *PathTrie[T]) navigateToNode(node *trieNode[T], keyPath []string, depth 
 
 // Delete removes a value from the trie.
 // Empty parent nodes are automatically cleaned up.
-func (t *PathTrie[T]) Delete(keyPath []string) {
+// Returns true if a value was deleted, false if the path didn't exist.
+func (t *PathTrie[T]) Delete(keyPath []string) bool {
 	if len(keyPath) == 0 {
-		return
+		return false
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	oldRoot := t.root.Load().(*trieNode[T])
+
+	// Check if the path exists before attempting deletion
+	if _, exists := t.navigateToNode(oldRoot, keyPath, 0); !exists {
+		return false
+	}
+
 	newRoot := t.deleteNode(oldRoot, keyPath, 0)
 	// Always update root, even if it becomes empty (with no value but may have children)
 	if newRoot != nil {
@@ -202,6 +208,8 @@ func (t *PathTrie[T]) Delete(keyPath []string) {
 			children: make(map[string]*trieNode[T]),
 		})
 	}
+
+	return true
 }
 
 // deleteNode recursively creates a new tree with the value removed.
@@ -321,59 +329,6 @@ func (t *PathTrie[T]) ForEachDescendant(
 	t.traverseNode(node, fn)
 }
 
-// ForEachPrefix traverses values whose paths start with the given prefix string.
-// The path is constructed by joining segments with ".".
-// This operation is lock-free.
-func (t *PathTrie[T]) ForEachPrefix(
-	prefix string,
-	fn func(T) bool,
-) {
-	root := t.root.Load().(*trieNode[T])
-	if root == nil {
-		return
-	}
-
-	t.traversePrefix(root, "", prefix, fn)
-}
-
-// traversePrefix performs DFS with prefix matching.
-func (t *PathTrie[T]) traversePrefix(
-	node *trieNode[T],
-	currentPath string,
-	prefix string,
-	fn func(T) bool,
-) bool {
-	// Build current path
-	if currentPath != "" && node.segment != rootSegment {
-		currentPath += "."
-	}
-	if node.segment != rootSegment {
-		currentPath += node.segment
-	}
-
-	// Check prefix match
-	// If prefix is empty, match all values
-	// Otherwise, check if current path starts with the prefix
-	matchesPrefix := prefix == "" || (currentPath != "" && strings.HasPrefix(currentPath, prefix))
-
-	if matchesPrefix && currentPath != "" {
-		if node.hasValue {
-			if !fn(node.value) {
-				return false
-			}
-		}
-	}
-
-	// Traverse children
-	for _, child := range node.children {
-		if !t.traversePrefix(child, currentPath, prefix, fn) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Len returns the total number of values in the trie.
 // This operation is lock-free but requires full tree traversal.
 func (t *PathTrie[T]) Len() int {
@@ -383,4 +338,82 @@ func (t *PathTrie[T]) Len() int {
 		return true
 	})
 	return count
+}
+
+// GetRoot returns the value stored at the root node (empty path).
+// This operation is lock-free.
+func (t *PathTrie[T]) GetRoot() (T, bool) {
+	root := t.root.Load().(*trieNode[T])
+	return root.value, root.hasValue
+}
+
+// InsertRoot adds or updates the value at the root node (empty path).
+// This operation is thread-safe.
+func (t *PathTrie[T]) InsertRoot(value T) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	oldRoot := t.root.Load().(*trieNode[T])
+	newRoot := &trieNode[T]{
+		segment:  oldRoot.segment,
+		value:    value,
+		hasValue: true,
+		children: oldRoot.children,
+	}
+	t.root.Store(newRoot)
+}
+
+// GetOrInsertRoot atomically retrieves the root value or inserts a new one if it doesn't exist.
+// The create function is called only if the value doesn't exist.
+// This operation is thread-safe.
+func (t *PathTrie[T]) GetOrInsertRoot(create func() T) T {
+	// Fast path: try lock-free read first
+	if val, ok := t.GetRoot(); ok {
+		return val
+	}
+
+	// Slow path: need to insert
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Double-check after acquiring lock
+	oldRoot := t.root.Load().(*trieNode[T])
+	if oldRoot.hasValue {
+		return oldRoot.value
+	}
+
+	// Create new value and insert at root
+	newValue := create()
+	newRoot := &trieNode[T]{
+		segment:  oldRoot.segment,
+		value:    newValue,
+		hasValue: true,
+		children: oldRoot.children,
+	}
+	t.root.Store(newRoot)
+
+	return newValue
+}
+
+// DeleteRoot removes the value at the root node.
+// Returns true if a value was deleted, false if there was no value.
+func (t *PathTrie[T]) DeleteRoot() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	oldRoot := t.root.Load().(*trieNode[T])
+	if !oldRoot.hasValue {
+		return false
+	}
+
+	var zero T
+	newRoot := &trieNode[T]{
+		segment:  oldRoot.segment,
+		value:    zero,
+		hasValue: false,
+		children: oldRoot.children,
+	}
+	t.root.Store(newRoot)
+
+	return true
 }

@@ -17,59 +17,79 @@
 package channel
 
 import (
+	"strings"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/channel"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/pkg/trie"
 )
 
-// ChannelTrie wraps PathTrie with Channel-specific methods.
+// ChannelTrie wraps ShardedPathTrie with Channel-specific methods.
+// It implements channel domain sharding strategy: projectID + separator + firstLevelKey.
 type ChannelTrie struct {
-	trie *trie.PathTrie[*Channel]
+	trie *trie.ShardedPathTrie[*Channel]
 }
 
 // NewChannelTrie creates a new trie for storing channels.
 func NewChannelTrie() *ChannelTrie {
 	return &ChannelTrie{
-		trie: trie.NewPathTrie[*Channel](),
+		trie: trie.NewShardedPathTrie[*Channel](),
 	}
 }
 
-// buildKeyPath constructs a key path with projectID prefix.
-// Returns nil if the channel key is invalid.
-func buildKeyPath(key types.ChannelRefKey) []string {
-	keyPath, err := channel.ParseKeyPath(key.ChannelKey)
-	if err != nil {
+// buildShardKey constructs a shard key from projectID and channelKey.
+// Sharding strategy: projectID + ChannelKeyPathSeparator + firstLevelKey
+// Example: "projectID.room-1" for channel key "room-1.section-1"
+func buildShardKey(projectID types.ID, channelKey key.Key) string {
+	keyPath, err := channel.ParseKeyPath(channelKey)
+	if err != nil || len(keyPath) == 0 {
+		return ""
+	}
+	return projectID.String() + channel.ChannelKeyPathSeparator + keyPath[0]
+}
+
+// buildRemainingPath returns the path after the first level key.
+// Example: ["section-1"] for channel key "room-1.section-1"
+func buildRemainingPath(channelKey key.Key) []string {
+	keyPath, err := channel.ParseKeyPath(channelKey)
+	if err != nil || len(keyPath) <= 1 {
 		return nil
 	}
-	return append([]string{key.ProjectID.String()}, keyPath...)
+	return keyPath[1:]
 }
 
 // Get retrieves a channel by its key.
-func (ct *ChannelTrie) Get(key types.ChannelRefKey) *Channel {
-	keyPath := buildKeyPath(key)
-	if keyPath == nil {
+func (ct *ChannelTrie) Get(refKey types.ChannelRefKey) *Channel {
+	shardKey := buildShardKey(refKey.ProjectID, refKey.ChannelKey)
+	if shardKey == "" {
 		return nil
 	}
-	ch, _ := ct.trie.Get(keyPath)
+	remaining := buildRemainingPath(refKey.ChannelKey)
+	ch, _ := ct.trie.Get(shardKey, remaining)
 	return ch
 }
 
 // GetOrInsert atomically retrieves or creates a channel.
-func (ct *ChannelTrie) GetOrInsert(key types.ChannelRefKey, create func() *Channel) *Channel {
-	keyPath := buildKeyPath(key)
-	if keyPath == nil {
+func (ct *ChannelTrie) GetOrInsert(refKey types.ChannelRefKey, create func() *Channel) *Channel {
+	shardKey := buildShardKey(refKey.ProjectID, refKey.ChannelKey)
+	if shardKey == "" {
 		return nil
 	}
-	return ct.trie.GetOrInsert(keyPath, create)
+	remaining := buildRemainingPath(refKey.ChannelKey)
+	return ct.trie.GetOrInsert(shardKey, remaining, create)
 }
 
-// Delete removes a channel by its key.
-func (ct *ChannelTrie) Delete(key types.ChannelRefKey) {
-	keyPath := buildKeyPath(key)
-	if keyPath == nil {
+// Delete removes a channel by its key and cleans up empty shard.
+// The caller should hold appropriate locks to prevent race conditions.
+func (ct *ChannelTrie) Delete(refKey types.ChannelRefKey) {
+	shardKey := buildShardKey(refKey.ProjectID, refKey.ChannelKey)
+	if shardKey == "" {
 		return
 	}
-	ct.trie.Delete(keyPath)
+	remaining := buildRemainingPath(refKey.ChannelKey)
+	ct.trie.Delete(shardKey, remaining)
+	ct.trie.DeleteShardIfEmpty(shardKey)
 }
 
 // ForEach traverses all channels in the trie (global).
@@ -79,26 +99,53 @@ func (ct *ChannelTrie) ForEach(fn func(*Channel) bool) {
 
 // ForEachInProject traverses all channels in a specific project.
 func (ct *ChannelTrie) ForEachInProject(projectID types.ID, fn func(*Channel) bool) {
-	ct.trie.ForEachDescendant([]string{projectID.String()}, fn)
+	shardPrefix := projectID.String() + channel.ChannelKeyPathSeparator
+	ct.trie.ForEachByShard(shardPrefix, fn)
 }
 
 // ForEachDescendant traverses descendant channels under the given key path.
-// The keyPath is relative to the project (without projectID prefix).
-// keyPath must be non-empty.
-func (ct *ChannelTrie) ForEachDescendant(key types.ChannelRefKey, fn func(*Channel) bool) {
-	keyPath := buildKeyPath(key)
-	if keyPath == nil {
+func (ct *ChannelTrie) ForEachDescendant(refKey types.ChannelRefKey, fn func(*Channel) bool) {
+	shardKey := buildShardKey(refKey.ProjectID, refKey.ChannelKey)
+	if shardKey == "" {
 		return
 	}
-	ct.trie.ForEachDescendant(keyPath, fn)
+	remaining := buildRemainingPath(refKey.ChannelKey)
+	ct.trie.ForEachDescendant(shardKey, remaining, fn)
 }
 
 // ForEachPrefix traverses channels whose keys start with the given prefix.
 // The prefix is scoped to the specified project, so only channels belonging to that project are visited.
+// This method handles channel-specific separator logic.
 func (ct *ChannelTrie) ForEachPrefix(prefix string, projectID types.ID, fn func(*Channel) bool) {
-	// The fullPrefix includes projectID as the first segment, ensuring project isolation.
-	fullPrefix := projectID.String() + "." + prefix
-	ct.trie.ForEachPrefix(fullPrefix, fn)
+	if prefix == "" {
+		ct.ForEachInProject(projectID, fn)
+		return
+	}
+
+	// Parse prefix using channel domain separator
+	parts := strings.SplitN(prefix, channel.ChannelKeyPathSeparator, 2)
+	firstLevelKey := parts[0]
+	shardKeyPrefix := projectID.String() + channel.ChannelKeyPathSeparator + firstLevelKey
+
+	// Find matching shards and filter by prefix
+	for _, shardKey := range ct.trie.ShardKeys() {
+		if !strings.HasPrefix(shardKey, shardKeyPrefix) {
+			continue
+		}
+
+		shouldContinue := true
+		ct.trie.ForEachInShard(shardKey, func(ch *Channel) bool {
+			if strings.HasPrefix(string(ch.Key.ChannelKey), prefix) {
+				shouldContinue = fn(ch)
+				return shouldContinue
+			}
+			return true
+		})
+
+		if !shouldContinue {
+			return
+		}
+	}
 }
 
 // Len returns the total number of channels.
