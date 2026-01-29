@@ -96,7 +96,7 @@ func (c *Config) Validate() error {
 	if c.ChannelSessionCountCacheTTL != "" {
 		if _, err := time.ParseDuration(c.ChannelSessionCountCacheTTL); err != nil {
 			return fmt.Errorf(
-				`invalid argument "%s" for "--session-count-cache-ttl" flag: %w`,
+				`invalid argument "%s" for "--channel-session-count-cache-ttl" flag: %w`,
 				c.ChannelSessionCountCacheTTL,
 				err,
 			)
