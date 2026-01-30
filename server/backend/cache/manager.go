@@ -34,6 +34,10 @@ type Manager struct {
 
 	// Snapshot is used to cache the snapshot information.
 	Snapshot *cache.LRU[types.DocRefKey, *document.InternalDocument]
+
+	// SessionCount is used to cache the session count of channels
+	// to reduce RPC calls between AdminServer and ClusterServer.
+	SessionCount *cache.LRUWithExpires[string, int64]
 }
 
 // Options contains configuration for cache manager.
@@ -44,6 +48,10 @@ type Options struct {
 
 	// Document related cache options
 	SnapshotCacheSize int
+
+	// Channel related cache options
+	ChannelSessionCountCacheSize int
+	ChannelSessionCountCacheTTL  time.Duration
 }
 
 // New creates a new cache manager.
@@ -65,9 +73,19 @@ func New(opts Options) (*Manager, error) {
 		return nil, err
 	}
 
+	sessionCountCache, err := cache.NewLRUWithExpires[string, int64](
+		opts.ChannelSessionCountCacheSize,
+		opts.ChannelSessionCountCacheTTL,
+		"session-count",
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &Manager{
-		AuthWebhook: authWebhookCache,
-		Snapshot:    snapshotCache,
+		AuthWebhook:  authWebhookCache,
+		Snapshot:     snapshotCache,
+		SessionCount: sessionCountCache,
 	}
 	return m, nil
 }

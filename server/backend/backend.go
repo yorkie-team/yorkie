@@ -107,9 +107,11 @@ func New(
 
 	// 02. Create the cache manager, pubsub, lockers, and background task manager.
 	cacheManager, err := cache.New(cache.Options{
-		AuthWebhookCacheSize: conf.AuthWebhookCacheSize,
-		AuthWebhookCacheTTL:  conf.ParseAuthWebhookCacheTTL(),
-		SnapshotCacheSize:    conf.SnapshotCacheSize,
+		AuthWebhookCacheSize:         conf.AuthWebhookCacheSize,
+		AuthWebhookCacheTTL:          conf.ParseAuthWebhookCacheTTL(),
+		SnapshotCacheSize:            conf.SnapshotCacheSize,
+		ChannelSessionCountCacheSize: conf.ChannelSessionCountCacheSize,
+		ChannelSessionCountCacheTTL:  conf.ParseChannelSessionCountCacheTTL(),
 	})
 	if err != nil {
 		return nil, err
