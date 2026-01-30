@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.46] - 2026-01-30
+
+### Changed
+
+- Refine shard key routing logic in Envoy Lua filter by @raararaara in https://github.com/yorkie-team/yorkie/pull/1649
+- Enable h2c support for cluster communication by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1651
+- Introduces ShardedPathTrie for channel manager by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1652
+- Add channel session count caching in GetChannels API by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1653
+
+### Fixed
+
+- Add webhook URL validation to prevent SSRF attacks by @kokodak in https://github.com/yorkie-team/yorkie/pull/1650
+
 ## [v0.6.45] - 2026-01-23
 
 ### Added
