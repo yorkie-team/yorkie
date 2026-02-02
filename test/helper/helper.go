@@ -81,8 +81,8 @@ var (
 	HousekeepingCandidatesLimit      = 10
 	HousekeepingCompactionMinChanges = 5
 
-	PresenceTTL             = "5s"
-	PresenceCleanupInterval = "1s"
+	ChannelSessionTTL             = "5s"
+	ChannelSessionCleanupInterval = "1s"
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
@@ -295,19 +295,19 @@ func TestConfig() *server.Config {
 			CompactionMinChanges: HousekeepingCompactionMinChanges,
 		},
 		Backend: &backend.Config{
-			AdminUser:                server.DefaultAdminUser,
-			AdminPassword:            server.DefaultAdminPassword,
-			SecretKey:                server.DefaultSecretKey,
-			AdminTokenDuration:       server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:        true,
-			SnapshotCacheSize:        SnapshotCacheSize,
-			AuthWebhookCacheSize:     AuthWebhookSize,
-			AuthWebhookCacheTTL:      AuthWebhookCacheTTL.String(),
-			DisableWebhookValidation: true,
-			GatewayAddr:              fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			RPCAddr:                  fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			PresenceTTL:              PresenceTTL,
-			PresenceCleanupInterval:  PresenceCleanupInterval,
+			AdminUser:                     server.DefaultAdminUser,
+			AdminPassword:                 server.DefaultAdminPassword,
+			SecretKey:                     server.DefaultSecretKey,
+			AdminTokenDuration:            server.DefaultAdminTokenDuration.String(),
+			UseDefaultProject:             true,
+			SnapshotCacheSize:             SnapshotCacheSize,
+			AuthWebhookCacheSize:          AuthWebhookSize,
+			AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
+			DisableWebhookValidation:      true,
+			GatewayAddr:                   fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			RPCAddr:                       fmt.Sprintf("localhost:%d", RPCPort+portOffset),
+			ChannelSessionTTL:             ChannelSessionTTL,
+			ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,

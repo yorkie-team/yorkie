@@ -11,22 +11,22 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
-func TestPresenceAttachableInterface(t *testing.T) {
+func TestChannelAttachableInterface(t *testing.T) {
 	t.Run("implements Attachable interface", func(t *testing.T) {
-		ch, err := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-channel"))
 		assert.NoError(t, err)
 
 		// Verify it implements Attachable interface
 		var _ attachable.Attachable = ch
 
-		assert.Equal(t, "test-presence", ch.Key().String())
+		assert.Equal(t, "test-channel", ch.Key().String())
 		assert.Equal(t, attachable.TypeChannel, ch.Type())
 		assert.Equal(t, attachable.StatusDetached, ch.Status())
 		assert.False(t, ch.IsAttached())
 	})
 
 	t.Run("status changes work correctly", func(t *testing.T) {
-		ch, err := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-channel"))
 		assert.NoError(t, err)
 
 		assert.Equal(t, attachable.StatusDetached, ch.Status())
@@ -43,9 +43,9 @@ func TestPresenceAttachableInterface(t *testing.T) {
 }
 
 func TestAttachableInterfaceCompatibility(t *testing.T) {
-	t.Run("Document and Presence both implement Attachable", func(t *testing.T) {
+	t.Run("Document and Channel both implement Attachable", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		ch, err := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-channel"))
 		assert.NoError(t, err)
 
 		for i, resource := range []attachable.Attachable{doc, ch} {
@@ -65,10 +65,10 @@ func TestAttachableInterfaceCompatibility(t *testing.T) {
 
 	t.Run("status changes work for both types", func(t *testing.T) {
 		doc := document.New(key.Key("test-doc"))
-		counter, err := channel.New(key.Key("test-presence"))
+		ch, err := channel.New(key.Key("test-channel"))
 		assert.NoError(t, err)
 
-		for _, resource := range []attachable.Attachable{doc, counter} {
+		for _, resource := range []attachable.Attachable{doc, ch} {
 			resource.SetStatus(attachable.StatusAttached)
 			assert.Equal(t, attachable.StatusAttached, resource.Status())
 			assert.True(t, resource.IsAttached())

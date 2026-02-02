@@ -299,14 +299,14 @@ func (s *yorkieServer) AttachChannel(
 		ChannelKey: channelKey,
 	}
 
-	sessionID, count, err := s.backend.Channel.Attach(ctx, refKey, actorID)
+	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID)
 	if err != nil {
 		return nil, err
 	}
 
 	response := &api.AttachChannelResponse{
-		SessionId: sessionID.String(),
-		Count:     count,
+		SessionId:    sessionID.String(),
+		SessionCount: sessionCount,
 	}
 	return connect.NewResponse(response), nil
 }
@@ -346,13 +346,13 @@ func (s *yorkieServer) DetachChannel(
 	}
 
 	// 02. Detach using presence ID
-	count, err := s.backend.Channel.Detach(ctx, sessionID)
+	sessionCount, err := s.backend.Channel.Detach(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	response := &api.DetachChannelResponse{
-		Count: count,
+		SessionCount: sessionCount,
 	}
 	return connect.NewResponse(response), nil
 }
@@ -401,10 +401,10 @@ func (s *yorkieServer) RefreshChannel(
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
 	}
-	count := s.backend.Channel.SessionCount(refKey, false)
+	sessionCount := s.backend.Channel.SessionCount(refKey, false)
 
 	response := &api.RefreshChannelResponse{
-		Count: count,
+		SessionCount: sessionCount,
 	}
 	return connect.NewResponse(response), nil
 }
@@ -457,13 +457,13 @@ func (s *yorkieServer) WatchChannel(
 		s.backend.PubSub.UnsubscribeChannel(ctx, refKey, subscription)
 	}()
 
-	// 04. Send initial count
-	currentCount := s.backend.Channel.SessionCount(refKey, false)
+	// 04. Send initial session count
+	sessionCount := s.backend.Channel.SessionCount(refKey, false)
 	if err := stream.Send(&api.WatchChannelResponse{
 		Body: &api.WatchChannelResponse_Initialized{
 			Initialized: &api.WatchChannelInitialized{
-				Count: currentCount,
-				Seq:   0,
+				SessionCount: sessionCount,
+				Seq:          0,
 			},
 		},
 	}); err != nil {
@@ -499,9 +499,9 @@ func (s *yorkieServer) WatchChannel(
 				response = &api.WatchChannelResponse{
 					Body: &api.WatchChannelResponse_Event{
 						Event: &api.ChannelEvent{
-							Type:  api.ChannelEvent_TYPE_PRESENCE,
-							Count: event.Count,
-							Seq:   event.Seq,
+							Type:         api.ChannelEvent_TYPE_PRESENCE,
+							SessionCount: event.SessionCount,
+							Seq:          event.Seq,
 						},
 					},
 				}

@@ -455,7 +455,7 @@ message ChannelEvent {
 
   Type type = 1;
   string publisher = 2;
-  int64 count = 3;
+  int64 session_count = 3;
   int64 seq = 4;
   string topic = 5;
   bytes payload = 6;

@@ -1297,7 +1297,7 @@ func (x *AttachChannelRequest) GetChannelKey() string {
 type AttachChannelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	SessionCount  int64                  `protobuf:"varint,2,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1339,9 +1339,9 @@ func (x *AttachChannelResponse) GetSessionId() string {
 	return ""
 }
 
-func (x *AttachChannelResponse) GetCount() int64 {
+func (x *AttachChannelResponse) GetSessionCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.SessionCount
 	}
 	return 0
 }
@@ -1408,7 +1408,7 @@ func (x *DetachChannelRequest) GetSessionId() string {
 
 type DetachChannelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	SessionCount  int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1443,9 +1443,9 @@ func (*DetachChannelResponse) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *DetachChannelResponse) GetCount() int64 {
+func (x *DetachChannelResponse) GetSessionCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.SessionCount
 	}
 	return 0
 }
@@ -1512,7 +1512,7 @@ func (x *RefreshChannelRequest) GetSessionId() string {
 
 type RefreshChannelResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	SessionCount  int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1547,9 +1547,9 @@ func (*RefreshChannelResponse) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{27}
 }
 
-func (x *RefreshChannelResponse) GetCount() int64 {
+func (x *RefreshChannelResponse) GetSessionCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.SessionCount
 	}
 	return 0
 }
@@ -1690,7 +1690,7 @@ func (*WatchChannelResponse_Event) isWatchChannelResponse_Body() {}
 
 type WatchChannelInitialized struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	SessionCount  int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
 	Seq           int64                  `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1726,9 +1726,9 @@ func (*WatchChannelInitialized) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *WatchChannelInitialized) GetCount() int64 {
+func (x *WatchChannelInitialized) GetSessionCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.SessionCount
 	}
 	return 0
 }
@@ -1995,27 +1995,27 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x14AttachChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
-	"channelKey\"L\n" +
+	"channelKey\"[\n" +
 	"\x15AttachChannelResponse\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"s\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12#\n" +
+	"\rsession_count\x18\x02 \x01(\x03R\fsessionCount\"s\n" +
 	"\x14DetachChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
 	"channelKey\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\"-\n" +
-	"\x15DetachChannelResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"t\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"<\n" +
+	"\x15DetachChannelResponse\x12#\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"t\n" +
 	"\x15RefreshChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
 	"channelKey\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\".\n" +
-	"\x16RefreshChannelResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"S\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"=\n" +
+	"\x16RefreshChannelResponse\x12#\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"S\n" +
 	"\x13WatchChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
@@ -2023,9 +2023,9 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x14WatchChannelResponse\x12F\n" +
 	"\vinitialized\x18\x01 \x01(\v2\".yorkie.v1.WatchChannelInitializedH\x00R\vinitialized\x12/\n" +
 	"\x05event\x18\x02 \x01(\v2\x17.yorkie.v1.ChannelEventH\x00R\x05eventB\x06\n" +
-	"\x04body\"A\n" +
-	"\x17WatchChannelInitialized\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\x12\x10\n" +
+	"\x04body\"P\n" +
+	"\x17WatchChannelInitialized\x12#\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x03R\x03seq\"\x80\x01\n" +
 	"\x10BroadcastRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
