@@ -161,7 +161,7 @@ func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
 	return result
 }
 
-// ParseChannelSessionTTL returns TTL for channel sessions.
+// ParseChannelSessionTTL returns TTL for channel session.
 func (c *Config) ParseChannelSessionTTL() time.Duration {
 	if c.ChannelSessionTTL == "" {
 		return 60 * time.Second // Default: 60 seconds
@@ -176,7 +176,7 @@ func (c *Config) ParseChannelSessionTTL() time.Duration {
 	return result
 }
 
-// ParsePresenceCleanupInterval returns the interval for presence cleanup.
+// ParseChannelSessionCleanupInterval returns the interval for channel session cleanup.
 func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	if c.ChannelSessionCleanupInterval == "" {
 		return 10 * time.Second // Default: 10 seconds
