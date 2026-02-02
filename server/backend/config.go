@@ -60,14 +60,14 @@ type Config struct {
 	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
 	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
 
-	// PresenceTTL is the time-to-live duration for presence sessions.
-	// If a presence is not refreshed within this duration, it will be removed.
+	// ChannelSessionTTL is the time-to-live duration for channel sessions.
+	// If a channel session is not refreshed within this duration, it will be removed.
 	// Default is "60s".
-	PresenceTTL string `yaml:"PresenceTTL"`
+	ChannelSessionTTL string `yaml:"ChannelSessionTTL"`
 
-	// PresenceCleanupInterval is the interval for running cleanup of expired presences.
+	// ChannelSessionCleanupInterval is the interval for running cleanup of expired channel sessions.
 	// Default is "10s".
-	PresenceCleanupInterval string `yaml:"PresenceCleanupInterval"`
+	ChannelSessionCleanupInterval string `yaml:"ChannelSessionCleanupInterval"`
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
@@ -102,20 +102,20 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
-	if c.PresenceTTL != "" {
-		if _, err := time.ParseDuration(c.PresenceTTL); err != nil {
+	if c.ChannelSessionTTL != "" {
+		if _, err := time.ParseDuration(c.ChannelSessionTTL); err != nil {
 			return fmt.Errorf(
-				`invalid argument "%s" for "--presence-ttl" flag: %w`,
-				c.PresenceTTL,
+				`invalid argument "%s" for "--channel-session-ttl" flag: %w`,
+				c.ChannelSessionTTL,
 				err,
 			)
 		}
 	}
-	if c.PresenceCleanupInterval != "" {
-		if _, err := time.ParseDuration(c.PresenceCleanupInterval); err != nil {
+	if c.ChannelSessionCleanupInterval != "" {
+		if _, err := time.ParseDuration(c.ChannelSessionCleanupInterval); err != nil {
 			return fmt.Errorf(
-				`invalid argument "%s" for "--presence-cleanup-interval" flag: %w`,
-				c.PresenceCleanupInterval,
+				`invalid argument "%s" for "--channel-session-cleanup-interval" flag: %w`,
+				c.ChannelSessionCleanupInterval,
 				err,
 			)
 		}
@@ -161,15 +161,15 @@ func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
 	return result
 }
 
-// ParsePresenceTTL returns TTL for presence sessions.
-func (c *Config) ParsePresenceTTL() time.Duration {
-	if c.PresenceTTL == "" {
+// ParseChannelSessionTTL returns TTL for channel sessions.
+func (c *Config) ParseChannelSessionTTL() time.Duration {
+	if c.ChannelSessionTTL == "" {
 		return 60 * time.Second // Default: 60 seconds
 	}
 
-	result, err := time.ParseDuration(c.PresenceTTL)
+	result, err := time.ParseDuration(c.ChannelSessionTTL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse presence ttl: %v\n", err)
+		fmt.Fprintf(os.Stderr, "parse channel session ttl: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -177,14 +177,14 @@ func (c *Config) ParsePresenceTTL() time.Duration {
 }
 
 // ParsePresenceCleanupInterval returns the interval for presence cleanup.
-func (c *Config) ParsePresenceCleanupInterval() time.Duration {
-	if c.PresenceCleanupInterval == "" {
+func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
+	if c.ChannelSessionCleanupInterval == "" {
 		return 10 * time.Second // Default: 10 seconds
 	}
 
-	result, err := time.ParseDuration(c.PresenceCleanupInterval)
+	result, err := time.ParseDuration(c.ChannelSessionCleanupInterval)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse presence cleanup interval: %v\n", err)
+		fmt.Fprintf(os.Stderr, "parse channel session cleanup interval: %v\n", err)
 		os.Exit(1)
 	}
 

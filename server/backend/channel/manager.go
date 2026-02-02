@@ -96,7 +96,7 @@ type Manager struct {
 	// sessionTTL is the time-to-live duration for sessions
 	sessionTTL gotime.Duration
 
-	// cleanupInterval is the interval for running cleanup of expired presences
+	// cleanupInterval is the interval for running cleanup of expired sessions
 	cleanupInterval gotime.Duration
 
 	// cleanupTicker is the ticker for periodic cleanup
@@ -205,12 +205,7 @@ func (m *Manager) upsertChannel(ctx context.Context, key types.ChannelRefKey) *C
 
 	// Publish event only for the goroutine that actually created the channel
 	if isNew && value != nil {
-		if err := m.broker.Produce(ctx, messaging.ChannelEventsMessage{
-			ProjectID:  key.ProjectID.String(),
-			EventType:  events.ChannelCreated,
-			Timestamp:  gotime.Now(),
-			ChannelKey: key.ChannelKey.String(),
-		}); err != nil {
+		if err := produceChannelEvent(ctx, m, key, events.ChannelCreated); err != nil {
 			logging.From(ctx).Errorf("failed to produce channel event: %v", err)
 		}
 	}
@@ -252,16 +247,16 @@ func (m *Manager) Attach(
 			continue // Retry with fresh channel
 		}
 
-		id := types.NewID()
-		channel.Sessions.Set(id, &Session{
-			ID:        id,
+		sessionID := types.NewID()
+		channel.Sessions.Set(sessionID, &Session{
+			ID:        sessionID,
 			Actor:     clientID,
 			Key:       key,
 			UpdatedAt: gotime.Now(),
 		})
 
 		// Add reverse index for O(1) detach lookup
-		m.sessionIDToKey.Set(id, key)
+		m.sessionIDToKey.Set(sessionID, key)
 
 		// Get or create client to session map
 		clientSessionMap := m.clientToSession.Upsert(
@@ -274,31 +269,24 @@ func (m *Manager) Attach(
 				return val
 			},
 		)
-		clientSessionMap.Set(key, id)
+		clientSessionMap.Set(key, sessionID)
 
-		newCount := int64(channel.Sessions.Len())
+		newSessionCount := int64(channel.Sessions.Len())
 
 		channel.mu.Unlock()
 
-		if err := m.broker.Produce(ctx, messaging.SessionEventsMessage{
-			ProjectID:  key.ProjectID.String(),
-			SessionID:  id.String(),
-			Timestamp:  gotime.Now(),
-			UserID:     clientID.String(),
-			ChannelKey: key.ChannelKey.String(),
-			EventType:  events.SessionCreated,
-		}); err != nil {
+		if err := produceSessionEvent(ctx, m, sessionID, clientID, key, events.SessionCreated); err != nil {
 			logging.From(ctx).Errorf("failed to produce session event: %v", err)
 		}
 
 		// Publish event to PubSub
 		m.pubsub.PublishChannel(ctx, events.ChannelEvent{
-			Key:   key,
-			Count: newCount,
-			Seq:   m.nextSeq(),
+			Key:          key,
+			SessionCount: newSessionCount,
+			Seq:          m.nextSeq(),
 		})
 
-		return id, newCount, nil
+		return sessionID, newSessionCount, nil
 	}
 }
 
@@ -327,7 +315,7 @@ func (m *Manager) Detach(
 
 	ch.Sessions.Delete(id)
 
-	newCount := int64(ch.Sessions.Len())
+	newSessionCount := int64(ch.Sessions.Len())
 
 	m.sessionIDToKey.Delete(id)
 
@@ -341,19 +329,19 @@ func (m *Manager) Detach(
 
 	// Delete channel while holding the lock to prevent race with Attach.
 	// ChannelTrie.Delete also cleans up empty shards internally.
-	if newCount == 0 {
+	if newSessionCount == 0 {
 		m.channels.Delete(key)
 	}
 
 	ch.mu.Unlock()
 
 	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
-		Key:   key,
-		Count: newCount,
-		Seq:   m.nextSeq(),
+		Key:          key,
+		SessionCount: newSessionCount,
+		Seq:          m.nextSeq(),
 	})
 
-	return newCount, nil
+	return newSessionCount, nil
 }
 
 // Refresh extends the TTL of an existing session by updating its activity time.
@@ -596,4 +584,36 @@ func (m *Manager) collectActiveChannelInfo(ch *Channel, results *[]ChannelSessio
 // isValidChannel checks if a channel is valid (non-nil with initialized sessions).
 func (m *Manager) isValidChannel(ch *Channel) bool {
 	return ch != nil && ch.Sessions != nil
+}
+
+func produceChannelEvent(
+	ctx context.Context,
+	manager *Manager,
+	key types.ChannelRefKey,
+	eventType events.ChannelEventType,
+) error {
+	return manager.broker.Produce(ctx, messaging.ChannelEventsMessage{
+		ProjectID:  key.ProjectID.String(),
+		EventType:  eventType,
+		Timestamp:  gotime.Now(),
+		ChannelKey: key.ChannelKey.String(),
+	})
+}
+
+func produceSessionEvent(
+	ctx context.Context,
+	manager *Manager,
+	sessionID types.ID,
+	clientID time.ActorID,
+	key types.ChannelRefKey,
+	eventType events.ChannelEventType,
+) error {
+	return manager.broker.Produce(ctx, messaging.SessionEventsMessage{
+		ProjectID:  key.ProjectID.String(),
+		SessionID:  sessionID.String(),
+		Timestamp:  gotime.Now(),
+		UserID:     clientID.String(),
+		ChannelKey: key.ChannelKey.String(),
+		EventType:  eventType,
+	})
 }

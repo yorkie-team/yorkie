@@ -638,7 +638,7 @@ func TestChannelManager_AttachDetach(t *testing.T) {
 		// Verify pubsub event was published
 		assert.Len(t, pubsub.events, 1)
 		assert.Equal(t, refKey, pubsub.events[0].Key)
-		assert.Equal(t, int64(1), pubsub.events[0].Count)
+		assert.Equal(t, int64(1), pubsub.events[0].SessionCount)
 	})
 
 	t.Run("attach same client to same channel returns existing session", func(t *testing.T) {
@@ -695,7 +695,7 @@ func TestChannelManager_AttachDetach(t *testing.T) {
 
 		// Verify pubsub event
 		assert.Len(t, pubsub.events, 1)
-		assert.Equal(t, int64(2), pubsub.events[0].Count)
+		assert.Equal(t, int64(2), pubsub.events[0].SessionCount)
 	})
 
 	t.Run("detach all sessions removes channel", func(t *testing.T) {

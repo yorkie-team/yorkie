@@ -2802,7 +2802,7 @@ type ChannelEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          ChannelEvent_Type      `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.ChannelEvent_Type" json:"type,omitempty"`
 	Publisher     string                 `protobuf:"bytes,2,opt,name=publisher,proto3" json:"publisher,omitempty"`
-	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	SessionCount  int64                  `protobuf:"varint,3,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
 	Seq           int64                  `protobuf:"varint,4,opt,name=seq,proto3" json:"seq,omitempty"`
 	Topic         string                 `protobuf:"bytes,5,opt,name=topic,proto3" json:"topic,omitempty"`
 	Payload       []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
@@ -2854,9 +2854,9 @@ func (x *ChannelEvent) GetPublisher() string {
 	return ""
 }
 
-func (x *ChannelEvent) GetCount() int64 {
+func (x *ChannelEvent) GetSessionCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.SessionCount
 	}
 	return 0
 }
@@ -4920,11 +4920,11 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\bDocEvent\x12+\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x17.yorkie.v1.DocEventTypeR\x04type\x12\x1c\n" +
 	"\tpublisher\x18\x02 \x01(\tR\tpublisher\x12+\n" +
-	"\x04body\x18\x03 \x01(\v2\x17.yorkie.v1.DocEventBodyR\x04body\"\xfb\x01\n" +
+	"\x04body\x18\x03 \x01(\v2\x17.yorkie.v1.DocEventBodyR\x04body\"\x8a\x02\n" +
 	"\fChannelEvent\x120\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1c.yorkie.v1.ChannelEvent.TypeR\x04type\x12\x1c\n" +
-	"\tpublisher\x18\x02 \x01(\tR\tpublisher\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x03R\x05count\x12\x10\n" +
+	"\tpublisher\x18\x02 \x01(\tR\tpublisher\x12#\n" +
+	"\rsession_count\x18\x03 \x01(\x03R\fsessionCount\x12\x10\n" +
 	"\x03seq\x18\x04 \x01(\x03R\x03seq\x12\x14\n" +
 	"\x05topic\x18\x05 \x01(\tR\x05topic\x12\x18\n" +
 	"\apayload\x18\x06 \x01(\fR\apayload\"C\n" +

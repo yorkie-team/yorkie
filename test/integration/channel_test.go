@@ -144,7 +144,7 @@ func TestChannelIntegration(t *testing.T) {
 		assert.Equal(t, int64(1), receivedCount, "Initial count should be 1")
 
 		// Validate Counter object holds the actual count value
-		assert.Equal(t, int64(1), ch.Count(), "Counter object should reflect actual count")
+		assert.Equal(t, int64(1), ch.SessionCount(), "Counter object should reflect actual count")
 	})
 
 	t.Run("session count changes with multiple clients test", func(t *testing.T) {
@@ -247,7 +247,7 @@ func TestChannelIntegration(t *testing.T) {
 		}, time.Second, 50*time.Millisecond, "Final count should be 1")
 
 		// Validate Counter object reflects the final count
-		assert.Equal(t, int64(1), watcher.Count(), "Watcher counter should reflect final count")
+		assert.Equal(t, int64(1), watcher.SessionCount(), "Watcher counter should reflect final count")
 	})
 
 	t.Run("out-of-order event handling test", func(t *testing.T) {
@@ -350,7 +350,7 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Note: Counter objects only reflect server state if they have WatchChannel active
 		// counter1 has WatchChannel active, so it should reflect the count
-		assert.Equal(t, int64(2), ch1.Count(), "Counter1 should reflect final count")
+		assert.Equal(t, int64(2), ch1.SessionCount(), "Counter1 should reflect final count")
 		// counter2 doesn't have WatchChannel, so we can't verify its internal count
 		// This is expected behavior - Counter objects need WatchChannel to stay synchronized
 	})
@@ -714,7 +714,7 @@ func TestChannelIntegration(t *testing.T) {
 		}
 
 		// Verify count dropped to 1
-		assert.Equal(t, int64(1), counter2.Count(), "Count should be 1 after client1 expired")
+		assert.Equal(t, int64(1), counter2.SessionCount(), "Count should be 1 after client1 expired")
 
 		// client2 should still be active
 		assert.True(t, counter2.IsAttached())
@@ -736,36 +736,36 @@ func TestChannelIntegration(t *testing.T) {
 		// Attach client1 with manual sync mode (no realtime option)
 		err = client1.Attach(ctx, counter1)
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), counter1.Count())
+		assert.Equal(t, int64(1), counter1.SessionCount())
 
 		// Attach client2 with manual sync mode
 		err = client2.Attach(ctx, counter2)
 		require.NoError(t, err)
-		assert.Equal(t, int64(2), counter2.Count())
+		assert.Equal(t, int64(2), counter2.SessionCount())
 
 		// In manual mode, counters don't automatically update
 		// counter1 still shows old count
-		assert.Equal(t, int64(1), counter1.Count())
+		assert.Equal(t, int64(1), counter1.SessionCount())
 
 		// Manually sync counter1 to get updated count
 		err = client1.Sync(ctx, client.WithKey(counter1.Key()))
 		require.NoError(t, err)
 
 		// Now counter1 should have the updated count
-		assert.Equal(t, int64(2), counter1.Count())
+		assert.Equal(t, int64(2), counter1.SessionCount())
 
 		// Detach client2
 		require.NoError(t, client2.Detach(ctx, counter2))
 
 		// counter1 still shows old count (manual mode)
-		assert.Equal(t, int64(2), counter1.Count())
+		assert.Equal(t, int64(2), counter1.SessionCount())
 
 		// Sync to get updated count
 		err = client1.Sync(ctx, client.WithKey(counter1.Key()))
 		require.NoError(t, err)
 
 		// Now counter1 should show 1
-		assert.Equal(t, int64(1), counter1.Count())
+		assert.Equal(t, int64(1), counter1.SessionCount())
 
 		// Detach client1
 		require.NoError(t, client1.Detach(ctx, counter1))
@@ -787,7 +787,7 @@ func TestChannelIntegration(t *testing.T) {
 		// Attach client1 with realtime sync mode
 		err = client1.Attach(ctx, ch1, client.WithChannelRealtimeSync())
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), ch1.Count())
+		assert.Equal(t, int64(1), ch1.SessionCount())
 
 		// Start watching for count changes
 		countChan1, closeWatch1, err := client1.WatchChannel(ctx, ch1)
@@ -810,7 +810,7 @@ func TestChannelIntegration(t *testing.T) {
 		select {
 		case count := <-countChan1:
 			assert.Equal(t, int64(2), count)
-			assert.Equal(t, int64(2), ch1.Count())
+			assert.Equal(t, int64(2), ch1.SessionCount())
 		case <-time.After(3 * time.Second):
 			t.Fatal("Timeout waiting for count update after client2 attached")
 		}
@@ -822,7 +822,7 @@ func TestChannelIntegration(t *testing.T) {
 		select {
 		case count := <-countChan1:
 			assert.Equal(t, int64(1), count)
-			assert.Equal(t, int64(1), ch1.Count())
+			assert.Equal(t, int64(1), ch1.SessionCount())
 		case <-time.After(3 * time.Second):
 			t.Fatal("Timeout waiting for count update after client2 detached")
 		}
@@ -851,13 +851,13 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, client2.Attach(ctx, counter2))
 
 		// counter1 shows old count (manual mode)
-		assert.Equal(t, int64(1), counter1.Count())
+		assert.Equal(t, int64(1), counter1.SessionCount())
 
 		// Sync all resources without specifying keys
 		require.NoError(t, client1.Sync(ctx))
 
 		// Now counter1 should have updated count
-		assert.Equal(t, int64(2), counter1.Count())
+		assert.Equal(t, int64(2), counter1.SessionCount())
 
 		// Cleanup
 		require.NoError(t, client1.Detach(ctx, doc1))
@@ -896,11 +896,11 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Verify counts
 		// room-1 direct session counts (per-client view)
-		assert.Equal(t, int64(1), channels[0].Count(), "room-1 should have 1 direct session")
-		assert.Equal(t, int64(1), channels[1].Count(), "room-1.section-1 should have 1 direct sessions")
-		assert.Equal(t, int64(1), channels[2].Count(), "room-1.section-1.desk-1 should have 1 direct sessions")
-		assert.Equal(t, int64(1), channels[3].Count(), "room-1.section-2 should have 1 direct sessions")
-		assert.Equal(t, int64(2), channels[4].Count(), "room-1 should have 2 direct sessions")
+		assert.Equal(t, int64(1), channels[0].SessionCount(), "room-1 should have 1 direct session")
+		assert.Equal(t, int64(1), channels[1].SessionCount(), "room-1.section-1 should have 1 direct sessions")
+		assert.Equal(t, int64(1), channels[2].SessionCount(), "room-1.section-1.desk-1 should have 1 direct sessions")
+		assert.Equal(t, int64(1), channels[3].SessionCount(), "room-1.section-2 should have 1 direct sessions")
+		assert.Equal(t, int64(2), channels[4].SessionCount(), "room-1 should have 2 direct sessions")
 
 		// Note: Client-side Count() only shows direct count for the exact path
 		// The hierarchical counting (includeSubPath) is a server-side feature
@@ -911,11 +911,11 @@ func TestChannelIntegration(t *testing.T) {
 			require.NoError(t, client.Detach(ctx, channels[i]))
 		}
 
-		assert.Equal(t, int64(0), channels[0].Count(), "room-1 should have 0 direct sessions after detach")
-		assert.Equal(t, int64(0), channels[1].Count(), "room-1.section-1 should have 0 direct sessions after detach")
-		assert.Equal(t, int64(0), channels[2].Count(), "room-1.section-1.desk-1 should have 0 direct sessions after detach")
-		assert.Equal(t, int64(0), channels[3].Count(), "room-1.section-2 should have 0 direct sessions after detach")
-		assert.Equal(t, int64(0), channels[4].Count(), "room-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[0].SessionCount(), "room-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[1].SessionCount(), "room-1.section-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[2].SessionCount(), "room-1.section-1.desk-1 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[3].SessionCount(), "room-1.section-2 should have 0 direct sessions after detach")
+		assert.Equal(t, int64(0), channels[4].SessionCount(), "room-1 should have 0 direct sessions after detach")
 	})
 
 	t.Run("channel path cleanup test", func(t *testing.T) {
@@ -1045,7 +1045,7 @@ func TestChannelIntegration(t *testing.T) {
 
 		for _, channel := range channels {
 			assert.False(t, channel.IsAttached())
-			assert.Equal(t, int64(0), channel.Count())
+			assert.Equal(t, int64(0), channel.SessionCount())
 		}
 	})
 }

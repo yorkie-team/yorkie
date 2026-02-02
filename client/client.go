@@ -639,13 +639,13 @@ func (c *Client) attachChannel(ctx context.Context, ch *channel.Channel, opts *A
 	}
 	c.attachments.Set(ch.Key(), attachment)
 
-	// Update initial count from attach response
-	ch.UpdateCount(res.Msg.Count, 0)
+	// Update initial session count from attach response
+	ch.UpdateSessionCount(res.Msg.SessionCount, 0)
 
 	return nil
 }
 
-// refreshChannel refreshes the TTL of the given channel and returns the current count.
+// refreshChannel refreshes the TTL of the given channel and returns the current session count.
 func (c *Client) refreshChannel(ctx context.Context, ch *channel.Channel) error {
 	attachment, ok := c.attachments.Get(ch.Key())
 	if !ok {
@@ -664,8 +664,8 @@ func (c *Client) refreshChannel(ctx context.Context, ch *channel.Channel) error 
 		return err
 	}
 
-	// Update count from refresh response
-	ch.UpdateCount(res.Msg.Count, 0)
+	// Update session count from refresh response
+	ch.UpdateSessionCount(res.Msg.SessionCount, 0)
 
 	return nil
 }
@@ -690,7 +690,7 @@ func (c *Client) detachChannel(ctx context.Context, ch *channel.Channel) error {
 
 	// Update counter status and reset count to 0
 	ch.SetStatus(attachable.StatusDetached)
-	ch.UpdateCount(0, 0) // Reset count and seq when detached
+	ch.UpdateSessionCount(0, 0) // Reset session count and seq when detached
 
 	c.attachments.Delete(ch.Key())
 
@@ -756,10 +756,10 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 				msg := stream.Msg()
 				switch body := msg.Body.(type) {
 				case *api.WatchChannelResponse_Initialized:
-					// Always accept initial count and update counter
-					ch.UpdateCount(body.Initialized.Count, body.Initialized.Seq)
+					// Always accept initial session count and update counter
+					ch.UpdateSessionCount(body.Initialized.SessionCount, body.Initialized.Seq)
 					select {
-					case countChan <- body.Initialized.Count:
+					case countChan <- body.Initialized.SessionCount:
 					case <-watchCtx.Done():
 						return
 					}
@@ -772,10 +772,10 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 							if handler, ok := ch.BroadcastEventHandlers()[body.Event.Topic]; ok && handler != nil {
 								_ = handler(body.Event.Topic, body.Event.Publisher, body.Event.Payload)
 							}
-						} else if ch.UpdateCount(body.Event.Count, body.Event.Seq) {
+						} else if ch.UpdateSessionCount(body.Event.SessionCount, body.Event.Seq) {
 							// Only send to channel if Counter accepted the update
 							select {
-							case countChan <- body.Event.Count:
+							case countChan <- body.Event.SessionCount:
 							case <-watchCtx.Done():
 								return
 							}

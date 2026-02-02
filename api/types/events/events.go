@@ -122,8 +122,8 @@ type ChannelEvent struct {
 	// Publisher is the actor who published the broadcast (for broadcasts).
 	Publisher time.ActorID
 
-	// Count is the current presence count of the channel.
-	Count int64
+	// Count is the current session count of the channel.
+	SessionCount int64
 
 	// Topic is the topic of the broadcast (for broadcasts).
 	Topic string

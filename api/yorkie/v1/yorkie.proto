@@ -174,7 +174,7 @@ message AttachChannelRequest {
 
 message AttachChannelResponse {
   string session_id = 1;
-  int64 count = 2;
+  int64 session_count = 2;
 }
 
 message DetachChannelRequest {
@@ -184,7 +184,7 @@ message DetachChannelRequest {
 }
 
 message DetachChannelResponse {
-  int64 count = 1;
+  int64 session_count = 1;
 }
 
 message RefreshChannelRequest {
@@ -194,7 +194,7 @@ message RefreshChannelRequest {
 }
 
 message RefreshChannelResponse {
-  int64 count = 1;
+  int64 session_count = 1;
 }
 
 message WatchChannelRequest {
@@ -210,7 +210,7 @@ message WatchChannelResponse {
 }
 
 message WatchChannelInitialized {
-  int64 count = 1;
+  int64 session_count = 1;
   int64 seq = 2;
 }
 

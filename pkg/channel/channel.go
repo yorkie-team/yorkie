@@ -51,7 +51,7 @@ type Channel struct {
 	actorID time.ActorID
 
 	// count is the current count value from server.
-	count atomic.Int64
+	sessionCount atomic.Int64
 
 	// seq is the last seen sequence number for ordering.
 	seq atomic.Int64
@@ -75,20 +75,20 @@ type BroadcastRequest struct {
 	Payload []byte
 }
 
-// New creates a new instance of Presence.
+// New creates a new instance of Channel.
 func New(k key.Key) (*Channel, error) {
 	if !IsValidChannelKeyPath(k) {
 		return nil, ErrInvalidChannelKey
 	}
 
-	counter := &Channel{
+	ch := &Channel{
 		key:                    k,
 		broadcastRequests:      make(chan BroadcastRequest, 1),
 		broadcastResponses:     make(chan error, 1),
 		broadcastEventHandlers: make(map[string]func(topic, publisher string, payload []byte) error),
 	}
-	counter.status.Store(int32(attachable.StatusDetached))
-	return counter, nil
+	ch.status.Store(int32(attachable.StatusDetached))
+	return ch, nil
 }
 
 // Key returns the key of this channel.
@@ -130,9 +130,9 @@ func (c *Channel) SetActor(actor time.ActorID) {
 	c.actorID = actor
 }
 
-// Count returns the current count value.
-func (c *Channel) Count() int64 {
-	return c.count.Load()
+// SessionCount returns the current session count value.
+func (c *Channel) SessionCount() int64 {
+	return c.sessionCount.Load()
 }
 
 // Seq returns the last seen sequence number.
@@ -140,12 +140,12 @@ func (c *Channel) Seq() int64 {
 	return c.seq.Load()
 }
 
-// UpdateCount updates the count and sequence number if the sequence is newer.
-func (c *Channel) UpdateCount(count int64, seq int64) bool {
+// UpdateSessionCount updates the session count and sequence number if the sequence is newer.
+func (c *Channel) UpdateSessionCount(sessionCount int64, seq int64) bool {
 	// Only update if sequence is newer (or initial state with seq=0)
 	currentSeq := c.seq.Load()
 	if seq > currentSeq || seq == 0 {
-		c.count.Store(count)
+		c.sessionCount.Store(sessionCount)
 		c.seq.Store(seq)
 		return true
 	}

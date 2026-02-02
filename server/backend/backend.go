@@ -163,8 +163,8 @@ func New(
 	// 08. Create channel manager for real-time user tracking.
 	channelManager := channel.NewManager(
 		pubsub,
-		conf.ParsePresenceTTL(),
-		conf.ParsePresenceCleanupInterval(),
+		conf.ParseChannelSessionTTL(),
+		conf.ParseChannelSessionCleanupInterval(),
 		&channel.Metrics{
 			Hostname: conf.Hostname,
 			Metrics:  metrics,
