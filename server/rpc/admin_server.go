@@ -281,6 +281,8 @@ func (s *adminServer) GetProjectStats(
 		ActiveUsersCount:            int32(stats.ActiveUsersCount),
 		ActiveDocuments:             converter.ToMetricPoints(stats.ActiveDocuments),
 		ActiveDocumentsCount:        int32(stats.ActiveDocumentsCount),
+		ActiveClients:               converter.ToMetricPoints(stats.ActiveClients),
+		ActiveClientsCount:          int32(stats.ActiveClientsCount),
 		ActiveChannels:              converter.ToMetricPoints(stats.ActiveChannels),
 		ActiveChannelsCount:         int32(stats.ActiveChannelsCount),
 		Sessions:                    converter.ToMetricPoints(stats.Sessions),

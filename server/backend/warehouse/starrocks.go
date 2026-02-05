@@ -166,6 +166,65 @@ func (r *StarRocks) GetActiveDocumentsCount(id types.ID, from, to time.Time) (in
 	return count, nil
 }
 
+// GetActiveClients returns the number of active clients in the given time range.
+func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return nil, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT
+	    DATE(timestamp) AS event_date,
+	    COUNT(DISTINCT client_id) AS active_clients
+	FROM
+	    client_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s'
+	GROUP BY
+	    event_date
+	ORDER BY
+	    event_date ASC;
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	metrics, err := r.queryMetrics(query)
+	if err != nil {
+		return nil, fmt.Errorf("get active clients: %w", err)
+	}
+	return metrics, nil
+}
+
+// GetActiveClientsCount returns the total number of active clients in the given time range.
+func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int, error) {
+	if err := validateTimeRange(from, to); err != nil {
+		return 0, err
+	}
+
+	// NOTE(hackerwins): StarRocks supports MySQL Driver, but it does not support
+	// Prepared Statement. So, we need to use string interpolation to build the query.
+	//nolint:gosec
+	query := fmt.Sprintf(`
+	SELECT
+		COUNT(DISTINCT client_id) AS active_clients
+	FROM
+		client_events
+	WHERE
+		project_id = '%s'
+		AND timestamp >= '%s'
+		AND timestamp < '%s';
+	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+
+	count, err := r.queryCount(query)
+	if err != nil {
+		return 0, fmt.Errorf("get active clients count: %w", err)
+	}
+	return count, nil
+}
+
 // GetActiveChannels returns the active channels of the given project.
 func (r *StarRocks) GetActiveChannels(id types.ID, from, to time.Time) ([]types.MetricPoint, error) {
 	if err := validateTimeRange(from, to); err != nil {

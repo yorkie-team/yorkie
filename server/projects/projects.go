@@ -156,6 +156,16 @@ func GetProjectStats(
 		return nil, err
 	}
 
+	activeClients, err := be.Warehouse.GetActiveClients(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	activeClientsCount, err := be.Warehouse.GetActiveClientsCount(id, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	activeChannels, err := be.Warehouse.GetActiveChannels(id, from, to)
 	if err != nil {
 		return nil, err
@@ -206,6 +216,8 @@ func GetProjectStats(
 		ActiveUsers:                 activeUsers,
 		ActiveDocumentsCount:        activeDocumentsCount,
 		ActiveDocuments:             activeDocuments,
+		ActiveClientsCount:          activeClientsCount,
+		ActiveClients:               activeClients,
 		ActiveChannelsCount:         activeChannelsCount,
 		ActiveChannels:              activeChannels,
 		SessionsCount:               sessionsCount,
