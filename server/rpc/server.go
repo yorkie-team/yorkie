@@ -38,6 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
+	"github.com/yorkie-team/yorkie/server/rpc/mcp"
 )
 
 // Server is a normal server that processes the logic requested by the client.
@@ -85,6 +86,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.Auth))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
+	mux.Handle(mcp.NewHandler(be))
 
 	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
