@@ -76,6 +76,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Bound request size to avoid memory pressure
+	const maxMCPBodyBytes = 1 << 20 // 1 MiB
+	r.Body = http.MaxBytesReader(w, r.Body, maxMCPBodyBytes)
+
 	// Authenticate the request
 	project, err := h.authenticate(r)
 	if err != nil {
@@ -136,7 +140,10 @@ func (h *Handler) authenticate(r *http.Request) (*types.Project, error) {
 		return nil, ErrInvalidAuthFormat
 	}
 
-	secretKey := parts[1]
+	secretKey := strings.TrimSpace(parts[1])
+	if secretKey == "" {
+		return nil, ErrMissingAPIKey
+	}
 	return projects.ProjectFromSecretKey(r.Context(), h.backend, secretKey)
 }
 
@@ -164,7 +171,10 @@ func (h *Handler) handleInitialize(w http.ResponseWriter, req Request) {
 
 // handleInitialized handles the initialized notification.
 func (h *Handler) handleInitialized(w http.ResponseWriter, req Request) {
-	// This is a notification, no response needed
+	// This is a notification, no response needed per JSON-RPC 2.0 spec
+	if req.ID == nil {
+		return
+	}
 	h.writeResult(w, req.ID, nil)
 }
 

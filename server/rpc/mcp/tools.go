@@ -625,7 +625,10 @@ func (h *Handler) previewTransform(
 	}
 
 	// Deep copy for transformation
-	transformedBytes, _ := json.Marshal(original)
+	transformedBytes, err := json.Marshal(original)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal document for copy: %w", err)
+	}
 	var transformed map[string]any
 	if err := json.Unmarshal(transformedBytes, &transformed); err != nil {
 		return nil, fmt.Errorf("failed to copy document: %w", err)
