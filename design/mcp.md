@@ -226,4 +226,4 @@ mux.Handle(mcp.NewHandler(be))  // Returns ("/mcp/", http.Handler)
 
 - [MCP Specification](https://modelcontextprotocol.io/specification)
 - [Yorkie Admin API](https://yorkie.dev/docs/admin-api)
-- [YSON Format](https://yorkie.dev/docs/yson)
+- [YSON Format](https://yorkie.dev/docs/advanced/yson)
