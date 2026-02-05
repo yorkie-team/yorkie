@@ -24,6 +24,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -183,13 +184,14 @@ func (r *StarRocks) GetActiveClients(id types.ID, from, to time.Time) ([]types.M
 	    client_events
 	WHERE
 		project_id = '%s'
+		AND event_type = '%s'
 		AND timestamp >= '%s'
 		AND timestamp < '%s'
 	GROUP BY
 	    event_date
 	ORDER BY
 	    event_date ASC;
-	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	metrics, err := r.queryMetrics(query)
 	if err != nil {
@@ -214,9 +216,10 @@ func (r *StarRocks) GetActiveClientsCount(id types.ID, from, to time.Time) (int,
 		client_events
 	WHERE
 		project_id = '%s'
+		AND event_type = '%s'
 		AND timestamp >= '%s'
 		AND timestamp < '%s';
-	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
+	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	count, err := r.queryCount(query)
 	if err != nil {

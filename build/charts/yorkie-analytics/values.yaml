@@ -21,6 +21,9 @@ yorkie-analytics:
       kafka-session-events:
         topic: session-events
         property-group-id: session_events_group
+      kafka-client-events:
+        topic: client-events
+        property-group-id: client_events_group
   kafka:
     enabled: true
     image:
@@ -42,6 +45,10 @@ yorkie-analytics:
         replicationFactor: 1
       session-events:
         topic: session-events
+        partitions: 1
+        replicationFactor: 1
+      client-events:
+        topic: client-events
         partitions: 1
         replicationFactor: 1
 

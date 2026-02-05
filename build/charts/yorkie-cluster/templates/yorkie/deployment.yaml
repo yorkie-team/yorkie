@@ -108,6 +108,10 @@ spec:
           "--kafka-document-events-topic",
           "{{ .Values.yorkie.args.kafkaDocumentEventsTopic }}",
           {{- end }}
+          {{- if .Values.yorkie.args.kafkaClientEventsTopic }}
+          "--kafka-client-events-topic",
+          "{{ .Values.yorkie.args.kafkaClientEventsTopic }}",
+          {{- end }}
           {{- if .Values.yorkie.args.kafkaChannelEventsTopic }}
           "--kafka-channel-events-topic",
           "{{ .Values.yorkie.args.kafkaChannelEventsTopic }}",

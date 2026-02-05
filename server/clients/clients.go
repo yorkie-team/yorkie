@@ -20,11 +20,14 @@ package clients
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/api/types/events"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -123,6 +126,19 @@ func DeactivateAsync(
 		if _, err := Deactivate(ctx, be, project, refKey); err != nil {
 			logging.LogError(ctx, fmt.Errorf("deactivate client asynchronously: %w", err))
 		}
+
+		if err := be.MsgBroker.Produce(
+			ctx,
+			messaging.ClientEventMessage{
+				ProjectID: project.ID.String(),
+				ClientID:  refKey.ClientID.String(),
+				Timestamp: time.Now(),
+				EventType: events.ClientDeactivatedEvent,
+			},
+		); err != nil {
+			logging.LogError(ctx, fmt.Errorf("produce client deactivation event: %w", err))
+		}
+
 	}, "deactivation")
 
 	return nil

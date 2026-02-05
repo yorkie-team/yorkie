@@ -31,6 +31,7 @@ func TestConfig(t *testing.T) {
 			Addresses:           "localhost:8080",
 			UserEventsTopic:     "user-events",
 			DocumentEventsTopic: "document-events",
+			ClientEventsTopic:   "client-events",
 			ChannelEventsTopic:  "channel-events",
 			SessionEventsTopic:  "session-events",
 			WriteTimeout:        "1s",

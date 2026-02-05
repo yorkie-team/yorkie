@@ -53,3 +53,15 @@ DISTRIBUTED BY HASH(project_id) BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
+
+CREATE TABLE IF NOT EXISTS client_events (
+    project_id VARCHAR(64),
+    client_id VARCHAR(64),
+    timestamp DATETIME,
+    event_type VARCHAR(32)
+) ENGINE = OLAP
+DUPLICATE KEY(project_id, client_id, timestamp)
+DISTRIBUTED BY HASH(project_id) BUCKETS 16
+PROPERTIES (
+    "replication_num" = "1"
+);

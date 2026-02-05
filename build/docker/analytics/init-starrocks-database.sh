@@ -24,6 +24,7 @@ mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tab
 mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: document_events' || echo -e 'document_events table not found'
 mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: channel_events' || echo -e 'channel_events table not found'
 mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: session_events' || echo -e 'session_events table not found'
+mysql -h starrocks-fe -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: client_events' || echo -e 'client_events table not found'
 
 
 sleep 5s
@@ -38,7 +39,7 @@ sleep 10s
 echo -e 'Checking and resuming routine loads if needed'
 mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\G'
 
-routine_loads=(yorkie.user_events yorkie.document_events yorkie.channel_events yorkie.session_events)
+routine_loads=(yorkie.user_events yorkie.document_events yorkie.channel_events yorkie.session_events yorkie.client_events)
 for routine_load in "${routine_loads[@]}"; do
   state=$(mysql -h starrocks-fe -P 9030 -u root -e "show routine load for $routine_load\G" 2>/dev/null | grep State: | sed 's/.*State: //')
   echo "Routine load $routine_load state: $state"

@@ -49,3 +49,16 @@ FROM KAFKA
     "kafka_topic" = "session-events",
     "property.group.id" = "session_events_group"
 );
+
+CREATE ROUTINE LOAD yorkie.client_events ON client_events
+PROPERTIES
+(
+    "format" = "JSON",
+    "desired_concurrent_number"="1"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" = "kafka:9092",
+    "kafka_topic" = "client-events",
+    "property.group.id" = "client_events_group"
+);

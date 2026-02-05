@@ -75,7 +75,7 @@ func createManager(
 ) (*channel.Manager, *mockPubSub, *MockBroker) {
 	pubsub := &mockPubSub{}
 	broker := &MockBroker{}
-	brokers := messaging.NewBroker(broker, broker, broker, broker)
+	brokers := messaging.NewBroker(broker, broker, broker, broker, broker)
 	db, err := memory.New()
 	assert.NoError(t, err)
 	_, _, err = db.EnsureDefaultUserAndProject(context.Background(), "test-user", "test-password")

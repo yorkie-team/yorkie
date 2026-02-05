@@ -41,6 +41,7 @@ type Config struct {
 	Addresses           string `yaml:"Addresses"`
 	UserEventsTopic     string `yaml:"UserEventsTopic"`
 	DocumentEventsTopic string `yaml:"DocumentEventsTopic"`
+	ClientEventsTopic   string `yaml:"ClientEventsTopic"`
 	ChannelEventsTopic  string `yaml:"ChannelEventsTopic"`
 	SessionEventsTopic  string `yaml:"SessionEventsTopic"`
 	WriteTimeout        string `yaml:"WriteTimeout"`
@@ -84,6 +85,10 @@ func (c *Config) Validate() error {
 
 	if c.DocumentEventsTopic == "" {
 		return fmt.Errorf("document events topic: %w", ErrEmptyTopic)
+	}
+
+	if c.ClientEventsTopic == "" {
+		return fmt.Errorf("client events topic: %w", ErrEmptyTopic)
 	}
 
 	if c.ChannelEventsTopic == "" {

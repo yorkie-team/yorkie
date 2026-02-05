@@ -59,6 +59,7 @@ const (
 
 	DefaultKafkaUserEventsTopic     = "user-events"
 	DefaultKafkaDocumentEventsTopic = "document-events"
+	DefaultKafkaClientEventsTopic   = "client-events"
 	DefaultKafkaChannelEventsTopic  = "channel-events"
 	DefaultKafkaSessionEventsTopic  = "session-events"
 	DefaultKafkaWriteTimeout        = 5 * time.Second

@@ -74,6 +74,7 @@ var (
 	kafkaAddresses           string
 	kafkaUserEventsTopic     string
 	kafkaDocumentEventsTopic string
+	kafkaClientEventsTopic   string
 	kafkaChannelEventsTopic  string
 	kafkaSessionEventsTopic  string
 	kafkaWriteTimeout        time.Duration
@@ -128,6 +129,7 @@ func newServerCmd() *cobra.Command {
 					Addresses:           kafkaAddresses,
 					UserEventsTopic:     kafkaUserEventsTopic,
 					DocumentEventsTopic: kafkaDocumentEventsTopic,
+					ClientEventsTopic:   kafkaClientEventsTopic,
 					ChannelEventsTopic:  kafkaChannelEventsTopic,
 					SessionEventsTopic:  kafkaSessionEventsTopic,
 					WriteTimeout:        kafkaWriteTimeout.String(),
@@ -502,6 +504,12 @@ func init() {
 		"kafka-document-events-topic",
 		server.DefaultKafkaDocumentEventsTopic,
 		"Kafka topic name to publish document events",
+	)
+	cmd.Flags().StringVar(
+		&kafkaClientEventsTopic,
+		"kafka-client-events-topic",
+		server.DefaultKafkaClientEventsTopic,
+		"Kafka topic name to publish client events",
 	)
 	cmd.Flags().StringVar(
 		&kafkaChannelEventsTopic,

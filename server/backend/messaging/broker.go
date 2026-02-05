@@ -38,6 +38,9 @@ const (
 	// DocumentEventsType represents document-related events.
 	DocumentEventsType EventType = "document"
 
+	// ClientEventsType represents client-related events.
+	ClientEventsType EventType = "client"
+
 	// ChannelEventsType represents channel-related events.
 	ChannelEventsType EventType = "channel"
 
@@ -68,6 +71,14 @@ type DocumentEventMessage struct {
 	EventType   events.DocEventType `json:"event_type"`
 }
 
+// ClientEventMessage represents a message for client events
+type ClientEventMessage struct {
+	ProjectID string                 `json:"project_id"`
+	ClientID  string                 `json:"client_id"`
+	Timestamp time.Time              `json:"timestamp"`
+	EventType events.ClientEventType `json:"event_type"`
+}
+
 // ChannelEventsMessage represents a message for channel events
 type ChannelEventsMessage struct {
 	ProjectID  string                  `json:"project_id"`
@@ -93,6 +104,11 @@ func (m UserEventMessage) Marshal() ([]byte, error) {
 
 // Marshal marshals the document event message to JSON.
 func (m DocumentEventMessage) Marshal() ([]byte, error) {
+	return marshalMessage(m)
+}
+
+// Marshal marshals the client event message to JSON.
+func (m ClientEventMessage) Marshal() ([]byte, error) {
 	return marshalMessage(m)
 }
 
@@ -144,6 +160,7 @@ func Ensure(kafkaConf *Config) Broker {
 	topics := []string{
 		kafkaConf.UserEventsTopic,
 		kafkaConf.DocumentEventsTopic,
+		kafkaConf.ClientEventsTopic,
 		kafkaConf.ChannelEventsTopic,
 		kafkaConf.SessionEventsTopic,
 	}
@@ -168,6 +185,12 @@ func Ensure(kafkaConf *Config) Broker {
 		brokers[DocumentEventsType] = dummy
 	}
 
+	if kafkaConf.ClientEventsTopic != "" {
+		brokers[ClientEventsType] = newKafkaBroker(kafkaConf, kafkaConf.ClientEventsTopic)
+	} else {
+		brokers[ClientEventsType] = dummy
+	}
+
 	if kafkaConf.ChannelEventsTopic != "" {
 		brokers[ChannelEventsType] = newKafkaBroker(kafkaConf, kafkaConf.ChannelEventsTopic)
 	} else {
@@ -189,6 +212,7 @@ func newManagerWithDummy(dummy *DummyBroker) *Manager {
 		brokers: map[EventType]Broker{
 			UserEventsType:     dummy,
 			DocumentEventsType: dummy,
+			ClientEventsType:   dummy,
 			ChannelEventsType:  dummy,
 			SessionEventsType:  dummy,
 		},
@@ -197,11 +221,12 @@ func newManagerWithDummy(dummy *DummyBroker) *Manager {
 
 // NewBroker creates a new Manager with the specified brokers for each event type.
 // This is primarily used for testing purposes.
-func NewBroker(user, document, channel, session Broker) *Manager {
+func NewBroker(user, document, client, channel, session Broker) *Manager {
 	return &Manager{
 		brokers: map[EventType]Broker{
 			UserEventsType:     user,
 			DocumentEventsType: document,
+			ClientEventsType:   client,
 			ChannelEventsType:  channel,
 			SessionEventsType:  session,
 		},
@@ -234,6 +259,8 @@ func (m *Manager) Produce(ctx context.Context, msg Message) error {
 		eventType = UserEventsType
 	case DocumentEventMessage:
 		eventType = DocumentEventsType
+	case ClientEventMessage:
+		eventType = ClientEventsType
 	case ChannelEventsMessage:
 		eventType = ChannelEventsType
 	case SessionEventsMessage:
