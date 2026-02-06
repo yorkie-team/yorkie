@@ -54,12 +54,6 @@ type Config struct {
 	// SnapshotCacheSize is the cache size of the snapshot.
 	SnapshotCacheSize int `yaml:"SnapshotCacheSize"`
 
-	// ChannelSessionCountCacheSize is the cache size of the session count.
-	ChannelSessionCountCacheSize int `yaml:"ChannelSessionCountCacheSize"`
-
-	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
-	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
-
 	// ChannelSessionTTL is the time-to-live duration for channel sessions.
 	// If a channel session is not refreshed within this duration, it will be removed.
 	// Default is "60s".
@@ -68,6 +62,12 @@ type Config struct {
 	// ChannelSessionCleanupInterval is the interval for running cleanup of expired channel sessions.
 	// Default is "10s".
 	ChannelSessionCleanupInterval string `yaml:"ChannelSessionCleanupInterval"`
+
+	// ChannelSessionCountCacheSize is the cache size of the session count.
+	ChannelSessionCountCacheSize int `yaml:"ChannelSessionCountCacheSize"`
+
+	// ChannelSessionCountCacheTTL is the TTL value for session count cache.
+	ChannelSessionCountCacheTTL string `yaml:"ChannelSessionCountCacheTTL"`
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
@@ -146,21 +146,6 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 	return result
 }
 
-// ParseChannelSessionCountCacheTTL returns TTL for session count cache.
-func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
-	if c.ChannelSessionCountCacheTTL == "" {
-		return 30 * time.Second // Default: 30 seconds
-	}
-
-	result, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse session count cache ttl: %v\n", err)
-		os.Exit(1)
-	}
-
-	return result
-}
-
 // ParseChannelSessionTTL returns TTL for channel session.
 func (c *Config) ParseChannelSessionTTL() time.Duration {
 	if c.ChannelSessionTTL == "" {
@@ -185,6 +170,21 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	result, err := time.ParseDuration(c.ChannelSessionCleanupInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session cleanup interval: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseChannelSessionCountCacheTTL returns TTL for session count cache.
+func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
+	if c.ChannelSessionCountCacheTTL == "" {
+		return 30 * time.Second // Default: 30 seconds
+	}
+
+	result, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse channel session count cache ttl: %v\n", err)
 		os.Exit(1)
 	}
 
