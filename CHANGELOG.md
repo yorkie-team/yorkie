@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.47] - 2026-02-06
+
+### Added
+
+- Add MCP server for AI-assisted document migration by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1659
+- Add active clients metric to project stats by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1660
+
+### Changed
+
+- Refactor channel terminology from presence to session by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1655
+
+### Fixed
+
+- Fix channel session configuration flags by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1661
+
 ## [v0.6.46] - 2026-01-30
 
 ### Changed

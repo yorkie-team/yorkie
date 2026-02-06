@@ -6,13 +6,11 @@ icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/p
 maintainers:
   - name: hackerwins
     email: susukang98@gmail.com
-  - name: krapie
-    email: krapi0314@gmail.com
 
 sources:
   - https://github.com/yorkie-team/yorkie
-version: 0.6.46
-appVersion: "0.6.46"
+version: 0.6.47
+appVersion: "0.6.47"
 kubeVersion: ">=1.23.0-0"
 
 dependencies:
