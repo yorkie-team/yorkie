@@ -28,6 +28,9 @@ type ClientEventType string
 const (
 	// ClientActivatedEvent is an event that occurs when the client is activated.
 	ClientActivatedEvent ClientEventType = "client-activated"
+
+	// ClientDeactivatedEvent is an event that occurs when the client is deactivated.
+	ClientDeactivatedEvent ClientEventType = "client-deactivated"
 )
 
 // DocEventType represents the type of the DocEvent.

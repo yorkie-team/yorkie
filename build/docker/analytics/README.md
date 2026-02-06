@@ -116,3 +116,13 @@ To check routine load status or fix a paused routine load, follow these steps:
         CustomProperties: {"group.id":"user_events_group"}
                            ...
    ```
+
+### Run Yorkie Server with Kafka and StarRocks
+
+To run the Yorkie server, follow these steps:
+
+```sh
+yorkie server --kafka-addresses "localhost:29092" --starrocks-dsn "root:@tcp(localhost:9030)/yorkie"
+```
+
+This command starts the Yorkie server with the specified Kafka addresses and StarRocks DSN (Data Source Name). Make sure that both Kafka and StarRocks services are running and accessible at the provided addresses.

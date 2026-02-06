@@ -65,6 +65,18 @@ data:
         "replication_num" = "1"
     );
 
+    CREATE TABLE IF NOT EXISTS client_events (
+        project_id VARCHAR(64),
+        client_id VARCHAR(64),
+        timestamp DATETIME,
+        event_type VARCHAR(32)
+    ) ENGINE = OLAP
+    DUPLICATE KEY(project_id, client_id, timestamp)
+    DISTRIBUTED BY HASH(project_id) BUCKETS 16
+    PROPERTIES (
+        "replication_num" = "1"
+    );
+
 
   init-create-routine-load.sql: |
     CREATE ROUTINE LOAD yorkie.user_events ON user_events
@@ -119,6 +131,19 @@ data:
         "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-session-events" "property-group-id" }}"
     );
 
+    CREATE ROUTINE LOAD yorkie.client_events ON client_events
+    PROPERTIES
+    (
+        "format" = "JSON",
+        "desired_concurrent_number"="1"
+    )
+    FROM KAFKA
+    (
+        "kafka_broker_list" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-broker-list" }}",
+        "kafka_topic" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-client-events" "topic" }}",
+        "property.group.id" = "{{ index .Values "yorkie-analytics" "starrocks" "routine-load" "kafka-client-events" "property-group-id" }}"
+    );
+
   init-starrocks-database.sh: |
     #!/bin/bash
 
@@ -143,6 +168,7 @@ data:
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: document_events' || echo -e 'document_events table not found'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: channel_events' || echo -e 'channel_events table not found'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: session_events' || echo -e 'session_events table not found'
+    mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show tables from yorkie\G' | grep 'Tables_in_yorkie: client_events' || echo -e 'client_events table not found'
 
 
     sleep 5s
@@ -157,7 +183,7 @@ data:
     echo -e 'Checking and resuming routine loads if needed'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G'
 
-    routine_loads=(yorkie.user_events yorkie.document_events yorkie.channel_events yorkie.session_events)
+    routine_loads=(yorkie.user_events yorkie.document_events yorkie.channel_events yorkie.session_events yorkie.client_events)
     for routine_load in ${routine_loads[@]}; do
       state=$(mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "show routine load for $routine_load\G" 2>/dev/null | grep State: | sed 's/.*State: //')
       echo "Routine load $routine_load state: $state"

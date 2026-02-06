@@ -76,6 +76,18 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
+	if err := s.backend.MsgBroker.Produce(
+		ctx,
+		messaging.ClientEventMessage{
+			ProjectID: project.ID.String(),
+			ClientID:  cli.ID.String(),
+			Timestamp: gotime.Now(),
+			EventType: events.ClientActivatedEvent,
+		},
+	); err != nil {
+		logging.From(ctx).Errorf("failed to produce client event: %v", err)
+	}
+
 	if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
 		if err := s.backend.MsgBroker.Produce(
 			ctx,
@@ -121,6 +133,19 @@ func (s *yorkieServer) DeactivateClient(
 		}); err != nil {
 			return nil, err
 		}
+
+		if err := s.backend.MsgBroker.Produce(
+			ctx,
+			messaging.ClientEventMessage{
+				ProjectID: project.ID.String(),
+				ClientID:  actorID.String(),
+				Timestamp: gotime.Now(),
+				EventType: events.ClientDeactivatedEvent,
+			},
+		); err != nil {
+			logging.From(ctx).Errorf("failed to produce client deactivation event: %v", err)
+		}
+
 		return connect.NewResponse(&api.DeactivateClientResponse{}), nil
 	}
 

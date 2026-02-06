@@ -39,6 +39,12 @@ type ProjectStats struct {
 	// ActiveDocumentsCount is the total count of active documents in the project.
 	ActiveDocumentsCount int `json:"active_documents_count"`
 
+	// ActiveClients is the time-series of active client counts in the project.
+	ActiveClients []MetricPoint `json:"active_clients"`
+
+	// ActiveClientsCount is the total count of active clients in the project.
+	ActiveClientsCount int `json:"active_clients_count"`
+
 	// ActiveChannels is the time-series of active channel counts in the project.
 	ActiveChannels []MetricPoint `json:"active_channels"`
 

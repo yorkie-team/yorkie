@@ -188,6 +188,8 @@ message GetProjectStatsResponse {
   repeated MetricPoint peak_sessions_per_channel = 11;
   int32 active_documents_count = 12;
   repeated MetricPoint active_documents = 13;
+  int32 active_clients_count = 14;
+  repeated MetricPoint active_clients = 15;
 }
 
 message RemoveMemberRequest {
