@@ -50,6 +50,11 @@ var (
 	authGitHubTokenURL            string
 	authGitHubDeviceAuthURL       string
 
+	channelSessionTTL             time.Duration
+	channelSessionCleanupInterval time.Duration
+	channelSessionCountCacheTTL   time.Duration
+	channelSessionCountCacheSize  int
+
 	housekeepingInterval time.Duration
 
 	mongoConnectionURI                string
@@ -104,6 +109,10 @@ func newServerCmd() *cobra.Command {
 			conf.Housekeeping.Interval = housekeepingInterval.String()
 
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
+			conf.Backend.ChannelSessionTTL = channelSessionTTL.String()
+			conf.Backend.ChannelSessionCleanupInterval = channelSessionCleanupInterval.String()
+			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
+			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -535,6 +544,29 @@ func init() {
 		"",
 		"StarRocks DSN for the analytics",
 	)
-
+	cmd.Flags().DurationVar(
+		&channelSessionTTL,
+		"channel-session-ttl",
+		server.DefaultChannelSessionTTL,
+		"The TTL value for channel sessions.",
+	)
+	cmd.Flags().DurationVar(
+		&channelSessionCleanupInterval,
+		"channel-session-cleanup-interval",
+		server.DefaultChannelSessionCleanupInterval,
+		"The interval for running cleanup of expired channel sessions.",
+	)
+	cmd.Flags().DurationVar(
+		&channelSessionCountCacheTTL,
+		"channel-session-count-cache-ttl",
+		server.DefaultChannelSessionCountCacheTTL,
+		"The TTL value for channel session count cache.",
+	)
+	cmd.Flags().IntVar(
+		&channelSessionCountCacheSize,
+		"channel-session-count-cache-size",
+		server.DefaultChannelSessionCountCacheSize,
+		"The cache size of the channel session count.",
+	)
 	rootCmd.AddCommand(cmd)
 }

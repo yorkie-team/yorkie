@@ -64,6 +64,11 @@ const (
 	DefaultKafkaSessionEventsTopic  = "session-events"
 	DefaultKafkaWriteTimeout        = 5 * time.Second
 
+	DefaultChannelSessionTTL             = 60 * time.Second
+	DefaultChannelSessionCleanupInterval = 10 * time.Second
+	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
+	DefaultChannelSessionCountCacheSize  = 10000
+
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
 	DefaultSecretKey     = "yorkie-secret"
