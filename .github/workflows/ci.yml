@@ -328,7 +328,7 @@ jobs:
         id: curr-load-versionvector
         run: |
           cd repo
-          k6 run test/k6/presence-with-versionvector.ts
+          k6 run -e WITH_VERSION_VECTOR=true test/k6/presence.ts
       - name: Stop the server
         run: cd repo && make stop
 

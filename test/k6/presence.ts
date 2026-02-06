@@ -37,6 +37,9 @@ const CONCURRENCY = parseInt(__ENV.CONCURRENCY || "500");
 // Virtual users per document (for even distribution)
 const VU_PER_DOCS = parseInt(__ENV.VU_PER_DOCS || "10");
 
+// Enable presence with version vector: 'true' or 'false'
+const WITH_VERSION_VECTOR = (__ENV.WITH_VERSION_VECTOR || "false") === "true";
+
 // In 'skew' mode, use a single document; in 'even' mode, distribute VUs across documents
 function getDocKey() {
   if (TEST_MODE === "skew") {
@@ -71,6 +74,17 @@ const deactivateClientsTime = new Trend("deactivate_clients_time", true); // tru
 const transactionFaileds = new Counter("transaction_faileds");
 const transactionSuccessRate = new Rate("transaction_success_rate");
 const transactionTime = new Trend("transaction_time", true); // true enables time formatting
+
+// Variables for Version Vector management
+let currentLamport = 1;
+let knownVersionVector: Record<string, number> = {};
+let myClientID = "";
+
+function getVersionVector(clientID: string) {
+  const vv = { ...knownVersionVector };
+  vv[clientID] = currentLamport;
+  return vv;
+}
 
 // k6 options for load testing
 export const options = {
@@ -139,7 +153,7 @@ function hexToBase64(hex: string) {
   const bytes = new Uint8Array(
     hex.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
   );
-  return b64encode(bytes);
+  return WITH_VERSION_VECTOR ? b64encode(bytes, "rawStd") : b64encode(bytes);
 }
 
 // Common headers that can be reused across requests
@@ -257,6 +271,10 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
   const colors = ["#00C9A7", "#C0392B", "#3498DB", "#F1C40F", "#9B59B6"];
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
+  const base64ClientID = hexToBase64(clientID);
+  myClientID = base64ClientID;
+  const versionVector = WITH_VERSION_VECTOR ? getVersionVector(base64ClientID) : {};
+
   const payload = {
     clientId: clientID,
     changePack: {
@@ -264,14 +282,14 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
       checkpoint: { clientSeq: 1 },
       changes: [
         {
-          id: { clientSeq: 1, actorId: actorID, versionVector: {} },
+          id: { clientSeq: 1, actorId: actorID, versionVector: versionVector },
           presenceChange: {
             type: "CHANGE_TYPE_PUT",
             presence: { data: { color: `"${randomColor}"` } },
           },
         },
       ],
-      versionVector: {},
+      versionVector: versionVector,
     },
   };
 
@@ -280,6 +298,10 @@ function attachDocument(clientID: string, actorID: string, docKey: string) {
     payload,
     { "x-shard-key": `${API_KEY}/${docKey}` }
   );
+
+  if (WITH_VERSION_VECTOR && resp.changePack.versionVector) {
+    knownVersionVector = { ...knownVersionVector, ...resp.changePack.versionVector };
+  }
 
   const documentId = resp!.documentId;
   const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
@@ -300,6 +322,10 @@ function pushpullChanges(
   docKey: string,
   lastServerSeq: number
 ) {
+  const versionVector = WITH_VERSION_VECTOR ? getVersionVector(myClientID) : {};
+  if (WITH_VERSION_VECTOR) {
+    currentLamport++;
+  }
   const startTime = new Date().getTime();
   const payload = {
     clientId: clientID,
@@ -310,7 +336,7 @@ function pushpullChanges(
         clientSeq: 1,
         serverSeq: lastServerSeq,
       },
-      versionVector: {},
+      versionVector: versionVector,
     },
   };
 
@@ -319,6 +345,10 @@ function pushpullChanges(
     payload,
     { "x-shard-key": `${API_KEY}/${docKey}` }
   );
+
+  if (WITH_VERSION_VECTOR && resp.changePack.versionVector) {
+    knownVersionVector = { ...knownVersionVector, ...resp.changePack.versionVector };
+  }
 
   const documentId = resp!.documentId;
   const serverSeq = Number(resp!.changePack.checkpoint.serverSeq);
