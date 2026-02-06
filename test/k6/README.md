@@ -120,7 +120,7 @@ This creates a high-contention scenario with 500 users all attaching/detaching f
 
 ### Channel Presence Test Parameters
 
-- `PRESENCE_KEY_PREFIX`: Prefix for channel keys (creates unique keys for each test run)
+- `CHANNEL_KEY_PREFIX`: Prefix for channel keys (creates unique keys for each test run)
 - `VU_PER_CHANNEL`: Number of virtual users per channel (only in `even` mode)
 - `ATTACH_ITERATIONS`: Number of attach/detach cycles each user performs (default: 5)
 
