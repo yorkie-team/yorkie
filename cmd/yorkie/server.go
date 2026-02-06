@@ -54,6 +54,8 @@ var (
 	channelSessionCleanupInterval time.Duration
 	channelSessionCountCacheTTL   time.Duration
 	channelSessionCountCacheSize  int
+	clusterRPCTimeout             time.Duration
+	clusterClientTimeout          time.Duration
 
 	housekeepingInterval time.Duration
 
@@ -113,6 +115,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ChannelSessionCleanupInterval = channelSessionCleanupInterval.String()
 			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
 			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
+			conf.Backend.ClusterRPCTimeout = clusterRPCTimeout.String()
+			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -567,6 +571,18 @@ func init() {
 		"channel-session-count-cache-size",
 		server.DefaultChannelSessionCountCacheSize,
 		"The cache size of the channel session count.",
+	)
+	cmd.Flags().DurationVar(
+		&clusterRPCTimeout,
+		"cluster-rpc-timeout",
+		server.DefaultClusterRPCTimeout,
+		"The timeout for individual cluster RPC calls.",
+	)
+	cmd.Flags().DurationVar(
+		&clusterClientTimeout,
+		"cluster-client-timeout",
+		server.DefaultClusterClientTimeout,
+		"The hard limit for the entire HTTP request lifecycle of cluster communication.",
 	)
 	rootCmd.AddCommand(cmd)
 }

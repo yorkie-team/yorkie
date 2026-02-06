@@ -127,7 +127,10 @@ func New(
 	eventWebhookManger := webhook.NewManager(
 		pkgwebhook.NewClient[types.EventWebhookRequest, int](conf.DisableWebhookValidation),
 	)
-	clusterClientPool := cluster.NewClientPool()
+	clusterClientPool := cluster.NewClientPool(
+		cluster.WithRPCTimeout(conf.ParseClusterRPCTimeout()),
+		cluster.WithClientTimeout(conf.ParseClusterClientTimeout()),
+	)
 
 	// 04. Create the database instance. If the MongoDB configuration is given,
 	// create a MongoDB instance. Otherwise, create a memory database instance.

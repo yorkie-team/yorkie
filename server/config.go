@@ -69,6 +69,9 @@ const (
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
 
+	DefaultClusterRPCTimeout    = 10 * time.Second
+	DefaultClusterClientTimeout = 30 * time.Second
+
 	DefaultAdminUser     = "admin"
 	DefaultAdminPassword = "admin"
 	DefaultSecretKey     = "yorkie-secret"
@@ -267,6 +270,12 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.RPCAddr == "" {
 		c.Backend.RPCAddr = DefaultBackendRPCAddr
+	}
+	if c.Backend.ClusterRPCTimeout == "" {
+		c.Backend.ClusterRPCTimeout = DefaultClusterRPCTimeout.String()
+	}
+	if c.Backend.ClusterClientTimeout == "" {
+		c.Backend.ClusterClientTimeout = DefaultClusterClientTimeout.String()
 	}
 }
 
