@@ -57,6 +57,7 @@ var (
 	clusterRPCTimeout             time.Duration
 	clusterClientTimeout          time.Duration
 	maxConcurrentClusterRPCs      int
+	clusterClientPoolSize         int
 
 	housekeepingInterval time.Duration
 
@@ -119,6 +120,7 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClusterRPCTimeout = clusterRPCTimeout.String()
 			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
 			conf.Backend.MaxConcurrentClusterRPCs = maxConcurrentClusterRPCs
+			conf.Backend.ClusterClientPoolSize = clusterClientPoolSize
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -591,6 +593,12 @@ func init() {
 		"max-concurrent-cluster-rpcs",
 		server.DefaultMaxConcurrentClusterRPCs,
 		"The maximum number of concurrent cluster RPC calls across the server.",
+	)
+	cmd.Flags().IntVar(
+		&clusterClientPoolSize,
+		"cluster-client-pool-size",
+		server.DefaultClusterClientPoolSize,
+		"The number of connections per host in the cluster client pool.",
 	)
 	rootCmd.AddCommand(cmd)
 }

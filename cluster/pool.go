@@ -19,60 +19,93 @@ package cluster
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // ClientPool manages a pool of cluster clients for reuse.
+// It maintains multiple connections per host to reduce HTTP/2 mutex contention.
 type ClientPool struct {
-	clients map[string]*Client
-	opts    []Option
-	mu      sync.RWMutex
+	clients  map[string][]*Client
+	counters map[string]*uint64
+	opts     []Option
+	poolSize int
+	mu       sync.RWMutex
 }
 
 // NewClientPool creates a new client pool.
 func NewClientPool(opts ...Option) *ClientPool {
+	var options Options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	poolSize := options.PoolSize
+	if poolSize <= 0 {
+		poolSize = 1
+	}
+
 	return &ClientPool{
-		clients: make(map[string]*Client),
-		opts:    opts,
+		clients:  make(map[string][]*Client),
+		counters: make(map[string]*uint64),
+		opts:     opts,
+		poolSize: poolSize,
 	}
 }
 
-// Get returns a client for the given address, creating one if it doesn't exist.
+// Get returns a client for the given address, creating clients if they don't exist.
+// It uses round-robin selection to distribute load across multiple connections.
 func (p *ClientPool) Get(rpcAddr string) (*Client, error) {
 	// Try to get existing client with read lock
 	p.mu.RLock()
-	if client, ok := p.clients[rpcAddr]; ok {
+	if clients, ok := p.clients[rpcAddr]; ok {
+		counter := atomic.AddUint64(p.counters[rpcAddr], 1)
+		client := clients[counter%uint64(len(clients))]
 		p.mu.RUnlock()
 		return client, nil
 	}
 	p.mu.RUnlock()
 
-	// Create new client with write lock
+	// Create new clients with write lock
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	// Double-check after acquiring write lock
-	if client, ok := p.clients[rpcAddr]; ok {
-		return client, nil
+	if clients, ok := p.clients[rpcAddr]; ok {
+		counter := atomic.AddUint64(p.counters[rpcAddr], 1)
+		return clients[counter%uint64(len(clients))], nil
 	}
 
-	// Create new client
-	client, err := Dial(rpcAddr, p.opts...)
-	if err != nil {
-		return nil, err
+	// Create pool of clients
+	clients := make([]*Client, p.poolSize)
+	for i := range clients {
+		cli, err := Dial(rpcAddr, p.opts...)
+		if err != nil {
+			// Cleanup already created clients
+			for j := 0; j < i; j++ {
+				clients[j].Close()
+			}
+			return nil, err
+		}
+		clients[i] = cli
 	}
 
-	p.clients[rpcAddr] = client
-	return client, nil
+	var counter uint64
+	p.clients[rpcAddr] = clients
+	p.counters[rpcAddr] = &counter
+	return clients[0], nil
 }
 
-// Remove removes a client from the pool and closes it.
+// Remove removes clients for the given address from the pool and closes them.
 func (p *ClientPool) Remove(rpcAddr string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if client, ok := p.clients[rpcAddr]; ok {
-		client.Close()
+	if clients, ok := p.clients[rpcAddr]; ok {
+		for _, client := range clients {
+			client.Close()
+		}
 		delete(p.clients, rpcAddr)
+		delete(p.counters, rpcAddr)
 	}
 }
 
@@ -81,10 +114,13 @@ func (p *ClientPool) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for _, client := range p.clients {
-		client.Close()
+	for _, clients := range p.clients {
+		for _, client := range clients {
+			client.Close()
+		}
 	}
-	p.clients = make(map[string]*Client)
+	p.clients = make(map[string][]*Client)
+	p.counters = make(map[string]*uint64)
 }
 
 // Prune removes clients that are no longer in the active nodes list.
@@ -97,10 +133,13 @@ func (p *ClientPool) Prune(addrs []string) {
 		activeSet[addr] = true
 	}
 
-	for addr, client := range p.clients {
+	for addr, clients := range p.clients {
 		if !activeSet[addr] {
-			client.Close()
+			for _, client := range clients {
+				client.Close()
+			}
 			delete(p.clients, addr)
+			delete(p.counters, addr)
 		}
 	}
 }

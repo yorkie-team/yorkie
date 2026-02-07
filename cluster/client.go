@@ -59,6 +59,11 @@ func WithClientTimeout(timeout gotime.Duration) Option {
 	return func(o *Options) { o.ClientTimeout = timeout }
 }
 
+// WithPoolSize configures the number of connections per host in the pool.
+func WithPoolSize(size int) Option {
+	return func(o *Options) { o.PoolSize = size }
+}
+
 // Options configures how we set up the client.
 type Options struct {
 	// IsSecure is whether to enable the TLS connection of the client.
@@ -71,6 +76,10 @@ type Options struct {
 	// ClientTimeout is the hard limit for the entire HTTP request lifecycle.
 	// If zero, defaults to defaultClientTimeout.
 	ClientTimeout gotime.Duration
+
+	// PoolSize is the number of connections per host in the pool.
+	// If zero, defaults to 1.
+	PoolSize int
 }
 
 const (

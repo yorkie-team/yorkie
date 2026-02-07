@@ -97,6 +97,11 @@ type Config struct {
 	// RPC calls across the entire server. This prevents goroutine explosion
 	// when a cluster peer is slow or unresponsive. Default is 5000.
 	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
+
+	// ClusterClientPoolSize is the number of connections per host in the cluster
+	// client pool. Multiple connections reduce HTTP/2 mutex contention under
+	// high concurrency. Default is 1.
+	ClusterClientPoolSize int `yaml:"ClusterClientPoolSize"`
 }
 
 // Validate validates this config.
