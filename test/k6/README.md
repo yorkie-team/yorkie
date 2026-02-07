@@ -24,7 +24,7 @@ There are three types of load tests available:
 - Simulates both watchers (who observe changes) and updaters (who make changes)
 - Tests watch stream performance and resource usage
 
-### Dedicated Presence Test (`dedicated-presence.ts`)
+### Channel Presence Test (`channel-presence.ts`)
 
 - Tests the dedicated Channel API (AttachChannel, DetachChannel)
 - Simulates clients repeatedly attaching and detaching from channels
@@ -110,14 +110,18 @@ This creates a high-contention scenario with 500 users all attaching/detaching f
 
 - `VU_PER_DOCS`: Number of virtual users per document (only in `even` mode)
 
+### Presence Test Parameters
+
+- `WITH_VERSION_VECTOR`: If true, update presence including explicit version vectors
+
 ### Stream Test Parameters
 
 - `WATCHER_RATIO`: Ratio of watchers to total users (0.0 to 1.0). Example: 0.5 = 50% watchers, 50% updaters
 
-### Dedicated Presence Test Parameters
+### Channel Presence Test Parameters
 
-- `PRESENCE_KEY_PREFIX`: Prefix for channel keys (creates unique keys for each test run)
-- `VU_PER_PRESENCE`: Number of virtual users per channel (only in `even` mode)
+- `CHANNEL_KEY_PREFIX`: Prefix for channel keys (creates unique keys for each test run)
+- `VU_PER_CHANNEL`: Number of virtual users per channel (only in `even` mode)
 - `ATTACH_ITERATIONS`: Number of attach/detach cycles each user performs (default: 5)
 
 ## Profiling with pprof
@@ -150,8 +154,4 @@ Open the interactive pprof web tool:
 
 ```bash
 go tool pprof -http=:9090 mem.out
-```
-
-```
-
 ```
