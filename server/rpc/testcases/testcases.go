@@ -1677,3 +1677,151 @@ func RunAdminGetChannelsTest(
 	// Because the session count is cached, it should be 1.
 	assert.Equal(t, 1, int(resp2.Msg.Channels[0].SessionCount))
 }
+
+// RunAdminGetChannelsMultiPathTest tests GetChannels with multiple channel keys
+// that have different first key paths, exercising the fan-out grouping logic.
+func RunAdminGetChannelsMultiPathTest(
+	t *testing.T,
+	testClient v1connect.YorkieServiceClient,
+	testAdminClient v1connect.AdminServiceClient,
+) {
+	resp1, err := testAdminClient.GetProject(
+		context.Background(),
+		connect.NewRequest(&api.GetProjectRequest{
+			Name: defaultProjectName,
+		}),
+	)
+	assert.NoError(t, err)
+
+	project := converter.FromProject(resp1.Msg.Project)
+	ctx := projects.With(context.Background(), project)
+
+	t.Run("multiple keys with different first paths", func(t *testing.T) {
+		channelKeys := []string{
+			"room-1.section-1",
+			"room-2.section-1",
+			"room-3.section-1",
+		}
+
+		for i, channelKey := range channelKeys {
+			activateResp, err := testClient.ActivateClient(
+				context.Background(),
+				connect.NewRequest(&api.ActivateClientRequest{
+					ClientKey: fmt.Sprintf("%s-diffpath-%d", t.Name(), i),
+				}),
+			)
+			assert.NoError(t, err)
+
+			_, err = testClient.AttachChannel(
+				context.Background(),
+				connect.NewRequest(&api.AttachChannelRequest{
+					ClientId:   activateResp.Msg.ClientId,
+					ChannelKey: channelKey,
+				}),
+			)
+			assert.NoError(t, err)
+		}
+
+		resp, err := testAdminClient.GetChannels(
+			ctx,
+			connect.NewRequest(&api.GetChannelsRequest{
+				ChannelKeys:    channelKeys,
+				IncludeSubPath: true,
+			}),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp.Msg.Channels)
+		assert.Equal(t, 3, len(resp.Msg.Channels))
+
+		channelMap := make(map[string]int32)
+		for _, ch := range resp.Msg.Channels {
+			channelMap[ch.Key] = ch.SessionCount
+		}
+		for _, ck := range channelKeys {
+			count, ok := channelMap[ck]
+			assert.True(t, ok, "channel %s should be in response", ck)
+			assert.Equal(t, int32(1), count, "channel %s should have session count 1", ck)
+		}
+	})
+
+	t.Run("multiple keys with same first path", func(t *testing.T) {
+		channelKeys := []string{
+			"room-4.section-1",
+			"room-4.section-2",
+			"room-4.section-3",
+		}
+
+		for i, channelKey := range channelKeys {
+			activateResp, err := testClient.ActivateClient(
+				context.Background(),
+				connect.NewRequest(&api.ActivateClientRequest{
+					ClientKey: fmt.Sprintf("%s-samepath-%d", t.Name(), i),
+				}),
+			)
+			assert.NoError(t, err)
+
+			_, err = testClient.AttachChannel(
+				context.Background(),
+				connect.NewRequest(&api.AttachChannelRequest{
+					ClientId:   activateResp.Msg.ClientId,
+					ChannelKey: channelKey,
+				}),
+			)
+			assert.NoError(t, err)
+		}
+
+		resp, err := testAdminClient.GetChannels(
+			ctx,
+			connect.NewRequest(&api.GetChannelsRequest{
+				ChannelKeys:    channelKeys,
+				IncludeSubPath: true,
+			}),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp.Msg.Channels)
+		assert.Equal(t, 3, len(resp.Msg.Channels))
+
+		for _, ch := range resp.Msg.Channels {
+			assert.Equal(t, int32(1), ch.SessionCount)
+		}
+	})
+
+	t.Run("mixed first paths with multiple keys each", func(t *testing.T) {
+		channelKeys := []string{
+			"room-5.section-1",
+			"room-5.section-2",
+			"room-6.section-1",
+			"room-6.section-2",
+		}
+
+		for i, channelKey := range channelKeys {
+			activateResp, err := testClient.ActivateClient(
+				context.Background(),
+				connect.NewRequest(&api.ActivateClientRequest{
+					ClientKey: fmt.Sprintf("%s-mixed-%d", t.Name(), i),
+				}),
+			)
+			assert.NoError(t, err)
+
+			_, err = testClient.AttachChannel(
+				context.Background(),
+				connect.NewRequest(&api.AttachChannelRequest{
+					ClientId:   activateResp.Msg.ClientId,
+					ChannelKey: channelKey,
+				}),
+			)
+			assert.NoError(t, err)
+		}
+
+		resp, err := testAdminClient.GetChannels(
+			ctx,
+			connect.NewRequest(&api.GetChannelsRequest{
+				ChannelKeys:    channelKeys,
+				IncludeSubPath: true,
+			}),
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, resp.Msg.Channels)
+		assert.Equal(t, 4, len(resp.Msg.Channels))
+	})
+}

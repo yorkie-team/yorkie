@@ -265,6 +265,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 	t.Run("admin get channels test", func(t *testing.T) {
 		testcases.RunAdminGetChannelsTest(t, testClient, testAdminClient)
 	})
+
+	t.Run("admin get channels multi path test", func(t *testing.T) {
+		testcases.RunAdminGetChannelsMultiPathTest(t, testClient, testAdminClient)
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {

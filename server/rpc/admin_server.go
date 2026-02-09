@@ -20,8 +20,10 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -51,9 +53,10 @@ import (
 )
 
 type adminServer struct {
-	backend           *backend.Backend
-	tokenManager      *auth.TokenManager
-	yorkieInterceptor *interceptors.YorkieServiceInterceptor
+	backend                 *backend.Backend
+	tokenManager            *auth.TokenManager
+	yorkieInterceptor       *interceptors.YorkieServiceInterceptor
+	clusterServiceSemaphore *semaphore.Weighted
 }
 
 // newAdminServer creates a new instance of adminServer.
@@ -63,9 +66,10 @@ func newAdminServer(
 	yorkieInterceptor *interceptors.YorkieServiceInterceptor,
 ) *adminServer {
 	return &adminServer{
-		backend:           be,
-		tokenManager:      tokenManager,
-		yorkieInterceptor: yorkieInterceptor,
+		backend:                 be,
+		tokenManager:            tokenManager,
+		yorkieInterceptor:       yorkieInterceptor,
+		clusterServiceSemaphore: semaphore.NewWeighted(int64(be.Config.MaxConcurrentClusterRPCs)),
 	}
 }
 
@@ -829,24 +833,42 @@ func (s *adminServer) GetChannels(
 		return nil, err
 	}
 
-	// Use channels for result collection to work with AttachGoroutine
+	// Fan out cluster RPCs with request context propagation.
+	// Unlike AttachGoroutine (fire-and-forget), these goroutines are
+	// request-scoped: they must return results and respect cancellation.
 	type groupResult struct {
 		channels []*types.ChannelSummary
 		err      error
 	}
 	resultCh := make(chan groupResult, len(groups))
 
+	var wg sync.WaitGroup
 	for firstPath, keys := range groups {
-		s.backend.Background.AttachGoroutine(func(ctx context.Context) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Server-wide concurrency limit: prevents goroutine explosion
+			// when cluster peers are slow or unresponsive.
+			if err := s.clusterServiceSemaphore.Acquire(ctx, 1); err != nil {
+				resultCh <- groupResult{err: err}
+				return
+			}
+			defer s.clusterServiceSemaphore.Release(1)
+
 			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
 			resultCh <- groupResult{channels: result, err: err}
-		}, "get-channels")
+		}()
 	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
 
 	// Collect results from all groups
 	var firstErr error
-	for range len(groups) {
-		res := <-resultCh
+	for res := range resultCh {
 		if res.err != nil && firstErr == nil {
 			firstErr = res.err
 		}
@@ -859,7 +881,6 @@ func (s *adminServer) GetChannels(
 			channels = append(channels, res.channels...)
 		}
 	}
-	close(resultCh)
 
 	if firstErr != nil {
 		return nil, firstErr
