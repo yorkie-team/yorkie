@@ -48,7 +48,7 @@ var allWebhookMethods = &[]string{
 	string(types.DetachDocument),
 	string(types.RemoveDocument),
 	string(types.PushPull),
-	string(types.WatchDocument),
+	string(types.Watch),
 	string(types.Broadcast),
 }
 
@@ -219,7 +219,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		project.AuthWebhookURL = authServer.URL
 		project.AuthWebhookMethods = []string{
 			string(types.AttachDocument),
-			string(types.WatchDocument),
+			string(types.Watch),
 		}
 		_, err := adminCli.UpdateProject(
 			ctx,

@@ -66,7 +66,7 @@ var allAuthWebhookMethods = []string{
 	string(types.DetachDocument),
 	string(types.RemoveDocument),
 	string(types.PushPull),
-	string(types.WatchDocument),
+	string(types.Watch),
 	string(types.Broadcast),
 }
 

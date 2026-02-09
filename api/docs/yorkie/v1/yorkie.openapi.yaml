@@ -178,26 +178,14 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
-  /yorkie.v1.YorkieService/WatchChannel:
+  /yorkie.v1.YorkieService/Watch:
     post:
       description: ""
       requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest'
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest'
       responses:
         "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.YorkieService
-  /yorkie.v1.YorkieService/WatchDocument:
-    post:
-      description: ""
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse'
+          $ref: '#/components/responses/yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -330,10 +318,7 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionRequest'
       required: true
-    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest:
-      content: {}
-      required: true
-    yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest:
+    yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest:
       content: {}
       required: true
   responses:
@@ -472,9 +457,7 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionResponse'
       description: ""
-    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse:
-      description: ""
-    yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse:
+    yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse:
       description: ""
   schemas:
     connect.error:
@@ -878,6 +861,17 @@ components:
           type: object
       title: ChangePack
       type: object
+    yorkie.v1.ChannelDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+      title: ChannelDescriptor
+      type: object
     yorkie.v1.ChannelEvent:
       additionalProperties: false
       description: ""
@@ -930,6 +924,48 @@ components:
         - 2
       title: Type
       type: string
+    yorkie.v1.ChannelInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        sessionCount:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: session_count
+      title: ChannelInit
+      type: object
+    yorkie.v1.ChannelWatchEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        event:
+          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+      title: ChannelWatchEvent
+      type: object
     yorkie.v1.Checkpoint:
       additionalProperties: false
       description: ""
@@ -1132,6 +1168,52 @@ components:
         - 3
       title: DocEventType
       type: string
+    yorkie.v1.DocWatchEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        event:
+          $ref: '#/components/schemas/yorkie.v1.DocEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+      title: DocWatchEvent
+      type: object
+    yorkie.v1.DocumentDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+      title: DocumentDescriptor
+      type: object
+    yorkie.v1.DocumentInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientIds:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: client_ids
+          type: array
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+      title: DocumentInit
+      type: object
     yorkie.v1.GetRevisionRequest:
       additionalProperties: false
       description: ""
@@ -1960,6 +2042,42 @@ components:
           type: object
       title: RemoveDocumentResponse
       type: object
+    yorkie.v1.ResourceDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        channel:
+          $ref: '#/components/schemas/yorkie.v1.ChannelDescriptor'
+          additionalProperties: false
+          description: ""
+          title: channel
+          type: object
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentDescriptor'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: ResourceDescriptor
+      type: object
+    yorkie.v1.ResourceInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelInit:
+          $ref: '#/components/schemas/yorkie.v1.ChannelInit'
+          additionalProperties: false
+          description: ""
+          title: channel_init
+          type: object
+        documentInit:
+          $ref: '#/components/schemas/yorkie.v1.DocumentInit'
+          additionalProperties: false
+          description: ""
+          title: document_init
+          type: object
+      title: ResourceInit
+      type: object
     yorkie.v1.RestoreRevisionRequest:
       additionalProperties: false
       description: ""
@@ -2258,61 +2376,39 @@ components:
           title: value
       title: VectorEntry
       type: object
-    yorkie.v1.WatchChannelInitialized:
+    yorkie.v1.WatchEvent:
       additionalProperties: false
       description: ""
       properties:
-        seq:
+        channelEvent:
+          $ref: '#/components/schemas/yorkie.v1.ChannelWatchEvent'
           additionalProperties: false
           description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
-        sessionCount:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: session_count
-      title: WatchChannelInitialized
-      type: object
-    yorkie.v1.WatchChannelRequest:
-      additionalProperties: false
-      description: ""
-      properties:
-        channelKey:
-          additionalProperties: false
-          description: ""
-          title: channel_key
-          type: string
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-      title: WatchChannelRequest
-      type: object
-    yorkie.v1.WatchChannelResponse:
-      additionalProperties: false
-      description: ""
-      properties:
-        event:
-          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
-          additionalProperties: false
-          description: ""
-          title: event
+          title: channel_event
           type: object
-        initialized:
-          $ref: '#/components/schemas/yorkie.v1.WatchChannelInitialized'
+        docEvent:
+          $ref: '#/components/schemas/yorkie.v1.DocWatchEvent'
           additionalProperties: false
           description: ""
-          title: initialized
+          title: doc_event
           type: object
-      title: WatchChannelResponse
+      title: WatchEvent
       type: object
-    yorkie.v1.WatchDocumentRequest:
+    yorkie.v1.WatchInitialization:
+      additionalProperties: false
+      description: ""
+      properties:
+        resourceInits:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ResourceInit'
+            type: object
+          title: resource_inits
+          type: array
+      title: WatchInitialization
+      type: object
+    yorkie.v1.WatchRequest:
       additionalProperties: false
       description: ""
       properties:
@@ -2321,43 +2417,33 @@ components:
           description: ""
           title: client_id
           type: string
-        documentId:
+        resources:
           additionalProperties: false
           description: ""
-          title: document_id
-          type: string
-      title: WatchDocumentRequest
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ResourceDescriptor'
+            type: object
+          title: resources
+          type: array
+      title: WatchRequest
       type: object
-    yorkie.v1.WatchDocumentResponse:
+    yorkie.v1.WatchResponse:
       additionalProperties: false
       description: ""
       properties:
         event:
-          $ref: '#/components/schemas/yorkie.v1.DocEvent'
+          $ref: '#/components/schemas/yorkie.v1.WatchEvent'
           additionalProperties: false
           description: ""
           title: event
           type: object
         initialization:
-          $ref: '#/components/schemas/yorkie.v1.WatchDocumentResponse.Initialization'
+          $ref: '#/components/schemas/yorkie.v1.WatchInitialization'
           additionalProperties: false
           description: ""
           title: initialization
           type: object
-      title: WatchDocumentResponse
-      type: object
-    yorkie.v1.WatchDocumentResponse.Initialization:
-      additionalProperties: false
-      description: ""
-      properties:
-        clientIds:
-          additionalProperties: false
-          description: ""
-          items:
-            type: string
-          title: client_ids
-          type: array
-      title: Initialization
+      title: WatchResponse
       type: object
   securitySchemes:
     ApiKeyAuth:

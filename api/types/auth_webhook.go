@@ -57,7 +57,7 @@ const (
 	DetachDocument Method = "DetachDocument"
 	RemoveDocument Method = "RemoveDocument"
 	PushPull       Method = "PushPull"
-	WatchDocument  Method = "WatchDocument"
+	Watch          Method = "Watch"
 
 	CreateRevision  Method = "CreateRevision"
 	GetRevision     Method = "GetRevision"
@@ -67,7 +67,6 @@ const (
 	AttachChannel  Method = "AttachChannel"
 	DetachChannel  Method = "DetachChannel"
 	RefreshChannel Method = "RefreshChannel"
-	WatchChannel   Method = "WatchChannel"
 	Broadcast      Method = "Broadcast"
 )
 
@@ -91,7 +90,7 @@ func AuthMethods() []Method {
 		DetachDocument,
 		RemoveDocument,
 		PushPull,
-		WatchDocument,
+		Watch,
 
 		CreateRevision,
 		GetRevision,
@@ -101,7 +100,6 @@ func AuthMethods() []Method {
 		AttachChannel,
 		DetachChannel,
 		RefreshChannel,
-		WatchChannel,
 		Broadcast,
 	}
 }
