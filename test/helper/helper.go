@@ -81,8 +81,12 @@ var (
 	HousekeepingCandidatesLimit      = 10
 	HousekeepingCompactionMinChanges = 5
 
-	ChannelSessionTTL             = "5s"
-	ChannelSessionCleanupInterval = "1s"
+	ChannelSessionTTL              = "5s"
+	ChannelSessionCleanupInterval  = "1s"
+	ChannelSessionCountCacheTTL    = "10s"
+	ChannelSessionCountCacheSize   = 100
+	ClusterRPCTimeout              = "10s"
+	ClusterClientTimeout           = "30s"
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
@@ -306,8 +310,12 @@ func TestConfig() *server.Config {
 			DisableWebhookValidation:      true,
 			GatewayAddr:                   fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			RPCAddr:                       fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			ChannelSessionTTL:             ChannelSessionTTL,
-			ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
+			ChannelSessionTTL:              ChannelSessionTTL,
+			ChannelSessionCleanupInterval:  ChannelSessionCleanupInterval,
+			ChannelSessionCountCacheTTL:    ChannelSessionCountCacheTTL,
+			ChannelSessionCountCacheSize:   ChannelSessionCountCacheSize,
+			ClusterRPCTimeout:              ClusterRPCTimeout,
+			ClusterClientTimeout:           ClusterClientTimeout,
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,

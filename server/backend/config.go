@@ -176,10 +176,6 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 
 // ParseChannelSessionTTL returns TTL for channel session.
 func (c *Config) ParseChannelSessionTTL() time.Duration {
-	if c.ChannelSessionTTL == "" {
-		return 60 * time.Second // Default: 60 seconds
-	}
-
 	result, err := time.ParseDuration(c.ChannelSessionTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session ttl: %v\n", err)
@@ -191,10 +187,6 @@ func (c *Config) ParseChannelSessionTTL() time.Duration {
 
 // ParseChannelSessionCleanupInterval returns the interval for channel session cleanup.
 func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
-	if c.ChannelSessionCleanupInterval == "" {
-		return 10 * time.Second // Default: 10 seconds
-	}
-
 	result, err := time.ParseDuration(c.ChannelSessionCleanupInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session cleanup interval: %v\n", err)
@@ -206,10 +198,6 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 
 // ParseClusterRPCTimeout returns the timeout for cluster RPC calls.
 func (c *Config) ParseClusterRPCTimeout() time.Duration {
-	if c.ClusterRPCTimeout == "" {
-		return 10 * time.Second // Default: 10 seconds
-	}
-
 	result, err := time.ParseDuration(c.ClusterRPCTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse cluster rpc timeout: %v\n", err)
@@ -221,10 +209,6 @@ func (c *Config) ParseClusterRPCTimeout() time.Duration {
 
 // ParseClusterClientTimeout returns the HTTP client timeout for cluster communication.
 func (c *Config) ParseClusterClientTimeout() time.Duration {
-	if c.ClusterClientTimeout == "" {
-		return 30 * time.Second // Default: 30 seconds
-	}
-
 	result, err := time.ParseDuration(c.ClusterClientTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse cluster client timeout: %v\n", err)
@@ -236,10 +220,6 @@ func (c *Config) ParseClusterClientTimeout() time.Duration {
 
 // ParseChannelSessionCountCacheTTL returns TTL for session count cache.
 func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
-	if c.ChannelSessionCountCacheTTL == "" {
-		return 30 * time.Second // Default: 30 seconds
-	}
-
 	result, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session count cache ttl: %v\n", err)
