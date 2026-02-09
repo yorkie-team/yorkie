@@ -496,20 +496,14 @@ func (s *yorkieServer) WatchChannel(
 	}
 
 	// 05. Stream session count updates and broadcast events
-	for {
-		select {
-		case event, ok := <-subscription.Events():
-			if !ok {
-				// Channel closed, end stream
-				return nil
-			}
-
-			var response *api.WatchChannelResponse
-
-			// Check event type and create appropriate response
+	return streamEvents(
+		ctx,
+		s.serviceCtx,
+		subscription,
+		stream.Send,
+		func(event events.ChannelEvent) (*api.WatchChannelResponse, error) {
 			if event.Type == events.ChannelBroadcast {
-				// Send broadcast event
-				response = &api.WatchChannelResponse{
+				return &api.WatchChannelResponse{
 					Body: &api.WatchChannelResponse_Event{
 						Event: &api.ChannelEvent{
 							Type:      api.ChannelEvent_TYPE_BROADCAST,
@@ -518,10 +512,11 @@ func (s *yorkieServer) WatchChannel(
 							Payload:   event.Payload,
 						},
 					},
-				}
-			} else if event.Seq > 0 {
-				// Send count update (skip if it's the initial event with Seq 0)
-				response = &api.WatchChannelResponse{
+				}, nil
+			}
+
+			if event.Seq > 0 {
+				return &api.WatchChannelResponse{
 					Body: &api.WatchChannelResponse_Event{
 						Event: &api.ChannelEvent{
 							Type:         api.ChannelEvent_TYPE_PRESENCE,
@@ -529,19 +524,14 @@ func (s *yorkieServer) WatchChannel(
 							Seq:          event.Seq,
 						},
 					},
-				}
+				}, nil
 			}
 
-			if response != nil {
-				if err := stream.Send(response); err != nil {
-					return err
-				}
-			}
-
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+			// Skip initial event with Seq 0
+			return nil, nil
+		},
+		nil,
+	)
 }
 
 // Broadcast broadcasts a message to all clients watching the presence.
@@ -884,19 +874,17 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	for {
-		select {
-		case <-s.serviceCtx.Done():
-			return context.Canceled
-		case <-ctx.Done():
-			return context.Canceled
-		case event := <-subscription.Events():
+	return streamEvents(
+		ctx,
+		s.serviceCtx,
+		subscription,
+		stream.Send,
+		func(event events.DocEvent) (*api.WatchDocumentResponse, error) {
 			eventType, err := converter.ToDocEventType(event.Type)
 			if err != nil {
-				return err
+				return nil, err
 			}
-
-			response := &api.WatchDocumentResponse{
+			return &api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
 						Type:      eventType,
@@ -907,18 +895,17 @@ func (s *yorkieServer) WatchDocument(
 						},
 					},
 				},
-			}
-			if err := stream.Send(response); err != nil {
-				return err
-			}
+			}, nil
+		},
+		func(event events.DocEvent) {
 			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
 				s.backend.Config.Hostname,
 				project,
 				event.Type,
 				event.Body.PayloadLen(),
 			)
-		}
-	}
+		},
+	)
 }
 
 // CreateRevision creates a new revision for the given document.
