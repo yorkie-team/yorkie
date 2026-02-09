@@ -99,7 +99,7 @@ func newHangingListener(t *testing.T) net.Listener {
 			}
 			go func(c net.Conn) {
 				<-time.After(10 * time.Second)
-				c.Close()
+				_ = c.Close()
 			}(conn)
 		}
 	}()
@@ -110,7 +110,7 @@ func newHangingListener(t *testing.T) net.Listener {
 func TestRPCTimeout(t *testing.T) {
 	t.Run("call is bounded by rpc timeout", func(t *testing.T) {
 		ln := newHangingListener(t)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 
 		rpcTimeout := 200 * time.Millisecond
 		client, err := New(
@@ -136,7 +136,7 @@ func TestRPCTimeout(t *testing.T) {
 
 	t.Run("shorter rpc timeout finishes faster", func(t *testing.T) {
 		ln := newHangingListener(t)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 
 		shortTimeout := 100 * time.Millisecond
 		longTimeout := 400 * time.Millisecond
@@ -177,7 +177,7 @@ func TestRPCTimeout(t *testing.T) {
 
 	t.Run("client timeout acts as safety net", func(t *testing.T) {
 		ln := newHangingListener(t)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 
 		clientTimeout := 200 * time.Millisecond
 		client, err := New(
@@ -202,7 +202,7 @@ func TestRPCTimeout(t *testing.T) {
 
 	t.Run("caller context timeout is respected", func(t *testing.T) {
 		ln := newHangingListener(t)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 
 		client, err := New(
 			WithRPCTimeout(5*time.Second),
