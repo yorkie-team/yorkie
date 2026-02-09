@@ -26,8 +26,9 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		AdminTokenDuration:  "24h",
-		AuthWebhookCacheTTL: "10s",
+		AdminTokenDuration:       "24h",
+		AuthWebhookCacheTTL:      "10s",
+		MaxConcurrentClusterRPCs: 1,
 	}
 }
 func TestConfig(t *testing.T) {
@@ -38,6 +39,18 @@ func TestConfig(t *testing.T) {
 		conf1 := validConf
 		conf1.AuthWebhookCacheTTL = "s"
 		assert.Error(t, conf1.Validate())
+	})
+
+	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.MaxConcurrentClusterRPCs = 0
+		assert.Error(t, conf.Validate())
+
+		conf.MaxConcurrentClusterRPCs = -1
+		assert.Error(t, conf.Validate())
+
+		conf.MaxConcurrentClusterRPCs = 1
+		assert.NoError(t, conf.Validate())
 	})
 
 	t.Run("validate ClusterRPCTimeout test", func(t *testing.T) {

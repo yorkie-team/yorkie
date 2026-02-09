@@ -85,8 +85,10 @@ var (
 	ChannelSessionCleanupInterval = "1s"
 	ChannelSessionCountCacheTTL   = "10s"
 	ChannelSessionCountCacheSize  = 100
-	ClusterRPCTimeout             = "10s"
-	ClusterClientTimeout          = "30s"
+
+	ClusterRPCTimeout        = "10s"
+	ClusterClientTimeout     = "30s"
+	MaxConcurrentClusterRPCs = 5000
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
@@ -98,8 +100,6 @@ var (
 	EventWebhookSize          = 100
 	GatewayAddr               = fmt.Sprintf("localhost:%d", RPCPort)
 	RPCAddr                   = fmt.Sprintf("localhost:%d", RPCPort)
-
-	MaxConcurrentClusterRPCs = 5000
 
 	MongoConnectionTimeout  = "5s"
 	MongoConnectionURI      = "mongodb://localhost:27017"
@@ -318,6 +318,7 @@ func TestConfig() *server.Config {
 			ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
 			ClusterRPCTimeout:             ClusterRPCTimeout,
 			ClusterClientTimeout:          ClusterClientTimeout,
+			MaxConcurrentClusterRPCs:      MaxConcurrentClusterRPCs,
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,
