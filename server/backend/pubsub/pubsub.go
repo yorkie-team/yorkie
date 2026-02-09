@@ -19,7 +19,6 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	gotime "time"
 
 	"go.uber.org/zap"
 
@@ -37,11 +36,6 @@ var (
 
 	// ErrAlreadyConnected is returned when the client is already connected to the document.
 	ErrAlreadyConnected = errors.AlreadyExists("already connected to the document").WithCode("ErrAlreadyConnected")
-)
-
-const (
-	// publishTimeout is the timeout for publishing an event.
-	publishTimeout = 100 * gotime.Millisecond
 )
 
 // PubSub is the memory implementation of PubSub, used for single server.
