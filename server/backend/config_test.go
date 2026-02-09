@@ -26,9 +26,11 @@ import (
 
 func newValidBackendConf() backend.Config {
 	return backend.Config{
-		AdminTokenDuration:       "24h",
-		AuthWebhookCacheTTL:      "10s",
-		MaxConcurrentClusterRPCs: 1,
+		AdminTokenDuration:           "24h",
+		AuthWebhookCacheTTL:          "10s",
+		ChannelSessionCountCacheSize: 1,
+		ClusterClientPoolSize:        1,
+		MaxConcurrentClusterRPCs:     1,
 	}
 }
 func TestConfig(t *testing.T) {
@@ -51,6 +53,17 @@ func TestConfig(t *testing.T) {
 
 		conf.MaxConcurrentClusterRPCs = 1
 		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("validate ChannelSessionCountCacheSize test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		assert.Equal(t, 1, conf.ChannelSessionCountCacheSize)
+
+		conf.ChannelSessionCountCacheSize = 0
+		assert.Error(t, conf.Validate())
+
+		conf.ChannelSessionCountCacheSize = -1
+		assert.Error(t, conf.Validate())
 	})
 
 	t.Run("validate ClusterRPCTimeout test", func(t *testing.T) {
@@ -100,5 +113,14 @@ func TestConfig(t *testing.T) {
 
 		conf.ClusterClientTimeout = "1m"
 		assert.Equal(t, "1m0s", conf.ParseClusterClientTimeout().String())
+	})
+
+	t.Run("ClusterClientPoolSize field test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		assert.Equal(t, 1, conf.ClusterClientPoolSize)
+
+		conf.ClusterClientPoolSize = 10
+		assert.Equal(t, 10, conf.ClusterClientPoolSize)
+		assert.NoError(t, conf.Validate())
 	})
 }

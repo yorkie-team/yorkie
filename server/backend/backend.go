@@ -133,6 +133,7 @@ func New(
 	clusterClientPool := cluster.NewClientPool(
 		cluster.WithRPCTimeout(conf.ParseClusterRPCTimeout()),
 		cluster.WithClientTimeout(conf.ParseClusterClientTimeout()),
+		cluster.WithPoolSize(conf.ClusterClientPoolSize),
 	)
 
 	// 04. Create the database instance. If the MongoDB configuration is given,

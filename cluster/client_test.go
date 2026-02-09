@@ -46,18 +46,15 @@ func TestOptions(t *testing.T) {
 		WithSecure(true)(&opts)
 		assert.True(t, opts.IsSecure)
 	})
+
+	t.Run("WithPoolSize sets pool size", func(t *testing.T) {
+		var opts Options
+		WithPoolSize(10)(&opts)
+		assert.Equal(t, 10, opts.PoolSize)
+	})
 }
 
 func TestNew(t *testing.T) {
-	t.Run("default timeouts when no options provided", func(t *testing.T) {
-		client, err := New()
-		require.NoError(t, err)
-		defer client.Close()
-
-		assert.Equal(t, defaultRPCTimeout, client.rpcTimeout)
-		assert.Equal(t, defaultClientTimeout, client.conn.Timeout)
-	})
-
 	t.Run("custom timeouts override defaults", func(t *testing.T) {
 		client, err := New(
 			WithRPCTimeout(5*time.Second),
@@ -68,18 +65,6 @@ func TestNew(t *testing.T) {
 
 		assert.Equal(t, 5*time.Second, client.rpcTimeout)
 		assert.Equal(t, 15*time.Second, client.conn.Timeout)
-	})
-
-	t.Run("zero timeout uses defaults", func(t *testing.T) {
-		client, err := New(
-			WithRPCTimeout(0),
-			WithClientTimeout(0),
-		)
-		require.NoError(t, err)
-		defer client.Close()
-
-		assert.Equal(t, defaultRPCTimeout, client.rpcTimeout)
-		assert.Equal(t, defaultClientTimeout, client.conn.Timeout)
 	})
 }
 

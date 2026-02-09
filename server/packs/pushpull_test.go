@@ -109,6 +109,7 @@ func TestMain(m *testing.M) {
 			ChannelSessionCountCacheSize:  helper.ChannelSessionCountCacheSize,
 			ClusterRPCTimeout:             helper.ClusterRPCTimeout,
 			ClusterClientTimeout:          helper.ClusterClientTimeout,
+			ClusterClientPoolSize:         helper.ClusterClientPoolSize,
 			MaxConcurrentClusterRPCs:      helper.MaxConcurrentClusterRPCs,
 		}, &mongo.Config{
 			ConnectionURI:      helper.MongoConnectionURI,

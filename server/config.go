@@ -71,6 +71,7 @@ const (
 
 	DefaultClusterRPCTimeout        = 10 * time.Second
 	DefaultClusterClientTimeout     = 30 * time.Second
+	DefaultClusterClientPoolSize    = 1
 	DefaultMaxConcurrentClusterRPCs = 5000
 
 	DefaultAdminUser     = "admin"
@@ -281,7 +282,7 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.ChannelSessionCountCacheTTL == "" {
 		c.Backend.ChannelSessionCountCacheTTL = DefaultChannelSessionCountCacheTTL.String()
 	}
-	if c.Backend.ChannelSessionCountCacheSize == 0 {
+	if c.Backend.ChannelSessionCountCacheSize <= 0 {
 		c.Backend.ChannelSessionCountCacheSize = DefaultChannelSessionCountCacheSize
 	}
 	if c.Backend.ClusterRPCTimeout == "" {
@@ -289,6 +290,9 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.ClusterClientTimeout == "" {
 		c.Backend.ClusterClientTimeout = DefaultClusterClientTimeout.String()
+	}
+	if c.Backend.ClusterClientPoolSize <= 0 {
+		c.Backend.ClusterClientPoolSize = DefaultClusterClientPoolSize
 	}
 	if c.Backend.MaxConcurrentClusterRPCs <= 0 {
 		c.Backend.MaxConcurrentClusterRPCs = DefaultMaxConcurrentClusterRPCs

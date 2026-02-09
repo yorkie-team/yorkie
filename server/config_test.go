@@ -63,6 +63,11 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultHostname, conf.Backend.Hostname)
 	assert.Equal(t, server.DefaultGatewayAddr, conf.Backend.GatewayAddr)
 
+	assertDurationEqual(t, server.DefaultClusterRPCTimeout, conf.Backend.ClusterRPCTimeout)
+	assertDurationEqual(t, server.DefaultClusterClientTimeout, conf.Backend.ClusterClientTimeout)
+	assert.Equal(t, server.DefaultClusterClientPoolSize, conf.Backend.ClusterClientPoolSize)
+	assert.Equal(t, server.DefaultMaxConcurrentClusterRPCs, conf.Backend.MaxConcurrentClusterRPCs)
+
 	if conf.Mongo != nil {
 		assertDurationEqual(t, server.DefaultMongoConnectionTimeout, conf.Mongo.ConnectionTimeout)
 		assert.Equal(t, server.DefaultMongoConnectionURI, conf.Mongo.ConnectionURI)
