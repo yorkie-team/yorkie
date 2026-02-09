@@ -290,7 +290,7 @@ func (c *Config) ensureBackendDefaultValue() {
 	if c.Backend.ClusterClientTimeout == "" {
 		c.Backend.ClusterClientTimeout = DefaultClusterClientTimeout.String()
 	}
-	if c.Backend.MaxConcurrentClusterRPCs == 0 {
+	if c.Backend.MaxConcurrentClusterRPCs <= 0 {
 		c.Backend.MaxConcurrentClusterRPCs = DefaultMaxConcurrentClusterRPCs
 	}
 }

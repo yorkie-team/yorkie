@@ -153,6 +153,12 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
+	if c.MaxConcurrentClusterRPCs <= 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
+			c.MaxConcurrentClusterRPCs,
+		)
+	}
 
 	return nil
 }
