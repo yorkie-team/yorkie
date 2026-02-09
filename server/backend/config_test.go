@@ -40,10 +40,52 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf1.Validate())
 	})
 
+	t.Run("validate ClusterRPCTimeout test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.ClusterRPCTimeout = "invalid"
+		assert.Error(t, conf.Validate())
+
+		conf.ClusterRPCTimeout = "5s"
+		assert.NoError(t, conf.Validate())
+
+		conf.ClusterRPCTimeout = ""
+		assert.NoError(t, conf.Validate())
+	})
+
+	t.Run("validate ClusterClientTimeout test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.ClusterClientTimeout = "invalid"
+		assert.Error(t, conf.Validate())
+
+		conf.ClusterClientTimeout = "30s"
+		assert.NoError(t, conf.Validate())
+
+		conf.ClusterClientTimeout = ""
+		assert.NoError(t, conf.Validate())
+	})
+
 	t.Run("parse test", func(t *testing.T) {
 		validConf := newValidBackendConf()
 
 		assert.Equal(t, "24h0m0s", validConf.ParseAdminTokenDuration().String())
 		assert.Equal(t, "10s", validConf.ParseAuthWebhookCacheTTL().String())
+	})
+
+	t.Run("parse ClusterRPCTimeout test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.ClusterRPCTimeout = "5s"
+		assert.Equal(t, "5s", conf.ParseClusterRPCTimeout().String())
+
+		conf.ClusterRPCTimeout = "10s"
+		assert.Equal(t, "10s", conf.ParseClusterRPCTimeout().String())
+	})
+
+	t.Run("parse ClusterClientTimeout test", func(t *testing.T) {
+		conf := newValidBackendConf()
+		conf.ClusterClientTimeout = "30s"
+		assert.Equal(t, "30s", conf.ParseClusterClientTimeout().String())
+
+		conf.ClusterClientTimeout = "1m"
+		assert.Equal(t, "1m0s", conf.ParseClusterClientTimeout().String())
 	})
 }

@@ -83,6 +83,10 @@ var (
 
 	ChannelSessionTTL             = "5s"
 	ChannelSessionCleanupInterval = "1s"
+	ChannelSessionCountCacheTTL   = "10s"
+	ChannelSessionCountCacheSize  = 100
+	ClusterRPCTimeout             = "10s"
+	ClusterClientTimeout          = "30s"
 
 	AdminTokenDuration        = "10s"
 	ClientDeactivateThreshold = "10s"
@@ -308,6 +312,10 @@ func TestConfig() *server.Config {
 			RPCAddr:                       fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			ChannelSessionTTL:             ChannelSessionTTL,
 			ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
+			ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
+			ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
+			ClusterRPCTimeout:             ClusterRPCTimeout,
+			ClusterClientTimeout:          ClusterClientTimeout,
 		},
 		Mongo: &mongo.Config{
 			ConnectionTimeout:  MongoConnectionTimeout,

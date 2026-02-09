@@ -95,14 +95,20 @@ func TestMain(m *testing.M) {
 
 	testBackend, err = backend.New(
 		&backend.Config{
-			AdminUser:            helper.AdminUser,
-			AdminPassword:        helper.AdminPassword,
-			UseDefaultProject:    helper.UseDefaultProject,
-			SnapshotCacheSize:    helper.SnapshotCacheSize,
-			AuthWebhookCacheSize: helper.AuthWebhookSize,
-			AuthWebhookCacheTTL:  helper.AuthWebhookCacheTTL.String(),
-			AdminTokenDuration:   helper.AdminTokenDuration,
-			RPCAddr:              helper.RPCAddr,
+			AdminUser:                     helper.AdminUser,
+			AdminPassword:                 helper.AdminPassword,
+			UseDefaultProject:             helper.UseDefaultProject,
+			SnapshotCacheSize:             helper.SnapshotCacheSize,
+			AuthWebhookCacheSize:          helper.AuthWebhookSize,
+			AuthWebhookCacheTTL:           helper.AuthWebhookCacheTTL.String(),
+			AdminTokenDuration:            helper.AdminTokenDuration,
+			RPCAddr:                       helper.RPCAddr,
+			ChannelSessionTTL:             helper.ChannelSessionTTL,
+			ChannelSessionCleanupInterval: helper.ChannelSessionCleanupInterval,
+			ChannelSessionCountCacheTTL:   helper.ChannelSessionCountCacheTTL,
+			ChannelSessionCountCacheSize:  helper.ChannelSessionCountCacheSize,
+			ClusterRPCTimeout:             helper.ClusterRPCTimeout,
+			ClusterClientTimeout:          helper.ClusterClientTimeout,
 		}, &mongo.Config{
 			ConnectionURI:      helper.MongoConnectionURI,
 			YorkieDatabase:     helper.TestDBName(),

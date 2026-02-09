@@ -82,6 +82,16 @@ type Config struct {
 
 	// DisableWebhookValidation is whether to disable webhook validation.
 	DisableWebhookValidation bool `yaml:"DisableWebhookValidation"`
+
+	// ClusterRPCTimeout is the timeout for individual cluster RPC calls.
+	// If a cluster peer does not respond within this duration, the call
+	// will be cancelled. Default is "10s".
+	ClusterRPCTimeout string `yaml:"ClusterRPCTimeout"`
+
+	// ClusterClientTimeout is the hard limit for the entire HTTP request
+	// lifecycle of cluster communication, including DNS, connection, TLS,
+	// request and response. This acts as a safety net. Default is "30s".
+	ClusterClientTimeout string `yaml:"ClusterClientTimeout"`
 }
 
 // Validate validates this config.
@@ -120,6 +130,24 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
+	if c.ClusterRPCTimeout != "" {
+		if _, err := time.ParseDuration(c.ClusterRPCTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--cluster-rpc-timeout" flag: %w`,
+				c.ClusterRPCTimeout,
+				err,
+			)
+		}
+	}
+	if c.ClusterClientTimeout != "" {
+		if _, err := time.ParseDuration(c.ClusterClientTimeout); err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--cluster-client-timeout" flag: %w`,
+				c.ClusterClientTimeout,
+				err,
+			)
+		}
+	}
 
 	return nil
 }
@@ -148,10 +176,6 @@ func (c *Config) ParseAuthWebhookCacheTTL() time.Duration {
 
 // ParseChannelSessionTTL returns TTL for channel session.
 func (c *Config) ParseChannelSessionTTL() time.Duration {
-	if c.ChannelSessionTTL == "" {
-		return 60 * time.Second // Default: 60 seconds
-	}
-
 	result, err := time.ParseDuration(c.ChannelSessionTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session ttl: %v\n", err)
@@ -163,10 +187,6 @@ func (c *Config) ParseChannelSessionTTL() time.Duration {
 
 // ParseChannelSessionCleanupInterval returns the interval for channel session cleanup.
 func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
-	if c.ChannelSessionCleanupInterval == "" {
-		return 10 * time.Second // Default: 10 seconds
-	}
-
 	result, err := time.ParseDuration(c.ChannelSessionCleanupInterval)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session cleanup interval: %v\n", err)
@@ -176,12 +196,30 @@ func (c *Config) ParseChannelSessionCleanupInterval() time.Duration {
 	return result
 }
 
-// ParseChannelSessionCountCacheTTL returns TTL for session count cache.
-func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
-	if c.ChannelSessionCountCacheTTL == "" {
-		return 30 * time.Second // Default: 30 seconds
+// ParseClusterRPCTimeout returns the timeout for cluster RPC calls.
+func (c *Config) ParseClusterRPCTimeout() time.Duration {
+	result, err := time.ParseDuration(c.ClusterRPCTimeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse cluster rpc timeout: %v\n", err)
+		os.Exit(1)
 	}
 
+	return result
+}
+
+// ParseClusterClientTimeout returns the HTTP client timeout for cluster communication.
+func (c *Config) ParseClusterClientTimeout() time.Duration {
+	result, err := time.ParseDuration(c.ClusterClientTimeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse cluster client timeout: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseChannelSessionCountCacheTTL returns TTL for session count cache.
+func (c *Config) ParseChannelSessionCountCacheTTL() time.Duration {
 	result, err := time.ParseDuration(c.ChannelSessionCountCacheTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session count cache ttl: %v\n", err)

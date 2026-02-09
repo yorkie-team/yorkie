@@ -48,17 +48,45 @@ func WithSecure(isSecure bool) Option {
 	return func(o *Options) { o.IsSecure = isSecure }
 }
 
+// WithRPCTimeout configures the timeout for individual cluster RPC calls.
+func WithRPCTimeout(timeout gotime.Duration) Option {
+	return func(o *Options) { o.RPCTimeout = timeout }
+}
+
+// WithClientTimeout configures the HTTP client timeout for the entire
+// request lifecycle (DNS + connect + TLS + request + response).
+func WithClientTimeout(timeout gotime.Duration) Option {
+	return func(o *Options) { o.ClientTimeout = timeout }
+}
+
 // Options configures how we set up the client.
 type Options struct {
 	// IsSecure is whether to enable the TLS connection of the client.
 	IsSecure bool
+
+	// RPCTimeout is the timeout for individual cluster RPC calls.
+	// If zero, defaults to defaultRPCTimeout.
+	RPCTimeout gotime.Duration
+
+	// ClientTimeout is the hard limit for the entire HTTP request lifecycle.
+	// If zero, defaults to defaultClientTimeout.
+	ClientTimeout gotime.Duration
 }
+
+const (
+	// defaultRPCTimeout is the fallback timeout when no RPCTimeout is configured.
+	defaultRPCTimeout = 10 * gotime.Second
+
+	// defaultClientTimeout is the fallback HTTP client timeout.
+	defaultClientTimeout = 30 * gotime.Second
+)
 
 // Client is a client for admin service.
 type Client struct {
-	conn     *http.Client
-	client   v1connect.ClusterServiceClient
-	isSecure bool
+	conn       *http.Client
+	client     v1connect.ClusterServiceClient
+	isSecure   bool
+	rpcTimeout gotime.Duration
 }
 
 // New creates an instance of Client.
@@ -68,7 +96,21 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	conn := &http.Client{}
+	rpcTimeout := options.RPCTimeout
+	if rpcTimeout == 0 {
+		rpcTimeout = defaultRPCTimeout
+	}
+
+	clientTimeout := options.ClientTimeout
+	if clientTimeout == 0 {
+		clientTimeout = defaultClientTimeout
+	}
+
+	conn := &http.Client{
+		// Timeout is a hard limit for the entire request lifecycle, acting as
+		// a safety net in case per-RPC context timeouts are not set properly.
+		Timeout: clientTimeout,
+	}
 	if options.IsSecure {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 		conn.Transport = &http2.Transport{
@@ -89,8 +131,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		conn:     conn,
-		isSecure: options.IsSecure,
+		conn:       conn,
+		isSecure:   options.IsSecure,
+		rpcTimeout: rpcTimeout,
 	}, nil
 }
 
@@ -136,6 +179,9 @@ func (c *Client) DetachDocument(
 	docID types.ID,
 	docKey key.Key,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	_, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceDetachDocumentRequest{
@@ -158,6 +204,9 @@ func (c *Client) CompactDocument(
 	project *types.Project,
 	docInfo *database.DocInfo,
 ) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	res, err := c.client.CompactDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceCompactDocumentRequest{
@@ -178,6 +227,9 @@ func (c *Client) PurgeDocument(
 	project *types.Project,
 	docInfo *database.DocInfo,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	_, err := c.client.PurgeDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServicePurgeDocumentRequest{
@@ -200,6 +252,9 @@ func (c *Client) GetDocument(
 	includeRoot bool,
 	includePresences bool,
 ) (*types.DocumentSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	response, err := c.client.GetDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.ClusterServiceGetDocumentRequest{
@@ -224,6 +279,9 @@ func (c *Client) ListChannels(
 	query string,
 	limit int32,
 ) ([]*types.ChannelSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	response, err := c.client.ListChannels(
 		ctx,
 		connect.NewRequest(&api.ClusterServiceListChannelsRequest{
@@ -253,6 +311,9 @@ func (c *Client) GetChannels(
 	firstKeyPath string,
 	includeSubPath bool,
 ) ([]*types.ChannelSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	keyStrings := make([]string, len(channelKeys))
 	for i, k := range channelKeys {
 		keyStrings[i] = k.String()
@@ -283,6 +344,9 @@ func (c *Client) GetChannelCount(
 	ctx context.Context,
 	projectID types.ID,
 ) (int32, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	response, err := c.client.GetChannelCount(
 		ctx,
 		connect.NewRequest(&api.ClusterServiceGetChannelCountRequest{
@@ -302,6 +366,9 @@ func (c *Client) InvalidateCache(
 	cacheType types.CacheType,
 	key string,
 ) error {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
 	_, err := c.client.InvalidateCache(
 		ctx,
 		connect.NewRequest(&api.InvalidateCacheRequest{
