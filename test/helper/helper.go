@@ -99,6 +99,8 @@ var (
 	GatewayAddr               = fmt.Sprintf("localhost:%d", RPCPort)
 	RPCAddr                   = fmt.Sprintf("localhost:%d", RPCPort)
 
+	MaxConcurrentClusterRPCs = 5000
+
 	MongoConnectionTimeout  = "5s"
 	MongoConnectionURI      = "mongodb://localhost:27017"
 	MongoPingTimeout        = "5s"

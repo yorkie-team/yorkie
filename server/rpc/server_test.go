@@ -85,6 +85,7 @@ func TestMain(m *testing.M) {
 		ChannelSessionCountCacheSize:  helper.ChannelSessionCountCacheSize,
 		ClusterRPCTimeout:             helper.ClusterRPCTimeout,
 		ClusterClientTimeout:          helper.ClusterClientTimeout,
+		MaxConcurrentClusterRPCs:      helper.MaxConcurrentClusterRPCs,
 	}, &mongo.Config{
 		ConnectionURI:      helper.MongoConnectionURI,
 		YorkieDatabase:     helper.TestDBName(),
