@@ -88,6 +88,7 @@ var (
 
 	ClusterRPCTimeout        = "10s"
 	ClusterClientTimeout     = "30s"
+	ClusterClientPoolSize    = 1
 	MaxConcurrentClusterRPCs = 5000
 
 	AdminTokenDuration        = "10s"
@@ -318,6 +319,7 @@ func TestConfig() *server.Config {
 			ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
 			ClusterRPCTimeout:             ClusterRPCTimeout,
 			ClusterClientTimeout:          ClusterClientTimeout,
+			ClusterClientPoolSize:         ClusterClientPoolSize,
 			MaxConcurrentClusterRPCs:      MaxConcurrentClusterRPCs,
 		},
 		Mongo: &mongo.Config{

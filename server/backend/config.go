@@ -93,6 +93,11 @@ type Config struct {
 	// request and response. This acts as a safety net. Default is "30s".
 	ClusterClientTimeout string `yaml:"ClusterClientTimeout"`
 
+	// ClusterClientPoolSize is the number of connections per host in the cluster
+	// client pool. Multiple connections reduce HTTP/2 mutex contention under
+	// high concurrency. Default is 1.
+	ClusterClientPoolSize int `yaml:"ClusterClientPoolSize"`
+
 	// MaxConcurrentClusterRPCs is the maximum number of concurrent cluster
 	// RPC calls across the entire server. This prevents goroutine explosion
 	// when a cluster peer is slow or unresponsive. Default is 5000.
@@ -153,13 +158,24 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
+	if c.ChannelSessionCountCacheSize <= 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--channel-session-count-cache-size"`,
+			c.ChannelSessionCountCacheSize,
+		)
+	}
 	if c.MaxConcurrentClusterRPCs <= 0 {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
 			c.MaxConcurrentClusterRPCs,
 		)
 	}
-
+	if c.ClusterClientPoolSize <= 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--cluster-client-pool-size"`,
+			c.ClusterClientPoolSize,
+		)
+	}
 	return nil
 }
 

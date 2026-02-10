@@ -59,6 +59,11 @@ func WithClientTimeout(timeout gotime.Duration) Option {
 	return func(o *Options) { o.ClientTimeout = timeout }
 }
 
+// WithPoolSize configures the number of connections per host in the pool.
+func WithPoolSize(size int) Option {
+	return func(o *Options) { o.PoolSize = size }
+}
+
 // Options configures how we set up the client.
 type Options struct {
 	// IsSecure is whether to enable the TLS connection of the client.
@@ -71,15 +76,11 @@ type Options struct {
 	// ClientTimeout is the hard limit for the entire HTTP request lifecycle.
 	// If zero, defaults to defaultClientTimeout.
 	ClientTimeout gotime.Duration
+
+	// PoolSize is the number of connections per host in the pool.
+	// If zero, defaults to 1.
+	PoolSize int
 }
-
-const (
-	// defaultRPCTimeout is the fallback timeout when no RPCTimeout is configured.
-	defaultRPCTimeout = 10 * gotime.Second
-
-	// defaultClientTimeout is the fallback HTTP client timeout.
-	defaultClientTimeout = 30 * gotime.Second
-)
 
 // Client is a client for admin service.
 type Client struct {
@@ -96,20 +97,10 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	rpcTimeout := options.RPCTimeout
-	if rpcTimeout == 0 {
-		rpcTimeout = defaultRPCTimeout
-	}
-
-	clientTimeout := options.ClientTimeout
-	if clientTimeout == 0 {
-		clientTimeout = defaultClientTimeout
-	}
-
 	conn := &http.Client{
 		// Timeout is a hard limit for the entire request lifecycle, acting as
 		// a safety net in case per-RPC context timeouts are not set properly.
-		Timeout: clientTimeout,
+		Timeout: options.ClientTimeout,
 	}
 	if options.IsSecure {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
@@ -133,7 +124,7 @@ func New(opts ...Option) (*Client, error) {
 	return &Client{
 		conn:       conn,
 		isSecure:   options.IsSecure,
-		rpcTimeout: rpcTimeout,
+		rpcTimeout: options.RPCTimeout,
 	}, nil
 }
 
