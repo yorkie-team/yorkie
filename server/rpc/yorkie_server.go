@@ -524,11 +524,23 @@ func (s *yorkieServer) subscribeResources(
 	var channelSubs []channelSub
 	var resourceInits []*api.ResourceInit
 
+	cleanup := func() {
+		for _, ds := range docSubs {
+			if err := s.unwatchDoc(ctx, ds.sub, ds.docKey); err != nil {
+				logging.From(ctx).Error(err)
+			}
+		}
+		for _, cs := range channelSubs {
+			s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
+		}
+	}
+
 	for _, res := range req.Resources {
 		switch desc := res.Resource.(type) {
 		case *api.ResourceDescriptor_Document:
 			ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
 			if err != nil {
+				cleanup()
 				return nil, nil, nil, err
 			}
 			docSubs = append(docSubs, *ds)
@@ -537,6 +549,7 @@ func (s *yorkieServer) subscribeResources(
 		case *api.ResourceDescriptor_Channel:
 			cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
 			if err != nil {
+				cleanup()
 				return nil, nil, nil, err
 			}
 			channelSubs = append(channelSubs, *cs)
@@ -642,7 +655,11 @@ func (s *yorkieServer) streamMergedEvents(
 						return
 					}
 					e := event
-					merged <- taggedEvent{docEvent: &e, docID: ds.docID.String()}
+					select {
+					case merged <- taggedEvent{docEvent: &e, docID: ds.docID.String()}:
+					case <-done:
+						return
+					}
 				}
 			}
 		}(ds)
@@ -658,7 +675,11 @@ func (s *yorkieServer) streamMergedEvents(
 						return
 					}
 					e := event
-					merged <- taggedEvent{channelEvent: &e, channelKey: string(cs.channelKey)}
+					select {
+					case merged <- taggedEvent{channelEvent: &e, channelKey: string(cs.channelKey)}:
+					case <-done:
+						return
+					}
 				}
 			}
 		}(cs)
