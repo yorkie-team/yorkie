@@ -34,6 +34,10 @@ service YorkieService {
   rpc RemoveDocument (RemoveDocumentRequest) returns (RemoveDocumentResponse) {}
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
   rpc Watch (WatchRequest) returns (stream WatchResponse) {}
+  // Deprecated: Use Watch with ResourceDescriptor instead.
+  rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
+  // Deprecated: Use Watch with ResourceDescriptor instead.
+  rpc WatchChannel (WatchChannelRequest) returns (stream WatchChannelResponse) {}
 
   rpc CreateRevision (CreateRevisionRequest) returns (CreateRevisionResponse) {}
   rpc GetRevision (GetRevisionRequest) returns (GetRevisionResponse) {}
@@ -151,6 +155,44 @@ message DocWatchEvent {
 message ChannelWatchEvent {
   string channel_key = 1;
   ChannelEvent event = 2;
+}
+
+// Deprecated: Use WatchRequest instead.
+message WatchDocumentRequest {
+  string client_id = 1;
+  string document_id = 2;
+}
+
+// Deprecated: Use WatchResponse instead.
+message WatchDocumentResponse {
+  message Initialization {
+    repeated string client_ids = 1;
+  }
+
+  oneof body {
+    Initialization initialization = 1;
+    DocEvent event = 2;
+  }
+}
+
+// Deprecated: Use WatchRequest instead.
+message WatchChannelRequest {
+  string client_id = 1;
+  string channel_key = 2;
+}
+
+// Deprecated: Use WatchResponse instead.
+message WatchChannelResponse {
+  oneof body {
+    WatchChannelInitialized initialized = 1;
+    ChannelEvent event = 2;
+  }
+}
+
+// Deprecated: Use ChannelInit instead.
+message WatchChannelInitialized {
+  int64 session_count = 1;
+  int64 seq = 2;
 }
 
 message RemoveDocumentRequest {

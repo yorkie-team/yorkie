@@ -58,6 +58,8 @@ const (
 	RemoveDocument Method = "RemoveDocument"
 	PushPull       Method = "PushPull"
 	Watch          Method = "Watch"
+	WatchDocument  Method = "WatchDocument" // Deprecated: use Watch
+	WatchChannel   Method = "WatchChannel"  // Deprecated: use Watch
 
 	CreateRevision  Method = "CreateRevision"
 	GetRevision     Method = "GetRevision"
@@ -91,6 +93,8 @@ func AuthMethods() []Method {
 		RemoveDocument,
 		PushPull,
 		Watch,
+		WatchDocument,
+		WatchChannel,
 
 		CreateRevision,
 		GetRevision,

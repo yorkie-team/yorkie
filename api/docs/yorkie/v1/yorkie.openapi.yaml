@@ -190,6 +190,30 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/WatchChannel:
+    post:
+      description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/WatchDocument:
+    post:
+      description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
 components:
   requestBodies:
     yorkie.v1.YorkieService.ActivateClient.yorkie.v1.ActivateClientRequest:
@@ -319,6 +343,12 @@ components:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionRequest'
       required: true
     yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest:
+      content: {}
+      required: true
+    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest:
+      content: {}
+      required: true
+    yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest:
       content: {}
       required: true
   responses:
@@ -458,6 +488,10 @@ components:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionResponse'
       description: ""
     yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse:
+      description: ""
+    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse:
+      description: ""
+    yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse:
       description: ""
   schemas:
     connect.error:
@@ -2375,6 +2409,107 @@ components:
           - type: number
           title: value
       title: VectorEntry
+      type: object
+    yorkie.v1.WatchChannelInitialized:
+      additionalProperties: false
+      description: 'Deprecated: Use ChannelInit instead.'
+      properties:
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        sessionCount:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: session_count
+      title: WatchChannelInitialized
+      type: object
+    yorkie.v1.WatchChannelRequest:
+      additionalProperties: false
+      description: 'Deprecated: Use WatchRequest instead.'
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+      title: WatchChannelRequest
+      type: object
+    yorkie.v1.WatchChannelResponse:
+      additionalProperties: false
+      description: 'Deprecated: Use WatchResponse instead.'
+      properties:
+        event:
+          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+        initialized:
+          $ref: '#/components/schemas/yorkie.v1.WatchChannelInitialized'
+          additionalProperties: false
+          description: ""
+          title: initialized
+          type: object
+      title: WatchChannelResponse
+      type: object
+    yorkie.v1.WatchDocumentRequest:
+      additionalProperties: false
+      description: 'Deprecated: Use WatchRequest instead.'
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+      title: WatchDocumentRequest
+      type: object
+    yorkie.v1.WatchDocumentResponse:
+      additionalProperties: false
+      description: 'Deprecated: Use WatchResponse instead.'
+      properties:
+        event:
+          $ref: '#/components/schemas/yorkie.v1.DocEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+        initialization:
+          $ref: '#/components/schemas/yorkie.v1.WatchDocumentResponse.Initialization'
+          additionalProperties: false
+          description: ""
+          title: initialization
+          type: object
+      title: WatchDocumentResponse
+      type: object
+    yorkie.v1.WatchDocumentResponse.Initialization:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientIds:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: client_ids
+          type: array
+      title: Initialization
       type: object
     yorkie.v1.WatchEvent:
       additionalProperties: false

@@ -19,6 +19,7 @@ package types
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/errors"
@@ -125,6 +126,9 @@ type Project struct {
 }
 
 // RequireAuth returns whether the given method requires authorization.
+// It supports backward compatibility: the new Watch method matches projects
+// configured with "Watch", "WatchDocument", or "WatchChannel". The deprecated
+// WatchDocument/WatchChannel methods match their own name or "Watch".
 func (p *Project) RequireAuth(method Method) bool {
 	if len(p.AuthWebhookURL) == 0 {
 		return false
@@ -134,8 +138,21 @@ func (p *Project) RequireAuth(method Method) bool {
 		return false
 	}
 
+	// Backward-compat: build the set of configured methods that the
+	// given RPC method should match against.
+	aliases := map[Method][]Method{
+		Watch:         {Watch, WatchDocument, WatchChannel},
+		WatchDocument: {WatchDocument, Watch},
+		WatchChannel:  {WatchChannel, Watch},
+	}
+
+	targets := []Method{method}
+	if a, ok := aliases[method]; ok {
+		targets = a
+	}
+
 	for _, m := range p.AuthWebhookMethods {
-		if Method(m) == method {
+		if slices.Contains(targets, Method(m)) {
 			return true
 		}
 	}

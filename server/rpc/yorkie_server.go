@@ -798,6 +798,184 @@ func convertChannelEvent(channelKey string, event *events.ChannelEvent) (*api.Wa
 	return nil, nil
 }
 
+// WatchDocument is a deprecated shim that delegates to subscribeDocument and streamEvents.
+// Deprecated: Use Watch with ResourceDescriptor instead.
+func (s *yorkieServer) WatchDocument(
+	ctx context.Context,
+	req *connect.Request[api.WatchDocumentRequest],
+	stream *connect.ServerStream[api.WatchDocumentResponse],
+) error {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.WatchDocument,
+	}); err != nil {
+		return err
+	}
+
+	desc := &api.ResourceDescriptor_Document{
+		Document: &api.DocumentDescriptor{DocumentId: req.Msg.DocumentId},
+	}
+	ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
+	if err != nil {
+		return err
+	}
+
+	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
+	defer func() {
+		if err := s.unwatchDoc(ctx, ds.sub, ds.docKey); err != nil {
+			logging.From(ctx).Error(err)
+		}
+		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
+	}()
+
+	docInit := ri.GetDocumentInit()
+	if err := stream.Send(&api.WatchDocumentResponse{
+		Body: &api.WatchDocumentResponse_Initialization_{
+			Initialization: &api.WatchDocumentResponse_Initialization{
+				ClientIds: docInit.GetClientIds(),
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	return streamEvents(
+		ctx,
+		s.serviceCtx,
+		ds.sub,
+		stream.Send,
+		func(event events.DocEvent) (*api.WatchDocumentResponse, error) {
+			eventType, err := converter.ToDocEventType(event.Type)
+			if err != nil {
+				return nil, err
+			}
+			return &api.WatchDocumentResponse{
+				Body: &api.WatchDocumentResponse_Event{
+					Event: &api.DocEvent{
+						Type:      eventType,
+						Publisher: event.Actor.String(),
+						Body: &api.DocEventBody{
+							Topic:   event.Body.Topic,
+							Payload: event.Body.Payload,
+						},
+					},
+				},
+			}, nil
+		},
+		func(event events.DocEvent) {
+			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+				s.backend.Config.Hostname,
+				project,
+				event.Type,
+				event.Body.PayloadLen(),
+			)
+		},
+	)
+}
+
+// WatchChannel is a deprecated shim that delegates to subscribeChannel and streamEvents.
+// Deprecated: Use Watch with ResourceDescriptor instead.
+func (s *yorkieServer) WatchChannel(
+	ctx context.Context,
+	req *connect.Request[api.WatchChannelRequest],
+	stream *connect.ServerStream[api.WatchChannelResponse],
+) error {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.WatchChannel,
+	}); err != nil {
+		return err
+	}
+
+	desc := &api.ResourceDescriptor_Channel{
+		Channel: &api.ChannelDescriptor{ChannelKey: req.Msg.ChannelKey},
+	}
+	cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
+	}()
+
+	chInit := ri.GetChannelInit()
+	if err := stream.Send(&api.WatchChannelResponse{
+		Body: &api.WatchChannelResponse_Initialized{
+			Initialized: &api.WatchChannelInitialized{
+				SessionCount: chInit.GetSessionCount(),
+				Seq:          chInit.GetSeq(),
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	return streamEvents(
+		ctx,
+		s.serviceCtx,
+		cs.sub,
+		stream.Send,
+		func(event events.ChannelEvent) (*api.WatchChannelResponse, error) {
+			if event.Type == events.ChannelBroadcast {
+				return &api.WatchChannelResponse{
+					Body: &api.WatchChannelResponse_Event{
+						Event: &api.ChannelEvent{
+							Type:      api.ChannelEvent_TYPE_BROADCAST,
+							Publisher: event.Publisher.String(),
+							Topic:     event.Topic,
+							Payload:   event.Payload,
+						},
+					},
+				}, nil
+			}
+			if event.Seq > 0 {
+				return &api.WatchChannelResponse{
+					Body: &api.WatchChannelResponse_Event{
+						Event: &api.ChannelEvent{
+							Type:         api.ChannelEvent_TYPE_PRESENCE,
+							SessionCount: event.SessionCount,
+							Seq:          event.Seq,
+						},
+					},
+				}, nil
+			}
+			// Skip initial event with Seq 0
+			return nil, nil
+		},
+		nil,
+	)
+}
+
 // Broadcast broadcasts a message to all clients watching the presence.
 func (s *yorkieServer) Broadcast(
 	ctx context.Context,
