@@ -122,7 +122,7 @@ func DeactivateAsync(
 	project *types.Project,
 	refKey types.ClientRefKey,
 ) error {
-	be.Background.AttachGoroutine(func(ctx context.Context) {
+	be.Go(func(ctx context.Context) {
 		if _, err := Deactivate(ctx, be, project, refKey); err != nil {
 			logging.LogError(ctx, fmt.Errorf("deactivate client asynchronously: %w", err))
 		}

@@ -31,17 +31,17 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/server/backend/background"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestSnapshot(t *testing.T) {
-	var b *background.Background
+	var be *backend.Backend
 	patch, err := monkey.PatchInstanceMethodByName(
-		reflect.TypeOf(b),
-		"AttachGoroutine",
+		reflect.TypeOf(be),
+		"Go",
 		func(
-			_ *background.Background,
+			_ *backend.Backend,
 			f func(c context.Context),
 			_ string,
 		) {

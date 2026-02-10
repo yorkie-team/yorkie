@@ -824,46 +824,28 @@ func (s *adminServer) GetChannels(
 	}
 
 	// Group channel keys by their first key path for istio consistent hash sharding.
-	groups, err := groupByFirstKeyPath(uncachedKeys)
+	groups, err := groupByFirstPath(uncachedKeys)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use channels for result collection to work with AttachGoroutine
-	type groupResult struct {
-		channels []*types.ChannelSummary
-		err      error
-	}
-	resultCh := make(chan groupResult, len(groups))
-
-	for firstPath, keys := range groups {
-		s.backend.Background.AttachGoroutine(func(ctx context.Context) {
-			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
-			resultCh <- groupResult{channels: result, err: err}
-		}, "get-channels")
+	// Fan out cluster RPCs with server-wide concurrency limit.
+	results, err := backend.FanOut(
+		ctx, s.backend, groups,
+		func(ctx context.Context, firstPath string, keys []key.Key) ([]*types.ChannelSummary, error) {
+			return clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	// Collect results from all groups
-	var firstErr error
-	for range len(groups) {
-		res := <-resultCh
-		if res.err != nil && firstErr == nil {
-			firstErr = res.err
-		}
-		if res.err == nil {
-			// 4. Store results in cache
-			for _, ch := range res.channels {
-				cacheKey := makeChannelSessionCountCacheKey(project.ID, ch.Key, includeSubPath)
-				s.backend.Cache.SessionCount.Add(cacheKey, ch.SessionCount)
-			}
-			channels = append(channels, res.channels...)
-		}
+	// 4. Store results in cache
+	for _, ch := range results {
+		cacheKey := makeChannelSessionCountCacheKey(project.ID, ch.Key, includeSubPath)
+		s.backend.Cache.SessionCount.Add(cacheKey, ch.SessionCount)
 	}
-	close(resultCh)
-
-	if firstErr != nil {
-		return nil, firstErr
-	}
+	channels = append(channels, results...)
 
 	return connect.NewResponse(&api.GetChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
@@ -875,8 +857,8 @@ func makeChannelSessionCountCacheKey(projectID types.ID, channelKey key.Key, inc
 	return fmt.Sprintf("%s:%s:%t", projectID, channelKey, includeSubPath)
 }
 
-// groupByFirstKeyPath groups channel keys by their first key path segment.
-func groupByFirstKeyPath(channelKeys []string) (map[string][]key.Key, error) {
+// groupByFirstPath groups channel keys by their first key path segment.
+func groupByFirstPath(channelKeys []string) (map[string][]key.Key, error) {
 	groups := make(map[string][]key.Key)
 
 	for _, keyStr := range channelKeys {

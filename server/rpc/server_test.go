@@ -85,6 +85,7 @@ func TestMain(m *testing.M) {
 		ChannelSessionCountCacheSize:  helper.ChannelSessionCountCacheSize,
 		ClusterRPCTimeout:             helper.ClusterRPCTimeout,
 		ClusterClientTimeout:          helper.ClusterClientTimeout,
+		MaxConcurrentClusterRPCs:      helper.MaxConcurrentClusterRPCs,
 	}, &mongo.Config{
 		ConnectionURI:      helper.MongoConnectionURI,
 		YorkieDatabase:     helper.TestDBName(),
@@ -264,6 +265,10 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin get channels test", func(t *testing.T) {
 		testcases.RunAdminGetChannelsTest(t, testClient, testAdminClient)
+	})
+
+	t.Run("admin get channels multi path test", func(t *testing.T) {
+		testcases.RunAdminGetChannelsMultiPathTest(t, testClient, testAdminClient)
 	})
 }
 

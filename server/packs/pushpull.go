@@ -123,7 +123,7 @@ func PushPull(
 
 	// 03. publish document event and store the snapshot if needed.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
-		be.Background.AttachGoroutine(func(ctx context.Context) {
+		be.Go(func(ctx context.Context) {
 			publisher, err := clientInfo.ID.ToActorID()
 			if err != nil {
 				logging.From(ctx).Error(err)

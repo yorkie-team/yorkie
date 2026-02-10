@@ -906,14 +906,14 @@ func TestShardedPathTrie_ConcurrentRootValueOperations(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			st.GetOrInsert(fmt.Sprintf("p1.r%d", idx%10), nil, func() int {
-				return idx
+				return idx + 1
 			})
 		}(i)
 
 		// Insert root (overwrites)
 		go func(idx int) {
 			defer wg.Done()
-			st.Insert(fmt.Sprintf("p1.r%d", idx%10), nil, idx*100)
+			st.Insert(fmt.Sprintf("p1.r%d", idx%10), nil, (idx+1)*100)
 		}(i)
 	}
 

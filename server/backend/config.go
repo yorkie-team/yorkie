@@ -92,6 +92,11 @@ type Config struct {
 	// lifecycle of cluster communication, including DNS, connection, TLS,
 	// request and response. This acts as a safety net. Default is "30s".
 	ClusterClientTimeout string `yaml:"ClusterClientTimeout"`
+
+	// MaxConcurrentClusterRPCs is the maximum number of concurrent cluster
+	// RPC calls across the entire server. This prevents goroutine explosion
+	// when a cluster peer is slow or unresponsive. Default is 5000.
+	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
 }
 
 // Validate validates this config.
@@ -147,6 +152,12 @@ func (c *Config) Validate() error {
 				err,
 			)
 		}
+	}
+	if c.MaxConcurrentClusterRPCs <= 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
+			c.MaxConcurrentClusterRPCs,
+		)
 	}
 
 	return nil

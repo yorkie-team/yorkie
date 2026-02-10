@@ -308,7 +308,7 @@ func (c *Client) GetChannels(
 	ctx context.Context,
 	project *types.Project,
 	channelKeys []key.Key,
-	firstKeyPath string,
+	firstPath string,
 	includeSubPath bool,
 ) ([]*types.ChannelSummary, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
@@ -325,7 +325,7 @@ func (c *Client) GetChannels(
 			ProjectId:      project.ID.String(),
 			ChannelKeys:    keyStrings,
 			IncludeSubPath: includeSubPath,
-		}), project.PublicKey, firstKeyPath),
+		}), project.PublicKey, firstPath),
 	)
 	if err != nil {
 		return nil, fromConnectError(err)
