@@ -32,7 +32,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		newAuthWebhookURL := "http://localhost:3000"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
-			string(types.WatchDocument),
+			string(types.Watch),
 		}
 		newAuthWebhookMaxRetries := uint64(10)
 		newAuthWebhookMinWaitInterval := "10ms"

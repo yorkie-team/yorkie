@@ -624,11 +624,17 @@ func RunWatchDocumentTest(
 	assert.NoError(t, err)
 
 	// watch document
-	watchResp, err := testClient.WatchDocument(
+	watchResp, err := testClient.Watch(
 		context.Background(),
-		connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:   activateResp.Msg.ClientId,
-			DocumentId: resPack.Msg.DocumentId,
+		connect.NewRequest(&api.WatchRequest{
+			ClientId: activateResp.Msg.ClientId,
+			Resources: []*api.ResourceDescriptor{{
+				Resource: &api.ResourceDescriptor_Document{
+					Document: &api.DocumentDescriptor{
+						DocumentId: resPack.Msg.DocumentId,
+					},
+				},
+			}},
 		},
 		))
 	assert.NoError(t, err)
@@ -733,11 +739,17 @@ func RunMaxSubscribersPerDocumentConcurrencyTest(
 				))
 			assert.NoError(t, err)
 
-			watchResp, err := testClient.WatchDocument(
+			watchResp, err := testClient.Watch(
 				context.Background(),
-				connect.NewRequest(&api.WatchDocumentRequest{
-					ClientId:   id,
-					DocumentId: resPack.Msg.DocumentId,
+				connect.NewRequest(&api.WatchRequest{
+					ClientId: id,
+					Resources: []*api.ResourceDescriptor{{
+						Resource: &api.ResourceDescriptor_Document{
+							Document: &api.DocumentDescriptor{
+								DocumentId: resPack.Msg.DocumentId,
+							},
+						},
+					}},
 				},
 				))
 			assert.NoError(t, err)

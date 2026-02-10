@@ -33,7 +33,11 @@ service YorkieService {
   rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
   rpc RemoveDocument (RemoveDocumentRequest) returns (RemoveDocumentResponse) {}
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
+  rpc Watch (WatchRequest) returns (stream WatchResponse) {}
+  // Deprecated: Use Watch with ResourceDescriptor instead.
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
+  // Deprecated: Use Watch with ResourceDescriptor instead.
+  rpc WatchChannel (WatchChannelRequest) returns (stream WatchChannelResponse) {}
 
   rpc CreateRevision (CreateRevisionRequest) returns (CreateRevisionResponse) {}
   rpc GetRevision (GetRevisionRequest) returns (GetRevisionResponse) {}
@@ -43,7 +47,6 @@ service YorkieService {
   rpc AttachChannel (AttachChannelRequest) returns (AttachChannelResponse) {}
   rpc DetachChannel (DetachChannelRequest) returns (DetachChannelResponse) {}
   rpc RefreshChannel (RefreshChannelRequest) returns (RefreshChannelResponse) {}
-  rpc WatchChannel (WatchChannelRequest) returns (stream WatchChannelResponse) {}
   rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
 }
 
@@ -88,11 +91,79 @@ message DetachDocumentResponse {
   ChangePack change_pack = 2;
 }
 
+message WatchRequest {
+  string client_id = 1;
+  repeated ResourceDescriptor resources = 2;
+}
+
+message ResourceDescriptor {
+  oneof resource {
+    DocumentDescriptor document = 1;
+    ChannelDescriptor channel = 2;
+  }
+}
+
+message DocumentDescriptor {
+  string document_id = 1;
+}
+
+message ChannelDescriptor {
+  string channel_key = 1;
+}
+
+message WatchResponse {
+  oneof body {
+    WatchInitialization initialization = 1;
+    WatchEvent event = 2;
+  }
+}
+
+message WatchInitialization {
+  repeated ResourceInit resource_inits = 1;
+}
+
+message ResourceInit {
+  oneof init {
+    DocumentInit document_init = 1;
+    ChannelInit channel_init = 2;
+  }
+}
+
+message DocumentInit {
+  string document_id = 1;
+  repeated string client_ids = 2;
+}
+
+message ChannelInit {
+  string channel_key = 1;
+  int64 session_count = 2;
+  int64 seq = 3;
+}
+
+message WatchEvent {
+  oneof event {
+    DocWatchEvent doc_event = 1;
+    ChannelWatchEvent channel_event = 2;
+  }
+}
+
+message DocWatchEvent {
+  string document_id = 1;
+  DocEvent event = 2;
+}
+
+message ChannelWatchEvent {
+  string channel_key = 1;
+  ChannelEvent event = 2;
+}
+
+// Deprecated: Use WatchRequest instead.
 message WatchDocumentRequest {
   string client_id = 1;
   string document_id = 2;
 }
 
+// Deprecated: Use WatchResponse instead.
 message WatchDocumentResponse {
   message Initialization {
     repeated string client_ids = 1;
@@ -102,6 +173,26 @@ message WatchDocumentResponse {
     Initialization initialization = 1;
     DocEvent event = 2;
   }
+}
+
+// Deprecated: Use WatchRequest instead.
+message WatchChannelRequest {
+  string client_id = 1;
+  string channel_key = 2;
+}
+
+// Deprecated: Use WatchResponse instead.
+message WatchChannelResponse {
+  oneof body {
+    WatchChannelInitialized initialized = 1;
+    ChannelEvent event = 2;
+  }
+}
+
+// Deprecated: Use ChannelInit instead.
+message WatchChannelInitialized {
+  int64 session_count = 1;
+  int64 seq = 2;
 }
 
 message RemoveDocumentRequest {
@@ -195,23 +286,6 @@ message RefreshChannelRequest {
 
 message RefreshChannelResponse {
   int64 session_count = 1;
-}
-
-message WatchChannelRequest {
-  string client_id = 1;
-  string channel_key = 2;
-}
-
-message WatchChannelResponse {
-  oneof body {
-    WatchChannelInitialized initialized = 1;
-    ChannelEvent event = 2;
-  }
-}
-
-message WatchChannelInitialized {
-  int64 session_count = 1;
-  int64 seq = 2;
 }
 
 message BroadcastRequest {

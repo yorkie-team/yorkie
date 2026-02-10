@@ -178,9 +178,21 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
-  /yorkie.v1.YorkieService/WatchChannel:
+  /yorkie.v1.YorkieService/Watch:
     post:
       description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/WatchChannel:
+    post:
+      description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
       requestBody:
         $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest'
       responses:
@@ -192,7 +204,7 @@ paths:
       - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/WatchDocument:
     post:
-      description: ""
+      description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
       requestBody:
         $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest'
       responses:
@@ -329,6 +341,9 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionRequest'
+      required: true
+    yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest:
+      content: {}
       required: true
     yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest:
       content: {}
@@ -471,6 +486,8 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionResponse'
+      description: ""
+    yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse:
       description: ""
     yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse:
       description: ""
@@ -878,6 +895,17 @@ components:
           type: object
       title: ChangePack
       type: object
+    yorkie.v1.ChannelDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+      title: ChannelDescriptor
+      type: object
     yorkie.v1.ChannelEvent:
       additionalProperties: false
       description: ""
@@ -930,6 +958,48 @@ components:
         - 2
       title: Type
       type: string
+    yorkie.v1.ChannelInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        seq:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: seq
+        sessionCount:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: session_count
+      title: ChannelInit
+      type: object
+    yorkie.v1.ChannelWatchEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+        event:
+          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+      title: ChannelWatchEvent
+      type: object
     yorkie.v1.Checkpoint:
       additionalProperties: false
       description: ""
@@ -1132,6 +1202,52 @@ components:
         - 3
       title: DocEventType
       type: string
+    yorkie.v1.DocWatchEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+        event:
+          $ref: '#/components/schemas/yorkie.v1.DocEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+      title: DocWatchEvent
+      type: object
+    yorkie.v1.DocumentDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+      title: DocumentDescriptor
+      type: object
+    yorkie.v1.DocumentInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientIds:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: client_ids
+          type: array
+        documentId:
+          additionalProperties: false
+          description: ""
+          title: document_id
+          type: string
+      title: DocumentInit
+      type: object
     yorkie.v1.GetRevisionRequest:
       additionalProperties: false
       description: ""
@@ -1960,6 +2076,42 @@ components:
           type: object
       title: RemoveDocumentResponse
       type: object
+    yorkie.v1.ResourceDescriptor:
+      additionalProperties: false
+      description: ""
+      properties:
+        channel:
+          $ref: '#/components/schemas/yorkie.v1.ChannelDescriptor'
+          additionalProperties: false
+          description: ""
+          title: channel
+          type: object
+        document:
+          $ref: '#/components/schemas/yorkie.v1.DocumentDescriptor'
+          additionalProperties: false
+          description: ""
+          title: document
+          type: object
+      title: ResourceDescriptor
+      type: object
+    yorkie.v1.ResourceInit:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelInit:
+          $ref: '#/components/schemas/yorkie.v1.ChannelInit'
+          additionalProperties: false
+          description: ""
+          title: channel_init
+          type: object
+        documentInit:
+          $ref: '#/components/schemas/yorkie.v1.DocumentInit'
+          additionalProperties: false
+          description: ""
+          title: document_init
+          type: object
+      title: ResourceInit
+      type: object
     yorkie.v1.RestoreRevisionRequest:
       additionalProperties: false
       description: ""
@@ -2260,7 +2412,7 @@ components:
       type: object
     yorkie.v1.WatchChannelInitialized:
       additionalProperties: false
-      description: ""
+      description: 'Deprecated: Use ChannelInit instead.'
       properties:
         seq:
           additionalProperties: false
@@ -2280,7 +2432,7 @@ components:
       type: object
     yorkie.v1.WatchChannelRequest:
       additionalProperties: false
-      description: ""
+      description: 'Deprecated: Use WatchRequest instead.'
       properties:
         channelKey:
           additionalProperties: false
@@ -2296,7 +2448,7 @@ components:
       type: object
     yorkie.v1.WatchChannelResponse:
       additionalProperties: false
-      description: ""
+      description: 'Deprecated: Use WatchResponse instead.'
       properties:
         event:
           $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
@@ -2314,7 +2466,7 @@ components:
       type: object
     yorkie.v1.WatchDocumentRequest:
       additionalProperties: false
-      description: ""
+      description: 'Deprecated: Use WatchRequest instead.'
       properties:
         clientId:
           additionalProperties: false
@@ -2330,7 +2482,7 @@ components:
       type: object
     yorkie.v1.WatchDocumentResponse:
       additionalProperties: false
-      description: ""
+      description: 'Deprecated: Use WatchResponse instead.'
       properties:
         event:
           $ref: '#/components/schemas/yorkie.v1.DocEvent'
@@ -2358,6 +2510,75 @@ components:
           title: client_ids
           type: array
       title: Initialization
+      type: object
+    yorkie.v1.WatchEvent:
+      additionalProperties: false
+      description: ""
+      properties:
+        channelEvent:
+          $ref: '#/components/schemas/yorkie.v1.ChannelWatchEvent'
+          additionalProperties: false
+          description: ""
+          title: channel_event
+          type: object
+        docEvent:
+          $ref: '#/components/schemas/yorkie.v1.DocWatchEvent'
+          additionalProperties: false
+          description: ""
+          title: doc_event
+          type: object
+      title: WatchEvent
+      type: object
+    yorkie.v1.WatchInitialization:
+      additionalProperties: false
+      description: ""
+      properties:
+        resourceInits:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ResourceInit'
+            type: object
+          title: resource_inits
+          type: array
+      title: WatchInitialization
+      type: object
+    yorkie.v1.WatchRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        clientId:
+          additionalProperties: false
+          description: ""
+          title: client_id
+          type: string
+        resources:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ResourceDescriptor'
+            type: object
+          title: resources
+          type: array
+      title: WatchRequest
+      type: object
+    yorkie.v1.WatchResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        event:
+          $ref: '#/components/schemas/yorkie.v1.WatchEvent'
+          additionalProperties: false
+          description: ""
+          title: event
+          type: object
+        initialization:
+          $ref: '#/components/schemas/yorkie.v1.WatchInitialization'
+          additionalProperties: false
+          description: ""
+          title: initialization
+          type: object
+      title: WatchResponse
       type: object
   securitySchemes:
     ApiKeyAuth:

@@ -434,72 +434,516 @@ func (s *yorkieServer) RefreshChannel(
 	return connect.NewResponse(response), nil
 }
 
-// WatchChannel connects the stream to deliver channel updates.
-func (s *yorkieServer) WatchChannel(
+// taggedEvent wraps a doc or channel event for fan-in multiplexing.
+type taggedEvent struct {
+	docEvent     *events.DocEvent
+	channelEvent *events.ChannelEvent
+	docID        string
+	channelKey   string
+}
+
+// docSub holds a document subscription with its identifiers.
+type docSub struct {
+	docID  types.ID
+	docKey types.DocRefKey
+	sub    *pubsub.DocSubscription
+}
+
+// channelSub holds a channel subscription with its identifiers.
+type channelSub struct {
+	channelKey key.Key
+	refKey     types.ChannelRefKey
+	sub        *pubsub.ChannelSubscription
+}
+
+// Watch connects a unified stream to deliver events from documents and channels
+// to the requesting client.
+func (s *yorkieServer) Watch(
 	ctx context.Context,
-	req *connect.Request[api.WatchChannelRequest],
-	stream *connect.ServerStream[api.WatchChannelResponse],
+	req *connect.Request[api.WatchRequest],
+	stream *connect.ServerStream[api.WatchResponse],
 ) error {
-	// 01. Validate the request and verify access
-	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
-		return err
-	}
-	channelKey := key.Key(req.Msg.ChannelKey)
-	if err := channelKey.Validate(); err != nil {
-		return err
-	}
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchChannel,
-		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.Read),
-	}); err != nil {
 		return err
 	}
 
 	project := projects.From(ctx)
-
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.Watch,
+	}); err != nil {
+		return err
+	}
+
+	docSubs, channelSubs, resourceInits, err := s.subscribeResources(ctx, req.Msg, clientID, project)
 	if err != nil {
 		return err
 	}
 
-	// 02. Create ChannelRefKey and subscribe to channel updates
-	refKey := types.ChannelRefKey{
-		ProjectID:  project.ID,
-		ChannelKey: channelKey,
-	}
-
-	subscription, _, err := s.backend.PubSub.SubscribeChannel(ctx, actorID, refKey)
-	if err != nil {
-		return err
-	}
-
-	// 03. Ensure cleanup when stream ends
+	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
 	defer func() {
-		s.backend.PubSub.UnsubscribeChannel(ctx, refKey, subscription)
+		for _, ds := range docSubs {
+			if err := s.unwatchDoc(ctx, ds.sub, ds.docKey); err != nil {
+				logging.From(ctx).Error(err)
+			}
+		}
+		for _, cs := range channelSubs {
+			s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
+		}
+		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
 	}()
 
-	// 04. Send initial session count
-	sessionCount := s.backend.Channel.SessionCount(refKey, false)
-	if err := stream.Send(&api.WatchChannelResponse{
-		Body: &api.WatchChannelResponse_Initialized{
-			Initialized: &api.WatchChannelInitialized{
-				SessionCount: sessionCount,
-				Seq:          0,
+	if err := stream.Send(&api.WatchResponse{
+		Body: &api.WatchResponse_Initialization{
+			Initialization: &api.WatchInitialization{
+				ResourceInits: resourceInits,
 			},
 		},
 	}); err != nil {
 		return err
 	}
 
-	// 05. Stream session count updates and broadcast events
+	return s.streamMergedEvents(ctx, stream, project, docSubs, channelSubs)
+}
+
+// subscribeResources subscribes to each document and channel resource in the request.
+func (s *yorkieServer) subscribeResources(
+	ctx context.Context,
+	req *api.WatchRequest,
+	clientID time.ActorID,
+	project *types.Project,
+) ([]docSub, []channelSub, []*api.ResourceInit, error) {
+	var docSubs []docSub
+	var channelSubs []channelSub
+	var resourceInits []*api.ResourceInit
+
+	cleanup := func() {
+		for _, ds := range docSubs {
+			if err := s.unwatchDoc(ctx, ds.sub, ds.docKey); err != nil {
+				logging.From(ctx).Error(err)
+			}
+		}
+		for _, cs := range channelSubs {
+			s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
+		}
+	}
+
+	for _, res := range req.Resources {
+		switch desc := res.Resource.(type) {
+		case *api.ResourceDescriptor_Document:
+			ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
+			if err != nil {
+				cleanup()
+				return nil, nil, nil, err
+			}
+			docSubs = append(docSubs, *ds)
+			resourceInits = append(resourceInits, ri)
+
+		case *api.ResourceDescriptor_Channel:
+			cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
+			if err != nil {
+				cleanup()
+				return nil, nil, nil, err
+			}
+			channelSubs = append(channelSubs, *cs)
+			resourceInits = append(resourceInits, ri)
+		}
+	}
+
+	return docSubs, channelSubs, resourceInits, nil
+}
+
+// subscribeDocument subscribes to a single document and returns its subscription and init data.
+func (s *yorkieServer) subscribeDocument(
+	ctx context.Context,
+	desc *api.ResourceDescriptor_Document,
+	clientID time.ActorID,
+	project *types.Project,
+) (*docSub, *api.ResourceInit, error) {
+	docID, err := converter.FromDocumentID(desc.Document.DocumentId)
+	if err != nil {
+		return nil, nil, err
+	}
+	dk := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, dk)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
+	defer locker.Unlock()
+
+	sub, clientIDs, err := s.watchDoc(ctx, clientID, dk, project.MaxSubscribersPerDocument)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var pbClientIDs []string
+	for _, id := range clientIDs {
+		pbClientIDs = append(pbClientIDs, id.String())
+	}
+
+	return &docSub{docID: docID, docKey: dk, sub: sub}, &api.ResourceInit{
+		Init: &api.ResourceInit_DocumentInit{
+			DocumentInit: &api.DocumentInit{
+				DocumentId: docID.String(),
+				ClientIds:  pbClientIDs,
+			},
+		},
+	}, nil
+}
+
+// subscribeChannel subscribes to a single channel and returns its subscription and init data.
+func (s *yorkieServer) subscribeChannel(
+	ctx context.Context,
+	desc *api.ResourceDescriptor_Channel,
+	clientID time.ActorID,
+	project *types.Project,
+) (*channelSub, *api.ResourceInit, error) {
+	channelKey := key.Key(desc.Channel.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, nil, err
+	}
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
+	}
+	sub, _, err := s.backend.PubSub.SubscribeChannel(ctx, clientID, refKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sessionCount := s.backend.Channel.SessionCount(refKey, false)
+	return &channelSub{channelKey: channelKey, refKey: refKey, sub: sub}, &api.ResourceInit{
+		Init: &api.ResourceInit_ChannelInit{
+			ChannelInit: &api.ChannelInit{
+				ChannelKey:   string(channelKey),
+				SessionCount: sessionCount,
+				Seq:          0,
+			},
+		},
+	}, nil
+}
+
+// streamMergedEvents fans in events from all subscriptions and streams them.
+func (s *yorkieServer) streamMergedEvents(
+	ctx context.Context,
+	stream *connect.ServerStream[api.WatchResponse],
+	project *types.Project,
+	docSubs []docSub,
+	channelSubs []channelSub,
+) error {
+	merged := make(chan taggedEvent, len(docSubs)+len(channelSubs))
+	done := make(chan struct{})
+	defer close(done)
+
+	for _, ds := range docSubs {
+		go func(ds docSub) {
+			for {
+				select {
+				case <-done:
+					return
+				case event, ok := <-ds.sub.Events():
+					if !ok {
+						return
+					}
+					e := event
+					select {
+					case merged <- taggedEvent{docEvent: &e, docID: ds.docID.String()}:
+					case <-done:
+						return
+					}
+				}
+			}
+		}(ds)
+	}
+	for _, cs := range channelSubs {
+		go func(cs channelSub) {
+			for {
+				select {
+				case <-done:
+					return
+				case event, ok := <-cs.sub.Events():
+					if !ok {
+						return
+					}
+					e := event
+					select {
+					case merged <- taggedEvent{channelEvent: &e, channelKey: string(cs.channelKey)}:
+					case <-done:
+						return
+					}
+				}
+			}
+		}(cs)
+	}
+
+	for {
+		select {
+		case <-s.serviceCtx.Done():
+			return context.Canceled
+		case <-ctx.Done():
+			return context.Canceled
+		case te := <-merged:
+			resp, err := s.convertTaggedEvent(te)
+			if err != nil {
+				logging.From(ctx).Errorf("failed to convert event: %v", err)
+				continue
+			}
+			if resp == nil {
+				continue
+			}
+
+			if te.docEvent != nil {
+				s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+					s.backend.Config.Hostname,
+					project,
+					te.docEvent.Type,
+					te.docEvent.Body.PayloadLen(),
+				)
+			}
+
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// convertTaggedEvent converts a tagged event into a WatchResponse.
+// Returns nil response for events that should be skipped.
+func (s *yorkieServer) convertTaggedEvent(te taggedEvent) (*api.WatchResponse, error) {
+	if te.docEvent != nil {
+		eventType, err := converter.ToDocEventType(te.docEvent.Type)
+		if err != nil {
+			return nil, err
+		}
+		return &api.WatchResponse{
+			Body: &api.WatchResponse_Event{
+				Event: &api.WatchEvent{
+					Event: &api.WatchEvent_DocEvent{
+						DocEvent: &api.DocWatchEvent{
+							DocumentId: te.docID,
+							Event: &api.DocEvent{
+								Type:      eventType,
+								Publisher: te.docEvent.Actor.String(),
+								Body: &api.DocEventBody{
+									Topic:   te.docEvent.Body.Topic,
+									Payload: te.docEvent.Body.Payload,
+								},
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	if te.channelEvent != nil {
+		return convertChannelEvent(te.channelKey, te.channelEvent)
+	}
+
+	return nil, nil
+}
+
+// convertChannelEvent converts a channel event into a WatchResponse.
+func convertChannelEvent(channelKey string, event *events.ChannelEvent) (*api.WatchResponse, error) {
+	if event.Type == events.ChannelBroadcast {
+		return &api.WatchResponse{
+			Body: &api.WatchResponse_Event{
+				Event: &api.WatchEvent{
+					Event: &api.WatchEvent_ChannelEvent{
+						ChannelEvent: &api.ChannelWatchEvent{
+							ChannelKey: channelKey,
+							Event: &api.ChannelEvent{
+								Type:      api.ChannelEvent_TYPE_BROADCAST,
+								Publisher: event.Publisher.String(),
+								Topic:     event.Topic,
+								Payload:   event.Payload,
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	if event.Seq > 0 {
+		return &api.WatchResponse{
+			Body: &api.WatchResponse_Event{
+				Event: &api.WatchEvent{
+					Event: &api.WatchEvent_ChannelEvent{
+						ChannelEvent: &api.ChannelWatchEvent{
+							ChannelKey: channelKey,
+							Event: &api.ChannelEvent{
+								Type:         api.ChannelEvent_TYPE_PRESENCE,
+								SessionCount: event.SessionCount,
+								Seq:          event.Seq,
+							},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	// Skip initial event with Seq 0
+	return nil, nil
+}
+
+// WatchDocument is a deprecated shim that delegates to subscribeDocument and streamEvents.
+// Deprecated: Use Watch with ResourceDescriptor instead.
+func (s *yorkieServer) WatchDocument(
+	ctx context.Context,
+	req *connect.Request[api.WatchDocumentRequest],
+	stream *connect.ServerStream[api.WatchDocumentResponse],
+) error {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.WatchDocument,
+	}); err != nil {
+		return err
+	}
+
+	desc := &api.ResourceDescriptor_Document{
+		Document: &api.DocumentDescriptor{DocumentId: req.Msg.DocumentId},
+	}
+	ds, ri, err := s.subscribeDocument(ctx, desc, clientID, project)
+	if err != nil {
+		return err
+	}
+
+	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
+	defer func() {
+		if err := s.unwatchDoc(ctx, ds.sub, ds.docKey); err != nil {
+			logging.From(ctx).Error(err)
+		}
+		s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
+	}()
+
+	docInit := ri.GetDocumentInit()
+	if err := stream.Send(&api.WatchDocumentResponse{
+		Body: &api.WatchDocumentResponse_Initialization_{
+			Initialization: &api.WatchDocumentResponse_Initialization{
+				ClientIds: docInit.GetClientIds(),
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
 	return streamEvents(
 		ctx,
 		s.serviceCtx,
-		subscription,
+		ds.sub,
+		stream.Send,
+		func(event events.DocEvent) (*api.WatchDocumentResponse, error) {
+			eventType, err := converter.ToDocEventType(event.Type)
+			if err != nil {
+				return nil, err
+			}
+			return &api.WatchDocumentResponse{
+				Body: &api.WatchDocumentResponse_Event{
+					Event: &api.DocEvent{
+						Type:      eventType,
+						Publisher: event.Actor.String(),
+						Body: &api.DocEventBody{
+							Topic:   event.Body.Topic,
+							Payload: event.Body.Payload,
+						},
+					},
+				},
+			}, nil
+		},
+		func(event events.DocEvent) {
+			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
+				s.backend.Config.Hostname,
+				project,
+				event.Type,
+				event.Body.PayloadLen(),
+			)
+		},
+	)
+}
+
+// WatchChannel is a deprecated shim that delegates to subscribeChannel and streamEvents.
+// Deprecated: Use Watch with ResourceDescriptor instead.
+func (s *yorkieServer) WatchChannel(
+	ctx context.Context,
+	req *connect.Request[api.WatchChannelRequest],
+	stream *connect.ServerStream[api.WatchChannelResponse],
+) error {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	if err != nil {
+		return err
+	}
+
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.WatchChannel,
+	}); err != nil {
+		return err
+	}
+
+	desc := &api.ResourceDescriptor_Channel{
+		Channel: &api.ChannelDescriptor{ChannelKey: req.Msg.ChannelKey},
+	}
+	cs, ri, err := s.subscribeChannel(ctx, desc, clientID, project)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		s.backend.PubSub.UnsubscribeChannel(ctx, cs.refKey, cs.sub)
+	}()
+
+	chInit := ri.GetChannelInit()
+	if err := stream.Send(&api.WatchChannelResponse{
+		Body: &api.WatchChannelResponse_Initialized{
+			Initialized: &api.WatchChannelInitialized{
+				SessionCount: chInit.GetSessionCount(),
+				Seq:          chInit.GetSeq(),
+			},
+		},
+	}); err != nil {
+		return err
+	}
+
+	return streamEvents(
+		ctx,
+		s.serviceCtx,
+		cs.sub,
 		stream.Send,
 		func(event events.ChannelEvent) (*api.WatchChannelResponse, error) {
 			if event.Type == events.ChannelBroadcast {
@@ -514,7 +958,6 @@ func (s *yorkieServer) WatchChannel(
 					},
 				}, nil
 			}
-
 			if event.Seq > 0 {
 				return &api.WatchChannelResponse{
 					Body: &api.WatchChannelResponse_Event{
@@ -526,7 +969,6 @@ func (s *yorkieServer) WatchChannel(
 					},
 				}, nil
 			}
-
 			// Skip initial event with Seq 0
 			return nil, nil
 		},
@@ -804,108 +1246,6 @@ func (s *yorkieServer) RemoveDocument(
 	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}), nil
-}
-
-// WatchDocument connects the stream to deliver events from the given documents
-// to the requesting client.
-func (s *yorkieServer) WatchDocument(
-	ctx context.Context,
-	req *connect.Request[api.WatchDocumentRequest],
-	stream *connect.ServerStream[api.WatchDocumentResponse],
-) error {
-	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
-	if err != nil {
-		return err
-	}
-
-	project := projects.From(ctx)
-	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
-	if err != nil {
-		return err
-	}
-
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
-	}); err != nil {
-		return err
-	}
-
-	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
-	if err != nil {
-		return nil
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchDocument,
-		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
-	}); err != nil {
-		return err
-	}
-
-	locker := s.backend.Lockers.Locker(documents.DocWatchStreamKey(clientID, docInfo.Key))
-	defer locker.Unlock()
-	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docKey, project.MaxSubscribersPerDocument)
-	if err != nil {
-		return err
-	}
-
-	s.backend.Metrics.AddWatchDocumentConnections(s.backend.Config.Hostname, project)
-	defer func() {
-		if err := s.unwatchDoc(ctx, subscription, docKey); err != nil {
-			logging.From(ctx).Error(err)
-		} else {
-			s.backend.Metrics.RemoveWatchDocumentConnections(s.backend.Config.Hostname, project)
-		}
-	}()
-
-	var pbClientIDs []string
-	for _, id := range clientIDs {
-		pbClientIDs = append(pbClientIDs, id.String())
-	}
-	if err := stream.Send(&api.WatchDocumentResponse{
-		Body: &api.WatchDocumentResponse_Initialization_{
-			Initialization: &api.WatchDocumentResponse_Initialization{
-				ClientIds: pbClientIDs,
-			},
-		},
-	}); err != nil {
-		return err
-	}
-
-	return streamEvents(
-		ctx,
-		s.serviceCtx,
-		subscription,
-		stream.Send,
-		func(event events.DocEvent) (*api.WatchDocumentResponse, error) {
-			eventType, err := converter.ToDocEventType(event.Type)
-			if err != nil {
-				return nil, err
-			}
-			return &api.WatchDocumentResponse{
-				Body: &api.WatchDocumentResponse_Event{
-					Event: &api.DocEvent{
-						Type:      eventType,
-						Publisher: event.Actor.String(),
-						Body: &api.DocEventBody{
-							Topic:   event.Body.Topic,
-							Payload: event.Body.Payload,
-						},
-					},
-				},
-			}, nil
-		},
-		func(event events.DocEvent) {
-			s.backend.Metrics.AddWatchDocumentEventPayloadBytes(
-				s.backend.Config.Hostname,
-				project,
-				event.Type,
-				event.Body.PayloadLen(),
-			)
-		},
-	)
 }
 
 // CreateRevision creates a new revision for the given document.

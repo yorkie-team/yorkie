@@ -719,12 +719,18 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 	// Create context for the watch stream
 	watchCtx, cancel := context.WithCancel(ctx)
 
-	// Start the watch stream using channel key
-	stream, err := c.client.WatchChannel(
+	// Start the watch stream using unified Watch RPC
+	stream, err := c.client.Watch(
 		watchCtx,
-		withShardKey(connect.NewRequest(&api.WatchChannelRequest{
-			ClientId:   c.id.String(),
-			ChannelKey: ch.Key().String(),
+		withShardKey(connect.NewRequest(&api.WatchRequest{
+			ClientId: c.id.String(),
+			Resources: []*api.ResourceDescriptor{{
+				Resource: &api.ResourceDescriptor_Channel{
+					Channel: &api.ChannelDescriptor{
+						ChannelKey: ch.Key().String(),
+					},
+				},
+			}},
 		}), c.options.APIKey, ch.FirstKeyPath()))
 	if err != nil {
 		cancel()
@@ -755,32 +761,34 @@ func (c *Client) WatchChannel(ctx context.Context, ch *channel.Channel) (<-chan 
 
 				msg := stream.Msg()
 				switch body := msg.Body.(type) {
-				case *api.WatchChannelResponse_Initialized:
-					// Always accept initial session count and update counter
-					ch.UpdateSessionCount(body.Initialized.SessionCount, body.Initialized.Seq)
-					select {
-					case countChan <- body.Initialized.SessionCount:
-					case <-watchCtx.Done():
-						return
-					}
-				case *api.WatchChannelResponse_Event:
-					// Let Counter decide whether to accept the update based on sequence
-					if body.Event != nil {
-						// Handle broadcast events
-						if body.Event.Type == api.ChannelEvent_TYPE_BROADCAST {
-							// If the handler exists, it means that the broadcast topic has been subscribed to.
-							if handler, ok := ch.BroadcastEventHandlers()[body.Event.Topic]; ok && handler != nil {
-								_ = handler(body.Event.Topic, body.Event.Publisher, body.Event.Payload)
-							}
-						} else if ch.UpdateSessionCount(body.Event.SessionCount, body.Event.Seq) {
-							// Only send to channel if Counter accepted the update
+				case *api.WatchResponse_Initialization:
+					for _, init := range body.Initialization.ResourceInits {
+						if ci, ok := init.Init.(*api.ResourceInit_ChannelInit); ok {
+							ch.UpdateSessionCount(ci.ChannelInit.SessionCount, ci.ChannelInit.Seq)
 							select {
-							case countChan <- body.Event.SessionCount:
+							case countChan <- ci.ChannelInit.SessionCount:
 							case <-watchCtx.Done():
 								return
 							}
 						}
-						// Counter automatically drops out-of-order events
+					}
+				case *api.WatchResponse_Event:
+					if ce, ok := body.Event.Event.(*api.WatchEvent_ChannelEvent); ok {
+						event := ce.ChannelEvent.Event
+						if event != nil {
+							// Handle broadcast events
+							if event.Type == api.ChannelEvent_TYPE_BROADCAST {
+								if handler, ok := ch.BroadcastEventHandlers()[event.Topic]; ok && handler != nil {
+									_ = handler(event.Topic, event.Publisher, event.Payload)
+								}
+							} else if ch.UpdateSessionCount(event.SessionCount, event.Seq) {
+								select {
+								case countChan <- event.SessionCount:
+								case <-watchCtx.Done():
+									return
+								}
+							}
+						}
 					}
 				}
 			}
@@ -843,7 +851,7 @@ func (c *Client) WatchStream(
 	return attachment.watchStream, attachment.closeWatchStream, nil
 }
 
-// runWatchLoop subscribes to events on a given documentIDs.
+// runWatchLoop subscribes to events on a given document using the unified Watch RPC.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "watchCtx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
@@ -854,11 +862,17 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 		return ErrNotAttached
 	}
 
-	stream, err := c.client.WatchDocument(
+	stream, err := c.client.Watch(
 		ctx,
-		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.resourceID.String(),
+		withShardKey(connect.NewRequest(&api.WatchRequest{
+			ClientId: c.id.String(),
+			Resources: []*api.ResourceDescriptor{{
+				Resource: &api.ResourceDescriptor_Document{
+					Document: &api.DocumentDescriptor{
+						DocumentId: attachment.resourceID.String(),
+					},
+				},
+			}},
 		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
@@ -871,7 +885,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	if !stream.Receive() {
 		return ErrInitNotReceived
 	}
-	if _, err := handleResponse(stream.Msg(), d); err != nil {
+	if _, err := handleWatchResponse(stream.Msg(), d); err != nil {
 		return err
 	}
 	if err = stream.Err(); err != nil {
@@ -884,7 +898,7 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
-			resp, err := handleResponse(pbResp, d)
+			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
 				rch <- WatchDocResponse{Err: err}
 				ctx.Done()
@@ -950,67 +964,74 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	return nil
 }
 
-func handleResponse(pbResp *api.WatchDocumentResponse, d *document.Document) (*WatchDocResponse, error) {
-	switch resp := pbResp.Body.(type) {
-	case *api.WatchDocumentResponse_Initialization_:
-		var clientIDs []string
-		for _, clientID := range resp.Initialization.ClientIds {
-			id, err := time.ActorIDFromHex(clientID)
+func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*WatchDocResponse, error) {
+	switch body := pbResp.Body.(type) {
+	case *api.WatchResponse_Initialization:
+		for _, init := range body.Initialization.ResourceInits {
+			switch ri := init.Init.(type) {
+			case *api.ResourceInit_DocumentInit:
+				var clientIDs []string
+				for _, clientID := range ri.DocumentInit.ClientIds {
+					id, err := time.ActorIDFromHex(clientID)
+					if err != nil {
+						return nil, err
+					}
+					clientIDs = append(clientIDs, id.String())
+				}
+				d.SetOnlineClients(clientIDs...)
+			}
+		}
+		return nil, nil
+	case *api.WatchResponse_Event:
+		switch we := body.Event.Event.(type) {
+		case *api.WatchEvent_DocEvent:
+			eventType, err := converter.FromEventType(we.DocEvent.Event.Type)
 			if err != nil {
 				return nil, err
 			}
-			clientIDs = append(clientIDs, id.String())
-		}
 
-		d.SetOnlineClients(clientIDs...)
-		return nil, nil
-	case *api.WatchDocumentResponse_Event:
-		eventType, err := converter.FromEventType(resp.Event.Type)
-		if err != nil {
-			return nil, err
-		}
-
-		cli, err := time.ActorIDFromHex(resp.Event.Publisher)
-		if err != nil {
-			return nil, err
-		}
-
-		switch eventType {
-		case events.DocChanged:
-			return &WatchDocResponse{Type: DocumentChanged}, nil
-		case events.DocWatched:
-			d.AddOnlineClient(cli.String())
-
-			// NOTE(hackerwins): If the presence does not exist, it means that
-			// PushPull is not received before watching. In that case, the 'watched'
-			// event is ignored here, and it will be triggered by PushPull.
-			if d.Presence(cli.String()) == nil {
-				return nil, nil
+			cli, err := time.ActorIDFromHex(we.DocEvent.Event.Publisher)
+			if err != nil {
+				return nil, err
 			}
 
-			return &WatchDocResponse{
-				Type: DocumentWatched,
-				Presences: map[string]document.PresenceData{
-					cli.String(): d.Presence(cli.String()),
-				},
-			}, nil
-		case events.DocUnwatched:
-			p := d.Presence(cli.String())
-			d.RemoveOnlineClient(cli.String())
+			switch eventType {
+			case events.DocChanged:
+				return &WatchDocResponse{Type: DocumentChanged}, nil
+			case events.DocWatched:
+				d.AddOnlineClient(cli.String())
 
-			// NOTE(hackerwins): If the presence does not exist, it means that
-			// PushPull is already received before unwatching. In that case, the
-			// 'unwatched' event is ignored here, and it was triggered by PushPull.
-			if p == nil {
-				return nil, nil
+				// NOTE(hackerwins): If the presence does not exist, it means that
+				// PushPull is not received before watching. In that case, the 'watched'
+				// event is ignored here, and it will be triggered by PushPull.
+				if d.Presence(cli.String()) == nil {
+					return nil, nil
+				}
+
+				return &WatchDocResponse{
+					Type: DocumentWatched,
+					Presences: map[string]document.PresenceData{
+						cli.String(): d.Presence(cli.String()),
+					},
+				}, nil
+			case events.DocUnwatched:
+				p := d.Presence(cli.String())
+				d.RemoveOnlineClient(cli.String())
+
+				// NOTE(hackerwins): If the presence does not exist, it means that
+				// PushPull is already received before unwatching. In that case, the
+				// 'unwatched' event is ignored here, and it was triggered by PushPull.
+				if p == nil {
+					return nil, nil
+				}
+
+				return &WatchDocResponse{
+					Type: DocumentUnwatched,
+					Presences: map[string]document.PresenceData{
+						cli.String(): p,
+					},
+				}, nil
 			}
-
-			return &WatchDocResponse{
-				Type: DocumentUnwatched,
-				Presences: map[string]document.PresenceData{
-					cli.String(): p,
-				},
-			}, nil
 		}
 	}
 	return nil, ErrUnsupportedWatchResponseType
