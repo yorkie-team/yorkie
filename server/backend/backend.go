@@ -60,8 +60,11 @@ type Backend struct {
 	// Channel is used to manage real-time channels.
 	Channel *channel.Manager
 
-	// Background is used to manage background tasks.
-	Background *background.Background
+	// background is used to manage background tasks.
+	background *background.Background
+	// fanOut is used to manage concurrent fan-out/fan-in tasks with
+	// a server-wide concurrency limit.
+	fanOut *fanOut
 	// Membership is used to manage leader election and lease renewal.
 	Membership *membership.Manager
 	// Housekeeping is used to manage background batch tasks.
@@ -203,7 +206,8 @@ func New(
 		PubSub:  pubsub,
 		Channel: channelManager,
 
-		Background:   bg,
+		background:   bg,
+		fanOut:       newFanOut(int64(conf.MaxConcurrentClusterRPCs)),
 		Membership:   membership,
 		Housekeeping: housekeeper,
 
@@ -216,6 +220,13 @@ func New(
 		MsgBroker: broker,
 		Warehouse: warehouse,
 	}, nil
+}
+
+// Go launches a fire-and-forget goroutine that is tracked for graceful
+// shutdown. When the backend shuts down, it waits for all goroutines
+// launched via Go to complete before closing resources.
+func (b *Backend) Go(f func(ctx context.Context), taskType string) {
+	b.background.Go(f, taskType)
 }
 
 // Start starts the backend.
@@ -247,7 +258,7 @@ func (b *Backend) Shutdown() error {
 		errs = append(errs, err)
 	}
 
-	b.Background.Close()
+	b.background.Close()
 
 	b.AuthWebhookClient.Close()
 	b.EventWebhookManager.Close()

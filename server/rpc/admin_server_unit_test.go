@@ -33,21 +33,21 @@ import (
 
 func TestGroupByFirstKeyPath(t *testing.T) {
 	t.Run("single key single segment", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{"room-1"})
+		groups, err := groupByFirstPath([]string{"room-1"})
 		assert.NoError(t, err)
 		assert.Len(t, groups, 1)
 		assert.Equal(t, []key.Key{key.Key("room-1")}, groups["room-1"])
 	})
 
 	t.Run("single key multi segment", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{"room-1.section-1"})
+		groups, err := groupByFirstPath([]string{"room-1.section-1"})
 		assert.NoError(t, err)
 		assert.Len(t, groups, 1)
 		assert.Equal(t, []key.Key{key.Key("room-1.section-1")}, groups["room-1"])
 	})
 
 	t.Run("multiple keys same first path", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{
+		groups, err := groupByFirstPath([]string{
 			"room-1.section-1",
 			"room-1.section-2",
 		})
@@ -59,7 +59,7 @@ func TestGroupByFirstKeyPath(t *testing.T) {
 	})
 
 	t.Run("multiple keys different first paths", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{
+		groups, err := groupByFirstPath([]string{
 			"room-1.section-1",
 			"room-2.section-1",
 			"room-3.section-1",
@@ -72,14 +72,14 @@ func TestGroupByFirstKeyPath(t *testing.T) {
 	})
 
 	t.Run("three level deep key", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{"room-1.section-1.user-1"})
+		groups, err := groupByFirstPath([]string{"room-1.section-1.user-1"})
 		assert.NoError(t, err)
 		assert.Len(t, groups, 1)
 		assert.Equal(t, []key.Key{key.Key("room-1.section-1.user-1")}, groups["room-1"])
 	})
 
 	t.Run("mixed depths same first path", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{
+		groups, err := groupByFirstPath([]string{
 			"room-1",
 			"room-1.section-1",
 			"room-1.section-1.user-1",
@@ -90,23 +90,23 @@ func TestGroupByFirstKeyPath(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		groups, err := groupByFirstKeyPath([]string{})
+		groups, err := groupByFirstPath([]string{})
 		assert.NoError(t, err)
 		assert.Empty(t, groups)
 	})
 
 	t.Run("invalid key empty string returns error", func(t *testing.T) {
-		_, err := groupByFirstKeyPath([]string{""})
+		_, err := groupByFirstPath([]string{""})
 		assert.Error(t, err)
 	})
 
 	t.Run("invalid key starting with dot returns error", func(t *testing.T) {
-		_, err := groupByFirstKeyPath([]string{".room-1"})
+		_, err := groupByFirstPath([]string{".room-1"})
 		assert.Error(t, err)
 	})
 
 	t.Run("invalid key ending with dot returns error", func(t *testing.T) {
-		_, err := groupByFirstKeyPath([]string{"room-1."})
+		_, err := groupByFirstPath([]string{"room-1."})
 		assert.Error(t, err)
 	})
 }

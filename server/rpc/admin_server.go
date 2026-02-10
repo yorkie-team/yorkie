@@ -20,10 +20,8 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"sync"
 
 	"connectrpc.com/connect"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -53,10 +51,9 @@ import (
 )
 
 type adminServer struct {
-	backend                 *backend.Backend
-	tokenManager            *auth.TokenManager
-	yorkieInterceptor       *interceptors.YorkieServiceInterceptor
-	clusterServiceSemaphore *semaphore.Weighted
+	backend           *backend.Backend
+	tokenManager      *auth.TokenManager
+	yorkieInterceptor *interceptors.YorkieServiceInterceptor
 }
 
 // newAdminServer creates a new instance of adminServer.
@@ -66,10 +63,9 @@ func newAdminServer(
 	yorkieInterceptor *interceptors.YorkieServiceInterceptor,
 ) *adminServer {
 	return &adminServer{
-		backend:                 be,
-		tokenManager:            tokenManager,
-		yorkieInterceptor:       yorkieInterceptor,
-		clusterServiceSemaphore: semaphore.NewWeighted(int64(be.Config.MaxConcurrentClusterRPCs)),
+		backend:           be,
+		tokenManager:      tokenManager,
+		yorkieInterceptor: yorkieInterceptor,
 	}
 }
 
@@ -828,63 +824,28 @@ func (s *adminServer) GetChannels(
 	}
 
 	// Group channel keys by their first key path for istio consistent hash sharding.
-	groups, err := groupByFirstKeyPath(uncachedKeys)
+	groups, err := groupByFirstPath(uncachedKeys)
 	if err != nil {
 		return nil, err
 	}
 
-	// Fan out cluster RPCs with request context propagation.
-	// Unlike AttachGoroutine (fire-and-forget), these goroutines are
-	// request-scoped: they must return results and respect cancellation.
-	type groupResult struct {
-		channels []*types.ChannelSummary
-		err      error
-	}
-	resultCh := make(chan groupResult, len(groups))
-
-	var wg sync.WaitGroup
-	for firstPath, keys := range groups {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			// Server-wide concurrency limit: prevents goroutine explosion
-			// when cluster peers are slow or unresponsive.
-			if err := s.clusterServiceSemaphore.Acquire(ctx, 1); err != nil {
-				resultCh <- groupResult{err: err}
-				return
-			}
-			defer s.clusterServiceSemaphore.Release(1)
-
-			result, err := clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
-			resultCh <- groupResult{channels: result, err: err}
-		}()
+	// Fan out cluster RPCs with server-wide concurrency limit.
+	results, err := backend.FanOut(
+		ctx, s.backend, groups,
+		func(ctx context.Context, firstPath string, keys []key.Key) ([]*types.ChannelSummary, error) {
+			return clusterClient.GetChannels(ctx, project, keys, firstPath, includeSubPath)
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
 
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Collect results from all groups
-	var firstErr error
-	for res := range resultCh {
-		if res.err != nil && firstErr == nil {
-			firstErr = res.err
-		}
-		if res.err == nil {
-			// 4. Store results in cache
-			for _, ch := range res.channels {
-				cacheKey := makeChannelSessionCountCacheKey(project.ID, ch.Key, includeSubPath)
-				s.backend.Cache.SessionCount.Add(cacheKey, ch.SessionCount)
-			}
-			channels = append(channels, res.channels...)
-		}
+	// 4. Store results in cache
+	for _, ch := range results {
+		cacheKey := makeChannelSessionCountCacheKey(project.ID, ch.Key, includeSubPath)
+		s.backend.Cache.SessionCount.Add(cacheKey, ch.SessionCount)
 	}
-
-	if firstErr != nil {
-		return nil, firstErr
-	}
+	channels = append(channels, results...)
 
 	return connect.NewResponse(&api.GetChannelsResponse{
 		Channels: converter.ToChannelSummaries(channels),
@@ -896,8 +857,8 @@ func makeChannelSessionCountCacheKey(projectID types.ID, channelKey key.Key, inc
 	return fmt.Sprintf("%s:%s:%t", projectID, channelKey, includeSubPath)
 }
 
-// groupByFirstKeyPath groups channel keys by their first key path segment.
-func groupByFirstKeyPath(channelKeys []string) (map[string][]key.Key, error) {
+// groupByFirstPath groups channel keys by their first key path segment.
+func groupByFirstPath(channelKeys []string) (map[string][]key.Key, error) {
 	groups := make(map[string][]key.Key)
 
 	for _, keyStr := range channelKeys {

@@ -63,9 +63,10 @@ func New(metrics *prometheus.Metrics) *Background {
 	}
 }
 
-// AttachGoroutine creates a goroutine on a given function and tracks it using
-// the background's WaitGroup.
-func (b *Background) AttachGoroutine(
+// Go launches a fire-and-forget goroutine tracked by the background's
+// WaitGroup. The goroutine runs until completion and is awaited on
+// graceful shutdown via Close.
+func (b *Background) Go(
 	f func(ctx context.Context),
 	taskType string,
 ) {
@@ -73,7 +74,7 @@ func (b *Background) AttachGoroutine(
 	defer b.wgMu.RUnlock()
 	select {
 	case <-b.closing:
-		logging.DefaultLogger().Warn("backend has closed; skipping AttachGoroutine")
+		logging.DefaultLogger().Warn("backend has closed; skipping background.Go")
 		return
 	default:
 	}
