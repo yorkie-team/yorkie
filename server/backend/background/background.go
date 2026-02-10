@@ -81,7 +81,7 @@ func (b *Background) Go(
 
 	// now safe to add since WaitGroup wait has not started yet
 	b.wg.Add(1)
-	routineLogger := logging.New(b.routineID.next())
+	routineLogger := logging.NewNamed(b.routineID.next())
 	b.metrics.AddBackgroundGoroutines(taskType)
 	go func() {
 		defer func() {

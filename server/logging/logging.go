@@ -53,6 +53,9 @@ var defaultLogger Logger
 var logLevel = zapcore.InfoLevel
 var loggerOnce sync.Once
 
+var defaultCore zapcore.Core
+var coreOnce sync.Once
+
 // SetLogLevel sets the level of global logger with ["debug", "info", "warn", "error", "panic", "fatal"].
 // SetLoglevel must be sets before calling DefaultLogger() or New().
 func SetLogLevel(level string) error {
@@ -120,6 +123,27 @@ func LogError(ctx context.Context, err error) {
 	}
 
 	logger.Error(err)
+}
+
+// NewNamed creates a logger derived from the shared core with the given name.
+// Unlike New(), this reuses the shared core and encoder,
+// avoiding per-call allocation of zapcore components.
+func NewNamed(name string) Logger {
+	return zap.New(sharedCore(), zap.AddStacktrace(zap.ErrorLevel)).Named(name).Sugar()
+}
+
+// sharedCore returns a singleton zapcore.Core shared across NewNamed() calls.
+func sharedCore() zapcore.Core {
+	coreOnce.Do(func() {
+		defaultCore = zapcore.NewTee(
+			zapcore.NewCore(
+				zapcore.NewConsoleEncoder(humanEncoderConfig()),
+				zapcore.AddSync(os.Stdout),
+				logLevel,
+			),
+		)
+	})
+	return defaultCore
 }
 
 // newLogger returns a new raw logger.

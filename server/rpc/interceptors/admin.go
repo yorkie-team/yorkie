@@ -182,7 +182,7 @@ func (i *AdminServiceInterceptor) buildContext(
 		ctx = newContext
 	}
 
-	ctx = logging.With(ctx, logging.New(i.requestID.next()))
+	ctx = logging.With(ctx, logging.NewNamed(i.requestID.next()))
 
 	return ctx, nil
 }
