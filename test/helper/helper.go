@@ -310,7 +310,7 @@ func TestConfig() *server.Config {
 			SnapshotCacheSize:             SnapshotCacheSize,
 			AuthWebhookCacheSize:          AuthWebhookSize,
 			AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
-			DisableWebhookValidation:      true,
+			EnableWebhookValidation:       false,
 			GatewayAddr:                   fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			RPCAddr:                       fmt.Sprintf("localhost:%d", RPCPort+portOffset),
 			ChannelSessionTTL:             ChannelSessionTTL,

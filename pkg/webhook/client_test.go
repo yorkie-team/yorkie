@@ -90,7 +90,7 @@ func TestHMAC(t *testing.T) {
 	testServer := newHMACTestServer(t, validSecret, expectedResponse)
 	defer testServer.Close()
 
-	client := webhook.NewClient[testRequest, testResponse](true)
+	client := webhook.NewClient[testRequest, testResponse](false)
 	options := webhook.Options{
 		MaxRetries:      0,
 		MinWaitInterval: 0,
@@ -155,7 +155,7 @@ func TestBackoff(t *testing.T) {
 	server := newRetryServer(t, replyAfter, expectedResponse)
 	defer server.Close()
 
-	webhookClient := webhook.NewClient[testRequest, testResponse](true)
+	webhookClient := webhook.NewClient[testRequest, testResponse](false)
 	t.Run("retry fail test", func(t *testing.T) {
 		reqPayload := testRequest{Name: "retry fails"}
 		body, err := json.Marshal(reqPayload)
@@ -197,7 +197,7 @@ func TestRequestTimeout(t *testing.T) {
 	server := newDelayServer(t, delayTime, expectedResponse)
 	defer server.Close()
 
-	webhookClient := webhook.NewClient[testRequest, testResponse](true)
+	webhookClient := webhook.NewClient[testRequest, testResponse](false)
 	t.Run("request succeed after timeout", func(t *testing.T) {
 		reqPayload := testRequest{Name: "TimeoutTest"}
 		body, err := json.Marshal(reqPayload)
@@ -243,7 +243,7 @@ func TestErrorHandling(t *testing.T) {
 		MaxWaitInterval: 0,
 		RequestTimeout:  50 * time.Millisecond,
 	}
-	unreachableClient := webhook.NewClient[testRequest, testResponse](true)
+	unreachableClient := webhook.NewClient[testRequest, testResponse](false)
 
 	t.Run("request fails with context done test", func(t *testing.T) {
 		reqPayload := testRequest{Name: "ContextDone"}

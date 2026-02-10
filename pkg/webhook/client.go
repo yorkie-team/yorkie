@@ -57,16 +57,16 @@ type Options struct {
 
 // Client is a httpClient for the webhook.
 type Client[Req any, Res any] struct {
-	httpClient        *http.Client
-	disableValidation bool
+	httpClient       *http.Client
+	enableValidation bool
 }
 
 // NewClient creates a new instance of Client. If you only want to get the status code,
 // then set Res to int.
-func NewClient[Req any, Res any](disableValidation bool) *Client[Req, Res] {
+func NewClient[Req any, Res any](enableValidation bool) *Client[Req, Res] {
 	return &Client[Req, Res]{
-		httpClient:        &http.Client{},
-		disableValidation: disableValidation,
+		httpClient:       &http.Client{},
+		enableValidation: enableValidation,
 	}
 }
 
@@ -78,7 +78,7 @@ func (c *Client[Req, Res]) Send(
 	options Options,
 ) (*Res, int, error) {
 	// Validate webhook URL early to prevent SSRF attacks before any processing
-	if err := ValidateWebhookURL(url, c.disableValidation); err != nil {
+	if err := ValidateWebhookURL(url, c.enableValidation); err != nil {
 		return nil, 0, fmt.Errorf("send webhook: %w", err)
 	}
 
