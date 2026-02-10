@@ -80,8 +80,10 @@ type Config struct {
 	// messages to other nodes in the cluster.
 	RPCAddr string `yaml:"RPCAddr"`
 
-	// DisableWebhookValidation is whether to disable webhook validation.
-	DisableWebhookValidation bool `yaml:"DisableWebhookValidation"`
+	// EnableWebhookValidation is whether to enable webhook URL validation
+	// to prevent SSRF attacks. If false (default), webhook URL validation
+	// is skipped.
+	EnableWebhookValidation bool `yaml:"EnableWebhookValidation"`
 
 	// ClusterRPCTimeout is the timeout for individual cluster RPC calls.
 	// If a cluster peer does not respond within this duration, the call

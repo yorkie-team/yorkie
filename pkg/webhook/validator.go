@@ -30,9 +30,9 @@ var (
 )
 
 // ValidateWebhookURL validates the webhook URL to prevent SSRF attacks.
-func ValidateWebhookURL(rawURL string, disabled bool) error {
-	// If validation is disabled, skip the validation.
-	if disabled {
+func ValidateWebhookURL(rawURL string, enabled bool) error {
+	// If validation is not enabled, skip the validation.
+	if !enabled {
 		return nil
 	}
 

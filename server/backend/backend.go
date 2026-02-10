@@ -125,10 +125,10 @@ func New(
 
 	// 03. Create webhook clients and cluster client pool.
 	authWebhookClient := pkgwebhook.NewClient[types.AuthWebhookRequest, types.AuthWebhookResponse](
-		conf.DisableWebhookValidation,
+		conf.EnableWebhookValidation,
 	)
 	eventWebhookManger := webhook.NewManager(
-		pkgwebhook.NewClient[types.EventWebhookRequest, int](conf.DisableWebhookValidation),
+		pkgwebhook.NewClient[types.EventWebhookRequest, int](conf.EnableWebhookValidation),
 	)
 	clusterClientPool := cluster.NewClientPool(
 		cluster.WithRPCTimeout(conf.ParseClusterRPCTimeout()),
