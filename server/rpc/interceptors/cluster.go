@@ -126,5 +126,5 @@ func (i *ClusterServiceInterceptor) WrapStreamingHandler(
 
 // buildContext builds a context data for server-to-server RPC.
 func (i *ClusterServiceInterceptor) buildContext(ctx context.Context) context.Context {
-	return logging.With(ctx, logging.New(i.requestID.next()))
+	return logging.With(ctx, logging.NewNamed(i.requestID.next()))
 }

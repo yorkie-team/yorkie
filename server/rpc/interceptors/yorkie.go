@@ -185,7 +185,7 @@ func (i *YorkieServiceInterceptor) buildContext(ctx context.Context, header http
 	}
 
 	// 04. Build Logger with request ID
-	ctx = logging.With(ctx, logging.New(i.requestID.next()))
+	ctx = logging.With(ctx, logging.NewNamed(i.requestID.next()))
 
 	return ctx, nil
 }
