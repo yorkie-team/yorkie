@@ -72,10 +72,12 @@ var (
 	MembershipLeaseDuration   = "15s"
 	MembershipRenewalInterval = "5s"
 
-	AdminUser              = server.DefaultAdminUser
-	AdminPassword          = server.DefaultAdminPassword
-	AdminPasswordForSignUp = AdminPassword + "123!"
-	UseDefaultProject      = true
+	AdminUser               = server.DefaultAdminUser
+	AdminPassword           = server.DefaultAdminPassword
+	AdminPasswordForSignUp  = AdminPassword + "123!"
+	UseDefaultProject       = true
+	SecretKey               = server.DefaultSecretKey
+	EnableWebhookValidation = false
 
 	HousekeepingInterval             = 500 * gotime.Millisecond
 	HousekeepingCandidatesLimit      = 10
@@ -105,6 +107,7 @@ var (
 	MongoConnectionTimeout  = "5s"
 	MongoConnectionURI      = "mongodb://localhost:27017"
 	MongoPingTimeout        = "5s"
+	MongoCacheStatsEnabled  = false
 	MongoCacheStatsInterval = "30s"
 	MongoProjectCacheSize   = 256
 	MongoProjectCacheTTL    = "5s"
@@ -280,6 +283,65 @@ func AssertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
 	assert.Equal(t, pairsA, pairsB)
 }
 
+// TestMongoConfig returns a shared mongo.Config for testing.
+func TestMongoConfig() *mongo.Config {
+	return &mongo.Config{
+		ConnectionTimeout:  MongoConnectionTimeout,
+		ConnectionURI:      MongoConnectionURI,
+		YorkieDatabase:     TestDBName(),
+		PingTimeout:        MongoPingTimeout,
+		CacheStatsEnabled:  MongoCacheStatsEnabled,
+		CacheStatsInterval: MongoCacheStatsInterval,
+		ProjectCacheSize:   MongoProjectCacheSize,
+		ProjectCacheTTL:    MongoProjectCacheTTL,
+		ClientCacheSize:    MongoClientCacheSize,
+		DocCacheSize:       MongoDocCacheSize,
+		ChangeCacheSize:    MongoChangeCacheSize,
+		VectorCacheSize:    MongoVectorCacheSize,
+	}
+}
+
+// TestMembershipConfig returns a shared membership.Config for testing.
+func TestMembershipConfig() *membership.Config {
+	return &membership.Config{
+		LeaseDuration:   MembershipLeaseDuration,
+		RenewalInterval: MembershipRenewalInterval,
+	}
+}
+
+// TestHousekeepingConfig returns a shared housekeeping.Config for testing.
+func TestHousekeepingConfig() *housekeeping.Config {
+	return &housekeeping.Config{
+		Interval:        HousekeepingInterval.String(),
+		CandidatesLimit: HousekeepingCandidatesLimit,
+	}
+}
+
+// TestBackendConfig returns a shared backend.Config for testing.
+func TestBackendConfig() *backend.Config {
+	return &backend.Config{
+		AdminUser:                     AdminUser,
+		AdminPassword:                 AdminPassword,
+		AdminTokenDuration:            AdminTokenDuration,
+		UseDefaultProject:             UseDefaultProject,
+		SecretKey:                     SecretKey,
+		SnapshotCacheSize:             SnapshotCacheSize,
+		AuthWebhookCacheSize:          AuthWebhookSize,
+		AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
+		EnableWebhookValidation:       EnableWebhookValidation,
+		GatewayAddr:                   GatewayAddr,
+		RPCAddr:                       RPCAddr,
+		ChannelSessionTTL:             ChannelSessionTTL,
+		ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
+		ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
+		ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
+		ClusterRPCTimeout:             ClusterRPCTimeout,
+		ClusterClientTimeout:          ClusterClientTimeout,
+		ClusterClientPoolSize:         ClusterClientPoolSize,
+		MaxConcurrentClusterRPCs:      MaxConcurrentClusterRPCs,
+	}
+}
+
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.
@@ -292,50 +354,21 @@ func TestConfig() *server.Config {
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
 		},
-		Membership: &membership.Config{
-			LeaseDuration:   MembershipLeaseDuration,
-			RenewalInterval: MembershipRenewalInterval,
-		},
-		Housekeeping: &housekeeping.Config{
-			Interval:             HousekeepingInterval.String(),
-			CandidatesLimit:      HousekeepingCandidatesLimit,
-			CompactionMinChanges: HousekeepingCompactionMinChanges,
-		},
-		Backend: &backend.Config{
-			AdminUser:                     server.DefaultAdminUser,
-			AdminPassword:                 server.DefaultAdminPassword,
-			SecretKey:                     server.DefaultSecretKey,
-			AdminTokenDuration:            server.DefaultAdminTokenDuration.String(),
-			UseDefaultProject:             true,
-			SnapshotCacheSize:             SnapshotCacheSize,
-			AuthWebhookCacheSize:          AuthWebhookSize,
-			AuthWebhookCacheTTL:           AuthWebhookCacheTTL.String(),
-			EnableWebhookValidation:       false,
-			GatewayAddr:                   fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			RPCAddr:                       fmt.Sprintf("localhost:%d", RPCPort+portOffset),
-			ChannelSessionTTL:             ChannelSessionTTL,
-			ChannelSessionCleanupInterval: ChannelSessionCleanupInterval,
-			ChannelSessionCountCacheTTL:   ChannelSessionCountCacheTTL,
-			ChannelSessionCountCacheSize:  ChannelSessionCountCacheSize,
-			ClusterRPCTimeout:             ClusterRPCTimeout,
-			ClusterClientTimeout:          ClusterClientTimeout,
-			ClusterClientPoolSize:         ClusterClientPoolSize,
-			MaxConcurrentClusterRPCs:      MaxConcurrentClusterRPCs,
-		},
-		Mongo: &mongo.Config{
-			ConnectionTimeout:  MongoConnectionTimeout,
-			ConnectionURI:      MongoConnectionURI,
-			YorkieDatabase:     TestDBName(),
-			PingTimeout:        MongoPingTimeout,
-			CacheStatsEnabled:  false,
-			CacheStatsInterval: "30s",
-			ProjectCacheSize:   MongoProjectCacheSize,
-			ProjectCacheTTL:    MongoProjectCacheTTL,
-			ClientCacheSize:    MongoClientCacheSize,
-			DocCacheSize:       MongoDocCacheSize,
-			ChangeCacheSize:    MongoChangeCacheSize,
-			VectorCacheSize:    MongoVectorCacheSize,
-		},
+		Membership: TestMembershipConfig(),
+		Housekeeping: func() *housekeeping.Config {
+			conf := TestHousekeepingConfig()
+			conf.CompactionMinChanges = HousekeepingCompactionMinChanges
+			return conf
+		}(),
+		Backend: func() *backend.Config {
+			conf := TestBackendConfig()
+			conf.SecretKey = server.DefaultSecretKey
+			conf.AdminTokenDuration = server.DefaultAdminTokenDuration.String()
+			conf.GatewayAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)
+			conf.RPCAddr = fmt.Sprintf("localhost:%d", RPCPort+portOffset)
+			return conf
+		}(),
+		Mongo: TestMongoConfig(),
 	}
 }
 
