@@ -7,6 +7,23 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.48] - 2026-02-11
+
+### Added
+
+- Add cluster RPC and client timeout configurations by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1665
+- Add max concurrent cluster RPCs configuration by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1667
+- Add connection pool size configuration for cluster client by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1669
+
+### Changed
+
+- Deduplicate k6 test code and update k6/README.md by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1663
+- Extract shared generic abstractions for pubsub and stream handling by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1664
+- Replace WatchDocument and WatchChannel with unified Watch RPC by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1666
+- Refactor logging to use shared core for named loggers by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1672
+- Rename DisableWebhookValidation to EnableWebhookValidation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1673
+- Enhance configuration tests and refactor backend config initialization by @emplam27 in https://github.com/yorkie-team/yorkie/pull/1674
+
 ## [v0.6.47] - 2026-02-06
 
 ### Added
