@@ -63,6 +63,11 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 	assert.Equal(t, server.DefaultHostname, conf.Backend.Hostname)
 	assert.Equal(t, server.DefaultGatewayAddr, conf.Backend.GatewayAddr)
 
+	assertDurationEqual(t, server.DefaultChannelSessionTTL, conf.Backend.ChannelSessionTTL)
+	assertDurationEqual(t, server.DefaultChannelSessionCleanupInterval, conf.Backend.ChannelSessionCleanupInterval)
+	assertDurationEqual(t, server.DefaultChannelSessionCountCacheTTL, conf.Backend.ChannelSessionCountCacheTTL)
+	assert.Equal(t, server.DefaultChannelSessionCountCacheSize, conf.Backend.ChannelSessionCountCacheSize)
+
 	assertDurationEqual(t, server.DefaultClusterRPCTimeout, conf.Backend.ClusterRPCTimeout)
 	assertDurationEqual(t, server.DefaultClusterClientTimeout, conf.Backend.ClusterClientTimeout)
 	assert.Equal(t, server.DefaultClusterClientPoolSize, conf.Backend.ClusterClientPoolSize)

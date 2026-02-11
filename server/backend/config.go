@@ -166,16 +166,16 @@ func (c *Config) Validate() error {
 			c.ChannelSessionCountCacheSize,
 		)
 	}
-	if c.MaxConcurrentClusterRPCs <= 0 {
-		return fmt.Errorf(
-			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
-			c.MaxConcurrentClusterRPCs,
-		)
-	}
 	if c.ClusterClientPoolSize <= 0 {
 		return fmt.Errorf(
 			`invalid argument "%d" for "--cluster-client-pool-size"`,
 			c.ClusterClientPoolSize,
+		)
+	}
+	if c.MaxConcurrentClusterRPCs <= 0 {
+		return fmt.Errorf(
+			`invalid argument "%d" for "--max-concurrent-cluster-rpcs"`,
+			c.MaxConcurrentClusterRPCs,
 		)
 	}
 	return nil

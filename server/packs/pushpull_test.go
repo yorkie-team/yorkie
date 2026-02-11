@@ -38,9 +38,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
-	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -94,42 +91,12 @@ func TestMain(m *testing.M) {
 	}
 
 	testBackend, err = backend.New(
-		&backend.Config{
-			AdminUser:                     helper.AdminUser,
-			AdminPassword:                 helper.AdminPassword,
-			UseDefaultProject:             helper.UseDefaultProject,
-			SnapshotCacheSize:             helper.SnapshotCacheSize,
-			AuthWebhookCacheSize:          helper.AuthWebhookSize,
-			AuthWebhookCacheTTL:           helper.AuthWebhookCacheTTL.String(),
-			AdminTokenDuration:            helper.AdminTokenDuration,
-			RPCAddr:                       helper.RPCAddr,
-			ChannelSessionTTL:             helper.ChannelSessionTTL,
-			ChannelSessionCleanupInterval: helper.ChannelSessionCleanupInterval,
-			ChannelSessionCountCacheTTL:   helper.ChannelSessionCountCacheTTL,
-			ChannelSessionCountCacheSize:  helper.ChannelSessionCountCacheSize,
-			ClusterRPCTimeout:             helper.ClusterRPCTimeout,
-			ClusterClientTimeout:          helper.ClusterClientTimeout,
-			ClusterClientPoolSize:         helper.ClusterClientPoolSize,
-			MaxConcurrentClusterRPCs:      helper.MaxConcurrentClusterRPCs,
-		}, &mongo.Config{
-			ConnectionURI:      helper.MongoConnectionURI,
-			YorkieDatabase:     helper.TestDBName(),
-			ConnectionTimeout:  helper.MongoConnectionTimeout,
-			PingTimeout:        helper.MongoPingTimeout,
-			CacheStatsInterval: helper.MongoCacheStatsInterval,
-			ProjectCacheSize:   helper.MongoProjectCacheSize,
-			ProjectCacheTTL:    helper.MongoProjectCacheTTL,
-			ClientCacheSize:    helper.MongoClientCacheSize,
-			DocCacheSize:       helper.MongoDocCacheSize,
-			ChangeCacheSize:    helper.MongoChangeCacheSize,
-			VectorCacheSize:    helper.MongoVectorCacheSize,
-		}, &membership.Config{
-			LeaseDuration:   helper.MembershipLeaseDuration,
-			RenewalInterval: helper.MembershipRenewalInterval,
-		}, &housekeeping.Config{
-			Interval:        helper.HousekeepingInterval.String(),
-			CandidatesLimit: helper.HousekeepingCandidatesLimit,
-		}, met, nil, nil)
+		helper.TestBackendConfig(),
+		helper.TestMongoConfig(),
+		helper.TestMembershipConfig(),
+		helper.TestHousekeepingConfig(),
+		met, nil, nil,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
