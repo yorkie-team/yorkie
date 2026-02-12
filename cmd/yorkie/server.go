@@ -77,6 +77,8 @@ var (
 	mongoChangeCacheSize              int
 	mongoVectorCacheSize              int
 
+	useScyllaDB bool
+
 	pprofEnabled bool
 
 	authWebhookCacheTTL time.Duration
@@ -140,6 +142,7 @@ func newServerCmd() *cobra.Command {
 					DocCacheSize:                 mongoDocCacheSize,
 					ChangeCacheSize:              mongoChangeCacheSize,
 					VectorCacheSize:              mongoVectorCacheSize,
+					UseScyllaDB:                  useScyllaDB,
 				}
 			}
 
@@ -437,6 +440,12 @@ func init() {
 		"backend-admin-user",
 		server.DefaultAdminUser,
 		"The name of the default admin user, who has full permissions.",
+	)
+	cmd.Flags().BoolVar(
+		&useScyllaDB,
+		"use-scylla-db",
+		false,
+		"Whether to use ScyllaDB as the database.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,

@@ -104,6 +104,9 @@ type Config struct {
 	// RPC calls across the entire server. This prevents goroutine explosion
 	// when a cluster peer is slow or unresponsive. Default is 5000.
 	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
+
+	// UseScyllaDB indicates whether to use ScyllaDB as the database.
+	UseScyllaDB bool `yaml:"UseScyllaDB"`
 }
 
 // Validate validates this config.

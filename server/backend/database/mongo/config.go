@@ -59,6 +59,9 @@ type Config struct {
 
 	// ProjectCacheTTL is the TTL value for the project metadata cache.
 	ProjectCacheTTL string `yaml:"ProjectCacheTTL"`
+
+	// UseScyllaDB indicates whether to use ScyllaDB as the database.
+	UseScyllaDB bool `yaml:"UseScyllaDB"`
 }
 
 // Validate returns an error if the provided Config is invalidated.

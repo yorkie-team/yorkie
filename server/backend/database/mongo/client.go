@@ -20,6 +20,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -29,15 +30,18 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
+	"github.com/gocql/gocql"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/database/scylla"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -58,6 +62,8 @@ type Client struct {
 	changeCache   *cache.LRU[types.DocRefKey, *ChangeStore]
 	presenceCache *cache.LRU[types.DocRefKey, *ChangeStore]
 	vectorCache   *cache.LRU[types.DocRefKey, *cmap.Map[types.ID, time.VersionVector]]
+	// ScyllaDB session (if nil, ScyllaDB is not used)
+	session *gocql.Session
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -144,6 +150,17 @@ func Dial(conf *Config) (*Client, error) {
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
+	var scyllaSession *gocql.Session
+	scyllaConfig := scylla.GetScyllaConfig()
+	if conf.UseScyllaDB {
+		session, err := scylla.Dial(scyllaConfig)
+		if err != nil {
+			return nil, fmt.Errorf("Dial ScyllaDB: %w", err)
+		}
+		logging.DefaultLogger().Infof("ScyllaDB connected, URI: %s", scyllaConfig.Hosts)
+		scyllaSession = session.Session
+	}
+
 	yorkieClient := &Client{
 		config: conf,
 		client: client,
@@ -155,6 +172,7 @@ func Dial(conf *Config) (*Client, error) {
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
 		vectorCache:   vectorCache,
+		session:       scyllaSession,
 	}
 
 	if conf.CacheStatsEnabled {
@@ -1722,29 +1740,68 @@ func (c *Client) CreateChangeInfos(
 
 	// 04. Store operation changes.
 	if len(opChanges) > 0 {
-		var opModels []mongo.WriteModel
-		for _, c := range opChanges {
-			opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
-				"project_id": refKey.ProjectID,
-				"doc_id":     refKey.DocID,
-				"server_seq": c.ServerSeq,
-			}).SetUpdate(bson.M{"$set": bson.M{
-				"actor_id":        c.ActorID,
-				"client_seq":      c.ClientSeq,
-				"lamport":         c.Lamport,
-				"version_vector":  c.VersionVector,
-				"message":         c.Message,
-				"operations":      c.Operations,
-				"presence_change": c.PresenceChange,
-			}}).SetUpsert(true))
-		}
+		if c.session != nil {
+			// TODO(ggyuchive)
+			batch := c.session.Batch(gocql.UnloggedBatch)
+			for _, ch := range opChanges {
+				jsonOperations, _ := json.Marshal(ch.Operations)
+				jsonPresence, _ := json.Marshal(ch.PresenceChange)
+				batch.Query(`
+		INSERT INTO changes (
+			project_id,
+			doc_id,
+			server_seq,
+			"_id",
+			actor_id,
+			client_seq,
+			lamport,
+			version_vector,
+			message,
+			operations,
+			presence
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					refKey.ProjectID,
+					refKey.DocID,
+					ch.ServerSeq,
+					ch.ID,
+					ch.ActorID,
+					ch.ClientSeq,
+					ch.Lamport,
+					scylla.ToScyllaVersionVector(ch.VersionVector),
+					ch.Message,
+					jsonOperations,
+					jsonPresence,
+				)
+			}
 
-		if _, err := c.collection(ColChanges).BulkWrite(
-			ctx,
-			opModels,
-			options.BulkWrite().SetOrdered(false),
-		); err != nil {
-			return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
+			if err := c.session.ExecuteBatch(batch); err != nil {
+				return nil, change.InitialCheckpoint, fmt.Errorf("batch insert changes %v: %w", refKey, err)
+			}
+		} else {
+			var opModels []mongo.WriteModel
+			for _, c := range opChanges {
+				opModels = append(opModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
+					"project_id": refKey.ProjectID,
+					"doc_id":     refKey.DocID,
+					"server_seq": c.ServerSeq,
+				}).SetUpdate(bson.M{"$set": bson.M{
+					"actor_id":        c.ActorID,
+					"client_seq":      c.ClientSeq,
+					"lamport":         c.Lamport,
+					"version_vector":  c.VersionVector,
+					"message":         c.Message,
+					"operations":      c.Operations,
+					"presence_change": c.PresenceChange,
+				}}).SetUpsert(true))
+			}
+
+			if _, err := c.collection(ColChanges).BulkWrite(
+				ctx,
+				opModels,
+				options.BulkWrite().SetOrdered(false),
+			); err != nil {
+				return nil, change.InitialCheckpoint, fmt.Errorf("create changes of %s: %w", refKey, err)
+			}
 		}
 	}
 
@@ -1821,19 +1878,50 @@ func (c *Client) CompactChangeInfos(
 			return err
 		}
 
-		if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
-			"project_id":      docInfo.ProjectID,
-			"doc_id":          docInfo.ID,
-			"server_seq":      newServerSeq,
-			"client_seq":      cn.ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"actor_id":        types.ID(cn.ID().ActorID().String()),
-			"version_vector":  cn.ID().VersionVector(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": cn.PresenceChange(),
-		}); err != nil {
-			return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+		if c.session != nil {
+			jsonOperations, _ := json.Marshal(encodedOperations)
+			jsonPresence, _ := json.Marshal(cn.PresenceChange())
+			if err := c.session.Query(`
+		INSERT INTO changes (
+			project_id,
+			doc_id,
+			server_seq,
+			client_seq,
+			lamport,
+			actor_id,
+			version_vector,
+			message,
+			operations,
+			presence
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				docInfo.ProjectID,
+				docInfo.ID,
+				newServerSeq,
+				cn.ClientSeq(),
+				cn.ID().Lamport(),
+				types.ID(cn.ID().ActorID().String()),
+				scylla.ToScyllaVersionVector(cn.ID().VersionVector()),
+				cn.Message(),
+				jsonOperations,
+				jsonPresence,
+			).Exec(); err != nil {
+				return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+			}
+		} else {
+			if _, err := c.collection(ColChanges).InsertOne(ctx, bson.M{
+				"project_id":      docInfo.ProjectID,
+				"doc_id":          docInfo.ID,
+				"server_seq":      newServerSeq,
+				"client_seq":      cn.ClientSeq(),
+				"lamport":         cn.ID().Lamport(),
+				"actor_id":        types.ID(cn.ID().ActorID().String()),
+				"version_vector":  cn.ID().VersionVector(),
+				"message":         cn.Message(),
+				"operations":      encodedOperations,
+				"presence_change": cn.PresenceChange(),
+			}); err != nil {
+				return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
+			}
 		}
 	}
 
@@ -1866,26 +1954,119 @@ func (c *Client) FindLatestChangeInfoByActor(
 	actorID types.ID,
 	serverSeq int64,
 ) (*database.ChangeInfo, error) {
-	option := options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
-	})
-
-	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"actor_id":   actorID,
-		"server_seq": bson.M{
-			"$lte": serverSeq,
-		},
-	}, option)
-
 	info := &database.ChangeInfo{}
-	if err := result.Decode(info); err != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return info, nil
-		}
+	if c.session != nil {
+		// NOTE(ggyuchive): In Scylla, we store changes in the `changes` table.
+		// We find the latest change for the given actor by filtering on
+		// project_id/doc_id/actor_id with server_seq <= given value.
+		// Since actor_id is not part of the primary key, we use ALLOW FILTERING.
+		query := `
+		SELECT
+			project_id,
+			doc_id,
+			server_seq,
+			client_seq,
+			lamport,
+			actor_id,
+			version_vector,
+			message,
+			operations,
+			presence
+		FROM changes
+		WHERE project_id = ? AND doc_id = ? AND actor_id = ? AND server_seq <= ?
+		ORDER BY server_seq DESC
+		LIMIT 1
+		ALLOW FILTERING`
 
-		return nil, fmt.Errorf("find the latest change of %s: %w", docRefKey, err)
+		var (
+			projectIDStr string
+			docIDStr     string
+			serverSeqP   int64
+			clientSeq    int32
+			lamport      int64
+			actorIDStr   string
+			vvMap        map[string]int64
+			message      string
+			opsBlob      []byte
+			prBlob       []byte
+		)
+
+		q := c.session.Query(
+			query,
+			docRefKey.ProjectID,
+			docRefKey.DocID,
+			actorID,
+			serverSeq,
+		).WithContext(ctx)
+		//logging.DefaultLogger().Infof("Executing Query: %s", q.String())
+		iter := q.Iter()
+
+		if iter.Scan(
+			&projectIDStr,
+			&docIDStr,
+			&serverSeqP,
+			&clientSeq,
+			&lamport,
+			&actorIDStr,
+			&vvMap,
+			&message,
+			&opsBlob,
+			&prBlob,
+		) {
+			var ops [][]byte
+			if len(opsBlob) > 0 {
+				if err := json.Unmarshal(opsBlob, &ops); err != nil {
+					_ = iter.Close()
+					return nil, fmt.Errorf("decode operations from scylla: %w", err)
+				}
+			}
+
+			var prChange *presence.Change
+			if len(prBlob) > 0 {
+				var tmp presence.Change
+				if err := json.Unmarshal(prBlob, &tmp); err != nil {
+					_ = iter.Close()
+					return nil, fmt.Errorf("decode presence from scylla: %w", err)
+				}
+				prChange = &tmp
+			}
+
+			info = &database.ChangeInfo{
+				ProjectID:      types.ID(projectIDStr),
+				DocID:          types.ID(docIDStr),
+				ServerSeq:      serverSeqP,
+				ClientSeq:      uint32(clientSeq),
+				Lamport:        lamport,
+				ActorID:        types.ID(actorIDStr),
+				VersionVector:  scylla.FromScyllaVersionVector(vvMap),
+				Message:        message,
+				Operations:     ops,
+				PresenceChange: prChange,
+			}
+		}
+		if err := iter.Close(); err != nil {
+			return nil, fmt.Errorf("find the latest change of %s: %w", docRefKey, err)
+		}
+	} else {
+		option := options.FindOne().SetSort(bson.M{
+			"server_seq": -1,
+		})
+
+		result := c.collection(ColChanges).FindOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"actor_id":   actorID,
+			"server_seq": bson.M{
+				"$lte": serverSeq,
+			},
+		}, option)
+		if err := result.Decode(info); err != nil {
+			if result.Err() == mongo.ErrNoDocuments {
+				return info, nil
+			}
+
+			return nil, fmt.Errorf("find the latest change of %s: %w", docRefKey, err)
+		}
 	}
 
 	return info, nil
@@ -1949,19 +2130,112 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		var infos []*database.ChangeInfo
 		current := from
 		for current <= to {
-			filter := bson.M{
-				"project_id": docRefKey.ProjectID,
-				"doc_id":     docRefKey.DocID,
-				"server_seq": bson.M{"$gte": current, "$lte": to},
-			}
-			opts := options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}).SetLimit(chunkSize)
-			cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
-			if err != nil {
-				return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
-			}
 			var chunk []*database.ChangeInfo
-			if err := cursor.All(ctx, &chunk); err != nil {
-				return nil, fmt.Errorf("fetch changes of %s: %w", docRefKey, err)
+			if c.session != nil {
+				query := `
+		SELECT
+			project_id,
+			doc_id,
+			server_seq,
+			client_seq,
+			lamport,
+			actor_id,
+			version_vector,
+			message,
+			operations,
+			presence
+		FROM changes
+		WHERE project_id = ? AND doc_id = ? AND server_seq >= ? AND server_seq <= ?
+		ORDER BY server_seq ASC
+		LIMIT ?`
+
+				iter := c.session.Query(
+					query,
+					docRefKey.ProjectID,
+					docRefKey.DocID,
+					current,
+					to,
+					chunkSize,
+				).WithContext(ctx).Iter()
+
+				for {
+					var (
+						projectIDStr string
+						docIDStr     string
+						serverSeq    int64
+						clientSeq    int32
+						lamport      int64
+						actorIDStr   string
+						vvMap        map[string]int64
+						message      string
+						opsBlob      []byte
+						prBlob       []byte
+					)
+
+					if !iter.Scan(
+						&projectIDStr,
+						&docIDStr,
+						&serverSeq,
+						&clientSeq,
+						&lamport,
+						&actorIDStr,
+						&vvMap,
+						&message,
+						&opsBlob,
+						&prBlob,
+					) {
+						break
+					}
+
+					var ops [][]byte
+					if len(opsBlob) > 0 {
+						if err := json.Unmarshal(opsBlob, &ops); err != nil {
+							_ = iter.Close()
+							return nil, fmt.Errorf("decode operations from scylla: %w", err)
+						}
+					}
+
+					var prChange *presence.Change
+					if len(prBlob) > 0 {
+						var tmp presence.Change
+						if err := json.Unmarshal(prBlob, &tmp); err != nil {
+							_ = iter.Close()
+							return nil, fmt.Errorf("decode presence from scylla: %w", err)
+						}
+						prChange = &tmp
+					}
+
+					chunk = append(chunk, &database.ChangeInfo{
+						ProjectID:      types.ID(projectIDStr),
+						DocID:          types.ID(docIDStr),
+						ServerSeq:      serverSeq,
+						ClientSeq:      uint32(clientSeq),
+						Lamport:        lamport,
+						ActorID:        types.ID(actorIDStr),
+						VersionVector:  scylla.FromScyllaVersionVector(vvMap),
+						Message:        message,
+						Operations:     ops,
+						PresenceChange: prChange,
+					})
+				}
+
+				if err := iter.Close(); err != nil {
+					return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
+				}
+			} else {
+				filter := bson.M{
+					"project_id": docRefKey.ProjectID,
+					"doc_id":     docRefKey.DocID,
+					"server_seq": bson.M{"$gte": current, "$lte": to},
+				}
+				opts := options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}).SetLimit(chunkSize)
+				cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
+				if err != nil {
+					return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
+				}
+				if err := cursor.All(ctx, &chunk); err != nil {
+					return nil, fmt.Errorf("fetch changes of %s: %w", docRefKey, err)
+				}
 			}
 			if len(chunk) == 0 {
 				break
@@ -1994,16 +2268,42 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id":     docRefKey.ProjectID,
-		"doc_id":         docRefKey.DocID,
-		"server_seq":     doc.Checkpoint().ServerSeq,
-		"lamport":        doc.Lamport(),
-		"version_vector": doc.VersionVector(),
-		"snapshot":       snapshot,
-		"created_at":     gotime.Now(),
-	}); err != nil {
-		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
+	if c.session != nil {
+		// NOTE(ggyuchive): In Scylla, snapshots are stored in the `snapshots` table.
+		if err := c.session.Query(`
+		INSERT INTO snapshots (
+			"_id",
+			project_id,
+			doc_id,
+			server_seq,
+			lamport,
+			version_vector,
+			snapshot,
+			created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			types.NewID(),
+			docRefKey.ProjectID,
+			docRefKey.DocID,
+			doc.Checkpoint().ServerSeq,
+			doc.Lamport(),
+			scylla.ToScyllaVersionVector(doc.VersionVector()),
+			snapshot,
+			gotime.Now(),
+		).WithContext(ctx).Exec(); err != nil {
+			return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
+		}
+	} else {
+		if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
+			"project_id":     docRefKey.ProjectID,
+			"doc_id":         docRefKey.DocID,
+			"server_seq":     doc.Checkpoint().ServerSeq,
+			"lamport":        doc.Lamport(),
+			"version_vector": doc.VersionVector(),
+			"snapshot":       snapshot,
+			"created_at":     gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
+		}
 	}
 
 	return nil
@@ -2015,19 +2315,77 @@ func (c *Client) FindSnapshotInfo(
 	docKey types.DocRefKey,
 	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
-	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"project_id": docKey.ProjectID,
-		"doc_id":     docKey.DocID,
-		"server_seq": serverSeq,
-	})
-
 	info := &database.SnapshotInfo{}
-	if err := result.Decode(info); err != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return info, nil
+	if c.session != nil {
+		query := `
+		SELECT
+			"_id",
+			project_id,
+			doc_id,
+			server_seq,
+			lamport,
+			version_vector,
+			snapshot,
+			created_at
+		FROM snapshots
+		WHERE project_id = ? AND doc_id = ? AND server_seq = ?`
+
+		var (
+			idStr        string
+			projectIDStr string
+			docIDStr     string
+			serverSeqVal int64
+			lamport      int64
+			vvMap        map[string]int64
+			snapBytes    []byte
+			createdAt    gotime.Time
+		)
+
+		iter := c.session.Query(
+			query,
+			docKey.ProjectID,
+			docKey.DocID,
+			serverSeq,
+		).WithContext(ctx).Iter()
+
+		if iter.Scan(
+			&idStr,
+			&projectIDStr,
+			&docIDStr,
+			&serverSeqVal,
+			&lamport,
+			&vvMap,
+			&snapBytes,
+			&createdAt,
+		) {
+			info = &database.SnapshotInfo{
+				ID:            types.ID(idStr),
+				ProjectID:     types.ID(projectIDStr),
+				DocID:         types.ID(docIDStr),
+				ServerSeq:     serverSeqVal,
+				Lamport:       lamport,
+				VersionVector: scylla.FromScyllaVersionVector(vvMap),
+				Snapshot:      snapBytes,
+				CreatedAt:     createdAt,
+			}
 		}
 
-		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, err)
+		if err := iter.Close(); err != nil {
+			return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, err)
+		}
+	} else {
+		result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
+			"project_id": docKey.ProjectID,
+			"doc_id":     docKey.DocID,
+			"server_seq": serverSeq,
+		})
+		if err := result.Decode(info); err != nil {
+			if result.Err() == mongo.ErrNoDocuments {
+				return info, nil
+			}
+
+			return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, err)
+		}
 	}
 
 	return info, nil
@@ -2040,30 +2398,97 @@ func (c *Client) FindClosestSnapshotInfo(
 	serverSeq int64,
 	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
-	option := options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
-	})
-
-	if !includeSnapshot {
-		option.SetProjection(bson.M{"Snapshot": 0})
-	}
-
-	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
-			"$lte": serverSeq,
-		},
-	}, option)
-
 	info := &database.SnapshotInfo{}
-	if err := result.Decode(info); err != nil {
-		if err == mongo.ErrNoDocuments {
+	if c.session != nil {
+		query := `
+		SELECT
+			"_id",
+			project_id,
+			doc_id,
+			server_seq,
+			lamport,
+			version_vector,
+			snapshot,
+			created_at
+		FROM snapshots
+		WHERE project_id = ? AND doc_id = ? AND server_seq <= ?
+		ORDER BY server_seq DESC
+		LIMIT 1`
+
+		var (
+			idStr        string
+			projectIDStr string
+			docIDStr     string
+			serverSeqVal int64
+			lamport      int64
+			vvMap        map[string]int64
+			snapBytes    []byte
+			createdAt    gotime.Time
+		)
+
+		iter := c.session.Query(
+			query,
+			docRefKey.ProjectID,
+			docRefKey.DocID,
+			serverSeq,
+		).WithContext(ctx).Iter()
+
+		found := iter.Scan(
+			&idStr,
+			&projectIDStr,
+			&docIDStr,
+			&serverSeqVal,
+			&lamport,
+			&vvMap,
+			&snapBytes,
+			&createdAt,
+		)
+
+		if err := iter.Close(); err != nil {
+			return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
+		}
+
+		if !found {
 			info.VersionVector = time.NewVersionVector()
 			return info, nil
 		}
 
-		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
+		if includeSnapshot {
+			info.Snapshot = snapBytes
+		}
+
+		info.ID = types.ID(idStr)
+		info.ProjectID = types.ID(projectIDStr)
+		info.DocID = types.ID(docIDStr)
+		info.ServerSeq = serverSeqVal
+		info.Lamport = lamport
+		info.VersionVector = scylla.FromScyllaVersionVector(vvMap)
+		info.CreatedAt = createdAt
+	} else {
+		option := options.FindOne().SetSort(bson.M{
+			"server_seq": -1,
+		})
+
+		if !includeSnapshot {
+			option.SetProjection(bson.M{"Snapshot": 0})
+		}
+
+		result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"server_seq": bson.M{
+				"$lte": serverSeq,
+			},
+		}, option)
+
+		if err := result.Decode(info); err != nil {
+			if err == mongo.ErrNoDocuments {
+				info.VersionVector = time.NewVersionVector()
+				return info, nil
+			}
+
+			return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
+		}
 	}
 
 	return info, nil
@@ -2121,15 +2546,54 @@ func (c *Client) GetMinVersionVector(
 ) (time.VersionVector, error) {
 	if !c.vectorCache.Contains(docRefKey) {
 		var infos []database.VersionVectorInfo
-		cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("find min version vector: %w", err)
-		}
-		if err := cursor.All(ctx, &infos); err != nil {
-			return nil, fmt.Errorf("find min version vector: %w", err)
+
+		if c.session != nil {
+			// NOTE(ggyuchive): Load version vectors for the document from Scylla.
+			query := `
+		SELECT
+			client_id,
+			version_vector
+		FROM versionvectors
+		WHERE project_id = ? AND doc_id = ?`
+
+			iter := c.session.Query(
+				query,
+				docRefKey.ProjectID,
+				docRefKey.DocID,
+			).WithContext(ctx).Iter()
+
+			for {
+				var (
+					clientIDStr string
+					vvMap       map[string]int64
+				)
+
+				if !iter.Scan(&clientIDStr, &vvMap) {
+					break
+				}
+
+				infos = append(infos, database.VersionVectorInfo{
+					ProjectID:     docRefKey.ProjectID,
+					DocID:         docRefKey.DocID,
+					ClientID:      types.ID(clientIDStr),
+					VersionVector: scylla.FromScyllaVersionVector(vvMap),
+				})
+			}
+
+			if err := iter.Close(); err != nil {
+				return nil, fmt.Errorf("find min version vector: %w", err)
+			}
+		} else {
+			cursor, err := c.collection(ColVersionVectors).Find(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("find min version vector: %w", err)
+			}
+			if err := cursor.All(ctx, &infos); err != nil {
+				return nil, fmt.Errorf("find min version vector: %w", err)
+			}
 		}
 
 		infoMap := cmap.New[types.ID, time.VersionVector]()
@@ -2165,27 +2629,58 @@ func (c *Client) updateVersionVector(
 	}
 
 	if !isAttached {
-		if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
-			"project_id": docRefKey.ProjectID,
-			"doc_id":     docRefKey.DocID,
-			"client_id":  clientInfo.ID,
-		}, options.DeleteOne()); err != nil {
-			return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+		if c.session != nil {
+			// Detach: remove the client's version vector entry from Scylla.
+			if err := c.session.Query(`
+		DELETE FROM versionvectors
+		WHERE project_id = ? AND doc_id = ? AND client_id = ?`,
+				docRefKey.ProjectID,
+				docRefKey.DocID,
+				clientInfo.ID,
+			).WithContext(ctx).Exec(); err != nil {
+				return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+			}
+		} else {
+			if _, err = c.collection(ColVersionVectors).DeleteOne(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"client_id":  clientInfo.ID,
+			}, options.DeleteOne()); err != nil {
+				return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+			}
 		}
 		return nil
 	}
 
-	_, err = c.collection(ColVersionVectors).UpdateOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"client_id":  clientInfo.ID,
-	}, bson.M{
-		"$set": bson.M{
-			"version_vector": vector,
-		},
-	}, options.UpdateOne().SetUpsert(true))
-	if err != nil {
-		return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+	if c.session != nil {
+		// Upsert the client's version vector in Scylla.
+		if err := c.session.Query(`
+		INSERT INTO versionvectors (
+			project_id,
+			doc_id,
+			client_id,
+			version_vector
+		) VALUES (?, ?, ?, ?)`,
+			docRefKey.ProjectID,
+			docRefKey.DocID,
+			clientInfo.ID,
+			scylla.ToScyllaVersionVector(vector),
+		).WithContext(ctx).Exec(); err != nil {
+			return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+		}
+	} else {
+		_, err = c.collection(ColVersionVectors).UpdateOne(ctx, bson.M{
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
+		}, bson.M{
+			"$set": bson.M{
+				"version_vector": vector,
+			},
+		}, options.UpdateOne().SetUpsert(true))
+		if err != nil {
+			return fmt.Errorf("update version vector of %s: %w", docRefKey, err)
+		}
 	}
 
 	return nil
@@ -2474,32 +2969,97 @@ func (c *Client) purgeDocumentInternals(
 	c.presenceCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 	c.vectorCache.Remove(types.DocRefKey{ProjectID: projectID, DocID: docID})
 
-	res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
-	}
-	counts[ColChanges] = res.DeletedCount
+	if c.session != nil {
+		// NOTE(ggyuchive): Purge related resources from Scylla tables and
+		// return the number of deleted rows for each table.
 
-	res, err = c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
-	}
-	counts[ColSnapshots] = res.DeletedCount
+		// changes
+		var changesCount int64
+		if err := c.session.Query(`
+		SELECT COUNT(*) FROM changes
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Scan(&changesCount); err != nil {
+			return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
+		}
+		if err := c.session.Query(`
+		DELETE FROM changes
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Exec(); err != nil {
+			return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
+		}
+		counts[ColChanges] = changesCount
 
-	res, err = c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
-		"project_id": projectID,
-		"doc_id":     docID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
+		// snapshots
+		var snapshotsCount int64
+		if err := c.session.Query(`
+		SELECT COUNT(*) FROM snapshots
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Scan(&snapshotsCount); err != nil {
+			return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
+		}
+		if err := c.session.Query(`
+		DELETE FROM snapshots
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Exec(); err != nil {
+			return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
+		}
+		counts[ColSnapshots] = snapshotsCount
+
+		// versionvectors
+		var vvCount int64
+		if err := c.session.Query(`
+		SELECT COUNT(*) FROM versionvectors
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Scan(&vvCount); err != nil {
+			return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
+		}
+		if err := c.session.Query(`
+		DELETE FROM versionvectors
+		WHERE project_id = ? AND doc_id = ?`,
+			projectID,
+			docID,
+		).WithContext(ctx).Exec(); err != nil {
+			return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
+		}
+		counts[ColVersionVectors] = vvCount
+	} else {
+		res, err := c.collection(ColChanges).DeleteMany(ctx, bson.M{
+			"project_id": projectID,
+			"doc_id":     docID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("purge changes of %s: %w", docID, err)
+		}
+		counts[ColChanges] = res.DeletedCount
+
+		res, err = c.collection(ColSnapshots).DeleteMany(ctx, bson.M{
+			"project_id": projectID,
+			"doc_id":     docID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
+		}
+		counts[ColSnapshots] = res.DeletedCount
+
+		res, err = c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
+			"project_id": projectID,
+			"doc_id":     docID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("purge version vectors of %s: %w", docID, err)
+		}
+		counts[ColVersionVectors] = res.DeletedCount
 	}
-	counts[ColVersionVectors] = res.DeletedCount
 
 	return counts, nil
 }
