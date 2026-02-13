@@ -3562,6 +3562,7 @@ type Operation_Style struct {
 	Attributes          map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
 	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // deprecated
+	AttributesToRemove  []string               `protobuf:"bytes,7,rep,name=attributes_to_remove,json=attributesToRemove,proto3" json:"attributes_to_remove,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -3634,6 +3635,13 @@ func (x *Operation_Style) GetExecutedAt() *TimeTicket {
 func (x *Operation_Style) GetCreatedAtMapByActor() map[string]*TimeTicket {
 	if x != nil {
 		return x.CreatedAtMapByActor
+	}
+	return nil
+}
+
+func (x *Operation_Style) GetAttributesToRemove() []string {
+	if x != nil {
+		return x.AttributesToRemove
 	}
 	return nil
 }
@@ -4548,7 +4556,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x06vector\x18\x01 \x03(\v2$.yorkie.v1.VersionVector.VectorEntryR\x06vector\x1a9\n" +
 	"\vVectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa3 \n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xd5 \n" +
 	"\tOperation\x12,\n" +
 	"\x03set\x18\x01 \x01(\v2\x18.yorkie.v1.Operation.SetH\x00R\x03set\x12,\n" +
 	"\x03add\x18\x02 \x01(\v2\x18.yorkie.v1.Operation.AddH\x00R\x03add\x12/\n" +
@@ -4603,7 +4611,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a\xab\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a\xdd\x04\n" +
 	"\x05Style\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12*\n" +
 	"\x04from\x18\x02 \x01(\v2\x16.yorkie.v1.TextNodePosR\x04from\x12&\n" +
@@ -4613,7 +4621,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"attributes\x126\n" +
 	"\vexecuted_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x12i\n" +
-	"\x17created_at_map_by_actor\x18\x06 \x03(\v23.yorkie.v1.Operation.Style.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x1a=\n" +
+	"\x17created_at_map_by_actor\x18\x06 \x03(\v23.yorkie.v1.Operation.Style.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x120\n" +
+	"\x14attributes_to_remove\x18\a \x03(\tR\x12attributesToRemove\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a]\n" +
