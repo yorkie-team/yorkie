@@ -2567,9 +2567,9 @@ func (d *DB) FindRevisionInfosByPaging(
 	// Sort by ID descending (newest first, since ID contains timestamp)
 	sort.Slice(revisions, func(i, j int) bool {
 		if paging.IsForward {
-			return revisions[i].ID > revisions[j].ID
+			return revisions[i].ID < revisions[j].ID
 		}
-		return revisions[i].ID < revisions[j].ID
+		return revisions[i].ID > revisions[j].ID
 	})
 
 	// Apply paging
