@@ -410,6 +410,73 @@ func (t *Text) Style(
 	return pairs, diff, nil
 }
 
+// RemoveStyle removes the given attributes from the given range.
+func (t *Text) RemoveStyle(
+	from,
+	to *RGATreeSplitNodePos,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+	versionVector time.VersionVector,
+) ([]GCPair, resource.DataSize, error) {
+	var diff resource.DataSize
+
+	// 01. Split nodes with from and to
+	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	if err != nil {
+		return nil, diff, err
+	}
+	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	if err != nil {
+		return nil, diff, err
+	}
+
+	diff.Add(diffTo, diffFrom)
+
+	// 02. find nodes between from and to that can be styled
+	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
+	isVersionVectorEmpty := len(versionVector) == 0
+
+	var toBeStyled []*RGATreeSplitNode[*TextValue]
+
+	for _, node := range nodes {
+		actorID := node.id.createdAt.ActorID()
+
+		var clientLamportAtChange int64
+		if isVersionVectorEmpty {
+			clientLamportAtChange = time.MaxLamport
+		} else {
+			lamport, ok := versionVector.Get(actorID)
+			if ok {
+				clientLamportAtChange = lamport
+			} else {
+				clientLamportAtChange = 0
+			}
+		}
+
+		if node.canStyle(executedAt, clientLamportAtChange) {
+			toBeStyled = append(toBeStyled, node)
+		}
+	}
+
+	// 03. remove attributes from styled nodes
+	var pairs []GCPair
+	for _, node := range toBeStyled {
+		val := node.value
+		for _, attr := range attributesToRemove {
+			rhtNodes := val.attrs.Remove(attr, executedAt)
+			for _, rhtNode := range rhtNodes {
+				pairs = append(pairs, GCPair{
+					Parent: node.Value(),
+					Child:  rhtNode,
+				})
+				diff.Add(rhtNode.DataSize())
+			}
+		}
+	}
+
+	return pairs, diff, nil
+}
+
 // Nodes returns the internal nodes of this Text.
 func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
 	return t.rgaTreeSplit.nodes()

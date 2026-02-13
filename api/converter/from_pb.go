@@ -528,6 +528,17 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if len(pbStyle.AttributesToRemove) > 0 {
+		return operations.NewStyleRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbStyle.AttributesToRemove,
+			executedAt,
+		), nil
+	}
+
 	return operations.NewStyle(
 		parentCreatedAt,
 		from,

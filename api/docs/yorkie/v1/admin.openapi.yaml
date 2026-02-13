@@ -2756,6 +2756,13 @@ components:
           description: ""
           title: attributes
           type: object
+        attributesToRemove:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: attributes_to_remove
+          type: array
         createdAtMapByActor:
           additionalProperties: false
           description: deprecated

@@ -18,6 +18,7 @@ package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -35,6 +36,9 @@ type Style struct {
 	// attributes represents the text style.
 	attributes map[string]string
 
+	// attributesToRemove represents the text style to be removed.
+	attributesToRemove []string
+
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
 }
@@ -48,11 +52,30 @@ func NewStyle(
 	executedAt *time.Ticket,
 ) *Style {
 	return &Style{
-		parentCreatedAt: parentCreatedAt,
-		from:            from,
-		to:              to,
-		attributes:      attributes,
-		executedAt:      executedAt,
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         attributes,
+		attributesToRemove: []string{},
+		executedAt:         executedAt,
+	}
+}
+
+// NewStyleRemove creates a new instance of Style for removing attributes.
+func NewStyleRemove(
+	parentCreatedAt *time.Ticket,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+) *Style {
+	return &Style{
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         map[string]string{},
+		attributesToRemove: attributesToRemove,
+		executedAt:         executedAt,
 	}
 }
 
@@ -64,9 +87,19 @@ func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error
 		return ErrNotApplicableDataType
 	}
 
-	pairs, diff, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
-	if err != nil {
-		return err
+	var pairs []crdt.GCPair
+	var diff resource.DataSize
+	var err error
+	if len(e.attributesToRemove) > 0 {
+		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
+		if err != nil {
+			return err
+		}
+	} else {
+		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, pair := range pairs {
@@ -107,4 +140,9 @@ func (e *Style) ParentCreatedAt() *time.Ticket {
 // Attributes returns the attributes of this operation.
 func (e *Style) Attributes() map[string]string {
 	return e.attributes
+}
+
+// AttributesToRemove returns the attributes to remove.
+func (e *Style) AttributesToRemove() []string {
+	return e.attributesToRemove
 }
