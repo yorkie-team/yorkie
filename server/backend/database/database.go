@@ -254,8 +254,9 @@ type Database interface {
 		ctx context.Context,
 		candidatesLimit int,
 		compactionMinChanges int,
+		lastServerSeq int64,
 		lastDocID types.ID,
-	) ([]*DocInfo, types.ID, error)
+	) ([]*DocInfo, int64, types.ID, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(ctx context.Context, projectID types.ID, docKey key.Key) (*DocInfo, error)

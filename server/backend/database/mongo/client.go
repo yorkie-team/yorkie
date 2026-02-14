@@ -1349,27 +1349,44 @@ func (c *Client) FindCompactionCandidates(
 	ctx context.Context,
 	candidatesLimit int,
 	compactionMinChanges int,
+	lastServerSeq int64,
 	lastDocID types.ID,
-) ([]*database.DocInfo, types.ID, error) {
-	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"_id":        bson.M{"$gt": lastDocID},
+) ([]*database.DocInfo, int64, types.ID, error) {
+	// Use (server_seq, _id) for cursor-based pagination to leverage the compound index.
+	// Query: (server_seq > lastServerSeq) OR (server_seq = lastServerSeq AND _id > lastDocID)
+	filter := bson.M{
 		"server_seq": bson.M{"$gte": compactionMinChanges},
-	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+		"$or": []bson.M{
+			{"server_seq": bson.M{"$gt": lastServerSeq}},
+			{
+				"server_seq": lastServerSeq,
+				"_id":        bson.M{"$gt": lastDocID},
+			},
+		},
+	}
+
+	cursor, err := c.collection(ColDocuments).Find(ctx, filter,
+		options.Find().
+			SetSort(bson.D{{Key: "server_seq", Value: 1}, {Key: "_id", Value: 1}}).
+			SetLimit(int64(candidatesLimit)))
 	if err != nil {
-		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
+		return nil, 0, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}
 
 	var infos []*database.DocInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, database.ZeroID, fmt.Errorf("fetch compaction candidates direct: %w", err)
+		return nil, 0, database.ZeroID, fmt.Errorf("fetch compaction candidates direct: %w", err)
 	}
 
-	var lastID types.ID = database.ZeroID
+	var resultLastServerSeq int64 = 0
+	var resultLastID types.ID = database.ZeroID
 	if len(infos) > 0 {
-		lastID = infos[len(infos)-1].ID
+		last := infos[len(infos)-1]
+		resultLastServerSeq = last.ServerSeq
+		resultLastID = last.ID
 	}
 
-	return infos, lastID, nil
+	return infos, resultLastServerSeq, resultLastID, nil
 }
 
 // FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.

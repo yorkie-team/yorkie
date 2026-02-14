@@ -177,6 +177,10 @@ func TestClient(t *testing.T) {
 	t.Run("RunFindCandidates test", func(t *testing.T) {
 		testcases.RunFindCandidatesTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("FindCompactionCandidates test", func(t *testing.T) {
+		testcases.RunFindCompactionCandidatesTest(t, cli, dummyProjectID)
+	})
 }
 
 func TestClient_RotateProjectKeys(t *testing.T) {

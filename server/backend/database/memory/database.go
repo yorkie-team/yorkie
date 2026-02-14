@@ -1264,33 +1264,48 @@ func (d *DB) FindCompactionCandidates(
 	ctx context.Context,
 	candidatesLimit int,
 	compactionMinChanges int,
+	lastServerSeq int64,
 	lastDocID types.ID,
-) ([]*database.DocInfo, types.ID, error) {
+) ([]*database.DocInfo, int64, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.LowerBound(tblDocuments, "id", lastDocID.String())
+	iter, err := txn.Get(tblDocuments, "id")
 	if err != nil {
-		return nil, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
+		return nil, 0, database.ZeroID, fmt.Errorf("find compaction candidates direct: %w", err)
 	}
 
-	var infos []*database.DocInfo
-	var lastID types.ID = lastDocID
-	count := 0
-
-	for raw := iter.Next(); raw != nil && count < candidatesLimit; raw = iter.Next() {
+	// Collect all candidates that meet the server_seq threshold
+	var candidates []*database.DocInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*database.DocInfo)
-
-		// Skip the lastDocID itself
-		if info.ID == lastDocID {
-			continue
-		}
-
-		// Always update lastID to ensure progress
-		lastID = info.ID
 
 		// Check if document has enough changes to compact
 		if info.ServerSeq < int64(compactionMinChanges) {
+			continue
+		}
+
+		candidates = append(candidates, info)
+	}
+
+	// Sort by (server_seq, _id) for consistent cursor-based pagination
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].ServerSeq != candidates[j].ServerSeq {
+			return candidates[i].ServerSeq < candidates[j].ServerSeq
+		}
+		return candidates[i].ID < candidates[j].ID
+	})
+
+	// Apply cursor-based pagination: skip documents until we pass (lastServerSeq, lastDocID)
+	var infos []*database.DocInfo
+	count := 0
+
+	for _, info := range candidates {
+		// Skip documents that are before or at the cursor position
+		if info.ServerSeq < lastServerSeq {
+			continue
+		}
+		if info.ServerSeq == lastServerSeq && info.ID <= lastDocID {
 			continue
 		}
 
@@ -1308,9 +1323,20 @@ func (d *DB) FindCompactionCandidates(
 
 		infos = append(infos, info.DeepCopy())
 		count++
+		if count >= candidatesLimit {
+			break
+		}
 	}
 
-	return infos, lastID, nil
+	var resultLastServerSeq int64 = 0
+	var resultLastID types.ID = database.ZeroID
+	if len(infos) > 0 {
+		last := infos[len(infos)-1]
+		resultLastServerSeq = last.ServerSeq
+		resultLastID = last.ID
+	}
+
+	return infos, resultLastServerSeq, resultLastID, nil
 }
 
 // FindAttachedClientInfosByRefKey returns the attached client infos of the given document.

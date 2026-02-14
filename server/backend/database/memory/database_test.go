@@ -155,4 +155,8 @@ func TestDB(t *testing.T) {
 	t.Run("RunFindCandidates test", func(t *testing.T) {
 		testcases.RunFindCandidatesTest(t, db, projectID)
 	})
+
+	t.Run("FindCompactionCandidates test", func(t *testing.T) {
+		testcases.RunFindCompactionCandidatesTest(t, db, projectID)
+	})
 }

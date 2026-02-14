@@ -184,6 +184,12 @@ var collectionInfos = []collectionInfo{
 				{Key: "removed_at", Value: int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
+		}, {
+			// Index for FindCompactionCandidates: supports (server_seq, _id) cursor pagination
+			Keys: bson.D{
+				{Key: "server_seq", Value: int32(1)},
+				{Key: "_id", Value: int32(1)},
+			},
 		}},
 	},
 	{
