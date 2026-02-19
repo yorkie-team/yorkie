@@ -2501,7 +2501,10 @@ func RunFindCompactionCandidatesTest(t *testing.T, db database.Database, project
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(emptyCandidates))
 
-		_ = lastServerSeq // Use lastServerSeq to avoid unused variable error
-		_ = lastID        // Use lastID to avoid unused variable error
+		// 05. Verify cursor values are consistent with results
+		if len(candidates) > 0 {
+			assert.Greater(t, lastServerSeq, int64(0))
+			assert.NotEqual(t, database.ZeroID, lastID)
+		}
 	})
 }

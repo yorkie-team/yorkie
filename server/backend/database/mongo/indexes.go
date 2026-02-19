@@ -185,7 +185,11 @@ var collectionInfos = []collectionInfo{
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
-			// Index for FindCompactionCandidates: supports (server_seq, _id) cursor pagination
+			// NOTE(raararaara): This index is for FindCompactionCandidates.
+			// It supports (server_seq, _id) cursor pagination.
+			// But it skips the shard key to cover all documents in all projects.
+			// On a sharded cluster this will cause scatter-gather,
+			// but is acceptable for periodic housekeeping.
 			Keys: bson.D{
 				{Key: "server_seq", Value: int32(1)},
 				{Key: "_id", Value: int32(1)},

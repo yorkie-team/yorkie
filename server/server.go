@@ -290,8 +290,9 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 
 		if processedCount > 0 {
 			logging.From(ctx).Infof(
-				"HSKP: compaction #%d %s candidates %d/%d compacted %d/%d %s",
+				"HSKP: compaction #%d seq:%d id:%s candidates %d/%d compacted %d/%d %s",
 				compactionState.term,
+				currentLastServerSeq,
 				currentLastID,
 				candidatesCount,
 				compactionState.totalCandidates,
