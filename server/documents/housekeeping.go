@@ -42,28 +42,30 @@ func CompactDocuments(
 	be *backend.Backend,
 	candidatesLimit int,
 	compactionMinChanges int,
+	lastServerSeq int64,
 	lastDocID types.ID,
-) (types.ID, int, int, error) {
+) (int64, types.ID, int, int, error) {
 	locker, ok := be.Lockers.LockerWithTryLock(compactionKey)
 	if !ok {
-		return lastDocID, 0, 0, nil
+		return lastServerSeq, lastDocID, 0, 0, nil
 	}
 	defer locker.Unlock()
 
-	lastID, candidates, err := FindCompactionCandidates(
+	resultServerSeq, resultDocID, candidates, err := FindCompactionCandidates(
 		ctx,
 		be,
 		candidatesLimit,
 		compactionMinChanges,
+		lastServerSeq,
 		lastDocID,
 	)
 	if err != nil {
-		return lastDocID, 0, 0, err
+		return lastServerSeq, lastDocID, 0, 0, err
 	}
 
 	// If no candidates found, reset to beginning for next cycle.
 	if len(candidates) == 0 {
-		return database.ZeroID, 0, 0, nil
+		return 0, database.ZeroID, 0, 0, nil
 	}
 
 	compactedCount := 0
@@ -79,7 +81,7 @@ func CompactDocuments(
 		}
 	}
 
-	return lastID, len(candidates), compactedCount, nil
+	return resultServerSeq, resultDocID, len(candidates), compactedCount, nil
 }
 
 // FindCompactionCandidates finds candidates to compact by directly querying documents.
@@ -88,18 +90,20 @@ func FindCompactionCandidates(
 	be *backend.Backend,
 	candidatesLimit int,
 	compactionMinChanges int,
+	lastServerSeq int64,
 	lastDocID types.ID,
-) (types.ID, []CandidatePairDoc, error) {
-	candidates, lastID, err := be.DB.FindCompactionCandidates(ctx, candidatesLimit, compactionMinChanges, lastDocID)
+) (int64, types.ID, []CandidatePairDoc, error) {
+	candidates, resultServerSeq, resultDocID, err := be.DB.FindCompactionCandidates(
+		ctx, candidatesLimit, compactionMinChanges, lastServerSeq, lastDocID)
 	if err != nil {
-		return database.ZeroID, nil, err
+		return 0, database.ZeroID, nil, err
 	}
 
 	var pairs []CandidatePairDoc
 	for _, candidate := range candidates {
 		info, err := be.DB.FindProjectInfoByID(ctx, candidate.ProjectID)
 		if err != nil {
-			return database.ZeroID, nil, err
+			return 0, database.ZeroID, nil, err
 		}
 
 		pairs = append(pairs, CandidatePairDoc{
@@ -108,5 +112,5 @@ func FindCompactionCandidates(
 		})
 	}
 
-	return lastID, pairs, nil
+	return resultServerSeq, resultDocID, pairs, nil
 }

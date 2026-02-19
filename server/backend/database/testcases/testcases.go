@@ -2466,7 +2466,7 @@ func RunFindCompactionCandidatesTest(t *testing.T, db database.Database, project
 		ctx := context.Background()
 
 		// 01. Test basic functionality with very low threshold
-		candidates, lastID, err := db.FindCompactionCandidates(ctx, 10, 1, database.ZeroID)
+		candidates, lastServerSeq, lastID, err := db.FindCompactionCandidates(ctx, 10, 1, 0, database.ZeroID)
 		assert.NoError(t, err)
 
 		// Should not crash and return valid data
@@ -2479,29 +2479,32 @@ func RunFindCompactionCandidatesTest(t *testing.T, db database.Database, project
 		}
 
 		// 02. Test with very high threshold (should find fewer or no documents)
-		highThresholdCandidates, _, err := db.FindCompactionCandidates(ctx, 10, 10000, database.ZeroID)
+		highThresholdCandidates, _, _, err := db.FindCompactionCandidates(ctx, 10, 10000, 0, database.ZeroID)
 		assert.NoError(t, err)
 
 		// Should find fewer candidates than with low threshold
 		assert.LessOrEqual(t, len(highThresholdCandidates), len(candidates))
 
 		// 03. Test pagination with smaller limit
-		limitedCandidates, newLastID, err := db.FindCompactionCandidates(ctx, 5, 1, database.ZeroID)
+		limitedCandidates, newLastServerSeq, newLastID, err := db.FindCompactionCandidates(ctx, 5, 1, 0, database.ZeroID)
 		assert.NoError(t, err)
 		assert.LessOrEqual(t, len(limitedCandidates), 5)
 
 		// Test second page if there are results
 		if len(limitedCandidates) > 0 {
-			_, _, err := db.FindCompactionCandidates(ctx, 5, 1, newLastID)
+			_, _, _, err := db.FindCompactionCandidates(ctx, 5, 1, newLastServerSeq, newLastID)
 			assert.NoError(t, err)
 		}
 
-		// 04. Test with empty result using high lastID
-		highID := types.ID("ffffffffffffffffffffffff")
-		emptyCandidates, _, err := db.FindCompactionCandidates(ctx, 10, 1, highID)
+		// 04. Test with empty result using high server_seq
+		emptyCandidates, _, _, err := db.FindCompactionCandidates(ctx, 10, 1, int64(1<<62), database.ZeroID)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(emptyCandidates))
 
-		_ = lastID // Use lastID to avoid unused variable error
+		// 05. Verify cursor values are consistent with results
+		if len(candidates) > 0 {
+			assert.Greater(t, lastServerSeq, int64(0))
+			assert.NotEqual(t, database.ZeroID, lastID)
+		}
 	})
 }
