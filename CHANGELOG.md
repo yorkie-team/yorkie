@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.6.49] - 2026-02-23
+
+### Added
+
+- Add attributes_to_remove support to Operation.Style for text undo/redo by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1678
+
+### Changed
+
+- Optimize FindCompactionCandidates query with compound index by @raararaara in https://github.com/yorkie-team/yorkie/pull/1677
+
+### Fixed
+
+- Fix inverted revision sort order in memory database by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1676
+- Fix empty documentSize in GetDocument response by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1687
+
 ## [v0.6.48] - 2026-02-11
 
 ### Added
