@@ -72,3 +72,5 @@ build/              # Docker, Helm charts, build scripts
 - **Cluster mode**: Consistent hashing (Maglev) for document sharding
 - **Housekeeping**: Background client deactivation + document compaction
 - See `design/` folder for detailed architecture documents
+
+IMPORTANT: Always refer to `design/` for architectural context and design decisions. And We should keep them up to date after making changes.
