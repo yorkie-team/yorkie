@@ -237,6 +237,7 @@ func (s *clusterServer) GetDocument(
 		// Set root if requested
 		if req.Msg.IncludeRoot {
 			summary.Root = doc.Marshal()
+			summary.DocSize = doc.DocSize()
 		}
 
 		// Set presences if requested
