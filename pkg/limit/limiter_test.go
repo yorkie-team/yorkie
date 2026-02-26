@@ -400,21 +400,16 @@ func TestBatchExpiration(t *testing.T) {
 			}
 		}
 
-		// Wait for each batch with both count checking and completion tracking
-		for i := range batchNum {
-			expectedCount := totalKeys + expireBatchSize*(i+1)
-
-			// First, wait for the callbacks to actually execute
-			for j := range expireBatchSize {
-				select {
-				case <-completionChan:
-				case <-time.After(expireInterval * 2):
-					t.Fatalf("Timeout waiting for batch %d callback %d", i+1, j+1)
-				}
+		// Wait for all debounced callbacks to complete.
+		// NOTE: We don't assert intermediate per-batch counts because the ticker
+		// and test assertions can race — a subsequent batch may fire before the
+		// test checks o.len(), leading to flaky intermediate counts.
+		for i := range expireBatchSize * batchNum {
+			select {
+			case <-completionChan:
+			case <-time.After(expireInterval * 2):
+				t.Fatalf("Timeout waiting for debounced callback %d", i+1)
 			}
-
-			// Then verify the count (should be immediate now)
-			assert.Equal(t, expectedCount, o.len(), "Batch %d should be complete", i+1)
 		}
 
 		assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
