@@ -21,12 +21,12 @@ import (
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/splay"
+	"github.com/yorkie-team/yorkie/pkg/treelist"
 )
 
 // RGATreeListNode is a node of RGATreeList.
 type RGATreeListNode struct {
-	indexNode *splay.Node[*RGATreeListNode]
+	indexNode *treelist.Node[*RGATreeListNode]
 	elem      Element
 	movedFrom *RGATreeListNode
 
@@ -40,7 +40,7 @@ func newRGATreeListNode(elem Element) *RGATreeListNode {
 		next: nil,
 		elem: elem,
 	}
-	node.indexNode = splay.NewNode(node)
+	node.indexNode = treelist.NewNode(node)
 
 	return node
 }
@@ -88,20 +88,12 @@ func (a *RGATreeListNode) SetMovedFrom(movedFrom *RGATreeListNode) {
 	a.movedFrom = movedFrom
 }
 
-// Len returns the length of this node.
-func (n *RGATreeListNode) Len() int {
-	if n.isRemoved() {
-		return 0
-	}
-	return 1
-}
-
 // String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
 	return n.elem.Marshal()
 }
 
-func (n *RGATreeListNode) isRemoved() bool {
+func (n *RGATreeListNode) IsRemoved() bool {
 	return n.elem.RemovedAt() != nil
 }
 
@@ -112,7 +104,7 @@ func (n *RGATreeListNode) isRemoved() bool {
 type RGATreeList struct {
 	dummyHead          *RGATreeListNode
 	last               *RGATreeListNode
-	nodeMapByIndex     *splay.Tree[*RGATreeListNode]
+	nodeMapByIndex     *treelist.Tree[*RGATreeListNode]
 	nodeMapByCreatedAt map[string]*RGATreeListNode
 }
 
@@ -124,7 +116,7 @@ func NewRGATreeList() *RGATreeList {
 
 	dummyValue.SetRemovedAt(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
-	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
+	nodeMapByIndex := treelist.NewTree(dummyHead.indexNode)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
 	nodeMapByCreatedAt[dummyHead.CreatedAt().Key()] = dummyHead
 
@@ -144,7 +136,7 @@ func (a *RGATreeList) Marshal() string {
 	current := a.dummyHead.next
 	isFirst := true
 	for current != nil {
-		if !current.isRemoved() {
+		if !current.IsRemoved() {
 			if isFirst {
 				isFirst = false
 			} else {
@@ -198,11 +190,11 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element, exec
 
 // Get returns the element of the given index.
 func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
-	splayNode, err := a.nodeMapByIndex.FindForArray(idx)
+	treelistNode, err := a.nodeMapByIndex.Find(idx)
 	if err != nil {
 		return nil, err
 	}
-	return splayNode.Value(), nil
+	return treelistNode.Value(), nil
 }
 
 // DeleteByCreatedAt deletes the given element.
@@ -211,11 +203,8 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 	if !ok {
 		return nil, fmt.Errorf("DeleteByCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
-
-	alreadyRemoved := node.isRemoved()
-	if node.elem.Remove(deletedAt) && !alreadyRemoved {
-		a.nodeMapByIndex.Splay(node.indexNode)
-	}
+	node.elem.Remove(deletedAt)
+	a.nodeMapByIndex.UpdateWeight(node.indexNode)
 	return node, nil
 }
 
@@ -294,7 +283,7 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, e
 
 	for {
 		node = node.prev
-		if a.dummyHead == node || !node.isRemoved() {
+		if a.dummyHead == node || !node.IsRemoved() {
 			break
 		}
 	}
