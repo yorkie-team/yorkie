@@ -12,6 +12,7 @@
 
 ### CRDT
 
+- [Undo/Redo](undo-redo.md): Per-client undo/redo with reverse operations and position reconciliation
 - [VersionVector](version-vector.md): VersionVector for GC and Resolving conflicts in CRDT
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
