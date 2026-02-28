@@ -1,6 +1,6 @@
 ---
 title: undo-redo
-target-version: 0.6.x
+target-version: 0.6.50
 ---
 
 # Undo/Redo (History)
