@@ -87,7 +87,7 @@ func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) err
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {
-		if node.isRemoved() {
+		if node.IsRemoved() {
 			continue
 		}
 		elements = append(elements, node.elem)
