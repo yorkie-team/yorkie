@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.0] - 2026-03-05
+
+### Added
+
+- Add undo/redo design document for CRDT operations by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1686
+
+### Fixed
+
+- Fix flaky TestBatchExpiration by removing racy per-batch assertions by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1688
+
 ## [v0.6.49] - 2026-02-23
 
 ### Added
