@@ -8,6 +8,20 @@ We hope that the items listed below will inspire further engagement from the com
 Any dates listed below and the specific issues that will ship in a given milestone are subject to change but should give a general idea of what we are planning.
 We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in GitHub so look there for the most up-to-date and issue plan.
 
+## 2026
+
+Yorkie v0.7 focuses on building a sustainable ecosystem and advancing co-editing capabilities.
+
+- Harness Introduction
+- Second Brain: Community
+- Local-First Co-editing Interface
+- Pageable Data Structure: PagableOrderedMap
+- Multi-User Undo/Redo
+- Tree Schema, Merge/Split Support
+- Quota & Limit
+- Comment Widget
+- Use Cases: Text Editor, Canvas, Whiteboard, Spreadsheet
+
 ## 2025
 
 Yorkie v0.6 focuses on enhancing collaboration efficiency and scalability.
