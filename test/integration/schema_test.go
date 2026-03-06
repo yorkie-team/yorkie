@@ -665,4 +665,46 @@ func TestDocumentSchema(t *testing.T) {
 
 		cli.Deactivate(ctx)
 	})
+
+	t.Run("tree schema with tree node rules round-trip test", func(t *testing.T) {
+		treeSchemaName := fmt.Sprintf("tree-schema-%d", gotime.Now().UnixMilli())
+		treeSchemaRules := []types.Rule{
+			{
+				Path: "$.content",
+				Type: "yorkie.Tree",
+				TreeNodes: []types.TreeNodeRule{
+					{NodeType: "doc", Content: "paragraph+", Marks: "", Group: ""},
+					{NodeType: "paragraph", Content: "text*", Marks: "bold italic", Group: "block"},
+					{NodeType: "text", Content: "", Marks: "", Group: ""},
+				},
+			},
+		}
+		err := adminCli.CreateSchema(
+			ctx,
+			"default",
+			treeSchemaName,
+			1,
+			`type Document = { content: yorkie.Tree; };`,
+			treeSchemaRules,
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(treeSchemaName+"@1")))
+
+		// Verify tree node rules are received by the client
+		assert.Equal(t, treeSchemaRules, doc.SchemaRules)
+		assert.Len(t, doc.SchemaRules[0].TreeNodes, 3)
+		assert.Equal(t, "doc", doc.SchemaRules[0].TreeNodes[0].NodeType)
+		assert.Equal(t, "paragraph+", doc.SchemaRules[0].TreeNodes[0].Content)
+		assert.Equal(t, "bold italic", doc.SchemaRules[0].TreeNodes[1].Marks)
+		assert.Equal(t, "block", doc.SchemaRules[0].TreeNodes[1].Group)
+
+		cli.Deactivate(ctx)
+	})
 }
