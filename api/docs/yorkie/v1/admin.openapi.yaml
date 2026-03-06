@@ -3339,6 +3339,14 @@ components:
           description: ""
           title: path
           type: string
+        treeNodes:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TreeNodeRule'
+            type: object
+          title: tree_nodes
+          type: array
         type:
           additionalProperties: false
           description: ""
@@ -3578,6 +3586,32 @@ components:
           title: offset
           type: integer
       title: TreeNodeID
+      type: object
+    yorkie.v1.TreeNodeRule:
+      additionalProperties: false
+      description: ""
+      properties:
+        content:
+          additionalProperties: false
+          description: ""
+          title: content
+          type: string
+        group:
+          additionalProperties: false
+          description: ""
+          title: group
+          type: string
+        marks:
+          additionalProperties: false
+          description: ""
+          title: marks
+          type: string
+        nodeType:
+          additionalProperties: false
+          description: ""
+          title: node_type
+          type: string
+      title: TreeNodeRule
       type: object
     yorkie.v1.TreeNodes:
       additionalProperties: false
