@@ -1104,9 +1104,19 @@ func FromRules(pbRules []*api.Rule) []types.Rule {
 
 // FromRule converts the given Protobuf formats to model format.
 func FromRule(pbRule *api.Rule) types.Rule {
+	var treeNodes []types.TreeNodeRule
+	for _, tn := range pbRule.TreeNodes {
+		treeNodes = append(treeNodes, types.TreeNodeRule{
+			NodeType: tn.NodeType,
+			Content:  tn.Content,
+			Marks:    tn.Marks,
+			Group:    tn.Group,
+		})
+	}
 	return types.Rule{
-		Path: pbRule.Path,
-		Type: pbRule.Type,
+		Path:      pbRule.Path,
+		Type:      pbRule.Type,
+		TreeNodes: treeNodes,
 	}
 }
 

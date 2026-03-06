@@ -731,9 +731,19 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 func ToRules(rules []types.Rule) []*api.Rule {
 	var pbRules []*api.Rule
 	for _, rule := range rules {
+		var treeNodes []*api.TreeNodeRule
+		for _, tn := range rule.TreeNodes {
+			treeNodes = append(treeNodes, &api.TreeNodeRule{
+				NodeType: tn.NodeType,
+				Content:  tn.Content,
+				Marks:    tn.Marks,
+				Group:    tn.Group,
+			})
+		}
 		pbRules = append(pbRules, &api.Rule{
-			Type: rule.Type,
-			Path: rule.Path,
+			Type:      rule.Type,
+			Path:      rule.Path,
+			TreeNodes: treeNodes,
 		})
 	}
 	return pbRules

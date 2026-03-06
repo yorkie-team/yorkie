@@ -66,7 +66,16 @@ func (s *SchemaInfo) DeepCopy() *SchemaInfo {
 	}
 
 	rules := make([]types.Rule, len(s.Rules))
-	copy(rules, s.Rules)
+	for i, r := range s.Rules {
+		rules[i] = types.Rule{
+			Path: r.Path,
+			Type: r.Type,
+		}
+		if len(r.TreeNodes) > 0 {
+			rules[i].TreeNodes = make([]types.TreeNodeRule, len(r.TreeNodes))
+			copy(rules[i].TreeNodes, r.TreeNodes)
+		}
+	}
 
 	return &SchemaInfo{
 		ID:        s.ID,
