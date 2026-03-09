@@ -707,4 +707,50 @@ func TestDocumentSchema(t *testing.T) {
 
 		cli.Deactivate(ctx)
 	})
+
+	t.Run("reject non-tree value at tree schema path test", func(t *testing.T) {
+		treeSchemaName := fmt.Sprintf("tree-schema-neg-%d", gotime.Now().UnixMilli())
+		treeSchemaRules := []types.Rule{
+			{
+				Path: "$.tree",
+				Type: "yorkie.Tree",
+				TreeNodes: []types.TreeNodeRule{
+					{NodeType: "doc", Content: "paragraph+", Marks: "", Group: ""},
+					{NodeType: "paragraph", Content: "text*", Marks: "bold italic", Group: "block"},
+					{NodeType: "text", Content: "", Marks: "", Group: ""},
+				},
+			},
+		}
+		err := adminCli.CreateSchema(
+			ctx,
+			"default",
+			treeSchemaName,
+			1,
+			`type Document = { tree: yorkie.Tree; };`,
+			treeSchemaRules,
+		)
+		assert.NoError(t, err)
+
+		cli, err := client.Dial(svr.RPCAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+		assert.NoError(t, cli.Activate(ctx))
+
+		doc := document.New(helper.TestKey(t))
+		assert.NoError(t, cli.Attach(ctx, doc, client.WithSchema(treeSchemaName+"@1")))
+
+		// Type-level rejection: setting a string where yorkie.Tree is expected
+		// should fail schema validation.
+		err = doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("tree", "not-a-tree")
+			return nil
+		})
+		assert.ErrorIs(t, err, document.ErrSchemaValidationFailed)
+
+		// TODO(yorkie-team): Content-level TreeNodeRule enforcement (e.g.,
+		// validating that tree nodes conform to the declared node types,
+		// content patterns, and allowed marks) will be added in a future PR.
+
+		cli.Deactivate(ctx)
+	})
 }
