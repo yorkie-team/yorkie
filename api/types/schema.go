@@ -20,11 +20,19 @@ import (
 	"time"
 )
 
+// TreeNodeRule represents a tree node rule in the schema.
+type TreeNodeRule struct {
+	NodeType string `json:"node_type" bson:"node_type"`
+	Content  string `json:"content" bson:"content"`
+	Marks    string `json:"marks" bson:"marks"`
+	Group    string `json:"group" bson:"group"`
+}
+
 // Rule is a rule that defines the structure of a document.
 type Rule struct {
-	Path string `json:"path"`
-
-	Type string `json:"type"`
+	Path      string         `json:"path"`
+	Type      string         `json:"type"`
+	TreeNodes []TreeNodeRule `json:"tree_nodes,omitempty" bson:"tree_nodes,omitempty"`
 }
 
 type Schema struct {

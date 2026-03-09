@@ -481,9 +481,17 @@ message Schema {
   google.protobuf.Timestamp created_at = 6;
 }
 
+message TreeNodeRule {
+  string node_type = 1;
+  string content = 2;
+  string marks = 3;
+  string group = 4;
+}
+
 message Rule {
   string path = 1;
   string type = 2;
+  repeated TreeNodeRule tree_nodes = 3;
 }
 
 /////////////////////////////////////////
