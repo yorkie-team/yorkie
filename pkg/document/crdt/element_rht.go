@@ -110,6 +110,10 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 	if !ok || v.CreatedAt().After(node.elem.CreatedAt()) {
 		rht.nodeMapByKey[k] = newNode
 		v.SetMovedAt(v.CreatedAt())
+	} else if !node.isRemoved() {
+		// The new node loses the LWW conflict — mark it as removed
+		// so it doesn't appear as a duplicate during iteration.
+		v.Remove(node.elem.CreatedAt())
 	}
 
 	return removed
