@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.1] - 2026-03-19
+
+### Added
+
+- Add tree-level schema support by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1691
+- Add 2026 roadmap for Yorkie v0.7
+
 ## [v0.7.0] - 2026-03-05
 
 ### Added
