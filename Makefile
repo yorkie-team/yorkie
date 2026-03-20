@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.7.1
+YORKIE_VERSION := 0.7.2
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
@@ -40,7 +40,7 @@ fmt: ## applies format and simplify codes
 	gofmt -s -w $(GO_SRC)
 
 lint: ## runs the golang-ci lint, checks for lint violations
-	golangci-lint run ./...
+	golangci-lint run --timeout 2m ./...
 
 coverage: ## runs coverage tests
 	go clean -testcache
