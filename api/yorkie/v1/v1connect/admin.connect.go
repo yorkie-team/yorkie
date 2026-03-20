@@ -148,6 +148,9 @@ const (
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
+	// AdminServiceCompactDocumentByAdminProcedure is the fully-qualified name of the AdminService's
+	// CompactDocumentByAdmin RPC.
+	AdminServiceCompactDocumentByAdminProcedure = "/yorkie.v1.AdminService/CompactDocumentByAdmin"
 )
 
 // AdminServiceClient is a client for the yorkie.v1.AdminService service.
@@ -187,6 +190,7 @@ type AdminServiceClient interface {
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
+	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the yorkie.v1.AdminService service. By default, it
@@ -374,6 +378,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetServerVersionProcedure,
 			opts...,
 		),
+		compactDocumentByAdmin: connect.NewClient[v1.CompactDocumentByAdminRequest, v1.CompactDocumentByAdminResponse](
+			httpClient,
+			baseURL+AdminServiceCompactDocumentByAdminProcedure,
+			opts...,
+		),
 	}
 }
 
@@ -414,6 +423,7 @@ type adminServiceClient struct {
 	listChannels           *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
 	getChannels            *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
 	getServerVersion       *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
+	compactDocumentByAdmin *connect.Client[v1.CompactDocumentByAdminRequest, v1.CompactDocumentByAdminResponse]
 }
 
 // SignUp calls yorkie.v1.AdminService.SignUp.
@@ -591,6 +601,11 @@ func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.
 	return c.getServerVersion.CallUnary(ctx, req)
 }
 
+// CompactDocumentByAdmin calls yorkie.v1.AdminService.CompactDocumentByAdmin.
+func (c *adminServiceClient) CompactDocumentByAdmin(ctx context.Context, req *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error) {
+	return c.compactDocumentByAdmin.CallUnary(ctx, req)
+}
+
 // AdminServiceHandler is an implementation of the yorkie.v1.AdminService service.
 type AdminServiceHandler interface {
 	SignUp(context.Context, *connect.Request[v1.SignUpRequest]) (*connect.Response[v1.SignUpResponse], error)
@@ -628,6 +643,7 @@ type AdminServiceHandler interface {
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
+	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -811,6 +827,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetServerVersion,
 		opts...,
 	)
+	adminServiceCompactDocumentByAdminHandler := connect.NewUnaryHandler(
+		AdminServiceCompactDocumentByAdminProcedure,
+		svc.CompactDocumentByAdmin,
+		opts...,
+	)
 	return "/yorkie.v1.AdminService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AdminServiceSignUpProcedure:
@@ -883,6 +904,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceGetChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
+		case AdminServiceCompactDocumentByAdminProcedure:
+			adminServiceCompactDocumentByAdminHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1030,4 +1053,8 @@ func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Re
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetServerVersion is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.CompactDocumentByAdmin is not implemented"))
 }

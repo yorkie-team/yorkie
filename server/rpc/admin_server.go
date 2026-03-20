@@ -755,6 +755,38 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
 }
 
+// CompactDocumentByAdmin compacts the document of the given key.
+func (s *adminServer) CompactDocumentByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.CompactDocumentByAdminRequest],
+) (*connect.Response[api.CompactDocumentByAdminResponse], error) {
+	project := projects.From(ctx)
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	compacted, err := documents.CompactDocument(
+		ctx, s.backend,
+		project,
+		docInfo,
+		req.Msg.Force,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	logging.DefaultLogger().Info(
+		fmt.Sprintf("document compact success(projectID: %s, docKey: %s, compacted: %v)",
+			project.ID, req.Msg.DocumentKey, compacted),
+	)
+
+	return connect.NewResponse(&api.CompactDocumentByAdminResponse{
+		Compacted: compacted,
+	}), nil
+}
+
 // ListChannels lists channels for the given project.
 func (s *adminServer) ListChannels(
 	ctx context.Context,
