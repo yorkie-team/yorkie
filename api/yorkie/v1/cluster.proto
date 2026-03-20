@@ -49,6 +49,7 @@ message ClusterServiceCompactDocumentRequest {
   string project_id = 1;
   string document_id = 2;
   string document_key = 3;
+  bool force = 4;
 }
 
 message ClusterServiceCompactDocumentResponse {

@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.7.0
+  version: v0.7.1
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -428,6 +428,11 @@ components:
           description: ""
           title: document_key
           type: string
+        force:
+          additionalProperties: false
+          description: ""
+          title: force
+          type: boolean
         projectId:
           additionalProperties: false
           description: ""
