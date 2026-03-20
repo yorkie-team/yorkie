@@ -35,6 +35,12 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
+const (
+	// snapshotBodyThreshold is the size threshold above which compressed snapshot
+	// data is stored in the snapshot_bodies table instead of inline.
+	snapshotBodyThreshold = 12 * 1024 * 1024
+)
+
 // DB is an in-memory database for testing or temporarily.
 type DB struct {
 	db *memdb.MemDB
@@ -1942,6 +1948,26 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	return infos, nil
 }
 
+// findSnapshotBodyInfo returns the snapshot body for the given ref key and server seq.
+func (d *DB) findSnapshotBodyInfo(
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) ([]byte, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(tblSnapshotBodies, "doc_id_server_seq",
+		docRefKey.DocID.String(),
+		serverSeq,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find snapshot body: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("snapshot body not found for %s at seq %d", docRefKey, serverSeq)
+	}
+	return raw.(*database.SnapshotBodyInfo).Snapshot, nil
+}
+
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (d *DB) CreateSnapshotInfo(
 	_ context.Context,
@@ -1953,18 +1979,44 @@ func (d *DB) CreateSnapshotInfo(
 		return err
 	}
 
+	compressed, err := database.CompressSnapshot(snapshot)
+	if err != nil {
+		return fmt.Errorf("compress snapshot of %s: %w", docRefKey, err)
+	}
+
+	hasExternalBody := len(compressed) > snapshotBodyThreshold
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	if hasExternalBody {
+		if err := txn.Insert(tblSnapshotBodies, &database.SnapshotBodyInfo{
+			ID:        newID(),
+			DocID:     docRefKey.DocID,
+			ProjectID: docRefKey.ProjectID,
+			ServerSeq: doc.Checkpoint().ServerSeq,
+			Snapshot:  compressed,
+			CreatedAt: gotime.Now(),
+		}); err != nil {
+			return fmt.Errorf("create snapshot body of %s: %w", docRefKey, err)
+		}
+	}
+
+	snapshotField := compressed
+	if hasExternalBody {
+		snapshotField = nil
+	}
+
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
-		ID:            newID(),
-		ProjectID:     docRefKey.ProjectID,
-		DocID:         docRefKey.DocID,
-		ServerSeq:     doc.Checkpoint().ServerSeq,
-		Lamport:       doc.Lamport(),
-		VersionVector: doc.VersionVector().DeepCopy(),
-		Snapshot:      snapshot,
-		CreatedAt:     gotime.Now(),
+		ID:              newID(),
+		ProjectID:       docRefKey.ProjectID,
+		DocID:           docRefKey.DocID,
+		ServerSeq:       doc.Checkpoint().ServerSeq,
+		Lamport:         doc.Lamport(),
+		VersionVector:   doc.VersionVector().DeepCopy(),
+		Snapshot:        snapshotField,
+		HasExternalBody: hasExternalBody,
+		CreatedAt:       gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
 	}
@@ -1991,7 +2043,22 @@ func (d *DB) FindSnapshotInfo(
 		return nil, fmt.Errorf("%s: %w", docKey, database.ErrSnapshotNotFound)
 	}
 
-	return raw.(*database.SnapshotInfo).DeepCopy(), nil
+	info := raw.(*database.SnapshotInfo).DeepCopy()
+	if info.HasExternalBody {
+		body, err := d.findSnapshotBodyInfo(info.DocRefKey(), info.ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+		info.Snapshot = body
+	}
+	if len(info.Snapshot) > 0 {
+		decompressed, err := database.DecompressSnapshot(info.Snapshot)
+		if err != nil {
+			return nil, fmt.Errorf("decompress snapshot: %w", err)
+		}
+		info.Snapshot = decompressed
+	}
+	return info, nil
 }
 
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
@@ -2019,13 +2086,14 @@ func (d *DB) FindClosestSnapshotInfo(
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docRefKey.DocID {
 			snapshotInfo = &database.SnapshotInfo{
-				ID:            info.ID,
-				ProjectID:     info.ProjectID,
-				DocID:         info.DocID,
-				ServerSeq:     info.ServerSeq,
-				Lamport:       info.Lamport,
-				VersionVector: info.VersionVector,
-				CreatedAt:     info.CreatedAt,
+				ID:              info.ID,
+				ProjectID:       info.ProjectID,
+				DocID:           info.DocID,
+				ServerSeq:       info.ServerSeq,
+				Lamport:         info.Lamport,
+				VersionVector:   info.VersionVector,
+				HasExternalBody: info.HasExternalBody,
+				CreatedAt:       info.CreatedAt,
 			}
 			if includeSnapshot {
 				snapshotInfo.Snapshot = info.Snapshot
@@ -2038,6 +2106,23 @@ func (d *DB) FindClosestSnapshotInfo(
 		return &database.SnapshotInfo{
 			VersionVector: time.NewVersionVector(),
 		}, nil
+	}
+
+	if includeSnapshot {
+		if snapshotInfo.HasExternalBody {
+			body, err := d.findSnapshotBodyInfo(snapshotInfo.DocRefKey(), snapshotInfo.ServerSeq)
+			if err != nil {
+				return nil, err
+			}
+			snapshotInfo.Snapshot = body
+		}
+		if len(snapshotInfo.Snapshot) > 0 {
+			decompressed, err := database.DecompressSnapshot(snapshotInfo.Snapshot)
+			if err != nil {
+				return nil, fmt.Errorf("decompress snapshot: %w", err)
+			}
+			snapshotInfo.Snapshot = decompressed
+		}
 	}
 
 	return snapshotInfo, nil
@@ -2485,6 +2570,12 @@ func (d *DB) purgeDocumentInternals(
 		return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
 	}
 	counts[tblSnapshots] = int64(count)
+
+	count, err = txn.DeleteAll(tblSnapshotBodies, "doc_id", docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshot bodies of %s: %w", docID, err)
+	}
+	counts[tblSnapshotBodies] = int64(count)
 
 	count, err = txn.DeleteAll(tblVersionVectors, "doc_id", docID.String())
 	if err != nil {
