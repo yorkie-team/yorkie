@@ -19,6 +19,11 @@
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Range Deletion in SplayTree](range-deletion-in-splay-tree.md): Improving range deletion in SplayTree
 
+### Schema
+
+- [Schema Validation](schema-validation.md): Declarative document structure definition and real-time change validation
+- [Tree Schema](tree-schema.md): ProseMirror-compatible structural constraints for yorkie.Tree
+
 ### Platform
 
 - [Sharded Cluster Mode](sharded-cluster-mode.md): Shard-based server cluster mode with consistent hashing
