@@ -44,7 +44,6 @@ import (
 const (
 	// StatusKey is the key of the status field.
 	StatusKey = "status"
-
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.

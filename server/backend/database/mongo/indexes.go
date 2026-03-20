@@ -242,7 +242,7 @@ var collectionInfos = []collectionInfo{
 		name: ColSnapshotBodies,
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
-				{Key: "doc_id", Value: int32(1)},      // shard key: [doc_id]
+				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "server_seq", Value: int32(1)},
 			},

@@ -48,14 +48,20 @@ func getEncoder() (*zstd.Encoder, error) {
 	encoderOnce.Do(func() {
 		encoder, encoderErr = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
 	})
-	return encoder, encoderErr
+	if encoderErr != nil {
+		return nil, fmt.Errorf("create zstd encoder: %w", encoderErr)
+	}
+	return encoder, nil
 }
 
 func getDecoder() (*zstd.Decoder, error) {
 	decoderOnce.Do(func() {
 		decoder, decoderErr = zstd.NewReader(nil)
 	})
-	return decoder, decoderErr
+	if decoderErr != nil {
+		return nil, fmt.Errorf("create zstd decoder: %w", decoderErr)
+	}
+	return decoder, nil
 }
 
 // CompressSnapshot compresses the given snapshot bytes using zstd and prepends
