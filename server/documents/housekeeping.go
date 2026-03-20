@@ -70,7 +70,7 @@ func CompactDocuments(
 
 	compactedCount := 0
 	for _, pair := range candidates {
-		compacted, err := CompactDocument(ctx, be, pair.Project, pair.Document)
+		compacted, err := CompactDocument(ctx, be, pair.Project, pair.Document, false)
 		if err != nil {
 			logging.From(ctx).Warnf("failed to compact document %s: %v", pair.Document.ID, err)
 			continue

@@ -558,12 +558,13 @@ func CompactDocument(
 	be *backend.Backend,
 	project *types.Project,
 	document *database.DocInfo,
+	force bool,
 ) (bool, error) {
 	clusterClient, err := be.ClusterClient()
 	if err != nil {
 		return false, err
 	}
-	return clusterClient.CompactDocument(ctx, project, document)
+	return clusterClient.CompactDocument(ctx, project, document, force)
 }
 
 // PurgeDocument purges the given document.

@@ -194,6 +194,7 @@ func (c *Client) CompactDocument(
 	ctx context.Context,
 	project *types.Project,
 	docInfo *database.DocInfo,
+	force bool,
 ) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
 	defer cancel()
@@ -204,6 +205,7 @@ func (c *Client) CompactDocument(
 			ProjectId:   docInfo.ProjectID.String(),
 			DocumentId:  docInfo.ID.String(),
 			DocumentKey: docInfo.Key.String(),
+			Force:       force,
 		}), project.PublicKey, docInfo.Key.String()))
 	if err != nil {
 		return false, fromConnectError(err)

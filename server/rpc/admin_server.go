@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"runtime"
 
@@ -767,23 +768,29 @@ func (s *adminServer) CompactDocumentByAdmin(
 		return nil, err
 	}
 
-	compacted, err := documents.CompactDocument(
-		ctx, s.backend,
-		project,
-		docInfo,
-		req.Msg.Force,
-	)
-	if err != nil {
+	// NOTE: In single-server mode, ClusterClient is unavailable, so we call
+	// packs.Compact directly with a document lock (same pattern as server.go
+	// test helper). In cluster mode, this also works correctly since the lock
+	// prevents concurrent operations on the same document.
+	locker := s.backend.Lockers.Locker(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.Unlock()
+
+	if err := packs.Compact(ctx, s.backend, project.ID, docInfo, req.Msg.Force); err != nil {
+		if stderrors.Is(err, packs.ErrDocumentAttached) {
+			return connect.NewResponse(&api.CompactDocumentByAdminResponse{
+				Compacted: false,
+			}), nil
+		}
 		return nil, err
 	}
 
 	logging.DefaultLogger().Info(
-		fmt.Sprintf("document compact success(projectID: %s, docKey: %s, compacted: %v)",
-			project.ID, req.Msg.DocumentKey, compacted),
+		fmt.Sprintf("document compact success(projectID: %s, docKey: %s)",
+			project.ID, req.Msg.DocumentKey),
 	)
 
 	return connect.NewResponse(&api.CompactDocumentByAdminResponse{
-		Compacted: compacted,
+		Compacted: true,
 	}), nil
 }
 
