@@ -48,6 +48,8 @@ const (
 	ColSnapshots = "snapshots"
 	// ColVersionVectors represents the versionvector collection in the database.
 	ColVersionVectors = "versionvectors"
+	// ColSnapshotBodies represents the snapshot_bodies collection in the database.
+	ColSnapshotBodies = "snapshot_bodies"
 	// ColRevisions represents the revisions collection in the database.
 	ColRevisions = "revisions"
 )
@@ -64,6 +66,7 @@ var Collections = []string{
 	ColSchemas,
 	ColChanges,
 	ColSnapshots,
+	ColSnapshotBodies,
 	ColVersionVectors,
 	ColRevisions,
 }
@@ -230,6 +233,16 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys: bson.D{
 				{Key: "doc_id", Value: int32(1)}, // shard key: [doc_id]
+				{Key: "project_id", Value: int32(1)},
+				{Key: "server_seq", Value: int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	}, {
+		name: ColSnapshotBodies,
+		indexes: []mongo.IndexModel{{
+			Keys: bson.D{
+				{Key: "doc_id", Value: int32(1)},      // shard key: [doc_id]
 				{Key: "project_id", Value: int32(1)},
 				{Key: "server_seq", Value: int32(1)},
 			},
