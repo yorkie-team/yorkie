@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.2] - 2026-03-20
+
+### Added
+
+- Add zstd snapshot compression and external body storage to prevent 16MB overflow by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1704
+- Add CompactDocumentByAdmin RPC to AdminService by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1702
+
+### Fixed
+
+- Fix ElementRHT.Set() producing duplicate keys on timestamp reversal by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1701
+
 ## [v0.7.1] - 2026-03-19
 
 ### Added
