@@ -245,6 +245,12 @@ func storeSnapshot(
 		docRefKey,
 		doc,
 	); err != nil {
+		logging.From(ctx).Errorf(
+			"SNAP: failed to store snapshot '%s', serverSeq: %d: %v",
+			docInfo.Key,
+			doc.Checkpoint().ServerSeq,
+			err,
+		)
 		return err
 	}
 

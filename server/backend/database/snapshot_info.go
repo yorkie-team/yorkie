@@ -46,6 +46,10 @@ type SnapshotInfo struct {
 	// Snapshot is the snapshot data.
 	Snapshot []byte `bson:"snapshot"`
 
+	// HasExternalBody indicates whether the snapshot data is stored externally
+	// (in the snapshot_bodies collection) instead of inline.
+	HasExternalBody bool `bson:"has_external_body"`
+
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt gotime.Time `bson:"created_at"`
 }
@@ -57,14 +61,15 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	}
 
 	return &SnapshotInfo{
-		ID:            i.ID,
-		ProjectID:     i.ProjectID,
-		DocID:         i.DocID,
-		ServerSeq:     i.ServerSeq,
-		Lamport:       i.Lamport,
-		VersionVector: i.VersionVector,
-		Snapshot:      i.Snapshot,
-		CreatedAt:     i.CreatedAt,
+		ID:              i.ID,
+		ProjectID:       i.ProjectID,
+		DocID:           i.DocID,
+		ServerSeq:       i.ServerSeq,
+		Lamport:         i.Lamport,
+		VersionVector:   i.VersionVector,
+		Snapshot:        i.Snapshot,
+		HasExternalBody: i.HasExternalBody,
+		CreatedAt:       i.CreatedAt,
 	}
 }
 
@@ -74,4 +79,26 @@ func (i *SnapshotInfo) DocRefKey() types.DocRefKey {
 		ProjectID: i.ProjectID,
 		DocID:     i.DocID,
 	}
+}
+
+// SnapshotBodyInfo stores large snapshot data separately from the snapshot
+// metadata when the compressed snapshot exceeds the inline size limit.
+type SnapshotBodyInfo struct {
+	// ID is the unique ID of the snapshot body.
+	ID types.ID `bson:"_id"`
+
+	// DocID is the ID of the document (shard key).
+	DocID types.ID `bson:"doc_id"`
+
+	// ProjectID is the ID of the project.
+	ProjectID types.ID `bson:"project_id"`
+
+	// ServerSeq is the server sequence of the corresponding snapshot.
+	ServerSeq int64 `bson:"server_seq"`
+
+	// Snapshot is the (compressed) snapshot data.
+	Snapshot []byte `bson:"snapshot"`
+
+	// CreatedAt is the time when the snapshot body was created.
+	CreatedAt gotime.Time `bson:"created_at"`
 }

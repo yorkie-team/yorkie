@@ -30,6 +30,7 @@ var (
 	tblChanges        = "changes"
 	tblSnapshots      = "snapshots"
 	tblVersionVectors = "versionvectors"
+	tblSnapshotBodies = "snapshot_bodies"
 	tblRevisions      = "revisions"
 )
 
@@ -281,6 +282,31 @@ var schema = &memdb.DBSchema{
 		},
 		tblSnapshots: {
 			Name: tblSnapshots,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"doc_id": {
+					Name:    "doc_id",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
+				},
+				"doc_id_server_seq": {
+					Name:   "doc_id_server_seq",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocID"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
+						},
+					},
+				},
+			},
+		},
+		tblSnapshotBodies: {
+			Name: tblSnapshotBodies,
 			Indexes: map[string]*memdb.IndexSchema{
 				"id": {
 					Name:    "id",

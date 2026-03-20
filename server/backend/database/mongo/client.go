@@ -2011,15 +2011,41 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id":     docRefKey.ProjectID,
-		"doc_id":         docRefKey.DocID,
-		"server_seq":     doc.Checkpoint().ServerSeq,
-		"lamport":        doc.Lamport(),
-		"version_vector": doc.VersionVector(),
-		"snapshot":       snapshot,
-		"created_at":     gotime.Now(),
-	}); err != nil {
+	compressed, err := database.CompressSnapshot(snapshot)
+	if err != nil {
+		return fmt.Errorf("compress snapshot of %s: %w", docRefKey, err)
+	}
+
+	serverSeq := doc.Checkpoint().ServerSeq
+	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
+
+	docFields := bson.M{
+		"project_id":        docRefKey.ProjectID,
+		"doc_id":            docRefKey.DocID,
+		"server_seq":        serverSeq,
+		"lamport":           doc.Lamport(),
+		"version_vector":    doc.VersionVector(),
+		"has_external_body": hasExternalBody,
+		"created_at":        gotime.Now(),
+	}
+
+	if hasExternalBody {
+		if err := c.createSnapshotBodyInfo(ctx, docRefKey, serverSeq, compressed); err != nil {
+			return err
+		}
+	} else {
+		docFields["snapshot"] = compressed
+	}
+
+	if _, err := c.collection(ColSnapshots).InsertOne(ctx, docFields); err != nil {
+		// Clean up orphaned body if metadata insert fails
+		if hasExternalBody {
+			_, _ = c.collection(ColSnapshotBodies).DeleteOne(ctx, bson.M{
+				"project_id": docRefKey.ProjectID,
+				"doc_id":     docRefKey.DocID,
+				"server_seq": serverSeq,
+			})
+		}
 		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
 	}
 
@@ -2043,8 +2069,24 @@ func (c *Client) FindSnapshotInfo(
 		if result.Err() == mongo.ErrNoDocuments {
 			return info, nil
 		}
-
 		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docKey, err)
+	}
+
+	if info.HasExternalBody {
+		body, err := c.findSnapshotBodyInfo(ctx, docKey, serverSeq)
+		if err != nil {
+			return nil, err
+		}
+		info.Snapshot = body
+	}
+
+	// Decompress (handles both compressed and legacy uncompressed)
+	if len(info.Snapshot) > 0 {
+		decompressed, err := database.DecompressSnapshot(info.Snapshot)
+		if err != nil {
+			return nil, fmt.Errorf("decompress snapshot of %s at %d: %w", docKey, serverSeq, err)
+		}
+		info.Snapshot = decompressed
 	}
 
 	return info, nil
@@ -2062,7 +2104,7 @@ func (c *Client) FindClosestSnapshotInfo(
 	})
 
 	if !includeSnapshot {
-		option.SetProjection(bson.M{"Snapshot": 0})
+		option.SetProjection(bson.M{"snapshot": 0})
 	}
 
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
@@ -2083,7 +2125,62 @@ func (c *Client) FindClosestSnapshotInfo(
 		return nil, fmt.Errorf("find snapshot before %d of %s: %w", serverSeq, docRefKey, err)
 	}
 
+	if includeSnapshot {
+		if info.HasExternalBody {
+			body, err := c.findSnapshotBodyInfo(ctx, info.DocRefKey(), info.ServerSeq)
+			if err != nil {
+				return nil, err
+			}
+			info.Snapshot = body
+		}
+		if len(info.Snapshot) > 0 {
+			decompressed, err := database.DecompressSnapshot(info.Snapshot)
+			if err != nil {
+				return nil, fmt.Errorf("decompress snapshot of %s: %w", docRefKey, err)
+			}
+			info.Snapshot = decompressed
+		}
+	}
+
 	return info, nil
+}
+
+// createSnapshotBodyInfo stores a large snapshot body in the snapshot_bodies collection.
+func (c *Client) createSnapshotBodyInfo(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+	snapshot []byte,
+) error {
+	if _, err := c.collection(ColSnapshotBodies).InsertOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"server_seq": serverSeq,
+		"snapshot":   snapshot,
+		"created_at": gotime.Now(),
+	}); err != nil {
+		return fmt.Errorf("create snapshot body of %s at seq %d: %w", docRefKey, serverSeq, err)
+	}
+	return nil
+}
+
+// findSnapshotBodyInfo returns the snapshot body for the given ref key and server seq.
+func (c *Client) findSnapshotBodyInfo(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) ([]byte, error) {
+	result := c.collection(ColSnapshotBodies).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"server_seq": serverSeq,
+	})
+
+	info := &database.SnapshotBodyInfo{}
+	if err := result.Decode(info); err != nil {
+		return nil, fmt.Errorf("find snapshot body of %s at seq %d: %w", docRefKey, serverSeq, err)
+	}
+	return info.Snapshot, nil
 }
 
 // UpdateMinVersionVector updates the version vector of the given client
@@ -2508,6 +2605,15 @@ func (c *Client) purgeDocumentInternals(
 		return nil, fmt.Errorf("purge snapshots of %s: %w", docID, err)
 	}
 	counts[ColSnapshots] = res.DeletedCount
+
+	res, err = c.collection(ColSnapshotBodies).DeleteMany(ctx, bson.M{
+		"project_id": projectID,
+		"doc_id":     docID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("purge snapshot bodies of %s: %w", docID, err)
+	}
+	counts[ColSnapshotBodies] = res.DeletedCount
 
 	res, err = c.collection(ColVersionVectors).DeleteMany(ctx, bson.M{
 		"project_id": projectID,
