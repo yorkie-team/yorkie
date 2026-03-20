@@ -80,4 +80,29 @@ func TestDocumentCompaction(t *testing.T) {
 		rootText := docC.InternalDocument().RootObject().Get("text").Marshal()
 		assert.Equal(t, len(cloneRootText), len(rootText))
 	})
+
+	t.Run("force compaction on attached document test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"text": Text()}`),
+		)))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "hello")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+
+		// Without force: should fail because document is attached.
+		// server.go calls packs.Compact directly (not via cluster service),
+		// so ErrDocumentAttached is returned as-is.
+		assert.Error(t, defaultServer.CompactDocument(ctx, d1.Key(), false))
+
+		// Force compact while attached: should succeed
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))
+
+		assert.NoError(t, c1.Detach(ctx, d1))
+	})
 }
