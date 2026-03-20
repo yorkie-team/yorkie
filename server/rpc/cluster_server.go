@@ -153,7 +153,7 @@ func (s *clusterServer) CompactDocument(
 		return nil, err
 	}
 
-	if err := packs.Compact(ctx, s.backend, projectID, docInfo); err != nil {
+	if err := packs.Compact(ctx, s.backend, projectID, docInfo, req.Msg.Force); err != nil {
 		// If the document is attached, we don't return an error.
 		// Because compaction is a best-effort operation.
 		if errors.Is(err, packs.ErrDocumentAttached) {

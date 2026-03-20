@@ -723,7 +723,7 @@ func TestDocumentWithInitialRoot(t *testing.T) {
 		assert.Equal(t, int64(1003), d1.Checkpoint().ServerSeq)
 
 		// 02. compact the document.
-		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key()))
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), false))
 
 		// 03. attach again and check if the counter is compacted.
 		d2 := document.New(helper.TestKey(t))

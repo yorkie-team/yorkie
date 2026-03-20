@@ -34,6 +34,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/CompactDocumentByAdmin:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.CompactDocumentByAdmin.yorkie.v1.CompactDocumentByAdminRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.CompactDocumentByAdmin.yorkie.v1.CompactDocumentByAdminResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/CreateDocument:
     post:
       description: ""
@@ -450,6 +462,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ChangePasswordRequest'
       required: true
+    yorkie.v1.AdminService.CompactDocumentByAdmin.yorkie.v1.CompactDocumentByAdminRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CompactDocumentByAdminRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CompactDocumentByAdminRequest'
+      required: true
     yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentRequest:
       content:
         application/json:
@@ -774,6 +795,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ChangePasswordResponse'
+      description: ""
+    yorkie.v1.AdminService.CompactDocumentByAdmin.yorkie.v1.CompactDocumentByAdminResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CompactDocumentByAdminResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.CompactDocumentByAdminResponse'
       description: ""
     yorkie.v1.AdminService.CreateDocument.yorkie.v1.CreateDocumentResponse:
       content:
@@ -1401,6 +1431,33 @@ components:
           title: session_count
           type: integer
       title: ChannelSummary
+      type: object
+    yorkie.v1.CompactDocumentByAdminRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        documentKey:
+          additionalProperties: false
+          description: ""
+          title: document_key
+          type: string
+        force:
+          additionalProperties: false
+          description: ""
+          title: force
+          type: boolean
+      title: CompactDocumentByAdminRequest
+      type: object
+    yorkie.v1.CompactDocumentByAdminResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        compacted:
+          additionalProperties: false
+          description: ""
+          title: compacted
+          type: boolean
+      title: CompactDocumentByAdminResponse
       type: object
     yorkie.v1.CreateDocumentRequest:
       additionalProperties: false

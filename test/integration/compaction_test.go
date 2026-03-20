@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -53,7 +55,7 @@ func TestDocumentCompaction(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, d1))
 
 		// 2. Compact the document
-		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key()))
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), false))
 
 		// 3. Create another changes to create a snapshot
 		docB := document.New(helper.TestKey(t))
@@ -79,5 +81,36 @@ func TestDocumentCompaction(t *testing.T) {
 		cloneRootText := docC.Root().GetText("text").Marshal()
 		rootText := docC.InternalDocument().RootObject().Get("text").Marshal()
 		assert.Equal(t, len(cloneRootText), len(rootText))
+	})
+
+	t.Run("force compaction on attached document test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"text": Text()}`),
+		)))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "hello")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+
+		// Without force: should fail because document is attached.
+		// server.go calls packs.Compact directly (not via cluster service),
+		// so ErrDocumentAttached is returned as-is.
+		err := defaultServer.CompactDocument(ctx, d1.Key(), false)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, packs.ErrDocumentAttached))
+
+		// Force compact while attached: should succeed
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))
+
+		// NOTE: After force compaction, the server resets serverSeq to 1,
+		// but the client's checkpoint still references the old serverSeq.
+		// This causes a mismatch on detach, which is an expected trade-off
+		// of force compaction on attached documents.
+		assert.Error(t, c1.Detach(ctx, d1))
 	})
 }

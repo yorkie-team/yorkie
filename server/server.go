@@ -181,7 +181,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 }
 
 // CompactDocument compacts the given document. It is used for testing.
-func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key) error {
+func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key, force bool) error {
 	project, err := r.DefaultProject(ctx)
 	if err != nil {
 		return err
@@ -198,7 +198,7 @@ func (r *Yorkie) CompactDocument(ctx context.Context, docKey key.Key) error {
 		return err
 	}
 
-	return packs.Compact(ctx, r.backend, project.ID, docInfo)
+	return packs.Compact(ctx, r.backend, project.ID, docInfo, force)
 }
 
 // RegisterHousekeepingTasks registers housekeeping tasks.

@@ -69,6 +69,8 @@ service AdminService {
   rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
   
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
+
+  rpc CompactDocumentByAdmin (CompactDocumentByAdminRequest) returns (CompactDocumentByAdminResponse) {}
 }
 
 enum InviteExpireOption {
@@ -411,4 +413,13 @@ message RestoreRevisionByAdminRequest {
 }
 
 message RestoreRevisionByAdminResponse {
+}
+
+message CompactDocumentByAdminRequest {
+  string document_key = 1;
+  bool force = 2;
+}
+
+message CompactDocumentByAdminResponse {
+  bool compacted = 1;
 }

@@ -197,6 +197,7 @@ type ClusterServiceCompactDocumentRequest struct {
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	DocumentId    string                 `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	DocumentKey   string                 `protobuf:"bytes,3,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	Force         bool                   `protobuf:"varint,4,opt,name=force,proto3" json:"force,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -250,6 +251,13 @@ func (x *ClusterServiceCompactDocumentRequest) GetDocumentKey() string {
 		return x.DocumentKey
 	}
 	return ""
+}
+
+func (x *ClusterServiceCompactDocumentRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
 }
 
 type ClusterServiceCompactDocumentResponse struct {
@@ -907,13 +915,14 @@ const file_yorkie_v1_cluster_proto_rawDesc = "" +
 	"\vdocument_id\x18\x03 \x01(\tR\n" +
 	"documentId\x12!\n" +
 	"\fdocument_key\x18\x04 \x01(\tR\vdocumentKey\"&\n" +
-	"$ClusterServiceDetachDocumentResponse\"\x89\x01\n" +
+	"$ClusterServiceDetachDocumentResponse\"\x9f\x01\n" +
 	"$ClusterServiceCompactDocumentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1f\n" +
 	"\vdocument_id\x18\x02 \x01(\tR\n" +
 	"documentId\x12!\n" +
-	"\fdocument_key\x18\x03 \x01(\tR\vdocumentKey\"E\n" +
+	"\fdocument_key\x18\x03 \x01(\tR\vdocumentKey\x12\x14\n" +
+	"\x05force\x18\x04 \x01(\bR\x05force\"E\n" +
 	"%ClusterServiceCompactDocumentResponse\x12\x1c\n" +
 	"\tcompacted\x18\x01 \x01(\bR\tcompacted\"\x87\x01\n" +
 	"\"ClusterServicePurgeDocumentRequest\x12\x1d\n" +

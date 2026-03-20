@@ -3631,6 +3631,102 @@ func (*RestoreRevisionByAdminResponse) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{69}
 }
 
+type CompactDocumentByAdminRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DocumentKey   string                 `protobuf:"bytes,1,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	Force         bool                   `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompactDocumentByAdminRequest) Reset() {
+	*x = CompactDocumentByAdminRequest{}
+	mi := &file_yorkie_v1_admin_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompactDocumentByAdminRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompactDocumentByAdminRequest) ProtoMessage() {}
+
+func (x *CompactDocumentByAdminRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_admin_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompactDocumentByAdminRequest.ProtoReflect.Descriptor instead.
+func (*CompactDocumentByAdminRequest) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *CompactDocumentByAdminRequest) GetDocumentKey() string {
+	if x != nil {
+		return x.DocumentKey
+	}
+	return ""
+}
+
+func (x *CompactDocumentByAdminRequest) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+type CompactDocumentByAdminResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Compacted     bool                   `protobuf:"varint,1,opt,name=compacted,proto3" json:"compacted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompactDocumentByAdminResponse) Reset() {
+	*x = CompactDocumentByAdminResponse{}
+	mi := &file_yorkie_v1_admin_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompactDocumentByAdminResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompactDocumentByAdminResponse) ProtoMessage() {}
+
+func (x *CompactDocumentByAdminResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_admin_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompactDocumentByAdminResponse.ProtoReflect.Descriptor instead.
+func (*CompactDocumentByAdminResponse) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_admin_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *CompactDocumentByAdminResponse) GetCompacted() bool {
+	if x != nil {
+		return x.Compacted
+	}
+	return false
+}
+
 var File_yorkie_v1_admin_proto protoreflect.FileDescriptor
 
 const file_yorkie_v1_admin_proto_rawDesc = "" +
@@ -3851,12 +3947,17 @@ const file_yorkie_v1_admin_proto_rawDesc = "" +
 	"\fdocument_key\x18\x02 \x01(\tR\vdocumentKey\x12\x1f\n" +
 	"\vrevision_id\x18\x03 \x01(\tR\n" +
 	"revisionId\" \n" +
-	"\x1eRestoreRevisionByAdminResponse*\xae\x01\n" +
+	"\x1eRestoreRevisionByAdminResponse\"X\n" +
+	"\x1dCompactDocumentByAdminRequest\x12!\n" +
+	"\fdocument_key\x18\x01 \x01(\tR\vdocumentKey\x12\x14\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\">\n" +
+	"\x1eCompactDocumentByAdminResponse\x12\x1c\n" +
+	"\tcompacted\x18\x01 \x01(\bR\tcompacted*\xae\x01\n" +
 	"\x12InviteExpireOption\x12$\n" +
 	" INVITE_EXPIRE_OPTION_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dINVITE_EXPIRE_OPTION_ONE_HOUR\x10\x01\x12*\n" +
 	"&INVITE_EXPIRE_OPTION_TWENTY_FOUR_HOURS\x10\x02\x12#\n" +
-	"\x1fINVITE_EXPIRE_OPTION_SEVEN_DAYS\x10\x032\xdf\x17\n" +
+	"\x1fINVITE_EXPIRE_OPTION_SEVEN_DAYS\x10\x032\xd0\x18\n" +
 	"\fAdminService\x12?\n" +
 	"\x06SignUp\x12\x18.yorkie.v1.SignUpRequest\x1a\x19.yorkie.v1.SignUpResponse\"\x00\x12<\n" +
 	"\x05LogIn\x12\x17.yorkie.v1.LogInRequest\x1a\x18.yorkie.v1.LogInResponse\"\x00\x12T\n" +
@@ -3894,7 +3995,8 @@ const file_yorkie_v1_admin_proto_rawDesc = "" +
 	"\x16RestoreRevisionByAdmin\x12(.yorkie.v1.RestoreRevisionByAdminRequest\x1a).yorkie.v1.RestoreRevisionByAdminResponse\"\x00\x12Q\n" +
 	"\fListChannels\x12\x1e.yorkie.v1.ListChannelsRequest\x1a\x1f.yorkie.v1.ListChannelsResponse\"\x00\x12N\n" +
 	"\vGetChannels\x12\x1d.yorkie.v1.GetChannelsRequest\x1a\x1e.yorkie.v1.GetChannelsResponse\"\x00\x12]\n" +
-	"\x10GetServerVersion\x12\".yorkie.v1.GetServerVersionRequest\x1a#.yorkie.v1.GetServerVersionResponse\"\x00BE\n" +
+	"\x10GetServerVersion\x12\".yorkie.v1.GetServerVersionRequest\x1a#.yorkie.v1.GetServerVersionResponse\"\x00\x12o\n" +
+	"\x16CompactDocumentByAdmin\x12(.yorkie.v1.CompactDocumentByAdminRequest\x1a).yorkie.v1.CompactDocumentByAdminResponse\"\x00BE\n" +
 	"\x11dev.yorkie.api.v1P\x01Z.github.com/yorkie-team/yorkie/api/yorkie/v1;v1b\x06proto3"
 
 var (
@@ -3910,7 +4012,7 @@ func file_yorkie_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_yorkie_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_yorkie_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
+var file_yorkie_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
 var file_yorkie_v1_admin_proto_goTypes = []any{
 	(InviteExpireOption)(0),                // 0: yorkie.v1.InviteExpireOption
 	(GetProjectStatsRequest_DateRange)(0),  // 1: yorkie.v1.GetProjectStatsRequest.DateRange
@@ -3984,55 +4086,57 @@ var file_yorkie_v1_admin_proto_goTypes = []any{
 	(*GetRevisionByAdminResponse)(nil),     // 69: yorkie.v1.GetRevisionByAdminResponse
 	(*RestoreRevisionByAdminRequest)(nil),  // 70: yorkie.v1.RestoreRevisionByAdminRequest
 	(*RestoreRevisionByAdminResponse)(nil), // 71: yorkie.v1.RestoreRevisionByAdminResponse
-	(*Member)(nil),                         // 72: yorkie.v1.Member
-	(*User)(nil),                           // 73: yorkie.v1.User
-	(*Project)(nil),                        // 74: yorkie.v1.Project
-	(*UpdatableProjectFields)(nil),         // 75: yorkie.v1.UpdatableProjectFields
-	(*MetricPoint)(nil),                    // 76: yorkie.v1.MetricPoint
-	(*DocumentSummary)(nil),                // 77: yorkie.v1.DocumentSummary
-	(*VersionVector)(nil),                  // 78: yorkie.v1.VersionVector
-	(*ChannelSummary)(nil),                 // 79: yorkie.v1.ChannelSummary
-	(*Change)(nil),                         // 80: yorkie.v1.Change
-	(*Rule)(nil),                           // 81: yorkie.v1.Rule
-	(*Schema)(nil),                         // 82: yorkie.v1.Schema
-	(*RevisionSummary)(nil),                // 83: yorkie.v1.RevisionSummary
+	(*CompactDocumentByAdminRequest)(nil),  // 72: yorkie.v1.CompactDocumentByAdminRequest
+	(*CompactDocumentByAdminResponse)(nil), // 73: yorkie.v1.CompactDocumentByAdminResponse
+	(*Member)(nil),                         // 74: yorkie.v1.Member
+	(*User)(nil),                           // 75: yorkie.v1.User
+	(*Project)(nil),                        // 76: yorkie.v1.Project
+	(*UpdatableProjectFields)(nil),         // 77: yorkie.v1.UpdatableProjectFields
+	(*MetricPoint)(nil),                    // 78: yorkie.v1.MetricPoint
+	(*DocumentSummary)(nil),                // 79: yorkie.v1.DocumentSummary
+	(*VersionVector)(nil),                  // 80: yorkie.v1.VersionVector
+	(*ChannelSummary)(nil),                 // 81: yorkie.v1.ChannelSummary
+	(*Change)(nil),                         // 82: yorkie.v1.Change
+	(*Rule)(nil),                           // 83: yorkie.v1.Rule
+	(*Schema)(nil),                         // 84: yorkie.v1.Schema
+	(*RevisionSummary)(nil),                // 85: yorkie.v1.RevisionSummary
 }
 var file_yorkie_v1_admin_proto_depIdxs = []int32{
 	0,  // 0: yorkie.v1.CreateInviteRequest.expire_option:type_name -> yorkie.v1.InviteExpireOption
-	72, // 1: yorkie.v1.AcceptInviteResponse.member:type_name -> yorkie.v1.Member
-	73, // 2: yorkie.v1.SignUpResponse.user:type_name -> yorkie.v1.User
-	74, // 3: yorkie.v1.CreateProjectResponse.project:type_name -> yorkie.v1.Project
-	74, // 4: yorkie.v1.GetProjectResponse.project:type_name -> yorkie.v1.Project
-	74, // 5: yorkie.v1.ListProjectsResponse.projects:type_name -> yorkie.v1.Project
-	75, // 6: yorkie.v1.UpdateProjectRequest.fields:type_name -> yorkie.v1.UpdatableProjectFields
-	74, // 7: yorkie.v1.UpdateProjectResponse.project:type_name -> yorkie.v1.Project
+	74, // 1: yorkie.v1.AcceptInviteResponse.member:type_name -> yorkie.v1.Member
+	75, // 2: yorkie.v1.SignUpResponse.user:type_name -> yorkie.v1.User
+	76, // 3: yorkie.v1.CreateProjectResponse.project:type_name -> yorkie.v1.Project
+	76, // 4: yorkie.v1.GetProjectResponse.project:type_name -> yorkie.v1.Project
+	76, // 5: yorkie.v1.ListProjectsResponse.projects:type_name -> yorkie.v1.Project
+	77, // 6: yorkie.v1.UpdateProjectRequest.fields:type_name -> yorkie.v1.UpdatableProjectFields
+	76, // 7: yorkie.v1.UpdateProjectResponse.project:type_name -> yorkie.v1.Project
 	1,  // 8: yorkie.v1.GetProjectStatsRequest.date_range:type_name -> yorkie.v1.GetProjectStatsRequest.DateRange
-	76, // 9: yorkie.v1.GetProjectStatsResponse.active_users:type_name -> yorkie.v1.MetricPoint
-	76, // 10: yorkie.v1.GetProjectStatsResponse.active_channels:type_name -> yorkie.v1.MetricPoint
-	76, // 11: yorkie.v1.GetProjectStatsResponse.sessions:type_name -> yorkie.v1.MetricPoint
-	76, // 12: yorkie.v1.GetProjectStatsResponse.peak_sessions_per_channel:type_name -> yorkie.v1.MetricPoint
-	76, // 13: yorkie.v1.GetProjectStatsResponse.active_documents:type_name -> yorkie.v1.MetricPoint
-	76, // 14: yorkie.v1.GetProjectStatsResponse.active_clients:type_name -> yorkie.v1.MetricPoint
-	72, // 15: yorkie.v1.ListMembersResponse.members:type_name -> yorkie.v1.Member
-	72, // 16: yorkie.v1.UpdateMemberRoleResponse.member:type_name -> yorkie.v1.Member
-	77, // 17: yorkie.v1.CreateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	77, // 18: yorkie.v1.ListDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	77, // 19: yorkie.v1.GetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	77, // 20: yorkie.v1.GetDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	77, // 21: yorkie.v1.UpdateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
-	78, // 22: yorkie.v1.GetSnapshotMetaResponse.version_vector:type_name -> yorkie.v1.VersionVector
-	77, // 23: yorkie.v1.SearchDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
-	79, // 24: yorkie.v1.ListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	79, // 25: yorkie.v1.GetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
-	80, // 26: yorkie.v1.ListChangesResponse.changes:type_name -> yorkie.v1.Change
-	81, // 27: yorkie.v1.CreateSchemaRequest.rules:type_name -> yorkie.v1.Rule
-	82, // 28: yorkie.v1.CreateSchemaResponse.schema:type_name -> yorkie.v1.Schema
-	82, // 29: yorkie.v1.ListSchemasResponse.schemas:type_name -> yorkie.v1.Schema
-	82, // 30: yorkie.v1.GetSchemaResponse.schema:type_name -> yorkie.v1.Schema
-	82, // 31: yorkie.v1.GetSchemasResponse.schemas:type_name -> yorkie.v1.Schema
-	74, // 32: yorkie.v1.RotateProjectKeysResponse.project:type_name -> yorkie.v1.Project
-	83, // 33: yorkie.v1.ListRevisionsByAdminResponse.revisions:type_name -> yorkie.v1.RevisionSummary
-	83, // 34: yorkie.v1.GetRevisionByAdminResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	78, // 9: yorkie.v1.GetProjectStatsResponse.active_users:type_name -> yorkie.v1.MetricPoint
+	78, // 10: yorkie.v1.GetProjectStatsResponse.active_channels:type_name -> yorkie.v1.MetricPoint
+	78, // 11: yorkie.v1.GetProjectStatsResponse.sessions:type_name -> yorkie.v1.MetricPoint
+	78, // 12: yorkie.v1.GetProjectStatsResponse.peak_sessions_per_channel:type_name -> yorkie.v1.MetricPoint
+	78, // 13: yorkie.v1.GetProjectStatsResponse.active_documents:type_name -> yorkie.v1.MetricPoint
+	78, // 14: yorkie.v1.GetProjectStatsResponse.active_clients:type_name -> yorkie.v1.MetricPoint
+	74, // 15: yorkie.v1.ListMembersResponse.members:type_name -> yorkie.v1.Member
+	74, // 16: yorkie.v1.UpdateMemberRoleResponse.member:type_name -> yorkie.v1.Member
+	79, // 17: yorkie.v1.CreateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	79, // 18: yorkie.v1.ListDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	79, // 19: yorkie.v1.GetDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	79, // 20: yorkie.v1.GetDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	79, // 21: yorkie.v1.UpdateDocumentResponse.document:type_name -> yorkie.v1.DocumentSummary
+	80, // 22: yorkie.v1.GetSnapshotMetaResponse.version_vector:type_name -> yorkie.v1.VersionVector
+	79, // 23: yorkie.v1.SearchDocumentsResponse.documents:type_name -> yorkie.v1.DocumentSummary
+	81, // 24: yorkie.v1.ListChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	81, // 25: yorkie.v1.GetChannelsResponse.channels:type_name -> yorkie.v1.ChannelSummary
+	82, // 26: yorkie.v1.ListChangesResponse.changes:type_name -> yorkie.v1.Change
+	83, // 27: yorkie.v1.CreateSchemaRequest.rules:type_name -> yorkie.v1.Rule
+	84, // 28: yorkie.v1.CreateSchemaResponse.schema:type_name -> yorkie.v1.Schema
+	84, // 29: yorkie.v1.ListSchemasResponse.schemas:type_name -> yorkie.v1.Schema
+	84, // 30: yorkie.v1.GetSchemaResponse.schema:type_name -> yorkie.v1.Schema
+	84, // 31: yorkie.v1.GetSchemasResponse.schemas:type_name -> yorkie.v1.Schema
+	76, // 32: yorkie.v1.RotateProjectKeysResponse.project:type_name -> yorkie.v1.Project
+	85, // 33: yorkie.v1.ListRevisionsByAdminResponse.revisions:type_name -> yorkie.v1.RevisionSummary
+	85, // 34: yorkie.v1.GetRevisionByAdminResponse.revision:type_name -> yorkie.v1.RevisionSummary
 	6,  // 35: yorkie.v1.AdminService.SignUp:input_type -> yorkie.v1.SignUpRequest
 	8,  // 36: yorkie.v1.AdminService.LogIn:input_type -> yorkie.v1.LogInRequest
 	10, // 37: yorkie.v1.AdminService.DeleteAccount:input_type -> yorkie.v1.DeleteAccountRequest
@@ -4068,43 +4172,45 @@ var file_yorkie_v1_admin_proto_depIdxs = []int32{
 	46, // 67: yorkie.v1.AdminService.ListChannels:input_type -> yorkie.v1.ListChannelsRequest
 	48, // 68: yorkie.v1.AdminService.GetChannels:input_type -> yorkie.v1.GetChannelsRequest
 	62, // 69: yorkie.v1.AdminService.GetServerVersion:input_type -> yorkie.v1.GetServerVersionRequest
-	7,  // 70: yorkie.v1.AdminService.SignUp:output_type -> yorkie.v1.SignUpResponse
-	9,  // 71: yorkie.v1.AdminService.LogIn:output_type -> yorkie.v1.LogInResponse
-	11, // 72: yorkie.v1.AdminService.DeleteAccount:output_type -> yorkie.v1.DeleteAccountResponse
-	13, // 73: yorkie.v1.AdminService.ChangePassword:output_type -> yorkie.v1.ChangePasswordResponse
-	15, // 74: yorkie.v1.AdminService.CreateProject:output_type -> yorkie.v1.CreateProjectResponse
-	19, // 75: yorkie.v1.AdminService.ListProjects:output_type -> yorkie.v1.ListProjectsResponse
-	17, // 76: yorkie.v1.AdminService.GetProject:output_type -> yorkie.v1.GetProjectResponse
-	23, // 77: yorkie.v1.AdminService.GetProjectStats:output_type -> yorkie.v1.GetProjectStatsResponse
-	21, // 78: yorkie.v1.AdminService.UpdateProject:output_type -> yorkie.v1.UpdateProjectResponse
-	65, // 79: yorkie.v1.AdminService.RotateProjectKeys:output_type -> yorkie.v1.RotateProjectKeysResponse
-	25, // 80: yorkie.v1.AdminService.RemoveMember:output_type -> yorkie.v1.RemoveMemberResponse
-	27, // 81: yorkie.v1.AdminService.ListMembers:output_type -> yorkie.v1.ListMembersResponse
-	29, // 82: yorkie.v1.AdminService.UpdateMemberRole:output_type -> yorkie.v1.UpdateMemberRoleResponse
-	3,  // 83: yorkie.v1.AdminService.CreateInvite:output_type -> yorkie.v1.CreateInviteResponse
-	5,  // 84: yorkie.v1.AdminService.AcceptInvite:output_type -> yorkie.v1.AcceptInviteResponse
-	31, // 85: yorkie.v1.AdminService.CreateDocument:output_type -> yorkie.v1.CreateDocumentResponse
-	33, // 86: yorkie.v1.AdminService.ListDocuments:output_type -> yorkie.v1.ListDocumentsResponse
-	35, // 87: yorkie.v1.AdminService.GetDocument:output_type -> yorkie.v1.GetDocumentResponse
-	37, // 88: yorkie.v1.AdminService.GetDocuments:output_type -> yorkie.v1.GetDocumentsResponse
-	45, // 89: yorkie.v1.AdminService.SearchDocuments:output_type -> yorkie.v1.SearchDocumentsResponse
-	39, // 90: yorkie.v1.AdminService.UpdateDocument:output_type -> yorkie.v1.UpdateDocumentResponse
-	41, // 91: yorkie.v1.AdminService.RemoveDocumentByAdmin:output_type -> yorkie.v1.RemoveDocumentByAdminResponse
-	43, // 92: yorkie.v1.AdminService.GetSnapshotMeta:output_type -> yorkie.v1.GetSnapshotMetaResponse
-	51, // 93: yorkie.v1.AdminService.ListChanges:output_type -> yorkie.v1.ListChangesResponse
-	53, // 94: yorkie.v1.AdminService.CreateSchema:output_type -> yorkie.v1.CreateSchemaResponse
-	55, // 95: yorkie.v1.AdminService.ListSchemas:output_type -> yorkie.v1.ListSchemasResponse
-	57, // 96: yorkie.v1.AdminService.GetSchema:output_type -> yorkie.v1.GetSchemaResponse
-	59, // 97: yorkie.v1.AdminService.GetSchemas:output_type -> yorkie.v1.GetSchemasResponse
-	61, // 98: yorkie.v1.AdminService.RemoveSchema:output_type -> yorkie.v1.RemoveSchemaResponse
-	67, // 99: yorkie.v1.AdminService.ListRevisionsByAdmin:output_type -> yorkie.v1.ListRevisionsByAdminResponse
-	69, // 100: yorkie.v1.AdminService.GetRevisionByAdmin:output_type -> yorkie.v1.GetRevisionByAdminResponse
-	71, // 101: yorkie.v1.AdminService.RestoreRevisionByAdmin:output_type -> yorkie.v1.RestoreRevisionByAdminResponse
-	47, // 102: yorkie.v1.AdminService.ListChannels:output_type -> yorkie.v1.ListChannelsResponse
-	49, // 103: yorkie.v1.AdminService.GetChannels:output_type -> yorkie.v1.GetChannelsResponse
-	63, // 104: yorkie.v1.AdminService.GetServerVersion:output_type -> yorkie.v1.GetServerVersionResponse
-	70, // [70:105] is the sub-list for method output_type
-	35, // [35:70] is the sub-list for method input_type
+	72, // 70: yorkie.v1.AdminService.CompactDocumentByAdmin:input_type -> yorkie.v1.CompactDocumentByAdminRequest
+	7,  // 71: yorkie.v1.AdminService.SignUp:output_type -> yorkie.v1.SignUpResponse
+	9,  // 72: yorkie.v1.AdminService.LogIn:output_type -> yorkie.v1.LogInResponse
+	11, // 73: yorkie.v1.AdminService.DeleteAccount:output_type -> yorkie.v1.DeleteAccountResponse
+	13, // 74: yorkie.v1.AdminService.ChangePassword:output_type -> yorkie.v1.ChangePasswordResponse
+	15, // 75: yorkie.v1.AdminService.CreateProject:output_type -> yorkie.v1.CreateProjectResponse
+	19, // 76: yorkie.v1.AdminService.ListProjects:output_type -> yorkie.v1.ListProjectsResponse
+	17, // 77: yorkie.v1.AdminService.GetProject:output_type -> yorkie.v1.GetProjectResponse
+	23, // 78: yorkie.v1.AdminService.GetProjectStats:output_type -> yorkie.v1.GetProjectStatsResponse
+	21, // 79: yorkie.v1.AdminService.UpdateProject:output_type -> yorkie.v1.UpdateProjectResponse
+	65, // 80: yorkie.v1.AdminService.RotateProjectKeys:output_type -> yorkie.v1.RotateProjectKeysResponse
+	25, // 81: yorkie.v1.AdminService.RemoveMember:output_type -> yorkie.v1.RemoveMemberResponse
+	27, // 82: yorkie.v1.AdminService.ListMembers:output_type -> yorkie.v1.ListMembersResponse
+	29, // 83: yorkie.v1.AdminService.UpdateMemberRole:output_type -> yorkie.v1.UpdateMemberRoleResponse
+	3,  // 84: yorkie.v1.AdminService.CreateInvite:output_type -> yorkie.v1.CreateInviteResponse
+	5,  // 85: yorkie.v1.AdminService.AcceptInvite:output_type -> yorkie.v1.AcceptInviteResponse
+	31, // 86: yorkie.v1.AdminService.CreateDocument:output_type -> yorkie.v1.CreateDocumentResponse
+	33, // 87: yorkie.v1.AdminService.ListDocuments:output_type -> yorkie.v1.ListDocumentsResponse
+	35, // 88: yorkie.v1.AdminService.GetDocument:output_type -> yorkie.v1.GetDocumentResponse
+	37, // 89: yorkie.v1.AdminService.GetDocuments:output_type -> yorkie.v1.GetDocumentsResponse
+	45, // 90: yorkie.v1.AdminService.SearchDocuments:output_type -> yorkie.v1.SearchDocumentsResponse
+	39, // 91: yorkie.v1.AdminService.UpdateDocument:output_type -> yorkie.v1.UpdateDocumentResponse
+	41, // 92: yorkie.v1.AdminService.RemoveDocumentByAdmin:output_type -> yorkie.v1.RemoveDocumentByAdminResponse
+	43, // 93: yorkie.v1.AdminService.GetSnapshotMeta:output_type -> yorkie.v1.GetSnapshotMetaResponse
+	51, // 94: yorkie.v1.AdminService.ListChanges:output_type -> yorkie.v1.ListChangesResponse
+	53, // 95: yorkie.v1.AdminService.CreateSchema:output_type -> yorkie.v1.CreateSchemaResponse
+	55, // 96: yorkie.v1.AdminService.ListSchemas:output_type -> yorkie.v1.ListSchemasResponse
+	57, // 97: yorkie.v1.AdminService.GetSchema:output_type -> yorkie.v1.GetSchemaResponse
+	59, // 98: yorkie.v1.AdminService.GetSchemas:output_type -> yorkie.v1.GetSchemasResponse
+	61, // 99: yorkie.v1.AdminService.RemoveSchema:output_type -> yorkie.v1.RemoveSchemaResponse
+	67, // 100: yorkie.v1.AdminService.ListRevisionsByAdmin:output_type -> yorkie.v1.ListRevisionsByAdminResponse
+	69, // 101: yorkie.v1.AdminService.GetRevisionByAdmin:output_type -> yorkie.v1.GetRevisionByAdminResponse
+	71, // 102: yorkie.v1.AdminService.RestoreRevisionByAdmin:output_type -> yorkie.v1.RestoreRevisionByAdminResponse
+	47, // 103: yorkie.v1.AdminService.ListChannels:output_type -> yorkie.v1.ListChannelsResponse
+	49, // 104: yorkie.v1.AdminService.GetChannels:output_type -> yorkie.v1.GetChannelsResponse
+	63, // 105: yorkie.v1.AdminService.GetServerVersion:output_type -> yorkie.v1.GetServerVersionResponse
+	73, // 106: yorkie.v1.AdminService.CompactDocumentByAdmin:output_type -> yorkie.v1.CompactDocumentByAdminResponse
+	71, // [71:107] is the sub-list for method output_type
+	35, // [35:71] is the sub-list for method input_type
 	35, // [35:35] is the sub-list for extension type_name
 	35, // [35:35] is the sub-list for extension extendee
 	0,  // [0:35] is the sub-list for field type_name
@@ -4122,7 +4228,7 @@ func file_yorkie_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_admin_proto_rawDesc), len(file_yorkie_v1_admin_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   70,
+			NumMessages:   72,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"runtime"
 
@@ -753,6 +754,44 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	)
 
 	return connect.NewResponse(&api.RemoveDocumentByAdminResponse{}), nil
+}
+
+// CompactDocumentByAdmin compacts the document of the given key.
+func (s *adminServer) CompactDocumentByAdmin(
+	ctx context.Context,
+	req *connect.Request[api.CompactDocumentByAdminRequest],
+) (*connect.Response[api.CompactDocumentByAdminResponse], error) {
+	project := projects.From(ctx)
+
+	// NOTE: In single-server mode, ClusterClient is unavailable, so we call
+	// packs.Compact directly with a document lock (same pattern as server.go
+	// test helper). In cluster mode, this also works correctly since the lock
+	// prevents concurrent operations on the same document.
+	locker := s.backend.Lockers.Locker(packs.DocKey(project.ID, key.Key(req.Msg.DocumentKey)))
+	defer locker.Unlock()
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.Msg.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := packs.Compact(ctx, s.backend, project.ID, docInfo, req.Msg.Force); err != nil {
+		if stderrors.Is(err, packs.ErrDocumentAttached) {
+			return connect.NewResponse(&api.CompactDocumentByAdminResponse{
+				Compacted: false,
+			}), nil
+		}
+		return nil, err
+	}
+
+	logging.DefaultLogger().Info(
+		fmt.Sprintf("document compact success(projectID: %s, docKey: %s)",
+			project.ID, req.Msg.DocumentKey),
+	)
+
+	return connect.NewResponse(&api.CompactDocumentByAdminResponse{
+		Compacted: true,
+	}), nil
 }
 
 // ListChannels lists channels for the given project.
