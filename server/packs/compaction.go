@@ -49,17 +49,20 @@ func Compact(
 	be *backend.Backend,
 	projectID types.ID,
 	docInfo *database.DocInfo,
+	force bool,
 ) error {
 	// 1. Check if the document is attached.
-	isAttached, err := be.DB.IsDocumentAttachedOrAttaching(ctx, types.DocRefKey{
-		ProjectID: projectID,
-		DocID:     docInfo.ID,
-	}, "")
-	if err != nil {
-		return err
-	}
-	if isAttached {
-		return fmt.Errorf("compact document %s: %w", docInfo.ID, ErrDocumentAttached)
+	if !force {
+		isAttached, err := be.DB.IsDocumentAttachedOrAttaching(ctx, types.DocRefKey{
+			ProjectID: projectID,
+			DocID:     docInfo.ID,
+		}, "")
+		if err != nil {
+			return err
+		}
+		if isAttached {
+			return fmt.Errorf("compact document %s: %w", docInfo.ID, ErrDocumentAttached)
+		}
 	}
 
 	// 2. Build compacted changes and check if the content is the same.

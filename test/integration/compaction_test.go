@@ -53,7 +53,7 @@ func TestDocumentCompaction(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, d1))
 
 		// 2. Compact the document
-		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key()))
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), false))
 
 		// 3. Create another changes to create a snapshot
 		docB := document.New(helper.TestKey(t))
