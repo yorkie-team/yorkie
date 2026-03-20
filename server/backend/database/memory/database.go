@@ -35,12 +35,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-const (
-	// snapshotBodyThreshold is the size threshold above which compressed snapshot
-	// data is stored in the snapshot_bodies table instead of inline.
-	snapshotBodyThreshold = 12 * 1024 * 1024
-)
-
 // DB is an in-memory database for testing or temporarily.
 type DB struct {
 	db *memdb.MemDB
@@ -1984,7 +1978,7 @@ func (d *DB) CreateSnapshotInfo(
 		return fmt.Errorf("compress snapshot of %s: %w", docRefKey, err)
 	}
 
-	hasExternalBody := len(compressed) > snapshotBodyThreshold
+	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()

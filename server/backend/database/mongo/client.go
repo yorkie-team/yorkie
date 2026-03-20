@@ -45,10 +45,6 @@ const (
 	// StatusKey is the key of the status field.
 	StatusKey = "status"
 
-	// snapshotBodyThreshold is the size threshold (in bytes) above which
-	// compressed snapshot data is stored in the snapshot_bodies collection.
-	// 12MB leaves headroom below MongoDB's 16MB BSON limit for metadata.
-	snapshotBodyThreshold = 12 * 1024 * 1024
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -2022,7 +2018,7 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	serverSeq := doc.Checkpoint().ServerSeq
-	hasExternalBody := len(compressed) > snapshotBodyThreshold
+	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
 
 	docFields := bson.M{
 		"project_id":        docRefKey.ProjectID,

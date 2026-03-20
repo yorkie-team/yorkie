@@ -28,6 +28,11 @@ const (
 	// Existing protobuf snapshots never start with 0x01 (protobuf field 1 with
 	// wire type 2 encodes as 0x0A), so this is safe for detection.
 	SnapshotFormatZstd byte = 0x01
+
+	// SnapshotBodyThreshold is the size threshold (in bytes) above which
+	// compressed snapshot data is stored in a separate body collection.
+	// 12MB leaves headroom below MongoDB's 16MB BSON limit for metadata.
+	SnapshotBodyThreshold = 12 * 1024 * 1024
 )
 
 var (
