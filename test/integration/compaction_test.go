@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
+	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -98,7 +100,9 @@ func TestDocumentCompaction(t *testing.T) {
 		// Without force: should fail because document is attached.
 		// server.go calls packs.Compact directly (not via cluster service),
 		// so ErrDocumentAttached is returned as-is.
-		assert.Error(t, defaultServer.CompactDocument(ctx, d1.Key(), false))
+		err := defaultServer.CompactDocument(ctx, d1.Key(), false)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, packs.ErrDocumentAttached))
 
 		// Force compact while attached: should succeed
 		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))

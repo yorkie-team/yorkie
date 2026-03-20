@@ -63,6 +63,8 @@ func Compact(
 		if isAttached {
 			return fmt.Errorf("compact document %s: %w", docInfo.ID, ErrDocumentAttached)
 		}
+	} else {
+		logging.DefaultLogger().Infof("force compacting document %s (skipping attachment check)", docInfo.ID)
 	}
 
 	// 2. Build compacted changes and check if the content is the same.
