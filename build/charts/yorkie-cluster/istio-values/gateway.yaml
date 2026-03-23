@@ -10,6 +10,20 @@ labels:
 
 service:
   type: NodePort
+  ports:
+    - name: status-port
+      port: 15021
+      protocol: TCP
+      targetPort: 15021
+      nodePort: 32442
+    - name: http2
+      port: 80
+      protocol: TCP
+      targetPort: 80
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 443
 
 # Ensure the gateway has the correct selector label for Istio CRDs
 # (Gateway, EnvoyFilter) that use `istio: yorkie-gateway` selector
