@@ -3,11 +3,11 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: filter-ratelimit
-  namespace: istio-system
+  namespace: {{ .Values.yorkie.namespace }}
 spec:
   workloadSelector:
     labels:
-      istio: ingressgateway
+      istio: yorkie-gateway
   configPatches:
     - applyTo: HTTP_FILTER
       match:
@@ -39,11 +39,11 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: filter-ratelimit-svc
-  namespace: istio-system
+  namespace: {{ .Values.yorkie.namespace }}
 spec:
   workloadSelector:
     labels:
-      istio: ingressgateway
+      istio: yorkie-gateway
   configPatches:
     - applyTo: VIRTUAL_HOST
       match:

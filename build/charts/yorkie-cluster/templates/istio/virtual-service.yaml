@@ -1,4 +1,4 @@
-apiVersion: networking.istio.io/v1alpha3
+apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: {{ .Values.yorkie.name }}
@@ -23,8 +23,8 @@ spec:
               number: {{ .Values.yorkie.ports.rpcPort }}
       # set cors policy for grpc-web protocols
       corsPolicy:
-        allowOrigin:
-          - "*"
+        allowOrigins:
+          - exact: "*"
         allowMethods:
           - POST
           - GET
