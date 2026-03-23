@@ -1,0 +1,5 @@
+# Istio control plane (istiod) values
+# Chart: istio/istiod
+meshConfig:
+  accessLogFile: /dev/stdout
+  enableTracing: true

@@ -1,0 +1,3 @@
+# Istio base chart values (CRDs + cluster-wide resources)
+# Chart: istio/base
+defaultRevision: default

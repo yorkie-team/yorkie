@@ -1,0 +1,15 @@
+# Istio gateway values for yorkie-gateway
+# Chart: istio/gateway
+#
+# Replaces the IstioOperator ingressGateway configuration.
+# Gateway is deployed in the yorkie namespace with NodePort service type.
+
+# Labels applied to the gateway deployment and pods
+labels:
+  istio: yorkie-gateway
+
+service:
+  type: NodePort
+
+# Ensure the gateway has the correct selector label for Istio CRDs
+# (Gateway, EnvoyFilter) that use `istio: yorkie-gateway` selector
