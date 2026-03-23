@@ -182,6 +182,9 @@ yorkie-mongodb:
   # Backup configuration - optional
   backup:
     enabled: false
+    tasks: []
+    volumeMounts: []
+    storages: {}
 
   # Sharding configuration
   sharding:
@@ -202,6 +205,13 @@ yorkie-mongodb:
     # Shard 1
     - name: rs0
       size: 1
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
       volumeSpec:
         persistentVolumeClaim:
           storageClassName: standard
@@ -212,6 +222,13 @@ yorkie-mongodb:
     # Shard 2
     - name: rs1
       size: 1
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
       volumeSpec:
         persistentVolumeClaim:
           storageClassName: standard

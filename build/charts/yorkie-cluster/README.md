@@ -8,6 +8,16 @@ Installs the yorkie-cluster, which provides cluster mode for Yorkie server to ha
 - Istioctl 1.17+
 - Helm 3+
 
+### Minikube
+
+If you are using Minikube, ensure it has enough resources allocated for the MongoDB sharded cluster:
+
+```bash
+minikube start --cpus=4 --memory=4096
+```
+
+The Percona MongoDB replsets are configured with resource requests (100m CPU, 256Mi memory per shard), so the cluster needs sufficient capacity to schedule all pods.
+
 ## Install Istio with Istio Operator
 
 Before installing the chart, you need to install Istio with [Istio Operator](https://istio.io/latest/docs/setup/install/operator/) using [istioctl](https://istio.io/latest/docs/setup/getting-started/#download).
