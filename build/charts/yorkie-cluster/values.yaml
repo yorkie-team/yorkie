@@ -182,7 +182,6 @@ yorkie-mongodb:
   # Backup configuration - optional
   backup:
     enabled: false
-    tasks: []
     volumeMounts: []
     storages: {}
 
