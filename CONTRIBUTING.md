@@ -75,7 +75,7 @@ with build tag `integration`, `bench`, or `complex`.
 
 ## Design Documents
 
-For developers, [design documents](design/README.md) about core features are provided. You can refer to the docs for understanding the overall structure of Yorkie.
+For developers, [design documents](docs/design/README.md) about core features are provided. You can refer to the docs for understanding the overall structure of Yorkie.
 
 ## Conventions
 
@@ -99,6 +99,12 @@ detached.
 ```
 
 The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various git tools.
+
+To enable automatic commit message validation, run:
+
+```sh
+bash scripts/setup.sh
+```
 
 ### Testing
 
