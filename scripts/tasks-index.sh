@@ -21,7 +21,7 @@ TODAY=$(date +%Y-%m-%d)
       echo "- [[$slug-todo]] — $title"
     done
   else
-    echo "(없음)"
+    echo "(none)"
   fi
 } > "$ACTIVE_DIR/README.md"
 echo "Updated $ACTIVE_DIR/README.md"
@@ -51,7 +51,7 @@ echo "Updated $ACTIVE_DIR/README.md"
       done
     done
   else
-    echo "(없음)"
+    echo "(none)"
   fi
 } > "$ARCHIVE_DIR/README.md"
 echo "Updated $ARCHIVE_DIR/README.md"
@@ -64,7 +64,7 @@ echo "Updated $ARCHIVE_DIR/README.md"
   echo ""
   echo "# Tasks"
   echo ""
-  echo "- \`active/\` — 진행 중 태스크"
-  echo "- \`archive/\` — 완료된 태스크"
+  echo "- \`active/\` — In-progress tasks"
+  echo "- \`archive/\` — Completed tasks"
 } > "$TASKS_DIR/README.md"
 echo "Updated $TASKS_DIR/README.md"

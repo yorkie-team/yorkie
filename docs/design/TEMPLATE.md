@@ -9,7 +9,7 @@ target-version: X.X.X
 
 ## Problem
 
-(배경과 동기. 왜 이 변경이 필요한가)
+(Background and motivation. Why is this change needed?)
 
 ### Goals
 
@@ -17,7 +17,7 @@ target-version: X.X.X
 
 ## Design
 
-(구체적인 설계. 코드 스니펫, API, 내부 구현 포함)
+(Detailed design. Include code snippets, APIs, and internal implementation.)
 
 ### Risks and Mitigation
 
@@ -36,4 +36,4 @@ target-version: X.X.X
 
 ## Tasks
 
-실행 계획은 `docs/tasks/active/`에 별도 태스크 문서로 관리한다.
+Track execution plans in `docs/tasks/active/` as separate task documents.
