@@ -6,6 +6,8 @@ ACTIVE_DIR="$TASKS_DIR/active"
 ARCHIVE_DIR="$TASKS_DIR/archive"
 TODAY=$(date +%Y-%m-%d)
 
+mkdir -p "$TASKS_DIR" "$ACTIVE_DIR" "$ARCHIVE_DIR"
+
 # --- active/README.md ---
 {
   echo "---"
@@ -35,9 +37,10 @@ echo "Updated $ACTIVE_DIR/README.md"
   echo "# Archived Tasks"
   echo ""
   if [ -d "$ARCHIVE_DIR" ]; then
-    for year_dir in $(ls -rd "$ARCHIVE_DIR"/*/ 2>/dev/null | grep -v README); do
+    shopt -s nullglob
+    for year_dir in "$ARCHIVE_DIR"/*/; do
       year=$(basename "$year_dir")
-      for month_dir in $(ls -rd "$year_dir"/*/ 2>/dev/null); do
+      for month_dir in "$year_dir"/*/; do
         month=$(basename "$month_dir")
         echo "## $year-$month"
         echo ""
