@@ -65,7 +65,7 @@ https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc4972041
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/08c1e917-08cf-492c-84c2-cf72b98c38f3" width="600" />
 
-Yorkie implements the above [data structure](https://github.com/yorkie-team/yorkie/blob/main/design/data-structure.md) to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
+Yorkie implements the above [data structure](https://github.com/yorkie-team/yorkie/blob/main/docs/design/data-structure.md) to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
 
 Thus, the `Tree`, introduced in this document, has dependencies such as '`Tree` → `CRDTTree` → `IndexTree`', and each layer has its own coordinate system:
 
@@ -83,7 +83,7 @@ The `index` is the coordinate system used by users for local editing. This `inde
 
 Next, the obtained `IndexTree.TreePos` is transformed into the logical coordinate system of the distributed tree, represented by `CRDTTree.TreePos`. To achieve this, the given physical position, `IndexTree.TreePos`, is used to find the parent node and left sibling node. Then, a `CRDTTree.TreePos` is created using the unique IDs of the parent node and left sibling node, which are `CRDTTree.TreeNodeID`. This coordinate system is used in subsequent `Tree.Edit` and `Tree.Style` operations.
 
-In the case of remote editing, where the local coordinate system is received from the user in local editing, there is no need for Step 1 since changes are pulled from the server using `ChangePack` to synchronize the changes. Refer to the [document-editing](https://github.com/yorkie-team/yorkie/blob/main/design/document-editing.md) for more details.
+In the case of remote editing, where the local coordinate system is received from the user in local editing, there is no need for Step 1 since changes are pulled from the server using `ChangePack` to synchronize the changes. Refer to the [document-editing](https://github.com/yorkie-team/yorkie/blob/main/docs/design/document-editing.md) for more details.
 
 **Tree.Edit Logic**
 

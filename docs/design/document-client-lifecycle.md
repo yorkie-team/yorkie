@@ -66,7 +66,7 @@ This diagram consists of the following elements:
 - **Document: Detached / Client: Activated**
 - The document has been detached, but the client remains active.
 - In this state, the document can be reattached using `Attach()`, or the client can be deactivated using `Deactivate()`.
-- Detached documents are not the target of [GC](https://github.com/yorkie-team/yorkie/blob/main/design/garbage-collection.md), which may leave stale tombstone nodes. Reattaching must follow certain constraints to maintain node consistency. See below.
+- Detached documents are not the target of [GC](https://github.com/yorkie-team/yorkie/blob/main/docs/design/garbage-collection.md), which may leave stale tombstone nodes. Reattaching must follow certain constraints to maintain node consistency. See below.
 
 > [!NOTE]
 > 📌 About Document Reattach

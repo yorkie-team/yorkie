@@ -37,7 +37,7 @@ bytes in a separate `snapshot_bodies` collection. The `snapshots` collection
 stores only metadata with a `has_external_body` flag.
 
 `snapshot_bodies` uses `doc_id` as its shard key, consistent with the existing
-sharding strategy documented in `design/mongodb-sharding.md`.
+sharding strategy documented in `docs/design/mongodb-sharding.md`.
 
 ### Additional: Error Handling
 
