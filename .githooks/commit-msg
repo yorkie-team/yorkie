@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Strip comment lines (lines starting with #)
+msg=$(sed '/^#/d' "$1")
+
+# Skip empty messages (git handles this separately)
+if [ -z "$msg" ]; then
+  exit 0
+fi
+
+subject=$(echo "$msg" | head -n1)
+subject_len=${#subject}
+
+if [ "$subject_len" -gt 70 ]; then
+  echo "commit-msg: subject line is $subject_len chars (max 70)" >&2
+  exit 1
+fi
+
+line_count=$(echo "$msg" | wc -l | tr -d ' ')
+
+if [ "$line_count" -ge 2 ]; then
+  line2=$(echo "$msg" | sed -n '2p')
+  if [ -n "$line2" ]; then
+    echo "commit-msg: line 2 must be blank (found: '$line2')" >&2
+    exit 1
+  fi
+fi
+
+if [ "$line_count" -ge 3 ]; then
+  line_num=0
+  while IFS= read -r line; do
+    line_num=$((line_num + 1))
+    if [ "$line_num" -le 2 ]; then
+      continue
+    fi
+    len=${#line}
+    if [ "$len" -gt 80 ]; then
+      echo "commit-msg: line $line_num is $len chars (max 80)" >&2
+      exit 1
+    fi
+  done <<< "$msg"
+fi
