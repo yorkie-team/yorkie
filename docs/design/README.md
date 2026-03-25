@@ -45,4 +45,4 @@ Writing a design document for big features has many advantages:
 
 While working on your design, writing code to prototype your functionality may be useful to refine your approach.
 
-Authoring Design document is also proceeded in the same [contribution flow](../CONTRIBUTING.md) as normal Pull Request such as function implementation or bug fixing.
+Authoring a design document follows the same [contribution flow](../../CONTRIBUTING.md) as a normal pull request, such as feature implementation or bug fixing.
