@@ -26,7 +26,9 @@ For protobuf changes, regenerate first: `make proto`
 ## Key Architecture
 
 - **Three-layer data model**: JSON-like (user-facing) -> CRDT (conflict resolution) -> Common (shared primitives)
-- **Design docs**: Always consult `design/` for architectural context. Keep design docs updated after changes.
+- **Design docs**: Always consult `docs/design/` for architectural context. Keep design docs updated after changes.
+- **Task tracking**: `docs/tasks/active/` for in-progress, `docs/tasks/archive/` for completed. Use `YYYYMMDD-<slug>-{todo,lessons}.md` pairs.
+- **Setup**: Run `bash scripts/setup.sh` to enable commit message validation hook.
 - **Entry point**: `cmd/yorkie/`
 - **Generated code**: `api/yorkie/v1/` (protobuf)
 
