@@ -1865,6 +1865,9 @@ func (c *Client) CompactChangeInfos(
 			"server_seq":   newServerSeq,
 			"compacted_at": gotime.Now(),
 		},
+		"$inc": bson.M{
+			"epoch": int64(1),
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
