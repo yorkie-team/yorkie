@@ -1216,7 +1216,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
 			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
 				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
-				existingDocInfo.Status == clientDocInfo.Status {
+				existingDocInfo.Status == clientDocInfo.Status &&
+				existingDocInfo.Epoch == clientDocInfo.Epoch {
 				return nil
 			}
 		}

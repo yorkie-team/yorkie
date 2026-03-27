@@ -103,6 +103,7 @@ func SystemClientInfo(projectID types.ID, docInfo *DocInfo) *ClientInfo {
 				Status:    DocumentAttached,
 				ServerSeq: docInfo.ServerSeq,
 				ClientSeq: 0,
+				Epoch:     docInfo.Epoch,
 			},
 		},
 	}
