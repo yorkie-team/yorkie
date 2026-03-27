@@ -18,6 +18,7 @@ package packs
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strconv"
 	gotime "time"
@@ -249,7 +250,18 @@ func pullPack(
 		docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
 
 	if err != nil {
-		return nil, err
+		// NOTE(hackerwins): When a client detaches after a compaction, the epoch
+		// mismatch makes change sync impossible. But detach only needs to update
+		// the client's status — syncing old-epoch changes is meaningless. So we
+		// skip the pull and return an empty pack to let the detach proceed.
+		if stderrors.Is(err, ErrEpochMismatch) && (opts.Status == document.StatusDetached || opts.Status == document.StatusRemoved) {
+			resPack = NewServerPack(docInfo.Key, change.Checkpoint{
+				ServerSeq: reqPack.Checkpoint.ServerSeq,
+				ClientSeq: cpAfterPush.ClientSeq,
+			}, nil, nil)
+		} else {
+			return nil, err
+		}
 	}
 	resPack.ApplyDocInfo(docInfo)
 
