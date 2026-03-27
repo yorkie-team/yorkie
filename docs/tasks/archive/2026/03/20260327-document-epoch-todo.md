@@ -181,6 +181,52 @@ git add server/backend/database/memory/database.go
 git commit -m "Increment epoch on compaction in memory DB CompactChangeInfos"
 ```
 
+### Task 4.5: Persist client epoch in UpdateClientInfoAfterPushPull
+
+**Files:**
+- Modify: `server/backend/database/mongo/client.go` (UpdateClientInfoAfterPushPull)
+- Modify: `server/backend/database/memory/database.go` (UpdateClientInfoAfterPushPull)
+
+- [x] **Step 1: Update MongoDB UpdateClientInfoAfterPushPull to persist epoch**
+
+In the attached branch of `UpdateClientInfoAfterPushPull`, add epoch to the
+`$set` clause so the client's epoch is written to MongoDB on every sync:
+
+```go
+clientDocInfoKey(docInfo.ID, "epoch"): clientDocInfo.Epoch,
+```
+
+Also add `existingDocInfo.Epoch == clientDocInfo.Epoch` to the cache bypass
+condition so epoch changes are never skipped.
+
+- [x] **Step 2: Update memory DB UpdateClientInfoAfterPushPull to persist epoch**
+
+In the attached branch, include `Epoch: clientDocInfo.Epoch` in the
+`ClientDocInfo` struct literal.
+
+- [x] **Step 3: Update SystemClientInfo to include epoch**
+
+In `server/backend/database/client_info.go`, add `Epoch: docInfo.Epoch` to
+the synthetic `ClientDocInfo` in `SystemClientInfo` to prevent false mismatch
+on server-side operations.
+
+- [x] **Step 4: Verify build and commit**
+
+Run: `make build`
+
+```bash
+git add server/backend/database/mongo/client.go \
+       server/backend/database/memory/database.go \
+       server/backend/database/client_info.go
+git commit -m "Fix epoch propagation in cache bypass and SystemClientInfo"
+```
+
+> **Note:** This task was not in the original plan. It was discovered during
+> Task 5 implementation: without persisting epoch in UpdateClientInfoAfterPushPull,
+> a client that attaches to a compacted document (epoch=1) would have epoch=0
+> in the DB after the first sync, causing a false ErrEpochMismatch on the next
+> sync.
+
 ### Task 5: Add ErrEpochMismatch and epoch check in preparePack
 
 **Files:**
@@ -217,7 +263,7 @@ t.Run("epoch mismatch after force compaction triggers reattach", func(t *testing
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `make test -tags integration -run TestDocumentCompaction/epoch_mismatch`
+Run: `go test -tags=integration ./test/integration/ -run TestDocumentCompaction/epoch_mismatch -count=1 -v`
 Expected: FAIL — `ErrEpochMismatch` is not defined yet.
 
 - [ ] **Step 3: Define ErrEpochMismatch**
@@ -266,12 +312,12 @@ Check `server/rpc/connecthelper/errors.go` to confirm that `FailedPrecond` maps 
 
 - [ ] **Step 6: Run the integration test**
 
-Run: `make test -tags integration -run TestDocumentCompaction/epoch_mismatch`
+Run: `go test -tags=integration ./test/integration/ -run TestDocumentCompaction/epoch_mismatch -count=1 -v`
 Expected: PASS
 
 - [ ] **Step 7: Run all compaction tests to verify no regression**
 
-Run: `make test -tags integration -run TestDocumentCompaction`
+Run: `go test -tags=integration ./test/integration/ -run TestDocumentCompaction -count=1 -v`
 Expected: All tests pass. The existing "force compaction on attached document" test will now get `ErrEpochMismatch` instead of `ErrInvalidServerSeq` on `c1.Detach` — update the assertion in that test:
 
 ```go
@@ -341,7 +387,7 @@ Expected: PASS
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `make test -tags integration`
+Run: `go test -tags=integration ./test/integration/ -count=1 -v`
 Expected: All tests pass.
 
 - [ ] **Step 4: Commit**
