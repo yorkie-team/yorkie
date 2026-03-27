@@ -1245,6 +1245,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			},
 			"$set": bson.M{
 				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+				clientDocInfoKey(docInfo.ID, "epoch"):   clientDocInfo.Epoch,
 				"updated_at":                            info.UpdatedAt,
 			},
 			"$addToSet": bson.M{

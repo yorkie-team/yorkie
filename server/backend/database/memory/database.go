@@ -1207,6 +1207,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
 			Status:    clientDocInfo.Status,
+			Epoch:     clientDocInfo.Epoch,
 		}
 		loaded.UpdatedAt = gotime.Now()
 	}

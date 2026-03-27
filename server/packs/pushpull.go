@@ -67,6 +67,11 @@ var (
 	// ErrInvalidServerSeq is returned when the given server seq greater than
 	// the initial server seq.
 	ErrInvalidServerSeq = errors.Internal("invalid server seq").WithCode("ErrInvalidServerSeq")
+
+	// ErrEpochMismatch is returned when the client's epoch does not match the
+	// document's epoch. This happens after compaction resets the document — the
+	// client must detach and re-attach to receive the compacted state.
+	ErrEpochMismatch = errors.FailedPrecond("epoch mismatch").WithCode("ErrEpochMismatch")
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -289,6 +294,18 @@ func preparePack(
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
 		}, nil, nil), nil
+	}
+
+	// Compare epochs first: if the document has been compacted since the
+	// client last synced, serverSeq values from different epochs cannot
+	// be compared.
+	if clientDocInfo := clientInfo.Documents[docInfo.ID]; clientDocInfo != nil && clientDocInfo.Epoch != docInfo.Epoch {
+		return nil, fmt.Errorf(
+			"client epoch(%d) != document epoch(%d): %w",
+			clientDocInfo.Epoch,
+			docInfo.Epoch,
+			ErrEpochMismatch,
+		)
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
