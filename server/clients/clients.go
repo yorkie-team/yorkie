@@ -170,7 +170,7 @@ func AttachDocument(
 		}
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.ID, isAttached); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID, isAttached, docInfo.Epoch); err != nil {
 		return nil, err
 	}
 
