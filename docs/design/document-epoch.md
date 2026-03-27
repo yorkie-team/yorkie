@@ -8,7 +8,8 @@ target-version: 0.7.3
 ## Summary
 
 When an administrator force-compacts a document through the Dashboard, the
-server resets its `serverSeq` to 1 and purges all prior changes and snapshots.
+server resets its `serverSeq` (to 0 or 1, depending on whether a compacted
+change is stored) and purges all prior changes and snapshots.
 Clients that were connected before the compaction still hold checkpoints
 referencing the old `serverSeq` (e.g., 17459). On the next PushPull these
 clients receive an `ErrInvalidServerSeq` error and become permanently stuck —
@@ -45,7 +46,7 @@ client to reattach.
 
 An epoch is a monotonically increasing integer that represents a document's
 "generation." Every time a document is compacted, all of its changes and
-snapshots are purged, `serverSeq` is reset to 1, and the epoch increments by 1.
+snapshots are purged, `serverSeq` is reset (to 0 or 1), and the epoch increments by 1.
 
 Think of it like a book's edition number. Page 153 in the 1st edition
 (epoch 0) and page 153 in the 2nd edition (epoch 1) contain entirely different
@@ -81,7 +82,7 @@ require no migration.
 **Attach:** When a client attaches to a document, the server records the
 document's current epoch in the client's `ClientDocInfo.Epoch`.
 
-```
+```text
 Client → AttachDocument → Server
 Server: ClientDocInfo.Epoch = DocInfo.Epoch
 ```
@@ -89,7 +90,7 @@ Server: ClientDocInfo.Epoch = DocInfo.Epoch
 **PushPull (normal):** The server compares epochs before processing changes.
 If they match, the existing logic runs unchanged.
 
-```
+```text
 Client(epoch=1) → PushPullChanges → Server(doc.epoch=1)
 Server: client.Epoch == doc.Epoch → proceed as usual
 ```
@@ -97,15 +98,15 @@ Server: client.Epoch == doc.Epoch → proceed as usual
 **Compaction:** When the admin compacts a document, the server increments the
 document's epoch alongside the `serverSeq` reset.
 
-```
+```text
 Admin → CompactDocumentByAdmin → Server
-Server: doc.Epoch++ (1 → 2), doc.ServerSeq → 1
+Server: doc.Epoch++ (1 → 2), doc.ServerSeq → 0/1
 ```
 
 **PushPull (after compaction):** A client from the previous epoch attempts to
 sync. The server detects the epoch mismatch and returns a dedicated error.
 
-```
+```text
 Client(epoch=1) → PushPullChanges → Server(doc.epoch=2)
 Server: client.Epoch(1) != doc.Epoch(2) → return ErrEpochMismatch
 Client: detach → re-attach (receives new epoch)
