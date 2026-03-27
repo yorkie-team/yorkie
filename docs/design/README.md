@@ -31,6 +31,7 @@
 - [Membership Management](membership.md): Leader-member structure for managing cluster node lifecycle
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
 - [Housekeeping](housekeeping.md): Background tasks for cleaning up documents and tombstones
+- [Document Epoch](document-epoch.md): Epoch-based detection and recovery for clients stale after compaction
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
 

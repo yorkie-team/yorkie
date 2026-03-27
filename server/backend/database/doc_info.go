@@ -57,6 +57,11 @@ type DocInfo struct {
 
 	// CompactedAt is the time when the document is compacted.
 	CompactedAt time.Time `bson:"compacted_at"`
+
+	// Epoch is a monotonically increasing counter that increments on every
+	// compaction. A serverSeq is only meaningful within its epoch — once the
+	// epoch changes, all prior checkpoints are invalidated.
+	Epoch int64 `bson:"epoch"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
@@ -88,6 +93,7 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		UpdatedAt:   info.UpdatedAt,
 		RemovedAt:   info.RemovedAt,
 		CompactedAt: info.CompactedAt,
+		Epoch:       info.Epoch,
 	}
 }
 

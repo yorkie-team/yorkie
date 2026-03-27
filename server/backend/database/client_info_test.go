@@ -36,7 +36,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -54,7 +54,7 @@ func TestClientInfo(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID, false)
+		err = clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.NoError(t, err)
 		isAttached, err = clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -85,7 +85,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -102,7 +102,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientDeactivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 
 		err = clientInfo.EnsureDocumentAttached(dummyDocID)
@@ -136,13 +136,13 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID, false)
+		err = clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 	})
 
@@ -151,7 +151,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID, false)
+		err := clientInfo.AttachDocument(dummyDocID, false, 0)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)

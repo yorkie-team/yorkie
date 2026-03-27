@@ -57,6 +57,7 @@ type ClientDocInfo struct {
 	Status    string `bson:"status"`
 	ServerSeq int64  `bson:"server_seq"`
 	ClientSeq uint32 `bson:"client_seq"`
+	Epoch     int64  `bson:"epoch"`
 }
 
 // ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
@@ -102,6 +103,7 @@ func SystemClientInfo(projectID types.ID, docInfo *DocInfo) *ClientInfo {
 				Status:    DocumentAttached,
 				ServerSeq: docInfo.ServerSeq,
 				ClientSeq: 0,
+				Epoch:     docInfo.Epoch,
 			},
 		},
 	}
@@ -129,7 +131,7 @@ func (i *ClientInfo) Deactivate() {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error {
+func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool, epoch int64) error {
 	if i.Status != ClientActivated {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrClientNotActivated)
@@ -153,6 +155,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error 
 		Status:    DocumentAttached,
 		ServerSeq: 0,
 		ClientSeq: 0,
+		Epoch:     epoch,
 	}
 	i.UpdatedAt = gotime.Now()
 
@@ -324,6 +327,7 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 			Status:    docInfo.Status,
 			ServerSeq: docInfo.ServerSeq,
 			ClientSeq: docInfo.ClientSeq,
+			Epoch:     docInfo.Epoch,
 		}
 	}
 

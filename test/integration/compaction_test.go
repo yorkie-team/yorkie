@@ -23,7 +23,9 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -107,10 +109,59 @@ func TestDocumentCompaction(t *testing.T) {
 		// Force compact while attached: should succeed
 		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))
 
-		// NOTE: After force compaction, the server resets serverSeq to 1,
-		// but the client's checkpoint still references the old serverSeq.
-		// This causes a mismatch on detach, which is an expected trade-off
-		// of force compaction on attached documents.
-		assert.Error(t, c1.Detach(ctx, d1))
+		// NOTE: After force compaction, the server resets serverSeq and
+		// increments epoch, but detach still succeeds because the server
+		// skips change sync for detach operations with epoch mismatch.
+		assert.NoError(t, c1.Detach(ctx, d1))
+	})
+
+	t.Run("same client recovers from epoch mismatch by detach and reattach", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Use a dedicated client to avoid interference from stale attachments
+		// left by previous subtests.
+		c, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c.Activate(ctx))
+		defer func() {
+			assert.NoError(t, c.Deactivate(ctx))
+			assert.NoError(t, c.Close())
+		}()
+
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"text": Text()}`),
+		)))
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "hello")
+			return nil
+		}))
+		assert.NoError(t, c.Sync(ctx))
+
+		// Force compact while client is attached
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))
+
+		// Sync fails with epoch mismatch
+		err = c.Sync(ctx)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
+
+		// Recovery with the same client: detach succeeds even with epoch
+		// mismatch (server skips change sync for detach), then re-attach
+		// with a new document instance to receive the compacted state.
+		assert.NoError(t, c.Detach(ctx, d1))
+
+		d2 := document.New(d1.Key())
+		assert.NoError(t, c.Attach(ctx, d2))
+
+		// Verify the reattached document has the compacted content
+		assert.Equal(t, `hello`, d2.Root().GetText("text").String())
+
+		// Further edits work normally
+		assert.NoError(t, d2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(5, 5, " world")
+			return nil
+		}))
+		assert.NoError(t, c.Sync(ctx))
 	})
 }

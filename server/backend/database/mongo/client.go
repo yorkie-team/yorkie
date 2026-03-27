@@ -1216,7 +1216,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		if existingDocInfo, ok := existing.Documents[docInfo.ID]; ok {
 			if existingDocInfo.ServerSeq >= clientDocInfo.ServerSeq &&
 				existingDocInfo.ClientSeq >= clientDocInfo.ClientSeq &&
-				existingDocInfo.Status == clientDocInfo.Status {
+				existingDocInfo.Status == clientDocInfo.Status &&
+				existingDocInfo.Epoch == clientDocInfo.Epoch {
 				return nil
 			}
 		}
@@ -1245,6 +1246,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			},
 			"$set": bson.M{
 				clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+				clientDocInfoKey(docInfo.ID, "epoch"):   clientDocInfo.Epoch,
 				"updated_at":                            info.UpdatedAt,
 			},
 			"$addToSet": bson.M{
@@ -1864,6 +1866,9 @@ func (c *Client) CompactChangeInfos(
 		"$set": bson.M{
 			"server_seq":   newServerSeq,
 			"compacted_at": gotime.Now(),
+		},
+		"$inc": bson.M{
+			"epoch": int64(1),
 		},
 	})
 	if err != nil {
