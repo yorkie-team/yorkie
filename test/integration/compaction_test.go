@@ -23,7 +23,9 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -141,7 +143,8 @@ func TestDocumentCompaction(t *testing.T) {
 
 		// Sync fails with epoch mismatch
 		err = c.Sync(ctx)
-		assert.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
 
 		// Recovery with the same client: detach succeeds even with epoch
 		// mismatch (server skips change sync for detach), then re-attach
