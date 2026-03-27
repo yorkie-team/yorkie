@@ -1842,6 +1842,7 @@ func (d *DB) CompactChangeInfos(
 
 	// 3. Update document
 	now := gotime.Now()
+	loadedDocInfo.Epoch++
 	loadedDocInfo.CompactedAt = now
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
 		return fmt.Errorf("compact document of %s: %w", docInfo.RefKey(), err)
