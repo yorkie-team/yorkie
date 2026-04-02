@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.3] - 2026-04-02
+
+### Added
+
+- Add StyleByPath and RemoveStyleByPath for Tree by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1717
+- Add document epoch for compaction-aware client recovery by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1714
+- Add ALB health check config for Istio gateway by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1710
+
+### Changed
+
+- Migrate Istio installation from IstioOperator to Helm charts by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1709
+
+### Fixed
+
+- Fix Helm chart default values for Percona MongoDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1708
+
 ## [v0.7.2] - 2026-03-20
 
 ### Added
