@@ -873,6 +873,150 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, doc.Root().GetTree("t").Marshal())
 	})
 
+	t.Run("style by path test", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").StyleByPath([]int{0}, []int{1}, map[string]string{"bold": "true"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p bold="true">ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("remove style by path test", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Attributes: map[string]string{"bold": "true"}, Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyleByPath([]int{0}, []int{1}, []string{"bold"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("multi-element style by path test", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").StyleByPath([]int{0}, []int{2}, map[string]string{"bold": "true"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p bold="true">ab</p><p bold="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("multi-element remove style by path test", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Attributes: map[string]string{"bold": "true"}, Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"bold": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p bold="true">ab</p><p bold="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyleByPath([]int{0}, []int{2}, []string{"bold"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("style by path with mismatched path lengths", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+				},
+			})
+			return nil
+		}))
+
+		assert.Panics(t, func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").StyleByPath([]int{0}, []int{0, 1}, map[string]string{"bold": "true"})
+				return nil
+			}))
+		})
+
+		assert.Panics(t, func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").RemoveStyleByPath([]int{0}, []int{0, 1}, []string{"bold"})
+				return nil
+			}))
+		})
+	})
+
+	t.Run("style by path with empty paths", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+				},
+			})
+			return nil
+		}))
+
+		assert.Panics(t, func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").StyleByPath([]int{}, []int{}, map[string]string{"bold": "true"})
+				return nil
+			}))
+		})
+
+		assert.Panics(t, func() {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").RemoveStyleByPath([]int{}, []int{}, []string{"bold"})
+				return nil
+			}))
+		})
+	})
+
 	// Concurrent editing, overlapping range test
 	t.Run("concurrently delete overlapping elements test", func(t *testing.T) {
 		ctx := context.Background()
