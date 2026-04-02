@@ -17,7 +17,7 @@ This document aims to help new SDK contributors understand the overall `Tree` da
 
 ### Non-Goals
 
-This document focuses on `Tree.Edit` operations rather than `Tree.Style`.
+This document does not cover the internal CRDT conflict resolution of `Tree.Style`, which follows the same coordinate system as `Tree.Edit`.
 
 ## Proposal Details
 
@@ -58,6 +58,31 @@ https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc4972041
 Users can use the `Style` operation to specify attributes for the element nodes in the `Tree`.
 
 https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L239-L268
+
+Similarly, users can specify the styling range using a `path` with `StyleByPath` and `RemoveStyleByPath`:
+
+```go
+// StyleByPath sets attributes on element nodes in the given path range.
+func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]string) bool
+
+// RemoveStyleByPath removes attributes from element nodes in the given path range.
+func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemove []string) bool
+```
+
+These follow the same pattern as `EditByPath`: convert two paths to CRDT positions via `PathToPos`, then delegate to the existing CRDT `Style`/`RemoveStyle` operations. The CRDT layer is unchanged — only the JSON layer gains path-based entry points.
+
+Note that `Style` applies attributes to **element nodes only**. Text nodes in the range are traversed but not styled (`canStyle` returns false for text nodes). This is the same behavior for both index-based and path-based variants.
+
+In the JS SDK, `styleByPath` is overloaded to support both single-path (existing) and range (new) signatures:
+
+```typescript
+// Single element (existing, backward-compatible)
+styleByPath(path: Array<number>, attributes: { [key: string]: any }): void;
+// Range (new)
+styleByPath(fromPath: Array<number>, toPath: Array<number>, attributes: { [key: string]: any }): void;
+```
+
+`removeStyleByPath` is new in both SDKs and only has the range signature.
 
 ### Implementation of Edit Operation
 

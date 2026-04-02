@@ -270,6 +270,99 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	return true
 }
 
+// StyleByPath sets the attributes to the elements of the given path range.
+func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]string) bool {
+	if len(fromPath) != len(toPath) {
+		panic(ErrPathLenDiff)
+	}
+
+	if len(fromPath) == 0 || len(toPath) == 0 {
+		panic(ErrEmptyPath)
+	}
+
+	if len(attributes) == 0 {
+		return true
+	}
+
+	fromPos, err := t.Tree.PathToPos(fromPath)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.PathToPos(toPath)
+	if err != nil {
+		panic(err)
+	}
+
+	ticket := t.context.IssueTimeTicket()
+	pairs, diff, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
+		t.context.AdjustDiffForGCPair(&diff, pair)
+	}
+
+	t.context.Acc(diff)
+
+	t.context.Push(operations.NewTreeStyle(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributes,
+		ticket,
+	))
+
+	return true
+}
+
+// RemoveStyleByPath removes the attributes from the elements of the given path range.
+func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemove []string) bool {
+	if len(fromPath) != len(toPath) {
+		panic(ErrPathLenDiff)
+	}
+
+	if len(fromPath) == 0 || len(toPath) == 0 {
+		panic(ErrEmptyPath)
+	}
+
+	if len(attributesToRemove) == 0 {
+		return true
+	}
+
+	fromPos, err := t.Tree.PathToPos(fromPath)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.PathToPos(toPath)
+	if err != nil {
+		panic(err)
+	}
+
+	ticket := t.context.IssueTimeTicket()
+	pairs, diff, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	t.context.Acc(diff)
+
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
+	}
+
+	t.context.Push(operations.NewTreeStyleRemove(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributesToRemove,
+		ticket,
+	))
+
+	return true
+}
+
 // Len returns the length of this tree.
 func (t *Tree) Len() int {
 	return t.IndexTree.Root().Len()
