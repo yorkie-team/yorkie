@@ -900,12 +900,6 @@ func (t *Tree) Edit(
 	// 03. Merge: move the nodes that are marked as moved.
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
-			// Detach from old parent first to prevent ghost references.
-			if node.Index.Parent != nil {
-				if err := node.Index.Parent.DetachChild(node.Index); err != nil {
-					return nil, resource.DataSize{}, err
-				}
-			}
 			if err := fromParent.Append(node); err != nil {
 				return nil, resource.DataSize{}, err
 			}
@@ -1017,8 +1011,13 @@ func (t *Tree) collectBetween(
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
+			// NOTE: Do not cascade-delete children of merge-boundary nodes
+			// (toBeMergedNodes), because those children are moved rather than
+			// deleted. Cascading into them would tombstone nodes that were
+			// inserted concurrently into the merged paragraph.
 			if node.canDelete(editedAt, creationKnown, tombstoneKnown) ||
-				slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
+				(slices.Contains(toBeRemoveds, node.Index.Parent.Value) &&
+					!slices.Contains(toBeMergedNodes, node.Index.Parent.Value)) {
 				// NOTE(hackerwins): If the node overlaps as an end token with the
 				// range then we need to keep the node.
 				if tokenType == index.Text || tokenType == index.Start {
