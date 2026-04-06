@@ -1285,6 +1285,27 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		realParentNode = leftNode.Index.Parent.Value
 	}
 
+	// 02-1. If the parent has been tombstoned by a merge, redirect to the
+	// merge destination. A merge-tombstone is detected by checking if any
+	// former child now lives in a different, living parent.
+	if realParentNode.IsRemoved() && isLeftMost {
+		for _, child := range realParentNode.Index.Children(true) {
+			childParent := child.Value.Index.Parent
+			if childParent != nil &&
+				childParent.Value != realParentNode &&
+				!childParent.Value.IsRemoved() {
+				mergeTarget := childParent.Value
+				// Find the left sibling just before the moved children.
+				offset := mergeTarget.Index.OffsetOfChild(child)
+				if offset == 0 {
+					return mergeTarget, mergeTarget, diff, nil
+				}
+				prevChildren := mergeTarget.Index.Children(true)
+				return mergeTarget, prevChildren[offset-1].Value, diff, nil
+			}
+		}
+	}
+
 	// 03. Split text node if the left node is text node.
 	if leftNode.IsText() {
 		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil)
