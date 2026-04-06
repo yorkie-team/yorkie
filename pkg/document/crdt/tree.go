@@ -900,6 +900,12 @@ func (t *Tree) Edit(
 	// 03. Merge: move the nodes that are marked as moved.
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
+			// Detach from old parent first to prevent ghost references.
+			if node.Index.Parent != nil {
+				if err := node.Index.Parent.DetachChild(node.Index); err != nil {
+					return nil, resource.DataSize{}, err
+				}
+			}
 			if err := fromParent.Append(node); err != nil {
 				return nil, resource.DataSize{}, err
 			}
