@@ -621,6 +621,35 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	return nil
 }
 
+// DetachChild removes the given child from this node's children list and
+// updates both VisibleLength and TotalLength. Unlike RemoveChild which is
+// used for GC purge of tombstoned nodes, DetachChild is used for moving
+// alive nodes between parents.
+func (n *Node[V]) DetachChild(child *Node[V]) error {
+	if n.IsText() {
+		return ErrInvalidMethodCallForTextNode
+	}
+
+	offset := -1
+	for i, c := range n.children {
+		if c == child {
+			offset = i
+			break
+		}
+	}
+
+	if offset == -1 {
+		return ErrChildNotFound
+	}
+
+	n.children = append(n.children[:offset], n.children[offset+1:]...)
+	child.UpdateAncestorsLength(-(child.PaddedLength()))
+	child.UpdateAncestorsLength(-(child.PaddedLength(true)), true)
+	child.Parent = nil
+
+	return nil
+}
+
 // InsertBefore inserts the given node before the given child.
 func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {
