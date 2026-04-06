@@ -968,6 +968,10 @@ func (t *Tree) collectBetween(
 ) ([]*TreeNode, []*TreeNode, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
+	// toBeMergedNodes tracks element nodes at the toParent boundary whose
+	// children are moved (merged) rather than deleted. Split siblings of these
+	// nodes should not be cascade-deleted.
+	var toBeMergedNodes []*TreeNode
 
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
@@ -986,6 +990,7 @@ func (t *Tree) collectBetween(
 				// 	return
 				// }
 
+				toBeMergedNodes = append(toBeMergedNodes, node)
 				for _, child := range node.Index.Children() {
 					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
 				}
@@ -1018,6 +1023,37 @@ func (t *Tree) collectBetween(
 				// range then we need to keep the node.
 				if tokenType == index.Text || tokenType == index.Start {
 					toBeRemoveds = append(toBeRemoveds, node)
+
+					// Cascade delete to split siblings created by concurrent
+					// SplitElement. Only for element nodes — text splits use
+					// offset-based IDs that findFloorNode already resolves.
+					// Skip nodes at the merge boundary (toParent side) whose
+					// children are moved rather than deleted — their split
+					// siblings should survive the merge.
+					if !node.IsText() && node.InsNextID != nil &&
+						!slices.Contains(toBeMergedNodes, node) {
+						next := t.findFloorNode(node.InsNextID)
+						for next != nil {
+							splitCreationKnown := false
+							if isLocal {
+								splitCreationKnown = true
+							} else if l, ok := versionVector.Get(
+								next.ID().CreatedAt.ActorID(),
+							); ok && l >= next.ID().CreatedAt.Lamport() {
+								splitCreationKnown = true
+							}
+							if !splitCreationKnown {
+								toBeRemoveds = append(toBeRemoveds, next)
+								for _, child := range next.Index.Children(true) {
+									toBeRemoveds = append(toBeRemoveds, child.Value)
+								}
+							}
+							if next.InsNextID == nil {
+								break
+							}
+							next = t.findFloorNode(next.InsNextID)
+						}
+					}
 				}
 			}
 		},
