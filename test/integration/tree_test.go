@@ -953,7 +953,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("overlapping-merge-and-merge", func(t *testing.T) {
-		t.Skip("skip this for lww performance test")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -997,7 +996,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("overlapping-merge-and-delete-element-node", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1038,7 +1036,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("overlapping-merge-and-delete-text-nodes", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1463,7 +1460,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-split-and-split-at-different-levels", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1655,7 +1651,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-split-and-delete-the-whole-original-and-split-nodes", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1739,7 +1734,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-merge-and-merge-at-the-same-level", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1783,7 +1777,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-merge-and-insert", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1864,7 +1857,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-merge-and-delete-contents-in-merged-node", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2624,7 +2616,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("side-by-side-split-and-insert", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2665,7 +2656,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
-		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
