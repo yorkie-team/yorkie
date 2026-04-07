@@ -27,7 +27,7 @@ fundamental CRDT convergence guarantee.
 
 ### Edit execution flow
 
-```
+```text
 Edit(from, to, contents, splitLevel)
   │
   ├── Step 01: FindTreeNodesWithSplitText(from), FindTreeNodesWithSplitText(to)
@@ -166,7 +166,9 @@ fields to `TreeNode`. No protobuf change — each replica computes these locally
 when executing the merge operation.
 
 When merge moves children from a source to `fromParent`:
-1. Record each moved child's ID in `source.mergedChildIDs`.
+1. Record each moved child's ID on its **actual source parent** only
+   (not all `toBeMergedNodes`), to prevent cross-contamination in
+   multi-boundary merges.
 2. `DetachChild` from old parent (correct lengths, prevent ghost references).
 3. `Append` to `fromParent`.
 4. Set `source.mergedInto = fromParent.id`.
@@ -180,7 +182,8 @@ and the merge destination is still discoverable via `mergedInto`.
 
 When a merge-source node is fully deleted (in `toBeRemoveds` but not in
 `toBeMergedNodes`), its former children in the merge target should also be
-deleted. Follow `mergedChildIDs` to find and tombstone them.
+deleted. Follow `mergedChildIDs` to find and tombstone them, including their
+full subtree (descendants of moved element nodes).
 
 Skip propagation when `mergedInto` points to `fromParent` — this means a
 prior local merge already moved the children, and the current operation is a

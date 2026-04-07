@@ -911,9 +911,15 @@ func (t *Tree) Edit(
 	// 03. Merge: move the nodes that are marked as moved.
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
-			// Record child ID before detaching.
-			for _, src := range toBeMergedNodes {
-				src.mergedChildIDs = append(src.mergedChildIDs, node.id)
+			// Record child ID on its actual source parent only.
+			if node.Index.Parent != nil {
+				srcParent := node.Index.Parent.Value
+				for _, src := range toBeMergedNodes {
+					if src == srcParent {
+						src.mergedChildIDs = append(src.mergedChildIDs, node.id)
+						break
+					}
+				}
 			}
 			// Detach from old parent to prevent ghost references.
 			if node.Index.Parent != nil {
@@ -950,6 +956,17 @@ func (t *Tree) Edit(
 							Child:  child,
 						})
 					}
+					// Also tombstone descendants if the moved child is an element.
+					index.TraverseNode(child.Index, func(n *index.Node[*TreeNode], _ int) {
+						if n.Value != child && n.Value.removedAt == nil {
+							if n.Value.remove(editedAt) {
+								pairs = append(pairs, GCPair{
+									Parent: t,
+									Child:  n.Value,
+								})
+							}
+						}
+					})
 				}
 			}
 		}
@@ -1092,9 +1109,12 @@ func (t *Tree) collectBetween(
 							}
 							if !splitCreationKnown {
 								toBeRemoveds = append(toBeRemoveds, next)
-								for _, child := range next.Index.Children(true) {
-									toBeRemoveds = append(toBeRemoveds, child.Value)
-								}
+								// Cascade through the full subtree, not just immediate children.
+								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
+									if n.Value != next {
+										toBeRemoveds = append(toBeRemoveds, n.Value)
+									}
+								})
 							}
 							if next.InsNextID == nil {
 								break
