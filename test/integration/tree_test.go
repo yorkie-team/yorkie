@@ -1735,7 +1735,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-merge-and-merge-at-the-same-level", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix range error in concurrent double-merge at same level")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))

@@ -1165,6 +1165,13 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 		return err
 	}
 
+	// When a concurrent merge redirects the to-position into an earlier
+	// part of the tree, the range becomes empty. This happens when a
+	// prior merge already handled the work. Treat as a no-op.
+	if fromIdx > toIdx {
+		return nil
+	}
+
 	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback, include)
 }
 
