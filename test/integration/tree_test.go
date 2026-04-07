@@ -953,7 +953,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("overlapping-merge-and-merge", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix DetachChild and redirect interaction for concurrent double-merge")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
