@@ -908,69 +908,18 @@ func (t *Tree) Edit(
 		}
 	}
 
-	// 03. Merge: move the nodes that are marked as moved.
-	for _, node := range toBeMovedToFromParents {
-		if node.removedAt == nil {
-			// Record child ID on its actual source parent only.
-			if node.Index.Parent != nil {
-				srcParent := node.Index.Parent.Value
-				for _, src := range toBeMergedNodes {
-					if src == srcParent {
-						src.mergedChildIDs = append(src.mergedChildIDs, node.id)
-						break
-					}
-				}
-			}
-			// Detach from old parent to prevent ghost references.
-			if node.Index.Parent != nil {
-				if err := node.Index.Parent.DetachChild(node.Index); err != nil {
-					return nil, resource.DataSize{}, err
-				}
-			}
-			if err := fromParent.Append(node); err != nil {
-				return nil, resource.DataSize{}, err
-			}
-		}
-	}
-	// Set forwarding pointer on merge-source nodes.
-	for _, src := range toBeMergedNodes {
-		src.mergedInto = fromParent.id
+	// 03. Merge: move children to fromParent and set forwarding pointers.
+	if err := t.mergeNodes(
+		fromParent, toBeMovedToFromParents, toBeMergedNodes,
+	); err != nil {
+		return nil, resource.DataSize{}, err
 	}
 
 	// 03-1. Propagate deletes to children moved by prior merges.
-	// When a merge-source node is fully deleted (not a merge boundary),
-	// its former children in the merge target should also be deleted.
-	// Skip when mergedInto points to fromParent — this means a prior
-	// local merge already moved the children to fromParent, and the
-	// current operation is a concurrent merge (not a delete).
-	for _, node := range toBeRemoveds {
-		if node.mergedInto != nil && len(node.mergedChildIDs) > 0 &&
-			!slices.Contains(toBeMergedNodes, node) &&
-			!node.mergedInto.Equal(fromParent.id) {
-			for _, childID := range node.mergedChildIDs {
-				child := t.findFloorNode(childID)
-				if child != nil && child.removedAt == nil {
-					if child.remove(editedAt) {
-						pairs = append(pairs, GCPair{
-							Parent: t,
-							Child:  child,
-						})
-					}
-					// Also tombstone descendants if the moved child is an element.
-					index.TraverseNode(child.Index, func(n *index.Node[*TreeNode], _ int) {
-						if n.Value != child && n.Value.removedAt == nil {
-							if n.Value.remove(editedAt) {
-								pairs = append(pairs, GCPair{
-									Parent: t,
-									Child:  n.Value,
-								})
-							}
-						}
-					})
-				}
-			}
-		}
-	}
+	mergePairs := t.propagateMergeDeletes(
+		fromParent, toBeRemoveds, toBeMergedNodes, editedAt,
+	)
+	pairs = append(pairs, mergePairs...)
 
 	// 04. Split: split the element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket); err != nil {
@@ -1017,6 +966,85 @@ func (t *Tree) Edit(
 	}
 
 	return pairs, diff, nil
+}
+
+// mergeNodes moves children to fromParent and sets forwarding pointers
+// on merge-source nodes.
+func (t *Tree) mergeNodes(
+	fromParent *TreeNode,
+	toBeMovedToFromParents []*TreeNode,
+	toBeMergedNodes []*TreeNode,
+) error {
+	for _, node := range toBeMovedToFromParents {
+		if node.removedAt == nil {
+			// Record child ID on its actual source parent only.
+			if node.Index.Parent != nil {
+				srcParent := node.Index.Parent.Value
+				for _, src := range toBeMergedNodes {
+					if src == srcParent {
+						src.mergedChildIDs = append(src.mergedChildIDs, node.id)
+						break
+					}
+				}
+			}
+			// Detach from old parent to prevent ghost references.
+			if node.Index.Parent != nil {
+				if err := node.Index.Parent.DetachChild(node.Index); err != nil {
+					return err
+				}
+			}
+			if err := fromParent.Append(node); err != nil {
+				return err
+			}
+		}
+	}
+	// Set forwarding pointer on merge-source nodes.
+	for _, src := range toBeMergedNodes {
+		src.mergedInto = fromParent.id
+	}
+	return nil
+}
+
+// propagateMergeDeletes tombstones children that were moved by prior merges
+// when the merge-source node is fully deleted (not a merge boundary).
+// It skips when mergedInto points to fromParent, which indicates a
+// concurrent merge rather than a delete.
+func (t *Tree) propagateMergeDeletes(
+	fromParent *TreeNode,
+	toBeRemoveds []*TreeNode,
+	toBeMergedNodes []*TreeNode,
+	editedAt *time.Ticket,
+) []GCPair {
+	var pairs []GCPair
+	for _, node := range toBeRemoveds {
+		if node.mergedInto != nil && len(node.mergedChildIDs) > 0 &&
+			!slices.Contains(toBeMergedNodes, node) &&
+			!node.mergedInto.Equal(fromParent.id) {
+			for _, childID := range node.mergedChildIDs {
+				child := t.findFloorNode(childID)
+				if child != nil && child.removedAt == nil {
+					if child.remove(editedAt) {
+						pairs = append(pairs, GCPair{
+							Parent: t,
+							Child:  child,
+						})
+					}
+					// Also tombstone descendants of the moved child.
+					index.TraverseNode(child.Index, func(n *index.Node[*TreeNode], _ int) {
+						if n.Value != child && n.Value.removedAt == nil {
+							if n.Value.remove(editedAt) {
+								pairs = append(pairs, GCPair{
+									Parent: t,
+									Child:  n.Value,
+								})
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+	return pairs
 }
 
 // collectBetween collects nodes that are marked as removed or moved.
