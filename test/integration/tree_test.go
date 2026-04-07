@@ -2873,6 +2873,108 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	t.Run("side-by-side-merge-and-merge", func(t *testing.T) {
+		// Tests that mergedChildIDs is correctly scoped when two clients
+		// merge different non-overlapping paragraph pairs concurrently.
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "d"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d2.Root().GetTree("t").ToXML())
+
+		// C1 merges p1+p2: Edit(2, 4) removes the </p><p> boundary between p1 and p2.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		// C2 merges p3+p4: Edit(8, 10) removes the </p><p> boundary between p3 and p4.
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(8, 10, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrent-delete-after-merge-with-nested-content", func(t *testing.T) {
+		// Tests that mergedChildIDs propagation works correctly with element
+		// children (nested <b> tags) when a concurrent full-delete races with a merge.
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "b",
+						Children: []json.TreeNode{{Type: "text", Value: "a"}},
+					}},
+				}, {
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "b",
+						Children: []json.TreeNode{{Type: "text", Value: "b"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p><b>a</b></p><p><b>b</b></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><b>a</b></p><p><b>b</b></p></root>", d2.Root().GetTree("t").ToXML())
+
+		// C1 merges p1+p2: Edit(4, 6) removes the </p><p> boundary.
+		// Positions: 0=root open, 1=p1 open, 2=b1 open, 3=a, 4=b1 close/p1 end,
+		// 5=p1-p2 boundary, 6=p2 open/b2 open, 7=b, 8=b2 close, 9=p2 close, 10=root close.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 6, nil, 0)
+			return nil
+		}))
+		// C2 deletes everything inside root.
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 10, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p><b>a</b><b>b</b></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
+	})
+
 	// Concurrent editing, complex cases test
 	t.Run("delete text content anchored to another concurrently test", func(t *testing.T) {
 		ctx := context.Background()
