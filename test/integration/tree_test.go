@@ -2972,6 +2972,54 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
+	// When one client deletes text content and another concurrently splits
+	// the same paragraph, the delete range overlaps with the split boundary.
+	// This creates a convergence challenge because the split position
+	// resolves inside tombstoned content.
+	//
+	// Additionally, in the JS SDK, splitElement uses this.children (a
+	// visible-only getter) which drops tombstoned children from _children
+	// during reassignment. In Go, Children(true) preserves removed nodes.
+	// This structural difference could cause issues with GC and subsequent
+	// operations that reference tombstoned nodes by ID.
+	t.Run("split-with-concurrent-delete-overlapping-content", func(t *testing.T) {
+		t.Skip("TODO(hackerwins): fix concurrent delete + split convergence on overlapping content")
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "abcd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
+
+		// d1: delete "bc" (positions 2-4)
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		// d2: split <p> at position 3 (between b and c) with splitLevel=1
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ad</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
 	// Issue B: merge with concurrent delete of content inside merge source.
 	// When a child in the merge source is tombstoned by a concurrent delete,
 	// the merge should skip it and only move alive children.
