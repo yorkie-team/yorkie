@@ -2886,6 +2886,92 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>cd</p><p></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	// Verify that sequential merge+split works correctly: after merging
+	// two paragraphs, a subsequent split by the same user should split
+	// the merged content normally (mergedFrom veto should not apply).
+	t.Run("sequential-merge-then-split", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		// d1: merge two paragraphs
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 5, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>abcd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		// d2: split the merged content at ab|cd (sequential, knows about merge)
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	// Verify that concurrent multi-level split + merge + text split
+	// converges correctly when a merge-moved text node is split by a
+	// concurrent operation (mergedFrom propagation via SplitText).
+	t.Run("multi-level-split-with-concurrent-merge-and-text-split", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+					},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p><p>ab</p><p>cd</p></p></root>", d1.Root().GetTree("t").ToXML())
+
+		// d1: split at level 2 (same as main bug case)
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, nil, 2)
+			return nil
+		}))
+		// d2: insert text at position inside "cd", which triggers text split
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 6, nil, 0)
+			return nil
+		}))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
 	// Issue B: merge with concurrent delete of content inside merge source.
 	// When a child in the merge source is tombstoned by a concurrent delete,
 	// the merge should skip it and only move alive children.
