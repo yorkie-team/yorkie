@@ -541,6 +541,10 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.removedAt = n.removedAt
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
+	clone.mergedInto = n.mergedInto
+	clone.mergedChildIDs = n.mergedChildIDs
+	clone.mergedFrom = n.mergedFrom
+	clone.mergedAt = n.mergedAt
 
 	if n.IsText() {
 		return clone, nil
