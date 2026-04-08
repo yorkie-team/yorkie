@@ -100,9 +100,10 @@ All 27 cases from `tree.md` converge:
 | Contained | split + insert (at split position) | ✅ | existing |
 | Contained | split + delete contents | ✅ | existing |
 | Contained | split + delete whole | ✅ | InsNextID cascade delete |
-| **Contained** | **split + split (different levels)** | ❌ | see Remaining Issue 1 |
-| **Side-by-side** | **split + insert** | ❌ | see Remaining Issue 2 |
-| **Side-by-side** | **split + delete** | ❌ | see Remaining Issue 2 |
+| Contained | split + split (different levels) | ✅ | split sibling forwarding (Fix 7) |
+| **Contained** | **multi-level split + cross-boundary merge** | ❌ | see Remaining Issue |
+| Side-by-side | split + insert | ✅ | split sibling forwarding (Fix 7) |
+| Side-by-side | split + delete | ✅ | split sibling forwarding (Fix 7) |
 | Side-by-side | split + split | ✅ | existing |
 | Side-by-side | split + merge | ✅ | existing |
 
@@ -116,12 +117,12 @@ All 27 cases from `tree.md` converge:
 ### Summary
 
 | Category | Total | ✅ Converge | ❌ Remaining |
-|----------|-------|-------------|-------------|
-| Basic Edit + Edit | ~27 | 27 | 0 |
+|----------|-------|-------------|--------------|
+| Basic Edit + Edit | 27 | 27 | 0 |
 | Merge | 12 | 12 | 0 |
-| Split | 12 | 9 | 3 |
-| Style | ~10 | 10 | 0 |
-| **Total** | **~61** | **58** | **3** |
+| Split | 13 | 12 | 1 |
+| Style | 10 | 10 | 0 |
+| **Total** | **62** | **61** | **1** |
 
 ## Design
 
@@ -198,6 +199,29 @@ tree (before the from-position), the traversal range becomes empty because
 the merge already handled the work. Treat `from > to` as a no-op instead of
 an error.
 
+### Fix 7: Split sibling forwarding
+
+**Location**: `CRDTTree.Edit` Step 01-1 (between position resolution and
+`collectBetween`)
+
+When `SplitElement` creates a split sibling linked via `InsNextID`, the
+sibling is unknown to concurrent editors whose positions were computed
+against the unsplit tree. After resolving `fromLeft`/`toLeft` via
+`FindTreeNodesWithSplitText`, advance each past element-type split siblings
+whose `CreatedAt` is not covered by the editor's version vector.
+
+This prevents three classes of bugs:
+1. **Multi-level split**: the remote split's boundary resolves after all
+   concurrent split products, producing the correct ancestor split point.
+2. **Side-by-side insert**: the insert position lands after all split
+   siblings, not between original and sibling.
+3. **Side-by-side delete**: the delete range starts after split siblings,
+   preventing traversal from passing through them and tombstoning their
+   text children.
+
+Skip advancement when `leftNode == parent` (leftmost child position) to
+preserve "insert at front" semantics.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -206,6 +230,7 @@ an error.
 | Fix 2 guard is too broad | Only applies when parent is in `toBeMergedNodes`, a pattern unique to merge |
 | Fix 3 redirect fires on plain deletes | Redirect only when mergedInto is set or a living child exists in a different living parent |
 | Fix 5 propagation deletes too much | Skip when mergedInto == fromParent (concurrent merge, not delete) |
+| Fix 7 advances past known siblings | Version vector check ensures only unknown siblings are skipped. `leftNode == parent` guard preserves leftmost-child semantics |
 
 ### Design Decisions
 
@@ -214,37 +239,57 @@ an error.
 | Fix implicit move instead of explicit Move operation | All bugs require the same fixes regardless. Move adds protocol complexity with no additional convergence benefit |
 | Element-only cascade for Fix 1 | Text splits use same-CreatedAt offset-based IDs that findFloorNode already resolves |
 | Runtime-only mergedInto/mergedChildIDs | Keeps protobuf unchanged. Each replica computes locally during merge execution |
+| Position-level fix for split siblings (Fix 7) | collectBetween-level fix proved infeasible — cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) |
 | No undo/redo in scope | Consistent with undo-redo.md Phase 2 deferral |
 
-## Remaining Issues
+## Remaining Issue
 
-### Issue 1: Multi-level split convergence
+### Multi-level split + cross-boundary merge divergence
 
-**Test**: `contained-split-and-split-at-different-levels`
+**Test**: `cascade-delete-across-parent-after-multi-level-split`
 
-When two clients split at different tree levels concurrently, each split
-modifies the ancestor chain. The remote split's position resolves against a
-tree whose ancestor structure has already been modified by the local split.
-The offset calculation in `tree.split()` produces different results depending
-on application order.
+When a multi-level split (splitLevel ≥ 2) and a cross-boundary delete+merge
+operate concurrently on the same region, the replicas diverge because merge
+and split are non-commutative when both move children.
 
-### Issue 2: Side-by-side split interactions
+**Scenario**:
+```text
+Initial: <root><p><p>ab</p><p>cd</p></p></root>
+d1: Edit(3,3,nil,2) — split 'a|b' at level 2
+d2: Edit(1,6,nil,0) — delete first inner <p> + merge second inner <p>
+```
 
-**Tests**: `side-by-side-split-and-insert`, `side-by-side-split-and-delete`
+**Root cause**: Both operations move children to different containers, and
+the result depends on application order:
 
-`SplitElement` creates a new node with a fresh `CreatedAt` (unknown to the
-remote client) but its text children inherit the original `CreatedAt` (known).
-When a concurrent operation's traversal range passes through the split sibling,
-the text children pass `canDelete` (creationKnown=true) while the parent
-element doesn't (creationKnown=false). This mismatch causes text children to
-be deleted from an otherwise-surviving split element.
+| Replica | Split first? | "cd" lands in | Result |
+|---------|-------------|---------------|--------|
+| d1 | ✅ yes | outer_p (merge moves it) | `<root><p>cd</p><p></p></root>` |
+| d2 | ❌ no | outer_p' (split moves it) | `<root><p></p><p>cd</p></root>` |
 
-Fixing this at the `collectBetween` level proved infeasible: the same
-conditions (text node with offset > 0, parent not in toBeRemoveds) appear in
-both cases where the text should be deleted (contained delete) and where it
-should be protected (side-by-side delete). A solution likely requires
-preventing the traversal from passing through the split sibling in the first
-place, via changes to `FindTreeNodesWithSplitText` position resolution.
+On d1: the merge destination is outer_p (original), so "cd" moves there.
+On d2: the merge happens first placing "cd" in outer_p, then the split
+moves "cd" to outer_p' (split sibling) because it falls after the split
+offset.
+
+**Potential fix approaches**:
+
+1. **SplitElement skips merge-moved children**: When splitting, exclude
+   children whose origin parent differs from the current parent (they were
+   moved here by a concurrent merge). Requires tracking original parent on
+   each child node.
+
+2. **Merge redirects to split sibling**: When the merge boundary is a split
+   sibling of fromParent, keep children in the sibling instead of moving to
+   fromParent. Requires InsNextID chain check during merge.
+
+3. **Deterministic container selection**: Use a deterministic rule (e.g.,
+   CreatedAt comparison) to decide which container receives the children
+   regardless of operation order.
+
+All approaches require additional per-node metadata or significant algorithm
+changes. This is deferred as a known limitation of the implicit split/merge
+approach. It only affects splitLevel ≥ 2 with concurrent cross-boundary merge.
 
 ## Alternatives Considered
 
@@ -255,3 +300,5 @@ place, via changes to `FindTreeNodesWithSplitText` position resolution.
 | Range-based Move (move all children after boundary) | Does not commute with concurrent inserts — divergence when applied in different order |
 | Fix only at JS SDK level | Does not fix CRDT layer bugs. Go concurrency tests would still fail |
 | Parent creation guard for split text nodes | Cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) at collectBetween level |
+| Always advance past split siblings (no VV check) | Breaks when editor knew about the split and intentionally positioned between original and sibling |
+| Advance only fromLeft, not toLeft | Delete ranges need toLeft advancement to include split siblings of range-end node |
