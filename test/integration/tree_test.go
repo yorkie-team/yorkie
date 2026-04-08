@@ -2975,6 +2975,52 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	t.Run("delete-starting-inside-merge-target", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		// C1: merge p1+p2 (from after 'b' to before 'c', crossing boundary)
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 5, nil, 0)
+			return nil
+		}))
+		// C2: delete from after 'b' through end of p2
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 7, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		// After sync: merged children (text_c) should be deleted because
+		// C2's delete range covers them. Even though mergedInto == fromParent
+		// suppresses propagation, the children are in fromParent and reachable
+		// through normal traversal.
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
 	// Concurrent editing, complex cases test
 	t.Run("delete text content anchored to another concurrently test", func(t *testing.T) {
 		ctx := context.Background()
