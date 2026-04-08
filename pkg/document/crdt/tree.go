@@ -889,6 +889,21 @@ func (t *Tree) Edit(
 
 	diff.Add(diffFrom, diffTo)
 
+	// 01-1. Advance past split siblings unknown to the editing client.
+	// When a concurrent SplitElement created siblings linked via InsNextID,
+	// the editor's position was computed against the unsplit tree. Advance
+	// past siblings the editor could not have seen so that the range
+	// starts/ends after all concurrent split products.
+	// Skip when leftNode == parent (leftmost child position) — advancing
+	// would change the semantics from "insert at front" to "insert after
+	// split sibling".
+	if fromLeft != fromParent {
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+	}
+	if toLeft != toParent {
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+	}
+
 	toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
 		editedAt, versionVector,
@@ -1159,6 +1174,43 @@ func (t *Tree) collectBetween(
 	}
 
 	return toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, nil
+}
+
+// advancePastUnknownSplitSiblings follows the InsNextID chain of the given
+// node, advancing past element-type split siblings that the editing client
+// did not know about (not in versionVector). This ensures that concurrent
+// operations resolve positions after all split products the editor could
+// not have seen.
+func (t *Tree) advancePastUnknownSplitSiblings(
+	node *TreeNode,
+	versionVector time.VersionVector,
+) *TreeNode {
+	if len(versionVector) == 0 || node == nil {
+		return node
+	}
+
+	current := node
+	for current.InsNextID != nil {
+		next := t.findFloorNode(current.InsNextID)
+		if next == nil || next.IsText() {
+			break
+		}
+
+		// Stop if the sibling has been moved to a different parent
+		// (e.g., by a higher-level concurrent split).
+		if next.Index.Parent != current.Index.Parent {
+			break
+		}
+
+		actorID := next.id.CreatedAt.ActorID()
+		if l, ok := versionVector.Get(actorID); ok && l >= next.id.CreatedAt.Lamport() {
+			break
+		}
+
+		current = next
+	}
+
+	return current
 }
 
 func (t *Tree) split(

@@ -133,7 +133,7 @@ In the case of local editing, the given `index`es are converted to `CRDTTree.Tre
 
 3-1. Traverse the range and identify nodes to be removed. If a node is an element node and doesn't include both opening and closing tags, it is excluded from removal.
 
-3-2. Update the `maxCreatedAtMapByActor` information for each node and mark nodes with tombstones in the `IndexTree` to indicate removal.
+3-2. Check each node's visibility using the version vector and mark nodes with tombstones in the `IndexTree` to indicate removal.
 
 **[[STEP 4]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L642-L681)** Insert the given nodes at the appropriate positions (insert operation only)
 
@@ -158,17 +158,15 @@ Eventual consistency is guaranteed for these [27 cases](https://github.com/yorki
 
 **How does it work?**
 
-- `lastCreatedAtMapByActor`
+- Version Vector
 
-https://github.com/yorkie-team/yorkie/blob/81137b32d0d1d3d36be5b63652e5ab0273f536de/pkg/document/operations/tree_edit.go#L36-L38
-
-`maxCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
+Each operation carries a version vector that captures the editing client's causal knowledge at the time of the edit. When applying a remote edit, the version vector determines whether the editing client knew about a given node's creation: if `node.CreatedAt.Lamport <= versionVector[node.ActorID]`, the node was visible to the editor.
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/cc025542-2c85-40ef-b846-157f38177487" width="450" />
 
-In the case of the example above, during the process of synchronizing operations between clients A and B, client A is unaware of the existence of '`c`' when client B performs `Edit(0,2)`. As a result, an issue arises where the element '`c`', which is within the contained range, gets deleted together.
+In the example above, during synchronization between clients A and B, client A is unaware of the existence of '`c`' when client B performs `Edit(0,2)`. Without causal tracking, the element '`c`' would be incorrectly deleted. The version vector prevents this by establishing that B's edit did not causally observe `c`'s creation.
 
-To address this, the `lastCreatedAtMapByActor` is utilized during operation execution to store final timestamp information for each actor. Subsequently, this information allows us to ascertain the causal relationship between the two events.
+> **Historical note**: Before v0.5.7, this was done via `maxCreatedAtMapByActor`, a per-range map of actor → max CreatedAt. The version vector replaced it with a complete causal snapshot.
 
 - Restricted to only `insertAfter`
 

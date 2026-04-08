@@ -1604,7 +1604,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("contained-split-and-split-at-different-levels", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix multi-level concurrent split convergence")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2761,7 +2760,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("side-by-side-split-and-insert", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix split sibling ordering with concurrent insert")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2802,7 +2800,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix split sibling with concurrent side-by-side delete")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
