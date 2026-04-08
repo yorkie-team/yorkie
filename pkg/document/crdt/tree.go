@@ -159,6 +159,17 @@ type TreeNode struct {
 	// the merge. Used to propagate concurrent deletes to moved children
 	// and to find the insertion boundary for concurrent inserts.
 	mergedChildIDs []*TreeNodeID
+
+	// mergedFrom records the source parent's ID when this node was moved
+	// by a merge operation. Used by SplitElement to skip merge-moved
+	// children, preventing divergence when split and merge operate
+	// concurrently on the same region.
+	mergedFrom *TreeNodeID
+
+	// mergedAt records when the merge operation occurred. Used together
+	// with mergedFrom to determine concurrency: the veto only applies
+	// when the editor's version vector does not cover this ticket.
+	mergedAt *time.Ticket
 }
 
 // Children returns the children of this node.
@@ -291,6 +302,7 @@ func (n *TreeNode) Split(
 	tree *Tree,
 	offset int,
 	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
 ) (resource.DataSize, error) {
 	var split *TreeNode
 	var err error
@@ -302,7 +314,7 @@ func (n *TreeNode) Split(
 			return diff, err
 		}
 	} else {
-		split, diff, err = n.SplitElement(offset, issueTimeTicket)
+		split, diff, err = n.SplitElement(offset, issueTimeTicket, versionVector)
 		if err != nil {
 			return diff, err
 		}
@@ -352,6 +364,8 @@ func (n *TreeNode) SplitText(
 		Offset:    offset + absOffset,
 	}, n.Type(), nil, string(rightRune))
 	rightNode.removedAt = n.removedAt
+	rightNode.mergedFrom = n.mergedFrom
+	rightNode.mergedAt = n.mergedAt
 
 	if err := n.Index.Parent.InsertAfterInternal(
 		rightNode.Index,
@@ -374,6 +388,7 @@ func (n *TreeNode) SplitText(
 func (n *TreeNode) SplitElement(
 	offset int,
 	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
 ) (*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 
@@ -394,12 +409,35 @@ func (n *TreeNode) SplitElement(
 	split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
 	split.Index.UpdateAncestorsLength(split.Index.PaddedLength(true), true)
 
-	leftChildren := n.Index.Children(true)[0:offset]
-	rightChildren := n.Index.Children(true)[offset:]
+	allChildren := n.Index.Children(true)
+	leftChildren := allChildren[0:offset]
+	rightChildren := allChildren[offset:]
+
+	// Fix 8: Keep merge-moved children in the original node when the
+	// merge is concurrent and the split boundary is not itself within
+	// merged content. If the boundary node (last left child) has
+	// mergedFrom, the split is operating within merged content and
+	// all children should move normally.
+	boundaryIsMerged := len(leftChildren) > 0 &&
+		leftChildren[len(leftChildren)-1].Value.mergedFrom != nil
+	var actualRight []*index.Node[*TreeNode]
+	for _, child := range rightChildren {
+		if !boundaryIsMerged &&
+			child.Value.mergedFrom != nil && child.Value.mergedAt != nil &&
+			len(versionVector) > 0 {
+			actorID := child.Value.mergedAt.ActorID()
+			if l, ok := versionVector.Get(actorID); !ok || l < child.Value.mergedAt.Lamport() {
+				leftChildren = append(leftChildren, child)
+				continue
+			}
+		}
+		actualRight = append(actualRight, child)
+	}
+
 	if err := n.Index.SetChildren(leftChildren); err != nil {
 		return nil, diff, err
 	}
-	if err := split.Index.SetChildren(rightChildren); err != nil {
+	if err := split.Index.SetChildren(actualRight); err != nil {
 		return nil, diff, err
 	}
 
@@ -503,6 +541,10 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.removedAt = n.removedAt
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
+	clone.mergedInto = n.mergedInto
+	clone.mergedChildIDs = n.mergedChildIDs
+	clone.mergedFrom = n.mergedFrom
+	clone.mergedAt = n.mergedAt
 
 	if n.IsText() {
 		return clone, nil
@@ -925,7 +967,7 @@ func (t *Tree) Edit(
 
 	// 03. Merge: move children to fromParent and set forwarding pointers.
 	if err := t.mergeNodes(
-		fromParent, toBeMovedToFromParents, toBeMergedNodes,
+		fromParent, toBeMovedToFromParents, toBeMergedNodes, editedAt,
 	); err != nil {
 		return nil, resource.DataSize{}, err
 	}
@@ -937,7 +979,7 @@ func (t *Tree) Edit(
 	pairs = append(pairs, mergePairs...)
 
 	// 04. Split: split the element nodes for the given splitLevel.
-	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket); err != nil {
+	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket, versionVector); err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
@@ -989,9 +1031,15 @@ func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
 	toBeMergedNodes []*TreeNode,
+	editedAt *time.Ticket,
 ) error {
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
+			// Record source parent for split-skip check (Fix 8).
+			if node.Index.Parent != nil {
+				node.mergedFrom = node.Index.Parent.Value.id
+				node.mergedAt = editedAt
+			}
 			// Record child ID on its actual source parent only.
 			if node.Index.Parent != nil {
 				srcParent := node.Index.Parent.Value
@@ -1218,6 +1266,7 @@ func (t *Tree) split(
 	fromLeft *TreeNode,
 	splitLevel int,
 	issueTimeTicket func() *time.Ticket,
+	versionVector time.VersionVector,
 ) error {
 	if splitLevel == 0 {
 		return nil
@@ -1237,7 +1286,7 @@ func (t *Tree) split(
 
 			offset++
 		}
-		if _, err := parent.Split(t, offset, issueTimeTicket); err != nil {
+		if _, err := parent.Split(t, offset, issueTimeTicket, versionVector); err != nil {
 			return err
 		}
 		left = parent
@@ -1478,7 +1527,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 	// 03. Split text node if the left node is text node.
 	if leftNode.IsText() {
-		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil)
+		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil, nil)
 		if err != nil {
 			return nil, nil, diff, err
 		}
