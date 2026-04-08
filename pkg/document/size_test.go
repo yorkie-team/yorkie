@@ -57,7 +57,7 @@ func TestTreeNodeSize(t *testing.T) {
 		// split element node
 		right, diff, err = para.SplitElement(1, func() *time.Ticket {
 			return time.InitialTicket
-		})
+		}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, resource.DataSize{Data: 0, Meta: 24}, diff)
 		assert.Equal(t, "<p>hello</p>", crdt.ToXML(para))
@@ -87,7 +87,7 @@ func TestTreeNodeSize(t *testing.T) {
 		// split element node
 		right, diff, err = para.SplitElement(1, func() *time.Ticket {
 			return time.InitialTicket
-		})
+		}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, resource.DataSize{Data: 16, Meta: 48}, diff)
 		assert.Equal(t, `<p bold="true">hello</p>`, crdt.ToXML(para))

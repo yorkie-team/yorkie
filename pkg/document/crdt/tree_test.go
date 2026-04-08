@@ -88,7 +88,7 @@ func TestTreeNode(t *testing.T) {
 
 		split, _, err := para.SplitElement(1, func() *time.Ticket {
 			return time.InitialTicket
-		})
+		}, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "<p>hello</p>", crdt.ToXML(para))
 		assert.Equal(t, "<p>yorkie</p>", crdt.ToXML(split))

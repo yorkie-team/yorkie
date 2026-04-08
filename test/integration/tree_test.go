@@ -2883,6 +2883,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>cd</p><p></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	// Issue B: merge with concurrent delete of content inside merge source.
