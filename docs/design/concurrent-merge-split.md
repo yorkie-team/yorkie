@@ -99,6 +99,7 @@ All 27 cases from `tree.md` converge:
 | Contained | split + insert (into split node) | ✅ | existing |
 | Contained | split + insert (at split position) | ✅ | existing |
 | Contained | split + delete contents | ✅ | existing |
+| **Overlapping** | **split + delete (overlapping text)** | ❌ | see Remaining Issues |
 | Contained | split + delete whole | ✅ | InsNextID cascade delete |
 | Contained | split + split (different levels) | ✅ | split sibling forwarding (Fix 7) |
 | Contained | multi-level split + cross-boundary merge | ✅ | SplitElement merge-moved children skip (Fix 8) |
@@ -120,9 +121,9 @@ All 27 cases from `tree.md` converge:
 |----------|-------|-------------|--------------|
 | Basic Edit + Edit | 27 | 27 | 0 |
 | Merge | 12 | 12 | 0 |
-| Split | 13 | 13 | 0 |
+| Split | 14 | 13 | 1 |
 | Style | 10 | 10 | 0 |
-| **Total** | **62** | **62** | **0** |
+| **Total** | **63** | **62** | **1** |
 
 ## Design
 
@@ -280,6 +281,58 @@ Both: <root><p>cd</p><p></p></root> ✅
 | No undo/redo in scope | Consistent with undo-redo.md Phase 2 deferral |
 | Runtime-only `mergedFrom` on child nodes | Same pattern as `mergedInto`/`mergedChildIDs`. No protobuf change needed |
 | Skip in SplitElement rather than post-reconciliation | Filtering during partition is simpler and preserves child ordering naturally |
+
+## Remaining Issues
+
+### Split + delete on overlapping text content
+
+**Test**: `split-with-concurrent-delete-overlapping-content`
+
+When one client deletes text and another concurrently splits the same
+paragraph at a position inside the deleted range, the replicas diverge.
+
+**Scenario**:
+```text
+Initial: <root><p>abcd</p></root>
+d1: Edit(2,4,nil,0) — delete "bc"
+d2: Edit(3,3,nil,1) — split at b|c with splitLevel=1
+```
+
+**Root cause**: The split position (between 'b' and 'c') resolves inside
+tombstoned content on the replica that applied the delete first. The
+position resolution and offset calculation produce different structural
+splits depending on operation order:
+
+| Replica | Delete first? | Result |
+|---------|--------------|--------|
+| d1 | ✅ yes | `<root><p>a</p><p>d</p></root>` |
+| d2 | ❌ no | `<root><p>ad</p><p></p></root>` |
+
+### JS SDK: splitElement drops tombstoned children
+
+**Location**: `IndexTreeNode.splitElement` in `index_tree.ts`
+
+The `children` getter (line 323) filters out removed nodes:
+```typescript
+get children(): Array<T> {
+  return this._children.filter((child) => !child.isRemoved);
+}
+```
+
+`splitElement` uses this getter to partition children, then reassigns
+`_children` from the filtered result. Tombstoned children are silently
+dropped from the tree structure. In Go, `Children(true)` includes removed
+nodes so they survive the split.
+
+This does not cause visible divergence (tombstoned nodes are invisible in
+`toXML()`), but it can affect:
+- GC bookkeeping: orphaned tombstones cannot be collected
+- Subsequent operations that reference tombstoned nodes by ID
+- Tree size/index calculations
+
+**Fix approach**: Use `_children` (raw array) instead of `children` (filtered
+getter) in `splitElement`, and compute the split offset against the full
+child list including removed nodes.
 
 ## Alternatives Considered
 
