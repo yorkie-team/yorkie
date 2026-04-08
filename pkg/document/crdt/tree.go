@@ -159,6 +159,12 @@ type TreeNode struct {
 	// the merge. Used to propagate concurrent deletes to moved children
 	// and to find the insertion boundary for concurrent inserts.
 	mergedChildIDs []*TreeNodeID
+
+	// mergedFrom records the source parent's ID when this node was moved
+	// by a merge operation. Used by SplitElement to skip merge-moved
+	// children, preventing divergence when split and merge operate
+	// concurrently on the same region.
+	mergedFrom *TreeNodeID
 }
 
 // Children returns the children of this node.
@@ -394,12 +400,26 @@ func (n *TreeNode) SplitElement(
 	split.Index.UpdateAncestorsLength(split.Index.PaddedLength())
 	split.Index.UpdateAncestorsLength(split.Index.PaddedLength(true), true)
 
-	leftChildren := n.Index.Children(true)[0:offset]
-	rightChildren := n.Index.Children(true)[offset:]
+	allChildren := n.Index.Children(true)
+	leftChildren := allChildren[0:offset]
+	rightChildren := allChildren[offset:]
+
+	// Fix 8: Keep merge-moved children in the original node instead of
+	// moving them to the split sibling. This prevents divergence when
+	// SplitElement and merge operate concurrently on the same region.
+	var actualRight []*index.Node[*TreeNode]
+	for _, child := range rightChildren {
+		if child.Value.mergedFrom != nil {
+			leftChildren = append(leftChildren, child)
+		} else {
+			actualRight = append(actualRight, child)
+		}
+	}
+
 	if err := n.Index.SetChildren(leftChildren); err != nil {
 		return nil, diff, err
 	}
-	if err := split.Index.SetChildren(rightChildren); err != nil {
+	if err := split.Index.SetChildren(actualRight); err != nil {
 		return nil, diff, err
 	}
 
@@ -992,6 +1012,10 @@ func (t *Tree) mergeNodes(
 ) error {
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
+			// Record source parent for split-skip check (Fix 8).
+			if node.Index.Parent != nil {
+				node.mergedFrom = node.Index.Parent.Value.id
+			}
 			// Record child ID on its actual source parent only.
 			if node.Index.Parent != nil {
 				srcParent := node.Index.Parent.Value

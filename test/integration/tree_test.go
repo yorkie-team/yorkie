@@ -2843,7 +2843,6 @@ func TestTree(t *testing.T) {
 	// parent, a concurrent delete+merge across the split boundary causes
 	// children to land in different containers on each replica.
 	t.Run("cascade-delete-across-parent-after-multi-level-split", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix multi-level split + cross-boundary merge divergence")
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2881,7 +2880,7 @@ func TestTree(t *testing.T) {
 			return nil
 		}))
 		assert.Equal(t, "<root><p><p>a</p></p><p><p>b</p><p>cd</p></p></root>", d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, "<root><p><p>cd</p></p></root>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
