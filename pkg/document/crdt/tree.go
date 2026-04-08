@@ -1316,6 +1316,13 @@ func (t *Tree) Style(
 
 	diff.Add(diffFrom, diffTo)
 
+	if fromLeft != fromParent {
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+	}
+	if toLeft != toParent {
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+	}
+
 	isVersionVectorEmpty := len(versionVector) == 0
 
 	var pairs []GCPair
@@ -1377,6 +1384,13 @@ func (t *Tree) RemoveStyle(
 	}
 
 	diff.Add(diffFrom, diffTo)
+
+	if fromLeft != fromParent {
+		fromLeft = t.advancePastUnknownSplitSiblings(fromLeft, versionVector)
+	}
+	if toLeft != toParent {
+		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
+	}
 
 	isVersionVectorEmpty := len(versionVector) == 0
 

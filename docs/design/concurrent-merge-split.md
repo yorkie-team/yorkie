@@ -117,11 +117,11 @@ All 27 cases from `tree.md` converge:
 
 | Category | Total | ✅ Converge |
 |----------|-------|-------------|
-| Basic Edit + Edit | ~27 | 27 |
+| Basic Edit + Edit | 27 | 27 |
 | Merge | 12 | 12 |
 | Split | 12 | 12 |
-| Style | ~10 | 10 |
-| **Total** | **~61** | **~61** |
+| Style | 10 | 10 |
+| **Total** | **61** | **61** |
 
 ## Design
 
