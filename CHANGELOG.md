@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.4] - 2026-04-09
+
+### Fixed
+
+- Fix tree divergence on concurrent split inside merge range by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1727
+- Fix split + delete divergence by skipping merge for concurrent elements by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1725
+- Fix multi-level split + merge divergence via mergedFrom by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1724
+- Fix split sibling convergence via position forwarding by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1723
+- Fix convergence bugs in concurrent tree merge/split by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1722
+
 ## [v0.7.3] - 2026-04-02
 
 ### Added
