@@ -2983,7 +2983,7 @@ func TestTree(t *testing.T) {
 	// This structural difference could cause issues with GC and subsequent
 	// operations that reference tombstoned nodes by ID.
 	t.Run("split-with-concurrent-delete-overlapping-content", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): fix concurrent delete + split convergence on overlapping content")
+		// Fixed by Fix 9: skip merge for concurrent elements in collectBetween.
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -3018,6 +3018,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	// Issue B: merge with concurrent delete of content inside merge source.

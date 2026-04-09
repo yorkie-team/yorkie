@@ -1141,9 +1141,25 @@ func (t *Tree) collectBetween(
 				// 	return
 				// }
 
-				toBeMergedNodes = append(toBeMergedNodes, node)
-				for _, child := range node.Index.Children() {
-					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
+				// Fix 9: Skip merge for elements created by concurrent
+				// operations. The editor didn't know about this element,
+				// so crossing into it is an artifact of a concurrent split,
+				// not an intentional merge.
+				isLocal := len(versionVector) == 0
+				elementKnown := false
+				if isLocal {
+					elementKnown = true
+				} else if l, ok := versionVector.Get(
+					node.id.CreatedAt.ActorID(),
+				); ok && l >= node.id.CreatedAt.Lamport() {
+					elementKnown = true
+				}
+
+				if elementKnown {
+					toBeMergedNodes = append(toBeMergedNodes, node)
+					for _, child := range node.Index.Children() {
+						toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
+					}
 				}
 			}
 
