@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.7.3
+YORKIE_VERSION := 0.7.4
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
