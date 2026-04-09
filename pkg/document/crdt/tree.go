@@ -1110,6 +1110,20 @@ func (t *Tree) propagateMergeDeletes(
 	return pairs
 }
 
+// ticketKnown returns true if the given ticket is causally known to the
+// editor, i.e. the editor's version vector covers the ticket's lamport
+// clock for the same actor. For local operations (empty version vector),
+// all tickets are considered known.
+func ticketKnown(vv time.VersionVector, ticket *time.Ticket) bool {
+	if len(vv) == 0 {
+		return true
+	}
+	if l, ok := vv.Get(ticket.ActorID()); ok && l >= ticket.Lamport() {
+		return true
+	}
+	return false
+}
+
 // collectBetween collects nodes that are marked as removed or moved.
 func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
@@ -1145,17 +1159,7 @@ func (t *Tree) collectBetween(
 				// operations. The editor didn't know about this element,
 				// so crossing into it is an artifact of a concurrent split,
 				// not an intentional merge.
-				isLocal := len(versionVector) == 0
-				elementKnown := false
-				if isLocal {
-					elementKnown = true
-				} else if l, ok := versionVector.Get(
-					node.id.CreatedAt.ActorID(),
-				); ok && l >= node.id.CreatedAt.Lamport() {
-					elementKnown = true
-				}
-
-				if elementKnown {
+				if ticketKnown(versionVector, node.id.CreatedAt) {
 					toBeMergedNodes = append(toBeMergedNodes, node)
 					for _, child := range node.Index.Children() {
 						toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
@@ -1164,23 +1168,10 @@ func (t *Tree) collectBetween(
 			}
 
 			// NOTE(sigmaith): Determine if the node's creation event was visible.
-			isLocal := len(versionVector) == 0
-			creationKnown := false
-			if isLocal {
-				creationKnown = true
-			} else if l, ok := versionVector.Get(node.id.CreatedAt.ActorID()); ok && l >= node.id.CreatedAt.Lamport() {
-				creationKnown = true
-			}
+			creationKnown := ticketKnown(versionVector, node.id.CreatedAt)
 
 			// NOTE(sigmaith): Determine if existing tombstone was already causally known.
-			tombstoneKnown := false
-			if node.removedAt != nil {
-				if isLocal {
-					tombstoneKnown = true
-				} else if l, ok := versionVector.Get(node.removedAt.ActorID()); ok && l >= node.removedAt.Lamport() {
-					tombstoneKnown = true
-				}
-			}
+			tombstoneKnown := node.removedAt != nil && ticketKnown(versionVector, node.removedAt)
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
@@ -1206,15 +1197,7 @@ func (t *Tree) collectBetween(
 						!slices.Contains(toBeMergedNodes, node) {
 						next := t.findFloorNode(node.InsNextID)
 						for next != nil {
-							splitCreationKnown := false
-							if isLocal {
-								splitCreationKnown = true
-							} else if l, ok := versionVector.Get(
-								next.ID().CreatedAt.ActorID(),
-							); ok && l >= next.ID().CreatedAt.Lamport() {
-								splitCreationKnown = true
-							}
-							if !splitCreationKnown {
+							if !ticketKnown(versionVector, next.ID().CreatedAt) {
 								toBeRemoveds = append(toBeRemoveds, next)
 								// Cascade through the full subtree, not just immediate children.
 								index.TraverseNode(next.Index, func(n *index.Node[*TreeNode], _ int) {
