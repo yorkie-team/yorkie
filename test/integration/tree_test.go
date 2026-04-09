@@ -2123,6 +2123,51 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	t.Run("contained-split-and-merge-same-block", func(t *testing.T) {
+		// Regression test for https://github.com/yorkie-team/yorkie/issues/1726
+		// When one client splits inside a block that the other client merges,
+		// replicas must converge.
+		ctx := context.Background()
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		// d1: split first paragraph at a|b
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		// d2: merge both paragraphs (delete boundary)
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 5, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>abcd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>bcd</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
 	t.Run("contained-merge-and-split-at-multi-levels", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))

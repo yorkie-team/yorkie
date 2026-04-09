@@ -413,22 +413,30 @@ func (n *TreeNode) SplitElement(
 	leftChildren := allChildren[0:offset]
 	rightChildren := allChildren[offset:]
 
-	// Fix 8: Keep merge-moved children in the original node when the
-	// merge is concurrent and the split boundary is not itself within
-	// merged content. If the boundary node (last left child) has
-	// mergedFrom, the split is operating within merged content and
-	// all children should move normally.
-	boundaryIsMerged := len(leftChildren) > 0 &&
-		leftChildren[len(leftChildren)-1].Value.mergedFrom != nil
+	// Fix 8: Handle concurrent merge-moved children during split.
+	// When a child was merge-moved from a source that is itself a child
+	// of the node being split, the content was local to this level and
+	// should stay in the original (left) node. When the source is
+	// external (e.g., a sibling element that was merged), the content
+	// should flow naturally to the split (right) node.
 	var actualRight []*index.Node[*TreeNode]
 	for _, child := range rightChildren {
-		if !boundaryIsMerged &&
-			child.Value.mergedFrom != nil && child.Value.mergedAt != nil &&
+		if child.Value.mergedFrom != nil && child.Value.mergedAt != nil &&
 			len(versionVector) > 0 {
 			actorID := child.Value.mergedAt.ActorID()
 			if l, ok := versionVector.Get(actorID); !ok || l < child.Value.mergedAt.Lamport() {
-				leftChildren = append(leftChildren, child)
-				continue
+				// Check if the merge source is a child of this node.
+				sourceIsChild := false
+				for _, sibling := range allChildren {
+					if sibling.Value.id.Equal(child.Value.mergedFrom) {
+						sourceIsChild = true
+						break
+					}
+				}
+				if sourceIsChild {
+					leftChildren = append(leftChildren, child)
+					continue
+				}
 			}
 		}
 		actualRight = append(actualRight, child)
