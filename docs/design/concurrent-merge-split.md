@@ -99,7 +99,7 @@ All 27 cases from `tree.md` converge:
 | Contained | split + insert (into split node) | ✅ | existing |
 | Contained | split + insert (at split position) | ✅ | existing |
 | Contained | split + delete contents | ✅ | existing |
-| **Overlapping** | **split + delete (overlapping text)** | ❌ | see Remaining Issues |
+| Overlapping | split + delete (overlapping text) | ✅ | concurrent element merge skip (Fix 9) |
 | Contained | split + delete whole | ✅ | InsNextID cascade delete |
 | Contained | split + split (different levels) | ✅ | split sibling forwarding (Fix 7) |
 | Contained | multi-level split + cross-boundary merge | ✅ | SplitElement merge-moved children skip (Fix 8) |
@@ -121,9 +121,9 @@ All 27 cases from `tree.md` converge:
 |----------|-------|-------------|--------------|
 | Basic Edit + Edit | 27 | 27 | 0 |
 | Merge | 12 | 12 | 0 |
-| Split | 14 | 13 | 1 |
+| Split | 14 | 14 | 0 |
 | Style | 10 | 10 | 0 |
-| **Total** | **63** | **62** | **1** |
+| **Total** | **63** | **63** | **0** |
 
 ## Design
 
@@ -259,6 +259,62 @@ d2 (merge → split): merge moves "cd" to outer_p, sets mergedFrom.
 Both: <root><p>cd</p><p></p></root> ✅
 ```
 
+### Fix 9: Skip merge for concurrent elements
+
+**Location**: `CRDTTree.collectBetween`
+
+When a delete range crosses into an element that was created by a concurrent
+operation (not covered by the editor's version vector), the delete should not
+trigger a merge. The element boundary was unknown to the editor, so the range
+crossing is an artifact of the concurrent split, not an intentional merge.
+
+In `collectBetween`, at the merge detection point (`Start && !ended`), check
+whether the element's `CreatedAt` is covered by the editor's version vector.
+If not, skip adding it to `toBeMergedNodes` and `toBeMovedToFromParents`.
+Text content inside the concurrent element is still tombstoned individually
+via the existing `canDelete` check.
+
+**Convergence proof**:
+
+```text
+Initial: <root><p>abcd</p></root>
+d1: Edit(2,4,nil,0) — delete "bc"
+d2: Edit(3,3,nil,1) — split at b|c with splitLevel=1
+
+d1 (delete → split): "bc" tombstoned. d2 split resolves at tombstone
+  boundary, SplitElement partitions ["a",†"b"] | [†"c","d"].
+  Result: <p>a</p><p>d</p>.
+
+d2 (split → delete): split creates <p>ab</p><p'>cd</p'>.
+  d1 delete: collectBetween(p,"a" → p',"c").
+  p' Start: p'.CreatedAt not in d1's VV → skip merge.
+  "b" canDelete → tombstoned. "c" canDelete → tombstoned.
+  "d" outside range → survives in p'.
+  Result: <p>a</p><p>d</p>.
+
+Both: <root><p>a</p><p>d</p></root> ✅
+```
+
+Intentional merges are unaffected: the target element existed when the editor
+created the operation, so its `CreatedAt` is always covered by the editor's
+version vector.
+
+### Fix 10: JS splitElement preserves tombstoned children
+
+**Location**: `IndexTreeNode.splitElement` in `index_tree.ts`
+
+The `children` getter filters out removed nodes. `splitElement` used this
+getter to partition children, then reassigned `_children` from the filtered
+result. Tombstoned children were silently dropped from the tree structure.
+
+**Fix**: Use `_children` (raw array) instead of `children` (filtered getter)
+in `splitElement`. This matches Go's `Children(true)` behavior and preserves
+tombstoned children across splits.
+
+Additionally fixed `clone.visibleSize` calculation: was using
+`paddedSize(true)` (total) instead of `paddedSize()` (visible), diverging
+from Go's `PaddedLength()` usage for visible length.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -269,6 +325,8 @@ Both: <root><p>cd</p><p></p></root> ✅
 | Fix 5 propagation deletes too much | Skip when mergedInto == fromParent (concurrent merge, not delete) |
 | Fix 7 advances past known siblings | Version vector check ensures only unknown siblings are skipped. `leftNode == parent` guard preserves leftmost-child semantics |
 | Fix 8 skips too many children | Only children with `mergedFrom` set are skipped. `mergedFrom` is only set during merge, so normal children are unaffected |
+| Fix 9 skips merge for known elements | Only elements whose CreatedAt is not covered by editor's VV are skipped. Intentional merges target elements the editor knew about |
+| Fix 10 changes splitElement child visibility | Uses raw `_children` array matching Go's `Children(true)`. Tombstoned children were already invisible in toXML output |
 
 ### Design Decisions
 
@@ -281,58 +339,12 @@ Both: <root><p>cd</p><p></p></root> ✅
 | No undo/redo in scope | Consistent with undo-redo.md Phase 2 deferral |
 | Runtime-only `mergedFrom` on child nodes | Same pattern as `mergedInto`/`mergedChildIDs`. No protobuf change needed |
 | Skip in SplitElement rather than post-reconciliation | Filtering during partition is simpler and preserves child ordering naturally |
+| VV check in collectBetween for Fix 9 | Same pattern as other fixes. Cleanly distinguishes intentional merge (editor knew the element) from accidental boundary crossing (concurrent split) |
+| Fix split position resolution instead of merge skip (Fix 9 alt) | Changing offset semantics in FindTreeNodesWithSplitText affects all text operations. collectBetween-level fix is more isolated |
 
 ## Remaining Issues
 
-### Split + delete on overlapping text content
-
-**Test**: `split-with-concurrent-delete-overlapping-content`
-
-When one client deletes text and another concurrently splits the same
-paragraph at a position inside the deleted range, the replicas diverge.
-
-**Scenario**:
-```text
-Initial: <root><p>abcd</p></root>
-d1: Edit(2,4,nil,0) — delete "bc"
-d2: Edit(3,3,nil,1) — split at b|c with splitLevel=1
-```
-
-**Root cause**: The split position (between 'b' and 'c') resolves inside
-tombstoned content on the replica that applied the delete first. The
-position resolution and offset calculation produce different structural
-splits depending on operation order:
-
-| Replica | Delete first? | Result |
-|---------|--------------|--------|
-| d1 | ✅ yes | `<root><p>a</p><p>d</p></root>` |
-| d2 | ❌ no | `<root><p>ad</p><p></p></root>` |
-
-### JS SDK: splitElement drops tombstoned children
-
-**Location**: `IndexTreeNode.splitElement` in `index_tree.ts`
-
-The `children` getter (line 323) filters out removed nodes:
-```typescript
-get children(): Array<T> {
-  return this._children.filter((child) => !child.isRemoved);
-}
-```
-
-`splitElement` uses this getter to partition children, then reassigns
-`_children` from the filtered result. Tombstoned children are silently
-dropped from the tree structure. In Go, `Children(true)` includes removed
-nodes so they survive the split.
-
-This does not cause visible divergence (tombstoned nodes are invisible in
-`toXML()`), but it can affect:
-- GC bookkeeping: orphaned tombstones cannot be collected
-- Subsequent operations that reference tombstoned nodes by ID
-- Tree size/index calculations
-
-**Fix approach**: Use `_children` (raw array) instead of `children` (filtered
-getter) in `splitElement`, and compute the split offset against the full
-child list including removed nodes.
+All 63 convergence cases now pass. No remaining convergence issues.
 
 ## Alternatives Considered
 
@@ -348,3 +360,6 @@ child list including removed nodes.
 | Merge redirects to split sibling (Fix 8 alt) | Merge would need structural awareness of splits. Direction ambiguous when multiple siblings exist |
 | Deterministic container selection (Fix 8 alt) | Requires generic comparison rule that interacts with all other fixes. Broad change surface |
 | Post-split reconciliation (move children back) | Error-prone ordering, harder to reason about than filtering during partition |
+| Fix split position resolution for overlapping delete (Fix 9 alt) | Changing offset semantics in SplitText/FindTreeNodesWithSplitText affects all text operations. Broad change surface with high regression risk |
+| Post-reconciliation for split boundaries (Fix 9 alt) | Does not fit the operation-based model. Complex correctness proof |
+| JS splitElement with visible-to-all offset conversion (Fix 10 alt) | Adds complexity without benefit. Go uses same visible offset with Children(true) and passes all tests |
