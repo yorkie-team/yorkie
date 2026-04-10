@@ -1355,6 +1355,30 @@ func (t *Tree) split(
 	return nil
 }
 
+// hasUnknownSplitSibling checks whether the given element node has a split
+// sibling (via InsNextID) whose creation the editor did not know about. This
+// is used to prevent styling an element via its End token when the End token
+// only appears in the style range because a concurrent split extended the
+// range into the split sibling.
+func (t *Tree) hasUnknownSplitSibling(
+	node *TreeNode,
+	versionVector time.VersionVector,
+) bool {
+	if node.InsNextID == nil {
+		return false
+	}
+
+	next := t.findFloorNode(node.InsNextID)
+	if next == nil || next.IsText() {
+		return false
+	}
+
+	actorID := next.id.CreatedAt.ActorID()
+	lamport, ok := versionVector.Get(actorID)
+
+	return !ok || lamport < next.id.CreatedAt.Lamport()
+}
+
 // traverseInPosRange traverses the tree in the given position range.
 // If includeRemoved is true, it includes removed nodes in the traversal.
 func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNode,
@@ -1452,6 +1476,14 @@ func (t *Tree) Style(
 		}
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
+			// Skip styling via End token when the node has an unknown
+			// split sibling. The End token is in the range only because
+			// a concurrent split extended the range into the sibling.
+			if token.TokenType == index.End && !isVersionVectorEmpty &&
+				t.hasUnknownSplitSibling(node, versionVector) {
+				return
+			}
+
 			for key, value := range attrs {
 				if rhtNode := node.SetAttr(key, value, editedAt); rhtNode != nil {
 					pairs = append(pairs, GCPair{
@@ -1521,6 +1553,14 @@ func (t *Tree) RemoveStyle(
 		}
 
 		if node.canStyle(editedAt, clientLamportAtChange) && len(attrs) > 0 {
+			// Skip styling via End token when the node has an unknown
+			// split sibling. The End token is in the range only because
+			// a concurrent split extended the range into the sibling.
+			if token.TokenType == index.End && !isVersionVectorEmpty &&
+				t.hasUnknownSplitSibling(node, versionVector) {
+				return
+			}
+
 			for _, attr := range attrs {
 				rhtNodes := node.RemoveAttr(attr, editedAt)
 				for _, rhtNode := range rhtNodes {
