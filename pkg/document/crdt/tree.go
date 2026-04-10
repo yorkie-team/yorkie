@@ -1373,6 +1373,11 @@ func (t *Tree) hasUnknownSplitSibling(
 		return false
 	}
 
+	// NOTE: Unlike advancePastUnknownSplitSiblings, we intentionally omit
+	// the parent-equality check here. In multi-level splits (splitLevel>=2),
+	// the split sibling may have been moved to a different parent by the
+	// recursive ancestor split. The End-token guard must still fire because
+	// the node WAS split — InsNextID is only set by SplitElement.
 	actorID := next.id.CreatedAt.ActorID()
 	lamport, ok := versionVector.Get(actorID)
 

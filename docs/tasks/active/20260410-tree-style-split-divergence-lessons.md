@@ -41,9 +41,9 @@ position (parent vs left sibling) is affected by the concurrent operation.
 the range expansion from P to P' brings P's End token into the traversal,
 and P IS known — so it gets styled via the End token.
 
-**Takeaway**: Per-node guards are insufficient when the traversal range
-itself is wrong. The fix must be at the position/range level, not the
-callback level.
+**Takeaway**: Per-node guards alone are insufficient when traversal range
+expands across split boundaries. A token-aware callback guard (End-token
+suppression with split-sibling VV check) is required in Style paths.
 
 ## Lesson 3: CRDT position resolution assumptions
 
