@@ -46,7 +46,7 @@ any field consolidation.
 The diagnostic test failed on the first run (as expected), proving the
 runtime-only assumption was wrong:
 
-```
+```text
 docA (ran merge directly, has merged* fields)        -> <root><p>acb</p></root>
 docB (loaded from snapshot, merged* stripped)        -> <root><p>ab</p></root>
 ```

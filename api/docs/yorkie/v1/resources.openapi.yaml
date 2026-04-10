@@ -2001,16 +2001,23 @@ components:
           description: ""
           title: ins_prev_id
           type: object
+        mergedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: |-
+            merged_at records the immutable ticket of the merge operation.
+             Stored alongside merged_from because the source parent's removed_at
+             may be overwritten by later LWW tombstones and thus cannot serve as
+             the merge-time causal boundary for SplitElement. See
+             docs/design/concurrent-merge-split.md for details.
+          title: merged_at
+          type: object
         mergedFrom:
           $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
           additionalProperties: false
           description: |-
             merged_from is set when this node was moved to a new parent by a
-             concurrent merge. It points to the source parent's ID, and is the
-             single persisted witness of the merge: all other merge-related
-             fields on TreeNode (mergedInto, mergedChildIDs, mergedAt) are
-             rebuilt from it at load time. See
-             docs/design/concurrent-merge-split.md for details.
+             concurrent merge. It points to the source parent's ID.
           title: merged_from
           type: object
         removedAt:

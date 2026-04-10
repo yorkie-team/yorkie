@@ -150,20 +150,24 @@ type TreeNode struct {
 	Attrs *RHT
 
 	// MergedFrom records the source parent's ID when this node was moved
-	// by a concurrent merge operation. This is the single persisted
-	// witness of the merge: other merge-related state (mergedInto on the
-	// source, the list of moved children, and the merge ticket) is
-	// derived from MergedFrom plus the loaded tree structure at load
-	// time or at use time. See docs/design/concurrent-merge-split.md.
+	// by a concurrent merge operation. Persisted in the snapshot
+	// encoding as the witness of the merge relationship.
 	MergedFrom *TreeNodeID
 
-	// mergedInto is a runtime-only cache pointing at the merge target
-	// (the parent that received this node's children). Set locally
-	// during merge execution and rebuilt from MergedFrom on snapshot
-	// load. Used for the fast "is this tombstoned parent a merge
-	// source?" check in FindTreeNodesWithSplitText; the alternative
-	// (scanning NodeMapByID every position resolution) would be
-	// prohibitively expensive.
+	// MergedAt records the immutable ticket of the merge operation.
+	// Persisted alongside MergedFrom because the source parent's
+	// removedAt may be overwritten by later LWW tombstones and thus
+	// cannot serve as the merge-time causal boundary for SplitElement's
+	// Fix 8 version-vector check. See docs/design/concurrent-merge-split.md.
+	MergedAt *time.Ticket
+
+	// mergedInto is a runtime cache pointing at the merge target (the
+	// parent that received this node's children). Set locally during
+	// merge execution and rebuilt from MergedFrom on snapshot load.
+	// Used for the fast "is this tombstoned parent a merge source?"
+	// check in FindTreeNodesWithSplitText; the alternative (scanning
+	// NodeMapByID every position resolution) would be prohibitively
+	// expensive.
 	mergedInto *TreeNodeID
 }
 
@@ -360,6 +364,7 @@ func (n *TreeNode) SplitText(
 	}, n.Type(), nil, string(rightRune))
 	rightNode.removedAt = n.removedAt
 	rightNode.MergedFrom = n.MergedFrom
+	rightNode.MergedAt = n.MergedAt
 
 	if err := n.Index.Parent.InsertAfterInternal(
 		rightNode.Index,
@@ -413,32 +418,30 @@ func (n *TreeNode) SplitElement(
 	// should stay in the original (left) node. When the source is
 	// external (e.g., a sibling element that was merged), the content
 	// should flow naturally to the split (right) node. The merge ticket
-	// is read from the source sibling's removedAt (the merge tombstoned
-	// the source in the same operation, so the tickets coincide).
+	// is read from the child's immutable MergedAt field — NOT from the
+	// source's removedAt, which may have been overwritten by a later
+	// LWW tombstone and would give a wrong concurrency answer.
 	var actualRight []*index.Node[*TreeNode]
 	for _, child := range rightChildren {
-		moveToLeft := false
-		if child.Value.MergedFrom != nil && len(versionVector) > 0 {
-			for _, sibling := range allChildren {
-				if !sibling.Value.id.Equal(child.Value.MergedFrom) {
-					continue
-				}
-				// Source is a child of this node; check whether the
-				// editor's VV covers the merge (via source.removedAt).
-				if sibling.Value.removedAt != nil {
-					actorID := sibling.Value.removedAt.ActorID()
-					if l, ok := versionVector.Get(actorID); !ok || l < sibling.Value.removedAt.Lamport() {
-						moveToLeft = true
+		if child.Value.MergedFrom != nil && child.Value.MergedAt != nil &&
+			len(versionVector) > 0 {
+			actorID := child.Value.MergedAt.ActorID()
+			if l, ok := versionVector.Get(actorID); !ok || l < child.Value.MergedAt.Lamport() {
+				// Check if the merge source is a child of this node.
+				sourceIsChild := false
+				for _, sibling := range allChildren {
+					if sibling.Value.id.Equal(child.Value.MergedFrom) {
+						sourceIsChild = true
+						break
 					}
 				}
-				break
+				if sourceIsChild {
+					leftChildren = append(leftChildren, child)
+					continue
+				}
 			}
 		}
-		if moveToLeft {
-			leftChildren = append(leftChildren, child)
-		} else {
-			actualRight = append(actualRight, child)
-		}
+		actualRight = append(actualRight, child)
 	}
 
 	if err := n.Index.SetChildren(leftChildren); err != nil {
@@ -550,6 +553,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.InsNextID = n.InsNextID
 	clone.mergedInto = n.mergedInto
 	clone.MergedFrom = n.MergedFrom
+	clone.MergedAt = n.MergedAt
 
 	if n.IsText() {
 		return clone, nil
@@ -683,9 +687,11 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 
 // rebuildMergeState reconstructs the mergedInto cache on source
 // parents from the persisted MergedFrom field on moved children.
-// Called after NodeMapByID is populated. Other merge-related state
-// (the list of moved children, the merge ticket) is derived on
-// demand at use sites via MergedFrom plus the live tree structure.
+// Called after NodeMapByID is populated. The merge ticket is read
+// from the child's persisted MergedAt field; for snapshots written
+// before MergedAt was added to the proto, it falls back to the
+// source's removedAt (an approximation that may be wrong if the
+// source was later overwritten by a concurrent delete).
 func (t *Tree) rebuildMergeState() {
 	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
 		child := node.Value
@@ -694,11 +700,21 @@ func (t *Tree) rebuildMergeState() {
 		}
 
 		src := t.findFloorNode(child.MergedFrom)
-		if src == nil || src.mergedInto != nil {
+		if src == nil {
 			return
 		}
 
-		src.mergedInto = node.Parent.Value.id
+		// Backwards compatibility: older snapshots have MergedFrom
+		// without MergedAt. Fall back to src.removedAt — imperfect
+		// when a later tombstone overwrote it, but this is the best
+		// we can do without the persisted merge ticket.
+		if child.MergedAt == nil && src.removedAt != nil {
+			child.MergedAt = src.removedAt
+		}
+
+		if src.mergedInto == nil {
+			src.mergedInto = node.Parent.Value.id
+		}
 	})
 }
 
@@ -1060,9 +1076,12 @@ func (t *Tree) Edit(
 }
 
 // mergeNodes moves children to fromParent and sets forwarding pointers
-// on merge-source nodes. Only MergedFrom (on the moved child) and
-// mergedInto (on the source parent) are written here; derivatives are
-// reconstructed at use time or via rebuildMergeState on snapshot load.
+// on merge-source nodes. On each moved child it records MergedFrom
+// (the source parent's ID) and MergedAt (the merge ticket) — both
+// persisted in the snapshot encoding. MergedAt must be captured here
+// because the source's removedAt is not immutable (later LWW tombstones
+// overwrite it). On each merge-source parent it sets mergedInto as a
+// runtime cache used by FindTreeNodesWithSplitText.
 func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
@@ -1071,10 +1090,13 @@ func (t *Tree) mergeNodes(
 ) error {
 	for _, node := range toBeMovedToFromParents {
 		if node.removedAt == nil {
-			// Record source parent on the moved child; this is the
-			// single persisted witness of the merge.
+			// Record source parent and merge ticket on the moved child.
+			// Both fields are persisted; MergedAt must be stored
+			// explicitly because source.removedAt can be overwritten
+			// by later concurrent deletes (LWW).
 			if node.Index.Parent != nil {
 				node.MergedFrom = node.Index.Parent.Value.id
+				node.MergedAt = editedAt
 			}
 			// Detach from old parent to prevent ghost references.
 			if node.Index.Parent != nil {

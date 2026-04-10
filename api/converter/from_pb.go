@@ -790,6 +790,13 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		}
 	}
 
+	if pbNode.GetMergedAt() != nil {
+		node.MergedAt, err = fromTimeTicket(pbNode.GetMergedAt())
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 	if err != nil {
 		return nil, err

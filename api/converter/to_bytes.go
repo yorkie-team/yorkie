@@ -335,6 +335,10 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 		pbNode.MergedFrom = toTreeNodeID(treeNode.MergedFrom)
 	}
 
+	if treeNode.MergedAt != nil {
+		pbNode.MergedAt = ToTimeTicket(treeNode.MergedAt)
+	}
+
 	return pbNode
 }
 
