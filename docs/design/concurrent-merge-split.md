@@ -163,9 +163,12 @@ different parent.
 
 **Location**: `CRDTTree.Edit` Step 04 (merge), `TreeNode` struct
 
-Add runtime-only `mergedInto *TreeNodeID` and `mergedChildIDs []*TreeNodeID`
-fields to `TreeNode`. No protobuf change — each replica computes these locally
-when executing the merge operation.
+Add `mergedInto *TreeNodeID` and `mergedChildIDs []*TreeNodeID` fields to
+`TreeNode`. These are runtime caches: a replica that runs the merge
+operation locally sets them during Step 04. A replica that loads the
+document from a snapshot reconstructs them via
+`Tree.rebuildMergeState` from the persisted `MergedFrom` field (see
+Fix 8). Only `MergedFrom` crosses the wire.
 
 When merge moves children from a source to `fromParent`:
 1. Record each moved child's ID on its **actual source parent** only
@@ -232,9 +235,22 @@ operate concurrently, `SplitElement` may move merge-moved children to the
 split sibling, causing divergence. The fix anchors merge-moved children in
 the merge destination so `SplitElement` does not relocate them.
 
-Add runtime-only `mergedFrom *TreeNodeID` field to `TreeNode`. When merge
-moves a child from its source parent to `fromParent`:
-1. Set `child.mergedFrom = sourceParent.id` before detach and append.
+Add `MergedFrom *TreeNodeID` field to `TreeNode`. This is the **only**
+merge-related field that is persisted in the snapshot encoding
+(`TreeNode.merged_from` in `resources.proto`). When merge moves a child
+from its source parent to `fromParent`:
+1. Set `child.MergedFrom = sourceParent.id` before detach and append.
+
+On snapshot load, `Tree.rebuildMergeState` walks the tree and uses
+`MergedFrom` to rebuild the derived fields on each source parent:
+- `mergedAt = source.removedAt` (the merge tombstoned the source in the
+  same operation, so the tickets coincide).
+- `mergedInto = target.id` (current parent of the moved child).
+- `mergedChildIDs = [all siblings with MergedFrom == source.id]`.
+
+This is the minimum wire state sufficient for Fixes 3/4/5/8 to apply
+on replicas that load from a snapshot between a remote merge and a
+concurrent op.
 
 In `SplitElement`, when partitioning children into left/right:
 1. Children in the right partition whose `mergedFrom` is set are kept in the
@@ -334,10 +350,10 @@ from Go's `PaddedLength()` usage for visible length.
 |----------|--------|
 | Fix implicit move instead of explicit Move operation | All bugs require the same fixes regardless. Move adds protocol complexity with no additional convergence benefit |
 | Element-only cascade for Fix 1 | Text splits use same-CreatedAt offset-based IDs that findFloorNode already resolves |
-| Runtime-only mergedInto/mergedChildIDs | Keeps protobuf unchanged. Each replica computes locally during merge execution |
+| Persist only `MergedFrom` in proto | `mergedInto`, `mergedChildIDs`, `mergedAt` are fully derivable from `MergedFrom` plus the loaded tree. Keeps the wire format minimal while still enabling convergence after snapshot roundtrip |
 | Position-level fix for split siblings (Fix 7) | collectBetween-level fix proved infeasible — cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) |
 | No undo/redo in scope | Consistent with undo-redo.md Phase 2 deferral |
-| Runtime-only `mergedFrom` on child nodes | Same pattern as `mergedInto`/`mergedChildIDs`. No protobuf change needed |
+| `MergedFrom` persisted on child nodes | The moved child is the only durable witness of the merge after snapshot roundtrip (source parent's linkage is otherwise lost once tombstoned). Single optional proto field; backwards-compatible |
 | Skip in SplitElement rather than post-reconciliation | Filtering during partition is simpler and preserves child ordering naturally |
 | VV check in collectBetween for Fix 9 | Same pattern as other fixes. Cleanly distinguishes intentional merge (editor knew the element) from accidental boundary crossing (concurrent split) |
 | Fix split position resolution instead of merge skip (Fix 9 alt) | Changing offset semantics in FindTreeNodesWithSplitText affects all text operations. collectBetween-level fix is more isolated |
@@ -351,7 +367,7 @@ All 63 convergence cases now pass. No remaining convergence issues.
 | Alternative | Why not |
 |-------------|---------|
 | Explicit `TreeMove` CRDT operation | Same fixes needed regardless. Adds protocol complexity with no additional convergence benefit |
-| `mergedInto` as protobuf field | Runtime-only field suffices. No serialization needed since each replica computes it locally |
+| `mergedInto`/`mergedChildIDs` as protobuf fields | Derivable from `MergedFrom` + tree structure at load time. Adding them would duplicate information already implicit in the loaded children |
 | Range-based Move (move all children after boundary) | Does not commute with concurrent inserts — divergence when applied in different order |
 | Fix only at JS SDK level | Does not fix CRDT layer bugs. Go concurrency tests would still fail |
 | Parent creation guard for split text nodes | Cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) at collectBetween level |

@@ -331,6 +331,10 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 		pbNode.InsNextId = toTreeNodeID(treeNode.InsNextID)
 	}
 
+	if treeNode.MergedFrom != nil {
+		pbNode.MergedFrom = toTreeNodeID(treeNode.MergedFrom)
+	}
+
 	return pbNode
 }
 

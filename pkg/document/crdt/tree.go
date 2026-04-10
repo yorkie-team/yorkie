@@ -160,14 +160,14 @@ type TreeNode struct {
 	// and to find the insertion boundary for concurrent inserts.
 	mergedChildIDs []*TreeNodeID
 
-	// mergedFrom records the source parent's ID when this node was moved
+	// MergedFrom records the source parent's ID when this node was moved
 	// by a merge operation. Used by SplitElement to skip merge-moved
 	// children, preventing divergence when split and merge operate
 	// concurrently on the same region.
-	mergedFrom *TreeNodeID
+	MergedFrom *TreeNodeID
 
 	// mergedAt records when the merge operation occurred. Used together
-	// with mergedFrom to determine concurrency: the veto only applies
+	// with MergedFrom to determine concurrency: the veto only applies
 	// when the editor's version vector does not cover this ticket.
 	mergedAt *time.Ticket
 }
@@ -364,7 +364,7 @@ func (n *TreeNode) SplitText(
 		Offset:    offset + absOffset,
 	}, n.Type(), nil, string(rightRune))
 	rightNode.removedAt = n.removedAt
-	rightNode.mergedFrom = n.mergedFrom
+	rightNode.MergedFrom = n.MergedFrom
 	rightNode.mergedAt = n.mergedAt
 
 	if err := n.Index.Parent.InsertAfterInternal(
@@ -421,14 +421,14 @@ func (n *TreeNode) SplitElement(
 	// should flow naturally to the split (right) node.
 	var actualRight []*index.Node[*TreeNode]
 	for _, child := range rightChildren {
-		if child.Value.mergedFrom != nil && child.Value.mergedAt != nil &&
+		if child.Value.MergedFrom != nil && child.Value.mergedAt != nil &&
 			len(versionVector) > 0 {
 			actorID := child.Value.mergedAt.ActorID()
 			if l, ok := versionVector.Get(actorID); !ok || l < child.Value.mergedAt.Lamport() {
 				// Check if the merge source is a child of this node.
 				sourceIsChild := false
 				for _, sibling := range allChildren {
-					if sibling.Value.id.Equal(child.Value.mergedFrom) {
+					if sibling.Value.id.Equal(child.Value.MergedFrom) {
 						sourceIsChild = true
 						break
 					}
@@ -551,7 +551,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	clone.InsNextID = n.InsNextID
 	clone.mergedInto = n.mergedInto
 	clone.mergedChildIDs = n.mergedChildIDs
-	clone.mergedFrom = n.mergedFrom
+	clone.MergedFrom = n.MergedFrom
 	clone.mergedAt = n.mergedAt
 
 	if n.IsText() {
@@ -673,7 +673,53 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 		tree.NodeMapByID.Put(node.Value.id, node.Value)
 	})
 
+	// Rebuild runtime merge state from the persisted MergedFrom field.
+	// MergedFrom is the only merge-related field written to the snapshot;
+	// mergedInto, mergedChildIDs, and mergedAt are derived here so that a
+	// replica loaded from a snapshot can still handle concurrent ops that
+	// target merged-away parents (Fix 3 redirect, Fix 5 propagation,
+	// Fix 8 split skip).
+	tree.rebuildMergeState()
+
 	return tree
+}
+
+// rebuildMergeState reconstructs the runtime-only merge fields
+// (mergedInto, mergedChildIDs, mergedAt) on source parents from the
+// persisted MergedFrom field on moved children. Called after
+// NodeMapByID is populated.
+func (t *Tree) rebuildMergeState() {
+	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], _ int) {
+		child := node.Value
+		if child.MergedFrom == nil || node.Parent == nil {
+			return
+		}
+
+		src := t.findFloorNode(child.MergedFrom)
+		if src == nil {
+			return
+		}
+
+		// The merge tombstoned the source in the same operation, so
+		// its removedAt is the merge ticket.
+		child.mergedAt = src.removedAt
+
+		target := node.Parent.Value
+		// Set mergedInto once per source on first encounter.
+		if src.mergedInto == nil {
+			src.mergedInto = target.id
+		}
+
+		// mergedChildIDs collects every sibling moved from the same
+		// source, in child order. Build once per source.
+		if len(src.mergedChildIDs) == 0 {
+			for _, sib := range node.Parent.Children(true) {
+				if sib.Value.MergedFrom != nil && sib.Value.MergedFrom.Equal(src.id) {
+					src.mergedChildIDs = append(src.mergedChildIDs, sib.Value.id)
+				}
+			}
+		}
+	})
 }
 
 // Marshal returns the JSON encoding of this Tree.
@@ -1045,7 +1091,7 @@ func (t *Tree) mergeNodes(
 		if node.removedAt == nil {
 			// Record source parent for split-skip check (Fix 8).
 			if node.Index.Parent != nil {
-				node.mergedFrom = node.Index.Parent.Value.id
+				node.MergedFrom = node.Index.Parent.Value.id
 				node.mergedAt = editedAt
 			}
 			// Record child ID on its actual source parent only.

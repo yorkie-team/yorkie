@@ -254,6 +254,13 @@ message TreeNode {
   TreeNodeID ins_next_id = 6;
   int32 depth = 7;
   map<string, NodeAttr> attributes = 8;
+  // merged_from is set when this node was moved to a new parent by a
+  // concurrent merge. It points to the source parent's ID, and is the
+  // single persisted witness of the merge: all other merge-related
+  // fields on TreeNode (mergedInto, mergedChildIDs, mergedAt) are
+  // rebuilt from it at load time. See
+  // docs/design/concurrent-merge-split.md for details.
+  TreeNodeID merged_from = 9;
 }
 
 message TreeNodes {

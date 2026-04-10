@@ -3592,6 +3592,18 @@ components:
           description: ""
           title: ins_prev_id
           type: object
+        mergedFrom:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: |-
+            merged_from is set when this node was moved to a new parent by a
+             concurrent merge. It points to the source parent's ID, and is the
+             single persisted witness of the merge: all other merge-related
+             fields on TreeNode (mergedInto, mergedChildIDs, mergedAt) are
+             rebuilt from it at load time. See
+             docs/design/concurrent-merge-split.md for details.
+          title: merged_from
+          type: object
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
