@@ -377,7 +377,91 @@ from Go's `PaddedLength()` usage for visible length.
 
 ## Remaining Issues
 
-All 63 convergence cases now pass. No remaining convergence issues.
+### Hand-crafted integration suite: 63/63 passing
+
+All 63 hand-crafted convergence cases in `test/integration/tree_test.go`
+pass. These are the scenarios Fix 1–10 were designed against.
+
+### Property-based suite: 1528/1597 passing, 69 silent divergences
+
+`test/complex/tree_concurrency_test.go` enumerates operation combinations
+over `TestTreeConcurrency{EditEdit, SplitSplit, SplitEdit, StyleStyle,
+EditStyle}`. When two clients diverge it calls `t.Skip(...)` instead of
+`t.Fail`, so CI stays green but the divergences are still observable in
+verbose output.
+
+Result at `d7154c27` (`-tags complex`):
+
+| Suite | Pass | Skip (divergence) | Fail |
+|---|---:|---:|---:|
+| `TestTreeConcurrencyEditEdit` | 901 | 0 | 0 |
+| `TestTreeConcurrencyStyleStyle` | 145 | 0 | 0 |
+| `TestTreeConcurrencyEditStyle` | 85 | 0 | 0 |
+| `TestTreeConcurrencySplitSplit` | 275 | **46** | 0 |
+| `TestTreeConcurrencySplitEdit` | 122 | **23** | 0 |
+| **Total** | **1528** | **69** | **0** |
+
+The 69 divergences reduce to **two independent root causes**.
+
+#### Root cause A: `splitLevel ≥ 2` (multi-level split)
+
+63 of the 69 divergences (91%) involve at least one operation with
+`splitLevel = 2`.
+
+`SplitSplit` cross-tabulated by the split level of each client:
+
+```text
+         op2=L1  op2=L2
+op1=L1      0      16
+op1=L2     18      12
+```
+
+Pure level-1 × level-1 concurrent splits fully converge. Every
+`SplitSplit` divergence has at least one `splitLevel = 2` operation.
+
+`SplitEdit` distribution:
+
+| split level | divergent cases |
+|---|---|
+| `splitLevel = 1` | 6 (all TreeStyle — see root cause B) |
+| `splitLevel = 2` | 17 (delete 2, replace 2, insert 3, style 5, remove-style 5) |
+
+Fix 1–10 only reason about single-level splits. `splitLevel = 2` is
+implemented by recursively splitting the parent after the child split,
+but the recursive path does not propagate Fix 7 (split sibling forwarding
+in `FindTreeNodesWithSplitText`) or Fix 8 (`MergedFrom` filter in
+`SplitElement`) to the newly created ancestor split nodes.
+
+#### Root cause B: TreeStyle does not apply Fix 7 to split siblings
+
+6 divergences in `SplitEdit` are pure `splitLevel = 1` × TreeStyle:
+
+```text
+A_contains_B(split-1, style | remove-style)
+right_node(text)(split-1, style | remove-style)
+right_node(element)(split-1, style | remove-style)
+```
+
+TreeEdit at `splitLevel = 1` is fully clean — the regressions are
+exclusive to the style path. TreeStyle's range traversal does not go
+through the Fix 7 branch in `FindTreeNodesWithSplitText` that skips
+unknown split siblings, so style ranges over a concurrently split region
+apply on a different node set on each replica.
+
+#### Scope observations
+
+- Zero divergences involve the `merge` operation. The merge fixes from
+  PR #1722–#1727 and the snapshot fix from PR #1729 are not implicated
+  in any skipped case in this suite.
+- `EditEdit` (the largest pre-#1722 divergence class) is 901/901 clean.
+  No regressions from the recent merge/split work.
+- The two root causes are independent: fixing multi-level split would
+  clear 63 cases but leave the 6 `splitLevel = 1` TreeStyle cases; the
+  TreeStyle fix is small and well-scoped, likely a direct port of Fix 7
+  into TreeStyle's traversal path.
+
+These are tracked as follow-up work, not as regressions of the merge
+runtime-state fix.
 
 ## Alternatives Considered
 
