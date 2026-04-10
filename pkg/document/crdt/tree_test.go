@@ -799,6 +799,57 @@ func TestTreeMerge(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>af</p></root>", tree.ToXML())
 	})
+
+	// Regression for the MergedAt immutability invariant: the merge
+	// ticket recorded on a moved child must reflect the merge operation
+	// itself, not the source parent's removedAt (which is mutable under
+	// LWW and can be overwritten by a later concurrent tombstone).
+	t.Run("MergedAt is captured at merge time, independent of source removedAt", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
+
+		// Build <root><p>a</p><p>b</p></root>.
+		_, _, err := tree.EditT(0, 0,
+			[]*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)},
+			0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(1, 1,
+			[]*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "a")},
+			0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(3, 3,
+			[]*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)},
+			0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		_, _, err = tree.EditT(4, 4,
+			[]*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "b")},
+			0, helper.TimeT(ctx), issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", tree.ToXML())
+
+		// Capture the merge ticket explicitly so we can assert on it later.
+		mergeTicket := helper.TimeT(ctx)
+		_, _, err = tree.EditT(2, 4, nil, 0, mergeTicket, issueTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>ab</p></root>", tree.ToXML())
+
+		// Locate the moved child (text node "b") now living under the
+		// first <p>. It carries MergedFrom pointing at the tombstoned
+		// second <p>, and MergedAt must equal the merge ticket.
+		var moved *crdt.TreeNode
+		for _, child := range tree.Root().Children(true) {
+			for _, grand := range child.Children(true) {
+				if grand.MergedFrom != nil {
+					moved = grand
+					break
+				}
+			}
+		}
+		assert.NotNil(t, moved, "moved child with MergedFrom should exist")
+		assert.NotNil(t, moved.MergedAt, "MergedAt should be set at merge time")
+		assert.True(t, moved.MergedAt.Compare(mergeTicket) == 0,
+			"MergedAt should equal the exact merge ticket (immutable witness)")
+	})
 }
 
 func issueTicket(change *change.Context) func() *time.Ticket {

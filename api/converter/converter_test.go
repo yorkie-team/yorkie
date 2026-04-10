@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -298,6 +299,184 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeLen(), doc.Root().GetTree("t").NodeLen())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).ToXML(), doc.Root().GetTree("t").ToXML())
+	})
+
+	// Regression test for the snapshot-roundtrip convergence bug
+	// previously fixed by persisting TreeNode.MergedFrom and
+	// reconstructing mergedInto / mergedChildIDs / mergedAt at load
+	// time. Mirrors "contained-merge-and-insert":
+	//   - docA runs a merge, then serializes via SnapshotToBytes.
+	//   - docB loads the snapshot and reconstructs merge state.
+	//   - docC, unaware of the merge, inserts 'c' inside original p[b].
+	//   - Both docA and docB must converge to <p>acb</p>.
+	t.Run("tree merge-and-insert convergence across snapshot", func(t *testing.T) {
+		actorA, err := time.ActorIDFromHex("000000000000000000000001")
+		assert.NoError(t, err)
+		actorB, err := time.ActorIDFromHex("000000000000000000000002")
+		assert.NoError(t, err)
+		actorC, err := time.ActorIDFromHex("000000000000000000000003")
+		assert.NoError(t, err)
+
+		// 01. docA creates the tree with two paragraphs.
+		docA := document.New(helper.TestKey(t))
+		docA.SetActor(actorA)
+		assert.NoError(t, docA.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}},
+			})
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", docA.Root().GetTree("t").ToXML())
+
+		// 02. docC starts from the pre-merge state of docA.
+		docC := document.New(helper.TestKey(t))
+		docC.SetActor(actorC)
+		initialPack := docA.CreateChangePack()
+		initialPack.VersionVector.Set(docC.ActorID(), docC.VersionVector().VersionOf(docC.ActorID()))
+		assert.NoError(t, docC.ApplyChangePack(initialPack))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", docC.Root().GetTree("t").ToXML())
+
+		// 03. docA merges p[a] and p[b] -> <p>ab</p>.
+		assert.NoError(t, docA.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p></root>", docA.Root().GetTree("t").ToXML())
+
+		// 04. docC (unaware of docA's merge) inserts 'c' at position 4
+		//     inside the original p[b]. The CRDT coordinates of this
+		//     insert point at a node that docA has tombstoned.
+		assert.NoError(t, docC.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 4, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>cb</p></root>", docC.Root().GetTree("t").ToXML())
+
+		// 05. Serialize docA's post-merge state via SnapshotToBytes -
+		//     this is exactly what the server stores as a snapshot.
+		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences())
+		assert.NoError(t, err)
+
+		// 06. docB loads the snapshot. mergedInto/mergedChildIDs/mergedAt
+		//     are reconstructed from the persisted MergedFrom field in
+		//     crdt.NewTree's rebuildMergeState pass.
+		docB := document.New(helper.TestKey(t))
+		docB.SetActor(actorB)
+		snapshotPack := change.NewPack(
+			helper.TestKey(t),
+			change.InitialCheckpoint,
+			nil,
+			docA.VersionVector().DeepCopy(),
+			snapshot,
+		)
+		assert.NoError(t, docB.ApplyChangePack(snapshotPack))
+		assert.Equal(t, "<root><p>ab</p></root>", docB.Root().GetTree("t").ToXML())
+
+		// 07. Apply docC's concurrent insert to both docA and docB.
+		//     Create fresh packs so each carries a VV scoped to its
+		//     target's actor clock (mimicking a server relay).
+		packForA := docC.CreateChangePack()
+		packForA.VersionVector.Set(docA.ActorID(), docA.VersionVector().VersionOf(docA.ActorID()))
+		assert.NoError(t, docA.ApplyChangePack(packForA))
+
+		packForB := docC.CreateChangePack()
+		packForB.VersionVector.Set(docB.ActorID(), docB.VersionVector().VersionOf(docB.ActorID()))
+		assert.NoError(t, docB.ApplyChangePack(packForB))
+
+		assert.Equal(t,
+			docA.Root().GetTree("t").ToXML(),
+			docB.Root().GetTree("t").ToXML(),
+			"docB (loaded from snapshot) must converge to the same state as docA",
+		)
+		assert.Equal(t, "<root><p>acb</p></root>", docA.Root().GetTree("t").ToXML())
+	})
+
+	// Sibling regression test covering the merge-merge overlap path
+	// (Fix 4 — mergedInto forwarding) across a snapshot roundtrip.
+	t.Run("tree merge-and-merge convergence across snapshot", func(t *testing.T) {
+		actorA, err := time.ActorIDFromHex("000000000000000000000011")
+		assert.NoError(t, err)
+		actorB, err := time.ActorIDFromHex("000000000000000000000012")
+		assert.NoError(t, err)
+		actorC, err := time.ActorIDFromHex("000000000000000000000013")
+		assert.NoError(t, err)
+
+		// 01. Three paragraphs.
+		docA := document.New(helper.TestKey(t))
+		docA.SetActor(actorA)
+		assert.NoError(t, docA.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+
+		// 02. docC starts from pre-merge state.
+		docC := document.New(helper.TestKey(t))
+		docC.SetActor(actorC)
+		initialPack := docA.CreateChangePack()
+		initialPack.VersionVector.Set(docC.ActorID(), docC.VersionVector().VersionOf(docC.ActorID()))
+		assert.NoError(t, docC.ApplyChangePack(initialPack))
+
+		// 03. docA merges p[a]+p[b]; docC (concurrently) merges p[b]+p[c].
+		assert.NoError(t, docA.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", docA.Root().GetTree("t").ToXML())
+		assert.NoError(t, docC.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 7, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", docC.Root().GetTree("t").ToXML())
+
+		// 04. Snapshot docA, load into docB.
+		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences())
+		assert.NoError(t, err)
+		docB := document.New(helper.TestKey(t))
+		docB.SetActor(actorB)
+		snapshotPack := change.NewPack(
+			helper.TestKey(t),
+			change.InitialCheckpoint,
+			nil,
+			docA.VersionVector().DeepCopy(),
+			snapshot,
+		)
+		assert.NoError(t, docB.ApplyChangePack(snapshotPack))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", docB.Root().GetTree("t").ToXML())
+
+		// 05. Apply docC's concurrent merge to both docA and docB.
+		packForA := docC.CreateChangePack()
+		packForA.VersionVector.Set(docA.ActorID(), docA.VersionVector().VersionOf(docA.ActorID()))
+		assert.NoError(t, docA.ApplyChangePack(packForA))
+
+		packForB := docC.CreateChangePack()
+		packForB.VersionVector.Set(docB.ActorID(), docB.VersionVector().VersionOf(docB.ActorID()))
+		assert.NoError(t, docB.ApplyChangePack(packForB))
+
+		assert.Equal(t,
+			docA.Root().GetTree("t").ToXML(),
+			docB.Root().GetTree("t").ToXML(),
+			"docB (loaded from snapshot) must converge to the same state as docA",
+		)
+		assert.Equal(t, "<root><p>abc</p></root>", docA.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("object converting to bytes with gc elements test", func(t *testing.T) {

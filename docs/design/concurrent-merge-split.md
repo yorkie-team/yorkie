@@ -163,14 +163,18 @@ different parent.
 
 **Location**: `CRDTTree.Edit` Step 04 (merge), `TreeNode` struct
 
-Add runtime-only `mergedInto *TreeNodeID` and `mergedChildIDs []*TreeNodeID`
-fields to `TreeNode`. No protobuf change — each replica computes these locally
-when executing the merge operation.
+Add a runtime `mergedInto *TreeNodeID` cache on the source parent. A
+replica that runs the merge operation locally sets it during Step 04.
+A replica that loads the document from a snapshot rebuilds it via
+`Tree.rebuildMergeState` from the persisted `MergedFrom` field on the
+moved children (see Fix 8). `mergedInto` is a cache only — it enables
+a fast nil-check on the hot path (`FindTreeNodesWithSplitText`); the
+alternative of scanning `NodeMapByID` on every position resolution
+would be too expensive.
 
 When merge moves children from a source to `fromParent`:
-1. Record each moved child's ID on its **actual source parent** only
-   (not all `toBeMergedNodes`), to prevent cross-contamination in
-   multi-boundary merges.
+1. Set `child.MergedFrom = sourceParent.id` on the moved child (the
+   single persisted witness).
 2. `DetachChild` from old parent (correct lengths, prevent ghost references).
 3. `Append` to `fromParent`.
 4. Set `source.mergedInto = fromParent.id`.
@@ -178,18 +182,25 @@ When merge moves children from a source to `fromParent`:
 This decouples DetachChild from redirect: children are cleanly detached,
 and the merge destination is still discoverable via `mergedInto`.
 
-### Fix 5: Delete propagation via mergedChildIDs
+### Fix 5: Delete propagation to merge-moved children
 
 **Location**: `CRDTTree.Edit` Step 04-1 (after merge)
 
 When a merge-source node is fully deleted (in `toBeRemoveds` but not in
-`toBeMergedNodes`), its former children in the merge target should also be
-deleted. Follow `mergedChildIDs` to find and tombstone them, including their
-full subtree (descendants of moved element nodes).
+`toBeMergedNodes`), its former children in the merge target should also
+be deleted. The list of moved children is recomputed on the fly from
+the merge target's children filtered by `MergedFrom`:
 
-Skip propagation when `mergedInto` points to `fromParent` — this means a
-prior local merge already moved the children, and the current operation is a
-concurrent merge (not a delete).
+```text
+mergeTarget = findFloorNode(source.mergedInto)
+moved = [c for c in mergeTarget.Children(true) if c.MergedFrom == source.id]
+```
+
+The moved children (and their full subtrees) are tombstoned.
+
+Skip propagation when `mergedInto` points to `fromParent` — this means
+a prior local merge already moved the children, and the current
+operation is a concurrent merge (not a delete).
 
 ### Fix 6: Inverted range no-op
 
@@ -232,13 +243,33 @@ operate concurrently, `SplitElement` may move merge-moved children to the
 split sibling, causing divergence. The fix anchors merge-moved children in
 the merge destination so `SplitElement` does not relocate them.
 
-Add runtime-only `mergedFrom *TreeNodeID` field to `TreeNode`. When merge
-moves a child from its source parent to `fromParent`:
-1. Set `child.mergedFrom = sourceParent.id` before detach and append.
+Add two persisted fields on moved children: `MergedFrom *TreeNodeID`
+(the source parent ID) and `MergedAt *time.Ticket` (the immutable
+merge ticket). Both are written to the snapshot encoding
+(`TreeNode.merged_from` and `TreeNode.merged_at` in
+`resources.proto`). When merge moves a child from its source parent
+to `fromParent`:
+1. Set `child.MergedFrom = sourceParent.id`.
+2. Set `child.MergedAt = editedAt`.
+3. Detach and append.
+
+`MergedAt` must be captured explicitly at merge time rather than read
+from `source.removedAt` at use time: the source's `removedAt` is
+mutated by LWW overwrite when a later concurrent tombstone targets the
+same node, which would corrupt the merge-time causal boundary.
+
+On snapshot load, `Tree.rebuildMergeState` walks the tree and uses
+`MergedFrom` to set `source.mergedInto = target.id` (the moved
+child's current parent). For backwards compatibility with snapshots
+written before `MergedAt` was added, it falls back to
+`source.removedAt` — approximate but the best available without the
+persisted ticket.
 
 In `SplitElement`, when partitioning children into left/right:
-1. Children in the right partition whose `mergedFrom` is set are kept in the
-   original node (appended to the left partition) instead of moving to the
+1. A child in the right partition whose `MergedFrom` is set is kept
+   in the original node when (a) the merge source was a child of the
+   node being split and (b) the editor's version vector does not
+   cover `child.MergedAt`. Everything else flows naturally to the
    split sibling.
 
 **Convergence proof** (main scenario):
@@ -334,10 +365,12 @@ from Go's `PaddedLength()` usage for visible length.
 |----------|--------|
 | Fix implicit move instead of explicit Move operation | All bugs require the same fixes regardless. Move adds protocol complexity with no additional convergence benefit |
 | Element-only cascade for Fix 1 | Text splits use same-CreatedAt offset-based IDs that findFloorNode already resolves |
-| Runtime-only mergedInto/mergedChildIDs | Keeps protobuf unchanged. Each replica computes locally during merge execution |
+| Persist `MergedFrom` + `MergedAt` in proto | `MergedFrom` is the witness of the merge relationship; `MergedAt` is the immutable merge ticket that Fix 8 needs. The source's `removedAt` can be overwritten by later LWW tombstones, so it cannot substitute for `MergedAt`. Other merge state (`mergedInto`, the list of moved children) is still derived at load time or on demand |
+| Keep `mergedInto` as a runtime cache | Needed for a fast nil-check on the hot path (`FindTreeNodesWithSplitText`). Rebuilding it lazily per call would require scanning `NodeMapByID` every position resolution |
+| Derive moved-children list on demand | `target.Children(true) \| where MergedFrom == source.id` gives the list. Both call sites (`propagateMergeDeletes`, the redirect in `FindTreeNodesWithSplitText`) already have the target in hand, so the cost is a short filter. Avoids carrying a redundant slice on every TreeNode |
 | Position-level fix for split siblings (Fix 7) | collectBetween-level fix proved infeasible — cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) |
 | No undo/redo in scope | Consistent with undo-redo.md Phase 2 deferral |
-| Runtime-only `mergedFrom` on child nodes | Same pattern as `mergedInto`/`mergedChildIDs`. No protobuf change needed |
+| `MergedFrom` persisted on child nodes | The moved child is the only durable witness of the merge after snapshot roundtrip (source parent's linkage is otherwise lost once tombstoned). Single optional proto field; backwards-compatible |
 | Skip in SplitElement rather than post-reconciliation | Filtering during partition is simpler and preserves child ordering naturally |
 | VV check in collectBetween for Fix 9 | Same pattern as other fixes. Cleanly distinguishes intentional merge (editor knew the element) from accidental boundary crossing (concurrent split) |
 | Fix split position resolution instead of merge skip (Fix 9 alt) | Changing offset semantics in FindTreeNodesWithSplitText affects all text operations. collectBetween-level fix is more isolated |
@@ -351,7 +384,9 @@ All 63 convergence cases now pass. No remaining convergence issues.
 | Alternative | Why not |
 |-------------|---------|
 | Explicit `TreeMove` CRDT operation | Same fixes needed regardless. Adds protocol complexity with no additional convergence benefit |
-| `mergedInto` as protobuf field | Runtime-only field suffices. No serialization needed since each replica computes it locally |
+| `mergedInto`/`mergedChildIDs` as protobuf fields | Derivable from `MergedFrom` + tree structure at load time. Adding them would duplicate information already implicit in the loaded children |
+| Stored `mergedChildIDs` list on `TreeNode` | Recomputed on demand via `target.Children(true) \| where MergedFrom == source.id`. The call sites (`propagateMergeDeletes`, the redirect branch in `FindTreeNodesWithSplitText`) are not on the hot path, so storing the list would be needless state |
+| Deriving `MergedAt` from `source.removedAt` | Rejected after code review: `source.removedAt` is not immutable — a later concurrent delete can overwrite it via LWW, producing a wrong causal boundary for the SplitElement Fix 8 check. `MergedAt` must be captured explicitly at merge time and persisted alongside `MergedFrom` |
 | Range-based Move (move all children after boundary) | Does not commute with concurrent inserts — divergence when applied in different order |
 | Fix only at JS SDK level | Does not fix CRDT layer bugs. Go concurrency tests would still fail |
 | Parent creation guard for split text nodes | Cannot distinguish contained delete (text should die) from side-by-side delete (text should survive) at collectBetween level |

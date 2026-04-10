@@ -254,6 +254,15 @@ message TreeNode {
   TreeNodeID ins_next_id = 6;
   int32 depth = 7;
   map<string, NodeAttr> attributes = 8;
+  // merged_from is set when this node was moved to a new parent by a
+  // concurrent merge. It points to the source parent's ID.
+  TreeNodeID merged_from = 9;
+  // merged_at records the immutable ticket of the merge operation.
+  // Stored alongside merged_from because the source parent's removed_at
+  // may be overwritten by later LWW tombstones and thus cannot serve as
+  // the merge-time causal boundary for SplitElement. See
+  // docs/design/concurrent-merge-split.md for details.
+  TimeTicket merged_at = 10;
 }
 
 message TreeNodes {
