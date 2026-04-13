@@ -168,7 +168,7 @@ func TestCounterDedup(t *testing.T) {
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
 
-		counter.IncreaseDedup(operand, "user-1") //nolint:errcheck
+		_, _ = counter.IncreaseDedup(operand, "user-1")
 		_, err = counter.IncreaseDedup(operand, "user-1")
 		assert.NoError(t, err)
 		assert.Equal(t, "1", counter.Marshal())
@@ -182,9 +182,9 @@ func TestCounterDedup(t *testing.T) {
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
 
-		counter.IncreaseDedup(operand, "user-1") //nolint:errcheck
-		counter.IncreaseDedup(operand, "user-2") //nolint:errcheck
-		counter.IncreaseDedup(operand, "user-3") //nolint:errcheck
+		_, _ = counter.IncreaseDedup(operand, "user-1")
+		_, _ = counter.IncreaseDedup(operand, "user-2")
+		_, _ = counter.IncreaseDedup(operand, "user-3")
 		assert.Equal(t, "3", counter.Marshal())
 	})
 
@@ -195,8 +195,8 @@ func TestCounterDedup(t *testing.T) {
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.IncreaseDedup(operand, "user-1") //nolint:errcheck
-		counter.IncreaseDedup(operand, "user-2") //nolint:errcheck
+		_, _ = counter.IncreaseDedup(operand, "user-1")
+		_, _ = counter.IncreaseDedup(operand, "user-2")
 
 		copied, err := counter.DeepCopy()
 		assert.NoError(t, err)
@@ -205,7 +205,7 @@ func TestCounterDedup(t *testing.T) {
 		assert.Equal(t, "2", copiedCounter.Marshal())
 
 		// Original and copy are independent
-		counter.IncreaseDedup(operand, "user-3") //nolint:errcheck
+		_, _ = counter.IncreaseDedup(operand, "user-3")
 		assert.Equal(t, "3", counter.Marshal())
 		assert.Equal(t, "2", copiedCounter.Marshal())
 	})
@@ -217,8 +217,8 @@ func TestCounterDedup(t *testing.T) {
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.IncreaseDedup(operand, "user-1") //nolint:errcheck
-		counter.IncreaseDedup(operand, "user-2") //nolint:errcheck
+		_, _ = counter.IncreaseDedup(operand, "user-1")
+		_, _ = counter.IncreaseDedup(operand, "user-2")
 
 		hllBytes := counter.HLLBytes()
 		assert.NotNil(t, hllBytes)
