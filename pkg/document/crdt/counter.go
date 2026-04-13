@@ -57,6 +57,8 @@ type Counter struct {
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
+	isDedup   bool
+	hll       *HLL
 }
 
 // NewCounter creates a new instance of Counter.
@@ -140,6 +142,10 @@ func (p *Counter) Marshal() string {
 // DeepCopy copies itself deeply.
 func (p *Counter) DeepCopy() (Element, error) {
 	counter := *p
+	if p.isDedup && p.hll != nil {
+		counter.hll = NewHLL()
+		counter.hll.Restore(p.hll.Bytes())
+	}
 	return &counter, nil
 }
 
@@ -222,6 +228,66 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 func (p *Counter) IsNumericType() bool {
 	t := p.valueType
 	return t == IntegerCnt || t == LongCnt
+}
+
+// SetDedup enables or disables dedup mode. When enabled, the Counter
+// maintains an internal HLL for duplicate detection.
+func (p *Counter) SetDedup(dedup bool) {
+	p.isDedup = dedup
+	if dedup && p.hll == nil {
+		p.hll = NewHLL()
+	}
+}
+
+// IsDedup returns whether this Counter is in dedup mode.
+func (p *Counter) IsDedup() bool {
+	return p.isDedup
+}
+
+// IncreaseDedup increases the counter only if the actor has not been seen
+// before. Returns the counter and nil error on success.
+func (p *Counter) IncreaseDedup(v *Primitive, actor string) (*Counter, error) {
+	if !p.isDedup || p.hll == nil {
+		return p.Increase(v)
+	}
+
+	if !p.IsNumericType() || !v.IsNumericType() {
+		return nil, ErrUnsupportedType
+	}
+
+	if p.hll.Add(actor) {
+		p.recomputeValue()
+	}
+
+	return p, nil
+}
+
+// HLLBytes returns the serialized HLL registers. Returns nil if not in dedup mode.
+func (p *Counter) HLLBytes() []byte {
+	if p.hll == nil {
+		return nil
+	}
+	return p.hll.Bytes()
+}
+
+// RestoreHLL restores the HLL state from bytes and recomputes the counter value.
+func (p *Counter) RestoreHLL(data []byte) {
+	if p.hll == nil {
+		p.hll = NewHLL()
+	}
+	p.hll.Restore(data)
+	p.recomputeValue()
+}
+
+// recomputeValue sets the counter value from the HLL count.
+func (p *Counter) recomputeValue() {
+	count := p.hll.Count()
+	switch p.valueType {
+	case IntegerCnt:
+		p.value = int32(count)
+	case LongCnt:
+		p.value = int64(count)
+	}
 }
 
 // castToInt casts numeric type to int32.
