@@ -637,6 +637,12 @@ components:
           description: ""
           title: created_at
           type: object
+        hllRegisters:
+          additionalProperties: false
+          description: ""
+          format: byte
+          title: hll_registers
+          type: string
         movedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1145,6 +1151,11 @@ components:
       additionalProperties: false
       description: ""
       properties:
+        actor:
+          additionalProperties: false
+          description: ""
+          title: actor
+          type: string
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -2365,6 +2376,10 @@ components:
         - 12
         - VALUE_TYPE_TREE
         - 13
+        - VALUE_TYPE_INTEGER_DEDUP_CNT
+        - 14
+        - VALUE_TYPE_LONG_DEDUP_CNT
+        - 15
       title: ValueType
       type: string
     yorkie.v1.VersionVector:

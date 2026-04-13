@@ -43,15 +43,17 @@ type CounterType int
 const (
 	IntegerCnt CounterType = iota
 	LongCnt
+	IntegerDedupCnt
+	LongDedupCnt
 )
 
 // CounterValueFromBytes parses the given bytes into value.
 func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, error) {
 	switch counterType {
-	case IntegerCnt:
+	case IntegerCnt, IntegerDedupCnt:
 		val := int32(binary.LittleEndian.Uint32(value))
 		return int(val), nil
-	case LongCnt:
+	case LongCnt, LongDedupCnt:
 		return int64(binary.LittleEndian.Uint64(value)), nil
 	default:
 		return nil, ErrUnsupportedType
@@ -65,33 +67,40 @@ type Counter struct {
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
-	isDedup   bool
 	hll       *HLL
 }
 
 // NewCounter creates a new instance of Counter.
 func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) (*Counter, error) {
 	switch valueType {
-	case IntegerCnt:
+	case IntegerCnt, IntegerDedupCnt:
 		intValue, err := castToInt(value)
 		if err != nil {
 			return nil, err
 		}
-		return &Counter{
-			valueType: IntegerCnt,
+		c := &Counter{
+			valueType: valueType,
 			value:     intValue,
 			createdAt: createdAt,
-		}, nil
-	case LongCnt:
+		}
+		if valueType == IntegerDedupCnt {
+			c.hll = NewHLL()
+		}
+		return c, nil
+	case LongCnt, LongDedupCnt:
 		longValue, err := castToLong(value)
 		if err != nil {
 			return nil, err
 		}
-		return &Counter{
-			valueType: LongCnt,
+		c := &Counter{
+			valueType: valueType,
 			value:     longValue,
 			createdAt: createdAt,
-		}, nil
+		}
+		if valueType == LongDedupCnt {
+			c.hll = NewHLL()
+		}
+		return c, nil
 	default:
 		return nil, ErrUnsupportedType
 	}
@@ -131,12 +140,12 @@ func (p *Counter) MetaSize() int {
 // DataSize returns the data usage of this element.
 func (p *Counter) DataSize() resource.DataSize {
 	size := 0
-	if p.valueType == IntegerCnt {
+	if p.valueType == IntegerCnt || p.valueType == IntegerDedupCnt {
 		size = 4
-	} else if p.valueType == LongCnt {
+	} else if p.valueType == LongCnt || p.valueType == LongDedupCnt {
 		size = 8
 	}
-	if p.isDedup && p.hll != nil {
+	if p.IsDedup() && p.hll != nil {
 		size += len(p.hll.Bytes())
 	}
 	return resource.DataSize{
@@ -153,7 +162,7 @@ func (p *Counter) Marshal() string {
 // DeepCopy copies itself deeply.
 func (p *Counter) DeepCopy() (Element, error) {
 	counter := *p
-	if p.isDedup && p.hll != nil {
+	if p.IsDedup() && p.hll != nil {
 		counter.hll = NewHLL()
 		if err := counter.hll.Restore(p.hll.Bytes()); err != nil {
 			return nil, err
@@ -218,13 +227,13 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 		return nil, ErrUnsupportedType
 	}
 	switch p.valueType {
-	case IntegerCnt:
+	case IntegerCnt, IntegerDedupCnt:
 		intValue, err := castToInt(v.value)
 		if err != nil {
 			return nil, err
 		}
 		p.value = p.value.(int32) + intValue
-	case LongCnt:
+	case LongCnt, LongDedupCnt:
 		longValue, err := castToLong(v.value)
 		if err != nil {
 			return nil, err
@@ -240,27 +249,19 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 // IsNumericType checks for numeric types.
 func (p *Counter) IsNumericType() bool {
 	t := p.valueType
-	return t == IntegerCnt || t == LongCnt
-}
-
-// SetDedup enables or disables dedup mode. When enabled, the Counter
-// maintains an internal HLL for duplicate detection.
-func (p *Counter) SetDedup(dedup bool) {
-	p.isDedup = dedup
-	if dedup && p.hll == nil {
-		p.hll = NewHLL()
-	}
+	return t == IntegerCnt || t == LongCnt ||
+		t == IntegerDedupCnt || t == LongDedupCnt
 }
 
 // IsDedup returns whether this Counter is in dedup mode.
 func (p *Counter) IsDedup() bool {
-	return p.isDedup
+	return p.valueType == IntegerDedupCnt || p.valueType == LongDedupCnt
 }
 
 // IncreaseDedup increases the counter only if the actor has not been seen
 // before. The delta value must be 1. Returns the counter and nil error on success.
 func (p *Counter) IncreaseDedup(v *Primitive, actor string) (*Counter, error) {
-	if !p.isDedup || p.hll == nil {
+	if !p.IsDedup() || p.hll == nil {
 		return p.Increase(v)
 	}
 
@@ -311,9 +312,9 @@ func (p *Counter) RestoreHLL(data []byte) error {
 func (p *Counter) recomputeValue() {
 	count := p.hll.Count()
 	switch p.valueType {
-	case IntegerCnt:
+	case IntegerCnt, IntegerDedupCnt:
 		p.value = int32(count)
-	case LongCnt:
+	case LongCnt, LongDedupCnt:
 		p.value = int64(count)
 	}
 }

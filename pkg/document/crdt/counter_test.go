@@ -140,17 +140,15 @@ func TestCounter(t *testing.T) {
 
 func TestCounterDedup(t *testing.T) {
 	t.Run("create dedup counter", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 		assert.True(t, counter.IsDedup())
 		assert.Equal(t, "0", counter.Marshal())
 	})
 
 	t.Run("dedup increase with new actor", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
@@ -161,9 +159,8 @@ func TestCounterDedup(t *testing.T) {
 	})
 
 	t.Run("dedup increase with duplicate actor is ignored", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
@@ -175,9 +172,8 @@ func TestCounterDedup(t *testing.T) {
 	})
 
 	t.Run("dedup increase with different actors", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
@@ -189,9 +185,8 @@ func TestCounterDedup(t *testing.T) {
 	})
 
 	t.Run("dedup deep copy preserves HLL state", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
@@ -211,9 +206,8 @@ func TestCounterDedup(t *testing.T) {
 	})
 
 	t.Run("HLL bytes round-trip", func(t *testing.T) {
-		counter, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		counter.SetDedup(true)
 
 		operand, err := crdt.NewPrimitive(int32(1), time.InitialTicket)
 		assert.NoError(t, err)
@@ -223,9 +217,8 @@ func TestCounterDedup(t *testing.T) {
 		hllBytes := counter.HLLBytes()
 		assert.NotNil(t, hllBytes)
 
-		restored, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
+		restored, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
-		restored.SetDedup(true)
 		err = restored.RestoreHLL(hllBytes)
 		assert.NoError(t, err)
 		assert.Equal(t, "2", restored.Marshal())

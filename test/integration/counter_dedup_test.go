@@ -44,8 +44,7 @@ func TestCounterDedup(t *testing.T) {
 
 		// c1 creates a dedup counter and increases with "user-1".
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			counter := root.SetNewCounter("uv", crdt.IntegerCnt, 0)
-			counter.Counter.SetDedup(true)
+			counter := root.SetNewCounter("uv", crdt.IntegerDedupCnt, 0)
 			counter.IncreaseDedup(1, "user-1")
 			return nil
 		}, "c1 creates dedup counter and increases with user-1")
@@ -79,8 +78,7 @@ func TestCounterDedup(t *testing.T) {
 
 		// c1 creates a dedup counter and increases with "user-1" and "user-2".
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			counter := root.SetNewCounter("uv", crdt.IntegerCnt, 0)
-			counter.Counter.SetDedup(true)
+			counter := root.SetNewCounter("uv", crdt.IntegerDedupCnt, 0)
 			counter.IncreaseDedup(1, "user-1")
 			counter.IncreaseDedup(1, "user-2")
 			return nil

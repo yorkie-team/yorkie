@@ -199,7 +199,7 @@ message JSONElement {
     TimeTicket created_at = 3;
     TimeTicket moved_at = 4;
     TimeTicket removed_at = 5;
-    bool is_dedup = 6;
+    reserved 6; // was is_dedup, now encoded in ValueType
     bytes hll_registers = 7;
   }
   message Tree {
@@ -439,6 +439,8 @@ enum ValueType {
   VALUE_TYPE_INTEGER_CNT = 11;
   VALUE_TYPE_LONG_CNT = 12;
   VALUE_TYPE_TREE = 13;
+  VALUE_TYPE_INTEGER_DEDUP_CNT = 14;
+  VALUE_TYPE_LONG_DEDUP_CNT = 15;
 }
 
 enum DocEventType {
