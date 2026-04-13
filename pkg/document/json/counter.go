@@ -97,6 +97,51 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	return p
 }
 
+// IncreaseDedup adds an increase operation with dedup. If the actor has
+// already been counted, the increase is ignored.
+func (p *Counter) IncreaseDedup(v interface{}, actor string) *Counter {
+	if !isAllowedOperand(v) {
+		panic("unsupported type")
+	}
+	var primitive *crdt.Primitive
+	var err error
+	ticket := p.context.IssueTimeTicket()
+
+	value, kind := convertAssertableOperand(v)
+	isInt := kind == reflect.Int
+	switch p.ValueType() {
+	case crdt.LongCnt:
+		if isInt {
+			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
+		} else {
+			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
+		}
+	case crdt.IntegerCnt:
+		if isInt {
+			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
+		} else {
+			primitive, err = crdt.NewPrimitive(int32(value.(float64)), ticket)
+		}
+	default:
+		panic("unsupported type")
+	}
+	if err != nil {
+		panic(err)
+	}
+	if _, err := p.Counter.IncreaseDedup(primitive, actor); err != nil {
+		panic(err)
+	}
+
+	p.context.Push(operations.NewIncreaseWithActor(
+		p.CreatedAt(),
+		primitive,
+		ticket,
+		actor,
+	))
+
+	return p
+}
+
 // isAllowedOperand indicates whether
 // the operand of increase is an allowable type.
 func isAllowedOperand(v interface{}) bool {
