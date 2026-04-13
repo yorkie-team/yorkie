@@ -222,18 +222,22 @@ func (p *Counter) Value() interface{} {
 // than MinInt32, Counter's value type can be changed Integer to Long.
 // Because in golang, int can be either int32 or int64.
 // So we need to assert int to int32.
+// Dedup counters must use IncreaseDedup instead.
 func (p *Counter) Increase(v *Primitive) (*Counter, error) {
+	if p.IsDedup() {
+		return nil, ErrDedupRequiresActor
+	}
 	if !p.IsNumericType() || !v.IsNumericType() {
 		return nil, ErrUnsupportedType
 	}
 	switch p.valueType {
-	case IntegerCnt, IntegerDedupCnt:
+	case IntegerCnt:
 		intValue, err := castToInt(v.value)
 		if err != nil {
 			return nil, err
 		}
 		p.value = p.value.(int32) + intValue
-	case LongCnt, LongDedupCnt:
+	case LongCnt:
 		longValue, err := castToLong(v.value)
 		if err != nil {
 			return nil, err
@@ -273,11 +277,21 @@ func (p *Counter) IncreaseDedup(v *Primitive, actor string) (*Counter, error) {
 		return nil, ErrDedupRequiresActor
 	}
 
-	delta, err := castToLong(v.value)
-	if err != nil {
-		return nil, err
-	}
-	if delta != 1 {
+	switch val := v.value.(type) {
+	case int32:
+		if val != 1 {
+			return nil, ErrDedupIncrementMustBeOne
+		}
+	case int64:
+		if val != 1 {
+			return nil, ErrDedupIncrementMustBeOne
+		}
+	case int:
+		if val != 1 {
+			return nil, ErrDedupIncrementMustBeOne
+		}
+	default:
+		// float types are not allowed for dedup increment.
 		return nil, ErrDedupIncrementMustBeOne
 	}
 

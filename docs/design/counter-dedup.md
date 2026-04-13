@@ -85,7 +85,7 @@ Behavior:
 | Mode | On `increase(v)` |
 |------|-------------------|
 | Normal | value += v (unchanged from current behavior) |
-| Dedup | Add actor hash to HLL. If already seen, ignore. If new, value += v |
+| Dedup | Add actor hash to HLL. If already seen, ignore. If new, value = hll.count() |
 
 In dedup mode, `value` is a derived value from `hll.count()`, so it is
 recomputed as `value = hll.count()` after each operation is applied.

@@ -66,13 +66,13 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
-	case crdt.LongCnt:
+	case crdt.LongCnt, crdt.LongDedupCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
 		} else {
 			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
 		}
-	case crdt.IntegerCnt:
+	case crdt.IntegerCnt, crdt.IntegerDedupCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
 		} else {
@@ -113,13 +113,13 @@ func (p *Counter) IncreaseDedup(v interface{}, actor string) *Counter {
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
-	case crdt.LongCnt:
+	case crdt.LongCnt, crdt.LongDedupCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
 		} else {
 			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
 		}
-	case crdt.IntegerCnt:
+	case crdt.IntegerCnt, crdt.IntegerDedupCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
 		} else {
