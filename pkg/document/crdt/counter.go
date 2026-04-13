@@ -28,6 +28,14 @@ import (
 // ErrUnsupportedType is returned when the given type is not supported.
 var ErrUnsupportedType = errors.New("unsupported type")
 
+// ErrDedupRequiresActor is returned when a dedup counter receives an
+// increase without an actor.
+var ErrDedupRequiresActor = errors.New("dedup counter requires actor")
+
+// ErrDedupIncrementMustBeOne is returned when a dedup counter receives
+// an increment value other than 1.
+var ErrDedupIncrementMustBeOne = errors.New("dedup counter only supports increment by 1")
+
 // CounterType represents any type that can be used as a counter.
 type CounterType int
 
@@ -128,6 +136,9 @@ func (p *Counter) DataSize() resource.DataSize {
 	} else if p.valueType == LongCnt {
 		size = 8
 	}
+	if p.isDedup && p.hll != nil {
+		size += len(p.hll.Bytes())
+	}
 	return resource.DataSize{
 		Data: size,
 		Meta: p.MetaSize(),
@@ -144,7 +155,9 @@ func (p *Counter) DeepCopy() (Element, error) {
 	counter := *p
 	if p.isDedup && p.hll != nil {
 		counter.hll = NewHLL()
-		counter.hll.Restore(p.hll.Bytes())
+		if err := counter.hll.Restore(p.hll.Bytes()); err != nil {
+			return nil, err
+		}
 	}
 	return &counter, nil
 }
@@ -245,7 +258,7 @@ func (p *Counter) IsDedup() bool {
 }
 
 // IncreaseDedup increases the counter only if the actor has not been seen
-// before. Returns the counter and nil error on success.
+// before. The delta value must be 1. Returns the counter and nil error on success.
 func (p *Counter) IncreaseDedup(v *Primitive, actor string) (*Counter, error) {
 	if !p.isDedup || p.hll == nil {
 		return p.Increase(v)
@@ -253,6 +266,18 @@ func (p *Counter) IncreaseDedup(v *Primitive, actor string) (*Counter, error) {
 
 	if !p.IsNumericType() || !v.IsNumericType() {
 		return nil, ErrUnsupportedType
+	}
+
+	if actor == "" {
+		return nil, ErrDedupRequiresActor
+	}
+
+	delta, err := castToLong(v.value)
+	if err != nil {
+		return nil, err
+	}
+	if delta != 1 {
+		return nil, ErrDedupIncrementMustBeOne
 	}
 
 	if p.hll.Add(actor) {
@@ -271,12 +296,15 @@ func (p *Counter) HLLBytes() []byte {
 }
 
 // RestoreHLL restores the HLL state from bytes and recomputes the counter value.
-func (p *Counter) RestoreHLL(data []byte) {
+func (p *Counter) RestoreHLL(data []byte) error {
 	if p.hll == nil {
 		p.hll = NewHLL()
 	}
-	p.hll.Restore(data)
+	if err := p.hll.Restore(data); err != nil {
+		return err
+	}
 	p.recomputeValue()
+	return nil
 }
 
 // recomputeValue sets the counter value from the HLL count.

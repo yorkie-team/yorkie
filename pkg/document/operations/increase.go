@@ -67,7 +67,10 @@ func (o *Increase) Execute(root *crdt.Root, _ time.VersionVector) error {
 	}
 
 	value := o.value.(*crdt.Primitive)
-	if o.actor != "" && cnt.IsDedup() {
+	if cnt.IsDedup() {
+		if o.actor == "" {
+			return ErrNotApplicableDataType
+		}
 		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
 			return err
 		}

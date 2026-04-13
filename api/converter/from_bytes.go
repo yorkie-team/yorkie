@@ -310,7 +310,9 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	if pbCnt.GetIsDedup() {
 		counter.SetDedup(true)
 		if len(pbCnt.GetHllRegisters()) > 0 {
-			counter.RestoreHLL(pbCnt.GetHllRegisters())
+			if err := counter.RestoreHLL(pbCnt.GetHllRegisters()); err != nil {
+				return nil, err
+			}
 		}
 	}
 

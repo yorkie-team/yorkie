@@ -94,7 +94,8 @@ func TestHLL(t *testing.T) {
 		assert.Equal(t, 1<<14, len(bytes)) // precision 14 = 16384 registers
 
 		restored := crdt.NewHLL()
-		restored.Restore(bytes)
+		err := restored.Restore(bytes)
+		assert.NoError(t, err)
 		assert.Equal(t, originalCount, restored.Count())
 	})
 }

@@ -226,7 +226,8 @@ func TestCounterDedup(t *testing.T) {
 		restored, err := crdt.NewCounter(crdt.IntegerCnt, int32(0), time.InitialTicket)
 		assert.NoError(t, err)
 		restored.SetDedup(true)
-		restored.RestoreHLL(hllBytes)
+		err = restored.RestoreHLL(hllBytes)
+		assert.NoError(t, err)
 		assert.Equal(t, "2", restored.Marshal())
 	})
 }

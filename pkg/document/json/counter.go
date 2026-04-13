@@ -100,6 +100,9 @@ func (p *Counter) Increase(v interface{}) *Counter {
 // IncreaseDedup adds an increase operation with dedup. If the actor has
 // already been counted, the increase is ignored.
 func (p *Counter) IncreaseDedup(v interface{}, actor string) *Counter {
+	if actor == "" {
+		panic("actor is required for dedup increase")
+	}
 	if !isAllowedOperand(v) {
 		panic("unsupported type")
 	}

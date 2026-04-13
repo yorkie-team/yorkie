@@ -17,6 +17,7 @@
 package crdt
 
 import (
+	"fmt"
 	"math"
 	"math/bits"
 
@@ -48,8 +49,8 @@ func NewHLL() *HLL {
 func (h *HLL) Add(value string) bool {
 	hv := xxhash.Sum64String(value)
 	idx := hv >> (64 - hllPrecision)
-	// Shift out the index bits; rho = position of leftmost 1-bit, 1-indexed.
-	w := hv << hllPrecision
+	// Shift out the index bits and set a sentinel bit to cap rho at 64-hllPrecision+1.
+	w := (hv << hllPrecision) | (uint64(1) << (hllPrecision - 1))
 	rho := uint8(bits.LeadingZeros64(w) + 1)
 
 	if rho > h.registers[idx] {
@@ -98,7 +99,12 @@ func (h *HLL) Bytes() []byte {
 	return h.registers[:]
 }
 
-// Restore loads register data from bytes.
-func (h *HLL) Restore(data []byte) {
+// Restore loads register data from bytes. Returns an error if the data
+// length does not match the expected register count.
+func (h *HLL) Restore(data []byte) error {
+	if len(data) != hllRegisterCount {
+		return fmt.Errorf("invalid HLL register payload: got %d bytes, want %d", len(data), hllRegisterCount)
+	}
 	copy(h.registers[:], data)
+	return nil
 }
