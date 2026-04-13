@@ -561,6 +561,14 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pbInc.GetActor() != "" {
+		return operations.NewIncreaseWithActor(
+			parentCreatedAt,
+			elem,
+			executedAt,
+			pbInc.GetActor(),
+		), nil
+	}
 	return operations.NewIncrease(
 		parentCreatedAt,
 		elem,

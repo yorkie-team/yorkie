@@ -463,6 +463,7 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
+			Actor:           increase.Actor(),
 		},
 	}, nil
 }
