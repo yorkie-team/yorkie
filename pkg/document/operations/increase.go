@@ -27,6 +27,7 @@ type Increase struct {
 	parentCreatedAt *time.Ticket
 	value           crdt.Element
 	executedAt      *time.Ticket
+	actor           string
 }
 
 // NewIncrease creates the increase instance.
@@ -42,6 +43,21 @@ func NewIncrease(
 	}
 }
 
+// NewIncreaseWithActor creates a new instance of Increase with an actor for dedup mode.
+func NewIncreaseWithActor(
+	parentCreatedAt *time.Ticket,
+	value crdt.Element,
+	executedAt *time.Ticket,
+	actor string,
+) *Increase {
+	return &Increase{
+		parentCreatedAt: parentCreatedAt,
+		value:           value,
+		executedAt:      executedAt,
+		actor:           actor,
+	}
+}
+
 // Execute executes this operation on the given document(`root`).
 func (o *Increase) Execute(root *crdt.Root, _ time.VersionVector) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
@@ -51,8 +67,14 @@ func (o *Increase) Execute(root *crdt.Root, _ time.VersionVector) error {
 	}
 
 	value := o.value.(*crdt.Primitive)
-	if _, err := cnt.Increase(value); err != nil {
-		return err
+	if o.actor != "" && cnt.IsDedup() {
+		if _, err := cnt.IncreaseDedup(value, o.actor); err != nil {
+			return err
+		}
+	} else {
+		if _, err := cnt.Increase(value); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -76,4 +98,9 @@ func (o *Increase) ExecutedAt() *time.Ticket {
 // SetActor sets the given actor to this operation.
 func (o *Increase) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
+// Actor returns the actor for dedup mode. Empty string means normal mode.
+func (o *Increase) Actor() string {
+	return o.actor
 }
