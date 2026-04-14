@@ -68,16 +68,21 @@ doc.update((root) => {
 
 ### Counter Internal Structure
 
-Add an optional dedup mode to Counter. When dedup is enabled, the Counter
-maintains an internal HyperLogLog.
+Dedup mode is encoded in the Counter's ValueType rather than a runtime flag.
+The ValueType `IntegerDedupCnt` / `LongDedupCnt` signals dedup mode and
+automatically initializes the internal HyperLogLog on creation.
 
 ```
+CounterType:
+  IntegerCnt         // normal 32-bit counter
+  LongCnt            // normal 64-bit counter
+  IntegerDedupCnt    // dedup 32-bit counter (auto-initializes HLL)
+  LongDedupCnt       // dedup 64-bit counter (auto-initializes HLL)
+
 Counter
-  ├── valueType: CounterType (Int, Long)
-  ├── value: number | Long
-  ├── isDedup: bool
-  └── [dedup mode only]
-      └── hll: HyperLogLog (precision=14, ~16KB)
+  ├── valueType: CounterType
+  ├── value: number | Long (always 0 at creation for dedup types)
+  └── hll: HyperLogLog (precision=14, ~16KB, only for dedup types)
 ```
 
 Behavior:
@@ -137,26 +142,32 @@ must also be persisted in snapshots.
 
 #### Protobuf Schema Change
 
-Extend the existing `JSONElement.Counter` message:
+Dedup mode is encoded in the ValueType enum, not as a separate field:
 
 ```protobuf
+enum ValueType {
+  // ...existing values...
+  VALUE_TYPE_INTEGER_DEDUP_CNT = 14;
+  VALUE_TYPE_LONG_DEDUP_CNT = 15;
+}
+
 message Counter {
-  ValueType type = 1;
+  ValueType type = 1;          // dedup types encode mode here
   bytes value = 2;
   TimeTicket created_at = 3;
   TimeTicket moved_at = 4;
   TimeTicket removed_at = 5;
-  // New fields for dedup mode:
-  bool is_dedup = 6;
-  bytes hll_registers = 7;  // Raw HLL register bytes (~16KB when dedup)
+  reserved 6;                  // was is_dedup, now in ValueType
+  bytes hll_registers = 7;    // HLL register bytes (~16KB for dedup)
 }
 ```
 
-- `is_dedup`: Indicates whether this Counter uses dedup mode. Defaults to
-  `false` for backward compatibility.
-- `hll_registers`: Serialized HLL register array. Empty when `is_dedup` is
-  false. When `is_dedup` is true, contains the raw register bytes (2^14 =
-  16,384 registers, 1 byte each = ~16KB).
+- `type`: `INTEGER_DEDUP_CNT` or `LONG_DEDUP_CNT` signals dedup mode.
+  This is transmitted in both Set operations (counter creation) and
+  snapshots, ensuring all replicas know the mode from creation.
+- `hll_registers`: Serialized HLL register array. Empty for normal
+  counters. For dedup counters, contains 2^14 = 16,384 registers (1
+  byte each = ~16KB).
 
 #### Serialization Path (Go)
 
