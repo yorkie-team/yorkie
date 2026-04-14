@@ -77,11 +77,11 @@ func TestYSONConversion(t *testing.T) {
 				Style(6, 9, map[string]string{"color": "blue"})
 
 			// long counter
-			r.SetNewCounter("k5", crdt.LongCnt, 0).
+			r.SetNewCounter("k5", int64(0)).
 				Increase(10)
 
 			// integer counter
-			r.SetNewCounter("k6", crdt.IntegerCnt, 0).
+			r.SetNewCounter("k6", 0).
 				Increase(10)
 
 			// tree
@@ -130,7 +130,7 @@ func TestYSONConversion(t *testing.T) {
 			// Add nested object
 			obj := arr.AddNewObject()
 			obj.SetString("key", "value")
-			obj.SetNewCounter("counter", crdt.IntegerCnt, 10)
+			obj.SetNewCounter("counter", 10)
 
 			text := arr.AddNewText()
 			text.Edit(0, 0, "Hello")

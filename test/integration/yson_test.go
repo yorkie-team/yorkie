@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
@@ -63,7 +62,7 @@ func TestObjectWithYSON(t *testing.T) {
 			root.SetNewObject("obj").SetString("str", "v")
 			root.GetObject("obj").SetNewArray("arr").AddInteger(1).AddString("str")
 			root.GetObject("obj").SetNewObject("obj").SetDouble("key3", 42.2)
-			root.GetObject("obj").SetNewCounter("cnt", crdt.LongCnt, 0)
+			root.GetObject("obj").SetNewCounter("cnt", int64(0))
 			root.GetObject("obj").SetNewText("txt")
 			root.GetObject("obj").SetNewTree("tree", json.TreeNode{
 				Type: "doc",

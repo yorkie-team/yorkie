@@ -69,9 +69,6 @@ const (
 // Root represents the root of a document.
 type Root = json.Object
 
-// Int represents an integer type in the document.
-const Int = crdt.IntegerCnt
-
 // Presence represents the presence of a client editing the document.
 type Presence = presence.Presence
 

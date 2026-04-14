@@ -188,7 +188,7 @@ func TestClient(t *testing.T) {
 		// 02. cli update the document with creating a counter
 		//     and sync with push-pull mode: CP(1, 1) -> CP(2, 2)
 		assert.NoError(t, doc.Update(func(root *document.Root, p *document.Presence) error {
-			root.SetNewCounter("counter", document.Int, 0)
+			root.SetNewCounter("counter", 0)
 			return nil
 		}))
 		assert.Equal(t, change.Checkpoint{ClientSeq: 1, ServerSeq: 1}, doc.Checkpoint())
