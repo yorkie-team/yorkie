@@ -105,7 +105,7 @@ func TestConverter(t *testing.T) {
 				Style(0, 5, map[string]string{"b": "1"})
 
 			// a counter
-			root.SetNewCounter("k5", crdt.LongCnt, 0).
+			root.SetNewCounter("k5", int64(0)).
 				Increase(10).
 				Increase(math.MaxInt64)
 
@@ -176,7 +176,7 @@ func TestConverter(t *testing.T) {
 				Style(0, 5, map[string]string{"b": "1"})
 
 			// counter
-			root.SetNewCounter("k4", crdt.IntegerCnt, 0).Increase(5)
+			root.SetNewCounter("k4", 0).Increase(5)
 
 			return nil
 		})

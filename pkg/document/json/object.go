@@ -98,8 +98,22 @@ func (p *Object) SetNewText(k string) *Text {
 	return v.(*Text)
 }
 
-// SetNewCounter sets a new NewCounter for the given key.
-func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
+// SetNewCounter sets a new Counter for the given key. The counter type is
+// inferred from the value: int/int32 → IntegerCnt, int64 → LongCnt.
+func (p *Object) SetNewCounter(k string, n any) *Counter {
+	t := inferCounterType(n)
+	return p.setNewCounter(k, t, n)
+}
+
+// SetNewDedupCounter sets a new dedup Counter for the given key. Dedup
+// counters use HyperLogLog to count unique actors. Use counter.Add(actor)
+// to record a unique visitor.
+func (p *Object) SetNewDedupCounter(k string) *Counter {
+	return p.setNewCounter(k, crdt.IntegerDedupCnt, 0)
+}
+
+// setNewCounter is the internal constructor that accepts an explicit type.
+func (p *Object) setNewCounter(k string, t crdt.CounterType, n any) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		crdtCounter, err := crdt.NewCounter(t, n, ticket)
 		if err != nil {
@@ -110,13 +124,6 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 	})
 
 	return v.(*Counter)
-}
-
-// SetNewDedupCounter sets a new dedup Counter for the given key. Dedup
-// counters use HyperLogLog to count unique actors. Use counter.Add(actor)
-// to record a unique visitor.
-func (p *Object) SetNewDedupCounter(k string) *Counter {
-	return p.SetNewCounter(k, crdt.IntegerDedupCnt, 0)
 }
 
 // SetNewTree sets a new Tree for the given key.
@@ -241,7 +248,7 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 func (p *Object) SetYSONElement(k string, v interface{}) *Object {
 	switch y := v.(type) {
 	case yson.Counter:
-		p.SetNewCounter(k, y.Type, y.Value)
+		p.setNewCounter(k, y.Type, y.Value)
 	case yson.Array:
 		arr := p.SetNewArray(k)
 		for _, elem := range y {

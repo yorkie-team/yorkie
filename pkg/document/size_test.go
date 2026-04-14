@@ -175,7 +175,7 @@ func TestDocumentSize(t *testing.T) {
 		doc := document.New("doc")
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
+			root.SetNewCounter("counter", 0)
 			return nil
 		}))
 		assert.Equal(t, resource.DataSize{Data: 4, Meta: 72}, doc.DocSize().Live)
@@ -328,7 +328,7 @@ func TestDocumentSize(t *testing.T) {
 		doc := document.New("doc")
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
+			root.SetNewCounter("counter", 0)
 			return nil
 		}))
 		clone, err := doc.InternalDocument().DeepCopy()

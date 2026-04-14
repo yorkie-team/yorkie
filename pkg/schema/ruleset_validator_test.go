@@ -8,7 +8,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/schema"
@@ -156,7 +155,7 @@ func TestRulesetValidator(t *testing.T) {
 		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetNewText("text")
 			r.SetNewTree("tree", json.TreeNode{Type: "doc"})
-			r.SetNewCounter("counter", crdt.IntegerCnt, 0)
+			r.SetNewCounter("counter", 0)
 			return nil
 		}))
 		result := schema.ValidateYorkieRuleset(doc.RootObject(), ruleset)

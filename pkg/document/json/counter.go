@@ -52,10 +52,13 @@ func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) *Counte
 	return p
 }
 
-// Increase adds an increase operations.
+// Increase adds an increase operation. Only valid for non-dedup counters.
 // Only numeric types are allowed as operand values, excluding
 // uint64 and uintptr.
 func (p *Counter) Increase(v interface{}) *Counter {
+	if p.Counter.IsDedup() {
+		panic("dedup counter does not support Increase(), use Add(actor)")
+	}
 	if !isAllowedOperand(v) {
 		panic("unsupported type")
 	}
@@ -132,6 +135,15 @@ func (p *Counter) Add(actor string) *Counter {
 	))
 
 	return p
+}
+
+// inferCounterType infers the CounterType from the Go value type.
+// int64 maps to LongCnt; all other numeric types map to IntegerCnt.
+func inferCounterType(v interface{}) crdt.CounterType {
+	if reflect.ValueOf(v).Kind() == reflect.Int64 {
+		return crdt.LongCnt
+	}
+	return crdt.IntegerCnt
 }
 
 // isAllowedOperand indicates whether

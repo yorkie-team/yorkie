@@ -25,7 +25,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -361,7 +360,7 @@ func TestDocument(t *testing.T) {
 
 		// integer type test
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("age", crdt.IntegerCnt, 5)
+			root.SetNewCounter("age", 5)
 
 			age := root.GetCounter("age")
 			age.Increase(long)
@@ -378,7 +377,7 @@ func TestDocument(t *testing.T) {
 
 		// long type test
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
+			root.SetNewCounter("price", int64(9000000000000000000))
 			price := root.GetCounter("price")
 			println(price.ValueType())
 			price.Increase(long)

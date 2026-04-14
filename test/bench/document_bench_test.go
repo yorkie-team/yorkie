@@ -27,7 +27,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -343,7 +342,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			// integer type test
 			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewCounter("age", crdt.IntegerCnt, 5)
+				root.SetNewCounter("age", 5)
 
 				age := root.GetCounter("age")
 				age.Increase(long)
@@ -359,7 +358,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			// long type test
 			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
+				root.SetNewCounter("price", int64(9000000000000000000))
 				price := root.GetCounter("price")
 				price.Increase(long)
 				price.Increase(double)
@@ -737,7 +736,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			counter := root.SetNewCounter("k1", crdt.IntegerCnt, 0)
+			counter := root.SetNewCounter("k1", 0)
 			for c := range cnt {
 				counter.Increase(c)
 			}
