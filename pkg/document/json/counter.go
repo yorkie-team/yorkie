@@ -66,7 +66,7 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
-	case crdt.LongCnt, crdt.LongDedupCnt:
+	case crdt.LongCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
 		} else {
@@ -114,8 +114,6 @@ func (p *Counter) Add(actor string) *Counter {
 	switch p.ValueType() {
 	case crdt.IntegerDedupCnt:
 		primitive, err = crdt.NewPrimitive(int32(1), ticket)
-	case crdt.LongDedupCnt:
-		primitive, err = crdt.NewPrimitive(int64(1), ticket)
 	default:
 		panic("unsupported dedup counter type")
 	}

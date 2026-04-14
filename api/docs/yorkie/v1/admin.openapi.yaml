@@ -4058,8 +4058,6 @@ components:
         - 13
         - VALUE_TYPE_INTEGER_DEDUP_CNT
         - 14
-        - VALUE_TYPE_LONG_DEDUP_CNT
-        - 15
       title: ValueType
       type: string
     yorkie.v1.VersionVector:

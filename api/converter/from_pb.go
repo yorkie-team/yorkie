@@ -923,8 +923,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		), nil
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT,
 		api.ValueType_VALUE_TYPE_LONG_CNT,
-		api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT,
-		api.ValueType_VALUE_TYPE_LONG_DEDUP_CNT:
+		api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
 			return nil, err
@@ -985,8 +984,6 @@ func fromCounterType(valueType api.ValueType) (crdt.CounterType, error) {
 		return crdt.LongCnt, nil
 	case api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT:
 		return crdt.IntegerDedupCnt, nil
-	case api.ValueType_VALUE_TYPE_LONG_DEDUP_CNT:
-		return crdt.LongDedupCnt, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

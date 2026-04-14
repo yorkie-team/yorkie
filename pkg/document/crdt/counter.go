@@ -44,7 +44,6 @@ const (
 	IntegerCnt CounterType = iota
 	LongCnt
 	IntegerDedupCnt
-	LongDedupCnt
 )
 
 // CounterValueFromBytes parses the given bytes into value.
@@ -53,7 +52,7 @@ func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, 
 	case IntegerCnt, IntegerDedupCnt:
 		val := int32(binary.LittleEndian.Uint32(value))
 		return int(val), nil
-	case LongCnt, LongDedupCnt:
+	case LongCnt:
 		return int64(binary.LittleEndian.Uint64(value)), nil
 	default:
 		return nil, ErrUnsupportedType
@@ -100,13 +99,6 @@ func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket
 			value:     longValue,
 			createdAt: createdAt,
 		}, nil
-	case LongDedupCnt:
-		return &Counter{
-			valueType: valueType,
-			value:     int64(0),
-			createdAt: createdAt,
-			hll:       NewHLL(),
-		}, nil
 	default:
 		return nil, ErrUnsupportedType
 	}
@@ -148,7 +140,7 @@ func (p *Counter) DataSize() resource.DataSize {
 	size := 0
 	if p.valueType == IntegerCnt || p.valueType == IntegerDedupCnt {
 		size = 4
-	} else if p.valueType == LongCnt || p.valueType == LongDedupCnt {
+	} else if p.valueType == LongCnt {
 		size = 8
 	}
 	if p.IsDedup() && p.hll != nil {
@@ -259,13 +251,12 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 // IsNumericType checks for numeric types.
 func (p *Counter) IsNumericType() bool {
 	t := p.valueType
-	return t == IntegerCnt || t == LongCnt ||
-		t == IntegerDedupCnt || t == LongDedupCnt
+	return t == IntegerCnt || t == LongCnt || t == IntegerDedupCnt
 }
 
 // IsDedup returns whether this Counter is in dedup mode.
 func (p *Counter) IsDedup() bool {
-	return p.valueType == IntegerDedupCnt || p.valueType == LongDedupCnt
+	return p.valueType == IntegerDedupCnt
 }
 
 // IncreaseDedup increases the counter only if the actor has not been seen
@@ -332,10 +323,8 @@ func (p *Counter) RestoreHLL(data []byte) error {
 func (p *Counter) recomputeValue() {
 	count := p.hll.Count()
 	switch p.valueType {
-	case IntegerCnt, IntegerDedupCnt:
+	case IntegerDedupCnt:
 		p.value = int32(count)
-	case LongCnt, LongDedupCnt:
-		p.value = int64(count)
 	}
 }
 

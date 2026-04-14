@@ -616,8 +616,6 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 		return api.ValueType_VALUE_TYPE_LONG_CNT, nil
 	case crdt.IntegerDedupCnt:
 		return api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT, nil
-	case crdt.LongDedupCnt:
-		return api.ValueType_VALUE_TYPE_LONG_DEDUP_CNT, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

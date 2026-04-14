@@ -56,7 +56,6 @@ const (
 	ValueType_VALUE_TYPE_LONG_CNT          ValueType = 12
 	ValueType_VALUE_TYPE_TREE              ValueType = 13
 	ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT ValueType = 14
-	ValueType_VALUE_TYPE_LONG_DEDUP_CNT    ValueType = 15
 )
 
 // Enum value maps for ValueType.
@@ -77,7 +76,6 @@ var (
 		12: "VALUE_TYPE_LONG_CNT",
 		13: "VALUE_TYPE_TREE",
 		14: "VALUE_TYPE_INTEGER_DEDUP_CNT",
-		15: "VALUE_TYPE_LONG_DEDUP_CNT",
 	}
 	ValueType_value = map[string]int32{
 		"VALUE_TYPE_NULL":              0,
@@ -95,7 +93,6 @@ var (
 		"VALUE_TYPE_LONG_CNT":          12,
 		"VALUE_TYPE_TREE":              13,
 		"VALUE_TYPE_INTEGER_DEDUP_CNT": 14,
-		"VALUE_TYPE_LONG_DEDUP_CNT":    15,
 	}
 )
 
@@ -5098,7 +5095,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
 	"\bsnapshot\x18\x04 \x01(\tR\bsnapshot\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\x95\x03\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\xfc\x02\n" +
 	"\tValueType\x12\x13\n" +
 	"\x0fVALUE_TYPE_NULL\x10\x00\x12\x16\n" +
 	"\x12VALUE_TYPE_BOOLEAN\x10\x01\x12\x16\n" +
@@ -5115,8 +5112,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x16VALUE_TYPE_INTEGER_CNT\x10\v\x12\x17\n" +
 	"\x13VALUE_TYPE_LONG_CNT\x10\f\x12\x13\n" +
 	"\x0fVALUE_TYPE_TREE\x10\r\x12 \n" +
-	"\x1cVALUE_TYPE_INTEGER_DEDUP_CNT\x10\x0e\x12\x1d\n" +
-	"\x19VALUE_TYPE_LONG_DEDUP_CNT\x10\x0f*\xa6\x01\n" +
+	"\x1cVALUE_TYPE_INTEGER_DEDUP_CNT\x10\x0e\"\x04\b\x0f\x10\x0f*\xa6\x01\n" +
 	"\fDocEventType\x12#\n" +
 	"\x1fDOC_EVENT_TYPE_DOCUMENT_CHANGED\x10\x00\x12#\n" +
 	"\x1fDOC_EVENT_TYPE_DOCUMENT_WATCHED\x10\x01\x12%\n" +

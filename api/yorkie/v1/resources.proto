@@ -440,7 +440,7 @@ enum ValueType {
   VALUE_TYPE_LONG_CNT = 12;
   VALUE_TYPE_TREE = 13;
   VALUE_TYPE_INTEGER_DEDUP_CNT = 14;
-  VALUE_TYPE_LONG_DEDUP_CNT = 15;
+  reserved 15;
 }
 
 enum DocEventType {
