@@ -175,14 +175,16 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 		return nil, err
 	}
 
+	pbCounter := &api.JSONElement_Counter{
+		Type:         pbCounterType,
+		Value:        counterValue,
+		CreatedAt:    ToTimeTicket(counter.CreatedAt()),
+		MovedAt:      ToTimeTicket(counter.MovedAt()),
+		RemovedAt:    ToTimeTicket(counter.RemovedAt()),
+		HllRegisters: counter.HLLBytes(),
+	}
 	return &api.JSONElement{
-		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
-			Type:      pbCounterType,
-			Value:     counterValue,
-			CreatedAt: ToTimeTicket(counter.CreatedAt()),
-			MovedAt:   ToTimeTicket(counter.MovedAt()),
-			RemovedAt: ToTimeTicket(counter.RemovedAt()),
-		}},
+		Body: &api.JSONElement_Counter_{Counter: pbCounter},
 	}, nil
 }
 

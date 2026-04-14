@@ -561,6 +561,14 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pbInc.GetActor() != "" {
+		return operations.NewIncreaseWithActor(
+			parentCreatedAt,
+			elem,
+			executedAt,
+			pbInc.GetActor(),
+		), nil
+	}
 	return operations.NewIncrease(
 		parentCreatedAt,
 		elem,
@@ -913,9 +921,9 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 			crdt.NewRGATreeSplit(crdt.InitialTextNode()),
 			createdAt,
 		), nil
-	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
-		fallthrough
-	case api.ValueType_VALUE_TYPE_LONG_CNT:
+	case api.ValueType_VALUE_TYPE_INTEGER_CNT,
+		api.ValueType_VALUE_TYPE_LONG_CNT,
+		api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
 			return nil, err
@@ -974,6 +982,8 @@ func fromCounterType(valueType api.ValueType) (crdt.CounterType, error) {
 		return crdt.IntegerCnt, nil
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
 		return crdt.LongCnt, nil
+	case api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT:
+		return crdt.IntegerDedupCnt, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

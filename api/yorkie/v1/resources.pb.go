@@ -41,20 +41,21 @@ const (
 type ValueType int32
 
 const (
-	ValueType_VALUE_TYPE_NULL        ValueType = 0
-	ValueType_VALUE_TYPE_BOOLEAN     ValueType = 1
-	ValueType_VALUE_TYPE_INTEGER     ValueType = 2
-	ValueType_VALUE_TYPE_LONG        ValueType = 3
-	ValueType_VALUE_TYPE_DOUBLE      ValueType = 4
-	ValueType_VALUE_TYPE_STRING      ValueType = 5
-	ValueType_VALUE_TYPE_BYTES       ValueType = 6
-	ValueType_VALUE_TYPE_DATE        ValueType = 7
-	ValueType_VALUE_TYPE_JSON_OBJECT ValueType = 8
-	ValueType_VALUE_TYPE_JSON_ARRAY  ValueType = 9
-	ValueType_VALUE_TYPE_TEXT        ValueType = 10
-	ValueType_VALUE_TYPE_INTEGER_CNT ValueType = 11
-	ValueType_VALUE_TYPE_LONG_CNT    ValueType = 12
-	ValueType_VALUE_TYPE_TREE        ValueType = 13
+	ValueType_VALUE_TYPE_NULL              ValueType = 0
+	ValueType_VALUE_TYPE_BOOLEAN           ValueType = 1
+	ValueType_VALUE_TYPE_INTEGER           ValueType = 2
+	ValueType_VALUE_TYPE_LONG              ValueType = 3
+	ValueType_VALUE_TYPE_DOUBLE            ValueType = 4
+	ValueType_VALUE_TYPE_STRING            ValueType = 5
+	ValueType_VALUE_TYPE_BYTES             ValueType = 6
+	ValueType_VALUE_TYPE_DATE              ValueType = 7
+	ValueType_VALUE_TYPE_JSON_OBJECT       ValueType = 8
+	ValueType_VALUE_TYPE_JSON_ARRAY        ValueType = 9
+	ValueType_VALUE_TYPE_TEXT              ValueType = 10
+	ValueType_VALUE_TYPE_INTEGER_CNT       ValueType = 11
+	ValueType_VALUE_TYPE_LONG_CNT          ValueType = 12
+	ValueType_VALUE_TYPE_TREE              ValueType = 13
+	ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT ValueType = 14
 )
 
 // Enum value maps for ValueType.
@@ -74,22 +75,24 @@ var (
 		11: "VALUE_TYPE_INTEGER_CNT",
 		12: "VALUE_TYPE_LONG_CNT",
 		13: "VALUE_TYPE_TREE",
+		14: "VALUE_TYPE_INTEGER_DEDUP_CNT",
 	}
 	ValueType_value = map[string]int32{
-		"VALUE_TYPE_NULL":        0,
-		"VALUE_TYPE_BOOLEAN":     1,
-		"VALUE_TYPE_INTEGER":     2,
-		"VALUE_TYPE_LONG":        3,
-		"VALUE_TYPE_DOUBLE":      4,
-		"VALUE_TYPE_STRING":      5,
-		"VALUE_TYPE_BYTES":       6,
-		"VALUE_TYPE_DATE":        7,
-		"VALUE_TYPE_JSON_OBJECT": 8,
-		"VALUE_TYPE_JSON_ARRAY":  9,
-		"VALUE_TYPE_TEXT":        10,
-		"VALUE_TYPE_INTEGER_CNT": 11,
-		"VALUE_TYPE_LONG_CNT":    12,
-		"VALUE_TYPE_TREE":        13,
+		"VALUE_TYPE_NULL":              0,
+		"VALUE_TYPE_BOOLEAN":           1,
+		"VALUE_TYPE_INTEGER":           2,
+		"VALUE_TYPE_LONG":              3,
+		"VALUE_TYPE_DOUBLE":            4,
+		"VALUE_TYPE_STRING":            5,
+		"VALUE_TYPE_BYTES":             6,
+		"VALUE_TYPE_DATE":              7,
+		"VALUE_TYPE_JSON_OBJECT":       8,
+		"VALUE_TYPE_JSON_ARRAY":        9,
+		"VALUE_TYPE_TEXT":              10,
+		"VALUE_TYPE_INTEGER_CNT":       11,
+		"VALUE_TYPE_LONG_CNT":          12,
+		"VALUE_TYPE_TREE":              13,
+		"VALUE_TYPE_INTEGER_DEDUP_CNT": 14,
 	}
 )
 
@@ -3750,6 +3753,7 @@ type Operation_Increase struct {
 	ParentCreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
 	Value           *JSONElementSimple     `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
 	ExecutedAt      *TimeTicket            `protobuf:"bytes,3,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	Actor           string                 `protobuf:"bytes,4,opt,name=actor,proto3" json:"actor,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -3803,6 +3807,13 @@ func (x *Operation_Increase) GetExecutedAt() *TimeTicket {
 		return x.ExecutedAt
 	}
 	return nil
+}
+
+func (x *Operation_Increase) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
 }
 
 type Operation_TreeEdit struct {
@@ -4344,6 +4355,7 @@ type JSONElement_Counter struct {
 	CreatedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	MovedAt       *TimeTicket            `protobuf:"bytes,4,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
 	RemovedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	HllRegisters  []byte                 `protobuf:"bytes,7,opt,name=hll_registers,json=hllRegisters,proto3" json:"hll_registers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4409,6 +4421,13 @@ func (x *JSONElement_Counter) GetMovedAt() *TimeTicket {
 func (x *JSONElement_Counter) GetRemovedAt() *TimeTicket {
 	if x != nil {
 		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *JSONElement_Counter) GetHllRegisters() []byte {
+	if x != nil {
+		return x.HllRegisters
 	}
 	return nil
 }
@@ -4655,7 +4674,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x06vector\x18\x01 \x03(\v2$.yorkie.v1.VersionVector.VectorEntryR\x06vector\x1a9\n" +
 	"\vVectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xd5 \n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xeb \n" +
 	"\tOperation\x12,\n" +
 	"\x03set\x18\x01 \x01(\v2\x18.yorkie.v1.Operation.SetH\x00R\x03set\x12,\n" +
 	"\x03add\x18\x02 \x01(\v2\x18.yorkie.v1.Operation.AddH\x00R\x03add\x12/\n" +
@@ -4727,12 +4746,13 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a]\n" +
 	"\x18CreatedAtMapByActorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xb9\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xcf\x01\n" +
 	"\bIncrease\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x122\n" +
 	"\x05value\x18\x02 \x01(\v2\x1c.yorkie.v1.JSONElementSimpleR\x05value\x126\n" +
 	"\vexecuted_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x1a\xf1\x03\n" +
+	"executedAt\x12\x14\n" +
+	"\x05actor\x18\x04 \x01(\tR\x05actor\x1a\xf1\x03\n" +
 	"\bTreeEdit\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12&\n" +
 	"\x04from\x18\x02 \x01(\v2\x12.yorkie.v1.TreePosR\x04from\x12\"\n" +
@@ -4778,7 +4798,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\fR\x05value\"\xa9\r\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\"\xd4\r\n" +
 	"\vJSONElement\x12D\n" +
 	"\vjson_object\x18\x01 \x01(\v2!.yorkie.v1.JSONElement.JSONObjectH\x00R\n" +
 	"jsonObject\x12A\n" +
@@ -4817,7 +4837,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\xe7\x01\n" +
+	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\x92\x02\n" +
 	"\aCounter\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x124\n" +
@@ -4825,7 +4845,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"created_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
 	"\bmoved_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
 	"\n" +
-	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x1a\xcf\x01\n" +
+	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12#\n" +
+	"\rhll_registers\x18\a \x01(\fR\fhllRegistersJ\x04\b\x06\x10\a\x1a\xcf\x01\n" +
 	"\x04Tree\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.yorkie.v1.TreeNodeR\x05nodes\x124\n" +
 	"\n" +
@@ -5074,7 +5095,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
 	"\bsnapshot\x18\x04 \x01(\tR\bsnapshot\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\xd4\x02\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt*\xfc\x02\n" +
 	"\tValueType\x12\x13\n" +
 	"\x0fVALUE_TYPE_NULL\x10\x00\x12\x16\n" +
 	"\x12VALUE_TYPE_BOOLEAN\x10\x01\x12\x16\n" +
@@ -5090,7 +5111,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x12\x1a\n" +
 	"\x16VALUE_TYPE_INTEGER_CNT\x10\v\x12\x17\n" +
 	"\x13VALUE_TYPE_LONG_CNT\x10\f\x12\x13\n" +
-	"\x0fVALUE_TYPE_TREE\x10\r*\xa6\x01\n" +
+	"\x0fVALUE_TYPE_TREE\x10\r\x12 \n" +
+	"\x1cVALUE_TYPE_INTEGER_DEDUP_CNT\x10\x0e\"\x04\b\x0f\x10\x0f*\xa6\x01\n" +
 	"\fDocEventType\x12#\n" +
 	"\x1fDOC_EVENT_TYPE_DOCUMENT_CHANGED\x10\x00\x12#\n" +
 	"\x1fDOC_EVENT_TYPE_DOCUMENT_WATCHED\x10\x01\x12%\n" +

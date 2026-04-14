@@ -307,6 +307,11 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	}
 	counter.SetMovedAt(movedAt)
 	counter.SetRemovedAt(removedAt)
+	if counter.IsDedup() && len(pbCnt.GetHllRegisters()) > 0 {
+		if err := counter.RestoreHLL(pbCnt.GetHllRegisters()); err != nil {
+			return nil, err
+		}
+	}
 
 	return counter, nil
 }

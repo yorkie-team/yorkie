@@ -463,6 +463,7 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
+			Actor:           increase.Actor(),
 		},
 	}, nil
 }
@@ -613,6 +614,8 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 		return api.ValueType_VALUE_TYPE_INTEGER_CNT, nil
 	case crdt.LongCnt:
 		return api.ValueType_VALUE_TYPE_LONG_CNT, nil
+	case crdt.IntegerDedupCnt:
+		return api.ValueType_VALUE_TYPE_INTEGER_DEDUP_CNT, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

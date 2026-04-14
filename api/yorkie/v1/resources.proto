@@ -114,6 +114,7 @@ message Operation {
     TimeTicket parent_created_at = 1;
     JSONElementSimple value = 2;
     TimeTicket executed_at = 3;
+    string actor = 4;
   }
   message TreeEdit {
     TimeTicket parent_created_at = 1;
@@ -198,6 +199,8 @@ message JSONElement {
     TimeTicket created_at = 3;
     TimeTicket moved_at = 4;
     TimeTicket removed_at = 5;
+    reserved 6; // was is_dedup, now encoded in ValueType
+    bytes hll_registers = 7;
   }
   message Tree {
     repeated TreeNode nodes = 1;
@@ -436,6 +439,8 @@ enum ValueType {
   VALUE_TYPE_INTEGER_CNT = 11;
   VALUE_TYPE_LONG_CNT = 12;
   VALUE_TYPE_TREE = 13;
+  VALUE_TYPE_INTEGER_DEDUP_CNT = 14;
+  reserved 15;
 }
 
 enum DocEventType {

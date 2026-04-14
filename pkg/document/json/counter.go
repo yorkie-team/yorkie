@@ -72,7 +72,7 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		} else {
 			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
 		}
-	case crdt.IntegerCnt:
+	case crdt.IntegerCnt, crdt.IntegerDedupCnt:
 		if isInt {
 			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
 		} else {
@@ -92,6 +92,43 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		p.CreatedAt(),
 		primitive,
 		ticket,
+	))
+
+	return p
+}
+
+// Add records a unique actor in the dedup counter. If the actor has already
+// been counted, the call is ignored. Only valid for dedup counters.
+func (p *Counter) Add(actor string) *Counter {
+	if actor == "" {
+		panic("actor is required")
+	}
+	if !p.Counter.IsDedup() {
+		panic("Add is only supported on dedup counters")
+	}
+
+	ticket := p.context.IssueTimeTicket()
+
+	var primitive *crdt.Primitive
+	var err error
+	switch p.ValueType() {
+	case crdt.IntegerDedupCnt:
+		primitive, err = crdt.NewPrimitive(int32(1), ticket)
+	default:
+		panic("unsupported dedup counter type")
+	}
+	if err != nil {
+		panic(err)
+	}
+	if _, err := p.Counter.IncreaseDedup(primitive, actor); err != nil {
+		panic(err)
+	}
+
+	p.context.Push(operations.NewIncreaseWithActor(
+		p.CreatedAt(),
+		primitive,
+		ticket,
+		actor,
 	))
 
 	return p
