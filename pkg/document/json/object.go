@@ -112,6 +112,13 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 	return v.(*Counter)
 }
 
+// SetNewDedupCounter sets a new dedup Counter for the given key. Dedup
+// counters use HyperLogLog to count unique actors. Use counter.Add(actor)
+// to record a unique visitor.
+func (p *Object) SetNewDedupCounter(k string) *Counter {
+	return p.SetNewCounter(k, crdt.IntegerDedupCnt, 0)
+}
+
 // SetNewTree sets a new Tree for the given key.
 func (p *Object) SetNewTree(k string, initialRoot ...TreeNode) *Tree {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {

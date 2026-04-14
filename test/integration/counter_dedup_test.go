@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -42,12 +41,11 @@ func TestCounterDedup(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		// c1 creates a dedup counter and increases with "user-1".
+		// c1 creates a dedup counter and adds "user-1".
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			counter := root.SetNewCounter("uv", crdt.IntegerDedupCnt, 0)
-			counter.IncreaseDedup(1, "user-1")
+			root.SetNewDedupCounter("uv").Add("user-1")
 			return nil
-		}, "c1 creates dedup counter and increases with user-1")
+		}, "c1 creates dedup counter and adds user-1")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"uv":1}`, d1.Marshal())
 
@@ -58,11 +56,11 @@ func TestCounterDedup(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		// c2 increases with same "user-1" — should be ignored after sync.
+		// c2 adds same "user-1" — should be ignored after sync.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetCounter("uv").IncreaseDedup(1, "user-1")
+			root.GetCounter("uv").Add("user-1")
 			return nil
-		}, "c2 increases with duplicate user-1")
+		}, "c2 adds duplicate user-1")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -76,13 +74,13 @@ func TestCounterDedup(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		// c1 creates a dedup counter and increases with "user-1" and "user-2".
+		// c1 creates a dedup counter and adds "user-1" and "user-2".
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			counter := root.SetNewCounter("uv", crdt.IntegerDedupCnt, 0)
-			counter.IncreaseDedup(1, "user-1")
-			counter.IncreaseDedup(1, "user-2")
+			counter := root.SetNewDedupCounter("uv")
+			counter.Add("user-1")
+			counter.Add("user-2")
 			return nil
-		}, "c1 creates dedup counter and increases with user-1 and user-2")
+		}, "c1 creates dedup counter and adds user-1 and user-2")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"uv":2}`, d1.Marshal())
 
@@ -93,11 +91,11 @@ func TestCounterDedup(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		// c2 increases with a new "user-3" — should be counted.
+		// c2 adds a new "user-3" — should be counted.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetCounter("uv").IncreaseDedup(1, "user-3")
+			root.GetCounter("uv").Add("user-3")
 			return nil
-		}, "c2 increases with new user-3")
+		}, "c2 adds new user-3")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})

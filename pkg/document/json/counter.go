@@ -97,36 +97,27 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	return p
 }
 
-// IncreaseDedup adds an increase operation with dedup. If the actor has
-// already been counted, the increase is ignored.
-func (p *Counter) IncreaseDedup(v interface{}, actor string) *Counter {
+// Add records a unique actor in the dedup counter. If the actor has already
+// been counted, the call is ignored. Only valid for dedup counters.
+func (p *Counter) Add(actor string) *Counter {
 	if actor == "" {
-		panic("actor is required for dedup increase")
+		panic("actor is required")
 	}
-	if !isAllowedOperand(v) {
-		panic("unsupported type")
+	if !p.Counter.IsDedup() {
+		panic("Add is only supported on dedup counters")
 	}
-	var primitive *crdt.Primitive
-	var err error
+
 	ticket := p.context.IssueTimeTicket()
 
-	value, kind := convertAssertableOperand(v)
-	isInt := kind == reflect.Int
+	var primitive *crdt.Primitive
+	var err error
 	switch p.ValueType() {
-	case crdt.LongCnt, crdt.LongDedupCnt:
-		if isInt {
-			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
-		} else {
-			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
-		}
-	case crdt.IntegerCnt, crdt.IntegerDedupCnt:
-		if isInt {
-			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
-		} else {
-			primitive, err = crdt.NewPrimitive(int32(value.(float64)), ticket)
-		}
+	case crdt.IntegerDedupCnt:
+		primitive, err = crdt.NewPrimitive(int32(1), ticket)
+	case crdt.LongDedupCnt:
+		primitive, err = crdt.NewPrimitive(int64(1), ticket)
 	default:
-		panic("unsupported type")
+		panic("unsupported dedup counter type")
 	}
 	if err != nil {
 		panic(err)
