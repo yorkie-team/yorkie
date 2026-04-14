@@ -18,7 +18,6 @@ metadata:
     alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
     alb.ingress.kubernetes.io/group.order: '10'
     alb.ingress.kubernetes.io/healthcheck-path: /healthz/ready
-    alb.ingress.kubernetes.io/healthcheck-port: "32442"
   {{ end }}
   {{ if .Values.ingress.ncpAlb.enabled }}
   annotations:
