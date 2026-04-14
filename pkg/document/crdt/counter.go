@@ -73,34 +73,40 @@ type Counter struct {
 // NewCounter creates a new instance of Counter.
 func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) (*Counter, error) {
 	switch valueType {
-	case IntegerCnt, IntegerDedupCnt:
+	case IntegerCnt:
 		intValue, err := castToInt(value)
 		if err != nil {
 			return nil, err
 		}
-		c := &Counter{
+		return &Counter{
 			valueType: valueType,
 			value:     intValue,
 			createdAt: createdAt,
-		}
-		if valueType == IntegerDedupCnt {
-			c.hll = NewHLL()
-		}
-		return c, nil
-	case LongCnt, LongDedupCnt:
+		}, nil
+	case IntegerDedupCnt:
+		return &Counter{
+			valueType: valueType,
+			value:     int32(0),
+			createdAt: createdAt,
+			hll:       NewHLL(),
+		}, nil
+	case LongCnt:
 		longValue, err := castToLong(value)
 		if err != nil {
 			return nil, err
 		}
-		c := &Counter{
+		return &Counter{
 			valueType: valueType,
 			value:     longValue,
 			createdAt: createdAt,
-		}
-		if valueType == LongDedupCnt {
-			c.hll = NewHLL()
-		}
-		return c, nil
+		}, nil
+	case LongDedupCnt:
+		return &Counter{
+			valueType: valueType,
+			value:     int64(0),
+			createdAt: createdAt,
+			hll:       NewHLL(),
+		}, nil
 	default:
 		return nil, ErrUnsupportedType
 	}
