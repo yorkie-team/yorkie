@@ -69,7 +69,6 @@ const (
 // Root represents the root of a document.
 type Root = json.Object
 
-
 // Presence represents the presence of a client editing the document.
 type Presence = presence.Presence
 
