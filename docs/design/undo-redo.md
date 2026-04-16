@@ -29,7 +29,7 @@ operations valid when remote edits arrive.
 - Undo/redo for `Tree.Edit` with `splitLevel >= 2` at the CRDT layer (deferred
   until L2 forward convergence is fixed; `splitLevel=1` is supported).
 - Overlapping range reconciliation for Tree (Cases 3–6, deferred to Phase 2).
-- Undo/redo for `TreeStyleOperation` (not yet implemented).
+- Undo/redo for `TreeStyleOperation` with multi-client reconciliation (single-client undo/redo is now supported via PR #1221).
 
 ## Proposal Details
 
@@ -81,6 +81,7 @@ mapping, and each subsection below explains the details.
 | `StyleOperation` (Text.style) | `StyleOperation` |
 | `TreeEditOperation` (Tree.edit, splitLevel=0) | `TreeEditOperation` |
 | `TreeEditOperation` (Tree.edit, splitLevel=1) | `TreeEditOperation` (boundary deletion) |
+| `TreeStyleOperation` (Tree.style) | `TreeStyleOperation` |
 
 #### Object.set → SetOperation
 
@@ -437,13 +438,14 @@ Oldest entries are evicted when the cap is reached.
 | Tree single-client (splitLevel=0) | ✅ | All op types + chained ops |
 | Tree split L1 undo/redo | ✅ | Boundary-deletion reverse ops (PR #1219) |
 | Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
+| TreeStyleOperation single-client | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
 
 #### Remaining Work
 
 | Priority | Item | Details |
 |----------|------|---------|
 | HIGH | Tree reconciliation Cases 3-6 | Overlapping range reconciliation. Text has it; Tree needs symmetric index computation or tree-native `normalizePos()`. 4 tests skipped. |
-| HIGH | TreeStyleOperation undo | No `reverseOp` generated. Text's `StyleOperation` has full undo support, but `TreeStyleOperation` does not. |
 | MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. |
+| MED | TreeStyleOperation multi-client | Single-client undo works; multi-client reconciliation not yet tested. |
 | LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). Fix forward first. |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup (TODO in `history.ts`). |
