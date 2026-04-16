@@ -1,6 +1,6 @@
 ---
 title: undo-redo
-target-version: 0.6.50
+target-version: 0.7.5
 ---
 
 # Undo/Redo (History)
@@ -26,10 +26,10 @@ operations valid when remote edits arrive.
 ### Non-Goals
 
 - Server-side undo/redo or global history browsing.
-- Undo/redo for `Tree.Edit` with `splitLevel > 0` at the CRDT layer (deferred to
-  Phase 2; note that user-facing `splitByPath`/`mergeByPath` decompose into
-  multiple `splitLevel=0` calls, so they are supported).
+- Undo/redo for `Tree.Edit` with `splitLevel >= 2` at the CRDT layer (deferred
+  until L2 forward convergence is fixed; `splitLevel=1` is supported).
 - Overlapping range reconciliation for Tree (Cases 3–6, deferred to Phase 2).
+- Undo/redo for `TreeStyleOperation` (not yet implemented).
 
 ## Proposal Details
 
@@ -79,7 +79,8 @@ mapping, and each subsection below explains the details.
 | `IncreaseOperation` (Counter) | `IncreaseOperation` |
 | `EditOperation` (Text.edit) | `EditOperation` |
 | `StyleOperation` (Text.style) | `StyleOperation` |
-| `TreeEditOperation` (Tree.edit) | `TreeEditOperation` |
+| `TreeEditOperation` (Tree.edit, splitLevel=0) | `TreeEditOperation` |
+| `TreeEditOperation` (Tree.edit, splitLevel=1) | `TreeEditOperation` (boundary deletion) |
 
 #### Object.set → SetOperation
 
@@ -301,6 +302,46 @@ When a remote change is applied, `Document` scans the History stacks and calls
 `reconcileTreeEdit()` for each pending `TreeEditOperation` targeting the same
 tree.
 
+#### Split Undo/Redo (splitLevel=1)
+
+A split creates new element boundaries without removing any nodes:
+
+```
+splitLevel=1: <p>ab|cd</p>  →  <p>ab</p><p>cd</p>   (2 boundary tokens)
+```
+
+The reverse is a **boundary deletion** — a `splitLevel=0` edit that removes the
+boundary tokens, merging the split elements back:
+
+```
+reverse: edit(fromIdx, fromIdx + 2, undefined, 0)   // delete 2 boundary tokens
+```
+
+This approach reuses all existing infrastructure:
+- The reverse op is a standard `TreeEditOperation` with `isUndoOp=true` and
+  `splitLevel=0`.
+- Reconciliation uses the existing 6-case overlap logic unchanged.
+- Redo works automatically: the boundary deletion produces its own reverse via
+  the existing `toReverseOperation` path.
+
+The `toSplitReverseOperation` method is guarded for pure L1 splits only
+(`splitLevel === 1`, no contents, no removed nodes). This prevents generating
+incorrect reverse ops for unsupported split shapes (L2+, split+delete combos).
+
+The undo/redo cycle:
+
+```
+split(L1)
+  → undo: boundary delete (splitLevel=0, removes 2 tokens)
+    → redo: re-insert boundary nodes (splitLevel=0, deep-copied nodes)
+      → undo again: boundary delete (same as first undo)
+```
+
+**Implementation note:** `splitElement` recomputes `visibleSize` from children's
+`paddedSize()`. Since `IndexTreeNode.paddedSize()` does not return 0 for removed
+nodes, the recomputation must explicitly skip removed children to avoid inflating
+the parent's size when tombstoned text nodes are present in the left partition.
+
 #### Phase 2: Overlapping Range Reconciliation
 
 The integer-index approach for Tree is **asymmetric** across clients for
@@ -383,3 +424,26 @@ real-world undo/redo scenarios.
 **Risk: Stack overflow from deep undo chains.**
 The undo and redo stacks are capped at 50 entries (`MaxUndoRedoStackDepth`).
 Oldest entries are evicted when the cap is reached.
+
+### Current Status (as of 2026-04-17)
+
+#### Completed
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Text single-client | ✅ | insert, delete, replace, style |
+| Text multi-client reconciliation | ✅ | All 7 cases (including overlapping Cases 3-6) |
+| Array undo | ✅ | add, remove, move, set |
+| Tree single-client (splitLevel=0) | ✅ | All op types + chained ops |
+| Tree split L1 undo/redo | ✅ | Boundary-deletion reverse ops (PR #1219) |
+| Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
+
+#### Remaining Work
+
+| Priority | Item | Details |
+|----------|------|---------|
+| HIGH | Tree reconciliation Cases 3-6 | Overlapping range reconciliation. Text has it; Tree needs symmetric index computation or tree-native `normalizePos()`. 4 tests skipped. |
+| HIGH | TreeStyleOperation undo | No `reverseOp` generated. Text's `StyleOperation` has full undo support, but `TreeStyleOperation` does not. |
+| MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. |
+| LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). Fix forward first. |
+| LOW | History reconciliation performance | O(n) stack scan → indexed lookup (TODO in `history.ts`). |
