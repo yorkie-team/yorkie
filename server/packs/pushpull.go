@@ -180,17 +180,9 @@ func pushPack(
 	docKey types.DocRefKey,
 	reqPack *change.Pack,
 ) ([]*database.ChangeInfo, *database.DocInfo, int64, change.Checkpoint, error) {
-	// 01. Acquire the push lock before reading checkpoint.
-	// The lock must be held before reading cpBeforePush so that concurrent
-	// pushes from different clients don't observe stale checkpoint values.
-	if reqPack.HasChanges() || reqPack.IsRemoved {
-		locker := be.Lockers.Locker(DocPushKey(docKey))
-		defer locker.Unlock()
-	}
-
 	cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
 
-	// 02. Filter out changes that are already pushed.
+	// 01. Filter out changes that are already pushed.
 	var pushables []*database.ChangeInfo
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() <= cpBeforePush.ClientSeq {
@@ -209,7 +201,7 @@ func pushPack(
 		pushables = append(pushables, info)
 	}
 
-	// 03. Discard stale-epoch changes before storing them.
+	// 02. Discard stale-epoch changes before storing them.
 	// pushPack runs before preparePack. Without this check, stale-epoch
 	// changes would be inserted into the in-memory changeCache, polluting
 	// it with operations that reference pre-compaction CRDT node IDs.
@@ -232,7 +224,17 @@ func pushPack(
 		}
 	}
 
-	// 04. Push the changes to the database.
+	// 03. Push the changes to the database.
+	// The lock must be held during CreateChangeInfos and the subsequent
+	// initialSeq calculation to prevent concurrent pushes from corrupting
+	// the checkpoint-to-serverSeq relationship.
+	if len(pushables) > 0 || reqPack.IsRemoved {
+		locker := be.Lockers.Locker(DocPushKey(docKey))
+		defer locker.Unlock()
+
+		// Re-read checkpoint inside the lock to ensure consistency.
+		cpBeforePush = clientInfo.Checkpoint(docKey.DocID)
+	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
 		docKey,
