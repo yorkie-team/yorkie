@@ -31,6 +31,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
+        {{- with .Values.yorkie.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{ if index .Values "mongodb" "enabled"}}
       initContainers:
