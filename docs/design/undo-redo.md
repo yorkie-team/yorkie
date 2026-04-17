@@ -446,6 +446,38 @@ Oldest entries are evicted when the cap is reached.
 | Priority | Item | Details |
 |----------|------|---------|
 | HIGH | Tree reconciliation Cases 3-6 | Overlapping range reconciliation. Text has it; Tree needs symmetric index computation or tree-native `normalizePos()`. 4 tests skipped. |
-| MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. |
+| MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. Same root cause as Cases 3-6: tree-native `normalizePos()` needed. See analysis below. |
 | LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). Fix forward first. |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup (TODO in `history.ts`). |
+
+#### Analysis: Tree Redo Divergence (insert-text + delete-text)
+
+This divergence shares the same root cause as Cases 3-6: Tree uses integer
+indices for redo positions, which are **asymmetric** across clients.
+
+```
+Initial:    <p>The fox jumped.</p>
+
+d1 forward: insert "X" at idx 16     → <p>The fox jumped.X</p>
+d2 forward: delete "." at idx 15-16  → <p>The fox jumped</p>
+Sync:       both converge to           <p>The fox jumpedX.</p>
+            (CRDT timestamp ordering: X before .)
+
+Both undo → sync → converge:          <p>The fox jumped.</p>
+
+d1 redo: insert "X" at idx 16        → <p>The fox jumped.X</p>  (X after .)
+d2 redo: delete "." at idx 15-16     → <p>The fox jumped.</p>
+Sync:    DIVERGE
+  d1: <p>The fox jumped.X</p>        (X after .)
+  d2: <p>The fox jumpedX.</p>        (X before .)
+```
+
+During forward execution, "X" and "." were concurrent inserts at the same
+position. The CRDT resolved their order by timestamp: `X` before `.`. On redo,
+"." has already been restored (via undo), so "X" is inserted sequentially
+**after** it — producing the opposite order.
+
+Text avoids this because `normalizePos()` walks the physical RGA chain, which is
+identical on all clients. Tree's integer-index-based redo does not have this
+guarantee. A tree-native `normalizePos()` that walks the CRDT node chain
+(analogous to Text's RGA chain walking) would fix both this issue and Cases 3-6.
