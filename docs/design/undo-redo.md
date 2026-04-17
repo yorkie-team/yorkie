@@ -439,6 +439,7 @@ Oldest entries are evicted when the cap is reached.
 | Tree split L1 undo/redo | ✅ | Boundary-deletion reverse ops (PR #1219) |
 | Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
 | TreeStyleOperation single-client | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
+| TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests), all converge (PR #1221) |
 
 #### Remaining Work
 
@@ -446,6 +447,5 @@ Oldest entries are evicted when the cap is reached.
 |----------|------|---------|
 | HIGH | Tree reconciliation Cases 3-6 | Overlapping range reconciliation. Text has it; Tree needs symmetric index computation or tree-native `normalizePos()`. 4 tests skipped. |
 | MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. |
-| MED | TreeStyleOperation multi-client | Single-client undo works; multi-client reconciliation not yet tested. |
 | LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). Fix forward first. |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup (TODO in `history.ts`). |
