@@ -72,8 +72,8 @@ function resolveMetric(summary, path) {
   const valuePath = path.slice(dot + 1);
 
   const metric = summary.metrics[metricName];
-  if (!metric || !metric.values) return null;
-  const val = metric.values[valuePath];
+  if (!metric) return null;
+  const val = metric[valuePath];
   return val !== undefined ? val : null;
 }
 
