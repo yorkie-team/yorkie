@@ -1,6 +1,6 @@
 ---
 title: fine-grained-document-locking
-target-version: 0.6.43
+target-version: 0.7.5
 ---
 
 <!-- Make sure to append document link in design README.md after creating the document. -->
