@@ -201,7 +201,30 @@ func pushPack(
 		pushables = append(pushables, info)
 	}
 
-	// 02. Push the changes to the database.
+	// 02. Discard stale-epoch changes before storing them.
+	// pushPack runs before preparePack. Without this check, stale-epoch
+	// changes would be inserted into the in-memory changeCache, polluting
+	// it with operations that reference pre-compaction CRDT node IDs.
+	// preparePack will return ErrEpochMismatch to the client downstream.
+	if len(pushables) > 0 {
+		if clientDocInfo := clientInfo.Documents[docKey.DocID]; clientDocInfo != nil {
+			currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+			if err != nil {
+				return nil, nil, time.InitialLamport, change.InitialCheckpoint, err
+			}
+			if clientDocInfo.Epoch != currentDocInfo.Epoch {
+				logging.From(ctx).Warnf(
+					"discarding %d changes from stale epoch: client(%d) != doc(%d)",
+					len(pushables),
+					clientDocInfo.Epoch,
+					currentDocInfo.Epoch,
+				)
+				pushables = nil
+			}
+		}
+	}
+
+	// 03. Push the changes to the database.
 	if len(pushables) > 0 || reqPack.IsRemoved {
 		locker := be.Lockers.Locker(DocPushKey(docKey))
 		defer locker.Unlock()

@@ -114,20 +114,61 @@ Client: detach → re-attach (receives new epoch)
 
 ### Epoch Check Placement
 
-The epoch comparison must happen **before** the existing `serverSeq`
-validation in `preparePack`. Once epochs differ, comparing `serverSeq` values
-is meaningless — they belong to different generations.
+The epoch comparison must happen in **two places**: `pushPack` (before
+changes are stored) and `preparePack` (before pulling changes).
+
+#### pushPack (push-side guard)
+
+`PushPull` executes `pushPack` before `preparePack`. If the epoch check
+only exists in `preparePack`, stale-epoch changes are already inserted into
+the in-memory `changeCache` by the time the mismatch is detected. These
+cached changes reference pre-compaction CRDT node IDs that no longer exist
+in the post-compaction snapshot, causing `ErrNotApplicableDataType` on
+subsequent attach or compaction attempts.
+
+To prevent this, `pushPack` must check the epoch **before** calling
+`CreateChangeInfos`:
+
+```go
+func pushPack(...) {
+    // ...filter already-pushed changes...
+
+    if len(pushables) > 0 {
+        docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+        if err != nil {
+            return ..., err
+        }
+        if clientDocInfo := clientInfo.Documents[docKey.DocID];
+            clientDocInfo != nil && clientDocInfo.Epoch != docInfo.Epoch {
+            // Discard stale-epoch changes silently. preparePack will
+            // return ErrEpochMismatch (or allow detach) downstream.
+            pushables = nil
+        }
+    }
+
+    docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(...)
+    // ...
+}
+```
+
+When the epoch mismatches, `pushPack` discards the pushable changes and
+proceeds with an empty push. This allows `PushPull` to continue into
+`pullPack`, where `preparePack` handles the epoch mismatch appropriately:
+returning `ErrEpochMismatch` for normal syncs, or allowing detach to
+proceed.
+
+#### preparePack (pull-side guard)
+
+The existing epoch check in `preparePack` remains unchanged. It compares
+epochs before the `serverSeq` validation and returns `ErrEpochMismatch`
+to the client:
 
 ```go
 func preparePack(...) {
-    // Compare epochs first: if the document has been compacted since the
-    // client last synced, serverSeq values from different epochs cannot be
-    // compared.
     if clientEpoch != docEpoch {
         return ErrEpochMismatch
     }
 
-    // Existing serverSeq validation.
     if initialServerSeq < reqPack.Checkpoint.ServerSeq {
         return ErrInvalidServerSeq
     }
@@ -143,11 +184,14 @@ func preparePack(...) {
 3. **`CompactChangeInfos`** (`server/backend/database/mongo/client.go`):
    Increment `doc.Epoch` alongside the `serverSeq` reset.
 4. **`AttachDocument`**: Set `ClientDocInfo.Epoch = DocInfo.Epoch` on attach.
-5. **`preparePack`** (`server/packs/pushpull.go`): Add epoch comparison before
+5. **`pushPack`** (`server/packs/pushpull.go`): Add epoch comparison before
+   `CreateChangeInfos` to prevent stale-epoch changes from polluting the
+   in-memory cache.
+6. **`preparePack`** (`server/packs/pushpull.go`): Add epoch comparison before
    the `serverSeq` check.
-6. **Error definition**: Add `ErrEpochMismatch` with an appropriate gRPC
+7. **Error definition**: Add `ErrEpochMismatch` with an appropriate gRPC
    status code mapping.
-7. **SDKs** (JS, iOS, Android): Handle `ErrEpochMismatch` by performing
+8. **SDKs** (JS, iOS, Android): Handle `ErrEpochMismatch` by performing
    detach → re-attach.
 
 ### Backward Compatibility
@@ -164,3 +208,4 @@ func preparePack(...) {
 | Client has unsent local changes when it receives `ErrEpochMismatch`; reattach discards them | Expose `ErrEpochMismatch` as an SDK event so the application can notify the user before reattaching |
 | Older SDK versions do not recognize `ErrEpochMismatch` | They fall through to the existing `ErrInvalidServerSeq` behavior — no worse than today |
 | Epoch counter overflows | `int64` supports over 9 × 10¹⁸ compactions — practically unlimited |
+| Stale-epoch push pollutes in-memory cache before `preparePack` detects mismatch | `pushPack` checks epoch before `CreateChangeInfos` and discards stale changes (see "Epoch Check Placement") |

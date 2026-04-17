@@ -164,4 +164,41 @@ func TestDocumentCompaction(t *testing.T) {
 		}))
 		assert.NoError(t, c.Sync(ctx))
 	})
+
+	t.Run("stale epoch push does not corrupt document for other clients", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithInitialRoot(
+			yson.ParseObject(`{"text": Text()}`),
+		)))
+		assert.NoError(t, d1.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(0, 0, "hello")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+
+		d2 := document.New(d1.Key())
+		assert.NoError(t, c2.Attach(ctx, d2))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.NoError(t, defaultServer.CompactDocument(ctx, d1.Key(), true))
+
+		assert.NoError(t, d2.Update(func(r *json.Object, p *presence.Presence) error {
+			r.GetText("text").Edit(5, 5, " world")
+			return nil
+		}))
+		err := c2.Sync(ctx)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, "ErrEpochMismatch", converter.ErrorCodeOf(err))
+
+		assert.NoError(t, c2.Detach(ctx, d2))
+
+		d3 := document.New(d1.Key())
+		assert.NoError(t, c3.Attach(ctx, d3))
+		assert.Equal(t, `hello`, d3.Root().GetText("text").String())
+
+		assert.NoError(t, c1.Detach(ctx, d1))
+		assert.NoError(t, c3.Detach(ctx, d3))
+	})
 }
