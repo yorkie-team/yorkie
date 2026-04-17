@@ -160,13 +160,14 @@ The following sections detail lock acquisition patterns for different types of o
 
 **PushPull(Internal Function)**
 
-_Push Phase (Steps 1-5):_
+_Push Phase (Steps 1-6):_
 
 1. 🔒 Acquire `doc.push`
-2. `findDoc` to fetch `server_seq`
-3. Push `changes` and assign `server_seq`
-4. `updateDoc` with `server_seq`
-5. 🔓 Release `doc.push`
+2. Read client `checkpoint` (must be inside lock to avoid stale reads under concurrency)
+3. Filter and validate `changes` (including epoch check)
+4. Push `changes` and assign `server_seq`
+5. `updateDoc` with `server_seq`
+6. 🔓 Release `doc.push`
 
 _Pull Phase (Steps 6-7):_
 
