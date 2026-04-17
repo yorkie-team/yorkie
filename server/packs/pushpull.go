@@ -201,7 +201,17 @@ func pushPack(
 		pushables = append(pushables, info)
 	}
 
-	// 02. Discard stale-epoch changes before storing them.
+	// 02. Push the changes to the database.
+	// NOTE(hackerwins): The lock must be acquired before the epoch check
+	// because FindDocInfoByRefKey populates the docCache. Without the lock,
+	// a concurrent goroutine's stale MongoDB read can overwrite a fresher
+	// cache entry, causing ErrConflictOnUpdate in CreateChangeInfos.
+	if len(pushables) > 0 || reqPack.IsRemoved {
+		locker := be.Lockers.Locker(DocPushKey(docKey))
+		defer locker.Unlock()
+	}
+
+	// 03. Discard stale-epoch changes before storing them.
 	// pushPack runs before preparePack. Without this check, stale-epoch
 	// changes would be inserted into the in-memory changeCache, polluting
 	// it with operations that reference pre-compaction CRDT node IDs.
@@ -222,12 +232,6 @@ func pushPack(
 				pushables = nil
 			}
 		}
-	}
-
-	// 03. Push the changes to the database.
-	if len(pushables) > 0 || reqPack.IsRemoved {
-		locker := be.Lockers.Locker(DocPushKey(docKey))
-		defer locker.Unlock()
 	}
 	docInfo, cpAfterPush, err := be.DB.CreateChangeInfos(
 		ctx,
