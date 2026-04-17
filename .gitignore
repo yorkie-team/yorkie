@@ -69,7 +69,6 @@ output.txt
 
 # Chart dependencies
 **/charts/*.tgz
-/build/charts/yorkie-argocd/charts/
 /build/charts/yorkie-monitoring/charts/
 /build/charts/yorkie-cluster/charts/yorkie-mongodb/charts/
 
