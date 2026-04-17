@@ -58,10 +58,14 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 			go func() {
 				defer wg.Done()
 
-				client, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
-				assert.NoError(b, err)
-				err = client.Sync(ctx)
-				assert.NoError(b, err)
+				cli, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
+				if !assert.NoError(b, err) {
+					return
+				}
+
+				if !assert.NoError(b, cli.Sync(ctx)) {
+					return
+				}
 
 				for j := range syncCnt {
 					err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -70,8 +74,8 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 					})
 					assert.NoError(b, err)
 				}
-				assert.NoError(b, client.Sync(ctx))
-				assert.NoError(b, client.Close())
+				assert.NoError(b, cli.Sync(ctx))
+				assert.NoError(b, cli.Close())
 			}()
 		}
 		wg.Wait()
