@@ -127,19 +127,28 @@ in the post-compaction snapshot, causing `ErrNotApplicableDataType` on
 subsequent attach or compaction attempts.
 
 To prevent this, `pushPack` must check the epoch **before** calling
-`CreateChangeInfos`:
+`CreateChangeInfos`. The push lock must also be acquired before reading
+`cpBeforePush` to prevent concurrent pushes from observing stale
+checkpoint values:
 
 ```go
 func pushPack(...) {
-    // ...filter already-pushed changes...
+    // Acquire lock before reading checkpoint.
+    if reqPack.HasChanges() || reqPack.IsRemoved {
+        locker := be.Lockers.Locker(DocPushKey(docKey))
+        defer locker.Unlock()
+    }
+
+    cpBeforePush := clientInfo.Checkpoint(docKey.DocID)
+    // ...filter already-pushed changes into pushables...
 
     if len(pushables) > 0 {
-        docInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
+        currentDocInfo, err := be.DB.FindDocInfoByRefKey(ctx, docKey)
         if err != nil {
             return ..., err
         }
         if clientDocInfo := clientInfo.Documents[docKey.DocID];
-            clientDocInfo != nil && clientDocInfo.Epoch != docInfo.Epoch {
+            clientDocInfo != nil && clientDocInfo.Epoch != currentDocInfo.Epoch {
             // Discard stale-epoch changes silently. preparePack will
             // return ErrEpochMismatch (or allow detach) downstream.
             pushables = nil
