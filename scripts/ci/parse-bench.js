@@ -148,8 +148,9 @@ function isSignificant(pct, absChange, unit) {
   return true;
 }
 
-// Build comparison rows for a set of benchmark names
-// Returns array of { name, metrics: [{ unit, prev, curr, pct, significant }] }
+// Build comparison rows for a set of benchmark names.
+// Returns { rows: [{ name, metrics: [{ unit, prevVal, currVal, pct, absChange, significant }] }],
+//           sortedUnits: string[] }
 function buildRows(names, prevData, currData) {
   // Collect all units seen across these benchmarks
   const allUnits = new Set();

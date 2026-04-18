@@ -39,14 +39,14 @@ const NOISE_RES = [
 ];
 
 // Target metrics to extract from the k6 summary JSON
-// Format: [dotPath, displayLabel, isCount]
+// Format: [dotPath, displayLabel, isCount, higherIsBetter]
 const TARGET_METRICS = [
-  ['transaction_time.avg', 'Transaction Time (avg)', false],
-  ['http_req_duration.avg', 'HTTP Req Duration (avg)', false],
-  ['http_req_duration.p(95)', 'HTTP Req Duration (p95)', false],
-  ['iteration_duration.avg', 'Iteration Duration (avg)', false],
-  ['data_received.count', 'Data Received', true],
-  ['data_sent.count', 'Data Sent', true],
+  ['transaction_time.avg', 'Transaction Time (avg)', false, false],
+  ['http_req_duration.avg', 'HTTP Req Duration (avg)', false, false],
+  ['http_req_duration.p(95)', 'HTTP Req Duration (p95)', false, false],
+  ['iteration_duration.avg', 'Iteration Duration (avg)', false, false],
+  ['data_received.count', 'Data Received', true, true],
+  ['data_sent.count', 'Data Sent', true, true],
 ];
 
 // Filter noise lines from k6 output
@@ -62,7 +62,7 @@ function filterOutput(text) {
 }
 
 // Resolve a dot-path like "http_req_duration.p(95)" from the k6 metrics object.
-// k6 summary structure: { metrics: { <name>: { values: { avg, "p(95)", ... } } } }
+// k6 --summary-export shape: { metrics: { <name>: { avg, "p(95)", count, ... } } }
 function resolveMetric(summary, path) {
   if (!summary || !summary.metrics) return null;
   const dot = path.indexOf('.');
@@ -95,12 +95,12 @@ function pctChange(prev, curr) {
 }
 
 // Change indicator emoji.
-// For load metrics: lower is generally better (time, bytes transferred).
-// Negative pct (curr < prev) = improvement = 🟢
-// Positive pct (curr > prev) = regression = 🔴
-function indicator(pct) {
+// higherIsBetter=false (default): negative pct = improvement = 🟢
+// higherIsBetter=true (throughput): positive pct = improvement = 🟢
+function indicator(pct, higherIsBetter) {
   if (pct === null) return '⚪';
   if (Math.abs(pct) < 0.5) return '⚪';
+  if (higherIsBetter) return pct > 0 ? '🟢' : '🔴';
   return pct < 0 ? '🟢' : '🔴';
 }
 
@@ -110,7 +110,7 @@ function buildTable(prevSummary, currSummary) {
   const sep = header.map(() => '---');
   const lines = [`| ${header.join(' | ')} |`, `| ${sep.join(' | ')} |`];
 
-  for (const [path, label, isCount] of TARGET_METRICS) {
+  for (const [path, label, isCount, higherIsBetter] of TARGET_METRICS) {
     const prevVal = resolveMetric(prevSummary, path);
     const currVal = resolveMetric(currSummary, path);
 
@@ -122,7 +122,7 @@ function buildTable(prevSummary, currSummary) {
     if (pct === null) {
       changeStr = '⚪ –';
     } else {
-      const icon = indicator(pct);
+      const icon = indicator(pct, higherIsBetter);
       const sign = pct > 0 ? '+' : '';
       changeStr = `${icon} ${sign}${pct.toFixed(1)}%`;
     }
@@ -148,7 +148,7 @@ function main() {
       process.stderr.write('Failed to parse CURR_LOAD_RESULT JSON: ' + e.message + '\n');
       process.exit(1);
     }
-    if (text && text !== 'null') {
+    if (text) {
       result = filterOutput(text);
     }
   }
@@ -165,7 +165,7 @@ function main() {
       process.exit(1);
     }
 
-    if (currSummary && currSummary !== 'null' && prevSummary && prevSummary !== 'null') {
+    if (currSummary && prevSummary) {
       table = buildTable(prevSummary, currSummary);
     }
   }

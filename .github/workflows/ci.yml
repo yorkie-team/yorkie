@@ -187,9 +187,10 @@ jobs:
         id: bench-analysis
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PARSED: ${{ steps.bench-parse.outputs.PARSED }}
         run: |
-          SIGNIFICANT=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '.significantChangesTable // ""')
-          GROUPED=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '.groupedTable // ""')
+          SIGNIFICANT=$(echo "$PARSED" | jq -r '.significantChangesTable // ""')
+          GROUPED=$(echo "$PARSED" | jq -r '.groupedTable // ""')
 
           if [ -z "$SIGNIFICANT" ]; then
             echo "ANALYSIS=No significant benchmark changes detected." >> $GITHUB_OUTPUT
@@ -197,62 +198,78 @@ jobs:
             exit 0
           fi
 
-          PROMPT="Analyze these Go benchmark changes (≥20% difference). Write 2-3 key observations as markdown bullets. Be concise, data-driven.
+          # Write prompt to a file to avoid shell injection
+          cat > /tmp/bench-prompt.txt << 'PROMPT_EOF'
+          Analyze these Go benchmark changes (≥20% difference). Write 2-3 key observations as markdown bullets. Be concise, data-driven.
+          PROMPT_EOF
+          echo "" >> /tmp/bench-prompt.txt
+          echo "Significant changes:" >> /tmp/bench-prompt.txt
+          echo "$SIGNIFICANT" >> /tmp/bench-prompt.txt
+          echo "" >> /tmp/bench-prompt.txt
+          echo "Full data:" >> /tmp/bench-prompt.txt
+          echo "$GROUPED" >> /tmp/bench-prompt.txt
 
-          Significant changes:
-          ${SIGNIFICANT}
+          ANALYSIS=$(claude -p "$(cat /tmp/bench-prompt.txt)" --model claude-sonnet-4-20250514 2>/dev/null || echo "Analysis unavailable.")
 
-          Full data:
-          ${GROUPED}"
-
-          ANALYSIS=$(claude -p "$PROMPT" --model claude-sonnet-4-20250514 --max-tokens 1024 2>/dev/null || echo "Analysis unavailable.")
+          # Write analysis to file to avoid shell injection in later steps
+          echo "$ANALYSIS" > /tmp/bench-analysis.txt
 
           EOF_MARKER="ANALYSIS_EOF_$(date +%s)"
           echo "ANALYSIS<<${EOF_MARKER}" >> $GITHUB_OUTPUT
           echo "$ANALYSIS" >> $GITHUB_OUTPUT
           echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
 
-          HAS_VV=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '.hasVersionVector // false')
+          HAS_VV=$(echo "$PARSED" | jq -r '.hasVersionVector // false')
           if [ "$HAS_VV" = "true" ]; then
-            VV_DATA=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '[.grouped | to_entries[] | select(.key | test("VersionVector|SyncConcurrency"))] | map("\(.key): \(.value | tostring)") | join("\n")')
-            VV_PROMPT="Compare Lamport vs VersionVector performance from this benchmark data. Provide a concise summary:
+            VV_DATA=$(echo "$PARSED" | jq -r '[.grouped | to_entries[] | select(.key | test("VersionVector|SyncConcurrency"))] | map("\(.key): \(.value | tostring)") | join("\n")')
 
-            ${VV_DATA}"
-            VV_ANALYSIS=$(claude -p "$VV_PROMPT" --model claude-sonnet-4-20250514 --max-tokens 1024 2>/dev/null || echo "")
+            cat > /tmp/vv-prompt.txt << 'PROMPT_EOF'
+          Compare Lamport vs VersionVector performance from this benchmark data. Provide a concise summary.
+          PROMPT_EOF
+            echo "" >> /tmp/vv-prompt.txt
+            echo "$VV_DATA" >> /tmp/vv-prompt.txt
+
+            VV_ANALYSIS=$(claude -p "$(cat /tmp/vv-prompt.txt)" --model claude-sonnet-4-20250514 2>/dev/null || echo "")
+            echo "$VV_ANALYSIS" > /tmp/vv-analysis.txt
+
             EOF_VV="VV_EOF_$(date +%s)"
             echo "VV_ANALYSIS<<${EOF_VV}" >> $GITHUB_OUTPUT
             echo "$VV_ANALYSIS" >> $GITHUB_OUTPUT
             echo "${EOF_VV}" >> $GITHUB_OUTPUT
           else
             echo "VV_ANALYSIS=" >> $GITHUB_OUTPUT
+            echo "" > /tmp/vv-analysis.txt
           fi
 
       - name: Post benchmark comment to PR
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARSED: ${{ steps.bench-parse.outputs.PARSED }}
         run: |
-          SIGNIFICANT_TABLE=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '.significantChangesTable // ""')
-          GROUPED_TABLE=$(echo '${{ steps.bench-parse.outputs.PARSED }}' | jq -r '.groupedTable // ""')
+          SIGNIFICANT_TABLE=$(echo "$PARSED" | jq -r '.significantChangesTable // ""')
+          GROUPED_TABLE=$(echo "$PARSED" | jq -r '.groupedTable // ""')
           COMMIT_ID="${{ github.sha }}"
           PREV_COMMIT_ID="${{ steps.prev-bench.outputs.PREV_COMMIT }}"
 
+          # Read LLM outputs from files (safe, no shell injection)
+          ANALYSIS=$(cat /tmp/bench-analysis.txt 2>/dev/null || echo "")
+          VV_ANALYSIS=$(cat /tmp/vv-analysis.txt 2>/dev/null || echo "")
+
           VV_SECTION=""
-          if [ -n "${{ steps.bench-analysis.outputs.VV_ANALYSIS }}" ]; then
-            VV_SECTION="
-          ### Clock Analysis
+          if [ -n "$VV_ANALYSIS" ]; then
+            VV_SECTION="### Clock Analysis
 
           <details>
           <summary>Lamport vs VersionVector</summary>
 
-          ${{ steps.bench-analysis.outputs.VV_ANALYSIS }}
+          ${VV_ANALYSIS}
 
-          </details>
-          "
+          </details>"
           fi
 
-          cat > /tmp/bench-comment.md << EOF
-          <!-- yorkie-ci-benchmark n8n comment -->
+          cat > /tmp/bench-comment.md << COMMENT_EOF
+          <!-- yorkie-ci-benchmark comment -->
           ## Go Benchmark Analysis 📊
 
           This is a comparison result between the previous(${PREV_COMMIT_ID}) and the current commit(${COMMIT_ID}).
@@ -261,19 +278,19 @@ jobs:
 
           ${SIGNIFICANT_TABLE}
 
-          ${{ steps.bench-analysis.outputs.ANALYSIS }}
+          ${ANALYSIS}
 
           ${VV_SECTION}
 
           ### Detailed Test Results
 
           ${GROUPED_TABLE}
-          EOF
+          COMMENT_EOF
 
           bash repo/scripts/ci/post-comment.sh \
             "${{ github.repository }}" \
             "${{ github.event.pull_request.number }}" \
-            "<!-- yorkie-ci-benchmark n8n comment -->" \
+            "<!-- yorkie-ci-benchmark comment -->" \
             /tmp/bench-comment.md
 
       - name: Store benchmark result
@@ -443,9 +460,10 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARSED: ${{ steps.load-parse.outputs.PARSED }}
         run: |
-          CHANGE_TABLE=$(echo '${{ steps.load-parse.outputs.PARSED }}' | jq -r '.table // ""')
-          RESULT=$(echo '${{ steps.load-parse.outputs.PARSED }}' | jq -r '.result // ""')
+          CHANGE_TABLE=$(echo "$PARSED" | jq -r '.table // ""')
+          RESULT=$(echo "$PARSED" | jq -r '.result // ""')
           COMMIT_ID="${{ github.sha }}"
           PREV_COMMIT_ID="${{ steps.prev-load.outputs.PREV_COMMIT }}"
 
@@ -456,8 +474,8 @@ jobs:
           ${CHANGE_TABLE}"
           fi
 
-          cat > /tmp/load-comment.md << EOF
-          <!-- yorkie-ci-load n8n comment -->
+          cat > /tmp/load-comment.md << COMMENT_EOF
+          <!-- yorkie-ci-load comment -->
           ## k6 Load Test 📊
 
           This is a comparison result between the previous(${PREV_COMMIT_ID}) and the current commit(${COMMIT_ID}).
@@ -471,12 +489,12 @@ jobs:
           ${RESULT}
 
           </details>
-          EOF
+          COMMENT_EOF
 
           bash repo/scripts/ci/post-comment.sh \
             "${{ github.repository }}" \
             "${{ github.event.pull_request.number }}" \
-            "<!-- yorkie-ci-load n8n comment -->" \
+            "<!-- yorkie-ci-load comment -->" \
             /tmp/load-comment.md
 
       - name: Store load result
