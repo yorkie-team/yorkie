@@ -418,6 +418,40 @@ entries:
   yorkie-cluster:
   - apiVersion: v2
     appVersion: 0.7.4
+    created: "2026-04-18T14:59:19.981970736Z"
+    dependencies:
+    - condition: mongodb.enabled
+      name: psmdb-operator
+      repository: https://percona.github.io/percona-helm-charts/
+      version: 1.21.1
+    - alias: yorkie-mongodb
+      condition: mongodb.enabled
+      name: psmdb-db
+      repository: https://percona.github.io/percona-helm-charts/
+      version: 1.21.1
+    description: yorkie-cluster provides cluster mode for Yorkie server to handle
+      large amount of workloads with ensuring high availability, reliability, and
+      scalability.
+    digest: e25f2bc2863a6de64638647babcbe9649c66651a963224bee34a3a120b27d3c7
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - istio
+    kubeVersion: '>=1.28.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    name: yorkie-cluster
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-cluster-0.7.5-rc2/yorkie-cluster-0.7.5-rc2.tgz
+    version: 0.7.5-rc2
+  - apiVersion: v2
+    appVersion: 0.7.4
     created: "2026-04-18T14:41:15.912302813Z"
     dependencies:
     - condition: mongodb.enabled
@@ -5057,4 +5091,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2026-04-18T14:41:15.912729671Z"
+generated: "2026-04-18T14:59:19.982392133Z"
