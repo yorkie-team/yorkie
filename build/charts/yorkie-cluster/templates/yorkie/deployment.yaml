@@ -31,6 +31,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
+        {{- if eq .Values.istio.mode "ambient" }}
+        sidecar.istio.io/inject: "false"
+        {{- end }}
         {{- with .Values.yorkie.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
