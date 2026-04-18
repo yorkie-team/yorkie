@@ -28,11 +28,6 @@ yorkie:
 
   resources: {}
 
-# Configuration for Istio service mesh
-istio:
-  # Istio data plane mode: "sidecar" or "ambient"
-  mode: sidecar
-
 # Configuration for istio ingress gateway
 ingressGateway:
   consistentHash:

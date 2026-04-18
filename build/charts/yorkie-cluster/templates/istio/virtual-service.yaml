@@ -9,11 +9,9 @@ spec:
   gateways:
     - {{ .Values.yorkie.name }}-gateway
   http:
-    # route to yorkie rpc service on "/yorkie.v1" uri prefix
-    - name: {{ .Values.yorkie.name }}-rpc-service
+    # route /auth paths with fixed shard key for GitHub OAuth session consistency
+    - name: {{ .Values.yorkie.name }}-auth-service
       match:
-        - uri:
-            prefix: "/yorkie.v1"
         - uri:
             prefix: "/auth"
       route:
@@ -21,7 +19,54 @@ spec:
             host: {{ .Values.yorkie.name }}
             port:
               number: {{ .Values.yorkie.ports.rpcPort }}
-      # set cors policy for grpc-web protocols
+      headers:
+        request:
+          set:
+            x-shard-key: "auth-session"
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - POST
+          - GET
+          - OPTIONS
+          - PUT
+          - DELETE
+        allowHeaders:
+          - grpc-timeout
+          - content-type
+          - keep-alive
+          - user-agent
+          - cache-control
+          - content-transfer-encoding
+          - custom-header-1
+          - x-accept-content-transfer-encoding
+          - x-accept-response-streaming
+          - x-user-agent
+          - x-yorkie-user-agent
+          - x-grpc-web
+          - authorization
+          - x-api-key
+          - x-shard-key
+          - connect-protocol-version
+          - connect-timeout-ms
+        maxAge: 1728s
+        exposeHeaders:
+          - custom-header-1
+          - grpc-status
+          - grpc-message
+          - grpc-status-details-bin
+        allowCredentials: true
+    # route /yorkie.v1 paths (client SDK sets x-shard-key)
+    - name: {{ .Values.yorkie.name }}-rpc-service
+      match:
+        - uri:
+            prefix: "/yorkie.v1"
+      route:
+        - destination:
+            host: {{ .Values.yorkie.name }}
+            port:
+              number: {{ .Values.yorkie.ports.rpcPort }}
       corsPolicy:
         allowOrigins:
           - exact: "*"

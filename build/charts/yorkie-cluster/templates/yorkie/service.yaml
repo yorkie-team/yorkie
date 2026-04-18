@@ -13,9 +13,6 @@ metadata:
     prometheus.io/scrape: "true"
     prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
     prometheus.io/path: "/metrics"
-    {{- if eq .Values.istio.mode "ambient" }}
-    istio.io/use-waypoint: {{ .Values.yorkie.name }}-waypoint
-    {{- end }}
 spec:
   ports:
   # even when the port name is grpc-web,
