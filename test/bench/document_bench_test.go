@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+// Package bench provides benchmark tests for Yorkie document operations.
 package bench
 
 import (
