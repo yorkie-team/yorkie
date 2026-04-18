@@ -485,6 +485,7 @@ jobs:
           ### Result
 
           <details>
+          <summary>Full k6 output</summary>
 
           ${RESULT}
 

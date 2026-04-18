@@ -31,6 +31,8 @@ const BENCH_LINE_RE =
 const TIME_UNITS = new Set(['ns/op', '(ns)', '(ms)', '(s)']);
 const MEMORY_UNITS = new Set(['B/op', '(bytes)']);
 const ALLOC_UNITS = new Set(['allocs/op', '(allocs)']);
+// Throughput units where higher is better (e.g. MB/s, ops/s)
+const THROUGHPUT_UNITS = new Set(['MB/s', 'ops/s', 'docs/s', 'req/s']);
 
 // Significant change thresholds
 const SIG_PCT = 20; // percent
@@ -130,13 +132,15 @@ function pctChange(prev, curr) {
   return ((curr - prev) / prev) * 100;
 }
 
-// Indicator emoji
-function indicator(pct) {
+// Indicator emoji.
+// For most units (time, memory, allocs): lower is better (negative % = 🟢).
+// For throughput units (MB/s, ops/s): higher is better (positive % = 🟢).
+function indicator(pct, unit) {
   if (pct === null) return '⚪';
-  // For time and memory: negative pct = improvement (green)
-  // For allocs: negative pct = improvement (green)
   if (Math.abs(pct) < 0.5) return '⚪';
-  return pct < 0 ? '🟢' : '🔴';
+  const higherBetter = THROUGHPUT_UNITS.has(unit);
+  const improved = higherBetter ? pct > 0 : pct < 0;
+  return improved ? '🟢' : '🔴';
 }
 
 // Determine if a change is significant
@@ -233,7 +237,7 @@ function buildGroupTable(groupName, names, prevData, currData) {
       const currStr = currVal !== null ? formatValue(currVal, unit) : 'N/A';
       let changeStr = '⚪ N/A';
       if (pct !== null) {
-        const icon = indicator(pct);
+        const icon = indicator(pct, unit);
         const sign = pct > 0 ? '+' : '';
         changeStr = `${icon} ${sign}${pct.toFixed(1)}%`;
       }
@@ -271,7 +275,7 @@ function buildSignificantTable(grouped, prevData, currData) {
   for (const { name, unit, prevVal, currVal, pct } of sigRows) {
     const prevStr = prevVal !== null ? formatValue(prevVal, unit) : 'N/A';
     const currStr = currVal !== null ? formatValue(currVal, unit) : 'N/A';
-    const icon = indicator(pct);
+    const icon = indicator(pct, unit);
     const sign = pct > 0 ? '+' : '';
     const changeStr = `${icon} ${sign}${pct.toFixed(1)}%`;
     lines.push(`| ${name} | ${unitLabel(unit)} | ${prevStr} | ${currStr} | ${changeStr} |`);
