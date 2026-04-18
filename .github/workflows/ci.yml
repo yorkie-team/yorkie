@@ -109,6 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.bench == 'true' }}
@@ -118,6 +119,16 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Node.js
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code CLI
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: Checkout current repository
         uses: actions/checkout@v4
@@ -158,37 +169,129 @@ jobs:
           content=$(cat output.txt | jq -R -s .)
           echo "BENCH_RESULT=$content" >> $GITHUB_OUTPUT
 
-      - name: Trigger n8n webhook
+      - name: Parse benchmark results
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        id: bench-parse
+        env:
+          PREV_BENCH_RESULT: ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }}
+          CURR_BENCH_RESULT: ${{ steps.curr-bench.outputs.BENCH_RESULT }}
+        run: |
+          PARSED=$(node repo/scripts/ci/parse-bench.js)
+          EOF_MARKER="BENCH_PARSE_EOF_$(date +%s)"
+          echo "PARSED<<${EOF_MARKER}" >> $GITHUB_OUTPUT
+          echo "$PARSED" >> $GITHUB_OUTPUT
+          echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
+
+      - name: Analyze benchmark with Claude
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        id: bench-analysis
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PARSED: ${{ steps.bench-parse.outputs.PARSED }}
+        run: |
+          SIGNIFICANT=$(echo "$PARSED" | jq -r '.significantChangesTable // ""')
+          GROUPED=$(echo "$PARSED" | jq -r '.groupedTable // ""')
+
+          if [ -z "$SIGNIFICANT" ]; then
+            echo "ANALYSIS=No significant benchmark changes detected." >> $GITHUB_OUTPUT
+            echo "VV_ANALYSIS=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Write prompt to a file to avoid shell injection
+          cat > /tmp/bench-prompt.txt << 'PROMPT_EOF'
+          Analyze these Go benchmark changes (≥20% difference). Write 2-3 key observations as markdown bullets. Be concise, data-driven.
+          PROMPT_EOF
+          echo "" >> /tmp/bench-prompt.txt
+          echo "Significant changes:" >> /tmp/bench-prompt.txt
+          echo "$SIGNIFICANT" >> /tmp/bench-prompt.txt
+          echo "" >> /tmp/bench-prompt.txt
+          echo "Full data:" >> /tmp/bench-prompt.txt
+          echo "$GROUPED" >> /tmp/bench-prompt.txt
+
+          ANALYSIS=$(claude -p "$(cat /tmp/bench-prompt.txt)" --model claude-sonnet-4-20250514 2>/dev/null || echo "Analysis unavailable.")
+
+          # Write analysis to file to avoid shell injection in later steps
+          echo "$ANALYSIS" > /tmp/bench-analysis.txt
+
+          EOF_MARKER="ANALYSIS_EOF_$(date +%s)"
+          echo "ANALYSIS<<${EOF_MARKER}" >> $GITHUB_OUTPUT
+          echo "$ANALYSIS" >> $GITHUB_OUTPUT
+          echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
+
+          HAS_VV=$(echo "$PARSED" | jq -r '.hasVersionVector // false')
+          if [ "$HAS_VV" = "true" ]; then
+            VV_DATA=$(echo "$PARSED" | jq -r '[.grouped | to_entries[] | select(.key | test("VersionVector|SyncConcurrency"))] | map("\(.key): \(.value | tostring)") | join("\n")')
+
+            cat > /tmp/vv-prompt.txt << 'PROMPT_EOF'
+          Compare Lamport vs VersionVector performance from this benchmark data. Provide a concise summary.
+          PROMPT_EOF
+            echo "" >> /tmp/vv-prompt.txt
+            echo "$VV_DATA" >> /tmp/vv-prompt.txt
+
+            VV_ANALYSIS=$(claude -p "$(cat /tmp/vv-prompt.txt)" --model claude-sonnet-4-20250514 2>/dev/null || echo "")
+            echo "$VV_ANALYSIS" > /tmp/vv-analysis.txt
+
+            EOF_VV="VV_EOF_$(date +%s)"
+            echo "VV_ANALYSIS<<${EOF_VV}" >> $GITHUB_OUTPUT
+            echo "$VV_ANALYSIS" >> $GITHUB_OUTPUT
+            echo "${EOF_VV}" >> $GITHUB_OUTPUT
+          else
+            echo "VV_ANALYSIS=" >> $GITHUB_OUTPUT
+            echo "" > /tmp/vv-analysis.txt
+          fi
+
+      - name: Post benchmark comment to PR
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
         env:
-          BENCH_RESULT: ${{ steps.curr-bench.outputs.BENCH_RESULT }}
-          PREV_BENCH_RESULT: ${{ steps.prev-bench.outputs.PREV_BENCH_RESULT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARSED: ${{ steps.bench-parse.outputs.PARSED }}
         run: |
-          payload=$(jq -n \
-           --arg repo "${{ github.repository }}" \
-           --arg pr_number "${{ github.event.pull_request.number }}" \
-           --arg commit_id "${{ github.sha }}" \
-           --arg prev_commit_id "${{ steps.prev-bench.outputs.PREV_COMMIT }}" \
-           --arg bench_result "$BENCH_RESULT" \
-           --arg prev_bench_result "$PREV_BENCH_RESULT" \
-           '{
-               target: "bench",
-               repo: $repo,
-               pr_number: $pr_number,
-               commit_id: $commit_id,
-               prev_commit_id: $prev_commit_id,
-               bench_result: $bench_result,
-               prev_bench_result: $prev_bench_result,
-           }')
+          SIGNIFICANT_TABLE=$(echo "$PARSED" | jq -r '.significantChangesTable // ""')
+          GROUPED_TABLE=$(echo "$PARSED" | jq -r '.groupedTable // ""')
+          COMMIT_ID="${{ github.sha }}"
+          PREV_COMMIT_ID="${{ steps.prev-bench.outputs.PREV_COMMIT }}"
 
-          response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
-          -H "Content-Type: application/json" \
-          -d "$payload" || echo "CURL_ERROR")
+          # Read LLM outputs from files (safe, no shell injection)
+          ANALYSIS=$(cat /tmp/bench-analysis.txt 2>/dev/null || echo "")
+          VV_ANALYSIS=$(cat /tmp/vv-analysis.txt 2>/dev/null || echo "")
 
-          if [ "$response" = "CURL_ERROR" ]; then
-            echo "::error::Failed to trigger n8n webhook"
-            exit 1
+          VV_SECTION=""
+          if [ -n "$VV_ANALYSIS" ]; then
+            VV_SECTION="### Clock Analysis
+
+          <details>
+          <summary>Lamport vs VersionVector</summary>
+
+          ${VV_ANALYSIS}
+
+          </details>"
           fi
+
+          cat > /tmp/bench-comment.md << COMMENT_EOF
+          <!-- yorkie-ci-benchmark comment -->
+          ## Go Benchmark Analysis 📊
+
+          This is a comparison result between the previous(${PREV_COMMIT_ID}) and the current commit(${COMMIT_ID}).
+
+          ### Significant Changes (≥20% difference)
+
+          ${SIGNIFICANT_TABLE}
+
+          ${ANALYSIS}
+
+          ${VV_SECTION}
+
+          ### Detailed Test Results
+
+          ${GROUPED_TABLE}
+          COMMENT_EOF
+
+          bash repo/scripts/ci/post-comment.sh \
+            "${{ github.repository }}" \
+            "${{ github.event.pull_request.number }}" \
+            "<!-- yorkie-ci-benchmark comment -->" \
+            /tmp/bench-comment.md
 
       - name: Store benchmark result
         if: github.ref == 'refs/heads/main'
@@ -260,6 +363,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.load-test == 'true' }}
@@ -269,6 +373,12 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Set up Node.js
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Checkout current repository
         uses: actions/checkout@v4
@@ -332,43 +442,61 @@ jobs:
       - name: Stop the server
         run: cd repo && make stop
 
-      - name: Trigger n8n webhook
+      - name: Parse load test results
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        id: load-parse
         env:
-          LOAD_RESULT: ${{ steps.curr-load.outputs.LOAD_RESULT }}
-          PREV_LOAD_RESULT: ${{ steps.prev-load.outputs.PREV_LOAD_RESULT }}
-          LOAD_SUMMARY: ${{ steps.curr-load.outputs.LOAD_SUMMARY }}
+          CURR_LOAD_RESULT: ${{ steps.curr-load.outputs.LOAD_RESULT }}
+          CURR_LOAD_SUMMARY: ${{ steps.curr-load.outputs.LOAD_SUMMARY }}
           PREV_LOAD_SUMMARY: ${{ steps.prev-load.outputs.PREV_LOAD_SUMMARY }}
         run: |
-          payload=$(jq -n \
-           --arg repo "${{ github.repository }}" \
-           --arg pr_number "${{ github.event.pull_request.number }}" \
-           --arg commit_id "${{ github.sha }}" \
-           --arg prev_commit_id "${{ steps.prev-load.outputs.PREV_COMMIT }}" \
-           --arg load_result "$LOAD_RESULT" \
-           --arg prev_load_result "$PREV_LOAD_RESULT" \
-           --arg load_summary "$LOAD_SUMMARY" \
-           --arg prev_load_summary "$PREV_LOAD_SUMMARY" \
-           '{
-               target: "load",
-               repo: $repo,
-               pr_number: $pr_number,
-               commit_id: $commit_id,
-               prev_commit_id: $prev_commit_id,
-               load_result: $load_result,
-               prev_load_result: $prev_load_result,
-               load_summary: $load_summary,
-               prev_load_summary: $prev_load_summary
-           }')
+          PARSED=$(node repo/scripts/ci/parse-load.js)
+          EOF_MARKER="LOAD_PARSE_EOF_$(date +%s)"
+          echo "PARSED<<${EOF_MARKER}" >> $GITHUB_OUTPUT
+          echo "$PARSED" >> $GITHUB_OUTPUT
+          echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
 
-           response=$(curl -f -X POST ${{ secrets.N8N_WEBHOOK_URL }} \
-           -H "Content-Type: application/json" \
-           -d "$payload" || echo "CURL_ERROR")
+      - name: Post load test comment to PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PARSED: ${{ steps.load-parse.outputs.PARSED }}
+        run: |
+          CHANGE_TABLE=$(echo "$PARSED" | jq -r '.table // ""')
+          RESULT=$(echo "$PARSED" | jq -r '.result // ""')
+          COMMIT_ID="${{ github.sha }}"
+          PREV_COMMIT_ID="${{ steps.prev-load.outputs.PREV_COMMIT }}"
 
-           if [ "$response" = "CURL_ERROR" ]; then
-               echo "::error::Failed to trigger n8n webhook"
-               exit 1
-           fi
+          CHANGE_SECTION=""
+          if [ -n "$CHANGE_TABLE" ] && [ "$CHANGE_TABLE" != "null" ]; then
+            CHANGE_SECTION="### Change
+
+          ${CHANGE_TABLE}"
+          fi
+
+          cat > /tmp/load-comment.md << COMMENT_EOF
+          <!-- yorkie-ci-load comment -->
+          ## k6 Load Test 📊
+
+          This is a comparison result between the previous(${PREV_COMMIT_ID}) and the current commit(${COMMIT_ID}).
+
+          ${CHANGE_SECTION}
+
+          ### Result
+
+          <details>
+          <summary>Full k6 output</summary>
+
+          ${RESULT}
+
+          </details>
+          COMMENT_EOF
+
+          bash repo/scripts/ci/post-comment.sh \
+            "${{ github.repository }}" \
+            "${{ github.event.pull_request.number }}" \
+            "<!-- yorkie-ci-load comment -->" \
+            /tmp/load-comment.md
 
       - name: Store load result
         if: github.ref == 'refs/heads/main'
