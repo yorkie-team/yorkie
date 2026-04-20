@@ -426,58 +426,146 @@ real-world undo/redo scenarios.
 The undo and redo stacks are capped at 50 entries (`MaxUndoRedoStackDepth`).
 Oldest entries are evicted when the cap is reached.
 
-### Current Status (as of 2026-04-17)
+### Current Status (as of 2026-04-20)
 
 #### Completed
 
 | Area | Status | Notes |
 |------|--------|-------|
 | Text single-client | ✅ | insert, delete, replace, style |
-| Text multi-client reconciliation | ✅ | All 7 cases (including overlapping Cases 3-6) |
+| Text multi-client reconciliation | ✅ | Convergence passes for all 7 cases (but see content correctness below) |
 | Array undo | ✅ | add, remove, move, set |
 | Tree single-client (splitLevel=0) | ✅ | All op types + chained ops |
 | Tree split L1 undo/redo | ✅ | Boundary-deletion reverse ops (PR #1219) |
 | Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
 | TreeStyleOperation single-client | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
-| TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests), all converge (PR #1221) |
+| TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests) (PR #1221) |
+| Tree redo divergence | ✅ | Fixed via CRDTTreePos-based undo execution + reconciliation disabled (branch `tree-undo-pos-normalization`) |
 
 #### Remaining Work
 
 | Priority | Item | Details |
 |----------|------|---------|
-| HIGH | Tree reconciliation Cases 3-6 | Overlapping range reconciliation. Text has it; Tree needs symmetric index computation or tree-native `normalizePos()`. 4 tests skipped. |
-| MED | Tree redo divergence | `insert-text + delete-text` redo combo diverges in multi-client. 1 test skipped. Same root cause as Cases 3-6: tree-native `normalizePos()` needed. See analysis below. |
-| LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). Fix forward first. |
-| LOW | History reconciliation performance | O(n) stack scan → indexed lookup (TODO in `history.ts`). |
+| HIGH | Overlapping undo content duplication | Both Text and Tree produce duplicate content when overlapping deletes are both undone. Text converges but content is wrong; Tree diverges. See analysis below. |
+| HIGH | Tree reconciliation Cases 3-6 | Blocked by overlapping undo content duplication — same root cause. 4 tests skipped. |
+| MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. |
+| LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). |
+| LOW | History reconciliation performance | O(n) stack scan → indexed lookup. |
 
-#### Analysis: Tree Redo Divergence (insert-text + delete-text)
+### Analysis: Overlapping Undo Content Duplication
 
-This divergence shares the same root cause as Cases 3-6: Tree uses integer
-indices for redo positions, which are **asymmetric** across clients.
+When two clients delete overlapping ranges and both undo, the shared
+content is re-inserted twice because each client's undo deep-copies
+removed content and re-inserts as new CRDT nodes.
+
+#### Concrete Example
 
 ```
-Initial:    <p>The fox jumped.</p>
+Text: "0123456789"
+d1: delete [4,6) = "45"     →  undo: re-insert "45"
+d2: delete [2,8) = "234567" →  undo: re-insert "234567"
 
-d1 forward: insert "X" at idx 16     → <p>The fox jumped.X</p>
-d2 forward: delete "." at idx 15-16  → <p>The fox jumped</p>
-Sync:       both converge to           <p>The fox jumpedX.</p>
-            (CRDT timestamp ordering: X before .)
-
-Both undo → sync → converge:          <p>The fox jumped.</p>
-
-d1 redo: insert "X" at idx 16        → <p>The fox jumped.X</p>  (X after .)
-d2 redo: delete "." at idx 15-16     → <p>The fox jumped.</p>
-Sync:    DIVERGE
-  d1: <p>The fox jumped.X</p>        (X after .)
-  d2: <p>The fox jumpedX.</p>        (X before .)
+Both undo → sync:
+  d1 re-inserts "45" (new RGA nodes)
+  d2 re-inserts "234567" (new RGA nodes, includes "45")
+  Result: "012345674589"  (expected "0123456789")
 ```
 
-During forward execution, "X" and "." were concurrent inserts at the same
-position. The CRDT resolved their order by timestamp: `X` before `.`. On redo,
-"." has already been restored (via undo), so "X" is inserted sequentially
-**after** it — producing the opposite order.
+This affects **both Text and Tree**:
+- Text: convergence passes (both clients get same wrong content) —
+  correctness tests added in PR #1222, marked `skip`
+- Tree: convergence fails (asymmetric integer indices cause different
+  wrong content on each client) — Cases 3-6 skipped
 
-Text avoids this because `normalizePos()` walks the physical RGA chain, which is
-identical on all clients. Tree's integer-index-based redo does not have this
-guarantee. A tree-native `normalizePos()` that walks the CRDT node chain
-(analogous to Text's RGA chain walking) would fix both this issue and Cases 3-6.
+#### Root Cause
+
+The undo mechanism creates **new CRDT nodes** (deep-copy + re-insert)
+instead of restoring original tombstoned nodes. When undo ranges overlap,
+the overlapping content gets duplicated because each client independently
+creates its own copies.
+
+Text's reconciliation detects the overlap via the 6-case integer logic
+and adjusts positions, but this only ensures convergence — not content
+correctness. Tree's reconciliation fails entirely because `CRDTTreePos`
+identifies slots (parent + leftSibling), not specific nodes, making
+integer-based overlap detection asymmetric.
+
+#### Approaches Explored
+
+**Approach A: CRDTTreePos-based execution (Tree only)**
+
+Use `CRDTTreePos` as source of truth for Tree undo ops instead of integer
+indices. Disable integer-based reconciliation. Implemented in branch
+`tree-undo-pos-normalization`.
+
+Result: Fixes Tree redo divergence (1 test). Does NOT fix Cases 3-6
+(overlapping content duplication is a separate problem).
+
+Key finding: `CRDTTreePos(parentID, leftSiblingID)` identifies a **slot**
+between nodes, not a specific node. Concurrent inserts between the
+leftSibling and target change what node occupies the slot, making
+index-based overlap detection fundamentally incorrect for Tree.
+
+Also found: `refineTreePos` must preserve original `CRDTTreePos` when the
+leftSibling is tombstoned — the `toTreePos + fromTreePos` roundtrip
+corrupts the offset for removed siblings.
+
+**Approach B: Selective un-tombstone (Resurrect)**
+
+Instead of deep-copy re-insert, undo clears `removedAt` on nodes whose
+tombstone timestamp matches the forward delete's `editedAt`. Each node is
+resurrected at most once (LWW winner's undo restores shared nodes, loser
+skips).
+
+Result — single-client: **fully works** (59/59 tests including all chain
+combinations, replace undo/redo, triple same replace).
+
+Result — multi-client: **fails due to GC**. Sync triggers
+`garbageCollect(versionVector)` which physically purges tombstoned nodes
+before the remote undo arrives. Resurrected nodes no longer exist.
+
+Implementation required 3 new fields on `EditOperation` (`resurrectAt`,
+`retombstoneNodeIDs`, `resurrectDeletedAt`), 3 new methods on
+`RGATreeSplit` (`resurrect`, `retombstone`, `retombstoneByCreatedAt`),
+plus `CRDTRoot.unregisterGCPair`, protobuf schema changes, and Go server
+converter updates.
+
+**Why Resurrect fails for multi-client:**
+
+The GC contract says: if all replicas have seen a deletion (reflected in
+`minSyncedVersionVector`), the tombstoned node can be purged. But "all
+replicas have seen the deletion" does NOT mean "no replica will undo it."
+A client may undo after GC has already purged the target node.
+
+Issue #664 proposes protecting locally-referenced undo elements from GC,
+but this only covers the LOCAL undo stack. Client A cannot protect nodes
+referenced by Client B's undo stack — Client A doesn't know Client B's
+undo intent.
+
+The existing content-based re-insert avoids this problem entirely because
+it creates new nodes independent of GC state.
+
+#### Remaining Options
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |
+| Reconciliation content trimming | Case 3: when undo fully contained by remote delete, clear content. | Only handles full containment; partial overlap (Cases 5-6) can't predict future undo intent. |
+| Accept as known limitation | Document the issue; focus on other improvements. | Overlapping undo is uncommon in practice; users can work around. |
+
+### Analysis: Tree Redo Divergence (resolved)
+
+This divergence was fixed by switching Tree undo ops to CRDTTreePos-based
+execution and disabling integer reconciliation. See branch
+`tree-undo-pos-normalization`.
+
+Root cause: Tree used integer indices for redo positions, which are
+asymmetric across clients. `CRDTTreePos` directly identifies the target
+position, and `refineTreePos` at execution time handles tombstoned
+siblings by preserving the original position.
+
+```
+d1 redo: insert "X" via CRDTTreePos → same position on all clients
+d2 redo: delete "." via CRDTTreePos → same node on all clients
+→ Convergence restored
+```
