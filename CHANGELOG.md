@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.5] - 2026-04-20
+
+### Added
+
+- Add Counter dedup mode with HyperLogLog for UV measurement by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1733
+- Add podAnnotations support to Helm deployment template by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1746
+
+### Changed
+
+- Simplify Counter interface with type inference by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1738
+- Remove hardcoded healthcheck-port from Ingress template by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1739
+- Remove deprecated yorkie-argocd Helm chart by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1748
+- Replace n8n webhook with inline CI result reporting by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1749
+
+### Fixed
+
+- Discard stale-epoch changes in pushPack before cache insertion by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1742
+- Acquire DocPushKey lock before epoch check in pushPack by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1745
+
 ## [v0.7.4] - 2026-04-11
 
 ### Fixed
