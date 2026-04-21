@@ -156,9 +156,9 @@ func (n *RGATreeListNode) PositionCreatedAt() *time.Ticket {
 	return n.createdAt
 }
 
-// PosMovedAt returns the LWW timestamp of the element's move into this
+// PositionMovedAt returns the LWW timestamp of the element's move into this
 // position. Nil for insert-created positions.
-func (n *RGATreeListNode) PosMovedAt() *time.Ticket {
+func (n *RGATreeListNode) PositionMovedAt() *time.Ticket {
 	if n.elementEntry == nil {
 		return nil
 	}

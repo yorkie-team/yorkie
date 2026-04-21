@@ -233,8 +233,8 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 		}
 
 		pbNode := &api.RGANode{Element: pbElem}
-		if rgaNode.PosMovedAt() != nil {
-			pbNode.PosMovedAt = ToTimeTicket(rgaNode.PosMovedAt())
+		if rgaNode.PositionMovedAt() != nil {
+			pbNode.PositionMovedAt = ToTimeTicket(rgaNode.PositionMovedAt())
 			pbNode.PositionCreatedAt = ToTimeTicket(rgaNode.PositionCreatedAt())
 		}
 		pbRGANodes = append(pbRGANodes, pbNode)

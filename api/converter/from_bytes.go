@@ -184,7 +184,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 			return nil, err
 		}
 
-		posMovedAt, err := fromTimeTicket(pbNode.PosMovedAt)
+		posMovedAt, err := fromTimeTicket(pbNode.PositionMovedAt)
 		if err != nil {
 			return nil, err
 		}

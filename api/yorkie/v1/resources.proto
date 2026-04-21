@@ -227,8 +227,8 @@ message RHTNode {
 message RGANode {
   RGANode next = 1;
   JSONElement element = 2;
-  TimeTicket pos_moved_at = 3;
-  TimeTicket position_created_at = 4;
+  TimeTicket position_created_at = 3;
+  TimeTicket position_moved_at = 4;
   TimeTicket position_removed_at = 5;
 }
 

@@ -1101,8 +1101,8 @@ type RGANode struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Next              *RGANode               `protobuf:"bytes,1,opt,name=next,proto3" json:"next,omitempty"`
 	Element           *JSONElement           `protobuf:"bytes,2,opt,name=element,proto3" json:"element,omitempty"`
-	PosMovedAt        *TimeTicket            `protobuf:"bytes,3,opt,name=pos_moved_at,json=posMovedAt,proto3" json:"pos_moved_at,omitempty"`
-	PositionCreatedAt *TimeTicket            `protobuf:"bytes,4,opt,name=position_created_at,json=positionCreatedAt,proto3" json:"position_created_at,omitempty"`
+	PositionCreatedAt *TimeTicket            `protobuf:"bytes,3,opt,name=position_created_at,json=positionCreatedAt,proto3" json:"position_created_at,omitempty"`
+	PositionMovedAt   *TimeTicket            `protobuf:"bytes,4,opt,name=position_moved_at,json=positionMovedAt,proto3" json:"position_moved_at,omitempty"`
 	PositionRemovedAt *TimeTicket            `protobuf:"bytes,5,opt,name=position_removed_at,json=positionRemovedAt,proto3" json:"position_removed_at,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -1152,16 +1152,16 @@ func (x *RGANode) GetElement() *JSONElement {
 	return nil
 }
 
-func (x *RGANode) GetPosMovedAt() *TimeTicket {
+func (x *RGANode) GetPositionCreatedAt() *TimeTicket {
 	if x != nil {
-		return x.PosMovedAt
+		return x.PositionCreatedAt
 	}
 	return nil
 }
 
-func (x *RGANode) GetPositionCreatedAt() *TimeTicket {
+func (x *RGANode) GetPositionMovedAt() *TimeTicket {
 	if x != nil {
-		return x.PositionCreatedAt
+		return x.PositionMovedAt
 	}
 	return nil
 }
@@ -4881,13 +4881,12 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x04body\"M\n" +
 	"\aRHTNode\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\"\xaa\x02\n" +
+	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\"\xb4\x02\n" +
 	"\aRGANode\x12&\n" +
 	"\x04next\x18\x01 \x01(\v2\x12.yorkie.v1.RGANodeR\x04next\x120\n" +
-	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\x127\n" +
-	"\fpos_moved_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"posMovedAt\x12E\n" +
-	"\x13position_created_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\x11positionCreatedAt\x12E\n" +
+	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\x12E\n" +
+	"\x13position_created_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\x11positionCreatedAt\x12A\n" +
+	"\x11position_moved_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fpositionMovedAt\x12E\n" +
 	"\x13position_removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\x11positionRemovedAt\"u\n" +
 	"\bNodeAttr\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x124\n" +
@@ -5279,8 +5278,8 @@ var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	11,  // 31: yorkie.v1.RHTNode.element:type_name -> yorkie.v1.JSONElement
 	13,  // 32: yorkie.v1.RGANode.next:type_name -> yorkie.v1.RGANode
 	11,  // 33: yorkie.v1.RGANode.element:type_name -> yorkie.v1.JSONElement
-	32,  // 34: yorkie.v1.RGANode.pos_moved_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 35: yorkie.v1.RGANode.position_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 34: yorkie.v1.RGANode.position_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 35: yorkie.v1.RGANode.position_moved_at:type_name -> yorkie.v1.TimeTicket
 	32,  // 36: yorkie.v1.RGANode.position_removed_at:type_name -> yorkie.v1.TimeTicket
 	32,  // 37: yorkie.v1.NodeAttr.updated_at:type_name -> yorkie.v1.TimeTicket
 	16,  // 38: yorkie.v1.TextNode.id:type_name -> yorkie.v1.TextNodeID
