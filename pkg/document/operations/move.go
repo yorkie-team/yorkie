@@ -60,7 +60,19 @@ func (o *Move) Execute(root *crdt.Root, _ time.VersionVector) error {
 		return ErrNotApplicableDataType
 	}
 
-	return obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
+	deadNode, err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
+	if err != nil {
+		return err
+	}
+
+	if deadNode != nil {
+		root.RegisterGCPair(crdt.GCPair{
+			Parent: obj.RGATreeList(),
+			Child:  deadNode,
+		})
+	}
+
+	return nil
 }
 
 // CreatedAt returns the creation time of the target element.

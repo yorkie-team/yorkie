@@ -6,8 +6,431 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
+
+// buildList creates an RGATreeList with elements whose createdAt tickets match
+// the provided tickets.
+func buildList(t *testing.T, values []string, tickets []*time.Ticket) *crdt.RGATreeList {
+	t.Helper()
+	elements := crdt.NewRGATreeList()
+	for i, v := range values {
+		primitive, err := crdt.NewPrimitive(v, tickets[i])
+		assert.NoError(t, err)
+		err = elements.Add(primitive)
+		assert.NoError(t, err)
+	}
+	return elements
+}
+
+func TestRGATreeListMoveAfterLWW(t *testing.T) {
+	t.Run("concurrent moves of the same element, both orders converge", func(t *testing.T) {
+		// Initial: [A, B, C]
+		// Op1 @t4: move(A, after B) — move A to after B
+		// Op2 @t5: move(A, after C) — move A to after C
+		// t5 > t4, so Op2 wins regardless of application order.
+		// Expected final: [B, C, A]
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		// Issue tickets for elements.
+		tA := ctx.IssueTimeTicket() // t1
+		tB := ctx.IssueTimeTicket() // t2
+		tC := ctx.IssueTimeTicket() // t3
+
+		// Issue tickets for move operations.
+		tMove1 := ctx.IssueTimeTicket() // t4 (move A after B)
+		tMove2 := ctx.IssueTimeTicket() // t5 (move A after C), wins by LWW
+
+		// Order 1: Op1 then Op2
+		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err := list1.MoveAfter(tB, tA, tMove1)
+		assert.NoError(t, err)
+		assert.Equal(t, `["B","A","C"]`, list1.Marshal())
+		_, err = list1.MoveAfter(tC, tA, tMove2)
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: Op2 then Op1
+		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err = list2.MoveAfter(tC, tA, tMove2)
+		assert.NoError(t, err)
+		_, err = list2.MoveAfter(tB, tA, tMove1) // should be discarded (LWW)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		// Both orders must produce the same result.
+		assert.Equal(t, result1, result2)
+		assert.Equal(t, `["B","C","A"]`, result1)
+	})
+}
+
+func TestRGATreeListMoveAfterConvergence(t *testing.T) {
+	t.Run("two moves of different elements converge in any order", func(t *testing.T) {
+
+		// Initial: [A, B, C]
+		// Op1 @t4: move(A, after C) → [B, C, A]
+		// Op2 @t5: move(B, after A) → B follows A wherever A is
+		// Since t5 > t4, Op2 sees A's position.
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tC := ctx.IssueTimeTicket()
+
+		tOp1 := ctx.IssueTimeTicket() // t4: move(A, after C)
+		tOp2 := ctx.IssueTimeTicket() // t5: move(B, after A)
+
+		// Order 1: Op1 → Op2
+		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err := list1.MoveAfter(tC, tA, tOp1)
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(tA, tB, tOp2)
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: Op2 → Op1
+		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err = list2.MoveAfter(tA, tB, tOp2)
+		assert.NoError(t, err)
+		_, err = list2.MoveAfter(tC, tA, tOp1)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		// Both orders must converge.
+		assert.Equal(t, result1, result2, "Diverged: %s != %s", result1, result2)
+	})
+
+	t.Run("three concurrent moves converge in any order", func(t *testing.T) {
+
+		// Initial: [A, B, C, D]
+		// Op1 @t5: move(A, after D)
+		// Op2 @t6: move(B, after A)
+		// Op3 @t7: move(C, after B)
+		// These form a chain of dependencies.
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tC := ctx.IssueTimeTicket()
+		tD := ctx.IssueTimeTicket()
+
+		tOp1 := ctx.IssueTimeTicket()
+		tOp2 := ctx.IssueTimeTicket()
+		tOp3 := ctx.IssueTimeTicket()
+
+		applyOps := func(order []int) string {
+			list := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
+			for _, op := range order {
+				var err error
+				switch op {
+				case 1:
+					_, err = list.MoveAfter(tD, tA, tOp1)
+				case 2:
+					_, err = list.MoveAfter(tA, tB, tOp2)
+				case 3:
+					_, err = list.MoveAfter(tB, tC, tOp3)
+				}
+				assert.NoError(t, err)
+			}
+			return list.Marshal()
+		}
+
+		// Try all 6 permutations of {1,2,3}.
+		orders := [][]int{
+			{1, 2, 3},
+			{1, 3, 2},
+			{2, 1, 3},
+			{2, 3, 1},
+			{3, 1, 2},
+			{3, 2, 1},
+		}
+
+		results := make([]string, len(orders))
+		for i, order := range orders {
+			results[i] = applyOps(order)
+		}
+
+		for i := 1; i < len(results); i++ {
+			assert.Equal(t, results[0], results[i],
+				"Order %v vs %v diverged: %s != %s", orders[0], orders[i], results[0], results[i])
+		}
+	})
+
+	t.Run("concurrent moves to independent destinations converge", func(t *testing.T) {
+		// Initial: [A, B, C, D]
+		// Op1 @t5: move(A, after D) — destination D is not moved
+		// Op2 @t6: move(B, after C) — destination C is not moved
+		// Destinations are stable (not moved), so order should not matter.
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tC := ctx.IssueTimeTicket()
+		tD := ctx.IssueTimeTicket()
+
+		tOp1 := ctx.IssueTimeTicket() // move(A, after D)
+		tOp2 := ctx.IssueTimeTicket() // move(B, after C)
+
+		// Order 1: Op1 → Op2
+		list1 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
+		_, err := list1.MoveAfter(tD, tA, tOp1)
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(tC, tB, tOp2)
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: Op2 → Op1
+		list2 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
+		_, err = list2.MoveAfter(tC, tB, tOp2)
+		assert.NoError(t, err)
+		_, err = list2.MoveAfter(tD, tA, tOp1)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		assert.Equal(t, result1, result2, "Diverged: %s != %s", result1, result2)
+		assert.Equal(t, `["C","B","D","A"]`, result1)
+	})
+}
+
+func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
+	t.Run("concurrent move and delete of the same element", func(t *testing.T) {
+		// Initial: [A, B, C]
+		// Op1 @t4: move(B, after C)
+		// Op2 @t5: delete(B)
+		// After both applied: B is moved but also deleted, so it should not appear.
+		// Expected: [A, C]
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tC := ctx.IssueTimeTicket()
+
+		tMove := ctx.IssueTimeTicket() // t4
+		tDel := ctx.IssueTimeTicket()  // t5
+
+		// Order 1: move then delete
+		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err := list1.MoveAfter(tC, tB, tMove)
+		assert.NoError(t, err)
+		assert.Equal(t, `["A","C","B"]`, list1.Marshal())
+		_, err = list1.DeleteByCreatedAt(tB, tDel)
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: delete then move
+		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
+		_, err = list2.DeleteByCreatedAt(tB, tDel)
+		assert.NoError(t, err)
+		assert.Equal(t, `["A","C"]`, list2.Marshal())
+		_, err = list2.MoveAfter(tC, tB, tMove)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		// Both orders should converge: B is deleted regardless of move.
+		assert.Equal(t, result1, result2)
+		assert.Equal(t, `["A","C"]`, result1)
+	})
+}
+
+func TestRGATreeListConcurrencyTable(t *testing.T) {
+	// Simulates the key combinations from TestArrayConcurrency (integration):
+	// move.target vs move.prev — both clients reference the same element.
+	// Initial: [1, 2, 3, 4]
+	// Client 0: move.prev  — MoveAfter(oneIdx=1, otherIdx=2) → move elem at 2 after elem at 1
+	// Client 1: move.target — MoveAfter(otherIdx=3, oneIdx=1) → move elem at 1 after elem at 3
+	// Both orders must converge.
+	t.Run("move.prev vs move.target converge", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		t1 := ctx.IssueTimeTicket() // elem 1
+		t2 := ctx.IssueTimeTicket() // elem 2
+		t3 := ctx.IssueTimeTicket() // elem 3
+		t4 := ctx.IssueTimeTicket() // elem 4
+
+		tC0 := ctx.IssueTimeTicket() // Client 0's move
+		tC1 := ctx.IssueTimeTicket() // Client 1's move
+
+		// Order 1: C0 then C1
+		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err := list1.MoveAfter(t2, t3, tC0) // move 3 after 2
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(t4, t2, tC1) // move 2 after 4
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: C1 then C0
+		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err = list2.MoveAfter(t4, t2, tC1)
+		assert.NoError(t, err)
+		_, err = list2.MoveAfter(t2, t3, tC0)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		assert.Equal(t, result1, result2, "Diverged: %s vs %s", result1, result2)
+	})
+
+	// insert vs move: C0 inserts after oneIdx, C1 moves oneIdx.
+	t.Run("insert vs move.target converge", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		t1 := ctx.IssueTimeTicket()
+		t2 := ctx.IssueTimeTicket()
+		t3 := ctx.IssueTimeTicket()
+		t4 := ctx.IssueTimeTicket()
+
+		tInsert := ctx.IssueTimeTicket()
+		tMove := ctx.IssueTimeTicket()
+		tNewElem := ctx.IssueTimeTicket()
+
+		// Order 1: insert then move
+		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		prim1, _ := crdt.NewPrimitive("5", tNewElem)
+		err := list1.InsertAfter(t2, prim1, tInsert) // insert 5 after 2
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: move then insert
+		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err = list2.MoveAfter(t4, t2, tMove)
+		assert.NoError(t, err)
+		prim2, _ := crdt.NewPrimitive("5", tNewElem)
+		err = list2.InsertAfter(t2, prim2, tInsert)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		assert.Equal(t, result1, result2, "Diverged: %s vs %s", result1, result2)
+	})
+
+	// set vs move: C0 sets at oneIdx, C1 moves oneIdx.
+	t.Run("set vs move.target converge", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		t1 := ctx.IssueTimeTicket()
+		t2 := ctx.IssueTimeTicket()
+		t3 := ctx.IssueTimeTicket()
+		t4 := ctx.IssueTimeTicket()
+
+		tSet := ctx.IssueTimeTicket()
+		tMove := ctx.IssueTimeTicket()
+
+		// Order 1: set then move
+		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		newElem1, _ := crdt.NewPrimitive("5", tSet)
+		_, err := list1.Set(t2, newElem1, tSet) // set elem at 2's position to 5
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(t4, t2, tMove) // move 2 after 4
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: move then set
+		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err = list2.MoveAfter(t4, t2, tMove)
+		assert.NoError(t, err)
+		newElem2, _ := crdt.NewPrimitive("5", tSet)
+		_, err = list2.Set(t2, newElem2, tSet)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		assert.Equal(t, result1, result2, "Diverged: %s vs %s", result1, result2)
+	})
+
+	// remove vs move: C0 removes at oneIdx, C1 moves oneIdx.
+	t.Run("remove vs move.target converge", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		t1 := ctx.IssueTimeTicket()
+		t2 := ctx.IssueTimeTicket()
+		t3 := ctx.IssueTimeTicket()
+		t4 := ctx.IssueTimeTicket()
+
+		tRemove := ctx.IssueTimeTicket()
+		tMove := ctx.IssueTimeTicket()
+
+		// Order 1: remove then move
+		list1 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err := list1.DeleteByCreatedAt(t2, tRemove) // remove elem 2
+		assert.NoError(t, err)
+		_, err = list1.MoveAfter(t4, t2, tMove) // move (already-deleted) 2 after 4
+		assert.NoError(t, err)
+		result1 := list1.Marshal()
+
+		// Order 2: move then remove
+		list2 := buildList(t, []string{"1", "2", "3", "4"}, []*time.Ticket{t1, t2, t3, t4})
+		_, err = list2.MoveAfter(t4, t2, tMove)
+		assert.NoError(t, err)
+		_, err = list2.DeleteByCreatedAt(t2, tRemove)
+		assert.NoError(t, err)
+		result2 := list2.Marshal()
+
+		assert.Equal(t, result1, result2, "Diverged: %s vs %s", result1, result2)
+	})
+}
+
+func TestRGATreeListLWWLosingMoveCreatesPosition(t *testing.T) {
+	t.Run("losing move still creates a position node for future references", func(t *testing.T) {
+		// Scenario: Two clients concurrently move X. Client C1's move loses LWW.
+		// But C1 also created another operation referencing the position created
+		// by its own move. That position must exist on all replicas.
+		//
+		// Initial: [A, B, X]
+		// Op1 @t4: move(X, after A) — C1's move (loses LWW, t4 < t5)
+		// Op2 @t5: move(X, after B) — C2's move (wins LWW)
+		// Op3 @t6: insert(Y, after position t4) — C1's insert referencing Op1's position
+		//
+		// On a replica that applies Op2 first, then Op1, then Op3:
+		// Op2 wins → X is after B. Op1 loses LWW → but must still create position t4.
+		// Op3 inserts Y after position t4 → must NOT get ErrChildNotFound.
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tX := ctx.IssueTimeTicket()
+
+		tOp1 := ctx.IssueTimeTicket() // t4: move(X, after A) — loses
+		tOp2 := ctx.IssueTimeTicket() // t5: move(X, after B) — wins
+		tOp3 := ctx.IssueTimeTicket() // t6: insert(Y, after position t4)
+
+		list := buildList(t, []string{"A", "B", "X"}, []*time.Ticket{tA, tB, tX})
+
+		// Apply Op2 first (winner).
+		_, err := list.MoveAfter(tB, tX, tOp2)
+		assert.NoError(t, err)
+		assert.Equal(t, `["A","B","X"]`, list.Marshal())
+
+		// Apply Op1 (loser). Must still create a dead position node for tOp1.
+		_, err = list.MoveAfter(tA, tX, tOp1)
+		assert.NoError(t, err)
+
+		// Op3: insert Y after position tOp1 (the position created by the losing move).
+		yPrim, err := crdt.NewPrimitive("Y", tOp3)
+		assert.NoError(t, err)
+		err = list.InsertAfter(tOp1, yPrim, tOp3)
+		assert.NoError(t, err, "insert after losing move's position should not fail")
+
+		// Y should appear after A (the position created by Op1's losing move).
+		// X stays after B (Op2 won LWW). Final: [A, Y, B, X]
+		assert.Equal(t, `["A","Y","B","X"]`, list.Marshal())
+	})
+}
 
 func TestRGATreeList(t *testing.T) {
 	t.Run("rga_tree_list operations test", func(t *testing.T) {
@@ -34,7 +457,7 @@ func TestRGATreeList(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, prevCreatedAt.Compare(targetElement.CreatedAt()), -1)
 
-		err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		assert.Equal(t, `["2","1","3"]`, elements.Marshal())
 
@@ -62,10 +485,10 @@ func TestRGATreeList(t *testing.T) {
 		_, err = elements.DeleteByCreatedAt(invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		_, err = elements.FindPrevCreatedAt(invalidCreatedAt)

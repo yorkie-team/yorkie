@@ -1714,6 +1714,24 @@ components:
           description: ""
           title: next
           type: object
+        positionCreatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: position_created_at
+          type: object
+        positionMovedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: position_moved_at
+          type: object
+        positionRemovedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: position_removed_at
+          type: object
       title: RGANode
       type: object
     yorkie.v1.RHTNode:

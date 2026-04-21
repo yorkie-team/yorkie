@@ -76,6 +76,10 @@ func NewRoot(root *Object) *Root {
 		}
 
 		switch e := elem.(type) {
+		case *Array:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
 		case *Text:
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)

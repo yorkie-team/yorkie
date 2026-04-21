@@ -470,9 +470,7 @@ func TestComplicatedArrayConcurrency(t *testing.T) {
 				return nil
 			}))
 
-			if !syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}}) {
-				t.Skipf("convergence failed for operation %s", op.opName)
-			}
+			syncClientsThenAssertEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}})
 		})
 	}
 }

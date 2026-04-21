@@ -59,7 +59,7 @@ func (a *Array) Get(idx int) (Element, error) {
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
@@ -68,19 +68,35 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) 
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
 
+// PosCreatedAt returns the createdAt of the position node currently holding
+// the element. Used to convert element identity to position identity for moves.
+func (a *Array) PosCreatedAt(elemCreatedAt *time.Ticket) (*time.Ticket, error) {
+	return a.elements.PosCreatedAt(elemCreatedAt)
+}
+
 // Delete deletes the element of the given index.
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 	node, err := a.elements.Delete(idx, deletedAt)
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
-// element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
+// element. Returns the dead position node (if any) for GC registration.
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (*RGATreeListNode, error) {
 	return a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
+}
+
+// AllRGANodes returns all RGA nodes including dead position nodes.
+func (a *Array) AllRGANodes() []*RGATreeListNode {
+	return a.elements.AllNodes()
+}
+
+// Elements returns the underlying RGATreeList (GCParent for dead positions).
+func (a *Array) RGATreeList() *RGATreeList {
+	return a.elements
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
@@ -90,7 +106,7 @@ func (a *Array) Elements() []Element {
 		if node.isRemoved() {
 			continue
 		}
-		elements = append(elements, node.elem)
+		elements = append(elements, node.Element())
 	}
 
 	return elements
@@ -133,13 +149,30 @@ func (a *Array) ToTestString() string {
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
-	for _, node := range a.elements.Nodes() {
-		copiedNode, err := node.elem.DeepCopy()
+	for _, node := range a.elements.AllNodes() {
+		if node.Element() == nil {
+			// Dead position node (abandoned by a move).
+			if node.RemovedAt() != nil {
+				elements.AddDeadPosition(node.PositionCreatedAt(), node.RemovedAt())
+			}
+			continue
+		}
+
+		copiedNode, err := node.Element().DeepCopy()
 		if err != nil {
 			return nil, err
 		}
-		if err = elements.Add(copiedNode); err != nil {
-			return nil, err
+
+		if node.PositionMovedAt() != nil {
+			if err = elements.AddMovedElement(
+				copiedNode, node.PositionCreatedAt(), node.PositionMovedAt(),
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err = elements.Add(copiedNode); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -199,7 +232,7 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // Set sets the given element at the given position of the creation time.
@@ -209,7 +242,7 @@ func (a *Array) Set(createdAt *time.Ticket, element Element, executedAt *time.Ti
 		return nil, err
 	}
 	if node != nil {
-		return node.elem, nil
+		return node.Element(), nil
 	}
 	return nil, nil
 }
@@ -222,11 +255,11 @@ func (a *Array) Len() int {
 // Descendants traverse the descendants of this array.
 func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
-		if callback(node.elem, a) {
+		if callback(node.Element(), a) {
 			return
 		}
 
-		if elem, ok := node.elem.(Container); ok {
+		if elem, ok := node.Element().(Container); ok {
 			elem.Descendants(callback)
 		}
 	}
@@ -235,4 +268,18 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 // RGANodes returns the slices of RGATreeListNode.
 func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
+}
+
+// GCPairs returns GC pairs for dead position nodes in this array.
+func (a *Array) GCPairs() []GCPair {
+	var pairs []GCPair
+	for _, node := range a.elements.AllNodes() {
+		if node.Element() == nil && node.RemovedAt() != nil {
+			pairs = append(pairs, GCPair{
+				Parent: a.elements,
+				Child:  node,
+			})
+		}
+	}
+	return pairs
 }

@@ -263,7 +263,13 @@ func (p *Array) MoveAfterByIndex(prevIndex, targetIndex int) {
 	if prev == nil || target == nil {
 		panic("index out of bound")
 	}
-	p.moveAfterInternal(prev.CreatedAt(), target.CreatedAt())
+
+	// Convert element identity to position identity for the anchor.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prev.CreatedAt())
+	if err != nil {
+		prevPosCreatedAt = prev.CreatedAt()
+	}
+	p.moveAfterInternal(prevPosCreatedAt, target.CreatedAt())
 }
 
 // InsertIntegerAfter inserts the given integer after the given previous
@@ -273,7 +279,13 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 	if prev == nil {
 		panic("index out of bound")
 	}
-	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+
+	// Convert element identity to position identity for the anchor.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prev.CreatedAt())
+	if err != nil {
+		prevPosCreatedAt = prev.CreatedAt()
+	}
+	p.insertAfterInternal(prevPosCreatedAt, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
 			panic(err)
@@ -476,8 +488,15 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	if err = p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	if err != nil {
 		panic(err)
+	}
+	if deadNode != nil {
+		p.context.RegisterGCPair(crdt.GCPair{
+			Parent: p.Array.RGATreeList(),
+			Child:  deadNode,
+		})
 	}
 }
 
@@ -491,8 +510,15 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	if err := p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	if err != nil {
 		panic(err)
+	}
+	if deadNode != nil {
+		p.context.RegisterGCPair(crdt.GCPair{
+			Parent: p.Array.RGATreeList(),
+			Child:  deadNode,
+		})
 	}
 }
 

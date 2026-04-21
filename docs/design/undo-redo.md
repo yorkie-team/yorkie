@@ -162,6 +162,15 @@ The reverse is an `ArraySetOperation` that targets the forward op's newly
 inserted element (`newCreatedAt`) and restores the previous value (deep-copied).
 This effectively swaps the new value back to the old one.
 
+**Known issue — Set after Move**: `RGATreeList.set` is implemented as
+`insertAfter(createdAt, newValue) + delete(createdAt)`. The `insertAfter` uses
+`nodeMapByCreatedAt[createdAt]` to find the insertion anchor. After a move, this
+resolves to the element's **original dead position** — not its current position.
+This is intentional for concurrent convergence (Move→Set and Set→Move both
+produce the same result), but it means undo restores the value at the dead
+position instead of the moved position. See the analysis section
+"Array Set + Move Undo" below for details and proposed fix.
+
 #### Counter.increase → IncreaseOperation
 
 `IncreaseOperation` adds a numeric delta to a `CRDTCounter`.
@@ -448,6 +457,7 @@ Oldest entries are evicted when the cap is reached.
 |----------|------|---------|
 | HIGH | Overlapping undo content duplication | Both Text and Tree produce duplicate content when overlapping deletes are both undone. Text converges but content is wrong; Tree diverges. See analysis below. |
 | HIGH | Tree reconciliation Cases 3-6 | Blocked by overlapping undo content duplication — same root cause. 4 tests skipped. |
+| HIGH | Array Set + Move undo | Set after Move restores value at dead position. Requires proto change. See analysis below. 4 tests skipped in JS SDK. |
 | MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. |
 | LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup. |
@@ -569,3 +579,99 @@ d1 redo: insert "X" via CRDTTreePos → same position on all clients
 d2 redo: delete "." via CRDTTreePos → same node on all clients
 → Convergence restored
 ```
+
+### Analysis: Array Set + Move Undo
+
+When an element is moved and then set (value replaced), undoing the set
+restores the value at the element's original dead position instead of
+its moved position.
+
+#### Concrete Example
+
+```
+Initial: [a, b, c, d, e]
+Move a after c: [b, c, a, d, e]
+Remove b: [c, a, d, e]            ← S2
+Set index 1 to 's': [c, s, d, e]  ← S3
+
+Undo set → expected S2: [c, a, d, e]
+Undo set → actual:      [a, c, d, e]   ← 'a' at front, not after 'c'
+```
+
+4 tests skipped in JS SDK (`move-*-set` combinations in
+`history_array_test.ts`).
+
+#### Root Cause
+
+`RGATreeList.set(createdAt, newValue, executedAt)` = `insertAfter(createdAt,
+newValue) + delete(createdAt)`. The `insertAfter` dual-lookup first checks
+`nodeMapByCreatedAt[createdAt]`, which finds the **original dead position**
+(before the move), not the element's current position.
+
+This is intentional for concurrent convergence — see
+`array-move-convergence.md`:
+
+> "Use the element's original position (via nodeMapByCreatedAt[createdAt])
+> so that Set always inserts at the position where the element was when
+> the Set operation was created, regardless of concurrent moves."
+
+The trade-off: the reverse `ArraySetOperation` also inserts at the dead
+position, because it uses the same `insertAfter(createdAt, ...)` path.
+
+#### Approaches Explored
+
+**Approach A: `prevPosCreatedAt` field on ArraySetOperation (local only)**
+
+Add a `prevPosCreatedAt` field to `ArraySetOperation`. The reverse op
+captures the element's current position before the set. When the reverse
+executes, it uses `prevPosCreatedAt` as the insertion anchor instead of
+`createdAt`.
+
+Result — single-client: **works** (`move-remove-set`, `move-move-set`
+pass). The restored value appears at the correct moved position.
+
+Result — multi-client: **fails** (`set-set` diverges). The
+`prevPosCreatedAt` is not serialized in protobuf. When the undo's change
+is synced to the other client, the reverse `ArraySetOperation` arrives
+without `prevPosCreatedAt`, falling back to `createdAt` (dead position).
+The two clients insert at different positions → divergence.
+
+**Approach B: `prevPosCreatedAt` in protobuf**
+
+Add `prev_pos_created_at` as an optional field to the `ArraySet` protobuf
+message. Forward set leaves it unset (convergence preserved). Reverse set
+(undo) populates it so the restored value goes to the correct position.
+
+```protobuf
+message Operation {
+  message ArraySet {
+    ...
+    TimeTicket prev_pos_created_at = 5; // position anchor for undo
+  }
+}
+```
+
+Both Go and JS SDKs serialize/deserialize the new field. Old clients
+ignore it (optional field, backward compatible).
+
+This is the **recommended approach**. It requires a coordinated proto +
+Go + JS change.
+
+**Approach C: Change `set` to use current position**
+
+Make `RGATreeList.set` use `elementMapByCreatedAt[createdAt].positionNode`
+for insertion instead of `nodeMapByCreatedAt[createdAt]`.
+
+**Rejected**: breaks concurrent convergence. Move→Set and Set→Move
+produce different positions because the element's "current" position
+depends on whether the Move has been applied yet.
+
+**Approach D: Composite reverse (ArraySetOperation + MoveOperation)**
+
+Return two reverse operations: a `ArraySetOperation` (restore value) +
+`MoveOperation` (correct position). Avoids proto changes.
+
+**Rejected**: the undo system runs `reconcileCreatedAt` on
+`ArraySetOperation` values, changing the element's `createdAt`. The
+paired `MoveOperation` references the old `createdAt`, which becomes
+stale. Keeping them synchronized requires complex bookkeeping.

@@ -341,6 +341,104 @@ func TestArray(t *testing.T) {
 		}, "noop move 0 again"))
 	})
 
+	t.Run("can push after moveFront without position confusion (document-based)", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		// Step 1: [0,1,2]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.SetNewArray("list")
+			arr.AddInteger(0, 1, 2)
+			assert.Equal(t, `{"list":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "initialize"))
+
+		// Step 2: MoveFront(2) => [2,0,1]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			targetID := arr.Get(2).CreatedAt()
+			arr.MoveFront(targetID)
+			assert.Equal(t, `{"list":[2,0,1]}`, root.Marshal())
+			return nil
+		}, "move 2 to front"))
+
+		// Step 3: Push 3 => [2,0,1,3]
+		// BUG: PosCreatedAt converts last dead position to moved element's
+		// current position, causing the insert to go to the front instead.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			arr.AddInteger(3)
+			assert.Equal(t, `{"list":[2,0,1,3]}`, root.Marshal())
+			return nil
+		}, "push 3 at end"))
+
+		// Step 4: MoveFront(3) => [3,2,0,1]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			targetID := arr.Get(3).CreatedAt()
+			arr.MoveFront(targetID)
+			assert.Equal(t, `{"list":[3,2,0,1]}`, root.Marshal())
+			return nil
+		}, "move 3 to front"))
+	})
+
+	t.Run("can push after moveLast without position confusion (document-based)", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		// Step 1: [0,1,2]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.SetNewArray("list")
+			arr.AddInteger(0, 1, 2)
+			assert.Equal(t, `{"list":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "initialize"))
+
+		// Step 2: MoveLast(0) => [1,2,0]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			targetID := arr.Get(0).CreatedAt()
+			arr.MoveLast(targetID)
+			assert.Equal(t, `{"list":[1,2,0]}`, root.Marshal())
+			return nil
+		}, "move 0 to last"))
+
+		// Step 3: Push 3 => [1,2,0,3]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			arr.AddInteger(3)
+			assert.Equal(t, `{"list":[1,2,0,3]}`, root.Marshal())
+			return nil
+		}, "push 3 at end"))
+	})
+
+	t.Run("can insertAfter a moved element without position confusion (document-based)", func(t *testing.T) {
+		doc := document.New(helper.TestKey(t))
+
+		// Step 1: [0,1,2]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.SetNewArray("list")
+			arr.AddInteger(0, 1, 2)
+			assert.Equal(t, `{"list":[0,1,2]}`, root.Marshal())
+			return nil
+		}, "initialize"))
+
+		// Step 2: MoveFront(2) => [2,0,1]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			targetID := arr.Get(2).CreatedAt()
+			arr.MoveFront(targetID)
+			assert.Equal(t, `{"list":[2,0,1]}`, root.Marshal())
+			return nil
+		}, "move 2 to front"))
+
+		// Step 3: InsertAfter index 2 (element 1) => [2,0,1,3]
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetArray("list")
+			arr.InsertIntegerAfter(2, 3)
+			assert.Equal(t, `{"list":[2,0,1,3]}`, root.Marshal())
+			return nil
+		}, "insert 3 after index 2"))
+	})
+
 	t.Run("can move an element at the last of array (document-based)", func(t *testing.T) {
 		doc := document.New(helper.TestKey(t))
 		var targetID *time.Ticket
