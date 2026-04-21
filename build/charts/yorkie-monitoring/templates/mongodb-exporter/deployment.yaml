@@ -28,9 +28,14 @@ spec:
           image: "{{ .Values.mongodbExporter.image.repository }}:{{ .Values.mongodbExporter.image.tag }}"
           imagePullPolicy: {{ .Values.mongodbExporter.image.pullPolicy }}
           args:
-            - --mongodb.uri={{ .Values.mongodbExporter.mongodb.uri }}
             - --collect-all
             - --compatible-mode
+          env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodbExporter.mongodb.existingSecret | default (printf "%s-mongodb-exporter" .Values.monitoring.name) }}
+                  key: mongodb-uri
           ports:
             - name: metrics
               containerPort: 9216
@@ -45,6 +50,13 @@ spec:
               path: /
               port: metrics
             initialDelaySeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           resources:
             {{- toYaml .Values.mongodbExporter.resources | nindent 12 }}
 {{- end }}

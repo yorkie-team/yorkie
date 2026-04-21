@@ -219,6 +219,7 @@ mongodbExporter:
 
   mongodb:
     uri: ""
+    existingSecret: ""
 
   resources:
     requests:
