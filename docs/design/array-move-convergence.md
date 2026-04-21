@@ -111,6 +111,38 @@ For elements that have never been moved, position createdAt = element createdAt 
 
 The `json/array.go` layer converts element createdAt → position createdAt when creating move operations via `PosCreatedAt()`.
 
+### Element Timestamps vs Position Timestamps
+
+Two layers of timestamps exist, each tracking a different lifecycle:
+
+```text
+Element (logical value)          Position (physical slot)
+├── created_at: value created    ├── position_created_at: slot created
+├── moved_at: (deprecated)       ├── position_moved_at: element placed here (LWW)
+└── removed_at: value deleted    └── position_removed_at: slot abandoned
+```
+
+**Element timestamps** track the value's lifecycle — when it was created and deleted. These are shared across all container types (Object, Array, Text, etc.).
+
+**Position timestamps** track the slot's lifecycle in the RGA linked list — when the slot was created, when an element was placed into it via move, and when the slot was abandoned because the element moved elsewhere.
+
+The two lifecycles are independent: a value can move between slots (position changes, element stays), and a slot can become dead when its element leaves (element moves, position dies).
+
+#### Element.MovedAt deprecation
+
+`Element.MovedAt` / `SetMovedAt` is legacy. It was originally used to track "when this element was repositioned within its parent container." After the position-identity separation, this role is entirely handled by `ElementEntry.posMovedAt` (the LWW register).
+
+Current state across the codebase:
+- **Array**: `posMovedAt` is the source of truth. `Element.SetMovedAt` is still called for snapshot serialization backward compatibility, but `Element.MovedAt()` is never read by any logic.
+- **Object (ElementRHT)**: `SetMovedAt(v.CreatedAt())` is called on LWW winners in `ElementRHT.Set`, but `MovedAt()` is never read by any logic either.
+- **All types**: `MovedAt()` is only read by `to_bytes.go` for snapshot serialization (`JSONElementSimple.moved_at`).
+
+Plan: gradually remove `Element.MovedAt` in a follow-up.
+1. Stop writing `JSONElementSimple.moved_at` for Array elements (use `RGANode.position_moved_at` instead)
+2. Stop calling `SetMovedAt` in `ElementRHT.Set` (no reader exists)
+3. Remove `MovedAt` / `SetMovedAt` from the `Element` interface
+4. Remove `movedAt` field from all Element implementations
+
 ### Protobuf
 
 **Move operation message**: No structural change. The `prev_created_at` field carries a position node identity instead of an element identity — same wire type, different semantic.
