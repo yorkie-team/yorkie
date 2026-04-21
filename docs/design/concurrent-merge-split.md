@@ -124,6 +124,24 @@ uniformly:
   child Start token still styled via `canStyle`. Matches the unsplit
   behavior (child was in the original range).
 
+### Fix 12: Copy attributes on split and propagate style to split siblings
+
+**`SplitElement`** — Deep-copy the original node's attributes (`Attrs`)
+to the split (right) node. Previously the right node was created with
+nil attributes, losing any styling.
+
+**`Style`, `RemoveStyle` callbacks** — After styling a node via its Start
+token, follow the `InsNextID` chain and apply the same style/remove-style
+to unknown split siblings (those whose `CreatedAt` is not covered by the
+editor's VV). This ensures that a style operation whose range was
+determined before a concurrent split also covers the right part.
+
+Without this propagation, the client that splits first misses the style
+on the right node, while the client that styles first copies it via the
+attribute deep-copy in split — causing divergence.
+
+Helper: `ticketKnown(vv, ticket)` — reused for the unknown-sibling check.
+
 ## Convergence Coverage
 
 ### Hand-crafted integration suite (`test/integration/tree_test.go`)
@@ -140,14 +158,16 @@ uniformly:
 
 | Suite | Pass | Skip (divergence) |
 |---|---:|---:|
-| EditEdit | 901 | 0 |
-| StyleStyle | 145 | 0 |
-| EditStyle | 85 | 0 |
-| SplitSplit | 275 | 46 |
-| SplitEdit | 139 | 7 |
-| **Total** | **1545** | **53** |
+| EditEdit | 900 | 0 |
+| StyleStyle | 144 | 0 |
+| EditStyle | 84 | 0 |
+| SplitSplit | 274 | 46 |
+| SplitEdit | 137 | 7 |
+| **Total** | **1539** | **53** |
 
 All 53 remaining divergences are `splitLevel >= 2` only.
+Fix 12 resolved 4 previously-skipped SplitEdit cases (`split-1` ×
+`style`/`remove-style` for `equal` and `B contains A` ranges).
 
 ## Key Design Decisions
 
