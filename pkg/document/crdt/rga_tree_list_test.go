@@ -243,6 +243,54 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 	})
 }
 
+func TestRGATreeListLWWLosingMoveCreatesPosition(t *testing.T) {
+	t.Run("losing move still creates a position node for future references", func(t *testing.T) {
+		// Scenario: Two clients concurrently move X. Client C1's move loses LWW.
+		// But C1 also created another operation referencing the position created
+		// by its own move. That position must exist on all replicas.
+		//
+		// Initial: [A, B, X]
+		// Op1 @t4: move(X, after A) — C1's move (loses LWW, t4 < t5)
+		// Op2 @t5: move(X, after B) — C2's move (wins LWW)
+		// Op3 @t6: insert(Y, after position t4) — C1's insert referencing Op1's position
+		//
+		// On a replica that applies Op2 first, then Op1, then Op3:
+		// Op2 wins → X is after B. Op1 loses LWW → but must still create position t4.
+		// Op3 inserts Y after position t4 → must NOT get ErrChildNotFound.
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		tA := ctx.IssueTimeTicket()
+		tB := ctx.IssueTimeTicket()
+		tX := ctx.IssueTimeTicket()
+
+		tOp1 := ctx.IssueTimeTicket() // t4: move(X, after A) — loses
+		tOp2 := ctx.IssueTimeTicket() // t5: move(X, after B) — wins
+		tOp3 := ctx.IssueTimeTicket() // t6: insert(Y, after position t4)
+
+		list := buildList(t, []string{"A", "B", "X"}, []*time.Ticket{tA, tB, tX})
+
+		// Apply Op2 first (winner).
+		_, err := list.MoveAfter(tB, tX, tOp2)
+		assert.NoError(t, err)
+		assert.Equal(t, `["A","B","X"]`, list.Marshal())
+
+		// Apply Op1 (loser). Must still create a dead position node for tOp1.
+		_, err = list.MoveAfter(tA, tX, tOp1)
+		assert.NoError(t, err)
+
+		// Op3: insert Y after position tOp1 (the position created by the losing move).
+		yPrim, err := crdt.NewPrimitive("Y", tOp3)
+		assert.NoError(t, err)
+		err = list.InsertAfter(tOp1, yPrim, tOp3)
+		assert.NoError(t, err, "insert after losing move's position should not fail")
+
+		// Y should appear in the list at the position created by Op1 (after A).
+		assert.Contains(t, list.Marshal(), `"Y"`)
+	})
+}
+
 func TestRGATreeList(t *testing.T) {
 	t.Run("rga_tree_list operations test", func(t *testing.T) {
 		root := helper.TestRoot()

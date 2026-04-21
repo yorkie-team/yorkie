@@ -177,9 +177,13 @@ func (n *RGATreeListNode) RemovedAt() *time.Ticket {
 
 // DataSize returns the size of this position node's metadata (for GC).
 func (n *RGATreeListNode) DataSize() resource.DataSize {
+	meta := time.TicketSize
+	if n.removedAt != nil {
+		meta += time.TicketSize
+	}
 	return resource.DataSize{
 		Data: 0,
-		Meta: time.TicketSize,
+		Meta: meta,
 	}
 }
 
@@ -379,8 +383,20 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	}
 
 	// LWW check: if a newer move already won, this move is discarded.
+	// But we still create the position node so that operations referencing
+	// this move's position (e.g., inserts after it) can find it.
 	if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt) {
-		return nil, nil
+		if _, ok := a.nodeMapByCreatedAt[executedAt.Key()]; ok {
+			return nil, nil
+		}
+
+		deadPosNode, err := a.insertPositionAfter(prevCreatedAt, executedAt)
+		if err != nil {
+			return nil, err
+		}
+		deadPosNode.removedAt = executedAt
+		a.nodeMapByIndex.Splay(deadPosNode.indexNode)
+		return deadPosNode, nil
 	}
 
 	// Create a new position node after the target position.

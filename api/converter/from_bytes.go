@@ -167,6 +167,9 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 	for _, pbNode := range pbArr.Nodes {
 		if pbNode.Element == nil {
 			// Dead position node (abandoned by a move).
+			if pbNode.PositionCreatedAt == nil || pbNode.PositionRemovedAt == nil {
+				return nil, fmt.Errorf("dead RGA position node missing position timestamps")
+			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
 				return nil, err
@@ -190,6 +193,9 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		}
 
 		if posMovedAt != nil {
+			if pbNode.PositionCreatedAt == nil {
+				return nil, fmt.Errorf("moved RGA node missing position_created_at")
+			}
 			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
 			if err != nil {
 				return nil, err
