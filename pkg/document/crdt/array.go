@@ -84,9 +84,19 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
-// element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
+// element. Returns the dead position node (if any) for GC registration.
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) (*RGATreeListNode, error) {
 	return a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
+}
+
+// AllRGANodes returns all RGA nodes including dead position nodes.
+func (a *Array) AllRGANodes() []*RGATreeListNode {
+	return a.elements.AllNodes()
+}
+
+// Elements returns the underlying RGATreeList (GCParent for dead positions).
+func (a *Array) RGATreeList() *RGATreeList {
+	return a.elements
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
@@ -241,4 +251,18 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 // RGANodes returns the slices of RGATreeListNode.
 func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
+}
+
+// GCPairs returns GC pairs for dead position nodes in this array.
+func (a *Array) GCPairs() []GCPair {
+	var pairs []GCPair
+	for _, node := range a.elements.AllNodes() {
+		if node.Element() == nil && node.RemovedAt() != nil {
+			pairs = append(pairs, GCPair{
+				Parent: a.elements,
+				Child:  node,
+			})
+		}
+	}
+	return pairs
 }

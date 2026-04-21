@@ -165,12 +165,42 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 	elements := crdt.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
+		if pbNode.Element == nil {
+			// Dead position node (abandoned by a move).
+			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			posRemovedAt, err := fromTimeTicket(pbNode.PositionRemovedAt)
+			if err != nil {
+				return nil, err
+			}
+			elements.AddDeadPosition(posCreatedAt, posRemovedAt)
+			continue
+		}
+
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
 			return nil, err
 		}
-		if err = elements.Add(elem); err != nil {
+
+		posMovedAt, err := fromTimeTicket(pbNode.PosMovedAt)
+		if err != nil {
 			return nil, err
+		}
+
+		if posMovedAt != nil {
+			posCreatedAt, err := fromTimeTicket(pbNode.PositionCreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			if err = elements.AddMovedElement(elem, posCreatedAt, posMovedAt); err != nil {
+				return nil, err
+			}
+		} else {
+			if err = elements.Add(elem); err != nil {
+				return nil, err
+			}
 		}
 	}
 

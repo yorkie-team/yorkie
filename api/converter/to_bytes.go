@@ -122,7 +122,7 @@ func toJSONObject(obj *crdt.Object) (*api.JSONElement, error) {
 }
 
 func toJSONArray(arr *crdt.Array) (*api.JSONElement, error) {
-	pbRGANodes, err := toRGANodes(arr.RGANodes())
+	pbRGANodes, err := toRGANodes(arr.AllRGANodes())
 	if err != nil {
 		return nil, err
 	}
@@ -218,14 +218,26 @@ func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {
 func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
+		if rgaNode.Element() == nil {
+			// Dead position node (abandoned by a move).
+			pbRGANodes = append(pbRGANodes, &api.RGANode{
+				PositionCreatedAt: ToTimeTicket(rgaNode.PositionCreatedAt()),
+				PositionRemovedAt: ToTimeTicket(rgaNode.RemovedAt()),
+			})
+			continue
+		}
+
 		pbElem, err := toJSONElement(rgaNode.Element())
 		if err != nil {
 			return nil, err
 		}
 
-		pbRGANodes = append(pbRGANodes, &api.RGANode{
-			Element: pbElem,
-		})
+		pbNode := &api.RGANode{Element: pbElem}
+		if rgaNode.PosMovedAt() != nil {
+			pbNode.PosMovedAt = ToTimeTicket(rgaNode.PosMovedAt())
+			pbNode.PositionCreatedAt = ToTimeTicket(rgaNode.PositionCreatedAt())
+		}
+		pbRGANodes = append(pbRGANodes, pbNode)
 	}
 	return pbRGANodes, nil
 }
