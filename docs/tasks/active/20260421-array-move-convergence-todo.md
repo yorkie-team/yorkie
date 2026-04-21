@@ -37,7 +37,7 @@ Introduce the element-position separation in the core data structure.
 **Files:**
 - Modify: `pkg/document/crdt/rga_tree_list.go:27-117`
 
-- [ ] **Step 1: Add ElementEntry struct**
+- [x] **Step 1: Add ElementEntry struct**
 
 Add after the RGATreeListNode struct (around line 35):
 
@@ -52,7 +52,7 @@ type ElementEntry struct {
 }
 ```
 
-- [ ] **Step 2: Refactor RGATreeListNode to act as a position node**
+- [x] **Step 2: Refactor RGATreeListNode to act as a position node**
 
 Replace the current struct (lines 27-34):
 
@@ -70,7 +70,7 @@ type RGATreeListNode struct {
 
 Remove the `movedFrom` field entirely.
 
-- [ ] **Step 3: Add elementMapByCreatedAt to RGATreeList**
+- [x] **Step 3: Add elementMapByCreatedAt to RGATreeList**
 
 Update the struct (lines 112-117):
 
@@ -86,7 +86,7 @@ type RGATreeList struct {
 
 Update `NewRGATreeList()` to initialize the new map.
 
-- [ ] **Step 4: Update accessor methods on RGATreeListNode**
+- [x] **Step 4: Update accessor methods on RGATreeListNode**
 
 Update `Element()`, `CreatedAt()`, `PositionedAt()`, `Len()`, `isRemoved()`, `String()` to work through `elementEntry`:
 
@@ -124,11 +124,11 @@ func (n *RGATreeListNode) isRemoved() bool {
 
 Note: Dead position nodes need a `createdAt` for the `nodeMapByCreatedAt` lookup. Add a `createdAt *time.Ticket` field to `RGATreeListNode` for this purpose — set during `insertAfter` from the `executedAt` of the move that created the position.
 
-- [ ] **Step 5: Remove movedFrom-related methods**
+- [x] **Step 5: Remove movedFrom-related methods**
 
 Delete `MovedFrom()` and `SetMovedFrom()` (lines 82-89).
 
-- [ ] **Step 6: Update InsertAfter to create ElementEntry**
+- [x] **Step 6: Update InsertAfter to create ElementEntry**
 
 In `insertAfter` (lines 352-370), after creating the new node, also create an ElementEntry and link them:
 
@@ -160,16 +160,16 @@ func (a *RGATreeList) insertAfter(
 }
 ```
 
-- [ ] **Step 7: Update Add to work with new structure**
+- [x] **Step 7: Update Add to work with new structure**
 
 Verify `Add()` still works through `InsertAfter` — it should, as it delegates to `InsertAfter`.
 
-- [ ] **Step 8: Compile and verify no build errors**
+- [x] **Step 8: Compile and verify no build errors**
 
 Run: `cd 03_projects/yorkie && go build ./...`
 Expected: BUILD SUCCESS (tests may fail, that's ok)
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add pkg/document/crdt/rga_tree_list.go
@@ -185,11 +185,11 @@ Replace the current release+insertAfter+cascade with LWW position register.
 **Files:**
 - Modify: `pkg/document/crdt/rga_tree_list.go:242-285, 317-335`
 
-- [ ] **Step 1: Remove cascade loop and movedFrom backtracking**
+- [x] **Step 1: Remove cascade loop and movedFrom backtracking**
 
 Delete the cascade loop (lines 270-282) and the movedFrom backtracking in `findNextBeforeExecutedAt` (lines 326-328).
 
-- [ ] **Step 2: Rewrite MoveAfter**
+- [x] **Step 2: Rewrite MoveAfter**
 
 ```go
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
@@ -234,7 +234,7 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 }
 ```
 
-- [ ] **Step 3: Add insertPositionAfter helper**
+- [x] **Step 3: Add insertPositionAfter helper**
 
 This creates a bare position node (no element) using the existing forward skip logic:
 
@@ -261,7 +261,7 @@ func (a *RGATreeList) insertPositionAfter(
 }
 ```
 
-- [ ] **Step 4: Simplify findNextBeforeExecutedAt**
+- [x] **Step 4: Simplify findNextBeforeExecutedAt**
 
 Remove the movedFrom backtracking, keep only forward skip:
 
@@ -283,7 +283,7 @@ func (a *RGATreeList) findNextBeforeExecutedAt(
 }
 ```
 
-- [ ] **Step 5: Update release to handle dead nodes**
+- [x] **Step 5: Update release to handle dead nodes**
 
 The `release` function (lines 337-350) needs to work with position nodes that have no element:
 
@@ -309,11 +309,11 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 }
 ```
 
-- [ ] **Step 6: Compile and verify no build errors**
+- [x] **Step 6: Compile and verify no build errors**
 
 Run: `cd 03_projects/yorkie && go build ./...`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add pkg/document/crdt/rga_tree_list.go
@@ -330,7 +330,7 @@ Methods that traverse the linked list need to handle dead position nodes.
 - Modify: `pkg/document/crdt/rga_tree_list.go` (Marshal, Nodes, Set, Delete, Get)
 - Modify: `pkg/document/crdt/array.go` (DeepCopy, Elements, Descendants)
 
-- [ ] **Step 1: Update Marshal to skip dead nodes**
+- [x] **Step 1: Update Marshal to skip dead nodes**
 
 ```go
 func (a *RGATreeList) Marshal() string {
@@ -356,7 +356,7 @@ func (a *RGATreeList) Marshal() string {
 }
 ```
 
-- [ ] **Step 2: Update Nodes to skip dead nodes**
+- [x] **Step 2: Update Nodes to skip dead nodes**
 
 ```go
 func (a *RGATreeList) Nodes() []*RGATreeListNode {
@@ -372,11 +372,11 @@ func (a *RGATreeList) Nodes() []*RGATreeListNode {
 }
 ```
 
-- [ ] **Step 3: Update Array.DeepCopy**
+- [x] **Step 3: Update Array.DeepCopy**
 
 In `array.go` (lines 134-149), update to work with the new structure. `Nodes()` already filters dead nodes, so `DeepCopy` should work as-is if `node.elem` is accessed through the accessor. Verify and adjust if needed.
 
-- [ ] **Step 4: Update FindPrevCreatedAt to skip dead nodes**
+- [x] **Step 4: Update FindPrevCreatedAt to skip dead nodes**
 
 ```go
 func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) {
@@ -396,11 +396,11 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, e
 }
 ```
 
-- [ ] **Step 5: Compile and verify**
+- [x] **Step 5: Compile and verify**
 
 Run: `cd 03_projects/yorkie && go build ./...`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add pkg/document/crdt/rga_tree_list.go pkg/document/crdt/array.go
@@ -416,7 +416,7 @@ Write tests that verify convergence under different application orders.
 **Files:**
 - Modify: `pkg/document/crdt/rga_tree_list_test.go`
 
-- [ ] **Step 1: Write test for basic LWW move**
+- [x] **Step 1: Write test for basic LWW move**
 
 Two concurrent moves of the same element — higher timestamp wins:
 
@@ -449,24 +449,24 @@ func TestRGATreeListMoveAfterLWW(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails (before implementation is complete)**
+- [x] **Step 2: Run test to verify it fails (before implementation is complete)**
 
 Run: `cd 03_projects/yorkie && go test ./pkg/document/crdt/ -run TestRGATreeListMoveAfterLWW -v`
 
-- [ ] **Step 3: Write test for the counterexample from the issue comment**
+- [x] **Step 3: Write test for the counterexample from the issue comment**
 
 Three concurrent ops: move(A after C), move(B after A), insert(X after B) — must converge regardless of order.
 
-- [ ] **Step 4: Write test for move + delete convergence**
+- [x] **Step 4: Write test for move + delete convergence**
 
 Concurrent move and delete of the same element.
 
-- [ ] **Step 5: Run all tests**
+- [x] **Step 5: Run all tests**
 
 Run: `cd 03_projects/yorkie && go test ./pkg/document/crdt/ -v`
 Expected: ALL PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add pkg/document/crdt/rga_tree_list_test.go
@@ -484,7 +484,7 @@ Dead position nodes need to be serialized in snapshots.
 - Modify: `api/converter/to_bytes.go:218-231`
 - Modify: `api/converter/from_bytes.go:165-189`
 
-- [ ] **Step 1: Update RGANode proto message**
+- [x] **Step 1: Update RGANode proto message**
 
 ```protobuf
 message RGANode {
@@ -496,11 +496,11 @@ message RGANode {
 }
 ```
 
-- [ ] **Step 2: Regenerate protobuf**
+- [x] **Step 2: Regenerate protobuf**
 
 Run: `cd 03_projects/yorkie && make proto`
 
-- [ ] **Step 3: Update toRGANodes**
+- [x] **Step 3: Update toRGANodes**
 
 In `to_bytes.go`, serialize dead position nodes alongside live ones:
 
@@ -532,7 +532,7 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 
 Note: `Nodes()` currently filters dead nodes. We need an `AllNodes()` method that includes dead nodes for serialization.
 
-- [ ] **Step 4: Update fromJSONArray to handle dead nodes**
+- [x] **Step 4: Update fromJSONArray to handle dead nodes**
 
 In `from_bytes.go`:
 
@@ -565,7 +565,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 }
 ```
 
-- [ ] **Step 5: Add AllNodes, AddDeadPosition, AddWithPosMovedAt to RGATreeList**
+- [x] **Step 5: Add AllNodes, AddDeadPosition, AddWithPosMovedAt to RGATreeList**
 
 ```go
 // AllNodes returns all nodes including dead position nodes (for serialization).
@@ -586,11 +586,11 @@ func (a *RGATreeList) AddDeadPosition(createdAt *time.Ticket) { ... }
 func (a *RGATreeList) AddWithPosMovedAt(elem Element, posMovedAt *time.Ticket) error { ... }
 ```
 
-- [ ] **Step 6: Compile and verify**
+- [x] **Step 6: Compile and verify**
 
 Run: `cd 03_projects/yorkie && make proto && go build ./...`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add api/yorkie/v1/resources.proto api/converter/to_bytes.go api/converter/from_bytes.go pkg/document/crdt/rga_tree_list.go
@@ -607,7 +607,7 @@ Dead position nodes should be garbage collected when all clients have synced pas
 - Modify: `pkg/document/crdt/rga_tree_list.go` (purge method)
 - Modify: `pkg/document/crdt/root.go` (GC registration)
 
-- [ ] **Step 1: Register dead position nodes for GC**
+- [x] **Step 1: Register dead position nodes for GC**
 
 In MoveAfter, after marking old position as dead, register it for GC:
 
@@ -616,7 +616,7 @@ In MoveAfter, after marking old position as dead, register it for GC:
 // Register dead node for GC using executedAt as the removal timestamp
 ```
 
-- [ ] **Step 2: Add purge support for dead position nodes**
+- [x] **Step 2: Add purge support for dead position nodes**
 
 ```go
 func (a *RGATreeList) PurgeDeadPosition(createdAt *time.Ticket) error {
@@ -632,11 +632,11 @@ func (a *RGATreeList) PurgeDeadPosition(createdAt *time.Ticket) error {
 }
 ```
 
-- [ ] **Step 3: Verify GC works with existing VersionVector mechanism**
+- [x] **Step 3: Verify GC works with existing VersionVector mechanism**
 
 Check that `root.GarbageCollect()` properly iterates and purges dead position nodes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add pkg/document/crdt/rga_tree_list.go pkg/document/crdt/root.go
@@ -652,7 +652,7 @@ Remove skips from existing convergence tests and add the counterexample test.
 **Files:**
 - Modify: `test/integration/array_test.go:409-478`
 
-- [ ] **Step 1: Update TestComplicatedArrayConcurrency**
+- [x] **Step 1: Update TestComplicatedArrayConcurrency**
 
 Change `t.Skipf` to `t.Fatalf` or use `assert.True` — these tests must now pass:
 
@@ -662,7 +662,7 @@ if !syncClientsThenCheckEqual(t, []clientAndDocPair{{c0, d0}, {c1, d1}}) {
 }
 ```
 
-- [ ] **Step 2: Add counterexample test**
+- [x] **Step 2: Add counterexample test**
 
 Add the three-concurrent-ops test from the issue comment:
 
@@ -676,18 +676,18 @@ func TestArrayMoveAfterCounterexample(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run integration tests**
+- [x] **Step 3: Run integration tests**
 
 Run: `cd 03_projects/yorkie && go test ./test/integration/ -run TestComplicatedArrayConcurrency -tags integration -v`
 Run: `cd 03_projects/yorkie && go test ./test/integration/ -run TestArrayMoveAfterCounterexample -tags integration -v`
 Expected: ALL PASS
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
 Run: `cd 03_projects/yorkie && make test`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add test/integration/array_test.go
@@ -700,22 +700,22 @@ git commit -m "Update integration tests for Array.MoveAfter convergence"
 
 **Files:** None (verification only)
 
-- [ ] **Step 1: Run linter**
+- [x] **Step 1: Run linter**
 
 Run: `cd 03_projects/yorkie && make lint`
 Expected: PASS
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 Run: `cd 03_projects/yorkie && make test`
 Expected: ALL PASS
 
-- [ ] **Step 3: Run integration tests**
+- [x] **Step 3: Run integration tests**
 
 Run: `cd 03_projects/yorkie && make test -tags integration`
 Expected: ALL PASS (if MongoDB available)
 
-- [ ] **Step 4: Review all changes**
+- [x] **Step 4: Review all changes**
 
 Run: `cd 03_projects/yorkie && git diff main --stat`
 Verify no unintended file changes.
