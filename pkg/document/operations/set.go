@@ -70,6 +70,9 @@ func (o *Set) Execute(root *crdt.Root, _ time.VersionVector) error {
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
 	}
+	if value.RemovedAt() != nil {
+		root.RegisterRemovedElementPair(obj, value)
+	}
 	return nil
 }
 
