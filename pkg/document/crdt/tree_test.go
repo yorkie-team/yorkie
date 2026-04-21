@@ -103,6 +103,31 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, `<span font-weight="bold">helloyorkie</span>`, crdt.ToXML(node))
 	})
 
+	t.Run("split element should copy attributes", func(t *testing.T) {
+		attrs := crdt.NewRHT()
+		attrs.Set("bold", "true", time.InitialTicket)
+
+		root := crdt.NewTreeNode(dummyTreeNodeID, "r", nil)
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", attrs)
+		assert.NoError(t, root.Append(para))
+		assert.NoError(t, para.Append(crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "helloworld")))
+		assert.Equal(t, `<r><p bold="true">helloworld</p></r>`, crdt.ToXML(root))
+
+		// split text node
+		left, err := para.Child(0)
+		assert.NoError(t, err)
+		_, _, err = left.SplitText(5, 0)
+		assert.NoError(t, err)
+
+		// split element node
+		split, _, err := para.SplitElement(1, func() *time.Ticket {
+			return time.InitialTicket
+		}, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, `<p bold="true">hello</p>`, crdt.ToXML(para))
+		assert.Equal(t, `<p bold="true">world</p>`, crdt.ToXML(split))
+	})
+
 	t.Run("UTF-16 code unit test", func(t *testing.T) {
 		tests := []struct {
 			length int
