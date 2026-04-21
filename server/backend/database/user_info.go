@@ -62,7 +62,7 @@ func NewUserInfo(username, hashedPassword string) *UserInfo {
 	return &UserInfo{
 		Username:       username,
 		HashedPassword: hashedPassword,
-		CreatedAt:      time.Now(),
+		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
 	}
 }
 
