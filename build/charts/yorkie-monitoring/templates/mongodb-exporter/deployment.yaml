@@ -42,12 +42,12 @@ spec:
               protocol: TCP
           livenessProbe:
             httpGet:
-              path: /
+              path: /metrics
               port: metrics
             initialDelaySeconds: 10
           readinessProbe:
             httpGet:
-              path: /
+              path: /metrics
               port: metrics
             initialDelaySeconds: 10
           securityContext:
