@@ -1,0 +1,50 @@
+{{- if .Values.mongodbExporter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.monitoring.name }}-mongodb-exporter
+  namespace: {{ .Values.monitoring.yorkieNamespace }}
+  labels:
+    app.kubernetes.io/name: mongodb-exporter
+    app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+    app.kubernetes.io/component: mongodb-exporter
+    app.kubernetes.io/part-of: {{ .Values.monitoring.name }}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb-exporter
+      app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mongodb-exporter
+        app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+        app.kubernetes.io/component: mongodb-exporter
+    spec:
+      containers:
+        - name: mongodb-exporter
+          image: "{{ .Values.mongodbExporter.image.repository }}:{{ .Values.mongodbExporter.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodbExporter.image.pullPolicy }}
+          args:
+            - --mongodb.uri={{ .Values.mongodbExporter.mongodb.uri }}
+            - --collect-all
+            - --compatible-mode
+          ports:
+            - name: metrics
+              containerPort: 9216
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: metrics
+            initialDelaySeconds: 10
+          resources:
+            {{- toYaml .Values.mongodbExporter.resources | nindent 12 }}
+{{- end }}

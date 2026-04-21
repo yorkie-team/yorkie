@@ -1,0 +1,121 @@
+{{- if .Values.mongodbExporter.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.monitoring.name }}-mongodb-dashboard
+  namespace: {{ .Values.monitoring.namespace }}
+  labels:
+    app.kubernetes.io/name: mongodb-exporter
+    app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+    app.kubernetes.io/component: mongodb-exporter
+    app.kubernetes.io/part-of: {{ .Values.monitoring.name }}
+    app.kubernetes.io/managed-by: Helm
+    grafana_dashboard: "1"
+data:
+  mongodb-mongos-overview.json: |-
+    {
+      "uid": "mongodb-yorkie",
+      "title": "MongoDB Mongos Overview",
+      "tags": ["mongodb", "yorkie"],
+      "timezone": "utc",
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "type": "stat", "title": "MongoDB Up",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "targets": [{ "expr": "mongodb_up", "legendFormat": "up", "refId": "A" }],
+          "fieldConfig": { "defaults": { "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}] } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 2, "type": "stat", "title": "Shards",
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "targets": [{ "expr": "mongodb_mongos_sharding_shards_total", "legendFormat": "shards", "refId": "A" }],
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 3, "type": "stat", "title": "Chunks",
+          "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+          "targets": [{ "expr": "mongodb_mongos_sharding_chunks_total", "legendFormat": "chunks", "refId": "A" }],
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 4, "type": "stat", "title": "Balancer",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+          "targets": [{ "expr": "mongodb_mongos_sharding_balancer_enabled", "legendFormat": "enabled", "refId": "A" }],
+          "fieldConfig": { "defaults": { "mappings": [{"type": "value", "options": {"0": {"text": "OFF", "color": "red"}, "1": {"text": "ON", "color": "green"}}}] } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 5, "type": "stat", "title": "DB Data Size",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+          "targets": [{ "expr": "mongodb_dbstats_dataSize{database=\"yorkie-meta\"}", "legendFormat": "data", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 6, "type": "stat", "title": "DB Index Size",
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+          "targets": [{ "expr": "mongodb_dbstats_indexSize{database=\"yorkie-meta\"}", "legendFormat": "index", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 10, "type": "timeseries", "title": "Read Ops by Collection",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "targets": [{ "expr": "rate(mongodb_collstats_latencyStats_reads_ops[5m])", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 11, "type": "timeseries", "title": "Write Ops by Collection",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "targets": [{ "expr": "rate(mongodb_collstats_latencyStats_writes_ops[5m])", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 12, "type": "timeseries", "title": "Read Latency by Collection (avg)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "targets": [{ "expr": "rate(mongodb_collstats_latencyStats_reads_latency[5m]) / rate(mongodb_collstats_latencyStats_reads_ops[5m])", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "\u00b5s" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 13, "type": "timeseries", "title": "Write Latency by Collection (avg)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "targets": [{ "expr": "rate(mongodb_collstats_latencyStats_writes_latency[5m]) / rate(mongodb_collstats_latencyStats_writes_ops[5m])", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "\u00b5s" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 20, "type": "timeseries", "title": "Collection Document Count",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+          "targets": [{ "expr": "mongodb_collstats_storageStats_count", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 21, "type": "timeseries", "title": "Collection Storage Size",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+          "targets": [{ "expr": "mongodb_collstats_storageStats_storageSize", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 30, "type": "timeseries", "title": "Shard Chunk Distribution",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+          "targets": [{ "expr": "mongodb_mongos_sharding_shard_chunks_total", "legendFormat": "{{ "{{" }}shard{{ "}}" }}", "refId": "A" }],
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        },
+        {
+          "id": 31, "type": "timeseries", "title": "Command Ops by Collection",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+          "targets": [{ "expr": "rate(mongodb_collstats_latencyStats_commands_ops[5m])", "legendFormat": "{{ "{{" }}database{{ "}}" }}.{{ "{{" }}collection{{ "}}" }} ({{ "{{" }}shard{{ "}}" }})", "refId": "A" }],
+          "fieldConfig": { "defaults": { "unit": "ops" } },
+          "datasource": { "type": "prometheus", "uid": "prometheus" }
+        }
+      ],
+      "schemaVersion": 39
+    }
+{{- end }}

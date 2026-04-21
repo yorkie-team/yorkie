@@ -207,3 +207,23 @@ loki-stack:
     config:
       clients:
         - url: http://yorkie-monitoring-loki:3100/loki/api/v1/push
+
+# Configuration for MongoDB exporter
+mongodbExporter:
+  enabled: false
+
+  image:
+    repository: percona/mongodb_exporter
+    tag: "0.44.0"
+    pullPolicy: IfNotPresent
+
+  mongodb:
+    uri: ""
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

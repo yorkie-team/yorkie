@@ -1,0 +1,26 @@
+{{- if .Values.mongodbExporter.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.monitoring.name }}-mongodb-exporter
+  namespace: {{ .Values.monitoring.namespace }}
+  labels:
+    app.kubernetes.io/name: mongodb-exporter
+    app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+    app.kubernetes.io/component: mongodb-exporter
+    app.kubernetes.io/part-of: {{ .Values.monitoring.name }}
+    app.kubernetes.io/managed-by: Helm
+    prometheus: monitoring
+spec:
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.monitoring.yorkieNamespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mongodb-exporter
+      app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+{{- end }}
