@@ -216,8 +216,8 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 		tB := ctx.IssueTimeTicket()
 		tC := ctx.IssueTimeTicket()
 
-		tMove := ctx.IssueTimeTicket()  // t4
-		tDel := ctx.IssueTimeTicket()   // t5
+		tMove := ctx.IssueTimeTicket() // t4
+		tDel := ctx.IssueTimeTicket()  // t5
 
 		// Order 1: move then delete
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})

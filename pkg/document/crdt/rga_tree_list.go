@@ -188,11 +188,11 @@ func (n *RGATreeListNode) DataSize() resource.DataSize {
 // a linked list, index-based element search is slow, O(n). To optimise for fast
 // insertions and removals at any index in the list, RGATreeList has a tree.
 type RGATreeList struct {
-	dummyHead              *RGATreeListNode
-	last                   *RGATreeListNode
-	nodeMapByIndex         *splay.Tree[*RGATreeListNode]
-	nodeMapByCreatedAt     map[string]*RGATreeListNode
-	elementMapByCreatedAt  map[string]*ElementEntry
+	dummyHead             *RGATreeListNode
+	last                  *RGATreeListNode
+	nodeMapByIndex        *splay.Tree[*RGATreeListNode]
+	nodeMapByCreatedAt    map[string]*RGATreeListNode
+	elementMapByCreatedAt map[string]*ElementEntry
 }
 
 // NewRGATreeList creates a new instance of RGATreeList.
