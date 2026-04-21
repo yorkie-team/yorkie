@@ -17,7 +17,6 @@
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
-- [Array Set + Move Undo](array-set-move-undo.md): Fix undo of set restoring value at dead position after move
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
 - [Range Deletion in SplayTree](range-deletion-in-splay-tree.md): Improving range deletion in SplayTree
