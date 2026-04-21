@@ -20,7 +20,6 @@ Extending `movedFrom` to a list does not solve the cascade problem. Counterexamp
 - Guarantee convergence of `Array.MoveAfter` under concurrent operations.
 - Pass `TestArrayConcurrencyTable` (49 cases) + `TestComplicateArrayConcurrency` (4 cases) + additional counterexamples.
 - Keep the existing Array insert/delete/get API unchanged.
-- Keep the protobuf Move operation message unchanged.
 
 ### Non-Goals
 
@@ -35,122 +34,140 @@ Apply Kleppmann's "Moving Elements in List CRDTs" (PaPoC 2020) principle on top 
 ### Conceptual Model
 
 ```
-Current:
+Before:
   RGATreeListNode = { elem(value+position metadata), movedFrom, prev, next }
   Element and position are coupled 1:1. move = release + insertAfter + cascade.
 
-Proposed:
-  PositionNode = { prev, next, indexNode, elementEntry }   // physical position slot
-  ElementEntry = { elem, positionNode, posMovedAt }         // logical element
-  move = create new PositionNode + LWW-update ElementEntry's position.
+After:
+  RGATreeListNode = { elementEntry, createdAt, prev, next }   // position slot
+  ElementEntry = { elem, positionNode, posMovedAt }            // logical element
+  move = create new position node + LWW-update ElementEntry's position.
 ```
 
-**PositionNode**: A slot in the RGA linked list. When `elementEntry` is nil, it is a dead slot (abandoned by a move). Dead slots have splay tree weight 0.
+**RGATreeListNode (position node)**: A slot in the RGA linked list. When `elementEntry` is nil, it is a dead slot (abandoned by a move). Dead slots have splay tree weight 0. Each position node has its own `createdAt` — for initial elements this equals the element's createdAt; for move-created positions this equals the move's `executedAt`.
 
 **ElementEntry**: Stable identity of an element. `positionNode` is the position this element currently occupies. `posMovedAt` is the LWW timestamp of the most recent move.
+
+**Two maps in RGATreeList**:
+- `nodeMapByCreatedAt`: maps position node createdAt → position node. Dead nodes stay in the map.
+- `elementMapByCreatedAt`: maps element createdAt → ElementEntry. Used for element lookups.
 
 ### MoveAfter Algorithm
 
 ```
 MoveAfter(prevCreatedAt, createdAt, executedAt):
-  1. entry = elementByCreatedAt[createdAt]
-  2. if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt):
+  1. prevPosNode = nodeMapByCreatedAt[prevCreatedAt]   // position node lookup
+  2. entry = elementMapByCreatedAt[createdAt]           // element lookup
+  3. if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt):
        return  // LWW: this move already lost
-  3. newPosNode = insertPositionAfter(prevCreatedAt, executedAt)
-       // reuse existing insertAfter's forward skip logic (RGA insertion rule)
-  4. oldPosNode = entry.positionNode
+  4. newPosNode = insertPositionAfter(prevPosNode, executedAt)
+       // forward skip only (RGA insertion rule)
+  5. oldPosNode = entry.positionNode
      oldPosNode.elementEntry = nil   // mark as dead slot
-     splayTree.updateWeight(oldPosNode)  // weight becomes 0
-  5. newPosNode.elementEntry = entry
+     oldPosNode.removedAt = executedAt  // register for GC
+  6. newPosNode.elementEntry = entry
      entry.positionNode = newPosNode
      entry.posMovedAt = executedAt
-     splayTree.updateWeight(newPosNode)
 ```
 
-**Convergence proof**: Concurrent moves are resolved deterministically by LWW comparison (step 2). For any element, only the move with the highest timestamp survives as the final position. This holds regardless of application order.
+**Key**: `prevCreatedAt` is a **position node identity**, not an element identity. When the user says "move B after A", the operation captures A's current position node's createdAt. On remote apply, this finds the exact position node in `nodeMapByCreatedAt` — even if A has since moved and the position is now dead.
 
-### Code to Remove
+### Position Node Identity for Move Destinations
 
-| Location | Content | Replaced by |
-|----------|---------|-------------|
-| `rga_tree_list.go:31` | `movedFrom *RGATreeListNode` | LWW register |
-| `rga_tree_list.go:82-89` | `MovedFrom()` / `SetMovedFrom()` | Remove |
-| `rga_tree_list.go:270-282` | Cascade loop | Remove — LWW makes it unnecessary |
-| `rga_tree_list.go:326-328` | `findNextBeforeExecutedAt` backtracking | Remove |
+This is the critical design decision for convergence of "move-after-moving-target":
 
-### Code to Keep
+When `move(B, after A)` is created locally, the operation stores `prevCreatedAt = A's current position node createdAt`. On remote apply, `nodeMapByCreatedAt[prevCreatedAt]` finds that exact position node (which may be dead if A was concurrently moved).
 
-| Location | Content | Reason |
-|----------|---------|--------|
-| RGA linked list + splay tree | Order management, index lookup | PositionNode reuses this structure |
-| `insertAfter` forward skip (lines 330-332) | Skip nodes positioned after executedAt | Part of RGA insertion rule, still needed |
-| `InsertAfter` / `Delete` | Insert/delete operations | Work independently of move |
-| `operations/move.go` | Move operation struct | Same fields, only Execute internals change |
+```
+Example:
+  Initial: Head → A_pos(tA) → B_pos(tB) → C_pos(tC)
 
-### Splay Tree Weight
+  Op1 @t4: move(A, after C), prev=tC
+  Op2 @t5: move(B, after A), prev=tA  // captures A's position at creation time
 
-Dead PositionNodes must be excluded from user-visible length:
+  Order 1 (Op1→Op2):
+    Op1: A moves to pos_t4 after C. A_pos(tA) becomes dead.
+    Op2: prev=tA → finds A_pos(dead). Insert B's new position after A_pos.
+    Result: [B, C, A]
 
-- Dead slot: weight = 0 (invisible)
-- Live slot (elementEntry != nil): weight = elem.Len() (same as current)
-- Removed element in slot: weight = 0 (same as current removed logic)
+  Order 2 (Op2→Op1):
+    Op2: prev=tA → finds A_pos(live). Insert B's new position after A_pos.
+    Op1: A moves to pos_t4 after C. A_pos becomes dead.
+    Result: [B, C, A]  ✓ Converged!
+```
+
+Dead position nodes stay in `nodeMapByCreatedAt` — they are never reassigned. This ensures remote operations always find the correct insertion point regardless of application order.
+
+### Move Operation Semantics Change
+
+The Move operation's `prev_created_at` field changes meaning:
+
+```
+Before: prev_created_at = element's createdAt (element identity)
+After:  prev_created_at = position node's createdAt (position identity)
+```
+
+For elements that have never been moved, position createdAt = element createdAt (no difference). For moved elements, position createdAt = the move's executedAt that placed the element there.
+
+The `json/array.go` layer converts element createdAt → position createdAt when creating move operations via `PosCreatedAt()`.
 
 ### Protobuf
 
-**Move operation message**: No change. All 4 fields map directly to the new semantics.
+**Move operation message**: No structural change. The `prev_created_at` field carries a position node identity instead of an element identity — same wire type, different semantic.
 
-```protobuf
-message Move {
-  TimeTicket parent_created_at = 1;  // Array
-  TimeTicket prev_created_at = 2;    // destination (after this)
-  TimeTicket created_at = 3;         // stable ID of element to move
-  TimeTicket executed_at = 4;        // LWW timestamp
-}
-```
-
-**Snapshot (RGANode)**: Needs additional field for dead position nodes.
+**Snapshot (RGANode)**: Three new fields for dead position nodes and move metadata:
 
 ```protobuf
 message RGANode {
-  JSONElementSimple element = 1;
-  // New field:
-  TimeTicket pos_moved_at = 2;      // LWW timestamp (null if position was created by insert)
+  RGANode next = 1;
+  JSONElement element = 2;
+  TimeTicket position_created_at = 3;
+  TimeTicket position_moved_at = 4;
+  TimeTicket position_removed_at = 5;
 }
 ```
 
-Dead position nodes are serialized as RGANodes with no element. `pos_moved_at` is set only when an element was moved.
+- `position_created_at`: The position node's own identity. For moved elements, differs from element's createdAt.
+- `position_moved_at`: LWW timestamp of the move that placed the element here. Null for insert-created positions.
+- `position_removed_at`: When the position became dead (for GC). Null for live positions.
+
+Dead position nodes are serialized as RGANodes with no element.
 
 ### GC
 
-Dead position nodes follow the existing VersionVector-based GC pattern:
-- Once all clients have synced past the move timestamp, the dead node can be purged from the linked list.
-- Reuse the existing `gcElementPairMap` registration mechanism.
+Dead position nodes implement `GCChild` interface and `RGATreeList` implements `GCParent`:
 
-### Counterexample Verification
+- `MoveAfter` sets `removedAt = executedAt` on dead position nodes and returns them for registration.
+- `operations/move.go` Execute registers dead nodes via `root.RegisterGCPair`.
+- `json/array.go` registers dead nodes via `context.RegisterGCPair`.
+- On snapshot restore, `root.NewRoot` calls `Array.GCPairs()` to register existing dead nodes.
+- `GarbageCollect` purges dead nodes from the linked list once all clients have synced past.
 
-Verify with the counterexample from the issue comment:
+### Code Removed
 
-```
-Initial: Head -> A -> B -> C
-Op1 @t1: move(A, after C)
-Op2 @t2: move(B, after A)   (t1 < t2)
-Op3 @t3: insert(X, after B) (t1 < t3 < t2)
-```
+| Content | Replaced by |
+|---------|-------------|
+| `movedFrom *RGATreeListNode` | Position node identity in operation |
+| `MovedFrom()` / `SetMovedFrom()` | Removed |
+| Cascade loop | LWW makes it unnecessary |
+| `findNextBeforeExecutedAt` movedFrom backtracking | Removed — forward skip only |
 
-With the LWW approach, in any application order:
-- B's final position is determined solely by Op2 (highest timestamp t2 for B). Op1 moves A, not B — no cascade contamination.
-- Op3 inserts X after B's current position. Since B's position is deterministic (always the result of Op2), X always lands in the same place.
+### Code Kept
 
-Key design decision: **insert after a moved element follows the element to its current position.** `prevCreatedAt` is the element's stable ID, so insertion always occurs after wherever that element currently is.
+| Content | Reason |
+|---------|--------|
+| RGA linked list + splay tree | PositionNode reuses this structure |
+| `insertAfter` forward skip | Part of RGA insertion rule, still needed |
+| `InsertAfter` / `Delete` | Work independently of move |
 
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
-| Dead position node accumulation increases memory | VersionVector-based GC. Loro reports ~50% memory increase as baseline |
-| Incompatible with existing snapshots | Migration logic: on load, convert all existing nodes to live PositionNode + ElementEntry pairs |
-| Interaction with Set operation (decomposed as InsertAfter + Remove) | Set operates at the element layer, independent of position. Verify with tests |
-| Removing `findNextBeforeExecutedAt` backtracking affects insert convergence | Only backtracking is removed. Forward skip is preserved — it's part of the RGA insertion rule |
+| Dead position node accumulation increases memory | VersionVector-based GC purges dead nodes |
+| Move operation semantic change (prev_created_at) | For never-moved elements, position createdAt = element createdAt (backward compatible). Mixed old/new clients on moved elements need version gating |
+| Incompatible with existing snapshots | New proto fields are additive. Old snapshots load correctly (new fields default to nil). New snapshots with dead nodes require new code |
+| Interaction with Set operation (InsertAfter + Remove) | Set operates at the element layer, independent of position. Verified with tests |
 
 ### Design Decisions
 
@@ -159,9 +176,10 @@ Key design decision: **insert after a moved element follows the element to its c
 | Adopt Kleppmann LWW approach | Formally verified (Isabelle/HOL). Convergence guaranteed by CRDT primitive composition |
 | Remove movedFrom + cascade entirely | Patching cannot achieve convergence (counterexample proven). Fundamental structural change needed |
 | Separate PositionNode / ElementEntry | Direct implementation of Kleppmann's principle. Loro uses the same pattern (ListItem / Element) |
+| Position node identity for move destinations | Solves move-after-moving-target. Dead position nodes are stable anchors in the list regardless of application order |
+| Two maps (nodeMap + elementMap) | nodeMap for position lookups (move destinations), elementMap for element lookups (delete, set, etc.). Clean separation of concerns |
 | Keep existing RGA linked list + splay tree | Insert/delete work correctly. Only move needs redesign |
-| Keep Move protobuf message | Fields map directly to new semantics. Avoid unnecessary wire format change |
-| Keep forward skip, remove only backtracking | Forward skip is RGA insertion rule. Backtracking is movedFrom-specific |
+| Keep forward skip, remove only backtracking | Forward skip is RGA insertion rule. Backtracking was movedFrom-specific |
 
 ## Alternatives Considered
 
