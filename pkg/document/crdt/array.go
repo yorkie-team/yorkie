@@ -149,13 +149,30 @@ func (a *Array) ToTestString() string {
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
-	for _, node := range a.elements.Nodes() {
+	for _, node := range a.elements.AllNodes() {
+		if node.Element() == nil {
+			// Dead position node (abandoned by a move).
+			if node.RemovedAt() != nil {
+				elements.AddDeadPosition(node.PositionCreatedAt(), node.RemovedAt())
+			}
+			continue
+		}
+
 		copiedNode, err := node.Element().DeepCopy()
 		if err != nil {
 			return nil, err
 		}
-		if err = elements.Add(copiedNode); err != nil {
-			return nil, err
+
+		if node.PositionMovedAt() != nil {
+			if err = elements.AddMovedElement(
+				copiedNode, node.PositionCreatedAt(), node.PositionMovedAt(),
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err = elements.Add(copiedNode); err != nil {
+				return nil, err
+			}
 		}
 	}
 
