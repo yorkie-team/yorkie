@@ -2369,7 +2369,7 @@ func (c *Client) FindDocInfosByQuery(
 		"removed_at": bson.M{
 			"$exists": false,
 		},
-	})
+	}, options.Find().SetSort(bson.D{{Key: "key", Value: 1}}))
 	if err != nil {
 		return nil, fmt.Errorf("find documents by query %s: %w", query, err)
 	}
