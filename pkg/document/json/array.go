@@ -476,8 +476,15 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	if err = p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	if err != nil {
 		panic(err)
+	}
+	if deadNode != nil {
+		p.context.RegisterGCPair(crdt.GCPair{
+			Parent: p.Array.RGATreeList(),
+			Child:  deadNode,
+		})
 	}
 }
 
@@ -497,8 +504,15 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	if err := p.MoveAfter(prevPosCreatedAt, createdAt, ticket); err != nil {
+	deadNode, err := p.MoveAfter(prevPosCreatedAt, createdAt, ticket)
+	if err != nil {
 		panic(err)
+	}
+	if deadNode != nil {
+		p.context.RegisterGCPair(crdt.GCPair{
+			Parent: p.Array.RGATreeList(),
+			Child:  deadNode,
+		})
 	}
 }
 

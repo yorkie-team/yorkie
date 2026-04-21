@@ -46,18 +46,18 @@ func TestRGATreeListMoveAfterLWW(t *testing.T) {
 
 		// Order 1: Op1 then Op2
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		err := list1.MoveAfter(tB, tA, tMove1)
+		_, err := list1.MoveAfter(tB, tA, tMove1)
 		assert.NoError(t, err)
 		assert.Equal(t, `["B","A","C"]`, list1.Marshal())
-		err = list1.MoveAfter(tC, tA, tMove2)
+		_, err = list1.MoveAfter(tC, tA, tMove2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 then Op1
 		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		err = list2.MoveAfter(tC, tA, tMove2)
+		_, err = list2.MoveAfter(tC, tA, tMove2)
 		assert.NoError(t, err)
-		err = list2.MoveAfter(tB, tA, tMove1) // should be discarded (LWW)
+		_, err = list2.MoveAfter(tB, tA, tMove1) // should be discarded (LWW)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -87,17 +87,17 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 
 		// Order 1: Op1 → Op2
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		err := list1.MoveAfter(tC, tA, tOp1)
+		_, err := list1.MoveAfter(tC, tA, tOp1)
 		assert.NoError(t, err)
-		err = list1.MoveAfter(tA, tB, tOp2)
+		_, err = list1.MoveAfter(tA, tB, tOp2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 → Op1
 		list2 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		err = list2.MoveAfter(tA, tB, tOp2)
+		_, err = list2.MoveAfter(tA, tB, tOp2)
 		assert.NoError(t, err)
-		err = list2.MoveAfter(tC, tA, tOp1)
+		_, err = list2.MoveAfter(tC, tA, tOp1)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -131,11 +131,11 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 				var err error
 				switch op {
 				case 1:
-					err = list.MoveAfter(tD, tA, tOp1)
+					_, err = list.MoveAfter(tD, tA, tOp1)
 				case 2:
-					err = list.MoveAfter(tA, tB, tOp2)
+					_, err = list.MoveAfter(tA, tB, tOp2)
 				case 3:
-					err = list.MoveAfter(tB, tC, tOp3)
+					_, err = list.MoveAfter(tB, tC, tOp3)
 				}
 				assert.NoError(t, err)
 			}
@@ -182,17 +182,17 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 
 		// Order 1: Op1 → Op2
 		list1 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
-		err := list1.MoveAfter(tD, tA, tOp1)
+		_, err := list1.MoveAfter(tD, tA, tOp1)
 		assert.NoError(t, err)
-		err = list1.MoveAfter(tC, tB, tOp2)
+		_, err = list1.MoveAfter(tC, tB, tOp2)
 		assert.NoError(t, err)
 		result1 := list1.Marshal()
 
 		// Order 2: Op2 → Op1
 		list2 := buildList(t, []string{"A", "B", "C", "D"}, []*time.Ticket{tA, tB, tC, tD})
-		err = list2.MoveAfter(tC, tB, tOp2)
+		_, err = list2.MoveAfter(tC, tB, tOp2)
 		assert.NoError(t, err)
-		err = list2.MoveAfter(tD, tA, tOp1)
+		_, err = list2.MoveAfter(tD, tA, tOp1)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -221,7 +221,7 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 
 		// Order 1: move then delete
 		list1 := buildList(t, []string{"A", "B", "C"}, []*time.Ticket{tA, tB, tC})
-		err := list1.MoveAfter(tC, tB, tMove)
+		_, err := list1.MoveAfter(tC, tB, tMove)
 		assert.NoError(t, err)
 		assert.Equal(t, `["A","C","B"]`, list1.Marshal())
 		_, err = list1.DeleteByCreatedAt(tB, tDel)
@@ -233,7 +233,7 @@ func TestRGATreeListMoveAfterWithDelete(t *testing.T) {
 		_, err = list2.DeleteByCreatedAt(tB, tDel)
 		assert.NoError(t, err)
 		assert.Equal(t, `["A","C"]`, list2.Marshal())
-		err = list2.MoveAfter(tC, tB, tMove)
+		_, err = list2.MoveAfter(tC, tB, tMove)
 		assert.NoError(t, err)
 		result2 := list2.Marshal()
 
@@ -268,7 +268,7 @@ func TestRGATreeList(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, prevCreatedAt.Compare(targetElement.CreatedAt()), -1)
 
-		err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		assert.Equal(t, `["2","1","3"]`, elements.Marshal())
 
@@ -296,10 +296,10 @@ func TestRGATreeList(t *testing.T) {
 		_, err = elements.DeleteByCreatedAt(invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
-		err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
+		_, err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
 		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		_, err = elements.FindPrevCreatedAt(invalidCreatedAt)
