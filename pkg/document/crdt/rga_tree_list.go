@@ -519,14 +519,14 @@ func (a *RGATreeList) insertAfter(
 	value Element,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
-	// For regular inserts, prevCreatedAt is an element's createdAt.
-	// Look up the element's current position node first; fall back to
-	// nodeMapByCreatedAt for the dummyHead and other non-element nodes.
+	// prevCreatedAt is a position node identity. Look up in nodeMapByCreatedAt
+	// first (covers both live and dead position nodes), then fall back to
+	// elementMapByCreatedAt for backward compatibility with element identity.
 	var startNode *RGATreeListNode
-	if entry, ok := a.elementMapByCreatedAt[prevCreatedAt.Key()]; ok {
-		startNode = entry.positionNode
-	} else if node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; ok {
+	if node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; ok {
 		startNode = node
+	} else if entry, ok := a.elementMapByCreatedAt[prevCreatedAt.Key()]; ok {
+		startNode = entry.positionNode
 	} else {
 		return nil, fmt.Errorf("insertAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
@@ -575,12 +575,14 @@ func (a *RGATreeList) Set(
 	element Element,
 	executedAt *time.Ticket,
 ) (*RGATreeListNode, error) {
-	entry, ok := a.elementMapByCreatedAt[createdAt.Key()]
-	if !ok {
+	if _, ok := a.elementMapByCreatedAt[createdAt.Key()]; !ok {
 		return nil, fmt.Errorf("set %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	_, err := a.insertAfter(entry.elem.CreatedAt(), element, executedAt)
+	// Use the element's original position (via nodeMapByCreatedAt[createdAt])
+	// so that Set always inserts at the position where the element was when
+	// the Set operation was created, regardless of concurrent moves.
+	_, err := a.insertAfter(createdAt, element, executedAt)
 	if err != nil {
 		return nil, nil
 	}

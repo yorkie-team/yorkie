@@ -442,18 +442,26 @@ func (p *Array) insertAfterInternal(
 	elem := creator(ticket)
 	value := toOriginal(elem)
 
+	// Convert element createdAt to position createdAt for stable reference.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prevCreatedAt)
+	if err != nil {
+		// Fall back to prevCreatedAt if not found in elementMap
+		// (e.g., dummyHead or already a position identity).
+		prevPosCreatedAt = prevCreatedAt
+	}
+
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
 		panic(err)
 	}
 	p.context.Push(operations.NewAdd(
 		p.Array.CreatedAt(),
-		prevCreatedAt,
+		prevPosCreatedAt,
 		copiedValue,
 		ticket,
 	))
 
-	if err = p.InsertAfter(prevCreatedAt, value, nil); err != nil {
+	if err = p.InsertAfter(prevPosCreatedAt, value, nil); err != nil {
 		panic(err)
 	}
 	p.context.RegisterElement(value)
