@@ -11,7 +11,7 @@ import (
 )
 
 // buildList creates an RGATreeList with elements whose createdAt tickets match
-// the provided tickets. Returns the list and the createdAt tickets of the elements.
+// the provided tickets.
 func buildList(t *testing.T, values []string, tickets []*time.Ticket) *crdt.RGATreeList {
 	t.Helper()
 	elements := crdt.NewRGATreeList()
@@ -426,8 +426,9 @@ func TestRGATreeListLWWLosingMoveCreatesPosition(t *testing.T) {
 		err = list.InsertAfter(tOp1, yPrim, tOp3)
 		assert.NoError(t, err, "insert after losing move's position should not fail")
 
-		// Y should appear in the list at the position created by Op1 (after A).
-		assert.Contains(t, list.Marshal(), `"Y"`)
+		// Y should appear after A (the position created by Op1's losing move).
+		// X stays after B (Op2 won LWW). Final: [A, Y, B, X]
+		assert.Equal(t, `["A","Y","B","X"]`, list.Marshal())
 	})
 }
 

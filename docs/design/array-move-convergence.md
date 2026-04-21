@@ -33,7 +33,7 @@ Apply Kleppmann's "Moving Elements in List CRDTs" (PaPoC 2020) principle on top 
 
 ### Conceptual Model
 
-```
+```text
 Before:
   RGATreeListNode = { elem(value+position metadata), movedFrom, prev, next }
   Element and position are coupled 1:1. move = release + insertAfter + cascade.
@@ -54,12 +54,17 @@ After:
 
 ### MoveAfter Algorithm
 
-```
+```text
 MoveAfter(prevCreatedAt, createdAt, executedAt):
   1. prevPosNode = nodeMapByCreatedAt[prevCreatedAt]   // position node lookup
   2. entry = elementMapByCreatedAt[createdAt]           // element lookup
   3. if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt):
-       return  // LWW: this move already lost
+       // LWW: this move lost. But still create a dead position node so that
+       // operations referencing this move's position can find it.
+       if executedAt not in nodeMapByCreatedAt:
+         deadPosNode = insertPositionAfter(prevPosNode, executedAt)
+         deadPosNode.removedAt = executedAt
+       return
   4. newPosNode = insertPositionAfter(prevPosNode, executedAt)
        // forward skip only (RGA insertion rule)
   5. oldPosNode = entry.positionNode
@@ -78,7 +83,7 @@ This is the critical design decision for convergence of "move-after-moving-targe
 
 When `move(B, after A)` is created locally, the operation stores `prevCreatedAt = A's current position node createdAt`. On remote apply, `nodeMapByCreatedAt[prevCreatedAt]` finds that exact position node (which may be dead if A was concurrently moved).
 
-```
+```text
 Example:
   Initial: Head → A_pos(tA) → B_pos(tB) → C_pos(tC)
 
@@ -102,7 +107,7 @@ Dead position nodes stay in `nodeMapByCreatedAt` — they are never reassigned. 
 
 The Move operation's `prev_created_at` field changes meaning:
 
-```
+```text
 Before: prev_created_at = element's createdAt (element identity)
 After:  prev_created_at = position node's createdAt (position identity)
 ```

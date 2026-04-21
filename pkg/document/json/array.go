@@ -502,7 +502,9 @@ func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 	// Convert element createdAt to position createdAt for stable reference.
 	prevPosCreatedAt, err := p.Array.PosCreatedAt(prevCreatedAt)
 	if err != nil {
-		panic(err)
+		// Fall back to prevCreatedAt if not found in elementMap
+		// (e.g., LastCreatedAt returns a position identity directly).
+		prevPosCreatedAt = prevCreatedAt
 	}
 
 	p.context.Push(operations.NewMove(
