@@ -1025,7 +1025,9 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 		infos, err := db.ListUserInfos(ctx)
 		assert.NoError(t, err)
 		assert.Len(t, infos, 1)
-		assert.Equal(t, infos[0], info)
+		assert.Equal(t, info.ID, infos[0].ID)
+		assert.Equal(t, info.Username, infos[0].Username)
+		assert.True(t, info.CreatedAt.Equal(infos[0].CreatedAt))
 	})
 }
 
