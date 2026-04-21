@@ -24,21 +24,47 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
-// RGATreeListNode is a node of RGATreeList.
+// ElementEntry is the stable identity of an element in the RGATreeList.
+// It holds the element value and tracks which position node currently owns it.
+type ElementEntry struct {
+	elem         Element
+	positionNode *RGATreeListNode
+	posMovedAt   *time.Ticket
+}
+
+// RGATreeListNode is a position slot in the RGA linked list.
+// When elementEntry is nil, it is a dead slot abandoned by a move.
 type RGATreeListNode struct {
-	indexNode *splay.Node[*RGATreeListNode]
-	elem      Element
-	movedFrom *RGATreeListNode
+	indexNode    *splay.Node[*RGATreeListNode]
+	elementEntry *ElementEntry
+	createdAt    *time.Ticket
 
 	prev *RGATreeListNode
 	next *RGATreeListNode
 }
 
 func newRGATreeListNode(elem Element) *RGATreeListNode {
-	node := &RGATreeListNode{
-		prev: nil,
-		next: nil,
+	entry := &ElementEntry{
 		elem: elem,
+	}
+	node := &RGATreeListNode{
+		prev:         nil,
+		next:         nil,
+		elementEntry: entry,
+		createdAt:    elem.CreatedAt(),
+	}
+	entry.positionNode = node
+	node.indexNode = splay.NewNode(node)
+
+	return node
+}
+
+// newBarePositionNode creates a position node without an element (used for move).
+func newBarePositionNode(createdAt *time.Ticket) *RGATreeListNode {
+	node := &RGATreeListNode{
+		prev:      nil,
+		next:      nil,
+		createdAt: createdAt,
 	}
 	node.indexNode = splay.NewNode(node)
 
@@ -59,38 +85,50 @@ func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNo
 	return prev.next
 }
 
-// Element returns the element of this node.
-func (n *RGATreeListNode) Element() Element {
-	return n.elem
+func insertNodeAfter(prev *RGATreeListNode, newNode *RGATreeListNode) {
+	prevNext := prev.next
+
+	prev.next = newNode
+	newNode.prev = prev
+	newNode.next = prevNext
+	if prevNext != nil {
+		prevNext.prev = newNode
+	}
 }
 
-// CreatedAt returns the creation time of this element.
+// Element returns the element of this node.
+func (n *RGATreeListNode) Element() Element {
+	if n.elementEntry == nil {
+		return nil
+	}
+	return n.elementEntry.elem
+}
+
+// CreatedAt returns the creation time of this node.
+// If the node has an element, it returns the element's createdAt for backward
+// compatibility with lookups by element ID.
 func (n *RGATreeListNode) CreatedAt() *time.Ticket {
-	return n.elem.CreatedAt()
+	if n.elementEntry != nil {
+		return n.elementEntry.elem.CreatedAt()
+	}
+	return n.createdAt
 }
 
 // PositionedAt returns the time this element was positioned.
 func (n *RGATreeListNode) PositionedAt() *time.Ticket {
-	if n.elem.MovedAt() != nil {
-		return n.elem.MovedAt()
+	if n.elementEntry != nil {
+		if n.elementEntry.elem.MovedAt() != nil {
+			return n.elementEntry.elem.MovedAt()
+		}
+		return n.elementEntry.elem.CreatedAt()
 	}
-
-	return n.elem.CreatedAt()
-}
-
-// MovedFrom returns the previous element before the element moved.
-func (a *RGATreeListNode) MovedFrom() *RGATreeListNode {
-	return a.movedFrom
-}
-
-// SetMovedFrom sets the previous element before the element moved.
-func (a *RGATreeListNode) SetMovedFrom(movedFrom *RGATreeListNode) {
-	a.movedFrom = movedFrom
+	return n.createdAt
 }
 
 // Len returns the length of this node.
+// Dead nodes (no element) return 0, removed elements return 0.
 func (n *RGATreeListNode) Len() int {
-	if n.isRemoved() {
+	if n.elementEntry == nil || n.isRemoved() {
 		return 0
 	}
 	return 1
@@ -98,11 +136,17 @@ func (n *RGATreeListNode) Len() int {
 
 // String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
-	return n.elem.Marshal()
+	if n.elementEntry == nil {
+		return ""
+	}
+	return n.elementEntry.elem.Marshal()
 }
 
 func (n *RGATreeListNode) isRemoved() bool {
-	return n.elem.RemovedAt() != nil
+	if n.elementEntry == nil {
+		return true
+	}
+	return n.elementEntry.elem.RemovedAt() != nil
 }
 
 // RGATreeList is a list with improved index-based lookup in RGA. RGA is a
@@ -110,10 +154,11 @@ func (n *RGATreeListNode) isRemoved() bool {
 // a linked list, index-based element search is slow, O(n). To optimise for fast
 // insertions and removals at any index in the list, RGATreeList has a tree.
 type RGATreeList struct {
-	dummyHead          *RGATreeListNode
-	last               *RGATreeListNode
-	nodeMapByIndex     *splay.Tree[*RGATreeListNode]
-	nodeMapByCreatedAt map[string]*RGATreeListNode
+	dummyHead              *RGATreeListNode
+	last                   *RGATreeListNode
+	nodeMapByIndex         *splay.Tree[*RGATreeListNode]
+	nodeMapByCreatedAt     map[string]*RGATreeListNode
+	elementMapByCreatedAt  map[string]*ElementEntry
 }
 
 // NewRGATreeList creates a new instance of RGATreeList.
@@ -127,12 +172,14 @@ func NewRGATreeList() *RGATreeList {
 	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
 	nodeMapByCreatedAt[dummyHead.CreatedAt().Key()] = dummyHead
+	elementMapByCreatedAt := make(map[string]*ElementEntry)
 
 	return &RGATreeList{
-		dummyHead:          dummyHead,
-		last:               dummyHead,
-		nodeMapByIndex:     nodeMapByIndex,
-		nodeMapByCreatedAt: nodeMapByCreatedAt,
+		dummyHead:             dummyHead,
+		last:                  dummyHead,
+		nodeMapByIndex:        nodeMapByIndex,
+		nodeMapByCreatedAt:    nodeMapByCreatedAt,
+		elementMapByCreatedAt: elementMapByCreatedAt,
 	}
 }
 
@@ -144,13 +191,13 @@ func (a *RGATreeList) Marshal() string {
 	current := a.dummyHead.next
 	isFirst := true
 	for current != nil {
-		if !current.isRemoved() {
+		if current.elementEntry != nil && !current.isRemoved() {
 			if isFirst {
 				isFirst = false
 			} else {
 				sb.WriteString(",")
 			}
-			sb.WriteString(current.elem.Marshal())
+			sb.WriteString(current.elementEntry.elem.Marshal())
 		}
 
 		current = current.next
@@ -166,15 +213,27 @@ func (a *RGATreeList) Add(elem Element) error {
 	return a.InsertAfter(a.last.CreatedAt(), elem, nil)
 }
 
-// Nodes returns an array of elements contained in this RGATreeList.
+// Nodes returns an array of live nodes (with elements) in this RGATreeList.
+// Dead position nodes (abandoned by moves) are excluded.
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (a *RGATreeList) Nodes() []*RGATreeListNode {
 	var nodes []*RGATreeListNode
 	current := a.dummyHead.next
-	for {
-		if current == nil {
-			break
+	for current != nil {
+		if current.elementEntry != nil {
+			nodes = append(nodes, current)
 		}
+		current = current.next
+	}
+
+	return nodes
+}
+
+// AllNodes returns all nodes including dead position nodes.
+func (a *RGATreeList) AllNodes() []*RGATreeListNode {
+	var nodes []*RGATreeListNode
+	current := a.dummyHead.next
+	for current != nil {
 		nodes = append(nodes, current)
 		current = current.next
 	}
@@ -212,8 +271,12 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 		return nil, fmt.Errorf("DeleteByCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
+	if node.elementEntry == nil {
+		return node, nil
+	}
+
 	alreadyRemoved := node.isRemoved()
-	if node.elem.Remove(deletedAt) && !alreadyRemoved {
+	if node.elementEntry.elem.Remove(deletedAt) && !alreadyRemoved {
 		a.nodeMapByIndex.Splay(node.indexNode)
 	}
 	return node, nil
@@ -240,47 +303,47 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode,
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
-// element.
+// element using LWW (Last-Writer-Wins) position register semantics.
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
-	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
-	if !ok {
+	if _, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]; !ok {
 		return fmt.Errorf("MoveAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
-	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	entry, ok := a.elementMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
-	if prevCreatedAt == createdAt {
+	// LWW check: if a newer move already won, this move is discarded.
+	if entry.posMovedAt != nil && !executedAt.After(entry.posMovedAt) {
 		return nil
 	}
 
-	if executedAt.After(node.PositionedAt()) {
-		movedFrom := node.prev
-		nextNode := node.next
-		a.release(node)
-		node, err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt)
-		if err != nil {
-			return err
-		}
-		node.elem.SetMovedAt(executedAt)
-		node.SetMovedFrom(movedFrom)
-
-		for nextNode != nil && nextNode.PositionedAt().After(executedAt) {
-			prevNode = node
-			node = nextNode
-			nextNode = node.next
-
-			a.release(node)
-			node, err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt)
-			if err != nil {
-				return err
-			}
-			node.elem.SetMovedAt(executedAt)
-			node.SetMovedFrom(movedFrom)
-		}
+	// Create a new position node after the target position.
+	newPosNode, err := a.insertPositionAfter(prevCreatedAt, executedAt)
+	if err != nil {
+		return err
 	}
+
+	// Mark old position as dead.
+	oldPosNode := entry.positionNode
+	oldPosNode.elementEntry = nil
+	a.nodeMapByIndex.Splay(oldPosNode.indexNode)
+
+	// Remove element's createdAt key from nodeMap (it pointed to the old position).
+	delete(a.nodeMapByCreatedAt, createdAt.Key())
+
+	// Attach element to new position.
+	newPosNode.elementEntry = entry
+	entry.positionNode = newPosNode
+	entry.posMovedAt = executedAt
+	entry.elem.SetMovedAt(executedAt)
+
+	// Register the new position node under the element's createdAt key for lookups.
+	a.nodeMapByCreatedAt[createdAt.Key()] = newPosNode
+
+	a.nodeMapByIndex.Splay(newPosNode.indexNode)
+
 	return nil
 }
 
@@ -294,6 +357,10 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, e
 
 	for {
 		node = node.prev
+		// Skip dead position nodes (no element).
+		if node.elementEntry == nil {
+			continue
+		}
 		if a.dummyHead == node || !node.isRemoved() {
 			break
 		}
@@ -309,6 +376,7 @@ func (a *RGATreeList) purge(elem Element) error {
 		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 
+	delete(a.elementMapByCreatedAt, elem.CreatedAt().Key())
 	a.release(node)
 
 	return nil
@@ -321,10 +389,6 @@ func (a *RGATreeList) findNextBeforeExecutedAt(
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return nil, fmt.Errorf("findNextBeforeExecutedAt %s: %w", createdAt.Key(), ErrChildNotFound)
-	}
-
-	for node.elem.MovedAt() != nil && node.elem.MovedAt().After(executedAt) && node.movedFrom != nil {
-		node = node.movedFrom
 	}
 
 	for node.next != nil && node.next.PositionedAt().After(executedAt) {
@@ -346,7 +410,12 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 	node.prev, node.next = nil, nil
 
 	a.nodeMapByIndex.Delete(node.indexNode)
-	delete(a.nodeMapByCreatedAt, node.CreatedAt().Key())
+
+	key := node.createdAt.Key()
+	if node.elementEntry != nil {
+		key = node.elementEntry.elem.CreatedAt().Key()
+	}
+	delete(a.nodeMapByCreatedAt, key)
 }
 
 func (a *RGATreeList) insertAfter(
@@ -366,6 +435,29 @@ func (a *RGATreeList) insertAfter(
 
 	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, newNode.indexNode)
 	a.nodeMapByCreatedAt[value.CreatedAt().Key()] = newNode
+	a.elementMapByCreatedAt[value.CreatedAt().Key()] = newNode.elementEntry
+	return newNode, nil
+}
+
+// insertPositionAfter creates a bare position node after resolving position
+// via forward skip (RGA insertion rule). Used by MoveAfter.
+func (a *RGATreeList) insertPositionAfter(
+	prevCreatedAt *time.Ticket,
+	executedAt *time.Ticket,
+) (*RGATreeListNode, error) {
+	prevNode, err := a.findNextBeforeExecutedAt(prevCreatedAt, executedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	newNode := newBarePositionNode(executedAt)
+	insertNodeAfter(prevNode, newNode)
+	if prevNode == a.last {
+		a.last = newNode
+	}
+
+	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, newNode.indexNode)
+	a.nodeMapByCreatedAt[executedAt.Key()] = newNode
 	return newNode, nil
 }
 

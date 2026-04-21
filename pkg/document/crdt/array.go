@@ -59,7 +59,7 @@ func (a *Array) Get(idx int) (Element, error) {
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
@@ -74,7 +74,7 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
@@ -90,7 +90,7 @@ func (a *Array) Elements() []Element {
 		if node.isRemoved() {
 			continue
 		}
-		elements = append(elements, node.elem)
+		elements = append(elements, node.Element())
 	}
 
 	return elements
@@ -134,7 +134,7 @@ func (a *Array) ToTestString() string {
 func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
 	for _, node := range a.elements.Nodes() {
-		copiedNode, err := node.elem.DeepCopy()
+		copiedNode, err := node.Element().DeepCopy()
 		if err != nil {
 			return nil, err
 		}
@@ -199,7 +199,7 @@ func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	if err != nil {
 		return nil, err
 	}
-	return node.elem, nil
+	return node.Element(), nil
 }
 
 // Set sets the given element at the given position of the creation time.
@@ -209,7 +209,7 @@ func (a *Array) Set(createdAt *time.Ticket, element Element, executedAt *time.Ti
 		return nil, err
 	}
 	if node != nil {
-		return node.elem, nil
+		return node.Element(), nil
 	}
 	return nil, nil
 }
@@ -222,11 +222,11 @@ func (a *Array) Len() int {
 // Descendants traverse the descendants of this array.
 func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
-		if callback(node.elem, a) {
+		if callback(node.Element(), a) {
 			return
 		}
 
-		if elem, ok := node.elem.(Container); ok {
+		if elem, ok := node.Element().(Container); ok {
 			elem.Descendants(callback)
 		}
 	}
