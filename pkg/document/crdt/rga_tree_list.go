@@ -117,10 +117,12 @@ func (n *RGATreeListNode) CreatedAt() *time.Ticket {
 }
 
 // PositionedAt returns the time this element was positioned.
+// For live nodes, the position register (posMovedAt) is the source of truth.
+// For dead nodes (no element), the position node's own createdAt is used.
 func (n *RGATreeListNode) PositionedAt() *time.Ticket {
 	if n.elementEntry != nil {
-		if n.elementEntry.elem.MovedAt() != nil {
-			return n.elementEntry.elem.MovedAt()
+		if n.elementEntry.posMovedAt != nil {
+			return n.elementEntry.posMovedAt
 		}
 		return n.elementEntry.elem.CreatedAt()
 	}
