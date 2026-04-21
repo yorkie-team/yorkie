@@ -1,6 +1,6 @@
 ---
 title: vv-cleanup
-target-version: 0.7.x
+target-version: 0.7.6
 ---
 
 # Remove Detached Client's Lamport from Version Vectors
