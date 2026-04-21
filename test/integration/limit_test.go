@@ -76,7 +76,6 @@ func TestDocSize(t *testing.T) {
 	})
 
 	t.Run("Update doc size test", func(t *testing.T) {
-		t.Skip("TODO(raararaara): Remove this after resolving inter-node projectCache invalidataion")
 		ctx := context.Background()
 
 		sizeLimit := 100
