@@ -263,7 +263,13 @@ func (p *Array) MoveAfterByIndex(prevIndex, targetIndex int) {
 	if prev == nil || target == nil {
 		panic("index out of bound")
 	}
-	p.moveAfterInternal(prev.CreatedAt(), target.CreatedAt())
+
+	// Convert element identity to position identity for the anchor.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prev.CreatedAt())
+	if err != nil {
+		prevPosCreatedAt = prev.CreatedAt()
+	}
+	p.moveAfterInternal(prevPosCreatedAt, target.CreatedAt())
 }
 
 // InsertIntegerAfter inserts the given integer after the given previous
@@ -273,7 +279,13 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 	if prev == nil {
 		panic("index out of bound")
 	}
-	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+
+	// Convert element identity to position identity for the anchor.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prev.CreatedAt())
+	if err != nil {
+		prevPosCreatedAt = prev.CreatedAt()
+	}
+	p.insertAfterInternal(prevPosCreatedAt, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
 			panic(err)
@@ -442,26 +454,18 @@ func (p *Array) insertAfterInternal(
 	elem := creator(ticket)
 	value := toOriginal(elem)
 
-	// Convert element createdAt to position createdAt for stable reference.
-	prevPosCreatedAt, err := p.Array.PosCreatedAt(prevCreatedAt)
-	if err != nil {
-		// Fall back to prevCreatedAt if not found in elementMap
-		// (e.g., dummyHead or already a position identity).
-		prevPosCreatedAt = prevCreatedAt
-	}
-
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
 		panic(err)
 	}
 	p.context.Push(operations.NewAdd(
 		p.Array.CreatedAt(),
-		prevPosCreatedAt,
+		prevCreatedAt,
 		copiedValue,
 		ticket,
 	))
 
-	if err = p.InsertAfter(prevPosCreatedAt, value, nil); err != nil {
+	if err = p.InsertAfter(prevCreatedAt, value, nil); err != nil {
 		panic(err)
 	}
 	p.context.RegisterElement(value)
@@ -499,22 +503,14 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 	ticket := p.context.IssueTimeTicket()
 
-	// Convert element createdAt to position createdAt for stable reference.
-	prevPosCreatedAt, err := p.Array.PosCreatedAt(prevCreatedAt)
-	if err != nil {
-		// Fall back to prevCreatedAt if not found in elementMap
-		// (e.g., LastCreatedAt returns a position identity directly).
-		prevPosCreatedAt = prevCreatedAt
-	}
-
 	p.context.Push(operations.NewMove(
 		p.Array.CreatedAt(),
-		prevPosCreatedAt,
+		prevCreatedAt,
 		createdAt,
 		ticket,
 	))
 
-	deadNode, err := p.MoveAfter(prevPosCreatedAt, createdAt, ticket)
+	deadNode, err := p.MoveAfter(prevCreatedAt, createdAt, ticket)
 	if err != nil {
 		panic(err)
 	}

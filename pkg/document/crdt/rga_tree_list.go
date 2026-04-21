@@ -312,9 +312,10 @@ func (a *RGATreeList) AllNodes() []*RGATreeListNode {
 	return nodes
 }
 
-// LastCreatedAt returns the creation time of last elements.
+// LastCreatedAt returns the position node's createdAt of the last node.
+// This is a position identity suitable for use as prevCreatedAt.
 func (a *RGATreeList) LastCreatedAt() *time.Ticket {
-	return a.last.CreatedAt()
+	return a.last.PositionCreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
