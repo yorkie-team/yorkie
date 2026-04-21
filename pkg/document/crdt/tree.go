@@ -1503,6 +1503,34 @@ func (t *Tree) Style(
 					diff.Add(newNode.DataSize())
 				}
 			}
+
+			// Propagate style to unknown split siblings so that a
+			// style operation whose range was determined before the
+			// split also covers the right part of the split.
+			if token.TokenType == index.Start && !isVersionVectorEmpty {
+				current := node
+				for current.InsNextID != nil {
+					next := t.findFloorNode(current.InsNextID)
+					if next == nil || next.IsText() {
+						break
+					}
+					if ticketKnown(versionVector, next.id.CreatedAt) {
+						break
+					}
+					for key, value := range attrs {
+						if rhtNode := next.SetAttr(key, value, editedAt); rhtNode != nil {
+							pairs = append(pairs, GCPair{
+								Parent: next,
+								Child:  rhtNode,
+							})
+						}
+						if newNode, ok := next.Attrs.nodeMapByKey[key]; ok {
+							diff.Add(newNode.DataSize())
+						}
+					}
+					current = next
+				}
+			}
 		}
 	}); err != nil {
 		return nil, resource.DataSize{}, err
@@ -1576,6 +1604,30 @@ func (t *Tree) RemoveStyle(
 						Parent: node,
 						Child:  rhtNode,
 					})
+				}
+			}
+
+			// Propagate remove-style to unknown split siblings.
+			if token.TokenType == index.Start && !isVersionVectorEmpty {
+				current := node
+				for current.InsNextID != nil {
+					next := t.findFloorNode(current.InsNextID)
+					if next == nil || next.IsText() {
+						break
+					}
+					if ticketKnown(versionVector, next.id.CreatedAt) {
+						break
+					}
+					for _, attr := range attrs {
+						rhtNodes := next.RemoveAttr(attr, editedAt)
+						for _, rhtNode := range rhtNodes {
+							pairs = append(pairs, GCPair{
+								Parent: next,
+								Child:  rhtNode,
+							})
+						}
+					}
+					current = next
 				}
 			}
 		}
