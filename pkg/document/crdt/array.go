@@ -68,6 +68,12 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) 
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
 
+// PosCreatedAt returns the createdAt of the position node currently holding
+// the element. Used to convert element identity to position identity for moves.
+func (a *Array) PosCreatedAt(elemCreatedAt *time.Ticket) (*time.Ticket, error) {
+	return a.elements.PosCreatedAt(elemCreatedAt)
+}
+
 // Delete deletes the element of the given index.
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 	node, err := a.elements.Delete(idx, deletedAt)

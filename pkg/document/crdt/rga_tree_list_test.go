@@ -69,9 +69,6 @@ func TestRGATreeListMoveAfterLWW(t *testing.T) {
 
 func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 	t.Run("two moves of different elements converge in any order", func(t *testing.T) {
-		// TODO(hackerwins): Enable after fixing convergence for moves where
-		// the destination anchor is itself moved concurrently.
-		t.Skip("Known non-convergence: move-after-moving-target not yet resolved")
 
 		// Initial: [A, B, C]
 		// Op1 @t4: move(A, after C) → [B, C, A]
@@ -109,8 +106,6 @@ func TestRGATreeListMoveAfterConvergence(t *testing.T) {
 	})
 
 	t.Run("three concurrent moves converge in any order", func(t *testing.T) {
-		// TODO(hackerwins): Enable after fixing convergence for chained moves.
-		t.Skip("Known non-convergence: chained move dependencies not yet resolved")
 
 		// Initial: [A, B, C, D]
 		// Op1 @t5: move(A, after D)

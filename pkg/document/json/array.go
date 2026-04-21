@@ -484,14 +484,20 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 func (p *Array) moveAfterInternal(prevCreatedAt, createdAt *time.Ticket) {
 	ticket := p.context.IssueTimeTicket()
 
+	// Convert element createdAt to position createdAt for stable reference.
+	prevPosCreatedAt, err := p.Array.PosCreatedAt(prevCreatedAt)
+	if err != nil {
+		panic(err)
+	}
+
 	p.context.Push(operations.NewMove(
 		p.Array.CreatedAt(),
-		prevCreatedAt,
+		prevPosCreatedAt,
 		createdAt,
 		ticket,
 	))
 
-	if err := p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+	if err := p.MoveAfter(prevPosCreatedAt, createdAt, ticket); err != nil {
 		panic(err)
 	}
 }
