@@ -14,6 +14,7 @@
 
 - [Undo/Redo](undo-redo.md): Per-client undo/redo with reverse operations and position reconciliation
 - [VersionVector](version-vector.md): VersionVector for GC and Resolving conflicts in CRDT
+- [VV Cleanup](vv-cleanup.md): Remove detached client's lamport from version vectors
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
