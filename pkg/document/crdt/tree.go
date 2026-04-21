@@ -399,8 +399,11 @@ func (n *TreeNode) SplitElement(
 	// nodes could have arbitrary offset range. So, id could be duplicated
 	// and its order could be broken when concurrent editing happens.
 	// Currently, we use the similar IDString of split element with the split text.
-	// TODO(raararaara): We need to check if the attributes are copied correctly when splitting elements.
-	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), nil)
+	var splitAttrs *RHT
+	if n.Attrs != nil {
+		splitAttrs = n.Attrs.DeepCopy()
+	}
+	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), splitAttrs)
 	split.removedAt = n.removedAt
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, diff, err
