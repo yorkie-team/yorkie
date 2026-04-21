@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/channel"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -1039,11 +1040,13 @@ func TestChannelManager_Concurrency(t *testing.T) {
 }
 
 func TestChannelManager_StartStop(t *testing.T) {
-	// Note: Start/Stop tests are skipped because the Start() function
-	// uses a background context that may not have a logger initialized,
-	// causing nil pointer dereference in tests. The cleanup functionality
-	// is tested via CleanupExpired in TestChannelManager_RefreshAndCleanup.
-	t.Skip("Start/Stop tests require logger initialization")
+	// Initialize default logger for background goroutine in Start().
+	logging.DefaultLogger()
+
+	manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+
+	manager.Start()
+	manager.Stop()
 }
 
 func TestChannelManager_SeqMonotonic(t *testing.T) {
