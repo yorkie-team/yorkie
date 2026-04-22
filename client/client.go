@@ -999,37 +999,26 @@ func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*Watc
 			case events.DocChanged:
 				return &WatchDocResponse{Type: DocumentChanged}, nil
 			case events.DocWatched:
-				d.AddOnlineClient(cli.String())
-
-				// NOTE(hackerwins): If the presence does not exist, it means that
-				// PushPull is not received before watching. In that case, the 'watched'
-				// event is ignored here, and it will be triggered by PushPull.
-				if d.Presence(cli.String()) == nil {
+				event := d.AddOnlineClientAndReconcile(cli.String())
+				if event == nil {
 					return nil, nil
 				}
-
+				t := PresenceChanged
+				if event.Type == document.WatchedEvent {
+					t = DocumentWatched
+				}
 				return &WatchDocResponse{
-					Type: DocumentWatched,
-					Presences: map[string]document.PresenceData{
-						cli.String(): d.Presence(cli.String()),
-					},
+					Type:      t,
+					Presences: event.Presences,
 				}, nil
 			case events.DocUnwatched:
-				p := d.Presence(cli.String())
-				d.RemoveOnlineClient(cli.String())
-
-				// NOTE(hackerwins): If the presence does not exist, it means that
-				// PushPull is already received before unwatching. In that case, the
-				// 'unwatched' event is ignored here, and it was triggered by PushPull.
-				if p == nil {
+				event := d.RemoveOnlineClientAndReconcile(cli.String())
+				if event == nil {
 					return nil, nil
 				}
-
 				return &WatchDocResponse{
-					Type: DocumentUnwatched,
-					Presences: map[string]document.PresenceData{
-						cli.String(): p,
-					},
+					Type:      DocumentUnwatched,
+					Presences: event.Presences,
 				}, nil
 			}
 		}
