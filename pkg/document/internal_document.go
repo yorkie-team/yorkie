@@ -281,45 +281,27 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVec
 func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
 	var events []DocEvent
 	for _, c := range changes {
+		var hadPresence, wasOnline bool
+		var prevPresence presence.Data
+		clientID := c.ID().ActorID().String()
+
 		if c.PresenceChange() != nil {
-			clientID := c.ID().ActorID().String()
-			if _, ok := d.onlineClients[clientID]; ok {
-				switch c.PresenceChange().ChangeType {
-				case presence.Put:
-					// NOTE(chacha912): When the user exists in onlineClients, but
-					// their presence was initially absent, we can consider that we have
-					// received their initial presence, so trigger the 'watched' event.
-					eventType := PresenceChangedEvent
-					if !d.presences.Has(clientID) {
-						eventType = WatchedEvent
-					}
-					event := DocEvent{
-						Type: eventType,
-						Presences: map[string]presence.Data{
-							clientID: c.PresenceChange().Presence,
-						},
-					}
-					events = append(events, event)
-				case presence.Clear:
-					// NOTE(chacha912): When the user exists in onlineClients, but
-					// PresenceChange(clear) is received, we can consider it as detachment
-					// occurring before unwatch.
-					// Detached user is no longer participating in the document, we remove
-					// them from the online clients and trigger the 'unwatched' event.
-					event := DocEvent{
-						Type: UnwatchedEvent,
-						Presences: map[string]presence.Data{
-							clientID: d.Presence(clientID),
-						},
-					}
-					events = append(events, event)
-					d.RemoveOnlineClient(clientID)
-				}
-			}
+			hadPresence = d.presences.Has(clientID)
+			_, wasOnline = d.onlineClients[clientID]
+			prevPresence = d.Presence(clientID)
 		}
 
 		if err := c.Execute(d.root, d.presences); err != nil {
 			return nil, err
+		}
+
+		if c.PresenceChange() != nil {
+			if c.PresenceChange().ChangeType == presence.Clear {
+				d.RemoveOnlineClient(clientID)
+			}
+			if event := d.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence); event != nil {
+				events = append(events, *event)
+			}
 		}
 
 		d.changeID = d.changeID.SyncClocks(c.ID())
@@ -389,6 +371,53 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	delete(d.onlineClients, clientID)
+}
+
+// ReconcilePresence compares the previous and current state of a client's
+// presence/online status and returns the appropriate event to emit.
+//
+// State transition table:
+//
+//	(!hadP || !wasOn) → (hasP && isOn)  : WatchedEvent
+//	(hadP && wasOn)   → (hasP && isOn)  : PresenceChangedEvent
+//	(hadP && wasOn)   → (!hasP || !isOn): UnwatchedEvent
+//	otherwise                           : no event (waiting)
+func (d *InternalDocument) ReconcilePresence(
+	clientID string,
+	hadPresence bool,
+	wasOnline bool,
+	prevPresence presence.Data,
+) *DocEvent {
+	hasPresence := d.presences.Has(clientID)
+	_, isOnline := d.onlineClients[clientID]
+
+	if !hasPresence || !isOnline {
+		if hadPresence && wasOnline {
+			return &DocEvent{
+				Type: UnwatchedEvent,
+				Presences: map[string]presence.Data{
+					clientID: prevPresence,
+				},
+			}
+		}
+		return nil
+	}
+
+	if !hadPresence || !wasOnline {
+		return &DocEvent{
+			Type: WatchedEvent,
+			Presences: map[string]presence.Data{
+				clientID: d.Presence(clientID),
+			},
+		}
+	}
+
+	return &DocEvent{
+		Type: PresenceChangedEvent,
+		Presences: map[string]presence.Data{
+			clientID: d.Presence(clientID),
+		},
+	}
 }
 
 // ToDocument converts this document to Document.

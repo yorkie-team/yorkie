@@ -461,6 +461,37 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
 }
 
+// AddOnlineClientAndReconcile adds the given client to the online clients
+// and returns the appropriate presence event based on the state transition.
+func (d *Document) AddOnlineClientAndReconcile(clientID string) *DocEvent {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	hadPresence := d.doc.presences.Has(clientID)
+	_, wasOnline := d.doc.onlineClients[clientID]
+	prevPresence := d.doc.Presence(clientID)
+
+	d.doc.AddOnlineClient(clientID)
+
+	return d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence)
+}
+
+// RemoveOnlineClientAndReconcile removes the given client from the online
+// clients and returns the appropriate presence event based on the state
+// transition.
+func (d *Document) RemoveOnlineClientAndReconcile(clientID string) *DocEvent {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	hadPresence := d.doc.presences.Has(clientID)
+	_, wasOnline := d.doc.onlineClients[clientID]
+	prevPresence := d.doc.Presence(clientID)
+
+	d.doc.RemoveOnlineClient(clientID)
+
+	return d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence)
+}
+
 // Events returns the events of this document.
 func (d *Document) Events() <-chan DocEvent {
 	return d.events
