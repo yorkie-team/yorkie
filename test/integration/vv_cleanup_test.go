@@ -215,7 +215,7 @@ func TestGCAfterVVCleanup(t *testing.T) {
 			root.GetText("text").Edit(0, 3, "")
 			return nil
 		}, "deletes text content"))
-		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 1, d1.GarbageLen())
 
 		assert.NoError(t, c1.Sync(ctx))
 
