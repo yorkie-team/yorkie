@@ -1,46 +1,56 @@
+version: "2"
 linters:
   enable:
-    - errcheck
-    - goimports
-    - govet
     - goconst
     - gocyclo
-    - gofmt
-    - revive
     - goprintffuncname
     - gosec
     - lll
     - misspell
     - nakedret
+    - revive
     - wrapcheck
   disable:
-    - gosimple
     - staticcheck
     - unused
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/yorkie-team/yorkie
-  gosec:
-    excludes:
-      - G107 # Potential HTTP request made with variable url
-      - G115 # Ignore integer overflows
-  revive:
+  settings:
+    gosec:
+      excludes:
+        - G107
+        - G115
+        - G118
+    revive:
+      rules:
+        - name: unused-parameter
+          disabled: true
+    wrapcheck:
+      ignore-sig-regexps:
+        - github.com/yorkie-team/yorkie
+        - context.Context
+  exclusions:
+    generated: lax
     rules:
-      - name: unused-parameter
-        disabled: true
-  wrapcheck:
-    ignoreSigRegexps:
-      - github.com/yorkie-team/yorkie # Ignore all methods in internal package
-      - context.Context # Ignore all methods in context package
-
-issues:
-  exclude-use-default: false
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    - text: "G112:"
-      linters:
-        - gosec
-    - path: api/types/updatable_project_fields.go
-      linters:
-        - lll
+      - linters:
+          - gosec
+        text: 'G112:'
+      - linters:
+          - lll
+        path: api/types/updatable_project_fields.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/yorkie-team/yorkie
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
