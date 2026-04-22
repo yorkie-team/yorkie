@@ -79,7 +79,7 @@ func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
 		changePackSize := proto.Size(pbPack)
 		b.ReportMetric(float64(changePackSize), "1_changepack(bytes)")
 
-		snapshot, err := converter.SnapshotToBytes(d1.RootObject(), d1.AllPresences())
+		snapshot, err := converter.SnapshotToBytes(d1.RootObject(), d1.AllPresences(), nil)
 		assert.NoError(b, err)
 		snapshotSize := len(snapshot)
 		b.ReportMetric(float64(snapshotSize), "2_snapshot(bytes)")
@@ -126,7 +126,7 @@ func benchmarkVV(b *testing.B, svr *server.Yorkie, clientCnt int) {
 		changePackSize = proto.Size(pbPack)
 		b.ReportMetric(float64(changePackSize), "5_changepack_after_detach(bytes)")
 
-		snapshot, err = converter.SnapshotToBytes(dN1.RootObject(), dN1.AllPresences())
+		snapshot, err = converter.SnapshotToBytes(dN1.RootObject(), dN1.AllPresences(), nil)
 		assert.NoError(b, err)
 		snapshotSize = len(snapshot)
 		b.ReportMetric(float64(snapshotSize), "6_snapshot_after_detach(bytes)")

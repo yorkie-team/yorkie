@@ -188,13 +188,23 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
+	detachedActors := make(map[time.ActorID]int64)
+	for actorIDStr, lamport := range pbPack.DetachedActors {
+		actorID, err := time.ActorIDFromHex(actorIDStr)
+		if err != nil {
+			return nil, err
+		}
+		detachedActors[actorID] = lamport
+	}
+
 	pack := &change.Pack{
-		DocumentKey:   key.Key(pbPack.DocumentKey),
-		Checkpoint:    fromCheckpoint(pbPack.Checkpoint),
-		Changes:       changes,
-		Snapshot:      pbPack.Snapshot,
-		IsRemoved:     pbPack.IsRemoved,
-		VersionVector: versionVector,
+		DocumentKey:    key.Key(pbPack.DocumentKey),
+		Checkpoint:     fromCheckpoint(pbPack.Checkpoint),
+		Changes:        changes,
+		Snapshot:       pbPack.Snapshot,
+		IsRemoved:      pbPack.IsRemoved,
+		VersionVector:  versionVector,
+		DetachedActors: detachedActors,
 	}
 
 	return pack, nil

@@ -102,7 +102,7 @@ func NewInternalDocumentFromSnapshot(
 	vector time.VersionVector,
 	snapshot []byte,
 ) (*InternalDocument, error) {
-	obj, presences, err := converter.BytesToSnapshot(snapshot)
+	obj, presences, _, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 }
 
 func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVector) error {
-	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
+	rootObj, presences, _, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}

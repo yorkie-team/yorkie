@@ -216,13 +216,19 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 		return nil, err
 	}
 
+	pbDetachedActors := make(map[string]int64)
+	for actorID, lamport := range pack.DetachedActors {
+		pbDetachedActors[actorID.String()] = lamport
+	}
+
 	return &api.ChangePack{
-		DocumentKey:   pack.DocumentKey.String(),
-		Checkpoint:    ToCheckpoint(pack.Checkpoint),
-		Changes:       pbChanges,
-		Snapshot:      pack.Snapshot,
-		VersionVector: pbVersionVector,
-		IsRemoved:     pack.IsRemoved,
+		DocumentKey:    pack.DocumentKey.String(),
+		Checkpoint:     ToCheckpoint(pack.Checkpoint),
+		Changes:        pbChanges,
+		Snapshot:       pack.Snapshot,
+		VersionVector:  pbVersionVector,
+		IsRemoved:      pack.IsRemoved,
+		DetachedActors: pbDetachedActors,
 	}, nil
 }
 

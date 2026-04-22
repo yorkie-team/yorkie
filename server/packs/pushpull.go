@@ -307,6 +307,27 @@ func pullPack(
 	if resPack.SnapshotLen() == 0 {
 		resPack.VersionVector = minVersionVector
 	}
+
+	// 04. Find detached clients whose lamport is covered by minVV.
+	detachedClients, err := be.DB.FindDetachedClients(ctx, docInfo.RefKey())
+	if err != nil {
+		return nil, err
+	}
+
+	detachedActors := make(map[string]int64)
+	for _, dc := range detachedClients {
+		if l, ok := minVersionVector.Get(dc.ActorID); ok && l >= dc.DetachedLamport {
+			detachedActors[dc.ActorID.String()] = dc.DetachedLamport
+			if err := be.DB.ResetDetachedLamport(ctx, dc.ClientID, docInfo.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if len(detachedActors) > 0 {
+		resPack.DetachedActors = detachedActors
+	}
+
 	if !clientInfo.IsServerClient() {
 		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
 			return nil, err
@@ -422,7 +443,7 @@ func pullSnapshot(
 		}
 	}
 
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences(), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -49,6 +49,10 @@ type ServerPack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	// DetachedActors is a map of actor IDs to their lamport at detach time.
+	// Server signals this when all clients have caught up.
+	DetachedActors map[string]int64
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -132,6 +136,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	pbPack.VersionVector = pbVersionVector
+	pbPack.DetachedActors = p.DetachedActors
 
 	return pbPack, nil
 }

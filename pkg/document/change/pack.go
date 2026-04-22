@@ -42,6 +42,9 @@ type Pack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	// DetachedActors is a map of detached actor IDs to their lamport values.
+	DetachedActors map[time.ActorID]int64
 }
 
 // NewPack creates a new instance of Pack.

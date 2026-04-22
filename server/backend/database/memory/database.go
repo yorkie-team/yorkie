@@ -2038,7 +2038,7 @@ func (d *DB) CreateSnapshotInfo(
 	docRefKey types.DocRefKey,
 	doc *document.InternalDocument,
 ) error {
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences(), nil)
 	if err != nil {
 		return err
 	}

@@ -1259,10 +1259,11 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	} else {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
-				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
-				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
-				"updated_at":                               info.UpdatedAt,
+				clientDocInfoKey(docInfo.ID, "server_seq"):        0,
+				clientDocInfoKey(docInfo.ID, "client_seq"):        0,
+				clientDocInfoKey(docInfo.ID, StatusKey):           clientDocInfo.Status,
+				clientDocInfoKey(docInfo.ID, "detached_lamport"): clientDocInfo.DetachedLamport,
+				"updated_at": info.UpdatedAt,
 			},
 			"$pull": bson.M{
 				"attached_docs":  docInfo.ID,
@@ -2075,7 +2076,7 @@ func (c *Client) CreateSnapshotInfo(
 	docRefKey types.DocRefKey,
 	doc *document.InternalDocument,
 ) error {
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences(), nil)
 	if err != nil {
 		return err
 	}

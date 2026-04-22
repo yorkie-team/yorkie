@@ -32,23 +32,33 @@ import (
 var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
 
 // BytesToSnapshot creates a Snapshot from the given byte array.
-func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
+func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, map[time.ActorID]int64, error) {
 	if len(snapshot) == 0 {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), presence.NewMap(), nil
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), presence.NewMap(), nil, nil
 	}
 
 	pbSnapshot := &api.Snapshot{}
 	if err := proto.Unmarshal(snapshot, pbSnapshot); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal snapshot: %w", err)
+		return nil, nil, nil, fmt.Errorf("unmarshal snapshot: %w", err)
 	}
 
 	obj, err := fromJSONElement(pbSnapshot.GetRoot())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	presences := fromPresences(pbSnapshot.GetPresences())
-	return obj.(*crdt.Object), presences, nil
+
+	detachedActors := make(map[time.ActorID]int64)
+	for actorIDStr, lamport := range pbSnapshot.GetDetachedActors() {
+		actorID, err := time.ActorIDFromHex(actorIDStr)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		detachedActors[actorID] = lamport
+	}
+
+	return obj.(*crdt.Object), presences, detachedActors, nil
 }
 
 // BytesToObject creates an Object from the given byte array.

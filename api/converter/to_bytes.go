@@ -25,11 +25,16 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 // SnapshotToBytes converts the given document to byte array.
-func SnapshotToBytes(obj *crdt.Object, presences map[string]presence.Data) ([]byte, error) {
+func SnapshotToBytes(
+	obj *crdt.Object,
+	presences map[string]presence.Data,
+	detachedActors map[time.ActorID]int64,
+) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err
@@ -37,9 +42,15 @@ func SnapshotToBytes(obj *crdt.Object, presences map[string]presence.Data) ([]by
 
 	pbPresences := ToPresences(presences)
 
+	pbDetachedActors := make(map[string]int64)
+	for actorID, lamport := range detachedActors {
+		pbDetachedActors[actorID.String()] = lamport
+	}
+
 	bytes, err := proto.Marshal(&api.Snapshot{
-		Root:      pbElem,
-		Presences: pbPresences,
+		Root:           pbElem,
+		Presences:      pbPresences,
+		DetachedActors: pbDetachedActors,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Snapshot to bytes: %w", err)

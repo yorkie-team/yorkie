@@ -361,7 +361,7 @@ func TestConverter(t *testing.T) {
 
 		// 05. Serialize docA's post-merge state via SnapshotToBytes -
 		//     this is exactly what the server stores as a snapshot.
-		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences())
+		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences(), nil)
 		assert.NoError(t, err)
 
 		// 06. docB loads the snapshot. mergedInto/mergedChildIDs/mergedAt
@@ -448,7 +448,7 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", docC.Root().GetTree("t").ToXML())
 
 		// 04. Snapshot docA, load into docB.
-		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences())
+		snapshot, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences(), nil)
 		assert.NoError(t, err)
 		docB := document.New(helper.TestKey(t))
 		docB.SetActor(actorB)
