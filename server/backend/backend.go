@@ -134,6 +134,7 @@ func New(
 		cluster.WithRPCTimeout(conf.ParseClusterRPCTimeout()),
 		cluster.WithClientTimeout(conf.ParseClusterClientTimeout()),
 		cluster.WithPoolSize(conf.ClusterClientPoolSize),
+		cluster.WithClusterSecret(conf.ClusterSecret),
 	)
 
 	// 04. Create the database instance. If the MongoDB configuration is given,

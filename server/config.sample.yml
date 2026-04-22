@@ -107,6 +107,10 @@ Backend:
   # GatewayAddr is the address of the gateway server.
   GatewayAddr: "localhost:8080"
 
+  # ClusterSecret is the shared secret for authenticating inter-node
+  # cluster RPCs. If empty, all requests are allowed.
+  ClusterSecret: ""
+
 # Mongo is the MongoDB configuration (Optional).
 Mongo:
   # ConnectionTimeout is the timeout for connecting to MongoDB.

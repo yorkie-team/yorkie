@@ -18,6 +18,9 @@ package interceptors
 
 import (
 	"context"
+	"crypto/subtle"
+	"errors"
+	"net/http"
 	"strings"
 	gotime "time"
 
@@ -28,6 +31,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 )
 
+const clusterSecretHeader = "x-cluster-secret"
+
 func isClusterService(method string) bool {
 	return strings.HasPrefix(method, "/yorkie.v1.ClusterService/")
 }
@@ -35,16 +40,34 @@ func isClusterService(method string) bool {
 // ClusterServiceInterceptor is an interceptor for building additional context
 // and handling metrics for server-to-server communication via ClusterService.
 type ClusterServiceInterceptor struct {
-	backend   *backend.Backend
-	requestID *requestID
+	backend       *backend.Backend
+	requestID     *requestID
+	clusterSecret string
 }
 
 // NewClusterServiceInterceptor creates a new instance of ClusterServiceInterceptor.
-func NewClusterServiceInterceptor(be *backend.Backend) *ClusterServiceInterceptor {
+func NewClusterServiceInterceptor(be *backend.Backend, clusterSecret string) *ClusterServiceInterceptor {
 	return &ClusterServiceInterceptor{
-		backend:   be,
-		requestID: newRequestID("c"),
+		backend:       be,
+		requestID:     newRequestID("c"),
+		clusterSecret: clusterSecret,
 	}
+}
+
+// authenticate validates the cluster secret from the request header.
+// If no secret is configured, all requests are allowed for backward compatibility.
+func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
+	if i.clusterSecret == "" {
+		return nil
+	}
+
+	secret := header.Get(clusterSecretHeader)
+	if subtle.ConstantTimeCompare([]byte(secret), []byte(i.clusterSecret)) != 1 {
+		return connect.NewError(connect.CodeUnauthenticated,
+			errors.New("invalid cluster secret"))
+	}
+
+	return nil
 }
 
 // WrapUnary creates a unary server interceptor for building additional context
@@ -56,6 +79,10 @@ func (i *ClusterServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Un
 	) (connect.AnyResponse, error) {
 		if !isClusterService(req.Spec().Procedure) {
 			return next(ctx, req)
+		}
+
+		if err := i.authenticate(req.Header()); err != nil {
+			return nil, err
 		}
 
 		start := gotime.Now()
@@ -102,6 +129,10 @@ func (i *ClusterServiceInterceptor) WrapStreamingHandler(
 	) error {
 		if !isClusterService(conn.Spec().Procedure) {
 			return next(ctx, conn)
+		}
+
+		if err := i.authenticate(conn.RequestHeader()); err != nil {
+			return err
 		}
 
 		ctx = i.buildContext(ctx)

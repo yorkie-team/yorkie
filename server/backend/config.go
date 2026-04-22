@@ -104,6 +104,10 @@ type Config struct {
 	// RPC calls across the entire server. This prevents goroutine explosion
 	// when a cluster peer is slow or unresponsive. Default is 5000.
 	MaxConcurrentClusterRPCs int `yaml:"MaxConcurrentClusterRPCs"`
+
+	// ClusterSecret is the shared secret for authenticating inter-node
+	// cluster RPCs. If empty, all requests are allowed.
+	ClusterSecret string `yaml:"ClusterSecret"`
 }
 
 // Validate validates this config.

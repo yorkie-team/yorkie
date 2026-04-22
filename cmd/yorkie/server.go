@@ -602,5 +602,11 @@ func init() {
 		server.DefaultMaxConcurrentClusterRPCs,
 		"The maximum number of concurrent cluster RPC calls across the server.",
 	)
+	cmd.Flags().StringVar(
+		&conf.Backend.ClusterSecret,
+		"cluster-secret",
+		"",
+		"The shared secret for authenticating cluster RPC calls. If empty, all requests are allowed.",
+	)
 	rootCmd.AddCommand(cmd)
 }

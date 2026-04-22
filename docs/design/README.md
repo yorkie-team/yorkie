@@ -37,6 +37,7 @@
 - [Document Epoch](document-epoch.md): Epoch-based detection and recovery for clients stale after compaction
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
+- [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 
 ## Maintaining the Document
 

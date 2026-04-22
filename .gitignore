@@ -77,3 +77,6 @@ output.txt
 
 # log files
 *.log
+
+# worktrees
+.worktrees

@@ -64,6 +64,11 @@ func WithPoolSize(size int) Option {
 	return func(o *Options) { o.PoolSize = size }
 }
 
+// WithClusterSecret configures the shared secret for cluster authentication.
+func WithClusterSecret(secret string) Option {
+	return func(o *Options) { o.ClusterSecret = secret }
+}
+
 // Options configures how we set up the client.
 type Options struct {
 	// IsSecure is whether to enable the TLS connection of the client.
@@ -80,14 +85,20 @@ type Options struct {
 	// PoolSize is the number of connections per host in the pool.
 	// If zero, defaults to 1.
 	PoolSize int
+
+	// ClusterSecret is the shared secret for authenticating cluster RPCs.
+	ClusterSecret string
 }
+
+const clusterSecretHeader = "x-cluster-secret"
 
 // Client is a client for admin service.
 type Client struct {
-	conn       *http.Client
-	client     v1connect.ClusterServiceClient
-	isSecure   bool
-	rpcTimeout gotime.Duration
+	conn        *http.Client
+	client      v1connect.ClusterServiceClient
+	connectOpts []connect.ClientOption
+	isSecure    bool
+	rpcTimeout  gotime.Duration
 }
 
 // New creates an instance of Client.
@@ -121,10 +132,19 @@ func New(opts ...Option) (*Client, error) {
 		}
 	}
 
+	var connectOpts []connect.ClientOption
+	if options.ClusterSecret != "" {
+		secret := options.ClusterSecret
+		connectOpts = append(connectOpts, connect.WithInterceptors(
+			clusterAuthInterceptor{secret: secret},
+		))
+	}
+
 	return &Client{
-		conn:       conn,
-		isSecure:   options.IsSecure,
-		rpcTimeout: options.RPCTimeout,
+		conn:        conn,
+		connectOpts: connectOpts,
+		isSecure:    options.IsSecure,
+		rpcTimeout:  options.RPCTimeout,
 	}, nil
 }
 
@@ -152,7 +172,7 @@ func (c *Client) Dial(rpcAddr string) error {
 		}
 	}
 
-	c.client = v1connect.NewClusterServiceClient(c.conn, rpcAddr)
+	c.client = v1connect.NewClusterServiceClient(c.conn, rpcAddr, c.connectOpts...)
 
 	return nil
 }
@@ -374,6 +394,31 @@ func (c *Client) InvalidateCache(
 	}
 
 	return nil
+}
+
+// clusterAuthInterceptor is a connect client interceptor that attaches
+// the cluster secret header to every outgoing request.
+type clusterAuthInterceptor struct {
+	secret string
+}
+
+func (a clusterAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		req.Header().Set(clusterSecretHeader, a.secret)
+		return next(ctx, req)
+	}
+}
+
+func (a clusterAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+		conn := next(ctx, spec)
+		conn.RequestHeader().Set(clusterSecretHeader, a.secret)
+		return conn
+	}
+}
+
+func (a clusterAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return next
 }
 
 /**
