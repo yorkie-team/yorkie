@@ -329,3 +329,201 @@ public applyChanges(changes: Array<Change<P>>): void {
   - Client, Document → MongoDB (Document DB or RDB)
   - Change → HBase (Wide column store)
   - Snapshot, Presence → Redis (key-value store, In-memory DB)
+
+## Presence Event Reconciliation
+
+> target-version: 0.7.6
+
+### Summary
+
+The current presence event system has a structural problem: the same event type is emitted from multiple code paths with conditional logic to handle event reordering between two independent server channels (PushPull and Watch Stream). This leads to bugs when new cases arise (e.g., [yorkie-js-sdk#729](https://github.com/yorkie-team/yorkie-js-sdk/issues/729) — missing presence value for initial presence).
+
+This section describes a redesign that separates data updates from event emission by introducing a single reconciliation function.
+
+### Problem
+
+Presence events (`watched`, `unwatched`, `presence-changed`) are emitted from 8 places across the JS SDK codebase:
+
+| # | Location | Event | Trigger |
+|---|----------|-------|---------|
+| 1 | `update()` | presence-changed | Local presence change |
+| 2 | `applyChange()` | watched or presence-changed | Remote PresenceChange.Put |
+| 3 | `applyChange()` | unwatched | Remote PresenceChange.Clear |
+| 4 | `applyWatchInit()` | initialized | Watch stream init |
+| 5 | `applyDocEvent()` | watched | DOCUMENT_WATCHED from watch stream |
+| 6 | `applyDocEvent()` | unwatched | DOCUMENT_UNWATCHED from watch stream |
+| 7 | `executeUndoRedo()` | presence-changed | Undo/redo with presence |
+
+The root cause: data updates and event emission are coupled. Each handler that receives data also tries to emit events, requiring every handler to check whether data from the other channel has already arrived. This creates scattered conditional logic that breaks when new cases appear.
+
+For example, in [yorkie-js-sdk#729](https://github.com/yorkie-team/yorkie-js-sdk/issues/729), when a client sets initial presence during `attach()`, `doc.update()` emits a `presence-changed` event immediately. At this point, the document status is not yet `Attached` and the client is not yet in `onlineClients`, so `getPresence()` returns `undefined`. The event fires with a missing presence value.
+
+### Design
+
+#### Principle: Separate data updates from event emission
+
+Each channel handler updates only its own data store. After updating, it calls a single `reconcilePresence()` function that compares the previous state with the current state and decides which event (if any) to emit.
+
+```
+[Data Layer]
+  PushPull handler:  updates presences Map     → reconcile()
+  Watch handler:     updates onlineClients Set → reconcile()
+  Local update():    updates presences Map     → reconcile()
+
+[Event Layer]
+  reconcilePresence(): (prev state, current state) → event decision
+```
+
+#### Per-client state model
+
+For each client, two independent boolean states are tracked:
+
+| State | Source | Meaning |
+|-------|--------|---------|
+| `hasPresence` | PushPull (ChangePack) | Client has presence data in presences Map |
+| `isOnline` | Watch Stream | Client is in onlineClients Set |
+
+#### State transition table
+
+The reconcile function maps `(previous, current)` state pairs to events:
+
+```
+Previous → Current                    Event
+──────────────────────────────────────────────────────
+(!hasP, !isOn) → (hasP, isOn)        watched
+(hasP, isOn)   → (hasP, isOn)        presence-changed (if value changed)
+(hasP, isOn)   → (!hasP, _)          unwatched (clear)
+(hasP, isOn)   → (_, !isOn)          unwatched (unwatch)
+(_, _)         → (hasP, !isOn)       no event (waiting for online)
+(_, _)         → (!hasP, isOn)       no event (waiting for presence)
+```
+
+Events are emitted only when both conditions are met (`hasPresence` AND `isOnline`), or when transitioning out of a state where both were met.
+
+#### reconcilePresence function
+
+```typescript
+type PrevState = { hadPresence: boolean; wasOnline: boolean };
+
+private reconcilePresence(
+  actorID: ActorID,
+  prev: PrevState,
+  source: OpSource,
+): DocEvent | undefined {
+  const hasPresence = this.presences.has(actorID);
+  const isOnline = this.onlineClients.has(actorID);
+
+  if (!hasPresence || !isOnline) {
+    if (prev.hadPresence && prev.wasOnline) {
+      return {
+        type: DocEventType.Unwatched,
+        source,
+        value: { clientID: actorID, presence: prev.presence },
+      };
+    }
+    return undefined;
+  }
+
+  if (!prev.hadPresence || !prev.wasOnline) {
+    return {
+      type: DocEventType.Watched,
+      source,
+      value: {
+        clientID: actorID,
+        presence: this.presences.get(actorID)!,
+      },
+    };
+  }
+
+  return {
+    type: DocEventType.PresenceChanged,
+    source,
+    value: {
+      clientID: actorID,
+      presence: this.presences.get(actorID)!,
+    },
+  };
+}
+```
+
+The caller knows what it changed, so it captures previous state before the update and passes it as a hint. No separate snapshot Map is needed.
+
+Event payloads read from `presences.get()` directly, not through `getPresence()` public API, to avoid the status/onlineClients guards that exist for external callers.
+
+#### Call sites
+
+Each call site follows the same pattern: capture prev → update data → reconcile → publish.
+
+```
+applyChange (remote Put):
+  prev = { hadPresence: presences.has(id), wasOnline: onlineClients.has(id) }
+  presences.set(id, newPresence)
+  event = reconcile(id, prev, OpSource.Remote)
+
+applyDocEvent (DOCUMENT_WATCHED):
+  prev = { hadPresence: presences.has(id), wasOnline: onlineClients.has(id) }
+  onlineClients.add(id)
+  event = reconcile(id, prev, OpSource.Remote)
+
+applyDocEvent (DOCUMENT_UNWATCHED):
+  prev = { hadPresence: presences.has(id), wasOnline: onlineClients.has(id) }
+  onlineClients.delete(id)
+  presences.delete(id)
+  event = reconcile(id, prev, OpSource.Remote)
+
+applyChange (remote Clear):
+  prev = { hadPresence: presences.has(id), wasOnline: onlineClients.has(id) }
+  onlineClients.delete(id)
+  presences.delete(id)
+  event = reconcile(id, prev, OpSource.Remote)
+
+update (local):
+  prev = { hadPresence: presences.has(myID), wasOnline: onlineClients.has(myID) }
+  presences.set(myID, newPresence)
+  event = reconcile(myID, prev, OpSource.Local)
+
+executeUndoRedo:
+  prev = { hadPresence: presences.has(myID), wasOnline: onlineClients.has(myID) }
+  presences.set(myID, newPresence)
+  event = reconcile(myID, prev, OpSource.UndoRedo)
+```
+
+#### initialized event
+
+The `initialized` event is not part of reconciliation. It is emitted once during `applyWatchInit()` and serves a different purpose (full list of current participants). This remains unchanged.
+
+### How this resolves yorkie-js-sdk#729
+
+With the current code:
+1. `doc.update(initialPresence)` → emits `presence-changed` → `getPresence()` returns `undefined` (not yet Attached)
+
+With reconciliation:
+1. `doc.update(initialPresence)` → sets presences → reconcile → `isOnline` is false → **no event (waiting)**
+2. Attach completes → `applyWatchInit()` → sets onlineClients → reconcile → both ready → **`watched` event with correct presence value**
+
+### Event reordering handled uniformly
+
+The existing event reordering scenarios (documented above in "Presence Events") are handled uniformly:
+
+**watched (PushPull first):**
+1. `applyChange(Put)` → presences set → reconcile → not online yet → no event
+2. `applyDocEvent(WATCHED)` → onlineClients add → reconcile → both ready → `watched`
+
+**watched (Watch first):**
+1. `applyDocEvent(WATCHED)` → onlineClients add → reconcile → no presence yet → no event
+2. `applyChange(Put)` → presences set → reconcile → both ready → `watched`
+
+Both orderings produce the same result through the same code path.
+
+### Implementation plan
+
+1. **JS SDK first:** Implement reconcile pattern in `yorkie-js-sdk`. Validate with existing integration tests + new test for #729.
+2. **Go SDK alignment:** Apply the same reconcile pattern to the Go SDK to maintain consistency across SDKs.
+
+### Risks and Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Existing tests depend on current (buggy) event timing | Update tests to expect correct behavior — old timing was a bug |
+| Edge cases missed in reconcile | State space is small (2 bits × 2 bits = 16 transitions) — exhaustive verification possible |
+| Behavioral difference between JS and Go SDK during rollout | JS SDK ships first as reference implementation; Go SDK follows with same pattern |
