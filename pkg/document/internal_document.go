@@ -76,6 +76,10 @@ type InternalDocument struct {
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
 	localChanges []*change.Change
+
+	// detachedActors is a map of detached actor IDs to their lamport at detach time.
+	// Used to augment VV for correct causality detection and GC after VV cleanup.
+	detachedActors map[time.ActorID]int64
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -84,13 +88,14 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(root),
-		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID(),
-		presences:     presence.NewMap(),
-		onlineClients: make(map[string]bool),
+		key:            k,
+		status:         StatusDetached,
+		root:           crdt.NewRoot(root),
+		checkpoint:     change.InitialCheckpoint,
+		changeID:       change.InitialID(),
+		presences:      presence.NewMap(),
+		onlineClients:  make(map[string]bool),
+		detachedActors: make(map[time.ActorID]int64),
 	}
 }
 
@@ -102,19 +107,24 @@ func NewInternalDocumentFromSnapshot(
 	vector time.VersionVector,
 	snapshot []byte,
 ) (*InternalDocument, error) {
-	obj, presences, _, err := converter.BytesToSnapshot(snapshot)
+	obj, presences, detachedActors, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
+	if detachedActors == nil {
+		detachedActors = make(map[time.ActorID]int64)
+	}
+
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(obj),
-		presences:     presences,
-		onlineClients: make(map[string]bool),
-		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      change.InitialID().SetClocks(lamport, vector),
+		key:            k,
+		status:         StatusDetached,
+		root:           crdt.NewRoot(obj),
+		presences:      presences,
+		onlineClients:  make(map[string]bool),
+		checkpoint:     change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:       change.InitialID().SetClocks(lamport, vector),
+		detachedActors: detachedActors,
 	}, nil
 }
 
@@ -150,7 +160,12 @@ func (d *InternalDocument) HasLocalChanges() bool {
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
 	hasSnapshot := len(pack.Snapshot) > 0
 
-	// 01. Apply remote changes to both the cloneRoot and the document.
+	// 01. Process detached actors from server signal.
+	if len(pack.DetachedActors) > 0 {
+		d.AddDetachedActors(pack.DetachedActors)
+	}
+
+	// 02. Apply remote changes to both the cloneRoot and the document.
 	if hasSnapshot {
 		if err := d.applySnapshot(pack.Snapshot, pack.VersionVector); err != nil {
 			return err
@@ -161,7 +176,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 		}
 	}
 
-	// 02. Remove local changes applied to server.
+	// 03. Remove local changes applied to server.
 	for d.HasLocalChanges() {
 		c := d.localChanges[0]
 		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
@@ -170,11 +185,14 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 		d.localChanges = d.localChanges[1:]
 	}
 
-	// 03. Update the checkpoint.
+	// 04. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
+	// 05. Do Garbage collection.
 	if !disableGC && pack.VersionVector != nil && !hasSnapshot {
-		if _, err := d.GarbageCollect(pack.VersionVector); err != nil {
+		gcVV := pack.VersionVector.DeepCopy()
+		d.AugmentVV(gcVV)
+		if _, err := d.GarbageCollect(gcVV); err != nil {
 			return err
 		}
 	}
@@ -231,6 +249,29 @@ func (d *InternalDocument) VersionVector() time.VersionVector {
 	return d.changeID.VersionVector()
 }
 
+// DetachedActors returns the detached actors map.
+func (d *InternalDocument) DetachedActors() map[time.ActorID]int64 {
+	return d.detachedActors
+}
+
+// AddDetachedActors stores the given detached actors and removes them from the document's VV.
+func (d *InternalDocument) AddDetachedActors(actors map[time.ActorID]int64) {
+	for actorID, lamport := range actors {
+		d.detachedActors[actorID] = lamport
+		d.changeID.VersionVector().Unset(actorID)
+	}
+}
+
+// AugmentVV augments the given VV with detached actors' lamport values.
+// This ensures correct causality detection and GC after VV cleanup.
+func (d *InternalDocument) AugmentVV(vv time.VersionVector) {
+	for actorID, lamport := range d.detachedActors {
+		if _, ok := vv.Get(actorID); !ok {
+			vv.Set(actorID, lamport)
+		}
+	}
+}
+
 // SetStatus sets the status of this document.
 func (d *InternalDocument) SetStatus(status StatusType) {
 	d.status = status
@@ -257,13 +298,17 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 }
 
 func (d *InternalDocument) applySnapshot(snapshot []byte, vector time.VersionVector) error {
-	rootObj, presences, _, err := converter.BytesToSnapshot(snapshot)
+	rootObj, presences, detachedActors, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
+	d.detachedActors = detachedActors
+	if d.detachedActors == nil {
+		d.detachedActors = make(map[time.ActorID]int64)
+	}
 
 	// NOTE(chacha912): Documents created from snapshots were experiencing edit
 	// restrictions due to low lamport values.
@@ -290,6 +335,10 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			_, wasOnline = d.onlineClients[clientID]
 			prevPresence = d.Presence(clientID)
 		}
+
+		// Augment change VV with detached actors' lamport values so that
+		// causality detection and GC work correctly after VV cleanup.
+		d.AugmentVV(c.ID().VersionVector())
 
 		if err := c.Execute(d.root, d.presences); err != nil {
 			return nil, err
@@ -439,6 +488,11 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		onlineClients[id] = true
 	}
 
+	detachedActors := make(map[time.ActorID]int64)
+	for id, lamport := range d.detachedActors {
+		detachedActors[id] = lamport
+	}
+
 	return &InternalDocument{
 		key:        d.key,
 		status:     d.status,
@@ -449,9 +503,10 @@ func (d *InternalDocument) DeepCopy() (*InternalDocument, error) {
 		// COnsider removing this in the future.
 		changeID: d.changeID.DeepCopy(),
 
-		root:          root,
-		presences:     d.presences.DeepCopy(),
-		onlineClients: onlineClients,
-		localChanges:  d.localChanges,
+		root:           root,
+		presences:      d.presences.DeepCopy(),
+		onlineClients:  onlineClients,
+		localChanges:   d.localChanges,
+		detachedActors: detachedActors,
 	}, nil
 }

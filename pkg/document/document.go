@@ -215,7 +215,12 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// 01. Apply remote changes to both the cloneRoot and the document.
+	// 01. Process detached actors from server signal.
+	if len(pack.DetachedActors) > 0 {
+		d.doc.AddDetachedActors(pack.DetachedActors)
+	}
+
+	// 02. Apply remote changes to both the cloneRoot and the document.
 	hasSnapshot := len(pack.Snapshot) > 0
 
 	if hasSnapshot {
@@ -230,7 +235,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 	}
 
-	// 02. Remove local changes applied to server.
+	// 03. Remove local changes applied to server.
 	for d.doc.HasLocalChanges() {
 		c := d.doc.localChanges[0]
 		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
@@ -245,15 +250,17 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 	}
 
-	// 03. Update the checkpoint.
+	// 04. Update the checkpoint.
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
-	// 04. Do Garbage collection.
+	// 05. Do Garbage collection.
 	if !d.options.DisableGC && !hasSnapshot {
-		d.GarbageCollect(pack.VersionVector)
+		gcVV := pack.VersionVector.DeepCopy()
+		d.doc.AugmentVV(gcVV)
+		d.GarbageCollect(gcVV)
 	}
 
-	// 05. Update the status.
+	// 06. Update the status.
 	if pack.IsRemoved {
 		d.SetStatus(StatusRemoved)
 	}
