@@ -845,6 +845,39 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, int(helper.SnapshotInterval), d2.GarbageLen())
 	})
 
+	t.Run("snapshot response should not contain tombstones when GC is enabled", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. c1 creates a document and generates tombstones by editing text.
+		d1 := document.New(helper.TestKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "-")
+			return nil
+		}))
+		for i := range int(helper.SnapshotThreshold) {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
+				return nil
+			}))
+		}
+		assert.Equal(t, int(helper.SnapshotThreshold), d1.GarbageLen())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 02. c2 attaches the same document. Because the number of changes
+		// exceeds SnapshotThreshold, the server responds with a snapshot.
+		// The snapshot should have no tombstones because the server runs GC
+		// with minVersionVector before building the snapshot.
+		d2 := document.New(helper.TestKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		assert.Equal(t, 0, d2.GarbageLen())
+	})
+
 	t.Run("concurrent garbage collection test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
