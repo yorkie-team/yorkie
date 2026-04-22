@@ -7,6 +7,27 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.6] - 2026-04-23
+
+### Added
+
+- Add shared secret authentication for ClusterService by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1770
+- Add mongodb-exporter to yorkie-monitoring chart by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1758
+
+### Changed
+
+- Unify presence event emission with ReconcilePresence by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1766
+- Garbage collect before building snapshot response by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1765
+- Copy attributes to split node in TreeNode.SplitElement by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1759
+- Upgrade golangci-lint to v2.11.4 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1769
+- Remove simple t.Skip calls by fixing root causes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1760
+- Remove t.Skip in Update doc size test by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1764
+
+### Fixed
+
+- Fix Array.MoveAfter convergence with LWW position register by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1762
+- Register LWW-losing element in gcElementPairMap on Set conflict by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1761
+
 ## [v0.7.5] - 2026-04-20
 
 ### Added
