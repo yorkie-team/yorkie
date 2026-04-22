@@ -34,7 +34,8 @@ var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
 // BytesToSnapshot creates a Snapshot from the given byte array.
 func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, map[time.ActorID]int64, error) {
 	if len(snapshot) == 0 {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), presence.NewMap(), nil, nil
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket),
+			presence.NewMap(), make(map[time.ActorID]int64), nil
 	}
 
 	pbSnapshot := &api.Snapshot{}

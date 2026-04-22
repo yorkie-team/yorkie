@@ -266,7 +266,7 @@ func (d *InternalDocument) AddDetachedActors(actors map[time.ActorID]int64) {
 // This ensures correct causality detection and GC after VV cleanup.
 func (d *InternalDocument) AugmentVV(vv time.VersionVector) {
 	for actorID, lamport := range d.detachedActors {
-		if _, ok := vv.Get(actorID); !ok {
+		if existing, ok := vv.Get(actorID); !ok || existing < lamport {
 			vv.Set(actorID, lamport)
 		}
 	}

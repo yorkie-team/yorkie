@@ -1259,9 +1259,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	} else {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey(docInfo.ID, "server_seq"):        0,
-				clientDocInfoKey(docInfo.ID, "client_seq"):        0,
-				clientDocInfoKey(docInfo.ID, StatusKey):           clientDocInfo.Status,
+				clientDocInfoKey(docInfo.ID, "server_seq"):       0,
+				clientDocInfoKey(docInfo.ID, "client_seq"):       0,
+				clientDocInfoKey(docInfo.ID, StatusKey):          clientDocInfo.Status,
 				clientDocInfoKey(docInfo.ID, "detached_lamport"): clientDocInfo.DetachedLamport,
 				"updated_at": info.UpdatedAt,
 			},
@@ -1451,7 +1451,7 @@ func (c *Client) FindDetachedClients(
 ) ([]database.DetachedClientInfo, error) {
 	filter := bson.M{
 		"project_id": docRefKey.ProjectID,
-		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentDetached,
+		clientDocInfoKey(docRefKey.DocID, StatusKey):          database.DocumentDetached,
 		clientDocInfoKey(docRefKey.DocID, "detached_lamport"): bson.M{"$gt": int64(0)},
 	}
 
@@ -1469,7 +1469,7 @@ func (c *Client) FindDetachedClients(
 	for _, info := range infos {
 		actorID, err := info.ID.ToActorID()
 		if err != nil {
-			return nil, fmt.Errorf("convert client ID to actor ID %s: %w", info.ID, err)
+			continue
 		}
 
 		result = append(result, database.DetachedClientInfo{

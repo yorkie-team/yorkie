@@ -1418,7 +1418,7 @@ func (d *DB) FindDetachedClients(
 		if docInfo.Status == database.DocumentDetached && docInfo.DetachedLamport > 0 {
 			actorID, err := info.ID.ToActorID()
 			if err != nil {
-				return nil, fmt.Errorf("convert client ID to actor ID %s: %w", info.ID, err)
+				continue
 			}
 			result = append(result, database.DetachedClientInfo{
 				ClientID:        info.ID,
