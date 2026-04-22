@@ -1393,6 +1393,74 @@ func (d *DB) FindAttachedClientCountsByDocIDs(
 	return attachedClientMap, nil
 }
 
+// FindDetachedClients returns detached clients with non-zero DetachedLamport
+// for the given document.
+func (d *DB) FindDetachedClients(
+	_ context.Context,
+	docRefKey types.DocRefKey,
+) ([]database.DetachedClientInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", docRefKey.ProjectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find detached clients of %s: %w", docRefKey, err)
+	}
+
+	var result []database.DetachedClientInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ClientInfo)
+		docInfo := info.Documents[docRefKey.DocID]
+		if docInfo == nil {
+			continue
+		}
+		if docInfo.Status == database.DocumentDetached && docInfo.DetachedLamport > 0 {
+			actorID, err := info.ID.ToActorID()
+			if err != nil {
+				return nil, fmt.Errorf("convert client ID to actor ID %s: %w", info.ID, err)
+			}
+			result = append(result, database.DetachedClientInfo{
+				ClientID:        info.ID,
+				ActorID:         actorID,
+				DetachedLamport: docInfo.DetachedLamport,
+			})
+		}
+	}
+
+	return result, nil
+}
+
+// ResetDetachedLamport resets the DetachedLamport of the given client's document
+// after all attached clients have been notified.
+func (d *DB) ResetDetachedLamport(
+	_ context.Context,
+	clientID types.ID,
+	docID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblClients, "id", clientID.String())
+	if err != nil {
+		return fmt.Errorf("reset detached lamport of %s for %s: %w", clientID, docID, err)
+	}
+	if raw == nil {
+		return fmt.Errorf("reset detached lamport of %s for %s: %w", clientID, docID, database.ErrClientNotFound)
+	}
+
+	loaded := raw.(*database.ClientInfo).DeepCopy()
+	if docInfo, ok := loaded.Documents[docID]; ok {
+		docInfo.DetachedLamport = 0
+	}
+
+	if err := txn.Insert(tblClients, loaded); err != nil {
+		return fmt.Errorf("reset detached lamport of %s for %s: %w", clientID, docID, err)
+	}
+	txn.Commit()
+
+	return nil
+}
+
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
 func (d *DB) FindOrCreateDocInfo(
 	_ context.Context,

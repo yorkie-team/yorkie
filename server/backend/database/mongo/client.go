@@ -1442,6 +1442,70 @@ func (c *Client) FindAttachedClientCountsByDocIDs(
 	return attachedClientMap, nil
 }
 
+// FindDetachedClients returns detached clients with non-zero DetachedLamport
+// for the given document.
+func (c *Client) FindDetachedClients(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) ([]database.DetachedClientInfo, error) {
+	filter := bson.M{
+		"project_id": docRefKey.ProjectID,
+		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentDetached,
+		clientDocInfoKey(docRefKey.DocID, "detached_lamport"): bson.M{"$gt": int64(0)},
+	}
+
+	cursor, err := c.collection(ColClients).Find(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("find detached clients of %s: %w", docRefKey, err)
+	}
+
+	var infos []*database.ClientInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("find detached clients of %s: %w", docRefKey, err)
+	}
+
+	var result []database.DetachedClientInfo
+	for _, info := range infos {
+		actorID, err := info.ID.ToActorID()
+		if err != nil {
+			return nil, fmt.Errorf("convert client ID to actor ID %s: %w", info.ID, err)
+		}
+
+		result = append(result, database.DetachedClientInfo{
+			ClientID:        info.ID,
+			ActorID:         actorID,
+			DetachedLamport: info.Documents[docRefKey.DocID].DetachedLamport,
+		})
+	}
+
+	return result, nil
+}
+
+// ResetDetachedLamport resets the DetachedLamport of the given client's document
+// after all attached clients have been notified.
+func (c *Client) ResetDetachedLamport(
+	ctx context.Context,
+	clientID types.ID,
+	docID types.ID,
+) error {
+	result, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+		"_id": clientID,
+	}, bson.M{
+		"$set": bson.M{
+			clientDocInfoKey(docID, "detached_lamport"): int64(0),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("reset detached lamport of %s for %s: %w", clientID, docID, err)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("reset detached lamport of %s for %s: %w", clientID, docID, database.ErrClientNotFound)
+	}
+
+	return nil
+}
+
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
 func (c *Client) FindOrCreateDocInfo(
 	ctx context.Context,

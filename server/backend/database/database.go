@@ -246,6 +246,21 @@ type Database interface {
 	// FindAttachedClientCountsByDocIDs returns the number of attached clients of the given documents as a map.
 	FindAttachedClientCountsByDocIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) (map[types.ID]int, error)
 
+	// FindDetachedClients returns detached clients with non-zero DetachedLamport
+	// for the given document.
+	FindDetachedClients(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+	) ([]DetachedClientInfo, error)
+
+	// ResetDetachedLamport resets the DetachedLamport of the given client's document
+	// after all attached clients have been notified.
+	ResetDetachedLamport(
+		ctx context.Context,
+		clientID types.ID,
+		docID types.ID,
+	) error
+
 	// FindActiveClients finds active clients for deactivation checking.
 	FindActiveClients(ctx context.Context, candidatesLimit int, lastClientID types.ID) ([]*ClientInfo, types.ID, error)
 

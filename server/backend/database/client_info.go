@@ -51,6 +51,13 @@ const (
 	DocumentRemoved   = "removed"
 )
 
+// DetachedClientInfo contains information about a detached client for VV cleanup.
+type DetachedClientInfo struct {
+	ClientID        types.ID
+	ActorID         time.ActorID
+	DetachedLamport int64
+}
+
 // ClientDocInfo is a structure representing information of the document
 // attached to the client.
 type ClientDocInfo struct {
