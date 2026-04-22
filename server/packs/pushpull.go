@@ -412,6 +412,16 @@ func pullSnapshot(
 
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
+	if !be.Config.SnapshotDisableGC {
+		vector, err := be.DB.GetMinVersionVector(ctx, docInfo.RefKey(), doc.VersionVector())
+		if err != nil {
+			return nil, err
+		}
+		if _, err := doc.GarbageCollect(vector); err != nil {
+			return nil, err
+		}
+	}
+
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
 		return nil, err
