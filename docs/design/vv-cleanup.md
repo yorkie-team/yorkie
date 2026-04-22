@@ -1,6 +1,6 @@
 ---
 title: vv-cleanup
-target-version: 0.7.6
+target-version: 0.7.7
 ---
 
 # Remove Detached Client's Lamport from Version Vectors
@@ -21,10 +21,10 @@ unknown concurrent actor").
 - Remove detached client lamport entries from VV without losing causality information
 - Define a safe removal point that all clients agree on
 - Maintain correct GC and concurrent operation handling after removal
+- Apply changes to both Go server and JS SDK
 
 ### Non-Goals
 
-- JS SDK changes (separate task; proto changes are additive and backward-compatible)
 - Automatic cleanup of the client-side `detachedActors` map (deferred to Compaction)
 - Optimizing minVV computation itself
 
@@ -62,7 +62,7 @@ Both need to handle the case where a detached actor's entry has been removed.
 Client detaches
   │
   ▼
-Server records {actorID, detachedLamport} in detached_clients table
+Server stores DetachedLamport in ClientDocInfo (existing clients collection)
   │
   ▼
 On each PushPull, server computes minVV and checks:
@@ -70,16 +70,16 @@ On each PushPull, server computes minVV and checks:
   │
   ├─ No  → do nothing (not all clients have caught up)
   │
-  └─ Yes → include actorID in response's removable_actors field
+  └─ Yes → include actorID in response's detached_actors field
 ```
 
 ### Client-Side Flow
 
 ```
-Receive removable_actors in ChangePack response
+Receive detached_actors in ChangePack response
   │
   ▼
-For each removable actor:
+For each detached actor:
   1. Add to document's detachedActors map (actorID → lamport)
   2. Remove from document's VV (Unset)
   │
@@ -112,31 +112,74 @@ in their VV because the server only signals removal after all clients have caugh
 message ChangePack {
   ...
   VersionVector version_vector = 7;
-  map<string, int64> removable_actors = 8;  // NEW
+  // detached_actors contains actors safe to remove from VV.
+  // Server signals this when all clients have caught up.
+  map<string, int64> detached_actors = 8;
 }
 
 message Snapshot {
   JSONElement root = 1;
   map<string, Presence> presences = 2;
-  map<string, int64> detached_actors = 3;   // NEW
+  // detached_actors preserves removed actor lamports for VV
+  // augmentation when restoring from snapshot.
+  map<string, int64> detached_actors = 3;
 }
 ```
 
-Both fields are additive — old clients ignore them, maintaining backward compatibility.
+Both fields use the same name and data shape (`actorID → lamport`). The role differs
+by context: ChangePack carries the server's removal signal, Snapshot preserves the
+state for restoration. Both are additive — old clients ignore them.
 
 ### Database Schema
 
-New `detachedclients` collection:
+No new collection. Reuse the existing `clients` collection by adding a field to
+`ClientDocInfo`:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| project_id | ID | Project identifier |
-| doc_id | ID | Document identifier |
-| actor_id | ActorID | Detached client's actor ID |
-| detached_lamport | int64 | Client's lamport at detach time |
-| created_at | Time | When the record was created |
+```go
+type ClientDocInfo struct {
+    Status          string
+    ServerSeq       int64
+    ClientSeq       uint32
+    Epoch           int64
+    DetachedLamport int64  // NEW: lamport at detach time, 0 when not applicable
+}
+```
 
-Unique index on `(project_id, doc_id, actor_id)`.
+When a client detaches, `DetachDocument()` stores the lamport value. The server
+queries detached clients by checking `DetachedLamport > 0` on the existing
+`clients` collection. After all clients have been notified, `DetachedLamport` is
+reset to 0.
+
+This avoids a new collection, new indexes, and migration — the `clients` collection
+already tracks per-document client state and has a `project_id` index.
+
+### Implementation Scope
+
+#### Go PR: Server + Go Client
+
+| Layer | Changes |
+|-------|---------|
+| Proto | Add `detached_actors` to `ChangePack` (field 8) and `Snapshot` (field 3) |
+| DB | Add `DetachedLamport` to `ClientDocInfo`, update `DetachDocument()` signature |
+| MongoDB | Update `UpdateClientInfoAfterPushPull()` to store lamport on detach |
+| Memory DB | Same changes for in-memory implementation |
+| Server | In `pullPack()`: query detached clients, check minVV condition, populate `detached_actors` |
+| Snapshot | Include `detached_actors` in snapshot creation |
+| Go Client | Add `detachedActors` map to Document, augment change VV + minVV |
+| Converter | Serialize/deserialize `detached_actors` in ChangePack and Snapshot |
+| Tests | Integration tests for full detach → signal → cleanup cycle |
+
+#### JS SDK PR: Client (after Go PR merges)
+
+| Layer | Changes |
+|-------|---------|
+| Converter | `fromChangePack`: parse `detached_actors`, `fromSnapshot`: parse `detached_actors` |
+| Document | Add `detachedActors: Map<string, bigint>` field |
+| applyChangePack | Store detached actors, unset from VV |
+| applyChange | Augment change VV with detachedActors before execution |
+| garbageCollect | Augment minVV with detachedActors before GC |
+| applySnapshot | Restore `detachedActors` from snapshot |
+| Tests | Unit tests for augmentation logic, integration with server |
 
 ### Risks and Mitigation
 
@@ -144,8 +187,9 @@ Unique index on `(project_id, doc_id, actor_id)`.
 |------|------------|
 | Augmenting Change VV in-place mutates the object | Change objects are consumed once during execution, not reused |
 | Snapshot format change | Proto field 3 is additive; old snapshots deserialize with empty map |
-| Server restart between record and cleanup | detached_clients table is persistent |
 | Client re-attaches with same ActorID | Not possible; each ActivateClient generates a new ID |
+| Long-offline client delays cleanup | Same limitation as existing minVV — unavoidable without timeout |
+| DB query cost on PushPull | Same collection as existing client queries; DetachedLamport > 0 filter is lightweight; records reset after notification so no accumulation |
 
 ### Design Decisions
 
@@ -155,16 +199,73 @@ Unique index on `(project_id, doc_id, actor_id)`.
 | Augment VV before Execute, not change ticketKnown signatures | Minimizes code changes; VV augmentation is a single point |
 | Store detachedActors on document, not in VV type | Keeps VV type simple (`map[ActorID]int64`); avoids proto/serialization changes to VV |
 | Wait for ALL clients before signaling removal | Prevents the offline-client bug where a change creator genuinely didn't know the actor |
+| Reuse `ClientDocInfo` instead of new collection | ClientDocInfo already tracks per-document client state; avoids new collection, index, and migration overhead |
+| Unified `detached_actors` name in proto | ChangePack and Snapshot carry same data shape; role difference explained by comments |
+| `DetachedLamport` field name (not just `Lamport`) | Explicit about when the value was captured; avoids ambiguity when client is in attached state |
+
+## Open Issues
+
+Design-level issues discovered during PR #1767 implementation. These must be
+resolved before proceeding with implementation.
+
+### Issue 1: VV Unset breaks isLocal detection for local operations
+
+`deleteNodes` determines `isLocal` by checking `len(versionVector) == 0`. When a
+client receives `detached_actors` and unsets the actor from its VV, other actor
+entries remain so the VV is not empty. Subsequent local Edits produce a change
+whose VV lacks the detached actor, causing `creationKnown = false` for nodes
+created by the detached actor — the local operation fails to delete them.
+
+```
+Example: after c3 detaches, c2 tries to delete "1" created by c3
+- c2 VV: {c1:1, c2:5} (c3 was unset)
+- isLocal = false (VV is not empty)
+- creationKnown = VV.Get(c3) → false
+- Result: "1" is not deleted (before cleanup, c3 was in VV so deletion worked)
+```
+
+### Issue 2: VV strip prevents minVV condition verification
+
+When a client strips detached actors from its VV before sending the ChangePack to
+the server, the server's stored VV loses that actor. `MinVersionVector` returns
+`minValue = 0` when an actor is missing from any stored VV, so the condition
+`minVV[actorID] >= detachedLamport` can never be satisfied.
+
+```
+Example: after c3 detaches, c1 and c2 push stripped VVs
+- c1 stored VV: {c1:4} (no c3)
+- c2 stored VV: {c2:5} (no c3)
+- minVV[c3] = 0 (actor absent)
+- 0 >= 3 (detachedLamport) = false → condition permanently unsatisfiable
+```
+
+### Issue 3: Clone and main VV augment ordering inconsistency
+
+In `document.go:applyChanges()`, the clone receives Execute first, then
+`ApplyChanges()` augments the VV and executes on main. Since VV is a map
+reference type, augmentation affects both — but the **clone executes before
+augmentation**, so it operates with the un-augmented VV.
+
+### Possible Solutions
+
+| Approach | Description | Cost |
+|----------|-------------|------|
+| A) Change `isLocal` detection | Use an explicit flag instead of `len(VV) == 0` to distinguish local vs. remote | High: affects CRDT layer broadly |
+| B) Separate condition management from stored VV | Check each client's stored VV individually instead of relying on `minVV` | Medium: DB query changes |
+| C) Drop VV Unset/strip, keep augment only | Give up VV size optimization; augment alone ensures correct GC/causality | Low: but does not achieve the core goal (VV size reduction) |
 
 ## Alternatives Considered
 
 | Alternative | Why not |
 |-------------|---------|
+| New `detachedclients` collection | Duplicates data already in `clients` collection; unnecessary migration |
+| Keep detached VV records as tombstones in `versionvectors` | Requires changing deletion logic in `updateVersionVector` and query filters in `GetMinVersionVector`; high impact |
 | Remove from server-side minVV only, keep in client VV | Doesn't reduce VV size in changes (main bandwidth concern) |
 | DAG-based causality tracking | Correct but requires major architectural change |
 | Epoch-based floor (single int64 replacing all removed actors) | Cannot distinguish detached actors from truly unknown new actors with lower lamport |
 | Change VV type to struct with active + detached maps | Large structural change to VV type; affects proto, serialization, all consumers |
 | Remove immediately on detach without waiting | Breaks causality for offline clients who haven't received the detach yet |
+| Separate proto field names (`removable_actors` / `detached_actors`) | Same data shape; unified name is simpler, role difference handled by comments |
 
 ## Tasks
 
