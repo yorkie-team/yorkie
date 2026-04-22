@@ -295,7 +295,7 @@ func pullPack(
 	resPack.ApplyDocInfo(docInfo)
 
 	// 02. update the document's status in the client.
-	if err := clientInfo.UpdateDocStatus(docInfo.ID, opts.Status, resPack.Checkpoint); err != nil {
+	if err := clientInfo.UpdateDocStatus(docInfo.ID, opts.Status, resPack.Checkpoint, reqPack.VersionVector.MaxLamport()); err != nil {
 		return nil, err
 	}
 

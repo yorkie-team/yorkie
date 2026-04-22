@@ -1148,7 +1148,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		assert.Error(t, err)
 
 		// 06. failure case: client is deactivated
-		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
@@ -1183,7 +1183,7 @@ func RunTryAttachingAndDeactivateClientTest(t *testing.T, db database.Database, 
 		assert.Error(t, err)
 
 		// 04. failure case: client is already deactivated
-		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 		_, err = db.DeactivateClient(ctx, clientInfo.RefKey())
 		assert.NoError(t, err)
@@ -1857,7 +1857,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		result, err = db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
@@ -1972,7 +1972,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.True(t, attached)
 
 		// 03. Check if document is attached after detaching
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -1988,14 +1988,14 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.True(t, attached)
 
 		// 05. Check if document is attached after a client detaching
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
 		assert.True(t, attached)
 
 		// 06. Check if document is attached after another client detaching
-		assert.NoError(t, c2.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c2.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2029,7 +2029,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.True(t, attached)
 
 		// 02. Check if a document is attached after detaching another document
-		assert.NoError(t, c1.DetachDocument(docRefKey2.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey2.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d2))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey2, "")
 		assert.NoError(t, err)
@@ -2039,7 +2039,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.True(t, attached)
 
 		// 03. Check if a document is attached after detaching remaining document
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2086,7 +2086,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		// Cleanup
 		c1, err = db.FindClientInfoByRefKey(ctx, c1.RefKey())
 		assert.NoError(t, err)
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 	})
 
@@ -2118,7 +2118,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 03. Check if document is attached after detaching
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2143,7 +2143,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.True(t, attached)
 
 		// 05. Check if document is attached after a client detaching
-		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c1.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2156,7 +2156,7 @@ func RunIsDocumentAttachedOrAttachingTest(t *testing.T, db database.Database, pr
 		assert.False(t, attached)
 
 		// 06. Check if document is attached after another client detaching
-		assert.NoError(t, c2.DetachDocument(docRefKey1.DocID))
+		assert.NoError(t, c2.DetachDocument(docRefKey1.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
 		attached, err = db.IsDocumentAttachedOrAttaching(ctx, docRefKey1, "")
 		assert.NoError(t, err)
@@ -2197,14 +2197,14 @@ func RunFindClientInfosByAttachedDocRefKeyTest(t *testing.T, db database.Databas
 		assert.Equal(t, clientInfo1.ID, clientInfos[0].ID)
 		assert.Equal(t, clientInfo2.ID, clientInfos[1].ID)
 
-		assert.NoError(t, clientInfo1.DetachDocument(docRefKey.DocID))
+		assert.NoError(t, clientInfo1.DetachDocument(docRefKey.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 		clientInfos, err = db.FindAttachedClientInfosByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(clientInfos))
 		assert.Equal(t, clientInfo2.ID, clientInfos[0].ID)
 
-		assert.NoError(t, clientInfo2.DetachDocument(docRefKey.DocID))
+		assert.NoError(t, clientInfo2.DetachDocument(docRefKey.DocID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
 		clientInfos, err = db.FindAttachedClientInfosByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -2234,7 +2234,7 @@ func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database,
 			assert.Equal(t, 2, attachedMap[docInfo1.ID])
 			assert.Equal(t, 1, attachedMap[docInfo2.ID])
 		}
-		assert.NoError(t, clientInfo1.DetachDocument(docInfo1.ID))
+		assert.NoError(t, clientInfo1.DetachDocument(docInfo1.ID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 		{
 			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID})
@@ -2242,7 +2242,7 @@ func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database,
 			assert.Len(t, attachedMap, 1)
 			assert.Equal(t, 1, attachedMap[docInfo1.ID])
 		}
-		assert.NoError(t, clientInfo2.DetachDocument(docInfo1.ID))
+		assert.NoError(t, clientInfo2.DetachDocument(docInfo1.ID, 0))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
 		{
 			attachedMap, err := db.FindAttachedClientCountsByDocIDs(ctx, projectID, []types.ID{docInfo1.ID, docInfo2.ID})

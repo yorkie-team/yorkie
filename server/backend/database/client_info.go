@@ -54,10 +54,11 @@ const (
 // ClientDocInfo is a structure representing information of the document
 // attached to the client.
 type ClientDocInfo struct {
-	Status    string `bson:"status"`
-	ServerSeq int64  `bson:"server_seq"`
-	ClientSeq uint32 `bson:"client_seq"`
-	Epoch     int64  `bson:"epoch"`
+	Status          string `bson:"status"`
+	ServerSeq       int64  `bson:"server_seq"`
+	ClientSeq       uint32 `bson:"client_seq"`
+	Epoch           int64  `bson:"epoch"`
+	DetachedLamport int64  `bson:"detached_lamport,omitempty"`
 }
 
 // ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
@@ -179,7 +180,7 @@ func (i *ClientInfo) IsAttaching(docID types.ID) bool {
 }
 
 // DetachDocument detaches the given document from this client.
-func (i *ClientInfo) DetachDocument(docID types.ID) error {
+func (i *ClientInfo) DetachDocument(docID types.ID, detachedLamport int64) error {
 	if err := i.EnsureDocumentAttachedOrAttaching(docID); err != nil {
 		return err
 	}
@@ -187,6 +188,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	i.Documents[docID].Status = DocumentDetached
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
+	i.Documents[docID].DetachedLamport = detachedLamport
 	i.UpdatedAt = gotime.Now()
 
 	return nil
@@ -324,10 +326,11 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	documents := make(map[types.ID]*ClientDocInfo, len(i.Documents))
 	for docID, docInfo := range i.Documents {
 		documents[docID] = &ClientDocInfo{
-			Status:    docInfo.Status,
-			ServerSeq: docInfo.ServerSeq,
-			ClientSeq: docInfo.ClientSeq,
-			Epoch:     docInfo.Epoch,
+			Status:          docInfo.Status,
+			ServerSeq:       docInfo.ServerSeq,
+			ClientSeq:       docInfo.ClientSeq,
+			Epoch:           docInfo.Epoch,
+			DetachedLamport: docInfo.DetachedLamport,
 		}
 	}
 
@@ -370,12 +373,13 @@ func (i *ClientInfo) UpdateDocStatus(
 	docID types.ID,
 	status document.StatusType,
 	cp change.Checkpoint,
+	detachedLamport int64,
 ) error {
 	switch status {
 	case document.StatusRemoved:
 		return i.RemoveDocument(docID)
 	case document.StatusDetached:
-		return i.DetachDocument(docID)
+		return i.DetachDocument(docID, detachedLamport)
 	default:
 		return i.UpdateCheckpoint(docID, cp)
 	}

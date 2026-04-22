@@ -48,7 +48,7 @@ func TestClientInfo(t *testing.T) {
 		err = clientInfo.EnsureDocumentAttached(dummyDocID)
 		assert.NoError(t, err)
 
-		err = clientInfo.DetachDocument(dummyDocID)
+		err = clientInfo.DetachDocument(dummyDocID, 0)
 		assert.NoError(t, err)
 		isAttached, err = clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
@@ -108,7 +108,7 @@ func TestClientInfo(t *testing.T) {
 		err = clientInfo.EnsureDocumentAttached(dummyDocID)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 
-		err = clientInfo.DetachDocument(dummyDocID)
+		err = clientInfo.DetachDocument(dummyDocID, 0)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 	})
 
@@ -116,7 +116,7 @@ func TestClientInfo(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
-		err := clientInfo.DetachDocument(dummyDocID)
+		err := clientInfo.DetachDocument(dummyDocID, 0)
 		assert.ErrorIs(t, err, database.ErrDocumentNotAttached)
 	})
 
