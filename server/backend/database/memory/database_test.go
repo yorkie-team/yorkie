@@ -148,6 +148,14 @@ func TestDB(t *testing.T) {
 		testcases.RunFindAttachedClientCountsByDocIDsTest(t, db, projectID)
 	})
 
+	t.Run("FindDetachedClients test", func(t *testing.T) {
+		testcases.RunFindDetachedClientsTest(t, db, projectID)
+	})
+
+	t.Run("ResetDetachedLamport test", func(t *testing.T) {
+		testcases.RunResetDetachedLamportTest(t, db, projectID)
+	})
+
 	t.Run("RunPurgeDocument test", func(t *testing.T) {
 		testcases.RunPurgeDocument(t, db, projectID)
 	})

@@ -1192,7 +1192,8 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	if !attached {
 		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
-			Status: clientDocInfo.Status,
+			Status:          clientDocInfo.Status,
+			DetachedLamport: clientDocInfo.DetachedLamport,
 		}
 		loaded.UpdatedAt = gotime.Now()
 	} else {

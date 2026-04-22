@@ -2266,6 +2266,85 @@ func RunFindAttachedClientCountsByDocIDsTest(t *testing.T, db database.Database,
 	})
 }
 
+// RunFindDetachedClientsTest runs the FindDetachedClients tests for the given db.
+func RunFindDetachedClientsTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("FindDetachedClients test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a client and a document then attach the document to the client.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 02. Detach the document with a non-zero DetachedLamport.
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID, 42))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 03. FindDetachedClients should return exactly one result.
+		docRefKey := docInfo.RefKey()
+		detached, err := db.FindDetachedClients(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Len(t, detached, 1)
+		expectedActorID, err := clientInfo.ID.ToActorID()
+		assert.NoError(t, err)
+		assert.Equal(t, clientInfo.ID, detached[0].ClientID)
+		assert.Equal(t, expectedActorID, detached[0].ActorID)
+		assert.Equal(t, int64(42), detached[0].DetachedLamport)
+
+		// 04. A client with DetachedLamport = 0 should not be returned.
+		clientInfo2, err := db.ActivateClient(ctx, projectID, t.Name()+"2", nil)
+		assert.NoError(t, err)
+		_, err = db.FindOrCreateDocInfo(ctx, clientInfo2.RefKey(), docKey)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID, false, docInfo.Epoch))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+		assert.NoError(t, clientInfo2.DetachDocument(docInfo.ID, 0))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+
+		detached, err = db.FindDetachedClients(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Len(t, detached, 1)
+		assert.Equal(t, clientInfo.ID, detached[0].ClientID)
+	})
+}
+
+// RunResetDetachedLamportTest runs the ResetDetachedLamport tests for the given db.
+func RunResetDetachedLamportTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("ResetDetachedLamport test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create a client and a document, attach and detach with non-zero lamport.
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name(), nil)
+		assert.NoError(t, err)
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		assert.NoError(t, clientInfo.DetachDocument(docInfo.ID, 100))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		// 02. Verify the detached client is found.
+		docRefKey := docInfo.RefKey()
+		detached, err := db.FindDetachedClients(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Len(t, detached, 1)
+
+		// 03. Reset the DetachedLamport.
+		err = db.ResetDetachedLamport(ctx, clientInfo.ID, docInfo.ID)
+		assert.NoError(t, err)
+
+		// 04. FindDetachedClients should return empty after reset.
+		detached, err = db.FindDetachedClients(ctx, docRefKey)
+		assert.NoError(t, err)
+		assert.Len(t, detached, 0)
+	})
+}
+
 // RunPurgeDocument runs the RunPurgeDocument tests for the given db.
 func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("PurgeDocument test", func(t *testing.T) {
