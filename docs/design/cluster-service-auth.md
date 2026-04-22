@@ -11,7 +11,7 @@ ClusterService (`/yorkie.v1.ClusterService/*`) is designed for inter-node commun
 
 In the current gateway-only Istio setup (no sidecar), both external and internal traffic flow through the same Istio Gateway:
 
-```
+```text
 External: Client → ALB → Istio Gateway (Envoy) → Yorkie Pod
 Internal: Yorkie Pod → Istio Gateway Service → Istio Gateway (Envoy) → Yorkie Pod
 ```
@@ -118,8 +118,7 @@ func (i *ClusterServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Un
 
 func (i *ClusterServiceInterceptor) authenticate(header http.Header) error {
     if i.clusterSecret == "" {
-        return connect.NewError(connect.CodeUnauthenticated,
-            errors.New("invalid cluster secret"))
+        return nil
     }
 
     secret := header.Get(clusterSecretHeader)
@@ -154,7 +153,7 @@ yorkie:
 
 ```go
 // server/rpc/server.go
-clusterInterceptor := interceptors.NewClusterServiceInterceptor(be)
+clusterInterceptor := interceptors.NewClusterServiceInterceptor(be, be.Config.ClusterSecret)
 ```
 
 `ClusterClientPool` passes the secret when creating clients:

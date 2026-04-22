@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClusterServiceAuthenticate(t *testing.T) {
@@ -49,7 +50,7 @@ func TestClusterServiceAuthenticate(t *testing.T) {
 		assert.Error(t, err)
 
 		var connectErr *connect.Error
-		assert.ErrorAs(t, err, &connectErr)
+		require.ErrorAs(t, err, &connectErr)
 		assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 		assert.Contains(t, connectErr.Message(), "invalid cluster secret")
 	})
@@ -65,7 +66,7 @@ func TestClusterServiceAuthenticate(t *testing.T) {
 		assert.Error(t, err)
 
 		var connectErr *connect.Error
-		assert.ErrorAs(t, err, &connectErr)
+		require.ErrorAs(t, err, &connectErr)
 		assert.Equal(t, connect.CodeUnauthenticated, connectErr.Code())
 	})
 

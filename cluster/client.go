@@ -411,7 +411,9 @@ func (a clusterAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryF
 
 func (a clusterAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		return next(ctx, spec)
+		conn := next(ctx, spec)
+		conn.RequestHeader().Set(clusterSecretHeader, a.secret)
+		return conn
 	}
 }
 
