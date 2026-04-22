@@ -865,6 +865,13 @@ components:
           description: ""
           title: checkpoint
           type: object
+        detachedActors:
+          additionalProperties: false
+          description: |-
+            detached_actors contains actors safe to remove from VV.
+             Server signals this when all clients have caught up.
+          title: detached_actors
+          type: object
         documentKey:
           additionalProperties: false
           description: ""
@@ -894,6 +901,24 @@ components:
           title: version_vector
           type: object
       title: ChangePack
+      type: object
+    yorkie.v1.ChangePack.DetachedActorsEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: value
+      title: DetachedActorsEntry
       type: object
     yorkie.v1.ChannelDescriptor:
       additionalProperties: false
