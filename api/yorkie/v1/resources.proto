@@ -31,6 +31,9 @@ option java_package = "dev.yorkie.api.v1";
 message Snapshot {
   JSONElement root = 1;
   map<string, Presence> presences = 2;
+  // detached_actors preserves removed actor lamports for VV
+  // augmentation when restoring from snapshot.
+  map<string, int64> detached_actors = 3;
 }
 
 /////////////////////////////////////////
@@ -47,6 +50,9 @@ message ChangePack {
   TimeTicket min_synced_ticket = 5; // deprecated
   bool is_removed = 6;
   VersionVector version_vector = 7;
+  // detached_actors contains actors safe to remove from VV.
+  // Server signals this when all clients have caught up.
+  map<string, int64> detached_actors = 8;
 }
 
 message Change {
