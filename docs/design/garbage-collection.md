@@ -67,6 +67,15 @@ min([c1:2, c2:3, c3:4], [c1:3, c2:1, c3:5, c4:3])
 
 ```
 
+## GC Responsibility by Response Type
+
+GC responsibility is split between server and client depending on the response type:
+
+- **Snapshot response**: The server runs GC with `minVersionVector` before serializing the snapshot. The client receives a clean state and skips GC (`!pack.hasSnapshot()` guard in the SDK).
+- **Changes response**: The server sends `minVersionVector` in the response pack. The client runs GC locally using this vector after applying the changes.
+
+This means the server must always GC the document before building a snapshot response. Without this, tombstones from applied changes would leak into the snapshot and persist on the client, since the client does not run GC for snapshot responses by design.
+
 ## An example of garbage collection:
 
 ### State 1
