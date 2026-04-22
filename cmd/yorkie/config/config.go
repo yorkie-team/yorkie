@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -30,7 +29,7 @@ import (
 
 // ensureYorkieDir ensures that the directory of Yorkie exists.
 func ensureYorkieDir() (string, error) {
-	yorkieDir := path.Join(os.Getenv("HOME"), ".yorkie")
+	yorkieDir := filepath.Clean(filepath.Join(os.Getenv("HOME"), ".yorkie"))
 	if err := os.MkdirAll(yorkieDir, 0700); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
@@ -45,7 +44,7 @@ func configPath() (string, error) {
 		return "", fmt.Errorf("ensure yorkie dir: %w", err)
 	}
 
-	return path.Join(yorkieDir, "config.json"), nil
+	return filepath.Join(yorkieDir, "config.json"), nil
 }
 
 // Auth is the authentication information.
