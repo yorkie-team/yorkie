@@ -309,6 +309,11 @@ func pullPack(
 	}
 
 	// 04. Find detached clients whose lamport is covered by minVV.
+	// The condition minVV[actorID] >= detachedLamport is idempotent, so
+	// detached_actors is sent to every client on each sync until the
+	// detached client is deactivated. This avoids the race where resetting
+	// DetachedLamport after one client's sync would cause other clients
+	// to miss the cleanup signal.
 	detachedClients, err := be.DB.FindDetachedClients(ctx, docInfo.RefKey())
 	if err != nil {
 		return nil, err
@@ -318,9 +323,6 @@ func pullPack(
 	for _, dc := range detachedClients {
 		if l, ok := minVersionVector.Get(dc.ActorID); ok && l >= dc.DetachedLamport {
 			detachedActors[dc.ActorID.String()] = dc.DetachedLamport
-			if err := be.DB.ResetDetachedLamport(ctx, dc.ClientID, docInfo.ID); err != nil {
-				return nil, err
-			}
 		}
 	}
 
@@ -443,7 +445,21 @@ func pullSnapshot(
 		}
 	}
 
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences(), nil)
+	// Include detached actors in the snapshot so that clients restoring
+	// from it can augment VVs for previously cleaned-up actors.
+	detachedClients, err := be.DB.FindDetachedClients(ctx, docInfo.RefKey())
+	if err != nil {
+		return nil, err
+	}
+	var detachedActors map[time.ActorID]int64
+	if len(detachedClients) > 0 {
+		detachedActors = make(map[time.ActorID]int64)
+		for _, dc := range detachedClients {
+			detachedActors[dc.ActorID] = dc.DetachedLamport
+		}
+	}
+
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences(), detachedActors)
 	if err != nil {
 		return nil, err
 	}

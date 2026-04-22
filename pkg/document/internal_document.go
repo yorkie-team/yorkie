@@ -353,6 +353,11 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			}
 		}
 
+		// Remove augmented detached actor entries before SyncClocks to
+		// prevent them from propagating back into the document's VV.
+		for actorID := range d.detachedActors {
+			c.ID().VersionVector().Unset(actorID)
+		}
 		d.changeID = d.changeID.SyncClocks(c.ID())
 	}
 
