@@ -52,6 +52,12 @@ func TestOptions(t *testing.T) {
 		WithPoolSize(10)(&opts)
 		assert.Equal(t, 10, opts.PoolSize)
 	})
+
+	t.Run("WithClusterSecret sets cluster secret", func(t *testing.T) {
+		var opts Options
+		WithClusterSecret("my-secret")(&opts)
+		assert.Equal(t, "my-secret", opts.ClusterSecret)
+	})
 }
 
 func TestNew(t *testing.T) {
