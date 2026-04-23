@@ -23,8 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -144,6 +146,77 @@ func TestTreeGC(t *testing.T) {
 			assert.Equal(t, 0, doc.GarbageLen())
 		})
 	}
+}
+
+func TestSplitElementWithRemovedChildren(t *testing.T) {
+	t.Run("VisibleLength should not include removed children after SplitElement", func(t *testing.T) {
+		// SplitElement recalculates VisibleLength after moving children.
+		// If removed (tombstoned) children are incorrectly counted,
+		// the parent's VisibleLength becomes inflated. Subsequent
+		// remove() calls then over-subtract, driving it negative.
+		doc := document.New("doc")
+
+		// 01. <doc><p>ab</p></doc>
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>ab</p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 02. Delete "ab" to create tombstone text nodes inside <p>.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 3, nil, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p></p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 03. Insert "cd" so <p> has both tombstone and live children.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "cd"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>cd</p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 04. Split <p> with splitLevel=1: insert new text between "c" and "d",
+		//     triggering SplitElement on <p>.
+		//     Before fix: SplitElement counted the tombstone "ab" in VisibleLength,
+		//     causing the root <doc> node's VisibleLength to be wrong.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "e"}, 1)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>ce</p><p>d</p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 05. Verify VisibleLength matches actual visible children sum
+		//     at every level: root <doc> and each split <p>.
+		tree := doc.Root().GetTree("t").Tree
+		root := tree.Root()
+
+		computeVisibleLength := func(node *index.Node[*crdt.TreeNode]) int {
+			sum := 0
+			for _, child := range node.Children(false) {
+				sum += child.PaddedLength()
+			}
+			return sum
+		}
+
+		assert.Equal(t, computeVisibleLength(root.Index), root.Index.VisibleLength,
+			"root VisibleLength should match sum of visible children")
+		for _, child := range root.Index.Children(false) {
+			assert.Equal(t, computeVisibleLength(child), child.VisibleLength,
+				"child %s VisibleLength should match sum of visible children", child.Type)
+		}
+	})
 }
 
 func TestTextGC(t *testing.T) {

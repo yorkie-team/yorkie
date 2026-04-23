@@ -456,7 +456,7 @@ func (n *TreeNode) SplitElement(
 
 	// Calculate node length
 	visibleNodeLength := 0
-	for _, child := range n.Index.Children(true) {
+	for _, child := range n.Index.Children(false) {
 		visibleNodeLength += child.PaddedLength()
 	}
 	n.Index.VisibleLength = visibleNodeLength
@@ -468,7 +468,7 @@ func (n *TreeNode) SplitElement(
 
 	// Calculate split length
 	visibleSplitLength := 0
-	for _, child := range split.Index.Children(true) {
+	for _, child := range split.Index.Children(false) {
 		visibleSplitLength += child.PaddedLength()
 	}
 	split.Index.VisibleLength = visibleSplitLength
