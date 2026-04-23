@@ -244,6 +244,7 @@ func TestYSONMarshal(t *testing.T) {
 			"key6": []byte{1, 2, 3},
 			"key7": gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC),
 			"key8": yson.Counter{Type: crdt.IntegerCnt, Value: int32(10)},
+			"keyd": yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(3)},
 			"key9": yson.Tree{
 				Root: yson.TreeNode{
 					Type:     "p",
@@ -266,6 +267,7 @@ func TestYSONMarshal(t *testing.T) {
 			"key6": BinData("AQID"),
 			"key7": Date("2025-01-02T15:04:05.058Z"),
 			"key8": Counter(Int(10)),
+			"keyd": DedupCounter(Int(3)),
 			"key9": Tree({"type":"p","children":[{"type":"text","value":"Tree in object"}]})
 		}`, &expected))
 		assert.Equal(t, expected, actual)
@@ -283,6 +285,7 @@ func TestYSONMarshal(t *testing.T) {
 			gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC),
 			yson.Counter{Type: crdt.IntegerCnt, Value: int32(32)},
 			yson.Counter{Type: crdt.LongCnt, Value: int64(64)},
+			yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(7)},
 			yson.Array{"nested", int64(1)},
 			yson.Object{"nested": "nest-obj"},
 			yson.Tree{
@@ -315,6 +318,7 @@ func TestYSONMarshal(t *testing.T) {
             Date("2025-01-02T15:04:05.058Z"),
             Counter(Int(32)),
             Counter(Long(64)),
+            DedupCounter(Int(7)),
             ["nested",Long(1)],
             {"nested":"nest-obj"},
             Tree({"type":"p","children":[{"type":"text","value":"Tree in array"}]}),
@@ -333,6 +337,22 @@ func TestYSONMarshal(t *testing.T) {
 		expected := yson.Counter{}
 		assert.NoError(t, yson.Unmarshal(`Counter(Long(100))`, &expected))
 		assert.Equal(t, expected, actual)
+	})
+
+	t.Run("dedup counter marshal/unmarshal test", func(t *testing.T) {
+		// Regression guard for #1773: Counter.Marshal() and parseCounter()
+		// must round-trip IntegerDedupCnt values via DedupCounter(Int(N)).
+		counter := yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(42)}
+		actual := yson.Counter{}
+		marshalled, err := counter.Marshal()
+		assert.NoError(t, err)
+		assert.Equal(t, `DedupCounter(Int(42))`, marshalled)
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+
+		expected := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`DedupCounter(Int(42))`, &expected))
+		assert.Equal(t, expected, actual)
+		assert.Equal(t, crdt.IntegerDedupCnt, actual.Type)
 	})
 
 	t.Run("text marshal/unmarshal test", func(t *testing.T) {

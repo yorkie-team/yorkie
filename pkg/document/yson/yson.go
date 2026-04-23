@@ -190,6 +190,8 @@ func (y Counter) Marshal() (string, error) {
 		return fmt.Sprintf("Counter(Int(%v))", y.Value), nil
 	case crdt.LongCnt:
 		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
+	case crdt.IntegerDedupCnt:
+		return fmt.Sprintf("DedupCounter(Int(%v))", y.Value), nil
 	default:
 		return "", fmt.Errorf("marshal counter: %w", ErrUnsupported)
 	}
@@ -305,7 +307,9 @@ func Unmarshal(data string, elem Element) error {
 		}
 
 	case *Counter:
-		counter, err := parseCounter(raw.(map[string]interface{}))
+		rawMap := raw.(map[string]interface{})
+		outerType, _ := rawMap["type"].(string)
+		counter, err := parseCounter(rawMap, outerType)
 		if err != nil {
 			return err
 		}
@@ -343,7 +347,9 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 
 		return val, nil
 	case "Counter":
-		return parseCounter(raw)
+		return parseCounter(raw, "Counter")
+	case "DedupCounter":
+		return parseCounter(raw, "DedupCounter")
 	case "Tree":
 		if value, ok := raw["value"].(map[string]interface{}); ok {
 			return parseTree(value)
@@ -426,15 +432,23 @@ func parseArray(raw []interface{}) (Array, error) {
 	return arr, nil
 }
 
-func parseCounter(raw map[string]interface{}) (Counter, error) {
+func parseCounter(raw map[string]interface{}, outerType string) (Counter, error) {
+	dedup := outerType == "DedupCounter"
 	counter := Counter{}
 	if value, ok := raw["value"].(map[string]interface{}); ok {
 		if t, ok := value["type"].(string); ok {
 			switch t {
 			case "Int":
-				counter.Type = crdt.IntegerCnt
+				if dedup {
+					counter.Type = crdt.IntegerDedupCnt
+				} else {
+					counter.Type = crdt.IntegerCnt
+				}
 				counter.Value = int32(value["value"].(float64))
 			case "Long":
+				// NOTE: LongDedupCnt not yet defined in crdt package;
+				// fall back to LongCnt for now. A follow-up change should
+				// add LongDedupCnt if dedup support is extended to int64.
 				counter.Type = crdt.LongCnt
 				counter.Value = int64(value["value"].(float64))
 			default:
@@ -531,6 +545,10 @@ func preprocessTypeValues(data string) string {
 		{`Tree()`, `{"type":"Tree","value":{}}`},
 
 		// Process constructors with values
+		// NOTE: DedupCounter must come before Counter since "DedupCounter"
+		// contains "Counter" as a substring — otherwise ReplaceAll would
+		// rewrite the inner occurrence first and corrupt the grammar.
+		{`DedupCounter(`, `{"type":"DedupCounter","value":`},
 		{`Counter(`, `{"type":"Counter","value":`},
 		{`Text(`, `{"type":"Text","value":`},
 		{`Tree(`, `{"type":"Tree","value":`},
