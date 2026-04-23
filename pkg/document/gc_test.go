@@ -23,8 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -195,19 +197,25 @@ func TestSplitElementWithRemovedChildren(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `<doc><p>ce</p><p>d</p></doc>`, doc.Root().GetTree("t").ToXML())
 
-		// 05. Verify VisibleLength is non-negative across the tree.
+		// 05. Verify VisibleLength matches actual visible children sum
+		//     at every level: root <doc> and each split <p>.
 		tree := doc.Root().GetTree("t").Tree
 		root := tree.Root()
-		assert.True(t, root.Index.VisibleLength >= 0,
-			"root VisibleLength should not be negative, got %d", root.Index.VisibleLength)
 
-		// Verify root's VisibleLength matches actual children sum.
-		computed := 0
-		for _, child := range root.Index.Children(false) {
-			computed += child.PaddedLength()
+		computeVisibleLength := func(node *index.Node[*crdt.TreeNode]) int {
+			sum := 0
+			for _, child := range node.Children(false) {
+				sum += child.PaddedLength()
+			}
+			return sum
 		}
-		assert.Equal(t, computed, root.Index.VisibleLength,
+
+		assert.Equal(t, computeVisibleLength(root.Index), root.Index.VisibleLength,
 			"root VisibleLength should match sum of visible children")
+		for _, child := range root.Index.Children(false) {
+			assert.Equal(t, computeVisibleLength(child), child.VisibleLength,
+				"child %s VisibleLength should match sum of visible children", child.Type)
+		}
 	})
 }
 
