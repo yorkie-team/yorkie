@@ -22,16 +22,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"os"
-
-	"google.golang.org/protobuf/proto"
-
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -153,28 +146,68 @@ func TestTreeGC(t *testing.T) {
 	}
 }
 
-func TestTreeGCReplayFromFixture(t *testing.T) {
-	t.Run("replay production changes triggers from-out-of-range", func(t *testing.T) {
-		// This test replays actual CRDT changes captured from a production
-		// Wafflebase document where Korean IME editing across multiple
-		// clients caused "from is out of range" errors during GC.
-		pbBytes, err := os.ReadFile("testdata/tree_gc_changes.pb")
-		if err != nil {
-			t.Skip("fixture not found:", err)
-		}
+func TestSplitElementWithRemovedChildren(t *testing.T) {
+	t.Run("VisibleLength should not include removed children after SplitElement", func(t *testing.T) {
+		// SplitElement recalculates VisibleLength after moving children.
+		// If removed (tombstoned) children are incorrectly counted,
+		// the parent's VisibleLength becomes inflated. Subsequent
+		// remove() calls then over-subtract, driving it negative.
+		doc := document.New("doc")
 
-		var pbResp api.ListChangesResponse
-		assert.NoError(t, proto.Unmarshal(pbBytes, &pbResp))
-
-		changes, err := converter.FromChanges(pbResp.Changes)
+		// 01. <doc><p>ab</p></doc>
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		})
 		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>ab</p></doc>`, doc.Root().GetTree("t").ToXML())
 
-		doc := document.NewInternalDocument(key.Key("test-doc"))
-		for _, c := range changes {
-			if _, err := doc.ApplyChanges(c); err != nil {
-				t.Fatalf("ApplyChanges failed at seq %d: %v", c.ServerSeq(), err)
-			}
+		// 02. Delete "ab" to create tombstone text nodes inside <p>.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 3, nil, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p></p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 03. Insert "cd" so <p> has both tombstone and live children.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "cd"}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>cd</p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 04. Split <p> with splitLevel=1: insert new text between "c" and "d",
+		//     triggering SplitElement on <p>.
+		//     Before fix: SplitElement counted the tombstone "ab" in VisibleLength,
+		//     causing the root <doc> node's VisibleLength to be wrong.
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "e"}, 1)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p>ce</p><p>d</p></doc>`, doc.Root().GetTree("t").ToXML())
+
+		// 05. Verify VisibleLength is non-negative across the tree.
+		tree := doc.Root().GetTree("t").Tree
+		root := tree.Root()
+		assert.True(t, root.Index.VisibleLength >= 0,
+			"root VisibleLength should not be negative, got %d", root.Index.VisibleLength)
+
+		// Verify root's VisibleLength matches actual children sum.
+		computed := 0
+		for _, child := range root.Index.Children(false) {
+			computed += child.PaddedLength()
 		}
+		assert.Equal(t, computed, root.Index.VisibleLength,
+			"root VisibleLength should match sum of visible children")
 	})
 }
 
