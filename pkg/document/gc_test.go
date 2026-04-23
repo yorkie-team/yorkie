@@ -22,9 +22,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"os"
+
+	"google.golang.org/protobuf/proto"
+
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -144,6 +151,31 @@ func TestTreeGC(t *testing.T) {
 			assert.Equal(t, 0, doc.GarbageLen())
 		})
 	}
+}
+
+func TestTreeGCReplayFromFixture(t *testing.T) {
+	t.Run("replay production changes triggers from-out-of-range", func(t *testing.T) {
+		// This test replays actual CRDT changes captured from a production
+		// Wafflebase document where Korean IME editing across multiple
+		// clients caused "from is out of range" errors during GC.
+		pbBytes, err := os.ReadFile("testdata/tree_gc_changes.pb")
+		if err != nil {
+			t.Skip("fixture not found:", err)
+		}
+
+		var pbResp api.ListChangesResponse
+		assert.NoError(t, proto.Unmarshal(pbBytes, &pbResp))
+
+		changes, err := converter.FromChanges(pbResp.Changes)
+		assert.NoError(t, err)
+
+		doc := document.NewInternalDocument(key.Key("test-doc"))
+		for _, c := range changes {
+			if _, err := doc.ApplyChanges(c); err != nil {
+				t.Fatalf("ApplyChanges failed at seq %d: %v", c.ServerSeq(), err)
+			}
+		}
+	})
 }
 
 func TestTextGC(t *testing.T) {
