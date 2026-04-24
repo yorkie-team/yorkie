@@ -323,25 +323,28 @@ func (n *TreeNode) Split(
 		split.InsPrevID = n.id
 		if n.InsNextID != nil {
 			insNext := tree.findFloorNode(n.InsNextID)
-			insNext.InsPrevID = split.id
 			split.InsNextID = n.InsNextID
 
-			// Fix 17: When the existing InsNext sibling is in a different
-			// parent (due to a prior parent-level split), move the new
-			// split sibling to that parent. This ensures that split
-			// siblings land in the same parent regardless of operation
-			// application order, fixing concurrent splitLevel>=2
-			// divergences.
-			if !n.IsText() && insNext.Index.Parent != nil &&
-				insNext.Index.Parent != split.Index.Parent &&
-				len(split.Index.Children(true)) == 0 {
-				if err := split.Index.Parent.DetachChild(split.Index); err != nil {
-					return diff, err
-				}
-				if err := insNext.Index.Parent.InsertBefore(
-					split.Index, insNext.Index,
-				); err != nil {
-					return diff, err
+			if insNext != nil {
+				insNext.InsPrevID = split.id
+
+				// Fix 17: When the existing InsNext sibling is in a different
+				// parent (due to a prior parent-level split), move the new
+				// split sibling to that parent. This ensures that split
+				// siblings land in the same parent regardless of operation
+				// application order, fixing concurrent splitLevel>=2
+				// divergences.
+				if !n.IsText() && insNext.Index.Parent != nil &&
+					insNext.Index.Parent != split.Index.Parent &&
+					len(split.Index.Children(true)) == 0 {
+					if err := split.Index.Parent.DetachChild(split.Index); err != nil {
+						return diff, err
+					}
+					if err := insNext.Index.Parent.InsertBefore(
+						split.Index, insNext.Index,
+					); err != nil {
+						return diff, err
+					}
 				}
 			}
 		}
