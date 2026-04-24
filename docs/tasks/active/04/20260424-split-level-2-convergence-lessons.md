@@ -37,3 +37,24 @@ sibling from the same actor is always our own creation.
 d1==d2 convergence does not guarantee correctness. Both documents
 can converge to the same wrong state (root diverged from clone).
 The clone/root check catches this class of bug.
+
+## SplitElement cannot fix cross-level divergences alone
+
+When `splitLevel-1` and `splitLevel-2` run concurrently on the same
+node, the `splitLevel-1` client never executes a parent-level
+`SplitElement`. Any fix inside `SplitElement` (partitioning logic)
+only runs on the `splitLevel-2` side. The other client has no
+opportunity to apply the same redistribution.
+
+Fix 17 solved this by operating at the `Split()` level — the insertion
+point — which runs on BOTH clients regardless of `splitLevel`. When
+a replay split creates an empty sibling and the original node's
+existing InsNext sibling is in a different parent, the empty sibling
+is moved to that parent.
+
+## Structural fixes over VV-gated fixes
+
+Fix 17 uses no VV checks. It relies purely on tree structure
+(`InsNext` parent comparison + empty children check). This avoids
+clone/root divergence by construction. Prefer structural invariants
+over VV-gated logic when the fix can be expressed structurally.

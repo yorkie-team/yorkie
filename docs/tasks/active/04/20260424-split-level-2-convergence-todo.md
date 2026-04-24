@@ -22,6 +22,8 @@ clone after change replay).
   in recursive split loop
 - [x] Fix 16: Move concurrent inserts at split boundary to the left
   in SplitElement
+- [x] Fix 17: Move empty split sibling to existing InsNext sibling's
+  parent in Split — resolves all 22 SplitSplit divergences
 - [x] Add clone/root consistency check to `syncClientsThenAssertEqual`
   and `syncClientsThenCheckEqual` (integration + complex)
 - [x] Add divergent-state XML logging to tree concurrency tests
@@ -29,8 +31,8 @@ clone after change replay).
 
 ## Remaining
 
-- [ ] Fix children redistribution in concurrent recursive splits
-  (27 divergences, see design doc "Remaining Issue" section)
+- [ ] Fix concurrent split + insert parent placement
+  (5 divergences in SplitEdit, see design doc "Remaining Issue")
 
 ## Test Results
 
@@ -47,9 +49,10 @@ clone after change replay).
 | EditEdit | 901 | 0 |
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
-| SplitSplit | 299 | 22 |
+| SplitSplit | 321 | 0 |
 | SplitEdit | 140 | 5 |
-| **Total** | **1570** | **27** |
+| **Total** | **1592** | **5** |
 
-All 27 skipped cases involve concurrent `splitLevel >= 2` and require
-children redistribution redesign (not offset-based fixes).
+All 5 skipped cases involve concurrent `splitLevel >= 2` split with
+insert/replace/delete where a non-split child lands in different
+parent partitions.

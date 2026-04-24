@@ -325,6 +325,25 @@ func (n *TreeNode) Split(
 			insNext := tree.findFloorNode(n.InsNextID)
 			insNext.InsPrevID = split.id
 			split.InsNextID = n.InsNextID
+
+			// Fix 17: When the existing InsNext sibling is in a different
+			// parent (due to a prior parent-level split), move the new
+			// split sibling to that parent. This ensures that split
+			// siblings land in the same parent regardless of operation
+			// application order, fixing concurrent splitLevel>=2
+			// divergences.
+			if !n.IsText() && insNext.Index.Parent != nil &&
+				insNext.Index.Parent != split.Index.Parent &&
+				len(split.Index.Children(true)) == 0 {
+				if err := split.Index.Parent.DetachChild(split.Index); err != nil {
+					return diff, err
+				}
+				if err := insNext.Index.Parent.InsertBefore(
+					split.Index, insNext.Index,
+				); err != nil {
+					return diff, err
+				}
+			}
 		}
 		n.InsNextID = split.id
 		tree.NodeMapByID.Put(split.id, split)
@@ -447,7 +466,7 @@ func (n *TreeNode) SplitElement(
 		actualRight = append(actualRight, child)
 	}
 
-	// Fix 13: Move concurrent inserts at the split boundary to the left.
+	// Fix 16: Move concurrent inserts at the split boundary to the left.
 	// A concurrent insert placed between the split boundary and the next
 	// original child was positioned relative to the pre-split child order.
 	// Its CRDT position (after a left-partition child) means it should

@@ -197,6 +197,25 @@ between the split boundary and the next original child was positioned
 relative to the pre-split child order; its CRDT position (after a
 left-partition child) means it should stay in the left partition.
 
+### Fix 17: Move empty split sibling to existing InsNext sibling's parent
+
+**`Split`** — After creating a split sibling and linking it into the
+`InsNextID` chain, check whether the existing `InsNext` sibling is in
+a different parent (due to a prior parent-level split by another
+operation). If so, and the new split sibling has no children (empty),
+detach it from the original parent and insert it before `InsNext` in
+`InsNext`'s parent.
+
+This fixes the 22 `SplitSplit` divergences where concurrent
+`splitLevel >= 2` operations on the same node produce empty replay
+split siblings that land in different parents depending on application
+order. The fix is VV-independent (purely structural), so clone/root
+consistency is preserved automatically.
+
+The empty-children guard prevents false activation on splits at
+different positions, where the new sibling legitimately carries
+children and belongs in the original parent.
+
 ## Convergence Coverage
 
 ### Hand-crafted integration suite (`test/integration/tree_test.go`)
@@ -216,14 +235,15 @@ left-partition child) means it should stay in the left partition.
 | EditEdit | 901 | 0 |
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
-| SplitSplit | 299 | 22 |
+| SplitSplit | 321 | 0 |
 | SplitEdit | 140 | 5 |
-| **Total** | **1570** | **27** |
+| **Total** | **1592** | **5** |
 
 Fixes 13-16 resolved 26 of the original 53 skipped `splitLevel >= 2`
-divergences. The remaining 27 involve concurrent recursive splits where
-children redistribution at the parent level produces order-dependent
-results (see "Remaining Issue" below).
+divergences. Fix 17 resolved all 22 remaining `SplitSplit` divergences.
+The remaining 5 involve concurrent `splitLevel >= 2` split with
+insert/replace/delete where a non-split child (e.g., `<i></i>`) lands
+in different parent partitions (see "Remaining Issue" below).
 
 ### Clone/root consistency
 
@@ -255,26 +275,18 @@ occur in sequence.
 | `includeRemoved` in split loop offset (Fix 14) | Must match `SplitElement`'s `Children(true)` partition to avoid boundary mismatch |
 | `skipActorID` in split loop advancement (Fix 15) | Same-actor siblings are own split products, not concurrent; advancing past them diverges root from clone |
 | Boundary insert migration in SplitElement (Fix 16) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
+| Empty sibling re-parenting in Split (Fix 17) | When a concurrent parent split already separated siblings into different parents, a replay split's empty product must follow the existing chain to be deterministic; VV-independent to preserve clone/root consistency |
 
-## Remaining Issue: Recursive Split Children Redistribution
+## Remaining Issue: Concurrent Split + Insert Parent Placement
 
-All 27 remaining divergences involve concurrent `splitLevel >= 2`
-operations on the same node. The root cause:
+5 remaining divergences involve concurrent `splitLevel >= 2` split
+with insert/replace/delete operations. The root cause:
 
-When two clients both split node N at offset 0:
-- Each locally takes all children into the split sibling (sibling is
-  non-empty)
-- On replay, N is already empty, so the replayed split creates an empty
-  sibling
-
-The level-1 (parent) split boundary is then placed differently:
-- Client A: replays B's level-2, splits parent at offset 1 — A's
-  non-empty sibling goes to the right
-- Client B: parent was already split locally — A's empty replay sibling
-  stays in the left
-
-This produces different tree structures despite identical content.
-The fix requires a mechanism in `SplitElement` to deterministically
-redistribute children during concurrent splits, independent of
-application order. This is architecturally different from the offset-
-based fixes (13-16) and needs separate design.
+When one client splits at `splitLevel >= 2` and another inserts a
+child element (e.g., `<i></i>`) in the same region, the inserted node
+lands in different parent partitions depending on application order.
+Unlike the empty split sibling case (Fix 17), the inserted node is not
+a split sibling (no `InsPrevID`) and has no structural chain to follow.
+This requires a separate mechanism to deterministically assign
+non-split children to the correct partition during concurrent
+parent-level splits.
