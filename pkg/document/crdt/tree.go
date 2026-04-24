@@ -471,12 +471,26 @@ func (n *TreeNode) SplitElement(
 	// original child was positioned relative to the pre-split child order.
 	// Its CRDT position (after a left-partition child) means it should
 	// stay in the left partition.
+	//
+	// Split siblings (nodes with InsPrevID) are skipped during the scan
+	// because they are not concurrent inserts — they are split products
+	// handled separately by Fix 17. Without skipping, a split sibling
+	// at the start of the right partition would set boundaryReached=true,
+	// hiding concurrent inserts that follow it.
 	if len(versionVector) > 0 {
 		var movedToLeft []*index.Node[*TreeNode]
 		var remaining []*index.Node[*TreeNode]
 		boundaryReached := false
 		for _, child := range actualRight {
 			if !boundaryReached {
+				// Skip element split siblings — they are not concurrent
+				// inserts but split products (handled by Fix 17). Text
+				// split siblings have deterministic IDs and should act
+				// as normal boundary markers.
+				if child.Value.InsPrevID != nil && !child.Value.IsText() {
+					remaining = append(remaining, child)
+					continue
+				}
 				actorID := child.Value.id.CreatedAt.ActorID()
 				if l, ok := versionVector.Get(actorID); !ok || l < child.Value.id.CreatedAt.Lamport() {
 					movedToLeft = append(movedToLeft, child)

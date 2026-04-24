@@ -21,9 +21,10 @@ clone after change replay).
 - [x] Fix 15: skipActorID — prevent advancing past own split products
   in recursive split loop
 - [x] Fix 16: Move concurrent inserts at split boundary to the left
-  in SplitElement
+  in SplitElement; skip element split siblings during boundary scan
 - [x] Fix 17: Move empty split sibling to existing InsNext sibling's
   parent in Split — resolves all 22 SplitSplit divergences
+
 - [x] Add clone/root consistency check to `syncClientsThenAssertEqual`
   and `syncClientsThenCheckEqual` (integration + complex)
 - [x] Add divergent-state XML logging to tree concurrency tests
@@ -31,8 +32,8 @@ clone after change replay).
 
 ## Remaining
 
-- [ ] Fix concurrent split + insert parent placement
-  (5 divergences in SplitEdit, see design doc "Remaining Issue")
+- [ ] Fix concurrent split + delete/replace range resolution
+  (2 divergences in SplitEdit, see design doc "Remaining Issue")
 
 ## Test Results
 
@@ -50,9 +51,8 @@ clone after change replay).
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
 | SplitSplit | 321 | 0 |
-| SplitEdit | 140 | 5 |
-| **Total** | **1592** | **5** |
+| SplitEdit | 143 | 2 |
+| **Total** | **1595** | **2** |
 
-All 5 skipped cases involve concurrent `splitLevel >= 2` split with
-insert/replace/delete where a non-split child lands in different
-parent partitions.
+Remaining 2 skipped cases involve concurrent `splitLevel >= 2` split
+with replace/delete where the delete range resolves differently.

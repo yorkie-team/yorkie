@@ -197,6 +197,12 @@ between the split boundary and the next original child was positioned
 relative to the pre-split child order; its CRDT position (after a
 left-partition child) means it should stay in the left partition.
 
+Element split siblings (nodes with `InsPrevID`, non-text) are skipped
+during the boundary scan. Without this, a split sibling at the start
+of the right partition sets `boundaryReached=true`, hiding concurrent
+inserts that follow it. Text split siblings retain their boundary
+role because their deterministic IDs make them safe markers.
+
 ### Fix 17: Move empty split sibling to existing InsNext sibling's parent
 
 **`Split`** — After creating a split sibling and linking it into the
@@ -236,14 +242,13 @@ children and belongs in the original parent.
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
 | SplitSplit | 321 | 0 |
-| SplitEdit | 140 | 5 |
-| **Total** | **1592** | **5** |
+| SplitEdit | 143 | 2 |
+| **Total** | **1595** | **2** |
 
-Fixes 13-16 resolved 26 of the original 53 skipped `splitLevel >= 2`
-divergences. Fix 17 resolved all 22 remaining `SplitSplit` divergences.
-The remaining 5 involve concurrent `splitLevel >= 2` split with
-insert/replace/delete where a non-split child (e.g., `<i></i>`) lands
-in different parent partitions (see "Remaining Issue" below).
+Fixes 13-17 resolved 51 of the original 53 skipped `splitLevel >= 2`
+divergences. The remaining 2 involve concurrent `splitLevel >= 2`
+split with replace/delete where the delete range resolves differently
+after split (see "Remaining Issue" below).
 
 ### Clone/root consistency
 
@@ -277,16 +282,13 @@ occur in sequence.
 | Boundary insert migration in SplitElement (Fix 16) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
 | Empty sibling re-parenting in Split (Fix 17) | When a concurrent parent split already separated siblings into different parents, a replay split's empty product must follow the existing chain to be deterministic; VV-independent to preserve clone/root consistency |
 
-## Remaining Issue: Concurrent Split + Insert Parent Placement
+## Remaining Issue: Concurrent Split + Delete/Replace Range
 
-5 remaining divergences involve concurrent `splitLevel >= 2` split
-with insert/replace/delete operations. The root cause:
+2 remaining divergences involve concurrent `splitLevel >= 2` split
+with replace or delete operations on an adjacent range. The root cause:
 
-When one client splits at `splitLevel >= 2` and another inserts a
-child element (e.g., `<i></i>`) in the same region, the inserted node
-lands in different parent partitions depending on application order.
-Unlike the empty split sibling case (Fix 17), the inserted node is not
-a split sibling (no `InsPrevID`) and has no structural chain to follow.
-This requires a separate mechanism to deterministically assign
-non-split children to the correct partition during concurrent
-parent-level splits.
+When one client splits "abcd" into "ab"/"cd" at `splitLevel >= 2`
+and another deletes/replaces the adjacent `<p>efgh</p>`, the delete
+range resolves differently after the split is applied. On one replica
+"cd" is deleted along with "efgh", on the other it survives. This is
+a range-resolution divergence, not a children-placement issue.
