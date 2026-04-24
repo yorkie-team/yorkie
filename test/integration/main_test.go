@@ -28,6 +28,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -88,6 +89,11 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 		fmt.Printf("after d%d: %s\n", i+2, v)
 		assert.Equal(t, expected, v)
 	}
+
+	// Assert clone and root tree consistency within each document.
+	for i, pair := range pairs {
+		assertCloneAndRootTreeEqual(t, i+1, pair.doc)
+	}
 }
 
 func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
@@ -118,6 +124,47 @@ func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 		}
 	}
 
+	// Check clone and root tree consistency within each document.
+	for i, pair := range pairs {
+		if !checkCloneAndRootTreeEqual(i+1, pair.doc) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// assertCloneAndRootTreeEqual asserts that each tree element in the document
+// has consistent XML between the clone and the root.
+func assertCloneAndRootTreeEqual(t *testing.T, docIdx int, doc *document.Document) {
+	for key, elem := range doc.RootObject().Members() {
+		tree, ok := elem.(*crdt.Tree)
+		if !ok {
+			continue
+		}
+		rootXML := tree.ToXML()
+		cloneXML := doc.Root().GetTree(key).ToXML()
+		assert.Equal(t, cloneXML, rootXML,
+			"d%d: clone and root tree %q should match", docIdx, key)
+	}
+}
+
+// checkCloneAndRootTreeEqual checks that each tree element in the document
+// has consistent XML between the clone and the root.
+func checkCloneAndRootTreeEqual(docIdx int, doc *document.Document) bool {
+	for key, elem := range doc.RootObject().Members() {
+		tree, ok := elem.(*crdt.Tree)
+		if !ok {
+			continue
+		}
+		rootXML := tree.ToXML()
+		cloneXML := doc.Root().GetTree(key).ToXML()
+		if cloneXML != rootXML {
+			fmt.Printf("d%d: clone/root mismatch for tree %q\n  clone: %s\n  root:  %s\n",
+				docIdx, key, cloneXML, rootXML)
+			return false
+		}
+	}
 	return true
 }
 
