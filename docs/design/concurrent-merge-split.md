@@ -169,22 +169,23 @@ partition. Without this, tombstoned children before the split point
 cause the visible-only offset to be smaller than the all-children
 offset, misplacing the partition boundary.
 
-### Fix 15: Advance left past split sibling in recursive split loop
+### Fix 15: skipActorID in recursive split loop
 
-**`split` function** — After `parent.Split()` creates a split sibling
-(linked via `InsNextID`), `left` is set to this sibling instead of
-`parent` for the next iteration. This ensures the next-level
-`FindOffset` places the split boundary AFTER all current-level split
-products, keeping them on the left side of the ancestor split.
+**`advancePastUnknownSplitSiblings`** — New `skipActorID` option stops
+advancement at siblings created by the current change's actor. In the
+split loop, `issueTimeTicket` creates siblings with lamports beyond the
+change's VV, making them appear "unknown". Without `skipActorID`, the
+function advances past the current operation's own split products,
+diverging from the clone path (VV=nil) where no advancement occurs.
 
-Without this, `advancePastUnknownSplitSiblings` in the next iteration
-cannot distinguish the just-created sibling from pre-existing ones
-(they share the same actor+lamport context), so it stops too early and
-the split product ends up on the wrong side.
+Since a single actor's changes are always sequential, an "unknown"
+sibling from the same actor is always our own creation, not a concurrent
+one. This preserves clone/root consistency while still advancing past
+genuine concurrent siblings from other actors.
 
-Only applies during concurrent replay (`versionVector` non-nil). In
-the non-concurrent case, `left = parent` is correct because no
-concurrent siblings exist.
+Previous approach (advancing `left` to the just-created sibling after
+`Split()`) achieved d1==d2 convergence but caused root tree structure to
+diverge from clone in 308 cases — the convergence was artificial.
 
 ### Fix 16: Move concurrent inserts at split boundary to the left
 
@@ -215,13 +216,21 @@ left-partition child) means it should stay in the left partition.
 | EditEdit | 901 | 0 |
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
-| SplitSplit | 321 | 0 |
-| SplitEdit | 145 | 0 |
-| **Total** | **1597** | **0** |
+| SplitSplit | 299 | 22 |
+| SplitEdit | 140 | 5 |
+| **Total** | **1570** | **27** |
 
-Fixes 13-16 resolved all 53 previously-skipped `splitLevel >= 2`
-divergences. The property-based suite is now fully clean across all
-operation types and split levels.
+Fixes 13-16 resolved 26 of the original 53 skipped `splitLevel >= 2`
+divergences. The remaining 27 involve concurrent recursive splits where
+children redistribution at the parent level produces order-dependent
+results (see "Remaining Issue" below).
+
+### Clone/root consistency
+
+`syncClientsThenAssertEqual` and `syncClientsThenCheckEqual` now verify
+that each document's clone tree XML matches its root tree XML after
+sync. This catches bugs where `change.Execute(root, versionVector)`
+produces a different tree structure from `change.Execute(clone, nil)`.
 
 ### Text vs Element ID asymmetry
 
@@ -244,5 +253,28 @@ occur in sequence.
 | End-token guard over range clamping (Fix 11) | Clamping fails for element-level ranges; guard handles both text and element uniformly |
 | Relaxed parent check at ancestor splits (Fix 13) | Follows Fix 11 rationale: `InsNextID` is only set by `SplitElement`, so its existence is sufficient evidence |
 | `includeRemoved` in split loop offset (Fix 14) | Must match `SplitElement`'s `Children(true)` partition to avoid boundary mismatch |
-| Concurrent-only sibling advancement (Fix 15) | Local path must use `left = parent` for correct split semantics; remote path needs advancement to avoid boundary disagreement |
+| `skipActorID` in split loop advancement (Fix 15) | Same-actor siblings are own split products, not concurrent; advancing past them diverges root from clone |
 | Boundary insert migration in SplitElement (Fix 16) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
+
+## Remaining Issue: Recursive Split Children Redistribution
+
+All 27 remaining divergences involve concurrent `splitLevel >= 2`
+operations on the same node. The root cause:
+
+When two clients both split node N at offset 0:
+- Each locally takes all children into the split sibling (sibling is
+  non-empty)
+- On replay, N is already empty, so the replayed split creates an empty
+  sibling
+
+The level-1 (parent) split boundary is then placed differently:
+- Client A: replays B's level-2, splits parent at offset 1 — A's
+  non-empty sibling goes to the right
+- Client B: parent was already split locally — A's empty replay sibling
+  stays in the left
+
+This produces different tree structures despite identical content.
+The fix requires a mechanism in `SplitElement` to deterministically
+redistribute children during concurrent splits, independent of
+application order. This is architecturally different from the offset-
+based fixes (13-16) and needs separate design.

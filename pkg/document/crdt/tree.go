@@ -1058,7 +1058,7 @@ func (t *Tree) Edit(
 	pairs = append(pairs, mergePairs...)
 
 	// 04. Split: split the element nodes for the given splitLevel.
-	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket, versionVector); err != nil {
+	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
@@ -1316,16 +1316,35 @@ func (t *Tree) collectBetween(
 // did not know about (not in versionVector). This ensures that concurrent
 // operations resolve positions after all split products the editor could
 // not have seen.
+//
+// Options (variadic):
+//   - relaxParentCheck (bool): skip parent equality check at ancestor
+//     iterations where concurrent splits may have reparented siblings.
+//   - skipActorID (*time.ActorID): stop at siblings created by this actor.
+//     Used in the split loop to avoid advancing past siblings created by
+//     the current operation's own issueTimeTicket (same actor, lamport
+//     beyond VV). Since a single actor's changes are sequential, an
+//     "unknown" sibling from the same actor must be our own creation,
+//     not a concurrent one.
 func (t *Tree) advancePastUnknownSplitSiblings(
 	node *TreeNode,
 	versionVector time.VersionVector,
-	relaxParentCheck ...bool,
+	opts ...any,
 ) *TreeNode {
 	if len(versionVector) == 0 || node == nil {
 		return node
 	}
 
-	relaxParent := len(relaxParentCheck) > 0 && relaxParentCheck[0]
+	var relaxParent bool
+	var skipActorID *time.ActorID
+	for _, opt := range opts {
+		switch v := opt.(type) {
+		case bool:
+			relaxParent = v
+		case *time.ActorID:
+			skipActorID = v
+		}
+	}
 
 	current := node
 	for current.InsNextID != nil {
@@ -1346,6 +1365,13 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 		}
 
 		actorID := next.id.CreatedAt.ActorID()
+
+		// Stop at siblings from the same actor as the current operation.
+		// They are our own split products, not concurrent ones.
+		if skipActorID != nil && actorID == *skipActorID {
+			break
+		}
+
 		if l, ok := versionVector.Get(actorID); ok && l >= next.id.CreatedAt.Lamport() {
 			break
 		}
@@ -1360,6 +1386,7 @@ func (t *Tree) split(
 	fromParent *TreeNode,
 	fromLeft *TreeNode,
 	splitLevel int,
+	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
 	versionVector time.VersionVector,
 ) error {
@@ -1371,13 +1398,21 @@ func (t *Tree) split(
 	parent := fromParent
 	left := fromLeft
 	for splitCount < splitLevel {
-		// Fix 7 propagation: advance past unknown element split siblings
-		// at the current ancestor level. Element splits produce non-
-		// deterministic IDs (new tickets) discoverable only via InsNextID
-		// chain. Use relaxed parent check because a concurrent ancestor
-		// split may have moved siblings to different parents.
+		// Fix 13: advance past unknown element split siblings at the
+		// current ancestor level. Element splits produce non-deterministic
+		// IDs (new tickets) discoverable only via InsNextID chain.
+		// Use relaxed parent check because a concurrent ancestor split
+		// may have moved siblings to different parents.
+		//
+		// skipActorID prevents advancing past siblings created by the
+		// current operation's own issueTimeTicket. Their lamports exceed
+		// the change's VV (they are new tickets), making them look
+		// "unknown", but they are our own split products — not concurrent.
+		// Since a single actor's changes are always sequential, an
+		// "unknown" sibling from the same actor is always our own.
 		if left != parent {
-			left = t.advancePastUnknownSplitSiblings(left, versionVector, true)
+			changeActorID := editedAt.ActorID()
+			left = t.advancePastUnknownSplitSiblings(left, versionVector, true, &changeActorID)
 			// If the advance moved left to a node under a different
 			// parent (due to a concurrent ancestor split), update parent
 			// to match so FindOffset and Split operate on the correct
@@ -1399,31 +1434,6 @@ func (t *Tree) split(
 		}
 		if _, err := parent.Split(t, offset, issueTimeTicket, versionVector); err != nil {
 			return err
-		}
-
-		// After Split(), parent.InsNextID points to the sibling just
-		// created in this iteration. Set left to this sibling so that
-		// the next iteration's FindOffset at the grandparent level
-		// places the split boundary AFTER both the original node and
-		// its split product (keeping them on the left side).
-		//
-		// Without this, advancePastUnknownSplitSiblings in the next
-		// iteration cannot distinguish the just-created sibling from
-		// pre-existing siblings (they share the same actor+lamport),
-		// so it stops too early and the split product ends up on the
-		// wrong side.
-		//
-		// Only do this when versionVector is non-nil (concurrent
-		// replay). In the non-concurrent case (versionVector is nil),
-		// left = parent is correct because no concurrent siblings
-		// exist that could cause mis-placement.
-		if len(versionVector) > 0 && parent.InsNextID != nil {
-			if splitSibling := t.findFloorNode(parent.InsNextID); splitSibling != nil && !splitSibling.IsText() {
-				left = splitSibling
-				parent = left.Index.Parent.Value
-				splitCount++
-				continue
-			}
 		}
 
 		left = parent
