@@ -158,7 +158,7 @@ type TreeNode struct {
 	// Persisted alongside MergedFrom because the source parent's
 	// removedAt may be overwritten by later LWW tombstones and thus
 	// cannot serve as the merge-time causal boundary for SplitElement's
-	// §6.1 version-vector check. See docs/design/concurrent-merge-split.md.
+	// §7.1 version-vector check. See docs/design/concurrent-merge-split.md.
 	MergedAt *time.Ticket
 
 	// mergedInto is a runtime cache pointing at the merge target (the
@@ -328,7 +328,7 @@ func (n *TreeNode) Split(
 			if insNext != nil {
 				insNext.InsPrevID = split.id
 
-				// §6.4 Empty Sibling Re-Parenting: When the existing
+				// §7.4 Empty Sibling Re-Parenting: When the existing
 				// InsNext sibling is in a different parent (due to a prior
 				// parent-level split), move the new split sibling to that
 				// parent. This ensures that split siblings land in the same
@@ -437,7 +437,7 @@ func (n *TreeNode) SplitElement(
 	leftChildren := allChildren[0:offset]
 	rightChildren := allChildren[offset:]
 
-	// §6.1 Merge-Moved Children: Keep children merge-moved from a
+	// §7.1 Merge-Moved Children: Keep children merge-moved from a
 	// source that is itself a child of the node being split in the
 	// original (left) partition. When the source is external (e.g., a
 	// sibling element that was merged), the content flows naturally to
@@ -467,14 +467,14 @@ func (n *TreeNode) SplitElement(
 		actualRight = append(actualRight, child)
 	}
 
-	// §6.3 Boundary Insert Migration: Move concurrent inserts at the
+	// §7.3 Boundary Insert Migration: Move concurrent inserts at the
 	// split boundary to the left. A concurrent insert placed between the
 	// split boundary and the next original child was positioned relative
 	// to the pre-split child order. Its CRDT position (after a
 	// left-partition child) means it should stay in the left partition.
 	//
 	// Element split siblings (nodes with InsPrevID) are skipped during
-	// the scan — they are split products handled by §6.4. Without
+	// the scan — they are split products handled by §7.4. Without
 	// skipping, a split sibling at the start of the right partition
 	// would set boundaryReached=true, hiding concurrent inserts that
 	// follow it.
@@ -485,7 +485,7 @@ func (n *TreeNode) SplitElement(
 		for _, child := range actualRight {
 			if !boundaryReached {
 				// Skip element split siblings — they are split products
-				// (handled by §6.4), not concurrent inserts. Text split
+				// (handled by §7.4), not concurrent inserts. Text split
 				// siblings have deterministic IDs and act as normal
 				// boundary markers.
 				if child.Value.InsPrevID != nil && !child.Value.IsText() {
@@ -741,8 +741,8 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	// MergedFrom is the only merge-related field written to the snapshot;
 	// mergedInto, mergedChildIDs, and mergedAt are derived here so that a
 	// replica loaded from a snapshot can still handle concurrent ops that
-	// target merged-away parents (§1.1 redirect, §5.2 propagation,
-	// §6.1 split skip).
+	// target merged-away parents (§1.1 redirect, §6.2 propagation,
+	// §7.1 split skip).
 	tree.rebuildMergeState()
 
 	return tree
@@ -1086,7 +1086,7 @@ func (t *Tree) Edit(
 		return nil, resource.DataSize{}, err
 	}
 
-	// Delete: tombstone the collected nodes.
+	// Phase 5: Delete — tombstone the collected nodes.
 	var pairs []GCPair
 	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
@@ -1097,25 +1097,25 @@ func (t *Tree) Edit(
 		}
 	}
 
-	// Phase 5: Merge — move children to fromParent, set forwarding pointers.
+	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	if err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, toBeMergedNodes, editedAt,
 	); err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
-	// §5.2: Propagate deletes to children moved by prior merges.
+	// §6.2: Propagate deletes to children moved by prior merges.
 	mergePairs := t.propagateMergeDeletes(
 		fromParent, toBeRemoveds, toBeMergedNodes, editedAt,
 	)
 	pairs = append(pairs, mergePairs...)
 
-	// Phase 6: Split — split element nodes for the given splitLevel.
+	// Phase 7: Split — split element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
 		return nil, resource.DataSize{}, err
 	}
 
-	// Insert: insert the given node at the given position.
+	// Phase 8: Insert — insert the given node at the given position.
 	if len(contents) != 0 {
 		leftInChildren := fromLeft
 
@@ -1450,12 +1450,12 @@ func (t *Tree) split(
 	parent := fromParent
 	left := fromLeft
 	for splitCount < splitLevel {
-		// §6.5 Per-Iteration Advance: advance past unknown element
+		// §7.5 Per-Iteration Advance: advance past unknown element
 		// split siblings at the current ancestor level. Element splits
 		// produce non-deterministic IDs discoverable only via InsNextID.
-		// Use relaxed parent check (§6.5) because a concurrent ancestor
+		// Use relaxed parent check (§7.5) because a concurrent ancestor
 		// split may have moved siblings to different parents.
-		// skipActorID (§6.7) prevents advancing past siblings created
+		// skipActorID (§7.7) prevents advancing past siblings created
 		// by the current operation's own issueTimeTicket — same-actor
 		// siblings are own split products, not concurrent.
 		if left != parent {

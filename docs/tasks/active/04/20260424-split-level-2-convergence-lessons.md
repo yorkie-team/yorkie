@@ -6,9 +6,9 @@
 
 `syncClientsThenAssertEqual` only compared Marshal() (JSON) across
 documents (d1 vs d2). It did not compare clone vs root within the same
-document. This allowed Fix 15 to achieve d1==d2 convergence by making
-both roots diverge from their clones in the same way — 308 hidden
-mismatches.
+document. This allowed §7.7 (skipActorID) to achieve d1==d2
+convergence by making both roots diverge from their clones in the same
+way — 308 hidden mismatches.
 
 **Rule**: Always verify `doc.Root().GetTree(key).ToXML()` matches
 `doc.RootObject().Get(key).(*crdt.Tree).ToXML()` after sync.
@@ -19,7 +19,7 @@ Any code that runs only when `versionVector != nil` changes the root
 path but not the clone path. If this code modifies tree structure
 (not just position resolution), root and clone will diverge.
 
-Fix 15's original approach (`left = splitSibling` only when VV is
+§7.7's original approach (`left = splitSibling` only when VV is
 non-nil) violated this. The replacement (`skipActorID`) filters
 correctly without introducing root-only structural changes.
 
@@ -46,7 +46,7 @@ node, the `splitLevel-1` client never executes a parent-level
 only runs on the `splitLevel-2` side. The other client has no
 opportunity to apply the same redistribution.
 
-Fix 17 solved this by operating at the `Split()` level — the insertion
+§7.4 solved this by operating at the `Split()` level — the insertion
 point — which runs on BOTH clients regardless of `splitLevel`. When
 a replay split creates an empty sibling and the original node's
 existing InsNext sibling is in a different parent, the empty sibling
@@ -54,18 +54,18 @@ is moved to that parent.
 
 ## Structural fixes over VV-gated fixes
 
-Fix 17 uses no VV checks. It relies purely on tree structure
+§7.4 uses no VV checks. It relies purely on tree structure
 (`InsNext` parent comparison + empty children check). This avoids
 clone/root divergence by construction. Prefer structural invariants
 over VV-gated logic when the fix can be expressed structurally.
 
 ## Separate delete range from insertion point
 
-Fix 18 initially modified `fromParent`/`fromLeft` for both
-`collectBetween` (delete range) and the insert step. This fixed the
-delete divergence but moved the insertion point to the wrong parent
-(split sibling instead of original). On the other replica, the
-insert happened before the split and Fix 16's boundary migration
+§3 (Range Narrowing) initially modified `fromParent`/`fromLeft` for
+both `collectBetween` (delete range) and the insert step. This fixed
+the delete divergence but moved the insertion point to the wrong
+parent (split sibling instead of original). On the other replica,
+the insert happened before the split and §7.3's boundary migration
 handled placement.
 
 **Rule**: When narrowing a cross-parent traversal range, use

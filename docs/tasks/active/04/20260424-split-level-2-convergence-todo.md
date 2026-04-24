@@ -14,28 +14,33 @@ clone after change replay).
 
 ## Done
 
-- [x] Fix 13: Propagate Fix 7 into recursive split loop with relaxed
-  parent check
-- [x] Fix 14: Include removed children in split loop offset
+- [x] §7.5: Propagate split sibling advance into recursive split loop
+  with relaxed parent check
+- [x] §7.6: Include removed children in split loop offset
   (`FindOffset` with `includeRemoved: true`)
-- [x] Fix 15: skipActorID — prevent advancing past own split products
+- [x] §7.7: skipActorID — prevent advancing past own split products
   in recursive split loop
-- [x] Fix 16: Move concurrent inserts at split boundary to the left
+- [x] §7.3: Move concurrent inserts at split boundary to the left
   in SplitElement; skip element split siblings during boundary scan
-- [x] Fix 17: Move empty split sibling to existing InsNext sibling's
+- [x] §7.4: Move empty split sibling to existing InsNext sibling's
   parent in Split — resolves all 22 SplitSplit divergences
-- [x] Fix 18: Narrow collectBetween range across split parent
+- [x] §3: Narrow collectBetween range across split parent
   boundaries; preserve original fromParent/fromLeft for insert —
   resolves last 2 SplitEdit divergences
+- [x] Add nil-guard for findFloorNode in Split (§7.4)
 
 - [x] Add clone/root consistency check to `syncClientsThenAssertEqual`
   and `syncClientsThenCheckEqual` (integration + complex)
 - [x] Add divergent-state XML logging to tree concurrency tests
 - [x] Verify 0 clone/root mismatches across all test suites
 
+- [x] Restructure design doc from Fix 1-18 chronological to algorithm
+  phase structure (Phase 1-9)
+- [x] Update code comments to reference design doc §sections
+
 ## Remaining
 
-All divergences resolved.
+All divergences resolved. JS SDK port pending (follow-up PR).
 
 ## Test Results
 
@@ -56,4 +61,4 @@ All divergences resolved.
 | SplitEdit | 145 | 0 |
 | **Total** | **1597** | **0** |
 
-All 53 original splitLevel >= 2 divergences resolved (Fixes 13-18).
+All 53 original splitLevel >= 2 divergences resolved.
