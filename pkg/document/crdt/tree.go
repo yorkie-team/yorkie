@@ -1293,10 +1293,13 @@ func (t *Tree) collectBetween(
 func (t *Tree) advancePastUnknownSplitSiblings(
 	node *TreeNode,
 	versionVector time.VersionVector,
+	relaxParentCheck ...bool,
 ) *TreeNode {
 	if len(versionVector) == 0 || node == nil {
 		return node
 	}
+
+	relaxParent := len(relaxParentCheck) > 0 && relaxParentCheck[0]
 
 	current := node
 	for current.InsNextID != nil {
@@ -1307,7 +1310,12 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 
 		// Stop if the sibling has been moved to a different parent
 		// (e.g., by a higher-level concurrent split).
-		if next.Index.Parent != current.Index.Parent {
+		// Skip this check when relaxParentCheck is true — at ancestor
+		// iterations of the split loop, a concurrent recursive split may
+		// have moved the sibling to a different parent. InsNextID is only
+		// set by SplitElement, so its existence is sufficient evidence
+		// of a split sibling (same rationale as hasUnknownSplitSibling).
+		if !relaxParent && next.Index.Parent != current.Index.Parent {
 			break
 		}
 
@@ -1337,6 +1345,22 @@ func (t *Tree) split(
 	parent := fromParent
 	left := fromLeft
 	for splitCount < splitLevel {
+		// Fix 7 propagation: advance past unknown element split siblings
+		// at the current ancestor level. Element splits produce non-
+		// deterministic IDs (new tickets) discoverable only via InsNextID
+		// chain. Use relaxed parent check because a concurrent ancestor
+		// split may have moved siblings to different parents.
+		if left != parent {
+			left = t.advancePastUnknownSplitSiblings(left, versionVector, true)
+			// If the advance moved left to a node under a different
+			// parent (due to a concurrent ancestor split), update parent
+			// to match so FindOffset and Split operate on the correct
+			// subtree.
+			if left.Index.Parent != nil && left.Index.Parent.Value != parent {
+				parent = left.Index.Parent.Value
+			}
+		}
+
 		var err error
 		offset := 0
 		if left != parent {
