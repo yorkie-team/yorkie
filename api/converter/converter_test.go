@@ -399,7 +399,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	// Sibling regression test covering the merge-merge overlap path
-	// (Fix 4 — mergedInto forwarding) across a snapshot roundtrip.
+	// (§1.1 mergedInto forwarding) across a snapshot roundtrip.
 	t.Run("tree merge-and-merge convergence across snapshot", func(t *testing.T) {
 		actorA, err := time.ActorIDFromHex("000000000000000000000011")
 		assert.NoError(t, err)

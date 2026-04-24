@@ -3028,7 +3028,7 @@ func TestTree(t *testing.T) {
 	// This structural difference could cause issues with GC and subsequent
 	// operations that reference tombstoned nodes by ID.
 	t.Run("split-with-concurrent-delete-overlapping-content", func(t *testing.T) {
-		// Fixed by Fix 9: skip merge for concurrent elements in collectBetween.
+		// Fixed by §4.3: skip merge for concurrent elements in collectBetween.
 		ctx := context.Background()
 		d1 := document.New(helper.TestKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
