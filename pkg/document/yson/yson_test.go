@@ -180,6 +180,30 @@ func TestYSONConversion(t *testing.T) {
 		assert.Equal(t, prevMarshalled, newMarshalled)
 	})
 
+	t.Run("dedup counter CRDT conversion test", func(t *testing.T) {
+		doc := document.New("dedup-yson")
+
+		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
+			counter := r.SetNewDedupCounter("uv")
+			for i := 0; i < 5; i++ {
+				counter.Add(fmt.Sprintf("user-%d", i))
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		root, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+
+		// Verify HLL registers are present in the YSON counter
+		ysonObj := root.(yson.Object)
+		ysonCounter := ysonObj["uv"].(yson.Counter)
+		assert.Equal(t, crdt.IntegerDedupCnt, ysonCounter.Type)
+		assert.Equal(t, int32(5), ysonCounter.Value)
+		assert.NotNil(t, ysonCounter.Registers)
+		assert.Equal(t, 16384, len(ysonCounter.Registers))
+	})
+
 	t.Run("yson conversion test", func(t *testing.T) {
 		root := yson.Object{
 			"string": "string",
