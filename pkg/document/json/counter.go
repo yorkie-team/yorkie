@@ -137,12 +137,6 @@ func (p *Counter) Add(actor string) *Counter {
 	return p
 }
 
-// RestoreHLL restores the HLL state from serialized register bytes.
-// It delegates to the underlying crdt.Counter.RestoreHLL.
-func (p *Counter) RestoreHLL(data []byte) error {
-	return p.Counter.RestoreHLL(data)
-}
-
 // inferCounterType infers the CounterType from the Go value type.
 // int64 maps to LongCnt; all other numeric types map to IntegerCnt.
 func inferCounterType(v interface{}) crdt.CounterType {

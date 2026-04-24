@@ -141,23 +141,22 @@ func toCounter(counter *crdt.Counter) (Counter, error) {
 
 ### SetYSON: HLL Restoration
 
-In `SetYSONElement()` (Counter branch), restore HLL after creating the
-counter:
+Pass HLL registers through `setNewCounter`/`AddNewCounter` via a
+variadic parameter. HLL is restored inside the creator function, before
+`DeepCopy` captures the element for the operation log:
 
 ```go
 case yson.Counter:
-    c := p.setNewCounter(k, y.Type, y.Value)
-    if len(y.Registers) > 0 {
-        c.RestoreHLL(y.Registers)
-    }
+    p.setNewCounter(k, y.Type, y.Value, y.Registers)
 ```
 
-This requires adding a `RestoreHLL(data []byte) error` method to
-`pkg/document/json/counter.go` that delegates to
-`crdt.Counter.RestoreHLL()`. The existing `RestoreHLL` restores the
-register array and calls `recomputeValue()`, so the counter's value is
-correctly set even though `crdt.NewCounter(IntegerDedupCnt, ...)` always
-initializes `value=0`.
+HLL restoration must happen inside the creator closure (before
+`DeepCopy`), not after the constructor returns. Yorkie's clone/execute
+architecture deep-copies the counter inside `setInternal`/`addInternal`,
+so the operation's copy must already carry the restored HLL. The
+existing `crdt.Counter.RestoreHLL` restores the register array and calls
+`recomputeValue()`, so the counter's value is correctly set even though
+`crdt.NewCounter(IntegerDedupCnt, ...)` always initializes `value=0`.
 
 ### Data Flow
 
@@ -206,12 +205,11 @@ Restore (compaction rebuild):
 
 | File | Change |
 |------|--------|
-| `pkg/document/yson/yson.go` | Add `Registers` field to Counter struct. Add `IntegerDedupCnt` case to `Marshal()`. Add `preprocessDedupCounter()` regex. Add `parseDedupCounter()` |
+| `pkg/document/yson/yson.go` | Add `Registers` field to Counter struct. Add `IntegerDedupCnt` case to `Marshal()`. Add regex pre-substitution in `preprocessTypeValues()`. Add `parseDedupCounter()` |
 | `pkg/document/yson/to_yson.go` | Extract `HLLBytes()` in `toCounter()` |
-| `pkg/document/json/object.go` | Call `RestoreHLL` in `SetYSONElement` Counter branch |
-| `pkg/document/json/counter.go` | Add `RestoreHLL(data []byte) error` method |
-| `pkg/document/yson/yson_test.go` | DedupCounter marshal/unmarshal round-trip unit tests |
-| `test/integration/` | storeRevision and compaction integration tests for dedup documents |
+| `pkg/document/json/object.go` | Pass HLL registers through `setNewCounter` variadic parameter in `SetYSONElement` |
+| `pkg/document/json/array.go` | Pass HLL registers through `AddNewCounter` variadic parameter in `AddYSON` |
+| `pkg/document/yson/yson_test.go` | DedupCounter marshal, unmarshal, round-trip, CRDT conversion, and full round-trip unit tests |
 
 ## Backward Compatibility
 
