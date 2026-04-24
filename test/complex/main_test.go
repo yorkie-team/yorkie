@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
@@ -172,6 +173,32 @@ func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 		}
 	}
 
+	// Check clone and root tree consistency within each document.
+	for i, pair := range pairs {
+		if !checkCloneAndRootTreeEqual(i+1, pair.doc) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// checkCloneAndRootTreeEqual checks that each tree element in the document
+// has consistent XML between the clone and the root.
+func checkCloneAndRootTreeEqual(docIdx int, doc *document.Document) bool {
+	for key, elem := range doc.RootObject().Members() {
+		tree, ok := elem.(*crdt.Tree)
+		if !ok {
+			continue
+		}
+		rootXML := tree.ToXML()
+		cloneXML := doc.Root().GetTree(key).ToXML()
+		if cloneXML != rootXML {
+			fmt.Printf("d%d: clone/root mismatch for tree %q\n  clone: %s\n  root:  %s\n",
+				docIdx, key, cloneXML, rootXML)
+			return false
+		}
+	}
 	return true
 }
 

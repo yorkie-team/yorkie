@@ -20,6 +20,7 @@ package complex
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -233,7 +234,9 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 		if flag {
 			return testResult{flag, `pass`}
 		}
-		return testResult{flag, `different result`}
+		xml1 := d1.Root().GetTree("t").ToXML()
+		xml2 := d2.Root().GetTree("t").ToXML()
+		return testResult{flag, fmt.Sprintf("different result\n  d1: %s\n  d2: %s", xml1, xml2)}
 	}
 
 	for _, interval := range rangesArr {
