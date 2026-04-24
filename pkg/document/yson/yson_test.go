@@ -371,6 +371,44 @@ func TestYSONMarshal(t *testing.T) {
 		assert.Equal(t, registers, actual.Registers)
 	})
 
+	t.Run("dedup counter round-trip test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+
+		original := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: registers,
+		}
+		marshalled, err := original.Marshal()
+		assert.NoError(t, err)
+
+		restored := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &restored))
+		assert.Equal(t, original, restored)
+	})
+
+	t.Run("dedup counter in object round-trip test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[42] = 7
+
+		obj := yson.Object{
+			"pv": yson.Counter{Type: crdt.IntegerCnt, Value: int32(100)},
+			"uv": yson.Counter{
+				Type:      crdt.IntegerDedupCnt,
+				Value:     int32(15),
+				Registers: registers,
+			},
+		}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		restored := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &restored))
+		assert.Equal(t, obj, restored)
+	})
+
 	t.Run("text marshal/unmarshal test", func(t *testing.T) {
 		text := yson.Text{
 			Nodes: []yson.TextNode{
