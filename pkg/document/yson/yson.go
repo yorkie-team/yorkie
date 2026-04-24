@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -41,11 +42,22 @@ var (
 	// ErrInvalidYSON is returned when the given YSON is not
 	// valid.
 	ErrInvalidYSON = errors.InvalidArgument("invalid YSON")
+
+	// dedupCounterRe matches DedupCounter(Int(N),"base64") in YSON text.
+	// Only Int is supported. If Long is added, extend both this regex
+	// and parseDedupCounter.
+	dedupCounterRe = regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([^"]+)"\)`)
 )
 
 const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
+
+	// counterTypeInt is the YSON token for 32-bit integer counters.
+	counterTypeInt = "Int"
+
+	// counterTypeLong is the YSON token for 64-bit integer counters.
+	counterTypeLong = "Long"
 )
 
 var (
@@ -65,8 +77,9 @@ type Element interface {
 
 // Counter represents a counter CRDT value.
 type Counter struct {
-	Type  crdt.CounterType
-	Value interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
+	Type      crdt.CounterType
+	Value     interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
+	Registers []byte      // HLL registers (dedup only; nil for normal counters)
 }
 
 // Array represents an array CRDT value.
@@ -190,6 +203,9 @@ func (y Counter) Marshal() (string, error) {
 		return fmt.Sprintf("Counter(Int(%v))", y.Value), nil
 	case crdt.LongCnt:
 		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
+	case crdt.IntegerDedupCnt:
+		encoded := base64.StdEncoding.EncodeToString(y.Registers)
+		return fmt.Sprintf(`DedupCounter(Int(%v),"%s")`, y.Value, encoded), nil
 	default:
 		return "", fmt.Errorf("marshal counter: %w", ErrUnsupported)
 	}
@@ -305,7 +321,17 @@ func Unmarshal(data string, elem Element) error {
 		}
 
 	case *Counter:
-		counter, err := parseCounter(raw.(map[string]interface{}))
+		rawMap, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unmarshal counter: %w", ErrInvalidYSON)
+		}
+		var counter Counter
+		var err error
+		if t, ok := rawMap["type"].(string); ok && t == "DedupCounter" {
+			counter, err = parseDedupCounter(rawMap)
+		} else {
+			counter, err = parseCounter(rawMap)
+		}
 		if err != nil {
 			return err
 		}
@@ -324,9 +350,9 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	}
 
 	switch t {
-	case "Int":
+	case counterTypeInt:
 		return int32(raw["value"].(float64)), nil
-	case "Long":
+	case counterTypeLong:
 		return int64(raw["value"].(float64)), nil
 	case "BinData":
 		val, err := base64.StdEncoding.DecodeString(raw["value"].(string))
@@ -344,6 +370,8 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 		return val, nil
 	case "Counter":
 		return parseCounter(raw)
+	case "DedupCounter":
+		return parseDedupCounter(raw)
 	case "Tree":
 		if value, ok := raw["value"].(map[string]interface{}); ok {
 			return parseTree(value)
@@ -431,10 +459,10 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 	if value, ok := raw["value"].(map[string]interface{}); ok {
 		if t, ok := value["type"].(string); ok {
 			switch t {
-			case "Int":
+			case counterTypeInt:
 				counter.Type = crdt.IntegerCnt
 				counter.Value = int32(value["value"].(float64))
-			case "Long":
+			case counterTypeLong:
 				counter.Type = crdt.LongCnt
 				counter.Value = int64(value["value"].(float64))
 			default:
@@ -447,6 +475,37 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 		return Counter{}, fmt.Errorf("parse counter value: %w", ErrUnsupported)
 	}
 	return counter, nil
+}
+
+func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
+	counterType, ok := raw["counterType"].(string)
+	if !ok {
+		return Counter{}, fmt.Errorf("parse dedup counter type: %w", ErrUnsupported)
+	}
+	hllStr, ok := raw["hll"].(string)
+	if !ok {
+		return Counter{}, fmt.Errorf("parse dedup counter hll: %w", ErrUnsupported)
+	}
+
+	registers, err := base64.StdEncoding.DecodeString(hllStr)
+	if err != nil {
+		return Counter{}, fmt.Errorf("parse dedup counter hll: %w", ErrInvalidYSON)
+	}
+
+	switch counterType {
+	case counterTypeInt:
+		v, ok := raw["value"].(float64)
+		if !ok {
+			return Counter{}, fmt.Errorf("parse dedup counter value: %w", ErrInvalidYSON)
+		}
+		return Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(v),
+			Registers: registers,
+		}, nil
+	default:
+		return Counter{}, fmt.Errorf("parse dedup counter type: %w", ErrUnsupported)
+	}
 }
 
 func parseText(raw []interface{}) (Text, error) {
@@ -519,6 +578,12 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 // preprocessTypeValues replaces custom types in the YSON string with
 // JSON-compatible formats.
 func preprocessTypeValues(data string) string {
+	// Pre-substitute DedupCounter into complete JSON before general
+	// replacements. The compound structure (Int(...) + bare base64 string)
+	// is incompatible with the global ')' → '}' replacement.
+	data = dedupCounterRe.ReplaceAllString(data,
+		`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`)
+
 	type replacement struct {
 		oldStr string
 		newStr string

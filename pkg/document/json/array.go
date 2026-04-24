@@ -164,12 +164,21 @@ func (p *Array) AddNewArray() *Array {
 }
 
 // AddNewCounter adds a new counter at the last.
-func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}) *Counter {
+// If registers is non-nil, the HLL state is restored before the counter is
+// stored, so that the operation's deep-copy already carries the correct value.
+func (p *Array) AddNewCounter(valueType crdt.CounterType, value interface{}, registers ...[]byte) *Counter {
 	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
 		counter, err := crdt.NewCounter(valueType, value, ticket)
 		if err != nil {
 			panic(err)
 		}
+
+		if len(registers) > 0 && len(registers[0]) > 0 {
+			if err := counter.RestoreHLL(registers[0]); err != nil {
+				panic(err)
+			}
+		}
+
 		return NewCounter(value, valueType).Initialize(p.context, counter)
 	})
 	return v.(*Counter)
@@ -209,7 +218,7 @@ func (p *Array) AddNewObject() *Object {
 func (p *Array) AddYSON(value interface{}) *Array {
 	switch y := value.(type) {
 	case yson.Counter:
-		p.AddNewCounter(y.Type, y.Value)
+		p.AddNewCounter(y.Type, y.Value, y.Registers)
 	case yson.Array:
 		a := p.AddNewArray()
 		for _, elem := range y {

@@ -113,11 +113,19 @@ func (p *Object) SetNewDedupCounter(k string) *Counter {
 }
 
 // setNewCounter is the internal constructor that accepts an explicit type.
-func (p *Object) setNewCounter(k string, t crdt.CounterType, n any) *Counter {
+// If registers is non-nil, the HLL state is restored before the counter is
+// stored, so that the operation's deep-copy already carries the correct value.
+func (p *Object) setNewCounter(k string, t crdt.CounterType, n any, registers ...[]byte) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		crdtCounter, err := crdt.NewCounter(t, n, ticket)
 		if err != nil {
 			panic(err)
+		}
+
+		if len(registers) > 0 && len(registers[0]) > 0 {
+			if err := crdtCounter.RestoreHLL(registers[0]); err != nil {
+				panic(err)
+			}
 		}
 
 		return NewCounter(n, t).Initialize(p.context, crdtCounter)
@@ -248,7 +256,7 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 func (p *Object) SetYSONElement(k string, v interface{}) *Object {
 	switch y := v.(type) {
 	case yson.Counter:
-		p.setNewCounter(k, y.Type, y.Value)
+		p.setNewCounter(k, y.Type, y.Value, y.Registers)
 	case yson.Array:
 		arr := p.SetNewArray(k)
 		for _, elem := range y {

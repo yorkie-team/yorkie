@@ -17,6 +17,8 @@
 package yson_test
 
 import (
+	"encoding/base64"
+	"fmt"
 	"testing"
 	gotime "time"
 
@@ -178,6 +180,69 @@ func TestYSONConversion(t *testing.T) {
 		assert.Equal(t, prevMarshalled, newMarshalled)
 	})
 
+	t.Run("dedup counter full round-trip test", func(t *testing.T) {
+		doc := document.New("dedup-roundtrip")
+		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewCounter("pv", 0).Increase(100)
+			counter := r.SetNewDedupCounter("uv")
+			for i := 0; i < 10; i++ {
+				counter.Add(fmt.Sprintf("user-%d", i))
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Convert CRDT → YSON
+		root, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+
+		// Convert YSON → new doc (simulates compaction rebuild)
+		newDoc := document.New("dedup-roundtrip")
+		err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetYSON(root)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Convert new doc back to YSON
+		newRoot, err := yson.FromCRDT(newDoc.RootObject())
+		assert.NoError(t, err)
+
+		// Marshal both and compare (compaction invariant)
+		prevMarshalled, err := root.(yson.Object).Marshal()
+		assert.NoError(t, err)
+		newMarshalled, err := newRoot.(yson.Object).Marshal()
+		assert.NoError(t, err)
+		assert.Equal(t, prevMarshalled, newMarshalled)
+
+		// Also verify the client-visible marshal matches
+		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
+	})
+
+	t.Run("dedup counter CRDT conversion test", func(t *testing.T) {
+		doc := document.New("dedup-yson")
+
+		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
+			counter := r.SetNewDedupCounter("uv")
+			for i := 0; i < 5; i++ {
+				counter.Add(fmt.Sprintf("user-%d", i))
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		root, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+
+		// Verify HLL registers are present in the YSON counter
+		ysonObj := root.(yson.Object)
+		ysonCounter := ysonObj["uv"].(yson.Counter)
+		assert.Equal(t, crdt.IntegerDedupCnt, ysonCounter.Type)
+		assert.Equal(t, int32(5), ysonCounter.Value)
+		assert.NotNil(t, ysonCounter.Registers)
+		assert.Equal(t, 16384, len(ysonCounter.Registers))
+	})
+
 	t.Run("yson conversion test", func(t *testing.T) {
 		root := yson.Object{
 			"string": "string",
@@ -333,6 +398,78 @@ func TestYSONMarshal(t *testing.T) {
 		expected := yson.Counter{}
 		assert.NoError(t, yson.Unmarshal(`Counter(Long(100))`, &expected))
 		assert.Equal(t, expected, actual)
+	})
+
+	t.Run("dedup counter marshal test", func(t *testing.T) {
+		// Create a 16384-byte register array with known values
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+
+		counter := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: registers,
+		}
+		marshalled, err := counter.Marshal()
+		assert.NoError(t, err)
+
+		expected := fmt.Sprintf(`DedupCounter(Int(15),"%s")`,
+			base64.StdEncoding.EncodeToString(registers))
+		assert.Equal(t, expected, marshalled)
+	})
+
+	t.Run("dedup counter unmarshal test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+		encoded := base64.StdEncoding.EncodeToString(registers)
+
+		input := fmt.Sprintf(`DedupCounter(Int(15),"%s")`, encoded)
+		actual := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(input, &actual))
+
+		assert.Equal(t, crdt.IntegerDedupCnt, actual.Type)
+		assert.Equal(t, int32(15), actual.Value)
+		assert.Equal(t, registers, actual.Registers)
+	})
+
+	t.Run("dedup counter round-trip test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+
+		original := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: registers,
+		}
+		marshalled, err := original.Marshal()
+		assert.NoError(t, err)
+
+		restored := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &restored))
+		assert.Equal(t, original, restored)
+	})
+
+	t.Run("dedup counter in object round-trip test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[42] = 7
+
+		obj := yson.Object{
+			"pv": yson.Counter{Type: crdt.IntegerCnt, Value: int32(100)},
+			"uv": yson.Counter{
+				Type:      crdt.IntegerDedupCnt,
+				Value:     int32(15),
+				Registers: registers,
+			},
+		}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		restored := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &restored))
+		assert.Equal(t, obj, restored)
 	})
 
 	t.Run("text marshal/unmarshal test", func(t *testing.T) {

@@ -73,8 +73,9 @@ func toPrimitive(primitive *crdt.Primitive) interface{} {
 
 func toCounter(counter *crdt.Counter) (Counter, error) {
 	return Counter{
-		Type:  counter.ValueType(),
-		Value: counter.Value(),
+		Type:      counter.ValueType(),
+		Value:     counter.Value(),
+		Registers: counter.HLLBytes(),
 	}, nil
 }
 
