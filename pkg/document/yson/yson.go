@@ -65,8 +65,9 @@ type Element interface {
 
 // Counter represents a counter CRDT value.
 type Counter struct {
-	Type  crdt.CounterType
-	Value interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
+	Type      crdt.CounterType
+	Value     interface{} // counter value (int32 for IntegerCnt, int64 for LongCnt)
+	Registers []byte      // HLL registers (dedup only; nil for normal counters)
 }
 
 // Array represents an array CRDT value.
@@ -190,6 +191,9 @@ func (y Counter) Marshal() (string, error) {
 		return fmt.Sprintf("Counter(Int(%v))", y.Value), nil
 	case crdt.LongCnt:
 		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
+	case crdt.IntegerDedupCnt:
+		encoded := base64.StdEncoding.EncodeToString(y.Registers)
+		return fmt.Sprintf(`DedupCounter(Int(%v),"%s")`, y.Value, encoded), nil
 	default:
 		return "", fmt.Errorf("marshal counter: %w", ErrUnsupported)
 	}

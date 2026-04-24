@@ -17,6 +17,8 @@
 package yson_test
 
 import (
+	"encoding/base64"
+	"fmt"
 	"testing"
 	gotime "time"
 
@@ -333,6 +335,25 @@ func TestYSONMarshal(t *testing.T) {
 		expected := yson.Counter{}
 		assert.NoError(t, yson.Unmarshal(`Counter(Long(100))`, &expected))
 		assert.Equal(t, expected, actual)
+	})
+
+	t.Run("dedup counter marshal test", func(t *testing.T) {
+		// Create a 16384-byte register array with known values
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+
+		counter := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: registers,
+		}
+		marshalled, err := counter.Marshal()
+		assert.NoError(t, err)
+
+		expected := fmt.Sprintf(`DedupCounter(Int(15),"%s")`,
+			base64.StdEncoding.EncodeToString(registers))
+		assert.Equal(t, expected, marshalled)
 	})
 
 	t.Run("text marshal/unmarshal test", func(t *testing.T) {
