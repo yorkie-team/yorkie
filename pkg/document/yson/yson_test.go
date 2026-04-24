@@ -356,6 +356,21 @@ func TestYSONMarshal(t *testing.T) {
 		assert.Equal(t, expected, marshalled)
 	})
 
+	t.Run("dedup counter unmarshal test", func(t *testing.T) {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		registers[100] = 3
+		encoded := base64.StdEncoding.EncodeToString(registers)
+
+		input := fmt.Sprintf(`DedupCounter(Int(15),"%s")`, encoded)
+		actual := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(input, &actual))
+
+		assert.Equal(t, crdt.IntegerDedupCnt, actual.Type)
+		assert.Equal(t, int32(15), actual.Value)
+		assert.Equal(t, registers, actual.Registers)
+	})
+
 	t.Run("text marshal/unmarshal test", func(t *testing.T) {
 		text := yson.Text{
 			Nodes: []yson.TextNode{

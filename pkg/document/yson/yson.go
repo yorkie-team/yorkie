@@ -23,6 +23,7 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -309,7 +310,14 @@ func Unmarshal(data string, elem Element) error {
 		}
 
 	case *Counter:
-		counter, err := parseCounter(raw.(map[string]interface{}))
+		rawMap := raw.(map[string]interface{})
+		var counter Counter
+		var err error
+		if t, ok := rawMap["type"].(string); ok && t == "DedupCounter" {
+			counter, err = parseDedupCounter(rawMap)
+		} else {
+			counter, err = parseCounter(rawMap)
+		}
 		if err != nil {
 			return err
 		}
@@ -348,6 +356,8 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 		return val, nil
 	case "Counter":
 		return parseCounter(raw)
+	case "DedupCounter":
+		return parseDedupCounter(raw)
 	case "Tree":
 		if value, ok := raw["value"].(map[string]interface{}); ok {
 			return parseTree(value)
@@ -453,6 +463,33 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 	return counter, nil
 }
 
+func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
+	counterType, ok := raw["counterType"].(string)
+	if !ok {
+		return Counter{}, fmt.Errorf("parse dedup counter type: %w", ErrUnsupported)
+	}
+	hllStr, ok := raw["hll"].(string)
+	if !ok {
+		return Counter{}, fmt.Errorf("parse dedup counter hll: %w", ErrUnsupported)
+	}
+
+	registers, err := base64.StdEncoding.DecodeString(hllStr)
+	if err != nil {
+		return Counter{}, fmt.Errorf("parse dedup counter hll: %w", ErrInvalidYSON)
+	}
+
+	switch counterType {
+	case "Int":
+		return Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(raw["value"].(float64)),
+			Registers: registers,
+		}, nil
+	default:
+		return Counter{}, fmt.Errorf("parse dedup counter type: %w", ErrUnsupported)
+	}
+}
+
 func parseText(raw []interface{}) (Text, error) {
 	var text Text
 
@@ -523,6 +560,13 @@ func parseTreeNode(raw map[string]interface{}) (TreeNode, error) {
 // preprocessTypeValues replaces custom types in the YSON string with
 // JSON-compatible formats.
 func preprocessTypeValues(data string) string {
+	// Pre-substitute DedupCounter into complete JSON before general
+	// replacements. The compound structure (Int(...) + bare base64 string)
+	// is incompatible with the global ')' → '}' replacement.
+	re := regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([^"]+)"\)`)
+	data = re.ReplaceAllString(data,
+		`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`)
+
 	type replacement struct {
 		oldStr string
 		newStr string
