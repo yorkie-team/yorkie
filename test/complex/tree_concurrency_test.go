@@ -246,9 +246,7 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 				desc += "(" + op1.getDesc() + "," + op2.getDesc() + ")"
 				t.Run(desc, func(t *testing.T) {
 					result := runTest(interval, op1, op2)
-					if !result.flag {
-						t.Skip(result.resultDesc)
-					}
+					assert.True(t, result.flag, result.resultDesc)
 				})
 			}
 		}
