@@ -39,6 +39,10 @@
 - [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 
+### Serialization
+
+- [YSON DedupCounter Serialization](yson-dedup-counter.md): YSON marshal/parse/grammar support for IntegerDedupCnt with HLL round-trip
+
 ## Maintaining the Document
 
 For significant scope and complex new features, it is recommended to write a Design Document before starting any implementation work. On the other hand, we don't need to design documentation for small, simple features and bug fixes.
