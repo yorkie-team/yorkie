@@ -180,6 +180,45 @@ func TestYSONConversion(t *testing.T) {
 		assert.Equal(t, prevMarshalled, newMarshalled)
 	})
 
+	t.Run("dedup counter full round-trip test", func(t *testing.T) {
+		doc := document.New("dedup-roundtrip")
+		err := doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewCounter("pv", 0).Increase(100)
+			counter := r.SetNewDedupCounter("uv")
+			for i := 0; i < 10; i++ {
+				counter.Add(fmt.Sprintf("user-%d", i))
+			}
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Convert CRDT → YSON
+		root, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+
+		// Convert YSON → new doc (simulates compaction rebuild)
+		newDoc := document.New("dedup-roundtrip")
+		err = newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetYSON(root)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// Convert new doc back to YSON
+		newRoot, err := yson.FromCRDT(newDoc.RootObject())
+		assert.NoError(t, err)
+
+		// Marshal both and compare (compaction invariant)
+		prevMarshalled, err := root.(yson.Object).Marshal()
+		assert.NoError(t, err)
+		newMarshalled, err := newRoot.(yson.Object).Marshal()
+		assert.NoError(t, err)
+		assert.Equal(t, prevMarshalled, newMarshalled)
+
+		// Also verify the client-visible marshal matches
+		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
+	})
+
 	t.Run("dedup counter CRDT conversion test", func(t *testing.T) {
 		doc := document.New("dedup-yson")
 
