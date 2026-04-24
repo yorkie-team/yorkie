@@ -447,6 +447,32 @@ func (n *TreeNode) SplitElement(
 		actualRight = append(actualRight, child)
 	}
 
+	// Fix 13: Move concurrent inserts at the split boundary to the left.
+	// A concurrent insert placed between the split boundary and the next
+	// original child was positioned relative to the pre-split child order.
+	// Its CRDT position (after a left-partition child) means it should
+	// stay in the left partition.
+	if len(versionVector) > 0 {
+		var movedToLeft []*index.Node[*TreeNode]
+		var remaining []*index.Node[*TreeNode]
+		boundaryReached := false
+		for _, child := range actualRight {
+			if !boundaryReached {
+				actorID := child.Value.id.CreatedAt.ActorID()
+				if l, ok := versionVector.Get(actorID); !ok || l < child.Value.id.CreatedAt.Lamport() {
+					movedToLeft = append(movedToLeft, child)
+					continue
+				}
+			}
+			boundaryReached = true
+			remaining = append(remaining, child)
+		}
+		if len(movedToLeft) > 0 {
+			leftChildren = append(leftChildren, movedToLeft...)
+			actualRight = remaining
+		}
+	}
+
 	if err := n.Index.SetChildren(leftChildren); err != nil {
 		return nil, diff, err
 	}
@@ -1364,7 +1390,7 @@ func (t *Tree) split(
 		var err error
 		offset := 0
 		if left != parent {
-			offset, err = parent.Index.FindOffset(left.Index)
+			offset, err = parent.Index.FindOffset(left.Index, true)
 			if err != nil {
 				return err
 			}
@@ -1374,6 +1400,32 @@ func (t *Tree) split(
 		if _, err := parent.Split(t, offset, issueTimeTicket, versionVector); err != nil {
 			return err
 		}
+
+		// After Split(), parent.InsNextID points to the sibling just
+		// created in this iteration. Set left to this sibling so that
+		// the next iteration's FindOffset at the grandparent level
+		// places the split boundary AFTER both the original node and
+		// its split product (keeping them on the left side).
+		//
+		// Without this, advancePastUnknownSplitSiblings in the next
+		// iteration cannot distinguish the just-created sibling from
+		// pre-existing siblings (they share the same actor+lamport),
+		// so it stops too early and the split product ends up on the
+		// wrong side.
+		//
+		// Only do this when versionVector is non-nil (concurrent
+		// replay). In the non-concurrent case (versionVector is nil),
+		// left = parent is correct because no concurrent siblings
+		// exist that could cause mis-placement.
+		if len(versionVector) > 0 && parent.InsNextID != nil {
+			if splitSibling := t.findFloorNode(parent.InsNextID); splitSibling != nil && !splitSibling.IsText() {
+				left = splitSibling
+				parent = left.Index.Parent.Value
+				splitCount++
+				continue
+			}
+		}
+
 		left = parent
 		parent = parent.Index.Parent.Value
 		splitCount++
