@@ -142,6 +142,60 @@ attribute deep-copy in split — causing divergence.
 
 Helper: `ticketKnown(vv, ticket)` — reused for the unknown-sibling check.
 
+### Fix 13: Fix 7 propagation into recursive split loop
+
+**`split` function** — The recursive split loop executes Fix 7
+(`advancePastUnknownSplitSiblings`) at each iteration, not just before
+the loop entry. Element splits produce non-deterministic IDs (new
+tickets, unlike text splits which reuse `CreatedAt` + offset), so the
+`InsNextID` chain is the only discovery path for concurrent element
+split siblings.
+
+The parent equality check in `advancePastUnknownSplitSiblings` is
+relaxed (skipped) at ancestor iterations via `relaxParentCheck` flag.
+A concurrent ancestor split may move siblings to different parents,
+causing the strict check to break the chain prematurely. Same rationale
+as Fix 11 (`hasUnknownSplitSibling`).
+
+If the advance moves `left` to a node under a different parent, `parent`
+is updated to match so `FindOffset` and `Split` operate on the correct
+subtree.
+
+### Fix 14: Include removed children in split loop offset
+
+**`split` function** — `FindOffset` in the split loop now passes
+`includeRemoved: true` to match `SplitElement`'s `Children(true)`
+partition. Without this, tombstoned children before the split point
+cause the visible-only offset to be smaller than the all-children
+offset, misplacing the partition boundary.
+
+### Fix 15: Advance left past split sibling in recursive split loop
+
+**`split` function** — After `parent.Split()` creates a split sibling
+(linked via `InsNextID`), `left` is set to this sibling instead of
+`parent` for the next iteration. This ensures the next-level
+`FindOffset` places the split boundary AFTER all current-level split
+products, keeping them on the left side of the ancestor split.
+
+Without this, `advancePastUnknownSplitSiblings` in the next iteration
+cannot distinguish the just-created sibling from pre-existing ones
+(they share the same actor+lamport context), so it stops too early and
+the split product ends up on the wrong side.
+
+Only applies during concurrent replay (`versionVector` non-nil). In
+the non-concurrent case, `left = parent` is correct because no
+concurrent siblings exist.
+
+### Fix 16: Move concurrent inserts at split boundary to the left
+
+**`SplitElement`** — After partitioning children into left/right, any
+consecutive run of concurrent inserts (children whose `CreatedAt` is
+unknown to the splitter's `VersionVector`) at the start of the right
+partition is moved to the left partition. A concurrent insert placed
+between the split boundary and the next original child was positioned
+relative to the pre-split child order; its CRDT position (after a
+left-partition child) means it should stay in the left partition.
+
 ## Convergence Coverage
 
 ### Hand-crafted integration suite (`test/integration/tree_test.go`)
@@ -158,16 +212,25 @@ Helper: `ticketKnown(vv, ticket)` — reused for the unknown-sibling check.
 
 | Suite | Pass | Skip (divergence) |
 |---|---:|---:|
-| EditEdit | 900 | 0 |
-| StyleStyle | 144 | 0 |
-| EditStyle | 84 | 0 |
-| SplitSplit | 274 | 46 |
-| SplitEdit | 137 | 7 |
-| **Total** | **1539** | **53** |
+| EditEdit | 901 | 0 |
+| StyleStyle | 145 | 0 |
+| EditStyle | 85 | 0 |
+| SplitSplit | 321 | 0 |
+| SplitEdit | 145 | 0 |
+| **Total** | **1597** | **0** |
 
-All 53 remaining divergences are `splitLevel >= 2` only.
-Fix 12 resolved 4 previously-skipped SplitEdit cases (`split-1` ×
-`style`/`remove-style` for `equal` and `B contains A` ranges).
+Fixes 13-16 resolved all 53 previously-skipped `splitLevel >= 2`
+divergences. The property-based suite is now fully clean across all
+operation types and split levels.
+
+### Text vs Element ID asymmetry
+
+Text split nodes have deterministic IDs (same `CreatedAt` + offset),
+resolved by `findFloorNode`. Element split nodes have non-deterministic
+IDs (new ticket from `issueTimeTicket`), discoverable only via the
+`InsNextID` chain. This asymmetry is why Fixes 13-15 are needed
+specifically for the recursive split path where multiple element splits
+occur in sequence.
 
 ## Key Design Decisions
 
@@ -179,12 +242,7 @@ Fix 12 resolved 4 previously-skipped SplitEdit cases (`split-1` ×
 | Derive moved-children on demand | `target.Children(true) | where MergedFrom == source.id`; call sites already have the target |
 | Position-level fix for splits (Fix 7) | `collectBetween`-level fix can't distinguish contained vs side-by-side delete |
 | End-token guard over range clamping (Fix 11) | Clamping fails for element-level ranges; guard handles both text and element uniformly |
-
-## Remaining Issue: `splitLevel >= 2`
-
-All remaining divergences (53 in the property-based suite) involve at
-least one `splitLevel = 2` operation. `splitLevel = 1` is fully clean
-across all operation types (edit, merge, split, style, remove-style).
-
-The recursive split path does not propagate Fix 7 (split sibling
-forwarding) or Fix 8 (`MergedFrom` filter) to ancestor split nodes.
+| Relaxed parent check at ancestor splits (Fix 13) | Follows Fix 11 rationale: `InsNextID` is only set by `SplitElement`, so its existence is sufficient evidence |
+| `includeRemoved` in split loop offset (Fix 14) | Must match `SplitElement`'s `Children(true)` partition to avoid boundary mismatch |
+| Concurrent-only sibling advancement (Fix 15) | Local path must use `left = parent` for correct split semantics; remote path needs advancement to avoid boundary disagreement |
+| Boundary insert migration in SplitElement (Fix 16) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
