@@ -42,6 +42,11 @@ var (
 	// ErrInvalidYSON is returned when the given YSON is not
 	// valid.
 	ErrInvalidYSON = errors.InvalidArgument("invalid YSON")
+
+	// dedupCounterRe matches DedupCounter(Int(N),"base64") in YSON text.
+	// Only Int is supported. If Long is added, extend both this regex
+	// and parseDedupCounter.
+	dedupCounterRe = regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([^"]+)"\)`)
 )
 
 const (
@@ -310,7 +315,10 @@ func Unmarshal(data string, elem Element) error {
 		}
 
 	case *Counter:
-		rawMap := raw.(map[string]interface{})
+		rawMap, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unmarshal counter: %w", ErrInvalidYSON)
+		}
 		var counter Counter
 		var err error
 		if t, ok := rawMap["type"].(string); ok && t == "DedupCounter" {
@@ -480,9 +488,13 @@ func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
 
 	switch counterType {
 	case "Int":
+		v, ok := raw["value"].(float64)
+		if !ok {
+			return Counter{}, fmt.Errorf("parse dedup counter value: %w", ErrInvalidYSON)
+		}
 		return Counter{
 			Type:      crdt.IntegerDedupCnt,
-			Value:     int32(raw["value"].(float64)),
+			Value:     int32(v),
 			Registers: registers,
 		}, nil
 	default:
@@ -563,8 +575,7 @@ func preprocessTypeValues(data string) string {
 	// Pre-substitute DedupCounter into complete JSON before general
 	// replacements. The compound structure (Int(...) + bare base64 string)
 	// is incompatible with the global ')' → '}' replacement.
-	re := regexp.MustCompile(`DedupCounter\(Int\((-?\d+)\),"([^"]+)"\)`)
-	data = re.ReplaceAllString(data,
+	data = dedupCounterRe.ReplaceAllString(data,
 		`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`)
 
 	type replacement struct {
