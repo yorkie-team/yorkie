@@ -138,7 +138,7 @@ func (p *Counter) Add(actor string) *Counter {
 }
 
 // RestoreHLL restores the HLL state from serialized register bytes.
-// This is used during YSON deserialization to recover dedup counter state.
+// It delegates to the underlying crdt.Counter.RestoreHLL.
 func (p *Counter) RestoreHLL(data []byte) error {
 	return p.Counter.RestoreHLL(data)
 }

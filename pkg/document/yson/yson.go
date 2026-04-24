@@ -52,6 +52,12 @@ var (
 const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
+
+	// counterTypeInt is the YSON token for 32-bit integer counters.
+	counterTypeInt = "Int"
+
+	// counterTypeLong is the YSON token for 64-bit integer counters.
+	counterTypeLong = "Long"
 )
 
 var (
@@ -344,9 +350,9 @@ func parseTypedValue(raw map[string]interface{}) (interface{}, error) {
 	}
 
 	switch t {
-	case "Int":
+	case counterTypeInt:
 		return int32(raw["value"].(float64)), nil
-	case "Long":
+	case counterTypeLong:
 		return int64(raw["value"].(float64)), nil
 	case "BinData":
 		val, err := base64.StdEncoding.DecodeString(raw["value"].(string))
@@ -453,10 +459,10 @@ func parseCounter(raw map[string]interface{}) (Counter, error) {
 	if value, ok := raw["value"].(map[string]interface{}); ok {
 		if t, ok := value["type"].(string); ok {
 			switch t {
-			case "Int":
+			case counterTypeInt:
 				counter.Type = crdt.IntegerCnt
 				counter.Value = int32(value["value"].(float64))
-			case "Long":
+			case counterTypeLong:
 				counter.Type = crdt.LongCnt
 				counter.Value = int64(value["value"].(float64))
 			default:
@@ -487,7 +493,7 @@ func parseDedupCounter(raw map[string]interface{}) (Counter, error) {
 	}
 
 	switch counterType {
-	case "Int":
+	case counterTypeInt:
 		v, ok := raw["value"].(float64)
 		if !ok {
 			return Counter{}, fmt.Errorf("parse dedup counter value: %w", ErrInvalidYSON)
