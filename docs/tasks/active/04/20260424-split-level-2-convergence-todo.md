@@ -24,6 +24,9 @@ clone after change replay).
   in SplitElement; skip element split siblings during boundary scan
 - [x] Fix 17: Move empty split sibling to existing InsNext sibling's
   parent in Split — resolves all 22 SplitSplit divergences
+- [x] Fix 18: Narrow collectBetween range across split parent
+  boundaries; preserve original fromParent/fromLeft for insert —
+  resolves last 2 SplitEdit divergences
 
 - [x] Add clone/root consistency check to `syncClientsThenAssertEqual`
   and `syncClientsThenCheckEqual` (integration + complex)
@@ -32,8 +35,7 @@ clone after change replay).
 
 ## Remaining
 
-- [ ] Fix concurrent split + delete/replace range resolution
-  (2 divergences in SplitEdit, see design doc "Remaining Issue")
+All divergences resolved.
 
 ## Test Results
 
@@ -51,8 +53,7 @@ clone after change replay).
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
 | SplitSplit | 321 | 0 |
-| SplitEdit | 143 | 2 |
-| **Total** | **1595** | **2** |
+| SplitEdit | 145 | 0 |
+| **Total** | **1597** | **0** |
 
-Remaining 2 skipped cases involve concurrent `splitLevel >= 2` split
-with replace/delete where the delete range resolves differently.
+All 53 original splitLevel >= 2 divergences resolved (Fixes 13-18).

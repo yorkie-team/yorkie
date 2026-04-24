@@ -222,6 +222,27 @@ The empty-children guard prevents false activation on splits at
 different positions, where the new sibling legitimately carries
 children and belongs in the original parent.
 
+### Fix 18: Narrow collectBetween range across split parent boundaries
+
+**`Edit` Step 01-2** — After position resolution, when `fromParent`
+and `toParent` are different nodes (the from position is in the
+original parent while the to position is in a split sibling), the
+traversal range crosses parent boundaries and may include content
+from concurrent split products that wasn't in the editor's original
+range. Follow `fromLeft`'s `InsNextID` chain to find a split sibling
+in `toParent`, and use that sibling as the `collectBetween` from
+position.
+
+Only the `collectBetween` range is narrowed. The original
+`fromParent`/`fromLeft` are preserved for merge, split, and insert
+steps so that content is inserted at the editor's intended position
+(matching the order-of-operations on the other replica, where
+Fix 16's boundary insert migration handles placement).
+
+VV-independent: relies only on `InsNextID` chain and parent pointer
+comparison. Both clone (VV=nil) and root (VV=set) follow the same
+code path, preserving clone/root consistency.
+
 ## Convergence Coverage
 
 ### Hand-crafted integration suite (`test/integration/tree_test.go`)
@@ -242,13 +263,11 @@ children and belongs in the original parent.
 | StyleStyle | 145 | 0 |
 | EditStyle | 85 | 0 |
 | SplitSplit | 321 | 0 |
-| SplitEdit | 143 | 2 |
-| **Total** | **1595** | **2** |
+| SplitEdit | 145 | 0 |
+| **Total** | **1597** | **0** |
 
-Fixes 13-17 resolved 51 of the original 53 skipped `splitLevel >= 2`
-divergences. The remaining 2 involve concurrent `splitLevel >= 2`
-split with replace/delete where the delete range resolves differently
-after split (see "Remaining Issue" below).
+Fixes 13-18 resolved all 53 original skipped `splitLevel >= 2`
+divergences.
 
 ### Clone/root consistency
 
@@ -281,14 +300,4 @@ occur in sequence.
 | `skipActorID` in split loop advancement (Fix 15) | Same-actor siblings are own split products, not concurrent; advancing past them diverges root from clone |
 | Boundary insert migration in SplitElement (Fix 16) | CRDT position of concurrent insert is relative to pre-split child order; physical position after split is misleading |
 | Empty sibling re-parenting in Split (Fix 17) | When a concurrent parent split already separated siblings into different parents, a replay split's empty product must follow the existing chain to be deterministic; VV-independent to preserve clone/root consistency |
-
-## Remaining Issue: Concurrent Split + Delete/Replace Range
-
-2 remaining divergences involve concurrent `splitLevel >= 2` split
-with replace or delete operations on an adjacent range. The root cause:
-
-When one client splits "abcd" into "ab"/"cd" at `splitLevel >= 2`
-and another deletes/replaces the adjacent `<p>efgh</p>`, the delete
-range resolves differently after the split is applied. On one replica
-"cd" is deleted along with "efgh", on the other it survives. This is
-a range-resolution divergence, not a children-placement issue.
+| Narrow collectBetween only, preserve insert point (Fix 18) | Adjusting fromLeft/fromParent for both delete and insert changes the insertion position, diverging from the other replica where Fix 16's boundary migration handles placement |

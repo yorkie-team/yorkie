@@ -58,3 +58,28 @@ Fix 17 uses no VV checks. It relies purely on tree structure
 (`InsNext` parent comparison + empty children check). This avoids
 clone/root divergence by construction. Prefer structural invariants
 over VV-gated logic when the fix can be expressed structurally.
+
+## Separate delete range from insertion point
+
+Fix 18 initially modified `fromParent`/`fromLeft` for both
+`collectBetween` (delete range) and the insert step. This fixed the
+delete divergence but moved the insertion point to the wrong parent
+(split sibling instead of original). On the other replica, the
+insert happened before the split and Fix 16's boundary migration
+handled placement.
+
+**Rule**: When narrowing a cross-parent traversal range, use
+separate variables for `collectBetween`. Preserve the original
+`fromParent`/`fromLeft` for merge, split, and insert steps so the
+content lands where the editor intended.
+
+## Text split IDs cross canDelete boundaries
+
+Text split nodes share `CreatedAt` with the original text, making
+them "known" to any client that knew the original. A concurrent
+element split places text("cd") — split from "abcd" — inside a new
+element split sibling. The delete traversal picks up this text via
+the cross-parent range and `canDelete` returns true because the
+`CreatedAt` is known. The fix must narrow the traversal range (not
+weaken `canDelete`), and must be VV-independent because clone also
+sees the same `CreatedAt`.

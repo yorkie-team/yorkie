@@ -1058,8 +1058,39 @@ func (t *Tree) Edit(
 		toLeft = t.advancePastUnknownSplitSiblings(toLeft, versionVector)
 	}
 
+	// 01-2. Fix 18: When a concurrent element split placed fromLeft and
+	// toLeft in different parents, the traversal range crosses parent
+	// boundaries and may include split products (e.g., text created by
+	// a concurrent text split inside a split sibling element) that were
+	// not in the editor's original range. Advance fromLeft through its
+	// InsNextID chain to find a split sibling in toParent, narrowing the
+	// range to only the intended content. VV-independent to preserve
+	// clone/root consistency.
+	//
+	// Only the collectBetween range is narrowed. The original
+	// fromParent/fromLeft are preserved for merge, split, and insert
+	// steps so that content is inserted at the editor's intended
+	// position (matching the order-of-operations on the other replica).
+	collectFromParent, collectFromLeft := fromParent, fromLeft
+	if fromLeft != fromParent && fromParent != toParent {
+		current := fromLeft
+		for current.InsNextID != nil {
+			next := t.findFloorNode(current.InsNextID)
+			if next == nil || next.IsText() {
+				break
+			}
+			if next.Index.Parent != nil &&
+				next.Index.Parent.Value == toParent {
+				collectFromLeft = next
+				collectFromParent = toParent
+				break
+			}
+			current = next
+		}
+	}
+
 	toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, err := t.collectBetween(
-		fromParent, fromLeft, toParent, toLeft,
+		collectFromParent, collectFromLeft, toParent, toLeft,
 		editedAt, versionVector,
 	)
 	if err != nil {
