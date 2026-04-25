@@ -1372,17 +1372,7 @@ type advanceOpts struct {
 // node, advancing past element-type split siblings that the editing client
 // did not know about (not in versionVector). This ensures that concurrent
 // operations resolve positions after all split products the editor could
-// not have seen.
-//
-// Options (variadic):
-//   - relaxParentCheck (bool): skip parent equality check at ancestor
-//     iterations where concurrent splits may have reparented siblings.
-//   - skipActorID (*time.ActorID): stop at siblings created by this actor.
-//     Used in the split loop to avoid advancing past siblings created by
-//     the current operation's own issueTimeTicket (same actor, lamport
-//     beyond VV). Since a single actor's changes are sequential, an
-//     "unknown" sibling from the same actor must be our own creation,
-//     not a concurrent one.
+// not have seen. See advanceOpts for optional parameters.
 func (t *Tree) advancePastUnknownSplitSiblings(
 	node *TreeNode,
 	versionVector time.VersionVector,
