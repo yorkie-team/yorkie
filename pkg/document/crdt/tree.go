@@ -514,29 +514,8 @@ func (n *TreeNode) SplitElement(
 		return nil, diff, err
 	}
 
-	// Calculate node length
-	visibleNodeLength := 0
-	for _, child := range n.Index.Children(false) {
-		visibleNodeLength += child.PaddedLength()
-	}
-	n.Index.VisibleLength = visibleNodeLength
-	totalNodeLength := 0
-	for _, child := range n.Index.Children(true) {
-		totalNodeLength += child.PaddedLength(true)
-	}
-	n.Index.TotalLength = totalNodeLength
-
-	// Calculate split length
-	visibleSplitLength := 0
-	for _, child := range split.Index.Children(false) {
-		visibleSplitLength += child.PaddedLength()
-	}
-	split.Index.VisibleLength = visibleSplitLength
-	totalSplitLength := 0
-	for _, child := range split.Index.Children(true) {
-		totalSplitLength += child.PaddedLength(true)
-	}
-	split.Index.TotalLength = totalSplitLength
+	recalcLength(n.Index)
+	recalcLength(split.Index)
 
 	// NOTE(hackerwins): Calculate data size after node splitting:
 	// Take the sum of the two split nodes(left and right) minus the size of
@@ -546,6 +525,23 @@ func (n *TreeNode) SplitElement(
 	diff.Sub(prvSize)
 
 	return split, diff, nil
+}
+
+// recalcLength recomputes VisibleLength and TotalLength of the given
+// index node from its children. Used after SplitElement repartitions
+// children between the original and split node.
+func recalcLength(n *index.Node[*TreeNode]) {
+	visible := 0
+	for _, child := range n.Children(false) {
+		visible += child.PaddedLength()
+	}
+	n.VisibleLength = visible
+
+	total := 0
+	for _, child := range n.Children(true) {
+		total += child.PaddedLength(true)
+	}
+	n.TotalLength = total
 }
 
 // remove marks the node as removed.
@@ -1120,15 +1116,12 @@ func (t *Tree) Edit(
 		leftInChildren := fromLeft
 
 		for _, content := range contents {
-			// 05-1. insert the content nodes to the tree.
 			if leftInChildren == fromParent {
-				// 05-1-1. when there's no leftSibling, then insert content into very front of parent's children List
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
 					return nil, resource.DataSize{}, err
 				}
 			} else {
-				// 05-1-2. insert after leftSibling
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
 					return nil, resource.DataSize{}, err
@@ -1363,39 +1356,35 @@ func (t *Tree) collectBetween(
 	return toBeRemoveds, toBeMovedToFromParents, toBeMergedNodes, nil
 }
 
+// advanceOpts holds optional parameters for advancePastUnknownSplitSiblings.
+type advanceOpts struct {
+	// relaxParent skips the parent-equality check. Needed at ancestor
+	// iterations of the split loop where a concurrent recursive split
+	// may have moved the sibling to a different parent.
+	relaxParent bool
+
+	// skipActorID stops advancement at siblings created by this actor.
+	// They are the current operation's own split products, not concurrent ones.
+	skipActorID *time.ActorID
+}
+
 // advancePastUnknownSplitSiblings follows the InsNextID chain of the given
 // node, advancing past element-type split siblings that the editing client
 // did not know about (not in versionVector). This ensures that concurrent
 // operations resolve positions after all split products the editor could
-// not have seen.
-//
-// Options (variadic):
-//   - relaxParentCheck (bool): skip parent equality check at ancestor
-//     iterations where concurrent splits may have reparented siblings.
-//   - skipActorID (*time.ActorID): stop at siblings created by this actor.
-//     Used in the split loop to avoid advancing past siblings created by
-//     the current operation's own issueTimeTicket (same actor, lamport
-//     beyond VV). Since a single actor's changes are sequential, an
-//     "unknown" sibling from the same actor must be our own creation,
-//     not a concurrent one.
+// not have seen. See advanceOpts for optional parameters.
 func (t *Tree) advancePastUnknownSplitSiblings(
 	node *TreeNode,
 	versionVector time.VersionVector,
-	opts ...any,
+	opts ...advanceOpts,
 ) *TreeNode {
 	if len(versionVector) == 0 || node == nil {
 		return node
 	}
 
-	var relaxParent bool
-	var skipActorID *time.ActorID
-	for _, opt := range opts {
-		switch v := opt.(type) {
-		case bool:
-			relaxParent = v
-		case *time.ActorID:
-			skipActorID = v
-		}
+	var o advanceOpts
+	if len(opts) > 0 {
+		o = opts[0]
 	}
 
 	current := node
@@ -1407,12 +1396,12 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 
 		// Stop if the sibling has been moved to a different parent
 		// (e.g., by a higher-level concurrent split).
-		// Skip this check when relaxParentCheck is true — at ancestor
+		// Skip this check when relaxParent is true — at ancestor
 		// iterations of the split loop, a concurrent recursive split may
 		// have moved the sibling to a different parent. InsNextID is only
 		// set by SplitElement, so its existence is sufficient evidence
 		// of a split sibling (same rationale as hasUnknownSplitSibling).
-		if !relaxParent && next.Index.Parent != current.Index.Parent {
+		if !o.relaxParent && next.Index.Parent != current.Index.Parent {
 			break
 		}
 
@@ -1420,7 +1409,7 @@ func (t *Tree) advancePastUnknownSplitSiblings(
 
 		// Stop at siblings from the same actor as the current operation.
 		// They are our own split products, not concurrent ones.
-		if skipActorID != nil && actorID == *skipActorID {
+		if o.skipActorID != nil && actorID == *o.skipActorID {
 			break
 		}
 
@@ -1460,7 +1449,10 @@ func (t *Tree) split(
 		// siblings are own split products, not concurrent.
 		if left != parent {
 			changeActorID := editedAt.ActorID()
-			left = t.advancePastUnknownSplitSiblings(left, versionVector, true, &changeActorID)
+			left = t.advancePastUnknownSplitSiblings(left, versionVector, advanceOpts{
+				relaxParent: true,
+				skipActorID: &changeActorID,
+			})
 			// If the advance moved left to a node under a different
 			// parent (due to a concurrent ancestor split), update parent
 			// to match so FindOffset and Split operate on the correct
