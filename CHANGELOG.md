@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.7] - 2026-04-26
+
+### Added
+
+- Support IntegerDedupCnt in YSON serialization with HLL round-trip by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1774
+
+### Changed
+
+- Simplify Tree.Edit with typed options and extracted helper by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1777
+
+### Fixed
+
+- Fix splitLevel>=2 concurrent convergence (Fixes 13-18) by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1776
+- Fix SplitElement computing VisibleLength with removed children by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1772
+
 ## [v0.7.6] - 2026-04-23
 
 ### Added
