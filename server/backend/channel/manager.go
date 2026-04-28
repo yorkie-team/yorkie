@@ -67,7 +67,17 @@ type Session struct {
 type Channel struct {
 	Key      types.ChannelRefKey
 	Sessions *cmap.Map[types.ID, *Session]
-	mu       sync.Mutex // Serializes Attach/Detach to prevent race conditions
+
+	// activeCount tracks the number of active sessions atomically.
+	// It is incremented in Attach before adding to Sessions, and decremented
+	// in Detach after removing from Sessions. This ensures Detach can check
+	// for zero without holding a lock, while Attach's increment prevents
+	// premature channel deletion.
+	activeCount atomic.Int64
+
+	// mu is only held when Detach needs to delete the channel (activeCount == 0).
+	// Attach never acquires this lock.
+	mu sync.Mutex
 }
 
 // ChannelSessionCountInfo represents information about a channel.
@@ -230,20 +240,25 @@ func (m *Manager) Attach(
 		}
 	}
 
-	// Retry loop for double-check pattern: if the channel was deleted by a concurrent
-	// Detach between GetOrInsert and acquiring the lock, we retry with a new channel.
+	// Retry loop: if the channel was deleted by a concurrent Detach between
+	// GetOrInsert and the activeCount increment, we retry with a new channel.
+	// Unlike the previous Mutex-based approach, Attach never acquires ch.mu.
+	// Instead, it uses an atomic activeCount to prevent premature deletion.
 	for {
 		channel := m.upsertChannel(ctx, key)
 		if channel == nil {
 			return types.ID(""), 0, fmt.Errorf("create channel failed: invalid channel key %s", key.ChannelKey)
 		}
 
-		channel.mu.Lock()
+		// Increment activeCount BEFORE checking the trie. This prevents Detach
+		// from deleting the channel between our trie check and session addition:
+		// - If Detach sees activeCount > 0 in its re-check, it skips deletion.
+		// - If Detach already deleted before we increment, the trie check fails.
+		channel.activeCount.Add(1)
 
-		// Double-check: verify the channel is still in the trie.
-		// A concurrent Detach may have deleted it after upsertChannel but before we acquired the lock.
+		// Verify the channel is still in the trie (pre-check).
 		if current := m.channels.Get(key); current != channel {
-			channel.mu.Unlock()
+			channel.activeCount.Add(-1)
 			continue // Retry with fresh channel
 		}
 
@@ -254,6 +269,15 @@ func (m *Manager) Attach(
 			Key:       key,
 			UpdatedAt: gotime.Now(),
 		})
+
+		// Post-check: verify the channel wasn't deleted between pre-check and
+		// Sessions.Set. This handles the race where Detach deletes the channel
+		// right after our pre-check passed but before we added the session.
+		if current := m.channels.Get(key); current != channel {
+			channel.Sessions.Delete(sessionID)
+			channel.activeCount.Add(-1)
+			continue // Retry with fresh channel
+		}
 
 		// Add reverse index for O(1) detach lookup
 		m.sessionIDToKey.Set(sessionID, key)
@@ -272,8 +296,6 @@ func (m *Manager) Attach(
 		clientSessionMap.Set(key, sessionID)
 
 		newSessionCount := int64(channel.Sessions.Len())
-
-		channel.mu.Unlock()
 
 		if err := produceSessionEvent(ctx, m, sessionID, clientID, key, events.SessionCreated); err != nil {
 			logging.From(ctx).Errorf("failed to produce session event: %v", err)
@@ -305,11 +327,8 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	ch.mu.Lock()
-
 	session, ok := ch.Sessions.Get(id)
 	if !ok {
-		ch.mu.Unlock()
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
@@ -327,13 +346,17 @@ func (m *Manager) Detach(
 		}
 	}
 
-	// Delete channel while holding the lock to prevent race with Attach.
-	// ChannelTrie.Delete also cleans up empty shards internally.
-	if newSessionCount == 0 {
-		m.channels.Delete(key)
+	// Decrement activeCount AFTER removing from Sessions and indexes.
+	// Only acquire the lock when count reaches zero (channel deletion).
+	if ch.activeCount.Add(-1) == 0 {
+		ch.mu.Lock()
+		// Re-check under lock: a concurrent Attach may have incremented
+		// activeCount between our Add(-1) and acquiring the lock.
+		if ch.activeCount.Load() == 0 {
+			m.channels.Delete(key)
+		}
+		ch.mu.Unlock()
 	}
-
-	ch.mu.Unlock()
 
 	m.pubsub.PublishChannel(ctx, events.ChannelEvent{
 		Key:          key,

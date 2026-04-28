@@ -1311,3 +1311,232 @@ func TestChannelManager_ProjectIsolation(t *testing.T) {
 		assert.Len(t, list2, 1)
 	})
 }
+
+func TestChannelManager_RaceConditions(t *testing.T) {
+	t.Run("attach-detach race on channel deletion (count reaches zero)", func(t *testing.T) {
+		// This tests the critical race: Detach decrements to 0 and tries to delete
+		// the channel, while Attach simultaneously adds a new session.
+		// The channel must not be lost.
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "race-room"}
+
+		for round := 0; round < 100; round++ {
+			// Attach one session
+			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", round))
+			sessionID, _, err := manager.Attach(ctx, refKey, clientID)
+			assert.NoError(t, err)
+
+			// Concurrently: detach that session AND attach a new one
+			var wg sync.WaitGroup
+			var detachErr error
+			var attachErr error
+			var newSessionID types.ID
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				_, detachErr = manager.Detach(ctx, sessionID)
+			}()
+			go func() {
+				defer wg.Done()
+				newClientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("b%023d", round))
+				newSessionID, _, attachErr = manager.Attach(ctx, refKey, newClientID)
+			}()
+			wg.Wait()
+
+			assert.NoError(t, detachErr, "round %d: detach failed", round)
+			assert.NoError(t, attachErr, "round %d: attach failed", round)
+
+			// The new session must be reachable
+			count := manager.SessionCount(refKey, false)
+			if count < 1 {
+				t.Fatalf("round %d: session lost! count=%d, newSessionID=%s",
+					round, count, newSessionID)
+			}
+
+			// Clean up for next round
+			_, err = manager.Detach(ctx, newSessionID)
+			assert.NoError(t, err, "round %d: cleanup detach failed", round)
+		}
+	})
+
+	t.Run("massive concurrent attach-detach on single channel", func(t *testing.T) {
+		// Simulates the 20K skew scenario: many goroutines hitting the same channel.
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "hot-channel"}
+
+		const numGoroutines = 500
+		const opsPerGoroutine = 20
+
+		var wg sync.WaitGroup
+		var attachErrors int64
+		var detachErrors int64
+
+		wg.Add(numGoroutines)
+		for g := 0; g < numGoroutines; g++ {
+			go func(id int) {
+				defer wg.Done()
+				for i := 0; i < opsPerGoroutine; i++ {
+					clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%012d%012d", id, i))
+					sessionID, _, err := manager.Attach(ctx, refKey, clientID)
+					if err != nil {
+						atomic.AddInt64(&attachErrors, 1)
+						continue
+					}
+
+					_, err = manager.Detach(ctx, sessionID)
+					if err != nil {
+						atomic.AddInt64(&detachErrors, 1)
+					}
+				}
+			}(g)
+		}
+		wg.Wait()
+
+		assert.Equal(t, int64(0), attachErrors, "attach errors")
+		assert.Equal(t, int64(0), detachErrors, "detach errors")
+
+		// All sessions detached, count should be 0
+		assert.Equal(t, int64(0), manager.SessionCount(refKey, false))
+	})
+
+	t.Run("concurrent attach-detach with refresh", func(t *testing.T) {
+		// Tests that Refresh works correctly while Attach/Detach are racing.
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "refresh-room"}
+
+		// Pre-attach sessions
+		sessions := attachChannels(t, ctx, manager, refKey, 100, "1")
+
+		var wg sync.WaitGroup
+		var attachErrors int64
+		var detachErrors int64
+
+		// Concurrent refreshes on sessions that won't be detached (50~99)
+		wg.Add(50)
+		for i := 50; i < 100; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				_ = manager.Refresh(ctx, sessions[idx])
+			}(i)
+		}
+
+		// Concurrent detaches (0~49)
+		wg.Add(50)
+		for i := 0; i < 50; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				if _, err := manager.Detach(ctx, sessions[idx]); err != nil {
+					atomic.AddInt64(&detachErrors, 1)
+				}
+			}(i)
+		}
+
+		// Concurrent attaches with unique client IDs (hex-safe, no overlap with prefix "1")
+		wg.Add(50)
+		for i := 0; i < 50; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("f%023d", idx))
+				if _, _, err := manager.Attach(ctx, refKey, cid); err != nil {
+					atomic.AddInt64(&attachErrors, 1)
+				}
+			}(i)
+		}
+
+		wg.Wait()
+
+		assert.Equal(t, int64(0), attachErrors, "attach errors")
+		assert.Equal(t, int64(0), detachErrors, "detach errors")
+		// 100 original - 50 detached + 50 new = 100
+		assert.Equal(t, int64(100), manager.SessionCount(refKey, false))
+	})
+
+	t.Run("channel recreation after full detach", func(t *testing.T) {
+		// Tests that a channel can be fully emptied and recreated without issues.
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "ephemeral-room"}
+
+		for round := 0; round < 50; round++ {
+			// Attach N sessions with globally unique hex client IDs
+			sessions := make([]types.ID, 10)
+			for i := 0; i < 10; i++ {
+				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%06x%018d", round, i))
+				sid, _, err := manager.Attach(ctx, refKey, cid)
+				assert.NoError(t, err)
+				sessions[i] = sid
+			}
+			assert.Equal(t, int64(10), manager.SessionCount(refKey, false))
+
+			// Detach all concurrently
+			var wg sync.WaitGroup
+			wg.Add(len(sessions))
+			for _, sid := range sessions {
+				go func(id types.ID) {
+					defer wg.Done()
+					_, err := manager.Detach(ctx, id)
+					assert.NoError(t, err)
+				}(sid)
+			}
+			wg.Wait()
+
+			assert.Equal(t, int64(0), manager.SessionCount(refKey, false),
+				"round %d: count should be 0 after full detach", round)
+		}
+	})
+
+	t.Run("session count accuracy under contention", func(t *testing.T) {
+		// Verifies that SessionCount returns accurate values even under heavy
+		// concurrent Attach/Detach. This is the key invariant.
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "count-room"}
+
+		const totalAttach = 1000
+		sessionIDs := make([]types.ID, totalAttach)
+		errors := make([]error, totalAttach)
+
+		// Attach all concurrently
+		var wg sync.WaitGroup
+		wg.Add(totalAttach)
+		for i := 0; i < totalAttach; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
+				sid, _, err := manager.Attach(ctx, refKey, cid)
+				sessionIDs[idx] = sid
+				errors[idx] = err
+			}(i)
+		}
+		wg.Wait()
+
+		for i, err := range errors {
+			assert.NoError(t, err, "attach %d failed", i)
+		}
+
+		// Exact count after all attaches
+		assert.Equal(t, int64(totalAttach), manager.SessionCount(refKey, false))
+
+		// Detach half concurrently
+		wg.Add(totalAttach / 2)
+		for i := 0; i < totalAttach/2; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				_, err := manager.Detach(ctx, sessionIDs[idx])
+				assert.NoError(t, err)
+			}(i)
+		}
+		wg.Wait()
+
+		assert.Equal(t, int64(totalAttach/2), manager.SessionCount(refKey, false))
+	})
+}
