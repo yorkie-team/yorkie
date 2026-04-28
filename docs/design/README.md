@@ -13,6 +13,7 @@
 ### CRDT
 
 - [Undo/Redo](undo-redo.md): Per-client undo/redo with reverse operations and position reconciliation
+- [Tree Split Undo/Redo](tree-split-undo-redo.md): Boundary-deletion reverse ops for `Tree.Edit` with `splitLevel >= 1` plus pre-tombstoned descendant filtering
 - [VersionVector](version-vector.md): VersionVector for GC and Resolving conflicts in CRDT
 - [VV Cleanup](vv-cleanup.md): Remove detached client's lamport from version vectors
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
