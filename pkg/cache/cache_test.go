@@ -17,6 +17,8 @@
 package cache_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,6 +70,74 @@ func TestLRUWithStats(t *testing.T) {
 		assert.Equal(t, int64(2), c.Stats().Misses())
 		assert.Equal(t, int64(5), c.Stats().Total())
 		assert.Equal(t, 60.0, c.Stats().HitRate())
+	})
+}
+
+func TestLRUConcurrency(t *testing.T) {
+	t.Run("concurrent Get and Add", func(t *testing.T) {
+		c, err := cache.NewLRU[string, int](1024, "concurrent-cache")
+		assert.NoError(t, err)
+
+		const numGoroutines = 100
+		const numOps = 1000
+
+		// Pre-populate half the keys so Gets have a mix of hits and misses.
+		for i := 0; i < numOps/2; i++ {
+			c.Add(fmt.Sprintf("key-%d", i), i)
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+		for g := 0; g < numGoroutines; g++ {
+			go func(id int) {
+				defer wg.Done()
+				for i := 0; i < numOps; i++ {
+					key := fmt.Sprintf("key-%d", i)
+					if i%2 == 0 {
+						c.Add(key, id*numOps+i)
+					} else {
+						c.Get(key)
+					}
+				}
+			}(g)
+		}
+		wg.Wait()
+
+		// Stats should be consistent: total = hits + misses.
+		stats := c.Stats()
+		assert.Equal(t, stats.Total(), stats.Hits()+stats.Misses())
+		assert.Greater(t, stats.Total(), int64(0))
+	})
+
+	t.Run("concurrent operations on same keys", func(t *testing.T) {
+		c, err := cache.NewLRU[string, int](64, "contention-cache")
+		assert.NoError(t, err)
+
+		const numGoroutines = 50
+		const numOps = 500
+
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+		for g := 0; g < numGoroutines; g++ {
+			go func() {
+				defer wg.Done()
+				for i := 0; i < numOps; i++ {
+					key := fmt.Sprintf("hot-key-%d", i%10)
+					c.Add(key, i)
+					c.Get(key)
+					c.Contains(key)
+					c.Peek(key)
+					c.Remove(key)
+				}
+			}()
+		}
+		wg.Wait()
+
+		// Verify the cache is still functional after heavy contention.
+		c.Add("final", 42)
+		val, ok := c.Get("final")
+		assert.True(t, ok)
+		assert.Equal(t, 42, val)
 	})
 }
 
