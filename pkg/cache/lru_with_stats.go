@@ -18,14 +18,15 @@
 package cache
 
 import (
-	"fmt"
-	"hash/fnv"
+	"hash/maphash"
 	"sync/atomic"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 const numShards = 16
+
+var hashSeed = maphash.MakeSeed()
 
 // LRU is a sharded LRU cache wrapper that tracks hit/miss statistics.
 // Keys are distributed across multiple shards to reduce lock contention.
@@ -60,9 +61,7 @@ func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
 
 // shard returns the shard index for the given key.
 func (c *LRU[K, V]) shard(key K) int {
-	h := fnv.New32a()
-	_, _ = fmt.Fprintf(h, "%v", key)
-	return int(h.Sum32() & (numShards - 1))
+	return int(maphash.Comparable(hashSeed, key) & (numShards - 1))
 }
 
 // Get retrieves a value from the cache and updates statistics.
