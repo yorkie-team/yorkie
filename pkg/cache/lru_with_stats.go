@@ -18,35 +18,55 @@
 package cache
 
 import (
+	"hash/maphash"
 	"sync/atomic"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// LRU is an LRU cache wrapper that tracks hit/miss statistics.
+const numShards = 16
+
+var hashSeed = maphash.MakeSeed()
+
+// LRU is a sharded LRU cache wrapper that tracks hit/miss statistics.
+// Keys are distributed across multiple shards to reduce lock contention.
 type LRU[K comparable, V any] struct {
-	cache *lru.Cache[K, V]
-	stats *Stats
-	name  string
+	shards [numShards]*lru.Cache[K, V]
+	stats  *Stats
+	name   string
 }
 
-// NewLRU creates a new LRU cache with statistics tracking.
+// NewLRU creates a new sharded LRU cache with statistics tracking.
 func NewLRU[K comparable, V any](size int, name string) (*LRU[K, V], error) {
-	cache, err := lru.New[K, V](size)
-	if err != nil {
-		return nil, err
+	perShard := size / numShards
+	if perShard < 1 {
+		perShard = 1
 	}
 
-	return &LRU[K, V]{
-		cache: cache,
+	c := &LRU[K, V]{
 		stats: &Stats{},
 		name:  name,
-	}, nil
+	}
+
+	for i := 0; i < numShards; i++ {
+		shard, err := lru.New[K, V](perShard)
+		if err != nil {
+			return nil, err
+		}
+		c.shards[i] = shard
+	}
+
+	return c, nil
+}
+
+// shard returns the shard index for the given key.
+func (c *LRU[K, V]) shard(key K) int {
+	return int(maphash.Comparable(hashSeed, key) & (numShards - 1))
 }
 
 // Get retrieves a value from the cache and updates statistics.
 func (c *LRU[K, V]) Get(key K) (V, bool) {
-	value, ok := c.cache.Get(key)
+	value, ok := c.shards[c.shard(key)].Get(key)
 	if ok {
 		atomic.AddInt64(&c.stats.hits, 1)
 	} else {
@@ -57,32 +77,38 @@ func (c *LRU[K, V]) Get(key K) (V, bool) {
 
 // Add adds a value to the cache.
 func (c *LRU[K, V]) Add(key K, value V) bool {
-	return c.cache.Add(key, value)
+	return c.shards[c.shard(key)].Add(key, value)
 }
 
 // Contains checks if a key exists in the cache without updating statistics.
 func (c *LRU[K, V]) Contains(key K) bool {
-	return c.cache.Contains(key)
+	return c.shards[c.shard(key)].Contains(key)
 }
 
 // Peek retrieves a value from the cache without updating LRU or statistics.
 func (c *LRU[K, V]) Peek(key K) (V, bool) {
-	return c.cache.Peek(key)
+	return c.shards[c.shard(key)].Peek(key)
 }
 
 // Remove removes a key from the cache.
 func (c *LRU[K, V]) Remove(key K) bool {
-	return c.cache.Remove(key)
+	return c.shards[c.shard(key)].Remove(key)
 }
 
 // Purge clears all entries from the cache.
 func (c *LRU[K, V]) Purge() {
-	c.cache.Purge()
+	for i := 0; i < numShards; i++ {
+		c.shards[i].Purge()
+	}
 }
 
 // Len returns the number of items in the cache.
 func (c *LRU[K, V]) Len() int {
-	return c.cache.Len()
+	n := 0
+	for i := 0; i < numShards; i++ {
+		n += c.shards[i].Len()
+	}
+	return n
 }
 
 // Stats returns the cache statistics.
