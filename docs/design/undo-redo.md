@@ -1,6 +1,6 @@
 ---
 title: undo-redo
-target-version: 0.7.5
+target-version: 0.7.8
 ---
 
 # Undo/Redo (History)
@@ -26,8 +26,6 @@ operations valid when remote edits arrive.
 ### Non-Goals
 
 - Server-side undo/redo or global history browsing.
-- Undo/redo for `Tree.Edit` with `splitLevel >= 2` at the CRDT layer (deferred
-  until L2 forward convergence is fixed; `splitLevel=1` is supported).
 - Overlapping range reconciliation for Tree (Cases 3–6, deferred to Phase 2).
 - Undo/redo for `TreeStyleOperation` with multi-client reconciliation (single-client undo/redo is now supported via PR #1221).
 
@@ -80,7 +78,7 @@ mapping, and each subsection below explains the details.
 | `EditOperation` (Text.edit) | `EditOperation` |
 | `StyleOperation` (Text.style) | `StyleOperation` |
 | `TreeEditOperation` (Tree.edit, splitLevel=0) | `TreeEditOperation` |
-| `TreeEditOperation` (Tree.edit, splitLevel=1) | `TreeEditOperation` (boundary deletion) |
+| `TreeEditOperation` (Tree.edit, splitLevel >= 1) | `TreeEditOperation` (boundary deletion) — see [tree-split-undo-redo.md](tree-split-undo-redo.md) |
 | `TreeStyleOperation` (Tree.style) | `TreeStyleOperation` |
 
 #### Object.set → SetOperation
@@ -264,10 +262,17 @@ a hierarchical structure with element nodes and text nodes.
 #### Reverse Operation
 
 When `Tree.edit([from, to], contents, splitLevel)` executes:
-1. `CRDTTree.edit()` returns the removed nodes and the pre-edit `fromIdx`.
+1. `CRDTTree.edit()` returns the removed nodes, the pre-edit `fromIdx`, and a
+   `preTombstoned` set of node IDs that were already tombstoned **before** this
+   edit ran.
 2. The reverse operation:
    - **For deletion (contents=undefined)**: deep-copies the removed nodes,
-     clears their tombstone markers, and stores them as `reverseContents`.
+     **filters out descendants whose IDs are in `preTombstoned`**, clears
+     tombstone markers on the surviving nodes, and stores them as
+     `reverseContents`. The filter is essential — without it, undoing a parent
+     delete would resurrect descendants that the user had independently
+     deleted in earlier operations, causing content accumulation across
+     undo/redo cycles in nested-edit scenarios (see Risks below).
    - **For insertion**: stores no content (the reverse is a deletion).
    - **For replacement**: combines both — deep-copies removed nodes and marks the
      inserted content range for deletion.
@@ -312,40 +317,18 @@ When a remote change is applied, `Document` scans the History stacks and calls
 `reconcileTreeEdit()` for each pending `TreeEditOperation` targeting the same
 tree.
 
-#### Split Undo/Redo (splitLevel=1)
+#### Split Undo/Redo
 
-A split creates new element boundaries without removing any nodes:
+A split creates element boundaries without removing nodes. The reverse is a
+`splitLevel=0` **boundary deletion** that removes those tokens
+(`2 * splitLevel` per level), merging the split elements back. The reverse is
+a standard `TreeEditOperation`, so reconciliation and redo reuse the
+existing `splitLevel=0` paths.
 
-```
-splitLevel=1: <p>ab|cd</p>  →  <p>ab</p><p>cd</p>   (2 boundary tokens)
-```
-
-The reverse is a **boundary deletion** — a `splitLevel=0` edit that removes the
-boundary tokens, merging the split elements back:
-
-```
-reverse: edit(fromIdx, fromIdx + 2, undefined, 0)   // delete 2 boundary tokens
-```
-
-This approach reuses all existing infrastructure:
-- The reverse op is a standard `TreeEditOperation` with `isUndoOp=true` and
-  `splitLevel=0`.
-- Reconciliation uses the existing 6-case overlap logic unchanged.
-- Redo works automatically: the boundary deletion produces its own reverse via
-  the existing `toReverseOperation` path.
-
-The `toSplitReverseOperation` method is guarded for pure L1 splits only
-(`splitLevel === 1`, no contents, no removed nodes). This prevents generating
-incorrect reverse ops for unsupported split shapes (L2+, split+delete combos).
-
-The undo/redo cycle:
-
-```
-split(L1)
-  → undo: boundary delete (splitLevel=0, removes 2 tokens)
-    → redo: re-insert boundary nodes (splitLevel=0, deep-copied nodes)
-      → undo again: boundary delete (same as first undo)
-```
+Both `splitLevel=1` and `splitLevel=2` are supported. See
+[tree-split-undo-redo.md](tree-split-undo-redo.md) for boundary-token
+mechanics, the undo/redo cycle, edge cases, pre-tombstoned descendant
+filtering, and the test matrix.
 
 **Implementation note:** `splitElement` recomputes `visibleSize` from children's
 `paddedSize()`. Since `IndexTreeNode.paddedSize()` does not return 0 for removed
@@ -425,6 +408,20 @@ by the undo operation might point to collected nodes. Mitigation: undo operation
 use `findPos()` (index-based lookup) at execution time rather than relying on
 stale CRDT positions.
 
+**Risk: Tree reverseOp resurrects already-deleted descendants (single-client).**
+Without descendant filtering, a parent-delete's reverseOp deep-copies the
+parent and traverses every descendant — including ones the user had already
+tombstoned in earlier operations. Clearing tombstones on the entire subtree
+makes the redo bring back content the user never intended to restore.
+Repeating the cycle (type → undo chars → undo parent → redo parent → type
+more → undo chars → undo parent) produces compounding `reverseContents`
+across cycles, since each cycle re-tombstones nodes that the previous redo
+revived. Mitigation: the reverseOp generator drops descendants whose IDs are
+in `preTombstoned` (collected during `CRDTTree.edit()`), so only the nodes
+this edit actually transitioned from visible to tombstoned are resurrected
+on redo. This preserves CRDT identity and concurrent-edit semantics — the
+fix is purely in `toReverseOperation`.
+
 **Risk: Asymmetric reconciliation for overlapping Tree edits.**
 As described in Phase 2, overlapping range reconciliation for Tree uses
 asymmetric integer indices. Mitigation: Cases 3–6 are skipped in Phase 1. The
@@ -445,11 +442,12 @@ Oldest entries are evicted when the cap is reached.
 | Text multi-client reconciliation | ✅ | Convergence passes for all 7 cases (but see content correctness below) |
 | Array undo | ✅ | add, remove, move, set |
 | Tree single-client (splitLevel=0) | ✅ | All op types + chained ops |
-| Tree split L1 undo/redo | ✅ | Boundary-deletion reverse ops (PR #1219) |
+| Tree split undo/redo (L1 + L2) | ✅ | Boundary-deletion reverse ops. See [tree-split-undo-redo.md](tree-split-undo-redo.md). |
 | Tree multi-client (non-overlapping) | ✅ | Cases 1, 2, 7 (left/right/adjacent) |
 | TreeStyleOperation single-client | ✅ | setStyle, removeStyle undo/redo (PR #1221) |
 | TreeStyleOperation multi-client | ✅ | style×style (18 tests), style×edit/split (24 tests) (PR #1221) |
 | Tree redo divergence | ✅ | Fixed via CRDTTreePos-based undo execution + reconciliation disabled (branch `tree-undo-pos-normalization`) |
+| Tree reverseOp descendant filtering | ✅ | `preTombstoned` set returned from `CRDTTree.edit()` and consumed by `toReverseOperation` — drops already-tombstoned descendants from `reverseContents` so nested edits (typing inside a later-deleted parent) don't accumulate across undo/redo cycles |
 
 #### Remaining Work
 
@@ -459,7 +457,6 @@ Oldest entries are evicted when the cap is reached.
 | HIGH | Tree reconciliation Cases 3-6 | Blocked by overlapping undo content duplication — same root cause. 4 tests skipped. |
 | HIGH | Array Set + Move undo | Set after Move restores value at dead position. Requires proto change. See analysis below. 4 tests skipped in JS SDK. |
 | MED | GC vs undo interaction | Issue #664. GC can purge elements still referenced by undo/redo stack. |
-| LOW | splitLevel≥2 undo/redo | Blocked by L2 forward convergence (68/320 concurrent tests fail). |
 | LOW | History reconciliation performance | O(n) stack scan → indexed lookup. |
 
 ### Analysis: Overlapping Undo Content Duplication
