@@ -1,8 +1,8 @@
 ---
-updated: 2026-04-22
+updated: 2026-04-29
 ---
 
 # Tasks
 
-- `active/` — In-progress tasks
-- `archive/` — Completed tasks
+- [active/](active/README.md) — In-progress tasks
+- [archive/](archive/README.md) — Completed tasks

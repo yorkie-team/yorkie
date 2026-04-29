@@ -1,5 +1,7 @@
 # Design Document
 
+New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
+
 ## Contents
 
 ### Document & Presence
@@ -21,6 +23,8 @@
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
 - [Tree](tree.md): Tree data structure for tree-based rich text editor
 - [Concurrent Merge and Split](concurrent-merge-split.md): Fix convergence bugs in concurrent tree merge/split operations
+- [Counter Dedup](counter-dedup.md): Counter dedup mode using HyperLogLog for high-volume idempotent counting
+- [Array Move Convergence](array-move-convergence.md): Fix convergence bugs in concurrent array move operations
 - [Range Deletion in SplayTree](range-deletion-in-splay-tree.md): Improving range deletion in SplayTree
 
 ### Schema
@@ -39,10 +43,8 @@
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): OLAP stack for Monthly Active Users (MAU) tracking
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
-
-### Serialization
-
-- [YSON DedupCounter Serialization](yson-dedup-counter.md): YSON marshal/parse/grammar support for IntegerDedupCnt with HLL round-trip
+- [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
+- [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
 
 ## Maintaining the Document
 
