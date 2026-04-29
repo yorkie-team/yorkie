@@ -20,3 +20,9 @@ The docker-compose files we use are as follows:
  runs MongoDB.
 - `docker-compose-full.yml`: This file builds Yorkie and launches it. It also runs
  MongoDB and monitoring tools such as Prometheus and Grafana.
+
+## Subdirectories
+
+- [analytics/](./analytics/README.md): Compose stack for analytics (Kafka, StarRocks)
+- [monitoring/](./monitoring/README.md): Compose stack for monitoring (Prometheus, Grafana)
+- [sharding/](./sharding/README.md): Compose stack for sharded MongoDB topology

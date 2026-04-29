@@ -56,6 +56,8 @@ Full, comprehensive [documentation](https://yorkie.dev/docs) is available on the
 - [docs/design/](docs/design/README.md) — Architectural design documents
 - [docs/tasks/](docs/tasks/README.md) — Task tracking (active and archived)
 - [test/k6/](test/k6/README.md) — Load testing setup
+- [build/charts/](build/charts/README.md) — Helm charts (cluster, monitoring, analytics)
+- [build/docker/](build/docker/README.md) — Docker Compose files for local dev
 - [CHANGELOG.md](CHANGELOG.md) — Release notes
 - [ROADMAP.md](ROADMAP.md) — Roadmap
 - [MAINTAINING.md](MAINTAINING.md) — Release and maintenance procedures
