@@ -119,23 +119,23 @@ The core process of the `Tree.Edit` operation is as follows:
 3. Delete nodes in the range of `fromTreePos` to `toTreePos`.
 4. Insert the given nodes at the appropriate positions (insert operation only).
 
-**[[STEP 1]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L121C1-L128)** Find `CRDTTree.TreePos` from the given `fromIdx` and `toIdx` (local editing only)
+**[STEP 1](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L121C1-L128)** Find `CRDTTree.TreePos` from the given `fromIdx` and `toIdx` (local editing only)
 
 In the case of local editing, the given `index`es are converted to `CRDTTree.TreePos`. The detailed process is the same as described in the 'Tree Coordinate System' above.
 
-**[[STEP 2]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L572C1-L580C3)** Find the corresponding left sibling node and parent node within the `IndexTree` based on `CRDTTree.TreePos`
+**[STEP 2](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L572C1-L580C3)** Find the corresponding left sibling node and parent node within the `IndexTree` based on `CRDTTree.TreePos`
 
 2-1. For text nodes, if necessary, split nodes at the appropriate positions to find the left sibling node.
 
 2-2. Determine the sequence of nodes and find the appropriate position. Since `Clone`s of each client might exist in different states, the `findFloorNode` function is used to find the closest node (lower bound).
 
-**[[STEP 3]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L582-L640)** Delete nodes in the range of `fromTreePos` to `toTreePos`
+**[STEP 3](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L582-L640)** Delete nodes in the range of `fromTreePos` to `toTreePos`
 
 3-1. Traverse the range and identify nodes to be removed. If a node is an element node and doesn't include both opening and closing tags, it is excluded from removal.
 
 3-2. Check each node's visibility using the version vector and mark nodes with tombstones in the `IndexTree` to indicate removal.
 
-**[[STEP 4]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L642-L681)** Insert the given nodes at the appropriate positions (insert operation only)
+**[STEP 4](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L642-L681)** Insert the given nodes at the appropriate positions (insert operation only)
 
 4-1. If the left sibling node at the insertion position is the same as the parent node, it means the node will be inserted as the leftmost child of the parent. Hence, the node is inserted at the leftmost position of the parent's children list.
 

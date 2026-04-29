@@ -51,6 +51,16 @@ Full, comprehensive [documentation](https://yorkie.dev/docs) is available on the
 - [with iOS SDK](https://yorkie.dev/docs/getting-started/with-ios-sdk)
 - [with Android SDK](https://yorkie.dev/docs/getting-started/with-android-sdk)
 
+## Project Documentation
+
+- [docs/design/](docs/design/README.md) — Architectural design documents
+- [docs/tasks/](docs/tasks/README.md) — Task tracking (active and archived)
+- [test/k6/](test/k6/README.md) — Load testing setup
+- [CHANGELOG.md](CHANGELOG.md) — Release notes
+- [ROADMAP.md](ROADMAP.md) — Roadmap
+- [MAINTAINING.md](MAINTAINING.md) — Release and maintenance procedures
+- [CLAUDE.md](CLAUDE.md) — Agent instructions for AI-assisted development
+
 ## Contributing
 
 See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
