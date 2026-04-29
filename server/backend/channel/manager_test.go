@@ -1539,4 +1539,44 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 
 		assert.Equal(t, int64(totalAttach/2), manager.SessionCount(refKey, false))
 	})
+
+	t.Run("concurrent refresh and cleanup with TTL", func(t *testing.T) {
+		// Tests that atomic updatedAt works correctly when Refresh and
+		// CleanupExpired race — refreshed sessions must survive cleanup.
+		ctx := context.Background()
+		ttl := 1 * time.Second
+		manager, _, _ := createManager(t, ttl, 10*time.Second)
+		projectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "ttl-race-room"}
+
+		// Attach 100 sessions
+		sessions := attachChannels(t, ctx, manager, refKey, 100, "1")
+		assert.Equal(t, int64(100), manager.SessionCount(refKey, false))
+
+		// Wait for 80% of TTL
+		time.Sleep(800 * time.Millisecond)
+
+		// Concurrently: refresh first 50, let last 50 expire
+		var wg sync.WaitGroup
+		wg.Add(50)
+		for i := 0; i < 50; i++ {
+			go func(idx int) {
+				defer wg.Done()
+				_ = manager.Refresh(ctx, sessions[idx])
+			}(i)
+		}
+		wg.Wait()
+
+		// Wait for TTL to expire for non-refreshed sessions
+		// (refreshed ones were updated at ~800ms, so they expire at ~1800ms)
+		time.Sleep(400 * time.Millisecond)
+
+		// Run cleanup — non-refreshed sessions (attached at t=0, now at t=1200ms) should be expired
+		// Refreshed sessions (updated at t=800ms, now at t=1200ms) should survive (400ms < 1s TTL)
+		cleaned, err := manager.CleanupExpired(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 50, cleaned, "should clean up 50 expired sessions")
+		assert.Equal(t, int64(50), manager.SessionCount(refKey, false),
+			"50 refreshed sessions should survive")
+	})
 }

@@ -57,10 +57,15 @@ type PubSub interface {
 
 // Session represents a single session.
 type Session struct {
-	ID        types.ID            // Unique session ID
-	Key       types.ChannelRefKey // Reference to the channel
-	Actor     time.ActorID        // Client who created this session
-	UpdatedAt gotime.Time         // Last activity time for TTL calculation
+	ID    types.ID            // Unique session ID
+	Key   types.ChannelRefKey // Reference to the channel
+	Actor time.ActorID        // Client who created this session
+
+	// updatedAt stores the last activity time as UnixNano (atomic).
+	// Using atomic allows Refresh to update this field without acquiring
+	// a cmap write lock — only a read lock is needed to get the Session
+	// pointer, then the atomic store updates the timestamp lock-free.
+	updatedAt atomic.Int64
 }
 
 // Channel represents a channel.
@@ -263,12 +268,13 @@ func (m *Manager) Attach(
 		}
 
 		sessionID := types.NewID()
-		channel.Sessions.Set(sessionID, &Session{
-			ID:        sessionID,
-			Actor:     clientID,
-			Key:       key,
-			UpdatedAt: gotime.Now(),
-		})
+		session := &Session{
+			ID:    sessionID,
+			Actor: clientID,
+			Key:   key,
+		}
+		session.updatedAt.Store(gotime.Now().UnixNano())
+		channel.Sessions.Set(sessionID, session)
 
 		// Post-check: verify the channel wasn't deleted between pre-check and
 		// Sessions.Set. This handles the race where Detach deletes the channel
@@ -387,12 +393,7 @@ func (m *Manager) Refresh(
 		return fmt.Errorf("refresh %s: %w", id, ErrSessionNotFound)
 	}
 
-	ch.Sessions.Set(id, &Session{
-		ID:        info.ID,
-		Key:       info.Key,
-		Actor:     info.Actor,
-		UpdatedAt: gotime.Now(),
-	})
+	info.updatedAt.Store(gotime.Now().UnixNano())
 
 	return nil
 }
@@ -467,7 +468,8 @@ func classifyExpiredSessions(
 ) []types.ID {
 	expiredIDs := []types.ID{}
 	for _, session := range sessionMap.Values() {
-		if now.Sub(session.UpdatedAt) > sessionTTL {
+		updatedAt := gotime.Unix(0, session.updatedAt.Load())
+		if now.Sub(updatedAt) > sessionTTL {
 			expiredIDs = append(expiredIDs, session.ID)
 		}
 	}
