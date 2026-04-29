@@ -202,7 +202,7 @@ L2 initial tree: `<doc><div><p>ABCD</p></div></doc>`. Splits use
 
 ### Pre-tombstoned Filtering Regression
 
-Single-it test in `history_tree_split_repro_test.ts` reproduces the
+A regression test in `history_tree_split_test.ts` reproduces the
 4-cycle type-undo-undo-redo flow against an empty inline in a sibling
 block, then asserts the redoStack-top `contents` size is constant
 across cycles. Before the fix the size grows by 4 per cycle
