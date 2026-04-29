@@ -49,6 +49,9 @@ func NewShardedPathTrie[T any]() *ShardedPathTrie[T] {
 
 // getOrCreateShard returns the shard for the given key, creating it if necessary.
 func (st *ShardedPathTrie[T]) getOrCreateShard(shardKey string) *PathTrie[T] {
+	if shard, ok := st.shards.Get(shardKey); ok {
+		return shard
+	}
 	return st.shards.Upsert(shardKey, func(existing *PathTrie[T], exists bool) *PathTrie[T] {
 		if exists {
 			return existing
