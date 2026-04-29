@@ -21,6 +21,7 @@ package types
 import (
 	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -85,7 +86,15 @@ func IDFromBytes(bytes []byte) ID {
 	return ID(hex.EncodeToString(bytes))
 }
 
+var actorIDCache sync.Map // time.ActorID → ID
+
 // IDFromActorID returns ID represented by the encoded hexadecimal string from actor ID.
+// It caches results to avoid repeated hex encoding for the same actor.
 func IDFromActorID(actorID time.ActorID) ID {
-	return IDFromBytes(actorID.Bytes())
+	if v, ok := actorIDCache.Load(actorID); ok {
+		return v.(ID)
+	}
+	id := IDFromBytes(actorID.Bytes())
+	actorIDCache.Store(actorID, id)
+	return id
 }
