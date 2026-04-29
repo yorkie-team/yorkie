@@ -338,7 +338,13 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	ch.Sessions.Delete(id)
+	// Use Sessions.Delete's return value to ensure exactly one goroutine
+	// performs cleanup when concurrent Detach calls race for the same
+	// session ID. Without this, both would decrement activeCount, driving
+	// it below zero so the channel is never removed from m.channels.
+	if !ch.Sessions.Delete(id) {
+		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
+	}
 
 	newSessionCount := int64(ch.Sessions.Len())
 
