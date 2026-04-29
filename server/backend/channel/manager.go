@@ -75,14 +75,20 @@ type Channel struct {
 
 	// activeCount tracks the number of active sessions atomically.
 	// It is incremented in Attach before adding to Sessions, and decremented
-	// in Detach after removing from Sessions. This ensures Detach can check
-	// for zero without holding a lock, while Attach's increment prevents
+	// after removing from Sessions. This ensures Detach can check for zero
+	// without holding a write lock, while Attach's increment prevents
 	// premature channel deletion.
 	activeCount atomic.Int64
 
-	// mu is only held when Detach needs to delete the channel (activeCount == 0).
-	// Attach never acquires this lock.
-	mu sync.Mutex
+	// mu serializes Detach's channel deletion (write lock) with Attach's
+	// commit phase (read lock). Concurrent Attaches share the read lock and
+	// do not contend with each other; only Detach's deletion blocks them.
+	// Without this serialization, Attach's pre/post-check could observe the
+	// channel in the trie before Detach's atomic store committed, while
+	// Detach's activeCount load could observe zero before Attach's increment
+	// became visible — both passing their checks for the same channel that
+	// Detach then removes from the trie.
+	mu sync.RWMutex
 }
 
 // ChannelSessionCountInfo represents information about a channel.
@@ -247,24 +253,25 @@ func (m *Manager) Attach(
 
 	// Retry loop: if the channel was deleted by a concurrent Detach between
 	// GetOrInsert and the activeCount increment, we retry with a new channel.
-	// Unlike the previous Mutex-based approach, Attach never acquires ch.mu.
-	// Instead, it uses an atomic activeCount to prevent premature deletion.
+	// Attach acquires ch.mu only as a read lock for the commit phase, which
+	// blocks only against Detach's write-locked deletion — concurrent Attaches
+	// share the read lock without contending.
 	for {
 		channel := m.upsertChannel(ctx, key)
 		if channel == nil {
 			return types.ID(""), 0, fmt.Errorf("create channel failed: invalid channel key %s", key.ChannelKey)
 		}
 
-		// Increment activeCount BEFORE checking the trie. This prevents Detach
-		// from deleting the channel between our trie check and session addition:
-		// - If Detach sees activeCount > 0 in its re-check, it skips deletion.
-		// - If Detach already deleted before we increment, the trie check fails.
+		// Increment activeCount BEFORE checking the trie. This is a fast-path
+		// signal to Detach that an Attach is in flight; the read lock below is
+		// what actually serializes against Detach's deletion.
 		channel.activeCount.Add(1)
 
-		// Verify the channel is still in the trie (pre-check).
+		// Pre-check: fast retry if the channel was already deleted before we
+		// incremented. This avoids taking the read lock when retry is certain.
 		if current := m.channels.Get(key); current != channel {
 			channel.activeCount.Add(-1)
-			continue // Retry with fresh channel
+			continue
 		}
 
 		sessionID := types.NewID()
@@ -274,18 +281,24 @@ func (m *Manager) Attach(
 			Key:   key,
 		}
 		session.updatedAt.Store(gotime.Now().UnixNano())
-		channel.Sessions.Set(sessionID, session)
 
-		// Post-check: verify the channel wasn't deleted between pre-check and
-		// Sessions.Set. This handles the race where Detach deletes the channel
-		// right after our pre-check passed but before we added the session.
+		// Acquire the read lock for the commit phase. This serializes with
+		// Detach's write lock for deletion: either we acquire the read lock
+		// before Detach acquires the write lock (so Detach's activeCount load
+		// observes our increment and skips deletion), or we acquire after
+		// Detach releases (so the re-check below sees the trie deletion and
+		// we retry). Without this lock, Detach's load could observe zero
+		// before our increment became visible while our trie check observed
+		// the channel before Detach's atomic store committed — both passing
+		// their checks for a channel that Detach then removes.
+		channel.mu.RLock()
 		if current := m.channels.Get(key); current != channel {
-			channel.Sessions.Delete(sessionID)
+			channel.mu.RUnlock()
 			channel.activeCount.Add(-1)
-			continue // Retry with fresh channel
+			continue
 		}
 
-		// Add reverse index for O(1) detach lookup
+		channel.Sessions.Set(sessionID, session)
 		m.sessionIDToKey.Set(sessionID, key)
 
 		// Get or create client to session map
@@ -300,6 +313,8 @@ func (m *Manager) Attach(
 			},
 		)
 		clientSessionMap.Set(key, sessionID)
+
+		channel.mu.RUnlock()
 
 		newSessionCount := int64(channel.Sessions.Len())
 
@@ -359,11 +374,13 @@ func (m *Manager) Detach(
 	}
 
 	// Decrement activeCount AFTER removing from Sessions and indexes.
-	// Only acquire the lock when count reaches zero (channel deletion).
+	// Only acquire the write lock when count reaches zero (channel deletion).
+	// The write lock excludes Attach's read-locked commit phase, ensuring that
+	// either Attach observed the channel as still present and incremented
+	// activeCount before we load it (so we skip deletion), or Attach observes
+	// the trie deletion under the read lock and retries.
 	if ch.activeCount.Add(-1) == 0 {
 		ch.mu.Lock()
-		// Re-check under lock: a concurrent Attach may have incremented
-		// activeCount between our Add(-1) and acquiring the lock.
 		if ch.activeCount.Load() == 0 {
 			m.channels.Delete(key)
 		}
