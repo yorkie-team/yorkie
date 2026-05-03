@@ -36,8 +36,6 @@ service YorkieService {
   rpc Watch (WatchRequest) returns (stream WatchResponse) {}
   // Deprecated: Use Watch with ResourceDescriptor instead.
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
-  // Deprecated: Use Watch with ResourceDescriptor instead.
-  rpc WatchChannel (WatchChannelRequest) returns (stream WatchChannelResponse) {}
 
   rpc CreateRevision (CreateRevisionRequest) returns (CreateRevisionResponse) {}
   rpc GetRevision (GetRevisionRequest) returns (GetRevisionResponse) {}
@@ -99,16 +97,11 @@ message WatchRequest {
 message ResourceDescriptor {
   oneof resource {
     DocumentDescriptor document = 1;
-    ChannelDescriptor channel = 2;
   }
 }
 
 message DocumentDescriptor {
   string document_id = 1;
-}
-
-message ChannelDescriptor {
-  string channel_key = 1;
 }
 
 message WatchResponse {
@@ -125,7 +118,6 @@ message WatchInitialization {
 message ResourceInit {
   oneof init {
     DocumentInit document_init = 1;
-    ChannelInit channel_init = 2;
   }
 }
 
@@ -134,27 +126,15 @@ message DocumentInit {
   repeated string client_ids = 2;
 }
 
-message ChannelInit {
-  string channel_key = 1;
-  int64 session_count = 2;
-  int64 seq = 3;
-}
-
 message WatchEvent {
   oneof event {
     DocWatchEvent doc_event = 1;
-    ChannelWatchEvent channel_event = 2;
   }
 }
 
 message DocWatchEvent {
   string document_id = 1;
   DocEvent event = 2;
-}
-
-message ChannelWatchEvent {
-  string channel_key = 1;
-  ChannelEvent event = 2;
 }
 
 // Deprecated: Use WatchRequest instead.
@@ -173,26 +153,6 @@ message WatchDocumentResponse {
     Initialization initialization = 1;
     DocEvent event = 2;
   }
-}
-
-// Deprecated: Use WatchRequest instead.
-message WatchChannelRequest {
-  string client_id = 1;
-  string channel_key = 2;
-}
-
-// Deprecated: Use WatchResponse instead.
-message WatchChannelResponse {
-  oneof body {
-    WatchChannelInitialized initialized = 1;
-    ChannelEvent event = 2;
-  }
-}
-
-// Deprecated: Use ChannelInit instead.
-message WatchChannelInitialized {
-  int64 session_count = 1;
-  int64 seq = 2;
 }
 
 message RemoveDocumentRequest {

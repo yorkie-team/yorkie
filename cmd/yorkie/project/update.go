@@ -68,7 +68,6 @@ var allAuthWebhookMethods = []string{
 	string(types.PushPull),
 	string(types.Watch),
 	string(types.WatchDocument),
-	string(types.WatchChannel),
 	string(types.Broadcast),
 }
 

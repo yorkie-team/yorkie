@@ -127,8 +127,8 @@ type Project struct {
 
 // RequireAuth returns whether the given method requires authorization.
 // It supports backward compatibility: the new Watch method matches projects
-// configured with "Watch", "WatchDocument", or "WatchChannel". The deprecated
-// WatchDocument/WatchChannel methods match their own name or "Watch".
+// configured with "Watch" or "WatchDocument". The deprecated WatchDocument
+// method matches its own name or "Watch".
 func (p *Project) RequireAuth(method Method) bool {
 	if len(p.AuthWebhookURL) == 0 {
 		return false
@@ -141,9 +141,8 @@ func (p *Project) RequireAuth(method Method) bool {
 	// Backward-compat: build the set of configured methods that the
 	// given RPC method should match against.
 	aliases := map[Method][]Method{
-		Watch:         {Watch, WatchDocument, WatchChannel},
+		Watch:         {Watch, WatchDocument},
 		WatchDocument: {WatchDocument, Watch},
-		WatchChannel:  {WatchChannel, Watch},
 	}
 
 	targets := []Method{method}

@@ -190,18 +190,6 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
-  /yorkie.v1.YorkieService/WatchChannel:
-    post:
-      description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
-      requestBody:
-        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest'
-      responses:
-        "200":
-          $ref: '#/components/responses/yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse'
-        default:
-          $ref: '#/components/responses/connect.error'
-      tags:
-      - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/WatchDocument:
     post:
       description: 'Deprecated: Use Watch with ResourceDescriptor instead.'
@@ -345,9 +333,6 @@ components:
     yorkie.v1.YorkieService.Watch.yorkie.v1.WatchRequest:
       content: {}
       required: true
-    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelRequest:
-      content: {}
-      required: true
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentRequest:
       content: {}
       required: true
@@ -488,8 +473,6 @@ components:
             $ref: '#/components/schemas/yorkie.v1.RestoreRevisionResponse'
       description: ""
     yorkie.v1.YorkieService.Watch.yorkie.v1.WatchResponse:
-      description: ""
-    yorkie.v1.YorkieService.WatchChannel.yorkie.v1.WatchChannelResponse:
       description: ""
     yorkie.v1.YorkieService.WatchDocument.yorkie.v1.WatchDocumentResponse:
       description: ""
@@ -894,111 +877,6 @@ components:
           title: version_vector
           type: object
       title: ChangePack
-      type: object
-    yorkie.v1.ChannelDescriptor:
-      additionalProperties: false
-      description: ""
-      properties:
-        channelKey:
-          additionalProperties: false
-          description: ""
-          title: channel_key
-          type: string
-      title: ChannelDescriptor
-      type: object
-    yorkie.v1.ChannelEvent:
-      additionalProperties: false
-      description: ""
-      properties:
-        payload:
-          additionalProperties: false
-          description: ""
-          format: byte
-          title: payload
-          type: string
-        publisher:
-          additionalProperties: false
-          description: ""
-          title: publisher
-          type: string
-        seq:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
-        sessionCount:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: session_count
-        topic:
-          additionalProperties: false
-          description: ""
-          title: topic
-          type: string
-        type:
-          $ref: '#/components/schemas/yorkie.v1.ChannelEvent.Type'
-          additionalProperties: false
-          description: ""
-          title: type
-      title: ChannelEvent
-      type: object
-    yorkie.v1.ChannelEvent.Type:
-      description: ""
-      enum:
-      - - TYPE_UNSPECIFIED
-        - 0
-        - TYPE_PRESENCE
-        - 1
-        - TYPE_BROADCAST
-        - 2
-      title: Type
-      type: string
-    yorkie.v1.ChannelInit:
-      additionalProperties: false
-      description: ""
-      properties:
-        channelKey:
-          additionalProperties: false
-          description: ""
-          title: channel_key
-          type: string
-        seq:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
-        sessionCount:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: session_count
-      title: ChannelInit
-      type: object
-    yorkie.v1.ChannelWatchEvent:
-      additionalProperties: false
-      description: ""
-      properties:
-        channelKey:
-          additionalProperties: false
-          description: ""
-          title: channel_key
-          type: string
-        event:
-          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
-          additionalProperties: false
-          description: ""
-          title: event
-          type: object
-      title: ChannelWatchEvent
       type: object
     yorkie.v1.Checkpoint:
       additionalProperties: false
@@ -2092,12 +1970,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        channel:
-          $ref: '#/components/schemas/yorkie.v1.ChannelDescriptor'
-          additionalProperties: false
-          description: ""
-          title: channel
-          type: object
         document:
           $ref: '#/components/schemas/yorkie.v1.DocumentDescriptor'
           additionalProperties: false
@@ -2110,12 +1982,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        channelInit:
-          $ref: '#/components/schemas/yorkie.v1.ChannelInit'
-          additionalProperties: false
-          description: ""
-          title: channel_init
-          type: object
         documentInit:
           $ref: '#/components/schemas/yorkie.v1.DocumentInit'
           additionalProperties: false
@@ -2477,60 +2343,6 @@ components:
           title: value
       title: VectorEntry
       type: object
-    yorkie.v1.WatchChannelInitialized:
-      additionalProperties: false
-      description: 'Deprecated: Use ChannelInit instead.'
-      properties:
-        seq:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: seq
-        sessionCount:
-          additionalProperties: false
-          description: ""
-          oneOf:
-          - type: string
-          - type: number
-          title: session_count
-      title: WatchChannelInitialized
-      type: object
-    yorkie.v1.WatchChannelRequest:
-      additionalProperties: false
-      description: 'Deprecated: Use WatchRequest instead.'
-      properties:
-        channelKey:
-          additionalProperties: false
-          description: ""
-          title: channel_key
-          type: string
-        clientId:
-          additionalProperties: false
-          description: ""
-          title: client_id
-          type: string
-      title: WatchChannelRequest
-      type: object
-    yorkie.v1.WatchChannelResponse:
-      additionalProperties: false
-      description: 'Deprecated: Use WatchResponse instead.'
-      properties:
-        event:
-          $ref: '#/components/schemas/yorkie.v1.ChannelEvent'
-          additionalProperties: false
-          description: ""
-          title: event
-          type: object
-        initialized:
-          $ref: '#/components/schemas/yorkie.v1.WatchChannelInitialized'
-          additionalProperties: false
-          description: ""
-          title: initialized
-          type: object
-      title: WatchChannelResponse
-      type: object
     yorkie.v1.WatchDocumentRequest:
       additionalProperties: false
       description: 'Deprecated: Use WatchRequest instead.'
@@ -2582,12 +2394,6 @@ components:
       additionalProperties: false
       description: ""
       properties:
-        channelEvent:
-          $ref: '#/components/schemas/yorkie.v1.ChannelWatchEvent'
-          additionalProperties: false
-          description: ""
-          title: channel_event
-          type: object
         docEvent:
           $ref: '#/components/schemas/yorkie.v1.DocWatchEvent'
           additionalProperties: false
