@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.8] - 2026-05-05
+
+### Changed
+
+- Reduce lock contention in channel manager for high-concurrency skew by @raararaara in https://github.com/yorkie-team/yorkie/pull/1786
+- Replace single LRU with sharded LRU to reduce lock contention by @raararaara in https://github.com/yorkie-team/yorkie/pull/1783
+
 ## [v0.7.7] - 2026-04-26
 
 ### Added
