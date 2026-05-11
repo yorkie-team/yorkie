@@ -109,6 +109,13 @@ func Deactivate(
 		}
 	}
 
+	// Cascade channel session cleanup across the cluster. Best-effort: per-node
+	// failures are logged inside the broadcast helper; channel TTL backstops
+	// anything we miss here.
+	if _, err := be.BroadcastDetachActorFromChannels(ctx, project.ID, actorID); err != nil {
+		logging.From(ctx).Warnf("cascade detach channel sessions: %v", err)
+	}
+
 	return be.DB.DeactivateClient(ctx, refKey)
 }
 

@@ -33,6 +33,7 @@ service ClusterService {
   rpc ListChannels (ClusterServiceListChannelsRequest) returns (ClusterServiceListChannelsResponse) {}
   rpc GetChannels (ClusterServiceGetChannelsRequest) returns (ClusterServiceGetChannelsResponse) {}
   rpc GetChannelCount (ClusterServiceGetChannelCountRequest) returns (ClusterServiceGetChannelCountResponse) {}
+  rpc DetachActorFromChannels (ClusterServiceDetachActorFromChannelsRequest) returns (ClusterServiceDetachActorFromChannelsResponse) {}
   rpc InvalidateCache (InvalidateCacheRequest) returns (InvalidateCacheResponse) {}
 }
 
@@ -101,6 +102,15 @@ message ClusterServiceGetChannelCountRequest {
 
 message ClusterServiceGetChannelCountResponse {
   int32 channel_count = 1;
+}
+
+message ClusterServiceDetachActorFromChannelsRequest {
+  string project_id = 1;
+  string actor_id = 2;
+}
+
+message ClusterServiceDetachActorFromChannelsResponse {
+  int32 detached_count = 1;
 }
 
 enum CacheType {

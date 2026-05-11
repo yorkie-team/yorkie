@@ -3,7 +3,7 @@ info:
   description: Yorkie is an open source document store for building collaborative
     editing applications.
   title: Yorkie
-  version: v0.7.5
+  version: v0.7.8
 servers:
 - description: Production server
   url: https://api.yorkie.dev
@@ -18,6 +18,18 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/yorkie.v1.ClusterService.CompactDocument.yorkie.v1.ClusterServiceCompactDocumentResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.ClusterService
+  /yorkie.v1.ClusterService/DetachActorFromChannels:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.ClusterService.DetachActorFromChannels.yorkie.v1.ClusterServiceDetachActorFromChannelsRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.ClusterService.DetachActorFromChannels.yorkie.v1.ClusterServiceDetachActorFromChannelsResponse'
         default:
           $ref: '#/components/responses/connect.error'
       tags:
@@ -117,6 +129,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentRequest'
       required: true
+    yorkie.v1.ClusterService.DetachActorFromChannels.yorkie.v1.ClusterServiceDetachActorFromChannelsRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachActorFromChannelsRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachActorFromChannelsRequest'
+      required: true
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentRequest:
       content:
         application/json:
@@ -198,6 +219,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ClusterServiceCompactDocumentResponse'
+      description: ""
+    yorkie.v1.ClusterService.DetachActorFromChannels.yorkie.v1.ClusterServiceDetachActorFromChannelsResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachActorFromChannelsResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.ClusterServiceDetachActorFromChannelsResponse'
       description: ""
     yorkie.v1.ClusterService.DetachDocument.yorkie.v1.ClusterServiceDetachDocumentResponse:
       content:
@@ -450,6 +480,33 @@ components:
           title: compacted
           type: boolean
       title: ClusterServiceCompactDocumentResponse
+      type: object
+    yorkie.v1.ClusterServiceDetachActorFromChannelsRequest:
+      additionalProperties: false
+      description: ""
+      properties:
+        actorId:
+          additionalProperties: false
+          description: ""
+          title: actor_id
+          type: string
+        projectId:
+          additionalProperties: false
+          description: ""
+          title: project_id
+          type: string
+      title: ClusterServiceDetachActorFromChannelsRequest
+      type: object
+    yorkie.v1.ClusterServiceDetachActorFromChannelsResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        detachedCount:
+          additionalProperties: false
+          description: ""
+          title: detached_count
+          type: integer
+      title: ClusterServiceDetachActorFromChannelsResponse
       type: object
     yorkie.v1.ClusterServiceDetachDocumentRequest:
       additionalProperties: false

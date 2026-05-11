@@ -819,6 +819,50 @@ func TestChannelManager_AttachDetachErrors(t *testing.T) {
 	})
 }
 
+func TestChannelManager_DetachByActor(t *testing.T) {
+	t.Run("detaches all sessions held by the actor", func(t *testing.T) {
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+
+		actorA, err := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", 0))
+		assert.NoError(t, err)
+		actorB, err := pkgtime.ActorIDFromHex(fmt.Sprintf("b%023d", 0))
+		assert.NoError(t, err)
+
+		keyA1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		keyA2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
+		keyB1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-3"}
+
+		_, _, err = manager.Attach(ctx, keyA1, actorA)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, keyA2, actorA)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, keyB1, actorB)
+		assert.NoError(t, err)
+
+		detached, err := manager.DetachByActor(ctx, actorA)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, detached)
+
+		assert.Equal(t, int64(0), manager.SessionCount(keyA1, false))
+		assert.Equal(t, int64(0), manager.SessionCount(keyA2, false))
+		assert.Equal(t, int64(1), manager.SessionCount(keyB1, false))
+	})
+
+	t.Run("returns zero when actor has no sessions", func(t *testing.T) {
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+
+		actor, err := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", 0))
+		assert.NoError(t, err)
+
+		detached, err := manager.DetachByActor(ctx, actor)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, detached)
+	})
+}
+
 func TestChannelManager_Stats(t *testing.T) {
 	t.Run("stats returns correct counts", func(t *testing.T) {
 		ctx := context.Background()

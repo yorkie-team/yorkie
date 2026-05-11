@@ -373,6 +373,30 @@ func (c *Client) GetChannelCount(
 	return response.Msg.ChannelCount, nil
 }
 
+// DetachActorFromChannels requests the remote node to detach all channel
+// sessions held by the given actor on that node.
+func (c *Client) DetachActorFromChannels(
+	ctx context.Context,
+	projectID types.ID,
+	actorID time.ActorID,
+) (int32, error) {
+	ctx, cancel := context.WithTimeout(ctx, c.rpcTimeout)
+	defer cancel()
+
+	response, err := c.client.DetachActorFromChannels(
+		ctx,
+		connect.NewRequest(&api.ClusterServiceDetachActorFromChannelsRequest{
+			ProjectId: projectID.String(),
+			ActorId:   actorID.String(),
+		}),
+	)
+	if err != nil {
+		return 0, fromConnectError(err)
+	}
+
+	return response.Msg.DetachedCount, nil
+}
+
 // InvalidateCache invalidates the cache of the given type and key.
 func (c *Client) InvalidateCache(
 	ctx context.Context,

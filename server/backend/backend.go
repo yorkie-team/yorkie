@@ -28,6 +28,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	pkgwebhook "github.com/yorkie-team/yorkie/pkg/webhook"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/cache"
@@ -454,6 +455,48 @@ func (b *Backend) BroadcastChannelCount(
 		channelCount += int(count)
 	}
 	return channelCount, nil
+}
+
+// BroadcastDetachActorFromChannels asks every cluster node to detach all
+// channel sessions held by the given actor. Used during client deactivation
+// to cascade cleanup across the cluster, since channels are sharded per node
+// and any of them may hold sessions for the actor.
+//
+// Best-effort: per-node failures are logged but do not abort the broadcast.
+// The channel session TTL still backstops any node we failed to reach.
+func (b *Backend) BroadcastDetachActorFromChannels(
+	ctx context.Context,
+	projectID types.ID,
+	actorID time.ActorID,
+) (int, error) {
+	nodes, err := b.prepareClusterClients(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("broadcast detach actor from channels: %w", err)
+	}
+
+	detached := 0
+	var errs []error
+	for _, node := range nodes {
+		nodeAddr := node.RPCAddr
+
+		cli, err := b.ClusterClientPool.Get(nodeAddr)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("get client for %s: %w", nodeAddr, err))
+			continue
+		}
+
+		count, err := cli.DetachActorFromChannels(ctx, projectID, actorID)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("detach actor on %s: %w", nodeAddr, err))
+			continue
+		}
+		detached += int(count)
+	}
+
+	if len(errs) > 0 {
+		logging.From(ctx).Warnf("partial failure in detach actor broadcast: %v", errors.Join(errs...))
+	}
+	return detached, nil
 }
 
 // prepareClusterClients returns cluster nodes and prunes inactive clients.

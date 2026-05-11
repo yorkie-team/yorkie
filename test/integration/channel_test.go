@@ -1048,4 +1048,71 @@ func TestChannelIntegration(t *testing.T) {
 			assert.Equal(t, int64(0), channel.SessionCount())
 		}
 	})
+
+	t.Run("deactivate cascades channel session detach", func(t *testing.T) {
+		// Channel session TTL is many seconds; assertion timeouts here are much
+		// shorter, so passing means cascade ran rather than TTL cleanup.
+		clients := activeClients(t, 2)
+		target, watcher := clients[0], clients[1]
+		defer func() {
+			assert.NoError(t, watcher.Deactivate(ctx))
+			assert.NoError(t, watcher.Close())
+			assert.NoError(t, target.Close())
+		}()
+
+		chanKey1 := helper.TestKey(t) + "-r1"
+		chanKey2 := helper.TestKey(t) + "-r2"
+
+		watcherCh1, err := channel.New(key.Key(chanKey1))
+		require.NoError(t, err)
+		watcherCh2, err := channel.New(key.Key(chanKey2))
+		require.NoError(t, err)
+		require.NoError(t, watcher.Attach(ctx, watcherCh1))
+		require.NoError(t, watcher.Attach(ctx, watcherCh2))
+
+		count1Chan, close1, err := watcher.WatchChannel(ctx, watcherCh1)
+		require.NoError(t, err)
+		defer close1()
+		count2Chan, close2, err := watcher.WatchChannel(ctx, watcherCh2)
+		require.NoError(t, err)
+		defer close2()
+
+		// latestCount keeps the most recent value seen on a count channel,
+		// since the watch stream may push multiple updates while we wait.
+		var latest1, latest2 int64 = -1, -1
+		drainAndCheck := func(target1, target2 int64) func() bool {
+			return func() bool {
+				for {
+					select {
+					case c := <-count1Chan:
+						latest1 = c
+					case c := <-count2Chan:
+						latest2 = c
+					default:
+						return latest1 == target1 && latest2 == target2
+					}
+				}
+			}
+		}
+
+		// After attach, watcher receives initial count = 1 on each channel.
+		assert.Eventually(t, drainAndCheck(1, 1), 10*time.Second, 100*time.Millisecond,
+			"initial counts should be 1 on both channels")
+
+		targetCh1, err := channel.New(key.Key(chanKey1))
+		require.NoError(t, err)
+		targetCh2, err := channel.New(key.Key(chanKey2))
+		require.NoError(t, err)
+		require.NoError(t, target.Attach(ctx, targetCh1))
+		require.NoError(t, target.Attach(ctx, targetCh2))
+
+		assert.Eventually(t, drainAndCheck(2, 2), 10*time.Second, 100*time.Millisecond,
+			"both channels should show 2 sessions after target attaches")
+
+		require.NoError(t, target.Deactivate(ctx))
+
+		// Cascade should detach target's sessions far faster than channel TTL.
+		assert.Eventually(t, drainAndCheck(1, 1), 10*time.Second, 100*time.Millisecond,
+			"cascade should detach target's sessions on Deactivate, well before channel TTL")
+	})
 }

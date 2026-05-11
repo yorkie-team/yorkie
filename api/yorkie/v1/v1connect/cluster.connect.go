@@ -69,6 +69,9 @@ const (
 	// ClusterServiceGetChannelCountProcedure is the fully-qualified name of the ClusterService's
 	// GetChannelCount RPC.
 	ClusterServiceGetChannelCountProcedure = "/yorkie.v1.ClusterService/GetChannelCount"
+	// ClusterServiceDetachActorFromChannelsProcedure is the fully-qualified name of the
+	// ClusterService's DetachActorFromChannels RPC.
+	ClusterServiceDetachActorFromChannelsProcedure = "/yorkie.v1.ClusterService/DetachActorFromChannels"
 	// ClusterServiceInvalidateCacheProcedure is the fully-qualified name of the ClusterService's
 	// InvalidateCache RPC.
 	ClusterServiceInvalidateCacheProcedure = "/yorkie.v1.ClusterService/InvalidateCache"
@@ -83,6 +86,7 @@ type ClusterServiceClient interface {
 	ListChannels(context.Context, *connect.Request[v1.ClusterServiceListChannelsRequest]) (*connect.Response[v1.ClusterServiceListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.ClusterServiceGetChannelsRequest]) (*connect.Response[v1.ClusterServiceGetChannelsResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
+	DetachActorFromChannels(context.Context, *connect.Request[v1.ClusterServiceDetachActorFromChannelsRequest]) (*connect.Response[v1.ClusterServiceDetachActorFromChannelsResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
 
@@ -131,6 +135,11 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			baseURL+ClusterServiceGetChannelCountProcedure,
 			opts...,
 		),
+		detachActorFromChannels: connect.NewClient[v1.ClusterServiceDetachActorFromChannelsRequest, v1.ClusterServiceDetachActorFromChannelsResponse](
+			httpClient,
+			baseURL+ClusterServiceDetachActorFromChannelsProcedure,
+			opts...,
+		),
 		invalidateCache: connect.NewClient[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse](
 			httpClient,
 			baseURL+ClusterServiceInvalidateCacheProcedure,
@@ -141,14 +150,15 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // clusterServiceClient implements ClusterServiceClient.
 type clusterServiceClient struct {
-	detachDocument  *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
-	compactDocument *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
-	purgeDocument   *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
-	getDocument     *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
-	listChannels    *connect.Client[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse]
-	getChannels     *connect.Client[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse]
-	getChannelCount *connect.Client[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse]
-	invalidateCache *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
+	detachDocument          *connect.Client[v1.ClusterServiceDetachDocumentRequest, v1.ClusterServiceDetachDocumentResponse]
+	compactDocument         *connect.Client[v1.ClusterServiceCompactDocumentRequest, v1.ClusterServiceCompactDocumentResponse]
+	purgeDocument           *connect.Client[v1.ClusterServicePurgeDocumentRequest, v1.ClusterServicePurgeDocumentResponse]
+	getDocument             *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
+	listChannels            *connect.Client[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse]
+	getChannels             *connect.Client[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse]
+	getChannelCount         *connect.Client[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse]
+	detachActorFromChannels *connect.Client[v1.ClusterServiceDetachActorFromChannelsRequest, v1.ClusterServiceDetachActorFromChannelsResponse]
+	invalidateCache         *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
 }
 
 // DetachDocument calls yorkie.v1.ClusterService.DetachDocument.
@@ -186,6 +196,11 @@ func (c *clusterServiceClient) GetChannelCount(ctx context.Context, req *connect
 	return c.getChannelCount.CallUnary(ctx, req)
 }
 
+// DetachActorFromChannels calls yorkie.v1.ClusterService.DetachActorFromChannels.
+func (c *clusterServiceClient) DetachActorFromChannels(ctx context.Context, req *connect.Request[v1.ClusterServiceDetachActorFromChannelsRequest]) (*connect.Response[v1.ClusterServiceDetachActorFromChannelsResponse], error) {
+	return c.detachActorFromChannels.CallUnary(ctx, req)
+}
+
 // InvalidateCache calls yorkie.v1.ClusterService.InvalidateCache.
 func (c *clusterServiceClient) InvalidateCache(ctx context.Context, req *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error) {
 	return c.invalidateCache.CallUnary(ctx, req)
@@ -200,6 +215,7 @@ type ClusterServiceHandler interface {
 	ListChannels(context.Context, *connect.Request[v1.ClusterServiceListChannelsRequest]) (*connect.Response[v1.ClusterServiceListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.ClusterServiceGetChannelsRequest]) (*connect.Response[v1.ClusterServiceGetChannelsResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
+	DetachActorFromChannels(context.Context, *connect.Request[v1.ClusterServiceDetachActorFromChannelsRequest]) (*connect.Response[v1.ClusterServiceDetachActorFromChannelsResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
 
@@ -244,6 +260,11 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		svc.GetChannelCount,
 		opts...,
 	)
+	clusterServiceDetachActorFromChannelsHandler := connect.NewUnaryHandler(
+		ClusterServiceDetachActorFromChannelsProcedure,
+		svc.DetachActorFromChannels,
+		opts...,
+	)
 	clusterServiceInvalidateCacheHandler := connect.NewUnaryHandler(
 		ClusterServiceInvalidateCacheProcedure,
 		svc.InvalidateCache,
@@ -265,6 +286,8 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 			clusterServiceGetChannelsHandler.ServeHTTP(w, r)
 		case ClusterServiceGetChannelCountProcedure:
 			clusterServiceGetChannelCountHandler.ServeHTTP(w, r)
+		case ClusterServiceDetachActorFromChannelsProcedure:
+			clusterServiceDetachActorFromChannelsHandler.ServeHTTP(w, r)
 		case ClusterServiceInvalidateCacheProcedure:
 			clusterServiceInvalidateCacheHandler.ServeHTTP(w, r)
 		default:
@@ -302,6 +325,10 @@ func (UnimplementedClusterServiceHandler) GetChannels(context.Context, *connect.
 
 func (UnimplementedClusterServiceHandler) GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.GetChannelCount is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) DetachActorFromChannels(context.Context, *connect.Request[v1.ClusterServiceDetachActorFromChannelsRequest]) (*connect.Response[v1.ClusterServiceDetachActorFromChannelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.DetachActorFromChannels is not implemented"))
 }
 
 func (UnimplementedClusterServiceHandler) InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error) {

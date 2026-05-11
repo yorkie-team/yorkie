@@ -396,6 +396,33 @@ func (m *Manager) Detach(
 	return newSessionCount, nil
 }
 
+// DetachByActor detaches all channel sessions held by the given actor on
+// this server. It is used during client deactivation to cascade cleanup
+// without waiting for the channel session TTL to expire.
+//
+// Errors on individual sessions are logged but do not abort the loop —
+// the goal is to evict as much as possible; remaining stale sessions
+// are caught by the cleanup ticker.
+func (m *Manager) DetachByActor(ctx context.Context, actor time.ActorID) (int, error) {
+	clientSessionMap, ok := m.clientToSession.Get(actor)
+	if !ok {
+		return 0, nil
+	}
+
+	sessionIDs := clientSessionMap.Values()
+
+	detached := 0
+	for _, sessionID := range sessionIDs {
+		if _, err := m.Detach(ctx, sessionID); err != nil {
+			logging.From(ctx).Warnf("detach session %s for actor %s: %v", sessionID, actor, err)
+			continue
+		}
+		detached++
+	}
+
+	return detached, nil
+}
+
 // Refresh extends the TTL of an existing session by updating its activity time.
 func (m *Manager) Refresh(
 	ctx context.Context,
