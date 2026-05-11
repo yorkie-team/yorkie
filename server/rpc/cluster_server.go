@@ -325,18 +325,24 @@ func (s *clusterServer) GetChannelCount(
 }
 
 // DetachActorFromChannels detaches all channel sessions held by the given
-// actor on this server. Used by the deactivate cascade to evict per-server
-// sessions across the cluster without waiting for the session TTL.
+// actor (scoped to the given project) on this server. Used by the deactivate
+// cascade to evict per-server sessions across the cluster without waiting
+// for the session TTL.
 func (s *clusterServer) DetachActorFromChannels(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceDetachActorFromChannelsRequest],
 ) (*connect.Response[api.ClusterServiceDetachActorFromChannelsResponse], error) {
+	projectID := types.ID(req.Msg.ProjectId)
+	if err := projectID.Validate(); err != nil {
+		return nil, err
+	}
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ActorId)
 	if err != nil {
 		return nil, err
 	}
 
-	detached, err := s.backend.Channel.DetachByActor(ctx, actorID)
+	detached, err := s.backend.Channel.DetachByActor(ctx, projectID, actorID)
 	if err != nil {
 		return nil, err
 	}

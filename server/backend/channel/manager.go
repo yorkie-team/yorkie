@@ -396,25 +396,47 @@ func (m *Manager) Detach(
 	return newSessionCount, nil
 }
 
-// DetachByActor detaches all channel sessions held by the given actor on
-// this server. It is used during client deactivation to cascade cleanup
-// without waiting for the channel session TTL to expire.
+// DetachByActor detaches channel sessions held by the given actor under the
+// given project on this server. It is used during client deactivation to
+// cascade cleanup without waiting for the channel session TTL to expire.
 //
-// Errors on individual sessions are logged but do not abort the loop —
-// the goal is to evict as much as possible; remaining stale sessions
-// are caught by the cleanup ticker.
-func (m *Manager) DetachByActor(ctx context.Context, actor time.ActorID) (int, error) {
+// Sessions are scoped to the project — a sibling project that happens to
+// share the same actor ID is untouched. Errors on individual sessions are
+// logged but do not abort the loop; the goal is to evict as much as
+// possible, and the cleanup ticker catches anything missed.
+func (m *Manager) DetachByActor(
+	ctx context.Context,
+	projectID types.ID,
+	actor time.ActorID,
+) (int, error) {
 	clientSessionMap, ok := m.clientToSession.Get(actor)
 	if !ok {
 		return 0, nil
 	}
 
-	sessionIDs := clientSessionMap.Values()
+	// Snapshot (channelRefKey, sessionID) pairs so we can filter by project
+	// without keeping the inner cmap pinned for the duration of Detach calls.
+	channelKeys := clientSessionMap.Keys()
+	type sessionRef struct {
+		key types.ChannelRefKey
+		id  types.ID
+	}
+	targets := make([]sessionRef, 0, len(channelKeys))
+	for _, key := range channelKeys {
+		if key.ProjectID != projectID {
+			continue
+		}
+		sessionID, ok := clientSessionMap.Get(key)
+		if !ok {
+			continue
+		}
+		targets = append(targets, sessionRef{key: key, id: sessionID})
+	}
 
 	detached := 0
-	for _, sessionID := range sessionIDs {
-		if _, err := m.Detach(ctx, sessionID); err != nil {
-			logging.From(ctx).Warnf("detach session %s for actor %s: %v", sessionID, actor, err)
+	for _, t := range targets {
+		if _, err := m.Detach(ctx, t.id); err != nil {
+			logging.From(ctx).Warnf("detach session %s for actor %s: %v", t.id, actor, err)
 			continue
 		}
 		detached++

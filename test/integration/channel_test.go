@@ -1077,17 +1077,29 @@ func TestChannelIntegration(t *testing.T) {
 		require.NoError(t, err)
 		defer close2()
 
-		// latestCount keeps the most recent value seen on a count channel,
-		// since the watch stream may push multiple updates while we wait.
+		// Track the most recent value seen on each count channel; the watch
+		// stream may push multiple updates while we wait. Once a stream is
+		// closed we stop draining it: receive-from-closed yields the zero
+		// value forever, which would otherwise spin the predicate and stall
+		// assert.Eventually instead of letting it time out cleanly.
 		var latest1, latest2 int64 = -1, -1
+		c1, c2 := count1Chan, count2Chan
 		drainAndCheck := func(target1, target2 int64) func() bool {
 			return func() bool {
 				for {
 					select {
-					case c := <-count1Chan:
-						latest1 = c
-					case c := <-count2Chan:
-						latest2 = c
+					case v, ok := <-c1:
+						if !ok {
+							c1 = nil
+							continue
+						}
+						latest1 = v
+					case v, ok := <-c2:
+						if !ok {
+							c2 = nil
+							continue
+						}
+						latest2 = v
 					default:
 						return latest1 == target1 && latest2 == target2
 					}

@@ -820,7 +820,7 @@ func TestChannelManager_AttachDetachErrors(t *testing.T) {
 }
 
 func TestChannelManager_DetachByActor(t *testing.T) {
-	t.Run("detaches all sessions held by the actor", func(t *testing.T) {
+	t.Run("detaches all sessions held by the actor in the project", func(t *testing.T) {
 		ctx := context.Background()
 		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
 		projectID := types.NewID()
@@ -841,7 +841,7 @@ func TestChannelManager_DetachByActor(t *testing.T) {
 		_, _, err = manager.Attach(ctx, keyB1, actorB)
 		assert.NoError(t, err)
 
-		detached, err := manager.DetachByActor(ctx, actorA)
+		detached, err := manager.DetachByActor(ctx, projectID, actorA)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, detached)
 
@@ -850,14 +850,41 @@ func TestChannelManager_DetachByActor(t *testing.T) {
 		assert.Equal(t, int64(1), manager.SessionCount(keyB1, false))
 	})
 
-	t.Run("returns zero when actor has no sessions", func(t *testing.T) {
+	t.Run("leaves sessions in sibling projects untouched", func(t *testing.T) {
 		ctx := context.Background()
 		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectA := types.NewID()
+		projectB := types.NewID()
 
 		actor, err := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", 0))
 		assert.NoError(t, err)
 
-		detached, err := manager.DetachByActor(ctx, actor)
+		keyInA := types.ChannelRefKey{ProjectID: projectA, ChannelKey: "room-1"}
+		keyInB := types.ChannelRefKey{ProjectID: projectB, ChannelKey: "room-1"}
+
+		_, _, err = manager.Attach(ctx, keyInA, actor)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, keyInB, actor)
+		assert.NoError(t, err)
+
+		detached, err := manager.DetachByActor(ctx, projectA, actor)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, detached)
+
+		assert.Equal(t, int64(0), manager.SessionCount(keyInA, false))
+		assert.Equal(t, int64(1), manager.SessionCount(keyInB, false),
+			"detach must be project-scoped: the sibling project's session must survive")
+	})
+
+	t.Run("returns zero when actor has no sessions", func(t *testing.T) {
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+
+		actor, err := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", 0))
+		assert.NoError(t, err)
+
+		detached, err := manager.DetachByActor(ctx, projectID, actor)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, detached)
 	})

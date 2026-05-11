@@ -57,7 +57,7 @@ Need to add one and use `prepareClusterClients` (same pattern as
 
   message ClusterServiceDetachActorFromChannelsRequest {
     string project_id = 1;
-    bytes actor_id = 2;
+    string actor_id = 2;
   }
   message ClusterServiceDetachActorFromChannelsResponse {
     int32 detached_count = 1;
