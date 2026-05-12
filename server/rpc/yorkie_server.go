@@ -483,15 +483,18 @@ func (s *yorkieServer) firstChannelRefresh(
 }
 
 // heartbeatChannelRefresh handles subsequent RefreshChannel calls that carry
-// an existing session_id. It preserves the prior behavior, including the
-// FindActiveClientInfo MongoDB read.
+// an existing session_id. Liveness is proven by the session_id itself —
+// the server issued it at first-call time, and the channel manager keeps
+// it in an in-memory map — so there is no per-heartbeat MongoDB read.
+// If the session has already been swept by the cleanup ticker, the
+// in-memory Refresh returns ErrSessionNotFound and the caller is expected
+// to start a new first-call cycle.
 func (s *yorkieServer) heartbeatChannelRefresh(
 	ctx context.Context,
 	req *connect.Request[api.RefreshChannelRequest],
 	channelKey key.Key,
 ) (*connect.Response[api.RefreshChannelResponse], error) {
-	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
-	if err != nil {
+	if _, err := time.ActorIDFromHex(req.Msg.ClientId); err != nil {
 		return nil, err
 	}
 	sessionID := types.ID(req.Msg.SessionId)
@@ -505,21 +508,12 @@ func (s *yorkieServer) heartbeatChannelRefresh(
 		return nil, err
 	}
 
-	project := projects.From(ctx)
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	if err := s.backend.Channel.Refresh(ctx, sessionID); err != nil {
 		return nil, err
 	}
 
 	refKey := types.ChannelRefKey{
-		ProjectID:  project.ID,
+		ProjectID:  projects.From(ctx).ID,
 		ChannelKey: channelKey,
 	}
 	sessionCount := s.backend.Channel.SessionCount(refKey, false)
