@@ -253,7 +253,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 	t.Run("default TTL is applied when zero", func(t *testing.T) {
 		manager, _, _ := createManager(t, 0, 0)
 
-		// Manager should have default TTL (60s)
+		// Manager should have default TTL (15s)
 		// We can't directly check the internal field, but we can verify it works
 		stats := manager.Stats()
 		assert.NotNil(t, stats)
