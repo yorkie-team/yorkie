@@ -2370,10 +2370,16 @@ func (x *DetachChannelResponse) GetSessionCount() int64 {
 }
 
 type RefreshChannelRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChannelKey    string                 `protobuf:"bytes,2,opt,name=channel_key,json=channelKey,proto3" json:"channel_key,omitempty"`
-	SessionId     string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ClientId   string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ChannelKey string                 `protobuf:"bytes,2,opt,name=channel_key,json=channelKey,proto3" json:"channel_key,omitempty"`
+	SessionId  string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// client_key and metadata are used only on the first call (when session_id
+	// is empty). The server activates the client and attaches it to the channel
+	// before refreshing, collapsing ActivateClient + AttachChannel + RefreshChannel
+	// into a single round trip.
+	ClientKey     string            `protobuf:"bytes,4,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	Metadata      map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2429,9 +2435,28 @@ func (x *RefreshChannelRequest) GetSessionId() string {
 	return ""
 }
 
+func (x *RefreshChannelRequest) GetClientKey() string {
+	if x != nil {
+		return x.ClientKey
+	}
+	return ""
+}
+
+func (x *RefreshChannelRequest) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type RefreshChannelResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionCount  int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	SessionCount int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
+	// client_id and session_id are populated only when the request was a
+	// first-call (i.e. session_id was empty). Subsequent heartbeats leave
+	// these empty.
+	ClientId      string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	SessionId     string `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2471,6 +2496,20 @@ func (x *RefreshChannelResponse) GetSessionCount() int64 {
 		return x.SessionCount
 	}
 	return 0
+}
+
+func (x *RefreshChannelResponse) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *RefreshChannelResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type BroadcastRequest struct {
@@ -2798,15 +2837,24 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\"<\n" +
 	"\x15DetachChannelResponse\x12#\n" +
-	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"t\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"\x9c\x02\n" +
 	"\x15RefreshChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
 	"channelKey\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\"=\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1d\n" +
+	"\n" +
+	"client_key\x18\x04 \x01(\tR\tclientKey\x12J\n" +
+	"\bmetadata\x18\x05 \x03(\v2..yorkie.v1.RefreshChannelRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"y\n" +
 	"\x16RefreshChannelResponse\x12#\n" +
-	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"\x80\x01\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"\x80\x01\n" +
 	"\x10BroadcastRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
@@ -2846,7 +2894,7 @@ func file_yorkie_v1_yorkie_proto_rawDescGZIP() []byte {
 	return file_yorkie_v1_yorkie_proto_rawDescData
 }
 
-var file_yorkie_v1_yorkie_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_yorkie_v1_yorkie_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_yorkie_v1_yorkie_proto_goTypes = []any{
 	(*ActivateClientRequest)(nil),                // 0: yorkie.v1.ActivateClientRequest
 	(*ActivateClientResponse)(nil),               // 1: yorkie.v1.ActivateClientResponse
@@ -2895,19 +2943,20 @@ var file_yorkie_v1_yorkie_proto_goTypes = []any{
 	(*BroadcastResponse)(nil),                    // 44: yorkie.v1.BroadcastResponse
 	nil,                                          // 45: yorkie.v1.ActivateClientRequest.MetadataEntry
 	(*WatchDocumentResponse_Initialization)(nil), // 46: yorkie.v1.WatchDocumentResponse.Initialization
-	(*ChangePack)(nil),                           // 47: yorkie.v1.ChangePack
-	(*Rule)(nil),                                 // 48: yorkie.v1.Rule
-	(*DocEvent)(nil),                             // 49: yorkie.v1.DocEvent
-	(*ChannelEvent)(nil),                         // 50: yorkie.v1.ChannelEvent
-	(*RevisionSummary)(nil),                      // 51: yorkie.v1.RevisionSummary
+	nil,                     // 47: yorkie.v1.RefreshChannelRequest.MetadataEntry
+	(*ChangePack)(nil),      // 48: yorkie.v1.ChangePack
+	(*Rule)(nil),            // 49: yorkie.v1.Rule
+	(*DocEvent)(nil),        // 50: yorkie.v1.DocEvent
+	(*ChannelEvent)(nil),    // 51: yorkie.v1.ChannelEvent
+	(*RevisionSummary)(nil), // 52: yorkie.v1.RevisionSummary
 }
 var file_yorkie_v1_yorkie_proto_depIdxs = []int32{
 	45, // 0: yorkie.v1.ActivateClientRequest.metadata:type_name -> yorkie.v1.ActivateClientRequest.MetadataEntry
-	47, // 1: yorkie.v1.AttachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	47, // 2: yorkie.v1.AttachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 3: yorkie.v1.AttachDocumentResponse.schema_rules:type_name -> yorkie.v1.Rule
-	47, // 4: yorkie.v1.DetachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	47, // 5: yorkie.v1.DetachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 1: yorkie.v1.AttachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 2: yorkie.v1.AttachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	49, // 3: yorkie.v1.AttachDocumentResponse.schema_rules:type_name -> yorkie.v1.Rule
+	48, // 4: yorkie.v1.DetachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 5: yorkie.v1.DetachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
 	9,  // 6: yorkie.v1.WatchRequest.resources:type_name -> yorkie.v1.ResourceDescriptor
 	10, // 7: yorkie.v1.ResourceDescriptor.document:type_name -> yorkie.v1.DocumentDescriptor
 	11, // 8: yorkie.v1.ResourceDescriptor.channel:type_name -> yorkie.v1.ChannelDescriptor
@@ -2918,58 +2967,59 @@ var file_yorkie_v1_yorkie_proto_depIdxs = []int32{
 	16, // 13: yorkie.v1.ResourceInit.channel_init:type_name -> yorkie.v1.ChannelInit
 	18, // 14: yorkie.v1.WatchEvent.doc_event:type_name -> yorkie.v1.DocWatchEvent
 	19, // 15: yorkie.v1.WatchEvent.channel_event:type_name -> yorkie.v1.ChannelWatchEvent
-	49, // 16: yorkie.v1.DocWatchEvent.event:type_name -> yorkie.v1.DocEvent
-	50, // 17: yorkie.v1.ChannelWatchEvent.event:type_name -> yorkie.v1.ChannelEvent
+	50, // 16: yorkie.v1.DocWatchEvent.event:type_name -> yorkie.v1.DocEvent
+	51, // 17: yorkie.v1.ChannelWatchEvent.event:type_name -> yorkie.v1.ChannelEvent
 	46, // 18: yorkie.v1.WatchDocumentResponse.initialization:type_name -> yorkie.v1.WatchDocumentResponse.Initialization
-	49, // 19: yorkie.v1.WatchDocumentResponse.event:type_name -> yorkie.v1.DocEvent
+	50, // 19: yorkie.v1.WatchDocumentResponse.event:type_name -> yorkie.v1.DocEvent
 	24, // 20: yorkie.v1.WatchChannelResponse.initialized:type_name -> yorkie.v1.WatchChannelInitialized
-	50, // 21: yorkie.v1.WatchChannelResponse.event:type_name -> yorkie.v1.ChannelEvent
-	47, // 22: yorkie.v1.RemoveDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	47, // 23: yorkie.v1.RemoveDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	47, // 24: yorkie.v1.PushPullChangesRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	47, // 25: yorkie.v1.PushPullChangesResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	51, // 26: yorkie.v1.CreateRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
-	51, // 27: yorkie.v1.GetRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
-	51, // 28: yorkie.v1.ListRevisionsResponse.revisions:type_name -> yorkie.v1.RevisionSummary
-	0,  // 29: yorkie.v1.YorkieService.ActivateClient:input_type -> yorkie.v1.ActivateClientRequest
-	2,  // 30: yorkie.v1.YorkieService.DeactivateClient:input_type -> yorkie.v1.DeactivateClientRequest
-	4,  // 31: yorkie.v1.YorkieService.AttachDocument:input_type -> yorkie.v1.AttachDocumentRequest
-	6,  // 32: yorkie.v1.YorkieService.DetachDocument:input_type -> yorkie.v1.DetachDocumentRequest
-	25, // 33: yorkie.v1.YorkieService.RemoveDocument:input_type -> yorkie.v1.RemoveDocumentRequest
-	27, // 34: yorkie.v1.YorkieService.PushPullChanges:input_type -> yorkie.v1.PushPullChangesRequest
-	8,  // 35: yorkie.v1.YorkieService.Watch:input_type -> yorkie.v1.WatchRequest
-	20, // 36: yorkie.v1.YorkieService.WatchDocument:input_type -> yorkie.v1.WatchDocumentRequest
-	22, // 37: yorkie.v1.YorkieService.WatchChannel:input_type -> yorkie.v1.WatchChannelRequest
-	29, // 38: yorkie.v1.YorkieService.CreateRevision:input_type -> yorkie.v1.CreateRevisionRequest
-	31, // 39: yorkie.v1.YorkieService.GetRevision:input_type -> yorkie.v1.GetRevisionRequest
-	33, // 40: yorkie.v1.YorkieService.ListRevisions:input_type -> yorkie.v1.ListRevisionsRequest
-	35, // 41: yorkie.v1.YorkieService.RestoreRevision:input_type -> yorkie.v1.RestoreRevisionRequest
-	37, // 42: yorkie.v1.YorkieService.AttachChannel:input_type -> yorkie.v1.AttachChannelRequest
-	39, // 43: yorkie.v1.YorkieService.DetachChannel:input_type -> yorkie.v1.DetachChannelRequest
-	41, // 44: yorkie.v1.YorkieService.RefreshChannel:input_type -> yorkie.v1.RefreshChannelRequest
-	43, // 45: yorkie.v1.YorkieService.Broadcast:input_type -> yorkie.v1.BroadcastRequest
-	1,  // 46: yorkie.v1.YorkieService.ActivateClient:output_type -> yorkie.v1.ActivateClientResponse
-	3,  // 47: yorkie.v1.YorkieService.DeactivateClient:output_type -> yorkie.v1.DeactivateClientResponse
-	5,  // 48: yorkie.v1.YorkieService.AttachDocument:output_type -> yorkie.v1.AttachDocumentResponse
-	7,  // 49: yorkie.v1.YorkieService.DetachDocument:output_type -> yorkie.v1.DetachDocumentResponse
-	26, // 50: yorkie.v1.YorkieService.RemoveDocument:output_type -> yorkie.v1.RemoveDocumentResponse
-	28, // 51: yorkie.v1.YorkieService.PushPullChanges:output_type -> yorkie.v1.PushPullChangesResponse
-	12, // 52: yorkie.v1.YorkieService.Watch:output_type -> yorkie.v1.WatchResponse
-	21, // 53: yorkie.v1.YorkieService.WatchDocument:output_type -> yorkie.v1.WatchDocumentResponse
-	23, // 54: yorkie.v1.YorkieService.WatchChannel:output_type -> yorkie.v1.WatchChannelResponse
-	30, // 55: yorkie.v1.YorkieService.CreateRevision:output_type -> yorkie.v1.CreateRevisionResponse
-	32, // 56: yorkie.v1.YorkieService.GetRevision:output_type -> yorkie.v1.GetRevisionResponse
-	34, // 57: yorkie.v1.YorkieService.ListRevisions:output_type -> yorkie.v1.ListRevisionsResponse
-	36, // 58: yorkie.v1.YorkieService.RestoreRevision:output_type -> yorkie.v1.RestoreRevisionResponse
-	38, // 59: yorkie.v1.YorkieService.AttachChannel:output_type -> yorkie.v1.AttachChannelResponse
-	40, // 60: yorkie.v1.YorkieService.DetachChannel:output_type -> yorkie.v1.DetachChannelResponse
-	42, // 61: yorkie.v1.YorkieService.RefreshChannel:output_type -> yorkie.v1.RefreshChannelResponse
-	44, // 62: yorkie.v1.YorkieService.Broadcast:output_type -> yorkie.v1.BroadcastResponse
-	46, // [46:63] is the sub-list for method output_type
-	29, // [29:46] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	51, // 21: yorkie.v1.WatchChannelResponse.event:type_name -> yorkie.v1.ChannelEvent
+	48, // 22: yorkie.v1.RemoveDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 23: yorkie.v1.RemoveDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 24: yorkie.v1.PushPullChangesRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	48, // 25: yorkie.v1.PushPullChangesResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	52, // 26: yorkie.v1.CreateRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	52, // 27: yorkie.v1.GetRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	52, // 28: yorkie.v1.ListRevisionsResponse.revisions:type_name -> yorkie.v1.RevisionSummary
+	47, // 29: yorkie.v1.RefreshChannelRequest.metadata:type_name -> yorkie.v1.RefreshChannelRequest.MetadataEntry
+	0,  // 30: yorkie.v1.YorkieService.ActivateClient:input_type -> yorkie.v1.ActivateClientRequest
+	2,  // 31: yorkie.v1.YorkieService.DeactivateClient:input_type -> yorkie.v1.DeactivateClientRequest
+	4,  // 32: yorkie.v1.YorkieService.AttachDocument:input_type -> yorkie.v1.AttachDocumentRequest
+	6,  // 33: yorkie.v1.YorkieService.DetachDocument:input_type -> yorkie.v1.DetachDocumentRequest
+	25, // 34: yorkie.v1.YorkieService.RemoveDocument:input_type -> yorkie.v1.RemoveDocumentRequest
+	27, // 35: yorkie.v1.YorkieService.PushPullChanges:input_type -> yorkie.v1.PushPullChangesRequest
+	8,  // 36: yorkie.v1.YorkieService.Watch:input_type -> yorkie.v1.WatchRequest
+	20, // 37: yorkie.v1.YorkieService.WatchDocument:input_type -> yorkie.v1.WatchDocumentRequest
+	22, // 38: yorkie.v1.YorkieService.WatchChannel:input_type -> yorkie.v1.WatchChannelRequest
+	29, // 39: yorkie.v1.YorkieService.CreateRevision:input_type -> yorkie.v1.CreateRevisionRequest
+	31, // 40: yorkie.v1.YorkieService.GetRevision:input_type -> yorkie.v1.GetRevisionRequest
+	33, // 41: yorkie.v1.YorkieService.ListRevisions:input_type -> yorkie.v1.ListRevisionsRequest
+	35, // 42: yorkie.v1.YorkieService.RestoreRevision:input_type -> yorkie.v1.RestoreRevisionRequest
+	37, // 43: yorkie.v1.YorkieService.AttachChannel:input_type -> yorkie.v1.AttachChannelRequest
+	39, // 44: yorkie.v1.YorkieService.DetachChannel:input_type -> yorkie.v1.DetachChannelRequest
+	41, // 45: yorkie.v1.YorkieService.RefreshChannel:input_type -> yorkie.v1.RefreshChannelRequest
+	43, // 46: yorkie.v1.YorkieService.Broadcast:input_type -> yorkie.v1.BroadcastRequest
+	1,  // 47: yorkie.v1.YorkieService.ActivateClient:output_type -> yorkie.v1.ActivateClientResponse
+	3,  // 48: yorkie.v1.YorkieService.DeactivateClient:output_type -> yorkie.v1.DeactivateClientResponse
+	5,  // 49: yorkie.v1.YorkieService.AttachDocument:output_type -> yorkie.v1.AttachDocumentResponse
+	7,  // 50: yorkie.v1.YorkieService.DetachDocument:output_type -> yorkie.v1.DetachDocumentResponse
+	26, // 51: yorkie.v1.YorkieService.RemoveDocument:output_type -> yorkie.v1.RemoveDocumentResponse
+	28, // 52: yorkie.v1.YorkieService.PushPullChanges:output_type -> yorkie.v1.PushPullChangesResponse
+	12, // 53: yorkie.v1.YorkieService.Watch:output_type -> yorkie.v1.WatchResponse
+	21, // 54: yorkie.v1.YorkieService.WatchDocument:output_type -> yorkie.v1.WatchDocumentResponse
+	23, // 55: yorkie.v1.YorkieService.WatchChannel:output_type -> yorkie.v1.WatchChannelResponse
+	30, // 56: yorkie.v1.YorkieService.CreateRevision:output_type -> yorkie.v1.CreateRevisionResponse
+	32, // 57: yorkie.v1.YorkieService.GetRevision:output_type -> yorkie.v1.GetRevisionResponse
+	34, // 58: yorkie.v1.YorkieService.ListRevisions:output_type -> yorkie.v1.ListRevisionsResponse
+	36, // 59: yorkie.v1.YorkieService.RestoreRevision:output_type -> yorkie.v1.RestoreRevisionResponse
+	38, // 60: yorkie.v1.YorkieService.AttachChannel:output_type -> yorkie.v1.AttachChannelResponse
+	40, // 61: yorkie.v1.YorkieService.DetachChannel:output_type -> yorkie.v1.DetachChannelResponse
+	42, // 62: yorkie.v1.YorkieService.RefreshChannel:output_type -> yorkie.v1.RefreshChannelResponse
+	44, // 63: yorkie.v1.YorkieService.Broadcast:output_type -> yorkie.v1.BroadcastResponse
+	47, // [47:64] is the sub-list for method output_type
+	30, // [30:47] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_yorkie_proto_init() }
@@ -3008,7 +3058,7 @@ func file_yorkie_v1_yorkie_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_yorkie_proto_rawDesc), len(file_yorkie_v1_yorkie_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   47,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
