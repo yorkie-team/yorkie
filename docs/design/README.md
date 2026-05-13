@@ -11,6 +11,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Data Structure](data-structure.md): Data structures for root in document
 - [DocPresence](doc-presence.md): Data structure for presence in document
 - [Presence](presence.md): Dedicated presence for real-time user tracking
+- [Channel Read-Only Attach](channel-readonly-attach.md): Read-only channel membership that does not contribute to session_count
 
 ### CRDT
 
