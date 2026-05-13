@@ -69,6 +69,7 @@ const (
 	AttachChannel  Method = "AttachChannel"
 	DetachChannel  Method = "DetachChannel"
 	RefreshChannel Method = "RefreshChannel"
+	PeekChannel    Method = "PeekChannel"
 	Broadcast      Method = "Broadcast"
 )
 
@@ -104,6 +105,7 @@ func AuthMethods() []Method {
 		AttachChannel,
 		DetachChannel,
 		RefreshChannel,
+		PeekChannel,
 		Broadcast,
 	}
 }

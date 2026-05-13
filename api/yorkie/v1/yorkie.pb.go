@@ -2512,6 +2512,98 @@ func (x *RefreshChannelResponse) GetSessionId() string {
 	return ""
 }
 
+// PeekChannel reads the current session_count of a channel without creating
+// a session on the server. Use this when a client only needs to display the
+// count (e.g. "N people writing") without contributing to it and without
+// receiving broadcasts. Caller polls on its own cadence.
+type PeekChannelRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChannelKey    string                 `protobuf:"bytes,1,opt,name=channel_key,json=channelKey,proto3" json:"channel_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PeekChannelRequest) Reset() {
+	*x = PeekChannelRequest{}
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PeekChannelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PeekChannelRequest) ProtoMessage() {}
+
+func (x *PeekChannelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PeekChannelRequest.ProtoReflect.Descriptor instead.
+func (*PeekChannelRequest) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *PeekChannelRequest) GetChannelKey() string {
+	if x != nil {
+		return x.ChannelKey
+	}
+	return ""
+}
+
+type PeekChannelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionCount  int64                  `protobuf:"varint,1,opt,name=session_count,json=sessionCount,proto3" json:"session_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PeekChannelResponse) Reset() {
+	*x = PeekChannelResponse{}
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PeekChannelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PeekChannelResponse) ProtoMessage() {}
+
+func (x *PeekChannelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PeekChannelResponse.ProtoReflect.Descriptor instead.
+func (*PeekChannelResponse) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *PeekChannelResponse) GetSessionCount() int64 {
+	if x != nil {
+		return x.SessionCount
+	}
+	return 0
+}
+
 type BroadcastRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
@@ -2524,7 +2616,7 @@ type BroadcastRequest struct {
 
 func (x *BroadcastRequest) Reset() {
 	*x = BroadcastRequest{}
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[43]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2536,7 +2628,7 @@ func (x *BroadcastRequest) String() string {
 func (*BroadcastRequest) ProtoMessage() {}
 
 func (x *BroadcastRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[43]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2549,7 +2641,7 @@ func (x *BroadcastRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BroadcastRequest.ProtoReflect.Descriptor instead.
 func (*BroadcastRequest) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{43}
+	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *BroadcastRequest) GetClientId() string {
@@ -2588,7 +2680,7 @@ type BroadcastResponse struct {
 
 func (x *BroadcastResponse) Reset() {
 	*x = BroadcastResponse{}
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[44]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2600,7 +2692,7 @@ func (x *BroadcastResponse) String() string {
 func (*BroadcastResponse) ProtoMessage() {}
 
 func (x *BroadcastResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[44]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2613,7 +2705,7 @@ func (x *BroadcastResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BroadcastResponse.ProtoReflect.Descriptor instead.
 func (*BroadcastResponse) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{44}
+	return file_yorkie_v1_yorkie_proto_rawDescGZIP(), []int{46}
 }
 
 type WatchDocumentResponse_Initialization struct {
@@ -2625,7 +2717,7 @@ type WatchDocumentResponse_Initialization struct {
 
 func (x *WatchDocumentResponse_Initialization) Reset() {
 	*x = WatchDocumentResponse_Initialization{}
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[46]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2637,7 +2729,7 @@ func (x *WatchDocumentResponse_Initialization) String() string {
 func (*WatchDocumentResponse_Initialization) ProtoMessage() {}
 
 func (x *WatchDocumentResponse_Initialization) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_yorkie_proto_msgTypes[46]
+	mi := &file_yorkie_v1_yorkie_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2854,14 +2946,19 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\"\x80\x01\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"5\n" +
+	"\x12PeekChannelRequest\x12\x1f\n" +
+	"\vchannel_key\x18\x01 \x01(\tR\n" +
+	"channelKey\":\n" +
+	"\x13PeekChannelResponse\x12#\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"\x80\x01\n" +
 	"\x10BroadcastRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
 	"channelKey\x12\x14\n" +
 	"\x05topic\x18\x03 \x01(\tR\x05topic\x12\x18\n" +
 	"\apayload\x18\x04 \x01(\fR\apayload\"\x13\n" +
-	"\x11BroadcastResponse2\xc5\v\n" +
+	"\x11BroadcastResponse2\x95\f\n" +
 	"\rYorkieService\x12W\n" +
 	"\x0eActivateClient\x12 .yorkie.v1.ActivateClientRequest\x1a!.yorkie.v1.ActivateClientResponse\"\x00\x12]\n" +
 	"\x10DeactivateClient\x12\".yorkie.v1.DeactivateClientRequest\x1a#.yorkie.v1.DeactivateClientResponse\"\x00\x12W\n" +
@@ -2878,7 +2975,8 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x0fRestoreRevision\x12!.yorkie.v1.RestoreRevisionRequest\x1a\".yorkie.v1.RestoreRevisionResponse\"\x00\x12T\n" +
 	"\rAttachChannel\x12\x1f.yorkie.v1.AttachChannelRequest\x1a .yorkie.v1.AttachChannelResponse\"\x00\x12T\n" +
 	"\rDetachChannel\x12\x1f.yorkie.v1.DetachChannelRequest\x1a .yorkie.v1.DetachChannelResponse\"\x00\x12W\n" +
-	"\x0eRefreshChannel\x12 .yorkie.v1.RefreshChannelRequest\x1a!.yorkie.v1.RefreshChannelResponse\"\x00\x12H\n" +
+	"\x0eRefreshChannel\x12 .yorkie.v1.RefreshChannelRequest\x1a!.yorkie.v1.RefreshChannelResponse\"\x00\x12N\n" +
+	"\vPeekChannel\x12\x1d.yorkie.v1.PeekChannelRequest\x1a\x1e.yorkie.v1.PeekChannelResponse\"\x00\x12H\n" +
 	"\tBroadcast\x12\x1b.yorkie.v1.BroadcastRequest\x1a\x1c.yorkie.v1.BroadcastResponse\"\x00BE\n" +
 	"\x11dev.yorkie.api.v1P\x01Z.github.com/yorkie-team/yorkie/api/yorkie/v1;v1b\x06proto3"
 
@@ -2894,7 +2992,7 @@ func file_yorkie_v1_yorkie_proto_rawDescGZIP() []byte {
 	return file_yorkie_v1_yorkie_proto_rawDescData
 }
 
-var file_yorkie_v1_yorkie_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_yorkie_v1_yorkie_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_yorkie_v1_yorkie_proto_goTypes = []any{
 	(*ActivateClientRequest)(nil),                // 0: yorkie.v1.ActivateClientRequest
 	(*ActivateClientResponse)(nil),               // 1: yorkie.v1.ActivateClientResponse
@@ -2939,24 +3037,26 @@ var file_yorkie_v1_yorkie_proto_goTypes = []any{
 	(*DetachChannelResponse)(nil),                // 40: yorkie.v1.DetachChannelResponse
 	(*RefreshChannelRequest)(nil),                // 41: yorkie.v1.RefreshChannelRequest
 	(*RefreshChannelResponse)(nil),               // 42: yorkie.v1.RefreshChannelResponse
-	(*BroadcastRequest)(nil),                     // 43: yorkie.v1.BroadcastRequest
-	(*BroadcastResponse)(nil),                    // 44: yorkie.v1.BroadcastResponse
-	nil,                                          // 45: yorkie.v1.ActivateClientRequest.MetadataEntry
-	(*WatchDocumentResponse_Initialization)(nil), // 46: yorkie.v1.WatchDocumentResponse.Initialization
-	nil,                     // 47: yorkie.v1.RefreshChannelRequest.MetadataEntry
-	(*ChangePack)(nil),      // 48: yorkie.v1.ChangePack
-	(*Rule)(nil),            // 49: yorkie.v1.Rule
-	(*DocEvent)(nil),        // 50: yorkie.v1.DocEvent
-	(*ChannelEvent)(nil),    // 51: yorkie.v1.ChannelEvent
-	(*RevisionSummary)(nil), // 52: yorkie.v1.RevisionSummary
+	(*PeekChannelRequest)(nil),                   // 43: yorkie.v1.PeekChannelRequest
+	(*PeekChannelResponse)(nil),                  // 44: yorkie.v1.PeekChannelResponse
+	(*BroadcastRequest)(nil),                     // 45: yorkie.v1.BroadcastRequest
+	(*BroadcastResponse)(nil),                    // 46: yorkie.v1.BroadcastResponse
+	nil,                                          // 47: yorkie.v1.ActivateClientRequest.MetadataEntry
+	(*WatchDocumentResponse_Initialization)(nil), // 48: yorkie.v1.WatchDocumentResponse.Initialization
+	nil,                     // 49: yorkie.v1.RefreshChannelRequest.MetadataEntry
+	(*ChangePack)(nil),      // 50: yorkie.v1.ChangePack
+	(*Rule)(nil),            // 51: yorkie.v1.Rule
+	(*DocEvent)(nil),        // 52: yorkie.v1.DocEvent
+	(*ChannelEvent)(nil),    // 53: yorkie.v1.ChannelEvent
+	(*RevisionSummary)(nil), // 54: yorkie.v1.RevisionSummary
 }
 var file_yorkie_v1_yorkie_proto_depIdxs = []int32{
-	45, // 0: yorkie.v1.ActivateClientRequest.metadata:type_name -> yorkie.v1.ActivateClientRequest.MetadataEntry
-	48, // 1: yorkie.v1.AttachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 2: yorkie.v1.AttachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	49, // 3: yorkie.v1.AttachDocumentResponse.schema_rules:type_name -> yorkie.v1.Rule
-	48, // 4: yorkie.v1.DetachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 5: yorkie.v1.DetachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	47, // 0: yorkie.v1.ActivateClientRequest.metadata:type_name -> yorkie.v1.ActivateClientRequest.MetadataEntry
+	50, // 1: yorkie.v1.AttachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	50, // 2: yorkie.v1.AttachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	51, // 3: yorkie.v1.AttachDocumentResponse.schema_rules:type_name -> yorkie.v1.Rule
+	50, // 4: yorkie.v1.DetachDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	50, // 5: yorkie.v1.DetachDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
 	9,  // 6: yorkie.v1.WatchRequest.resources:type_name -> yorkie.v1.ResourceDescriptor
 	10, // 7: yorkie.v1.ResourceDescriptor.document:type_name -> yorkie.v1.DocumentDescriptor
 	11, // 8: yorkie.v1.ResourceDescriptor.channel:type_name -> yorkie.v1.ChannelDescriptor
@@ -2967,20 +3067,20 @@ var file_yorkie_v1_yorkie_proto_depIdxs = []int32{
 	16, // 13: yorkie.v1.ResourceInit.channel_init:type_name -> yorkie.v1.ChannelInit
 	18, // 14: yorkie.v1.WatchEvent.doc_event:type_name -> yorkie.v1.DocWatchEvent
 	19, // 15: yorkie.v1.WatchEvent.channel_event:type_name -> yorkie.v1.ChannelWatchEvent
-	50, // 16: yorkie.v1.DocWatchEvent.event:type_name -> yorkie.v1.DocEvent
-	51, // 17: yorkie.v1.ChannelWatchEvent.event:type_name -> yorkie.v1.ChannelEvent
-	46, // 18: yorkie.v1.WatchDocumentResponse.initialization:type_name -> yorkie.v1.WatchDocumentResponse.Initialization
-	50, // 19: yorkie.v1.WatchDocumentResponse.event:type_name -> yorkie.v1.DocEvent
+	52, // 16: yorkie.v1.DocWatchEvent.event:type_name -> yorkie.v1.DocEvent
+	53, // 17: yorkie.v1.ChannelWatchEvent.event:type_name -> yorkie.v1.ChannelEvent
+	48, // 18: yorkie.v1.WatchDocumentResponse.initialization:type_name -> yorkie.v1.WatchDocumentResponse.Initialization
+	52, // 19: yorkie.v1.WatchDocumentResponse.event:type_name -> yorkie.v1.DocEvent
 	24, // 20: yorkie.v1.WatchChannelResponse.initialized:type_name -> yorkie.v1.WatchChannelInitialized
-	51, // 21: yorkie.v1.WatchChannelResponse.event:type_name -> yorkie.v1.ChannelEvent
-	48, // 22: yorkie.v1.RemoveDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 23: yorkie.v1.RemoveDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 24: yorkie.v1.PushPullChangesRequest.change_pack:type_name -> yorkie.v1.ChangePack
-	48, // 25: yorkie.v1.PushPullChangesResponse.change_pack:type_name -> yorkie.v1.ChangePack
-	52, // 26: yorkie.v1.CreateRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
-	52, // 27: yorkie.v1.GetRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
-	52, // 28: yorkie.v1.ListRevisionsResponse.revisions:type_name -> yorkie.v1.RevisionSummary
-	47, // 29: yorkie.v1.RefreshChannelRequest.metadata:type_name -> yorkie.v1.RefreshChannelRequest.MetadataEntry
+	53, // 21: yorkie.v1.WatchChannelResponse.event:type_name -> yorkie.v1.ChannelEvent
+	50, // 22: yorkie.v1.RemoveDocumentRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	50, // 23: yorkie.v1.RemoveDocumentResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	50, // 24: yorkie.v1.PushPullChangesRequest.change_pack:type_name -> yorkie.v1.ChangePack
+	50, // 25: yorkie.v1.PushPullChangesResponse.change_pack:type_name -> yorkie.v1.ChangePack
+	54, // 26: yorkie.v1.CreateRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	54, // 27: yorkie.v1.GetRevisionResponse.revision:type_name -> yorkie.v1.RevisionSummary
+	54, // 28: yorkie.v1.ListRevisionsResponse.revisions:type_name -> yorkie.v1.RevisionSummary
+	49, // 29: yorkie.v1.RefreshChannelRequest.metadata:type_name -> yorkie.v1.RefreshChannelRequest.MetadataEntry
 	0,  // 30: yorkie.v1.YorkieService.ActivateClient:input_type -> yorkie.v1.ActivateClientRequest
 	2,  // 31: yorkie.v1.YorkieService.DeactivateClient:input_type -> yorkie.v1.DeactivateClientRequest
 	4,  // 32: yorkie.v1.YorkieService.AttachDocument:input_type -> yorkie.v1.AttachDocumentRequest
@@ -2997,26 +3097,28 @@ var file_yorkie_v1_yorkie_proto_depIdxs = []int32{
 	37, // 43: yorkie.v1.YorkieService.AttachChannel:input_type -> yorkie.v1.AttachChannelRequest
 	39, // 44: yorkie.v1.YorkieService.DetachChannel:input_type -> yorkie.v1.DetachChannelRequest
 	41, // 45: yorkie.v1.YorkieService.RefreshChannel:input_type -> yorkie.v1.RefreshChannelRequest
-	43, // 46: yorkie.v1.YorkieService.Broadcast:input_type -> yorkie.v1.BroadcastRequest
-	1,  // 47: yorkie.v1.YorkieService.ActivateClient:output_type -> yorkie.v1.ActivateClientResponse
-	3,  // 48: yorkie.v1.YorkieService.DeactivateClient:output_type -> yorkie.v1.DeactivateClientResponse
-	5,  // 49: yorkie.v1.YorkieService.AttachDocument:output_type -> yorkie.v1.AttachDocumentResponse
-	7,  // 50: yorkie.v1.YorkieService.DetachDocument:output_type -> yorkie.v1.DetachDocumentResponse
-	26, // 51: yorkie.v1.YorkieService.RemoveDocument:output_type -> yorkie.v1.RemoveDocumentResponse
-	28, // 52: yorkie.v1.YorkieService.PushPullChanges:output_type -> yorkie.v1.PushPullChangesResponse
-	12, // 53: yorkie.v1.YorkieService.Watch:output_type -> yorkie.v1.WatchResponse
-	21, // 54: yorkie.v1.YorkieService.WatchDocument:output_type -> yorkie.v1.WatchDocumentResponse
-	23, // 55: yorkie.v1.YorkieService.WatchChannel:output_type -> yorkie.v1.WatchChannelResponse
-	30, // 56: yorkie.v1.YorkieService.CreateRevision:output_type -> yorkie.v1.CreateRevisionResponse
-	32, // 57: yorkie.v1.YorkieService.GetRevision:output_type -> yorkie.v1.GetRevisionResponse
-	34, // 58: yorkie.v1.YorkieService.ListRevisions:output_type -> yorkie.v1.ListRevisionsResponse
-	36, // 59: yorkie.v1.YorkieService.RestoreRevision:output_type -> yorkie.v1.RestoreRevisionResponse
-	38, // 60: yorkie.v1.YorkieService.AttachChannel:output_type -> yorkie.v1.AttachChannelResponse
-	40, // 61: yorkie.v1.YorkieService.DetachChannel:output_type -> yorkie.v1.DetachChannelResponse
-	42, // 62: yorkie.v1.YorkieService.RefreshChannel:output_type -> yorkie.v1.RefreshChannelResponse
-	44, // 63: yorkie.v1.YorkieService.Broadcast:output_type -> yorkie.v1.BroadcastResponse
-	47, // [47:64] is the sub-list for method output_type
-	30, // [30:47] is the sub-list for method input_type
+	43, // 46: yorkie.v1.YorkieService.PeekChannel:input_type -> yorkie.v1.PeekChannelRequest
+	45, // 47: yorkie.v1.YorkieService.Broadcast:input_type -> yorkie.v1.BroadcastRequest
+	1,  // 48: yorkie.v1.YorkieService.ActivateClient:output_type -> yorkie.v1.ActivateClientResponse
+	3,  // 49: yorkie.v1.YorkieService.DeactivateClient:output_type -> yorkie.v1.DeactivateClientResponse
+	5,  // 50: yorkie.v1.YorkieService.AttachDocument:output_type -> yorkie.v1.AttachDocumentResponse
+	7,  // 51: yorkie.v1.YorkieService.DetachDocument:output_type -> yorkie.v1.DetachDocumentResponse
+	26, // 52: yorkie.v1.YorkieService.RemoveDocument:output_type -> yorkie.v1.RemoveDocumentResponse
+	28, // 53: yorkie.v1.YorkieService.PushPullChanges:output_type -> yorkie.v1.PushPullChangesResponse
+	12, // 54: yorkie.v1.YorkieService.Watch:output_type -> yorkie.v1.WatchResponse
+	21, // 55: yorkie.v1.YorkieService.WatchDocument:output_type -> yorkie.v1.WatchDocumentResponse
+	23, // 56: yorkie.v1.YorkieService.WatchChannel:output_type -> yorkie.v1.WatchChannelResponse
+	30, // 57: yorkie.v1.YorkieService.CreateRevision:output_type -> yorkie.v1.CreateRevisionResponse
+	32, // 58: yorkie.v1.YorkieService.GetRevision:output_type -> yorkie.v1.GetRevisionResponse
+	34, // 59: yorkie.v1.YorkieService.ListRevisions:output_type -> yorkie.v1.ListRevisionsResponse
+	36, // 60: yorkie.v1.YorkieService.RestoreRevision:output_type -> yorkie.v1.RestoreRevisionResponse
+	38, // 61: yorkie.v1.YorkieService.AttachChannel:output_type -> yorkie.v1.AttachChannelResponse
+	40, // 62: yorkie.v1.YorkieService.DetachChannel:output_type -> yorkie.v1.DetachChannelResponse
+	42, // 63: yorkie.v1.YorkieService.RefreshChannel:output_type -> yorkie.v1.RefreshChannelResponse
+	44, // 64: yorkie.v1.YorkieService.PeekChannel:output_type -> yorkie.v1.PeekChannelResponse
+	46, // 65: yorkie.v1.YorkieService.Broadcast:output_type -> yorkie.v1.BroadcastResponse
+	48, // [48:66] is the sub-list for method output_type
+	30, // [30:48] is the sub-list for method input_type
 	30, // [30:30] is the sub-list for extension type_name
 	30, // [30:30] is the sub-list for extension extendee
 	0,  // [0:30] is the sub-list for field type_name
@@ -3058,7 +3160,7 @@ func file_yorkie_v1_yorkie_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_yorkie_proto_rawDesc), len(file_yorkie_v1_yorkie_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   48,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
