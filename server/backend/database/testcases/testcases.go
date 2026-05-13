@@ -113,6 +113,37 @@ func RunLeadershipTest(
 		assert.True(t, renewedInfo.ExpiresAt.Compare(info.ExpiresAt) >= 0) // Expiry should extend
 	})
 
+	t.Run("TryLeadership should return nil for follower when active leader exists", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.RemoveClusterNodes(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		// First node acquires leadership
+		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+
+		// Second node tries to acquire — should get nil without error
+		info2, err := db.TryLeadership(ctx, nodeIDTwo, "", leaseDuration)
+		require.NoError(t, err)
+		assert.Nil(t, info2)
+
+		// Verify both nodes are registered and only one is leader
+		nodes, err := db.FindClusterNodes(ctx, leaseDuration)
+		require.NoError(t, err)
+		assert.Equal(t, 2, len(nodes))
+
+		leaderCount := 0
+		for _, node := range nodes {
+			if node.IsLeader {
+				leaderCount++
+				assert.Equal(t, nodeIDOne, node.RPCAddr)
+			}
+		}
+		assert.Equal(t, 1, leaderCount)
+	})
+
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
 		ctx := context.Background()
 		require.NoError(t, db.RemoveClusterNodes(ctx))
