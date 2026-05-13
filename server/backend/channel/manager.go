@@ -61,11 +61,29 @@ type Session struct {
 	Key   types.ChannelRefKey // Reference to the channel
 	Actor time.ActorID        // Client who created this session
 
+	// readOnly excludes this session from the reported SessionCount while
+	// keeping it in Sessions for pubsub fan-out and TTL accounting.
+	// Atomic so a re-attach with a different read_only flag can flip the
+	// session in place (read-only ↔ participant) without recreating the
+	// session — the route-change UX in the collapsed RefreshChannel flow
+	// relies on this.
+	readOnly atomic.Bool
+
 	// updatedAt stores the last activity time as UnixNano (atomic).
 	// Using atomic allows Refresh to update this field without acquiring
 	// a cmap write lock — only a read lock is needed to get the Session
 	// pointer, then the atomic store updates the timestamp lock-free.
 	updatedAt atomic.Int64
+}
+
+// IsReadOnly reports whether the session is currently in read-only mode.
+func (s *Session) IsReadOnly() bool {
+	return s.readOnly.Load()
+}
+
+// SetReadOnly updates the session's read-only state.
+func (s *Session) SetReadOnly(readOnly bool) {
+	s.readOnly.Store(readOnly)
 }
 
 // Channel represents a channel.
@@ -235,10 +253,13 @@ func (m *Manager) upsertChannel(ctx context.Context, key types.ChannelRefKey) *C
 }
 
 // Attach adds a client to a channel and returns the unique session ID.
+// If readOnly is true, the session is excluded from the reported
+// SessionCount but otherwise participates fully (pubsub, broadcast, TTL).
 func (m *Manager) Attach(
 	ctx context.Context,
 	key types.ChannelRefKey,
 	clientID time.ActorID,
+	readOnly bool,
 ) (types.ID, int64, error) {
 	if !pkgchannel.IsValidChannelKeyPath(key.ChannelKey) {
 		return types.ID(""), 0, ErrInvalidChannelKey
@@ -247,6 +268,25 @@ func (m *Manager) Attach(
 	// Check if client is already attached to this channel
 	if sessionMap, ok := m.clientToSession.Get(clientID); ok {
 		if sessionID, found := sessionMap.Get(key); found {
+			// Idempotent re-attach. If the read_only flag has changed (e.g.
+			// a route-change upgraded the viewer from read-only to writer),
+			// flip the session in place and publish a count update; otherwise
+			// just return the current count.
+			if ch := m.channels.Get(key); ch != nil {
+				if existing, exists := ch.Sessions.Get(sessionID); exists {
+					if existing.IsReadOnly() != readOnly {
+						existing.SetReadOnly(readOnly)
+						existing.updatedAt.Store(gotime.Now().UnixNano())
+						newSessionCount := countParticipants(ch)
+						m.pubsub.PublishChannel(ctx, events.ChannelEvent{
+							Key:          key,
+							SessionCount: newSessionCount,
+							Seq:          m.nextSeq(),
+						})
+						return sessionID, newSessionCount, nil
+					}
+				}
+			}
 			return sessionID, m.SessionCount(key, false), nil
 		}
 	}
@@ -280,6 +320,7 @@ func (m *Manager) Attach(
 			Actor: clientID,
 			Key:   key,
 		}
+		session.readOnly.Store(readOnly)
 		session.updatedAt.Store(gotime.Now().UnixNano())
 
 		// Acquire the read lock for the commit phase. This serializes with
@@ -316,7 +357,9 @@ func (m *Manager) Attach(
 
 		channel.mu.RUnlock()
 
-		newSessionCount := int64(channel.Sessions.Len())
+		// Count excludes read-only sessions so the reported value matches
+		// what is published to other clients.
+		newSessionCount := countParticipants(channel)
 
 		if err := produceSessionEvent(ctx, m, sessionID, clientID, key, events.SessionCreated); err != nil {
 			logging.From(ctx).Errorf("failed to produce session event: %v", err)
@@ -361,7 +404,9 @@ func (m *Manager) Detach(
 		return 0, fmt.Errorf("detach %s: %w", id, ErrSessionNotFound)
 	}
 
-	newSessionCount := int64(ch.Sessions.Len())
+	// Count excludes read-only sessions so the reported value matches
+	// what is published to other clients.
+	newSessionCount := countParticipants(ch)
 
 	m.sessionIDToKey.Delete(id)
 
@@ -421,9 +466,22 @@ func (m *Manager) Refresh(
 	return nil
 }
 
-// SessionCount returns the current session count for a channel key.
-// This is a lock-free operation by directly querying the session map length.
-// If includeSubPath is true, it returns the total count of sessions in the channel and all its sub-channels.
+// countParticipants returns the number of non-read-only sessions in a channel.
+// O(N) over Sessions, but called only at attach/heartbeat/detach (not per
+// broadcast); see docs/design/channel-readonly-attach.md for the rationale.
+func countParticipants(ch *Channel) int64 {
+	var n int64
+	for _, s := range ch.Sessions.Values() {
+		if !s.IsReadOnly() {
+			n++
+		}
+	}
+	return n
+}
+
+// SessionCount returns the current participant count for a channel key,
+// excluding sessions attached with read_only=true.
+// If includeSubPath is true, it returns the total count of participants in the channel and all its sub-channels.
 func (m *Manager) SessionCount(channelkey types.ChannelRefKey, includeSubPath bool) int64 {
 	if !pkgchannel.IsValidChannelKeyPath(channelkey.ChannelKey) {
 		return 0
@@ -432,19 +490,19 @@ func (m *Manager) SessionCount(channelkey types.ChannelRefKey, includeSubPath bo
 	if !includeSubPath {
 		ch := m.channels.Get(channelkey)
 		if ch != nil {
-			return int64(ch.Sessions.Len())
+			return countParticipants(ch)
 		}
 		return 0
 	}
 
-	totalCount := 0
+	var totalCount int64
 	// Use ForEachDescendant to get all child channels in the hierarchy
 	m.channels.ForEachDescendant(channelkey, func(ch *Channel) bool {
-		totalCount += ch.Sessions.Len()
+		totalCount += countParticipants(ch)
 		return true
 	})
 
-	return int64(totalCount)
+	return totalCount
 }
 
 // CleanupExpired removes sessions that have exceeded their TTL.

@@ -27,7 +27,7 @@ A common UX pattern exhibits the problem directly. Consider a forum or chat room
 
 ### Non-Goals
 
-- **In-place upgrade** read-only → participant on the same `session_id`. Re-attachment via detach + new first-call is sufficient; in typical UX flows this happens naturally via route transition (e.g. surrounding page → composer page).
+- **Separate "upgrade" RPC.** A re-attach (i.e. another first-call from the same client + channel) with a different `read_only` is enough to flip the session in place; no dedicated upgrade endpoint is introduced.
 - **Authorization split** between read-only and participant attach. Both use the existing `AttachChannel` ReadWrite permission. A stricter permission tier (read-only attach requires only ReadOnly) can be added later without breaking clients.
 - **Aggregate counts** (read-only + participant combined) exposed through any public API. Server-internal metrics may track it for operational reasons.
 - **Heartbeat tuning per mode**. Both modes share the same TTL/heartbeat policy.
@@ -68,7 +68,7 @@ type Session struct {
     ID        types.ID
     Key       types.ChannelRefKey
     Actor     time.ActorID
-    ReadOnly  bool          // NEW — set at Attach time, immutable for the session's lifetime
+    readOnly  atomic.Bool   // NEW — mutable across re-attach so a route change can flip mode
     updatedAt atomic.Int64
 }
 ```
@@ -84,7 +84,9 @@ func (m *Manager) Attach(
 ) (types.ID, int64, error)
 ```
 
-The session is constructed with `ReadOnly: readOnly`. All existing concurrency invariants (the `activeCount` retry loop, the RLock/WLock interaction with `Detach`) are unchanged — read-only sessions occupy the same `Sessions` map and contribute to `activeCount`, they just don't contribute to the reported count.
+On a fresh attach the session is created with the requested flag. On an idempotent re-attach (same `clientID + channelKey`) the existing session is returned; if the requested `readOnly` differs from the session's current state, the flag is **flipped in place** under the atomic and a count-update event is published. This handles route-change upgrades in the collapsed RefreshChannel flow, where there is no explicit detach RPC to retire the old session.
+
+All existing concurrency invariants (the `activeCount` retry loop, the RLock/WLock interaction with `Detach`) are unchanged — read-only sessions occupy the same `Sessions` map and contribute to `activeCount`, they just don't contribute to the reported count.
 
 ### Counted vs uncounted
 
@@ -138,12 +140,22 @@ A consequence: when **only read-only sessions** attach or detach, `session_count
 `server/rpc/yorkie_server.go`, `firstChannelRefresh`:
 
 ```go
-sessionID, sessionCount, err := s.backend.Channel.Attach(
-    ctx, refKey, actorID, req.Msg.ReadOnly,
-)
+// Resolve the actor: reuse a known client_id when the SDK has one (so
+// re-mounts don't churn through ActivateClient and stay within Attach's
+// idempotency), otherwise activate by client_key.
+var clientID types.ID
+if req.Msg.ClientId != "" {
+    actorID, _ := time.ActorIDFromHex(req.Msg.ClientId)
+    clientID = types.IDFromActorID(actorID)
+} else {
+    cli, _ := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
+    clientID = cli.ID
+}
+actorID, _ := clientID.ToActorID()
+sessionID, sessionCount, _ := s.backend.Channel.Attach(ctx, refKey, actorID, req.Msg.ReadOnly)
 ```
 
-`heartbeatChannelRefresh` is untouched — read-only-ness is a property of the existing session and need not be re-stated on heartbeat.
+`heartbeatChannelRefresh` is untouched — heartbeat carries no membership-state changes.
 
 ### SDK
 
@@ -168,7 +180,7 @@ React surface:
 </ChannelProvider>
 ```
 
-`readOnly` defaults to `false`. The flag is read at first-call only; mutating the prop while attached has no effect (consistent with `channelKey` semantics). To toggle, callers remount — in typical UX flows this happens naturally via route transition: the surrounding page unmounts its read-only `ChannelProvider` and the composer page mounts a participant `ChannelProvider` with the same `channelKey`.
+`readOnly` defaults to `false`. The flag is read on every first-call (i.e. every `ChannelProvider` mount). Toggling the prop and remounting issues a new first-call with the different flag; the server flips the existing session in place (see *Server data model*).
 
 ### Lifecycle in a route-transition UX
 
@@ -179,11 +191,12 @@ route /room/:id/compose              → <ChannelProvider channelKey="writers" /
 
 Timeline on a third-party tab attached to `writers`:
 
-1. User A on `/room/abc` — first-call with `read_only=true` → server registers session, `SessionCount` unchanged, `ChannelEvent` carries the unchanged count.
-2. User A clicks the composer button, navigates to `/room/abc/compose`. The read-only provider unmounts (SDK does not need to detach eagerly; cleanup via TTL is fine because the session is invisible to the count). The participant provider on the new route mounts → first-call with `read_only=false` → server registers a *new* session, `SessionCount` increments, `ChannelEvent` published.
-3. User A navigates back. Participant session detaches on unmount (SDK should detach eagerly here so the count delta is prompt). Read-only provider mounts again on `/room/abc`.
+1. User A on `/room/abc` — first-call with `read_only=true` → server creates session, `SessionCount` unchanged at 0, `ChannelEvent` carries the unchanged count.
+2. User A clicks the composer, navigates to `/room/abc/compose`. The read-only provider unmounts; the SDK does **not** call DetachChannel (collapsed flow). The participant provider on the new route mounts → first-call with `read_only=false` for the same `(client_id, channel_key)`. The server's `Manager.Attach` matches the existing session by client+channel, detects the flag mismatch, **flips `readOnly` to false in place**, recomputes the count (now includes A → +1), and publishes a `ChannelEvent`. Same `session_id`, same heartbeat loop in the SDK.
+3. User A navigates back. The participant provider unmounts; the read-only provider on `/room/:id` mounts and first-calls with `read_only=true`. Same flip in reverse: count drops by 1.
+4. User A closes the tab outright (without navigating). Heartbeats stop, server reaps the session after `channelSessionTTL`. If the session was a participant at that moment, the count drops then; if it was already read-only, the count is unchanged.
 
-The asymmetry — participant detaches eagerly on unmount, read-only falls off via TTL — is intentional: read-only disappearance does not move the displayed number, so cleanup latency is invisible to users. SDK implementations may choose to detach both eagerly for tidiness; that's a quality-of-implementation choice, not a correctness requirement.
+Net effect: count moves crisply on every route-driven mode change (no TTL lag), while pure presence cleanup (closing the tab) follows the channel TTL. No explicit DetachChannel RPC is needed.
 
 ### Risks and Mitigation
 
@@ -201,7 +214,7 @@ The asymmetry — participant detaches eagerly on unmount, read-only falls off v
 |----------|--------|
 | Flag on `Session` rather than separate `ReadOnlySessions` map | Single membership list keeps `activeCount`, TTL cleanup, and pubsub fan-out paths unchanged. Filtering is one predicate. |
 | Filter at read time in `SessionCount`, not at write time via parallel counter | Avoids a second source of truth that has to stay consistent under concurrent Attach/Detach. Read cost is acceptable for channel scale. |
-| `read_only` is immutable per session (no in-place upgrade RPC) | Typical UX upgrades read-only → participant via route change, which detaches and first-calls fresh. Adding `SetReadOnly` later is non-breaking if upgrade-in-place becomes necessary. |
+| `read_only` is mutable via re-attach (same client + channel with a different flag flips the session in place) | The collapsed RefreshChannel flow has no explicit detach RPC, so the SDK can't retire an old read-only session before mounting a participant attach. Flipping the existing session is atomic (atomic.Bool), keeps the `session_id` stable across mode changes, and emits a single count-update event. Alternative — splitting old/new sessions on mismatch — adds churn (two events, sessionId change) for no semantic gain. |
 | Both read-only and participant use `AttachChannel` ReadWrite permission | Per requirement: any client may read-only-attach. A ReadOnly-style permission tier can be added later without breaking read-only clients (they'd just keep working on the existing permission). |
 | `read_only` flag only meaningful on first-call | Heartbeats carry no membership state changes; this keeps `heartbeatChannelRefresh` a pure liveness ping. |
 | Read-only sessions still receive `ChannelEvent` even when only read-only churn occurs | Cost is the same pubsub broadcast; read-only viewers explicitly want count updates and the unchanged count is a valid event payload. |

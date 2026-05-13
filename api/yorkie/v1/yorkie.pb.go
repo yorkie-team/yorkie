@@ -2378,8 +2378,13 @@ type RefreshChannelRequest struct {
 	// is empty). The server activates the client and attaches it to the channel
 	// before refreshing, collapsing ActivateClient + AttachChannel + RefreshChannel
 	// into a single round trip.
-	ClientKey     string            `protobuf:"bytes,4,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	Metadata      map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ClientKey string            `protobuf:"bytes,4,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	Metadata  map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// read_only is meaningful only on the first call (session_id empty). When
+	// true, the resulting session is attached to the channel but excluded from
+	// session_count reported to all clients. Read-only sessions still receive
+	// broadcasts and channel events; the flag only affects count accounting.
+	ReadOnly      bool `protobuf:"varint,6,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2447,6 +2452,13 @@ func (x *RefreshChannelRequest) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *RefreshChannelRequest) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
 }
 
 type RefreshChannelResponse struct {
@@ -2837,7 +2849,7 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\"<\n" +
 	"\x15DetachChannelResponse\x12#\n" +
-	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"\x9c\x02\n" +
+	"\rsession_count\x18\x01 \x01(\x03R\fsessionCount\"\xb9\x02\n" +
 	"\x15RefreshChannelRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vchannel_key\x18\x02 \x01(\tR\n" +
@@ -2846,7 +2858,8 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1d\n" +
 	"\n" +
 	"client_key\x18\x04 \x01(\tR\tclientKey\x12J\n" +
-	"\bmetadata\x18\x05 \x03(\v2..yorkie.v1.RefreshChannelRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x05 \x03(\v2..yorkie.v1.RefreshChannelRequest.MetadataEntryR\bmetadata\x12\x1b\n" +
+	"\tread_only\x18\x06 \x01(\bR\breadOnly\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"y\n" +

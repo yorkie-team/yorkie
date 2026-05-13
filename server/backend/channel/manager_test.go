@@ -99,7 +99,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		}
 		clientID := pkgtime.InitialActorID
 
-		sessionID, count, err := manager.Attach(ctx, refKey, clientID)
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
@@ -132,7 +132,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		}
 		clientID := pkgtime.InitialActorID
 
-		_, count, err := manager.Attach(ctx, refKey, clientID)
+		_, count, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
@@ -161,7 +161,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		}
 		clientID := pkgtime.InitialActorID
 
-		sessionID, count, err := manager.Attach(ctx, refKey, clientID)
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
 
@@ -199,13 +199,13 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		clientID2, err := pkgtime.ActorIDFromHex("000000000000000000000001")
 		assert.NoError(t, err)
 
-		_, _, err = manager.Attach(ctx, refKey, clientID1)
+		_, _, err = manager.Attach(ctx, refKey, clientID1, false)
 		assert.NoError(t, err)
 
 		// Wait a bit before creating second channel
 		time.Sleep(200 * time.Millisecond)
 
-		sessionID2, count, err := manager.Attach(ctx, refKey, clientID2)
+		sessionID2, count, err := manager.Attach(ctx, refKey, clientID2, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), count)
 
@@ -596,7 +596,7 @@ func attachChannels(
 	for i := range count {
 		clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", clientIDPrefix, i))
 		assert.NoError(t, err)
-		channelID, _, err := manager.Attach(ctx, refKey, clientID)
+		channelID, _, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		channelIDs = append(channelIDs, channelID)
 	}
@@ -631,7 +631,7 @@ func TestChannelManager_AttachDetach(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
 		clientID := pkgtime.InitialActorID
 
-		sessionID, count, err := manager.Attach(ctx, refKey, clientID)
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, sessionID)
 		assert.Equal(t, int64(1), count)
@@ -650,12 +650,12 @@ func TestChannelManager_AttachDetach(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
 		clientID := pkgtime.InitialActorID
 
-		sessionID1, count1, err := manager.Attach(ctx, refKey, clientID)
+		sessionID1, count1, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count1)
 
 		// Attach again with same client
-		sessionID2, count2, err := manager.Attach(ctx, refKey, clientID)
+		sessionID2, count2, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.NoError(t, err)
 		assert.Equal(t, sessionID1, sessionID2) // Same session ID
 		assert.Equal(t, int64(1), count2)       // Count unchanged
@@ -728,9 +728,9 @@ func TestChannelManager_AttachDetach(t *testing.T) {
 		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-2"}
 		clientID := pkgtime.InitialActorID
 
-		_, _, err := manager.Attach(ctx, refKey1, clientID)
+		_, _, err := manager.Attach(ctx, refKey1, clientID, false)
 		assert.NoError(t, err)
-		_, _, err = manager.Attach(ctx, refKey2, clientID)
+		_, _, err = manager.Attach(ctx, refKey2, clientID, false)
 		assert.NoError(t, err)
 
 		assert.Equal(t, int64(1), manager.SessionCount(refKey1, false))
@@ -773,7 +773,7 @@ func TestChannelManager_AttachDetachErrors(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: ""}
 		clientID := pkgtime.InitialActorID
 
-		_, _, err := manager.Attach(ctx, refKey, clientID)
+		_, _, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.Error(t, err)
 	})
 
@@ -786,7 +786,7 @@ func TestChannelManager_AttachDetachErrors(t *testing.T) {
 		refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: ".room-1"}
 		clientID := pkgtime.InitialActorID
 
-		_, _, err := manager.Attach(ctx, refKey, clientID)
+		_, _, err := manager.Attach(ctx, refKey, clientID, false)
 		assert.Error(t, err)
 	})
 
@@ -900,7 +900,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 					errors[idx] = err
 					return
 				}
-				sessionID, _, err := manager.Attach(ctx, refKey, clientID)
+				sessionID, _, err := manager.Attach(ctx, refKey, clientID, false)
 				sessionIDs[idx] = sessionID
 				errors[idx] = err
 			}(i)
@@ -941,7 +941,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 					ChannelKey: key.Key(fmt.Sprintf("room-%d", idx)),
 				}
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
-				_, _, err := manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID, false)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
@@ -987,7 +987,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("2%023d", idx))
-				_, _, err := manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID, false)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
@@ -1024,7 +1024,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 				defer wg.Done()
 				refKey := refKeys[idx%len(refKeys)]
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
-				_, _, err := manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID, false)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
@@ -1063,7 +1063,7 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 			clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 			assert.NoError(t, err)
 
-			_, _, err = manager.Attach(ctx, refKey, clientID)
+			_, _, err = manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 
 			// Get the latest event
@@ -1119,7 +1119,7 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
-				_, _, err := manager.Attach(ctx, refKey, clientID)
+				_, _, err := manager.Attach(ctx, refKey, clientID, false)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
@@ -1179,7 +1179,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 				ChannelKey: key.Key(fmt.Sprintf("room-%03d", i)),
 			}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, err := manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 		}
 
@@ -1211,7 +1211,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 			}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, err := manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 		}
 
@@ -1232,7 +1232,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 				ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 			}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, err := manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 		}
 
@@ -1251,7 +1251,7 @@ func TestChannelManager_ListBoundary(t *testing.T) {
 		for i, k := range keys {
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
-			_, _, err := manager.Attach(ctx, refKey, clientID)
+			_, _, err := manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 		}
 
@@ -1325,7 +1325,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		for round := 0; round < 100; round++ {
 			// Attach one session
 			clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("a%023d", round))
-			sessionID, _, err := manager.Attach(ctx, refKey, clientID)
+			sessionID, _, err := manager.Attach(ctx, refKey, clientID, false)
 			assert.NoError(t, err)
 
 			// Concurrently: detach that session AND attach a new one
@@ -1342,7 +1342,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				newClientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("b%023d", round))
-				newSessionID, _, attachErr = manager.Attach(ctx, refKey, newClientID)
+				newSessionID, _, attachErr = manager.Attach(ctx, refKey, newClientID, false)
 			}()
 			wg.Wait()
 
@@ -1382,7 +1382,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 				defer wg.Done()
 				for i := 0; i < opsPerGoroutine; i++ {
 					clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%012d%012d", id, i))
-					sessionID, _, err := manager.Attach(ctx, refKey, clientID)
+					sessionID, _, err := manager.Attach(ctx, refKey, clientID, false)
 					if err != nil {
 						atomic.AddInt64(&attachErrors, 1)
 						continue
@@ -1444,7 +1444,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("f%023d", idx))
-				if _, _, err := manager.Attach(ctx, refKey, cid); err != nil {
+				if _, _, err := manager.Attach(ctx, refKey, cid, false); err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
 			}(i)
@@ -1470,7 +1470,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 			sessions := make([]types.ID, 10)
 			for i := 0; i < 10; i++ {
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%06x%018d", round, i))
-				sid, _, err := manager.Attach(ctx, refKey, cid)
+				sid, _, err := manager.Attach(ctx, refKey, cid, false)
 				assert.NoError(t, err)
 				sessions[i] = sid
 			}
@@ -1512,7 +1512,7 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 			go func(idx int) {
 				defer wg.Done()
 				cid, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
-				sid, _, err := manager.Attach(ctx, refKey, cid)
+				sid, _, err := manager.Attach(ctx, refKey, cid, false)
 				sessionIDs[idx] = sid
 				errors[idx] = err
 			}(i)
@@ -1578,5 +1578,202 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		assert.Equal(t, 50, cleaned, "should clean up 50 expired sessions")
 		assert.Equal(t, int64(50), manager.SessionCount(refKey, false),
 			"50 refreshed sessions should survive")
+	})
+}
+
+func TestChannelManager_ReadOnly(t *testing.T) {
+	t.Run("read-only attach does not bump session count", func(t *testing.T) {
+		ctx := context.Background()
+		manager, pubsub, _ := createManager(t, 60*time.Second, 10*time.Second)
+		refKey := types.ChannelRefKey{ProjectID: types.NewID(), ChannelKey: "room-1"}
+		clientID := pkgtime.InitialActorID
+
+		sessionID, count, err := manager.Attach(ctx, refKey, clientID, true)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, sessionID)
+		assert.Equal(t, int64(0), count, "read-only attach must not count")
+
+		// SessionCount query reflects the same exclusion.
+		assert.Equal(t, int64(0), manager.SessionCount(refKey, false))
+
+		// PubSub still fires (so other clients learn of channel churn),
+		// but the published count must reflect the exclusion.
+		assert.Len(t, pubsub.events, 1)
+		assert.Equal(t, int64(0), pubsub.events[0].SessionCount)
+	})
+
+	t.Run("participants are counted, read-only sessions are not", func(t *testing.T) {
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		refKey := types.ChannelRefKey{ProjectID: types.NewID(), ChannelKey: "room-1"}
+
+		// Two read-only viewers.
+		readOnlyA, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 0))
+		assert.NoError(t, err)
+		readOnlyB, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 1))
+		assert.NoError(t, err)
+		_, count, err := manager.Attach(ctx, refKey, readOnlyA, true)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+		_, count, err = manager.Attach(ctx, refKey, readOnlyB, true)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+
+		// Two participants — count bumps to 1, then 2.
+		participantA, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 0))
+		assert.NoError(t, err)
+		participantB, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 1))
+		assert.NoError(t, err)
+		_, count, err = manager.Attach(ctx, refKey, participantA, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+		_, count, err = manager.Attach(ctx, refKey, participantB, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), count)
+
+		assert.Equal(t, int64(2), manager.SessionCount(refKey, false))
+	})
+
+	t.Run("detaching a read-only session leaves the count unchanged", func(t *testing.T) {
+		ctx := context.Background()
+		manager, pubsub, _ := createManager(t, 60*time.Second, 10*time.Second)
+		refKey := types.ChannelRefKey{ProjectID: types.NewID(), ChannelKey: "room-1"}
+
+		participant, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 0))
+		assert.NoError(t, err)
+		_, count, err := manager.Attach(ctx, refKey, participant, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+
+		readOnly, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 0))
+		assert.NoError(t, err)
+		readOnlySID, _, err := manager.Attach(ctx, refKey, readOnly, true)
+		assert.NoError(t, err)
+
+		// Reset pubsub.events len so we can isolate the detach event.
+		eventsBefore := len(pubsub.events)
+		newCount, err := manager.Detach(ctx, readOnlySID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), newCount, "participant count survives read-only detach")
+		assert.Equal(t, int64(1), manager.SessionCount(refKey, false))
+
+		// A pubsub event is still published; its count must equal the
+		// participant count, not the total session count.
+		assert.Equal(t, eventsBefore+1, len(pubsub.events))
+		assert.Equal(t, int64(1), pubsub.events[eventsBefore].SessionCount)
+	})
+
+	t.Run("re-attach with different read_only flips the existing session in place", func(t *testing.T) {
+		ctx := context.Background()
+		manager, pubsub, _ := createManager(t, 60*time.Second, 10*time.Second)
+		refKey := types.ChannelRefKey{ProjectID: types.NewID(), ChannelKey: "room-1"}
+		clientID := pkgtime.InitialActorID
+
+		// First attach as read-only.
+		sid1, count1, err := manager.Attach(ctx, refKey, clientID, true)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), count1)
+		eventsAfterRO := len(pubsub.events)
+
+		// Re-attach the same client to the same channel with read_only=false:
+		// in the collapsed RefreshChannel flow there is no explicit detach,
+		// so the session is reused with its read_only flag flipped in place.
+		// The session ID is stable, but the participant count rises.
+		sid2, count2, err := manager.Attach(ctx, refKey, clientID, false)
+		assert.NoError(t, err)
+		assert.Equal(t, sid1, sid2, "sessionId stable across mode flip")
+		assert.Equal(t, int64(1), count2, "session became participant")
+
+		// A pubsub event is published reflecting the new count.
+		assert.Equal(t, eventsAfterRO+1, len(pubsub.events))
+		assert.Equal(t, int64(1), pubsub.events[eventsAfterRO].SessionCount)
+
+		// Flip back to read-only. Same sessionId, count drops to 0.
+		sid3, count3, err := manager.Attach(ctx, refKey, clientID, true)
+		assert.NoError(t, err)
+		assert.Equal(t, sid1, sid3)
+		assert.Equal(t, int64(0), count3, "session became read-only again")
+
+		// Idempotent re-attach with the same flag does not publish.
+		eventsBeforeIdem := len(pubsub.events)
+		sid4, count4, err := manager.Attach(ctx, refKey, clientID, true)
+		assert.NoError(t, err)
+		assert.Equal(t, sid1, sid4)
+		assert.Equal(t, int64(0), count4)
+		assert.Equal(t, eventsBeforeIdem, len(pubsub.events),
+			"no event on idempotent re-attach")
+	})
+
+	t.Run("read-only sessions are reaped by TTL like participants", func(t *testing.T) {
+		// Initialize default logger for background goroutine in Start().
+		logging.DefaultLogger()
+
+		ctx := context.Background()
+		ttl := 50 * time.Millisecond
+		cleanupInterval := 20 * time.Millisecond
+		manager, _, _ := createManager(t, ttl, cleanupInterval)
+		manager.Start()
+		t.Cleanup(func() { manager.Stop() })
+
+		refKey := types.ChannelRefKey{ProjectID: types.NewID(), ChannelKey: "room-1"}
+
+		readOnly, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 0))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, refKey, readOnly, true)
+		assert.NoError(t, err)
+
+		participant, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 0))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, refKey, participant, false)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), manager.SessionCount(refKey, false))
+
+		// Wait for both sessions to expire and be reaped.
+		time.Sleep(ttl + 2*cleanupInterval)
+		assert.Equal(t, int64(0), manager.SessionCount(refKey, false))
+	})
+
+	t.Run("SessionCount with includeSubPath filters read-only across sub-channels", func(t *testing.T) {
+		ctx := context.Background()
+		manager, _, _ := createManager(t, 60*time.Second, 10*time.Second)
+		projectID := types.NewID()
+
+		parent := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1"}
+		child := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-1.section-1"}
+
+		// Parent: 1 participant + 1 read-only.
+		p1, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 0))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, parent, p1, false)
+		assert.NoError(t, err)
+		r1, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 0))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, parent, r1, true)
+		assert.NoError(t, err)
+
+		// Child: 2 participants + 2 read-only.
+		p2, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 1))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, child, p2, false)
+		assert.NoError(t, err)
+		p3, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "b", 2))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, child, p3, false)
+		assert.NoError(t, err)
+		r2, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 1))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, child, r2, true)
+		assert.NoError(t, err)
+		r3, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%s%023d", "a", 2))
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, child, r3, true)
+		assert.NoError(t, err)
+
+		// Per-channel.
+		assert.Equal(t, int64(1), manager.SessionCount(parent, false))
+		assert.Equal(t, int64(2), manager.SessionCount(child, false))
+
+		// With sub-path: 1 + 2 = 3 participants total (4 read-only excluded).
+		assert.Equal(t, int64(3), manager.SessionCount(parent, true))
 	})
 }

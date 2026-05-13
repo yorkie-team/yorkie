@@ -288,6 +288,11 @@ message RefreshChannelRequest {
   // into a single round trip.
   string client_key = 4;
   map<string, string> metadata = 5;
+  // read_only is meaningful only on the first call (session_id empty). When
+  // true, the resulting session is attached to the channel but excluded from
+  // session_count reported to all clients. Read-only sessions still receive
+  // broadcasts and channel events; the flag only affects count accounting.
+  bool read_only = 6;
 }
 
 message RefreshChannelResponse {

@@ -324,7 +324,9 @@ func (s *yorkieServer) AttachChannel(
 		ChannelKey: channelKey,
 	}
 
-	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID)
+	// Legacy AttachChannel does not carry the read_only flag; read-only
+	// attaches must go through the collapsed RefreshChannel first-call.
+	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -412,15 +414,10 @@ func (s *yorkieServer) firstChannelRefresh(
 	req *connect.Request[api.RefreshChannelRequest],
 	channelKey key.Key,
 ) (*connect.Response[api.RefreshChannelResponse], error) {
-	if req.Msg.ClientKey == "" {
+	if req.Msg.ClientId == "" && req.Msg.ClientKey == "" {
 		return nil, clients.ErrInvalidClientKey
 	}
 
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.ActivateClient,
-	}); err != nil {
-		return nil, err
-	}
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachChannel,
 		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.ReadWrite),
@@ -429,39 +426,60 @@ func (s *yorkieServer) firstChannelRefresh(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
-	if err != nil {
-		return nil, err
-	}
 
-	if err := s.backend.MsgBroker.Produce(
-		ctx,
-		messaging.ClientEventMessage{
-			ProjectID: project.ID.String(),
-			ClientID:  cli.ID.String(),
-			Timestamp: gotime.Now(),
-			EventType: events.ClientActivatedEvent,
-		},
-	); err != nil {
-		logging.From(ctx).Errorf("failed to produce client event: %v", err)
-	}
+	// Resolve the actor: if the caller already holds a client_id (typically
+	// from a prior ActivateClient or first channel call on the same Client
+	// instance), reuse it so Manager.Attach's idempotency check works across
+	// re-mounts. Otherwise, activate by client_key.
+	var clientID types.ID
+	if req.Msg.ClientId != "" {
+		actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+		if err != nil {
+			return nil, err
+		}
+		clientID = types.IDFromActorID(actorID)
+	} else {
+		if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+			Method: types.ActivateClient,
+		}); err != nil {
+			return nil, err
+		}
 
-	if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
+		cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		clientID = cli.ID
+
 		if err := s.backend.MsgBroker.Produce(
 			ctx,
-			messaging.UserEventMessage{
-				UserID:    userID,
+			messaging.ClientEventMessage{
+				ProjectID: project.ID.String(),
+				ClientID:  cli.ID.String(),
 				Timestamp: gotime.Now(),
 				EventType: events.ClientActivatedEvent,
-				ProjectID: project.ID.String(),
-				UserAgent: req.Header().Get("x-yorkie-user-agent"),
 			},
 		); err != nil {
-			logging.From(ctx).Errorf("failed to produce user event: %v", err)
+			logging.From(ctx).Errorf("failed to produce client event: %v", err)
+		}
+
+		if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
+			if err := s.backend.MsgBroker.Produce(
+				ctx,
+				messaging.UserEventMessage{
+					UserID:    userID,
+					Timestamp: gotime.Now(),
+					EventType: events.ClientActivatedEvent,
+					ProjectID: project.ID.String(),
+					UserAgent: req.Header().Get("x-yorkie-user-agent"),
+				},
+			); err != nil {
+				logging.From(ctx).Errorf("failed to produce user event: %v", err)
+			}
 		}
 	}
 
-	actorID, err := cli.ID.ToActorID()
+	actorID, err := clientID.ToActorID()
 	if err != nil {
 		return nil, err
 	}
@@ -470,14 +488,14 @@ func (s *yorkieServer) firstChannelRefresh(
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
 	}
-	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID)
+	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID, req.Msg.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
 
 	return connect.NewResponse(&api.RefreshChannelResponse{
 		SessionCount: sessionCount,
-		ClientId:     cli.ID.String(),
+		ClientId:     clientID.String(),
 		SessionId:    sessionID.String(),
 	}), nil
 }
