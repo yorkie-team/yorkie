@@ -144,6 +144,26 @@ func RunLeadershipTest(
 		assert.Equal(t, 1, leaderCount)
 	})
 
+	t.Run("TryLeadership should return nil when leader retries with empty token before lease expires", func(t *testing.T) {
+		ctx := context.Background()
+		require.NoError(t, db.RemoveClusterNodes(ctx))
+
+		leaseDuration := 30 * gotime.Second
+
+		// Initial acquisition succeeds.
+		info, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+
+		// Same node retries with empty token (e.g., a restart that lost the
+		// in-memory lease token). The active lease blocks re-acquire until it
+		// expires; recovery waits for expiry rather than racing to refresh
+		// the existing row.
+		info2, err := db.TryLeadership(ctx, nodeIDOne, "", leaseDuration)
+		require.NoError(t, err)
+		assert.Nil(t, info2)
+	})
+
 	t.Run("TryLeadership should fail with invalid token", func(t *testing.T) {
 		ctx := context.Background()
 		require.NoError(t, db.RemoveClusterNodes(ctx))
