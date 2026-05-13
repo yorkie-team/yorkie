@@ -33,7 +33,7 @@ import (
 // generated with a version of connect newer than the one compiled into your binary. You can fix the
 // problem by either regenerating this code with an older version of connect or updating the connect
 // version compiled into your binary.
-const _ = connect.IsAtLeastVersion0_1_0
+const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// YorkieServiceName is the fully-qualified name of the YorkieService service.
@@ -95,6 +95,9 @@ const (
 	// YorkieServiceRefreshChannelProcedure is the fully-qualified name of the YorkieService's
 	// RefreshChannel RPC.
 	YorkieServiceRefreshChannelProcedure = "/yorkie.v1.YorkieService/RefreshChannel"
+	// YorkieServicePeekChannelProcedure is the fully-qualified name of the YorkieService's PeekChannel
+	// RPC.
+	YorkieServicePeekChannelProcedure = "/yorkie.v1.YorkieService/PeekChannel"
 	// YorkieServiceBroadcastProcedure is the fully-qualified name of the YorkieService's Broadcast RPC.
 	YorkieServiceBroadcastProcedure = "/yorkie.v1.YorkieService/Broadcast"
 )
@@ -119,6 +122,7 @@ type YorkieServiceClient interface {
 	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
 	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
 	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
+	PeekChannel(context.Context, *connect.Request[v1.PeekChannelRequest]) (*connect.Response[v1.PeekChannelResponse], error)
 	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
@@ -131,91 +135,115 @@ type YorkieServiceClient interface {
 // http://api.acme.com or https://acme.com/grpc).
 func NewYorkieServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) YorkieServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
+	yorkieServiceMethods := v1.File_yorkie_v1_yorkie_proto.Services().ByName("YorkieService").Methods()
 	return &yorkieServiceClient{
 		activateClient: connect.NewClient[v1.ActivateClientRequest, v1.ActivateClientResponse](
 			httpClient,
 			baseURL+YorkieServiceActivateClientProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("ActivateClient")),
+			connect.WithClientOptions(opts...),
 		),
 		deactivateClient: connect.NewClient[v1.DeactivateClientRequest, v1.DeactivateClientResponse](
 			httpClient,
 			baseURL+YorkieServiceDeactivateClientProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("DeactivateClient")),
+			connect.WithClientOptions(opts...),
 		),
 		attachDocument: connect.NewClient[v1.AttachDocumentRequest, v1.AttachDocumentResponse](
 			httpClient,
 			baseURL+YorkieServiceAttachDocumentProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("AttachDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		detachDocument: connect.NewClient[v1.DetachDocumentRequest, v1.DetachDocumentResponse](
 			httpClient,
 			baseURL+YorkieServiceDetachDocumentProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("DetachDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		removeDocument: connect.NewClient[v1.RemoveDocumentRequest, v1.RemoveDocumentResponse](
 			httpClient,
 			baseURL+YorkieServiceRemoveDocumentProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("RemoveDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		pushPullChanges: connect.NewClient[v1.PushPullChangesRequest, v1.PushPullChangesResponse](
 			httpClient,
 			baseURL+YorkieServicePushPullChangesProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("PushPullChanges")),
+			connect.WithClientOptions(opts...),
 		),
 		watch: connect.NewClient[v1.WatchRequest, v1.WatchResponse](
 			httpClient,
 			baseURL+YorkieServiceWatchProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("Watch")),
+			connect.WithClientOptions(opts...),
 		),
 		watchDocument: connect.NewClient[v1.WatchDocumentRequest, v1.WatchDocumentResponse](
 			httpClient,
 			baseURL+YorkieServiceWatchDocumentProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("WatchDocument")),
+			connect.WithClientOptions(opts...),
 		),
 		watchChannel: connect.NewClient[v1.WatchChannelRequest, v1.WatchChannelResponse](
 			httpClient,
 			baseURL+YorkieServiceWatchChannelProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("WatchChannel")),
+			connect.WithClientOptions(opts...),
 		),
 		createRevision: connect.NewClient[v1.CreateRevisionRequest, v1.CreateRevisionResponse](
 			httpClient,
 			baseURL+YorkieServiceCreateRevisionProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("CreateRevision")),
+			connect.WithClientOptions(opts...),
 		),
 		getRevision: connect.NewClient[v1.GetRevisionRequest, v1.GetRevisionResponse](
 			httpClient,
 			baseURL+YorkieServiceGetRevisionProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("GetRevision")),
+			connect.WithClientOptions(opts...),
 		),
 		listRevisions: connect.NewClient[v1.ListRevisionsRequest, v1.ListRevisionsResponse](
 			httpClient,
 			baseURL+YorkieServiceListRevisionsProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("ListRevisions")),
+			connect.WithClientOptions(opts...),
 		),
 		restoreRevision: connect.NewClient[v1.RestoreRevisionRequest, v1.RestoreRevisionResponse](
 			httpClient,
 			baseURL+YorkieServiceRestoreRevisionProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("RestoreRevision")),
+			connect.WithClientOptions(opts...),
 		),
 		attachChannel: connect.NewClient[v1.AttachChannelRequest, v1.AttachChannelResponse](
 			httpClient,
 			baseURL+YorkieServiceAttachChannelProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("AttachChannel")),
+			connect.WithClientOptions(opts...),
 		),
 		detachChannel: connect.NewClient[v1.DetachChannelRequest, v1.DetachChannelResponse](
 			httpClient,
 			baseURL+YorkieServiceDetachChannelProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("DetachChannel")),
+			connect.WithClientOptions(opts...),
 		),
 		refreshChannel: connect.NewClient[v1.RefreshChannelRequest, v1.RefreshChannelResponse](
 			httpClient,
 			baseURL+YorkieServiceRefreshChannelProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("RefreshChannel")),
+			connect.WithClientOptions(opts...),
+		),
+		peekChannel: connect.NewClient[v1.PeekChannelRequest, v1.PeekChannelResponse](
+			httpClient,
+			baseURL+YorkieServicePeekChannelProcedure,
+			connect.WithSchema(yorkieServiceMethods.ByName("PeekChannel")),
+			connect.WithClientOptions(opts...),
 		),
 		broadcast: connect.NewClient[v1.BroadcastRequest, v1.BroadcastResponse](
 			httpClient,
 			baseURL+YorkieServiceBroadcastProcedure,
-			opts...,
+			connect.WithSchema(yorkieServiceMethods.ByName("Broadcast")),
+			connect.WithClientOptions(opts...),
 		),
 	}
 }
@@ -238,6 +266,7 @@ type yorkieServiceClient struct {
 	attachChannel    *connect.Client[v1.AttachChannelRequest, v1.AttachChannelResponse]
 	detachChannel    *connect.Client[v1.DetachChannelRequest, v1.DetachChannelResponse]
 	refreshChannel   *connect.Client[v1.RefreshChannelRequest, v1.RefreshChannelResponse]
+	peekChannel      *connect.Client[v1.PeekChannelRequest, v1.PeekChannelResponse]
 	broadcast        *connect.Client[v1.BroadcastRequest, v1.BroadcastResponse]
 }
 
@@ -321,6 +350,11 @@ func (c *yorkieServiceClient) RefreshChannel(ctx context.Context, req *connect.R
 	return c.refreshChannel.CallUnary(ctx, req)
 }
 
+// PeekChannel calls yorkie.v1.YorkieService.PeekChannel.
+func (c *yorkieServiceClient) PeekChannel(ctx context.Context, req *connect.Request[v1.PeekChannelRequest]) (*connect.Response[v1.PeekChannelResponse], error) {
+	return c.peekChannel.CallUnary(ctx, req)
+}
+
 // Broadcast calls yorkie.v1.YorkieService.Broadcast.
 func (c *yorkieServiceClient) Broadcast(ctx context.Context, req *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error) {
 	return c.broadcast.CallUnary(ctx, req)
@@ -346,6 +380,7 @@ type YorkieServiceHandler interface {
 	AttachChannel(context.Context, *connect.Request[v1.AttachChannelRequest]) (*connect.Response[v1.AttachChannelResponse], error)
 	DetachChannel(context.Context, *connect.Request[v1.DetachChannelRequest]) (*connect.Response[v1.DetachChannelResponse], error)
 	RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error)
+	PeekChannel(context.Context, *connect.Request[v1.PeekChannelRequest]) (*connect.Response[v1.PeekChannelResponse], error)
 	Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error)
 }
 
@@ -355,90 +390,114 @@ type YorkieServiceHandler interface {
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
 func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	yorkieServiceMethods := v1.File_yorkie_v1_yorkie_proto.Services().ByName("YorkieService").Methods()
 	yorkieServiceActivateClientHandler := connect.NewUnaryHandler(
 		YorkieServiceActivateClientProcedure,
 		svc.ActivateClient,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("ActivateClient")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceDeactivateClientHandler := connect.NewUnaryHandler(
 		YorkieServiceDeactivateClientProcedure,
 		svc.DeactivateClient,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("DeactivateClient")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceAttachDocumentHandler := connect.NewUnaryHandler(
 		YorkieServiceAttachDocumentProcedure,
 		svc.AttachDocument,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("AttachDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceDetachDocumentHandler := connect.NewUnaryHandler(
 		YorkieServiceDetachDocumentProcedure,
 		svc.DetachDocument,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("DetachDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceRemoveDocumentHandler := connect.NewUnaryHandler(
 		YorkieServiceRemoveDocumentProcedure,
 		svc.RemoveDocument,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("RemoveDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServicePushPullChangesHandler := connect.NewUnaryHandler(
 		YorkieServicePushPullChangesProcedure,
 		svc.PushPullChanges,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("PushPullChanges")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceWatchHandler := connect.NewServerStreamHandler(
 		YorkieServiceWatchProcedure,
 		svc.Watch,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("Watch")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceWatchDocumentHandler := connect.NewServerStreamHandler(
 		YorkieServiceWatchDocumentProcedure,
 		svc.WatchDocument,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("WatchDocument")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceWatchChannelHandler := connect.NewServerStreamHandler(
 		YorkieServiceWatchChannelProcedure,
 		svc.WatchChannel,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("WatchChannel")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceCreateRevisionHandler := connect.NewUnaryHandler(
 		YorkieServiceCreateRevisionProcedure,
 		svc.CreateRevision,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("CreateRevision")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceGetRevisionHandler := connect.NewUnaryHandler(
 		YorkieServiceGetRevisionProcedure,
 		svc.GetRevision,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("GetRevision")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceListRevisionsHandler := connect.NewUnaryHandler(
 		YorkieServiceListRevisionsProcedure,
 		svc.ListRevisions,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("ListRevisions")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceRestoreRevisionHandler := connect.NewUnaryHandler(
 		YorkieServiceRestoreRevisionProcedure,
 		svc.RestoreRevision,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("RestoreRevision")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceAttachChannelHandler := connect.NewUnaryHandler(
 		YorkieServiceAttachChannelProcedure,
 		svc.AttachChannel,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("AttachChannel")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceDetachChannelHandler := connect.NewUnaryHandler(
 		YorkieServiceDetachChannelProcedure,
 		svc.DetachChannel,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("DetachChannel")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceRefreshChannelHandler := connect.NewUnaryHandler(
 		YorkieServiceRefreshChannelProcedure,
 		svc.RefreshChannel,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("RefreshChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	yorkieServicePeekChannelHandler := connect.NewUnaryHandler(
+		YorkieServicePeekChannelProcedure,
+		svc.PeekChannel,
+		connect.WithSchema(yorkieServiceMethods.ByName("PeekChannel")),
+		connect.WithHandlerOptions(opts...),
 	)
 	yorkieServiceBroadcastHandler := connect.NewUnaryHandler(
 		YorkieServiceBroadcastProcedure,
 		svc.Broadcast,
-		opts...,
+		connect.WithSchema(yorkieServiceMethods.ByName("Broadcast")),
+		connect.WithHandlerOptions(opts...),
 	)
 	return "/yorkie.v1.YorkieService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -474,6 +533,8 @@ func NewYorkieServiceHandler(svc YorkieServiceHandler, opts ...connect.HandlerOp
 			yorkieServiceDetachChannelHandler.ServeHTTP(w, r)
 		case YorkieServiceRefreshChannelProcedure:
 			yorkieServiceRefreshChannelHandler.ServeHTTP(w, r)
+		case YorkieServicePeekChannelProcedure:
+			yorkieServicePeekChannelHandler.ServeHTTP(w, r)
 		case YorkieServiceBroadcastProcedure:
 			yorkieServiceBroadcastHandler.ServeHTTP(w, r)
 		default:
@@ -547,6 +608,10 @@ func (UnimplementedYorkieServiceHandler) DetachChannel(context.Context, *connect
 
 func (UnimplementedYorkieServiceHandler) RefreshChannel(context.Context, *connect.Request[v1.RefreshChannelRequest]) (*connect.Response[v1.RefreshChannelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.RefreshChannel is not implemented"))
+}
+
+func (UnimplementedYorkieServiceHandler) PeekChannel(context.Context, *connect.Request[v1.PeekChannelRequest]) (*connect.Response[v1.PeekChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.YorkieService.PeekChannel is not implemented"))
 }
 
 func (UnimplementedYorkieServiceHandler) Broadcast(context.Context, *connect.Request[v1.BroadcastRequest]) (*connect.Response[v1.BroadcastResponse], error) {

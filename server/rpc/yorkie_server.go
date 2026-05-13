@@ -1065,6 +1065,36 @@ func (s *yorkieServer) WatchChannel(
 	)
 }
 
+// PeekChannel returns the current session_count of a channel without
+// creating a session on the server. Use when the caller only needs to
+// display the count and does not need to receive broadcasts or contribute
+// to the count itself. Polled by the client at its own cadence; no
+// per-caller server state, no pubsub fan-out.
+func (s *yorkieServer) PeekChannel(
+	ctx context.Context,
+	req *connect.Request[api.PeekChannelRequest],
+) (*connect.Response[api.PeekChannelResponse], error) {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.PeekChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	refKey := types.ChannelRefKey{
+		ProjectID:  projects.From(ctx).ID,
+		ChannelKey: channelKey,
+	}
+	return connect.NewResponse(&api.PeekChannelResponse{
+		SessionCount: s.backend.Channel.SessionCount(refKey, false),
+	}), nil
+}
+
 // Broadcast broadcasts a message to all clients watching the presence.
 func (s *yorkieServer) Broadcast(
 	ctx context.Context,
