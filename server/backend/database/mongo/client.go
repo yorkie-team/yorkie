@@ -228,13 +228,29 @@ func (c *Client) tryAcquireLeadership(
 	rpcAddr string,
 	leaseMS int64,
 ) (*database.ClusterNodeInfo, error) {
-	// Generate a new lease token
+	// Check if there is already an active leader with a valid lease.
+	// This avoids unnecessary write attempts that would cause duplicate key
+	// errors on the is_leader_true_unique index.
+	count, err := c.collection(ColClusterNodes).CountDocuments(
+		ctx,
+		bson.M{
+			"is_leader": true,
+			"$expr":     bson.M{"$gte": bson.A{"$expires_at", "$$NOW"}},
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("check active leader: %w", err)
+	}
+	if count > 0 {
+		return nil, nil
+	}
+
+	// No active leader found. Try to acquire leadership using atomic upsert.
 	token, err := database.GenerateLeaseToken()
 	if err != nil {
 		return nil, fmt.Errorf("generate lease token: %w", err)
 	}
 
-	// Try to acquire leadership using atomic upsert.
 	result := c.collection(ColClusterNodes).FindOneAndUpdate(
 		ctx,
 		bson.M{"rpc_addr": rpcAddr},
@@ -254,8 +270,8 @@ func (c *Client) tryAcquireLeadership(
 
 	info := &database.ClusterNodeInfo{}
 	if err := result.Decode(info); err != nil {
-		// If the error is due to a duplicate key, it means another node has
-		// already acquired leadership.
+		// If the error is due to a duplicate key, it means another node
+		// acquired leadership between the read check and this write.
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, nil
 		}
