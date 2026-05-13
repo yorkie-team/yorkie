@@ -64,7 +64,7 @@ const (
 	DefaultKafkaSessionEventsTopic  = "session-events"
 	DefaultKafkaWriteTimeout        = 5 * time.Second
 
-	DefaultChannelSessionTTL             = 15 * time.Second
+	DefaultChannelSessionTTL             = 10 * time.Second
 	DefaultChannelSessionCleanupInterval = 10 * time.Second
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000

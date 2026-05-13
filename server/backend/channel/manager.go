@@ -146,7 +146,7 @@ func NewManager(
 	db database.Database,
 ) *Manager {
 	if ttl == 0 {
-		ttl = 15 * gotime.Second
+		ttl = 10 * gotime.Second
 	}
 
 	if cleanupInterval == 0 {
