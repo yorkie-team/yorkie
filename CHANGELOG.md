@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.9] - 2026-05-14
+
+### Added
+
+- Channel RPC consolidation + PeekChannel by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/1805
+
+### Fixed
+
+- Skip leadership write when active leader exists by @raararaara in https://github.com/yorkie-team/yorkie/pull/1804
+
 ## [v0.7.8] - 2026-05-05
 
 ### Changed
