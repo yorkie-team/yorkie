@@ -47,6 +47,7 @@ service YorkieService {
   rpc AttachChannel (AttachChannelRequest) returns (AttachChannelResponse) {}
   rpc DetachChannel (DetachChannelRequest) returns (DetachChannelResponse) {}
   rpc RefreshChannel (RefreshChannelRequest) returns (RefreshChannelResponse) {}
+  rpc PeekChannel (PeekChannelRequest) returns (PeekChannelResponse) {}
   rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
 }
 
@@ -282,9 +283,32 @@ message RefreshChannelRequest {
   string client_id = 1;
   string channel_key = 2;
   string session_id = 3;
+  // client_key and metadata are used only on the first call (when session_id
+  // is empty). The server activates the client and attaches it to the channel
+  // before refreshing, collapsing ActivateClient + AttachChannel + RefreshChannel
+  // into a single round trip.
+  string client_key = 4;
+  map<string, string> metadata = 5;
 }
 
 message RefreshChannelResponse {
+  int64 session_count = 1;
+  // client_id and session_id are populated only when the request was a
+  // first-call (i.e. session_id was empty). Subsequent heartbeats leave
+  // these empty.
+  string client_id = 2;
+  string session_id = 3;
+}
+
+// PeekChannel reads the current session_count of a channel without creating
+// a session on the server. Use this when a client only needs to display the
+// count (e.g. "N people writing") without contributing to it and without
+// receiving broadcasts. Caller polls on its own cadence.
+message PeekChannelRequest {
+  string channel_key = 1;
+}
+
+message PeekChannelResponse {
   int64 session_count = 1;
 }
 

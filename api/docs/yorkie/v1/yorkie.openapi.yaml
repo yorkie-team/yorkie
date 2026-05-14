@@ -2034,6 +2034,20 @@ components:
           description: ""
           title: client_id
           type: string
+        clientKey:
+          additionalProperties: false
+          description: |-
+            client_key and metadata are used only on the first call (when session_id
+             is empty). The server activates the client and attaches it to the channel
+             before refreshing, collapsing ActivateClient + AttachChannel + RefreshChannel
+             into a single round trip.
+          title: client_key
+          type: string
+        metadata:
+          additionalProperties: false
+          description: ""
+          title: metadata
+          type: object
         sessionId:
           additionalProperties: false
           description: ""
@@ -2041,10 +2055,34 @@ components:
           type: string
       title: RefreshChannelRequest
       type: object
+    yorkie.v1.RefreshChannelRequest.MetadataEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: MetadataEntry
+      type: object
     yorkie.v1.RefreshChannelResponse:
       additionalProperties: false
       description: ""
       properties:
+        clientId:
+          additionalProperties: false
+          description: |-
+            client_id and session_id are populated only when the request was a
+             first-call (i.e. session_id was empty). Subsequent heartbeats leave
+             these empty.
+          title: client_id
+          type: string
         sessionCount:
           additionalProperties: false
           description: ""
@@ -2052,6 +2090,11 @@ components:
           - type: string
           - type: number
           title: session_count
+        sessionId:
+          additionalProperties: false
+          description: ""
+          title: session_id
+          type: string
       title: RefreshChannelResponse
       type: object
     yorkie.v1.RemoveDocumentRequest:

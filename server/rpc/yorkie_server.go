@@ -387,13 +387,114 @@ func (s *yorkieServer) RefreshChannel(
 	ctx context.Context,
 	req *connect.Request[api.RefreshChannelRequest],
 ) (*connect.Response[api.RefreshChannelResponse], error) {
-	// 01. Validate the request and verify access
-	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	// First-call path: when session_id is empty, this RPC subsumes
+	// ActivateClient + AttachChannel + RefreshChannel into a single round trip.
+	// Subsequent heartbeats keep the prior session_id and skip activate/attach.
+	if req.Msg.SessionId == "" {
+		return s.firstChannelRefresh(ctx, req, channelKey)
+	}
+
+	// Heartbeat path: refresh the TTL of an existing session.
+	return s.heartbeatChannelRefresh(ctx, req, channelKey)
+}
+
+// firstChannelRefresh handles the first RefreshChannel call from a client.
+// It activates the client (if needed), attaches it to the channel, and
+// refreshes the TTL — returning the freshly allocated client_id and
+// session_id so the client can include them in subsequent heartbeats.
+func (s *yorkieServer) firstChannelRefresh(
+	ctx context.Context,
+	req *connect.Request[api.RefreshChannelRequest],
+	channelKey key.Key,
+) (*connect.Response[api.RefreshChannelResponse], error) {
+	if req.Msg.ClientKey == "" {
+		return nil, clients.ErrInvalidClientKey
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.ActivateClient,
+	}); err != nil {
+		return nil, err
+	}
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.AttachChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.ReadWrite),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
 	if err != nil {
 		return nil, err
 	}
-	channelKey := key.Key(req.Msg.ChannelKey)
-	if err := channelKey.Validate(); err != nil {
+
+	if err := s.backend.MsgBroker.Produce(
+		ctx,
+		messaging.ClientEventMessage{
+			ProjectID: project.ID.String(),
+			ClientID:  cli.ID.String(),
+			Timestamp: gotime.Now(),
+			EventType: events.ClientActivatedEvent,
+		},
+	); err != nil {
+		logging.From(ctx).Errorf("failed to produce client event: %v", err)
+	}
+
+	if userID, exist := req.Msg.Metadata["userID"]; exist && userID != "" {
+		if err := s.backend.MsgBroker.Produce(
+			ctx,
+			messaging.UserEventMessage{
+				UserID:    userID,
+				Timestamp: gotime.Now(),
+				EventType: events.ClientActivatedEvent,
+				ProjectID: project.ID.String(),
+				UserAgent: req.Header().Get("x-yorkie-user-agent"),
+			},
+		); err != nil {
+			logging.From(ctx).Errorf("failed to produce user event: %v", err)
+		}
+	}
+
+	actorID, err := cli.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	refKey := types.ChannelRefKey{
+		ProjectID:  project.ID,
+		ChannelKey: channelKey,
+	}
+	sessionID, sessionCount, err := s.backend.Channel.Attach(ctx, refKey, actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.RefreshChannelResponse{
+		SessionCount: sessionCount,
+		ClientId:     cli.ID.String(),
+		SessionId:    sessionID.String(),
+	}), nil
+}
+
+// heartbeatChannelRefresh handles subsequent RefreshChannel calls that carry
+// an existing session_id. Liveness is proven by the session_id itself —
+// the server issued it at first-call time, and the channel manager keeps
+// it in an in-memory map — so there is no per-heartbeat MongoDB read.
+// If the session has already been swept by the cleanup ticker, the
+// in-memory Refresh returns ErrSessionNotFound and the caller is expected
+// to start a new first-call cycle.
+func (s *yorkieServer) heartbeatChannelRefresh(
+	ctx context.Context,
+	req *connect.Request[api.RefreshChannelRequest],
+	channelKey key.Key,
+) (*connect.Response[api.RefreshChannelResponse], error) {
+	if _, err := time.ActorIDFromHex(req.Msg.ClientId); err != nil {
 		return nil, err
 	}
 	sessionID := types.ID(req.Msg.SessionId)
@@ -407,31 +508,19 @@ func (s *yorkieServer) RefreshChannel(
 		return nil, err
 	}
 
-	project := projects.From(ctx)
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// 02. Refresh presence using presence ID
 	if err := s.backend.Channel.Refresh(ctx, sessionID); err != nil {
 		return nil, err
 	}
 
-	// 03. Get current count from backend
 	refKey := types.ChannelRefKey{
-		ProjectID:  project.ID,
+		ProjectID:  projects.From(ctx).ID,
 		ChannelKey: channelKey,
 	}
 	sessionCount := s.backend.Channel.SessionCount(refKey, false)
 
-	response := &api.RefreshChannelResponse{
+	return connect.NewResponse(&api.RefreshChannelResponse{
 		SessionCount: sessionCount,
-	}
-	return connect.NewResponse(response), nil
+	}), nil
 }
 
 // taggedEvent wraps a doc or channel event for fan-in multiplexing.
@@ -974,6 +1063,36 @@ func (s *yorkieServer) WatchChannel(
 		},
 		nil,
 	)
+}
+
+// PeekChannel returns the current session_count of a channel without
+// creating a session on the server. Use when the caller only needs to
+// display the count and does not need to receive broadcasts or contribute
+// to the count itself. Polled by the client at its own cadence; no
+// per-caller server state, no pubsub fan-out.
+func (s *yorkieServer) PeekChannel(
+	ctx context.Context,
+	req *connect.Request[api.PeekChannelRequest],
+) (*connect.Response[api.PeekChannelResponse], error) {
+	channelKey := key.Key(req.Msg.ChannelKey)
+	if err := channelKey.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.PeekChannel,
+		Attributes: types.NewAccessAttributes([]key.Key{channelKey}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	refKey := types.ChannelRefKey{
+		ProjectID:  projects.From(ctx).ID,
+		ChannelKey: channelKey,
+	}
+	return connect.NewResponse(&api.PeekChannelResponse{
+		SessionCount: s.backend.Channel.SessionCount(refKey, false),
+	}), nil
 }
 
 // Broadcast broadcasts a message to all clients watching the presence.
