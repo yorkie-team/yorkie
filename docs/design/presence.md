@@ -140,20 +140,22 @@ The server exposes dedicated RPC methods for channel operations:
 
 - `AttachChannel`: Attach to a channel
 - `DetachChannel`: Detach from a channel
-- `RefreshChannel`: Refresh TTL of an active session
+- `RefreshChannel`: Refresh TTL of an active session. On the first call (empty `session_id`), the request also carries `client_key` and `metadata`, and the server collapses `ActivateClient` + `AttachChannel` + `RefreshChannel` into a single round trip, returning the assigned `client_id` and `session_id` in the response.
 - `WatchChannel`: Stream real-time count updates and broadcast messages
 - `Broadcast`: Send messages to all channel subscribers
+- `PeekChannel`: Stateless read of a channel's `session_count` without creating a server-side session. Used for read-only display of "N people active" without joining the channel or receiving broadcasts.
 
 ### How It Works
 
 #### Channel Flow
 
-1. **Attach**: Client → AttachChannel RPC → Server generates sessionID → PubSub broadcasts count
+1. **First-call attach**: Client → RefreshChannel RPC (empty `session_id`, populated `client_key` + `metadata`) → Server runs `ActivateClient` + `AttachChannel` + `RefreshChannel` in one handler → Returns `client_id` + `session_id` → PubSub broadcasts count
 2. **Subscribe**: Client → WatchChannel RPC → Server creates subscription → Streams count updates and broadcast events
 3. **Broadcast**: Client → Broadcast RPC → Server routes message to all subscribers (except sender)
-4. **Heartbeat**: Client timer (30s) → RefreshChannel RPC → Server updates timestamp
+4. **Heartbeat**: Client timer (heartbeat interval ≤ TTL/3) → RefreshChannel RPC (populated `session_id`) → Server updates timestamp; no MongoDB read on this path — the in-memory channel session map is the sole liveness proof
 5. **Cleanup**: Server timer (10s) → Scans expired sessions → Detach and broadcast updates
 6. **Detach**: Client → DetachChannel RPC → Server removes session → Broadcasts count update
+7. **Peek (read-only)**: Client → PeekChannel RPC → Server returns `session_count` without creating a session or fan-out subscriber
 
 #### Document Presence Flow (Existing)
 
@@ -168,15 +170,16 @@ To handle abnormal disconnections (crashes, network failures), the Channel uses 
 **Server-Side:**
 
 - Each `SessionInfo` has an `UpdatedAt` timestamp
-- Default TTL: 60 seconds
+- Default TTL: 15 seconds (configurable via `ChannelSessionTTL`)
 - Cleanup runs every 10 seconds
 - Sessions expire when `now - UpdatedAt > TTL`
 
 **Client-Side:**
 
-- Heartbeat timer fires every 30 seconds (default)
+- Heartbeat timer fires at TTL/3 by default (5s when server TTL is 15s)
 - Calls `RefreshChannel()` to update server timestamp
 - Continues until detachment or context cancellation
+- SDK and server defaults must be co-tuned: heartbeat > TTL would cause healthy clients to flap
 
 **Design Choices:**
 
