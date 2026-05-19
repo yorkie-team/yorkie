@@ -219,7 +219,7 @@ func (i *YorkieServiceInterceptor) checkCORS(ctx context.Context, header http.He
 	}
 
 	for _, allowed := range project.AllowedOrigins {
-		if allowed == "*" || allowed == origin {
+		if matchOrigin(allowed, origin) {
 			return nil
 		}
 	}

@@ -19,7 +19,9 @@ package types
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
@@ -99,6 +101,41 @@ type UpdatableProjectFields struct {
 
 	// AllowedOrigins is the list of origins that are allowed to access the project.
 	AllowedOrigins *[]string `bson:"allowed_origins,omitempty" validate:"omitempty,dive,valid_origin"`
+}
+
+// isValidOrigin reports whether v is an acceptable AllowedOrigins entry:
+// the universal "*" or an origin URL whose wildcards (if any) appear only
+// inside host labels.
+func isValidOrigin(v string) bool {
+	if v == "*" {
+		return true
+	}
+	if err := validation.Validate(v, []any{"url"}); err != nil {
+		return false
+	}
+	u, err := url.Parse(v)
+	if err != nil {
+		return false
+	}
+	for _, label := range strings.Split(u.Hostname(), ".") {
+		if label == "" {
+			return false
+		}
+	}
+	if !strings.Contains(v, "*") {
+		return true
+	}
+	if strings.ContainsAny(u.Scheme, "*") ||
+		strings.ContainsAny(u.Path, "*") ||
+		strings.ContainsAny(u.RawQuery, "*") ||
+		strings.ContainsAny(u.Fragment, "*") ||
+		strings.ContainsAny(u.Port(), "*") {
+		return false
+	}
+	if u.User != nil && strings.ContainsAny(u.User.String(), "*") {
+		return false
+	}
+	return true
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -196,21 +233,17 @@ func init() {
 	if err := validation.RegisterValidation(
 		"valid_origin",
 		func(level validation.FieldLevel) bool {
-			origin := level.Field().String()
-			if origin == "*" {
-				return true
-			}
-			if err := validation.Validate(origin, []any{"url"}); err != nil {
-				return false
-			}
-			return true
+			return isValidOrigin(level.Field().String())
 		},
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}
 
-	if err := validation.RegisterTranslation("valid_origin", "given {0} must be a valid URL or '*'"); err != nil {
+	if err := validation.RegisterTranslation(
+		"valid_origin",
+		"given {0} must be '*' or an origin URL; wildcards are only allowed inside host labels",
+	); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}

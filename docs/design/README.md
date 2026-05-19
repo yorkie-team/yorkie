@@ -45,6 +45,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [MCP Server](mcp.md): Model Context Protocol server integration for AI assistants
 - [Snapshot Overflow](snapshot-overflow.md): Handling Yorkie snapshots that exceed MongoDB's 16MB BSON limit
+- [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 
 ## Maintaining the Document
 
