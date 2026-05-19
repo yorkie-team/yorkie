@@ -2,6 +2,7 @@
 
 # Allowed Origins Wildcard
 
+PR: https://github.com/yorkie-team/yorkie/pull/1810
 Branch: `feat-allowed-origins-wildcard`
 Design: `docs/design/allowed-origins-wildcard.md`
 
@@ -11,28 +12,33 @@ Support wildcard patterns in `Project.AllowedOrigins` so values like
 `https://*.example.com` or `https://*-m.stock.example.com` match the
 corresponding browser `Origin` headers instead of being silently dropped.
 
-## Plan
+## Done
 
-- [ ] Add `server/rpc/interceptors/origin.go` with `matchOrigin(pattern,
+- [x] Add `server/rpc/interceptors/origin.go` with `matchOrigin(pattern,
       origin string) bool`
-  - [ ] `"*"` matches anything
-  - [ ] Exact-string fast path
-  - [ ] URL parse, compare scheme (case-insensitive), host labels,
+  - [x] `"*"` matches anything
+  - [x] Exact-string fast path (added after self-review)
+  - [x] URL parse, compare scheme (case-insensitive), host labels,
         port; reject if any of path/query/fragment is non-empty
-  - [ ] Label-level glob via `path.Match` with case-insensitive
+  - [x] Label-level glob via `path.Match` with case-insensitive
         comparison
-- [ ] Add `server/rpc/interceptors/origin_test.go` table-driven tests
+- [x] Add `server/rpc/interceptors/origin_test.go` table-driven tests
       covering each row of the examples table in the design doc plus
       negative cases (scheme/port/label-count/empty)
-- [ ] Replace inner condition in `server/rpc/interceptors/yorkie.go`
+- [x] Replace inner condition in `server/rpc/interceptors/yorkie.go`
       (`checkCORS`) with `matchOrigin(allowed, origin)`
-- [ ] Tighten `valid_origin` in `api/types/updatable_project_fields.go`:
-      reject wildcards outside host labels, reject empty labels, update
-      translation string
-- [ ] `make lint && make test`
-- [ ] Commit (English, one commit for design + tests + impl unless
-      review prefers split)
-- [ ] Push and open PR
+- [x] Tighten `valid_origin` in `api/types/updatable_project_fields.go`:
+      reject wildcards outside host labels, reject empty labels for all
+      patterns, update translation string
+- [x] `make lint && make test`
+- [x] Two commits: design doc + implementation
+- [x] Push and open PR (#1810)
+- [x] Address CodeRabbit comment: hoist empty-label check above the
+      wildcard-free early return
+
+## Remaining
+
+- [ ] PR review and merge
 
 ## Notes
 
