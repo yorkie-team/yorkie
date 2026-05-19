@@ -113,13 +113,17 @@ func isValidOrigin(v string) bool {
 	if err := validation.Validate(v, []any{"url"}); err != nil {
 		return false
 	}
-	if !strings.Contains(v, "*") {
-		return true
-	}
-
 	u, err := url.Parse(v)
 	if err != nil {
 		return false
+	}
+	for _, label := range strings.Split(u.Hostname(), ".") {
+		if label == "" {
+			return false
+		}
+	}
+	if !strings.Contains(v, "*") {
+		return true
 	}
 	if strings.ContainsAny(u.Scheme, "*") ||
 		strings.ContainsAny(u.Path, "*") ||
@@ -130,11 +134,6 @@ func isValidOrigin(v string) bool {
 	}
 	if u.User != nil && strings.ContainsAny(u.User.String(), "*") {
 		return false
-	}
-	for _, label := range strings.Split(u.Hostname(), ".") {
-		if label == "" {
-			return false
-		}
 	}
 	return true
 }

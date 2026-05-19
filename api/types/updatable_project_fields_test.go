@@ -255,6 +255,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			{"https://example.com#*"},
 			{"https://example.com:*"},
 			{"https://*..example.com"},
+			{"https://.example.com"},
 		}
 		for _, origins := range invalid {
 			origins := origins
