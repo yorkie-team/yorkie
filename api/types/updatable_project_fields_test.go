@@ -230,4 +230,36 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.NoError(t, fields.Validate())
 	})
+
+	t.Run("allowed origins test", func(t *testing.T) {
+		valid := [][]string{
+			{"*"},
+			{"https://example.com"},
+			{"https://*.example.com"},
+			{"https://*-m.stock.example.com"},
+			{"https://api-*.example.com:8080"},
+			{"https://example.com", "https://*.example.com"},
+		}
+		for _, origins := range valid {
+			origins := origins
+			fields := &types.UpdatableProjectFields{AllowedOrigins: &origins}
+			assert.NoError(t, fields.Validate(), "expected valid: %v", origins)
+		}
+
+		invalid := [][]string{
+			{""},
+			{"not-a-url"},
+			{"*://example.com"},
+			{"https://example.com/*"},
+			{"https://example.com?q=*"},
+			{"https://example.com#*"},
+			{"https://example.com:*"},
+			{"https://*..example.com"},
+		}
+		for _, origins := range invalid {
+			origins := origins
+			fields := &types.UpdatableProjectFields{AllowedOrigins: &origins}
+			assert.ErrorAs(t, fields.Validate(), &formErr, "expected invalid: %v", origins)
+		}
+	})
 }
