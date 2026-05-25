@@ -1,9 +1,9 @@
 module github.com/yorkie-team/yorkie
 
-go 1.24.0
+go 1.25.0
 
 require (
-	connectrpc.com/connect v1.19.1
+	connectrpc.com/connect v1.20.0
 	connectrpc.com/grpchealth v1.4.0
 	github.com/go-co-op/gocron/v2 v2.18.2
 	github.com/go-playground/locales v0.14.1
@@ -29,7 +29,7 @@ require (
 	golang.org/x/net v0.47.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
 	google.golang.org/grpc v1.73.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
 
