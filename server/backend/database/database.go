@@ -281,9 +281,17 @@ type Database interface {
 
 	// GetProjectStatsCounts returns the cached project counts (clients, documents)
 	// stored on the project document. Bypasses ProjectCache.
+	//
+	// When the project is missing or has never been refreshed, returns a
+	// zero-valued ProjectStatsCounts (not nil, no error). Callers detect the
+	// cold-start state with counts.UpdatedAt.IsZero().
 	GetProjectStatsCounts(ctx context.Context, projectID types.ID) (*ProjectStatsCounts, error)
 
 	// UpdateProjectStats writes the cached stats fields on the project document.
+	//
+	// Returns ErrProjectNotFound when the project doesn't exist. Note: this is
+	// asymmetric with GetProjectStatsCounts (which returns zeros for cold start) —
+	// reads tolerate a missing record, writes refuse to create one.
 	UpdateProjectStats(
 		ctx context.Context,
 		projectID types.ID,
@@ -294,15 +302,22 @@ type Database interface {
 
 	// CountActivatedClients counts clients with status = activated for the given
 	// project. Slow on large collections; used by the project-stats refresh task only.
+	// MongoDB implementations MUST use SecondaryPreferred read preference to keep
+	// load off the primary.
 	CountActivatedClients(ctx context.Context, projectID types.ID) (int64, error)
 
 	// CountAliveDocuments counts non-removed documents for the given project.
 	// Slow on large collections; used by the project-stats refresh task only.
+	// MongoDB implementations MUST use SecondaryPreferred read preference to keep
+	// load off the primary.
 	CountAliveDocuments(ctx context.Context, projectID types.ID) (int64, error)
 
 	// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
 	// ordered by `_id` ascending. Used by housekeeping tasks that need to iterate
 	// across all projects.
+	//
+	// When the iteration is exhausted (no projects beyond lastID), returns
+	// (nil, ZeroID, nil). Callers restart by passing ZeroID as lastID on the next call.
 	FindProjectInfosForRefresh(
 		ctx context.Context,
 		limit int,

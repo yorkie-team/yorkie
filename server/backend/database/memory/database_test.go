@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
@@ -207,18 +208,107 @@ func TestFindProjectInfosForRefresh(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
-	var ids []types.ID
 	for i := 0; i < 5; i++ {
-		info, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-p%d", t.Name(), i), testOwnerID)
+		_, err := db.CreateProjectInfo(ctx, fmt.Sprintf("p%d", i), testOwnerID)
 		assert.NoError(t, err)
-		ids = append(ids, info.ID)
 	}
 
-	page1, lastID, err := db.FindProjectInfosForRefresh(ctx, 3, database.ZeroID)
+	// Page 1: first three projects starting from ZeroID.
+	page1, page1LastID, err := db.FindProjectInfosForRefresh(ctx, 3, database.ZeroID)
 	assert.NoError(t, err)
 	assert.Len(t, page1, 3)
 
-	page2, _, err := db.FindProjectInfosForRefresh(ctx, 3, lastID)
+	// Page 2: remaining two projects starting from page1LastID.
+	page2, page2LastID, err := db.FindProjectInfosForRefresh(ctx, 3, page1LastID)
 	assert.NoError(t, err)
 	assert.Len(t, page2, 2)
+
+	// Distinctness: no ID overlap between page 1 and page 2.
+	seen := make(map[types.ID]struct{}, len(page1)+len(page2))
+	for _, info := range page1 {
+		seen[info.ID] = struct{}{}
+	}
+	for _, info := range page2 {
+		_, dup := seen[info.ID]
+		assert.False(t, dup, "page2 ID %s overlaps with page1", info.ID)
+		seen[info.ID] = struct{}{}
+	}
+
+	// Ordering: concatenated IDs are strictly ascending.
+	all := make([]*database.ProjectInfo, 0, len(page1)+len(page2))
+	all = append(all, page1...)
+	all = append(all, page2...)
+	for i := 1; i < len(all); i++ {
+		assert.True(t, all[i-1].ID < all[i].ID,
+			"expected strictly ascending order: %s < %s", all[i-1].ID, all[i].ID)
+	}
+
+	// Page 3 (wrap): iteration exhausted, returns no infos and ZeroID.
+	page3, page3LastID, err := db.FindProjectInfosForRefresh(ctx, 3, page2LastID)
+	assert.NoError(t, err)
+	assert.Len(t, page3, 0)
+	assert.Equal(t, database.ZeroID, page3LastID)
+}
+
+func TestCountActivatedClients(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	project, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+	assert.NoError(t, err)
+
+	// Activate 3 clients.
+	var clients []*database.ClientInfo
+	for i := 0; i < 3; i++ {
+		info, err := db.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-c%d", t.Name(), i), nil)
+		assert.NoError(t, err)
+		clients = append(clients, info)
+	}
+
+	count, err := db.CountActivatedClients(ctx, project.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+
+	// Deactivate one client.
+	_, err = db.DeactivateClient(ctx, clients[0].RefKey())
+	assert.NoError(t, err)
+
+	count, err = db.CountActivatedClients(ctx, project.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+}
+
+func TestCountAliveDocuments(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	project, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+	assert.NoError(t, err)
+
+	clientInfo, err := db.ActivateClient(ctx, project.ID, t.Name(), nil)
+	assert.NoError(t, err)
+
+	// Create 2 documents.
+	var docs []*database.DocInfo
+	for i := 0; i < 2; i++ {
+		docKey := key.Key(fmt.Sprintf("tests$%s-d%d", t.Name(), i))
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+		assert.NoError(t, err)
+		docs = append(docs, docInfo)
+	}
+
+	count, err := db.CountAliveDocuments(ctx, project.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+
+	// Mark one document as removed.
+	assert.NoError(t, db.UpdateDocInfoStatusToRemoved(ctx, docs[0].RefKey()))
+
+	count, err = db.CountAliveDocuments(ctx, project.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), count)
 }
