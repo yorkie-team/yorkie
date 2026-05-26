@@ -169,7 +169,10 @@ func badRequestFromError(err error) (*errdetails.BadRequest, bool) {
 	return br, true
 }
 
-// LogLevelOf returns logging.Level corresponding to the given connect.Error.
+// LogLevelOf returns logging.Level corresponding to the given error.
+// Recognizes both connect.Error and pkg/errors.StatusError so the logging
+// interceptor can pick the right level whether the handler returned the
+// raw status error or it was already converted to connect.Error.
 func LogLevelOf(err error) logging.Level {
 	if err == nil {
 		return logging.Debug
@@ -180,36 +183,50 @@ func LogLevelOf(err error) logging.Level {
 		return logging.Debug
 	}
 
-	// Convert to connect error to get the code
-	if connectErr := new(connect.Error); goerrors.As(err, &connectErr) {
-		switch connectErr.Code() {
-		case connect.CodeCanceled:
-			// Client canceled request - usually not an issue
-			return logging.Debug
-		case connect.CodeInvalidArgument, connect.CodeNotFound, connect.CodeAlreadyExists, connect.CodeFailedPrecondition:
-			// Client-side errors - usually expected validation or business logic errors
-			return logging.Info
-		case connect.CodeUnimplemented:
-			// Client called unsupported feature - not a server issue
-			return logging.Info
-		case connect.CodeUnauthenticated, connect.CodePermissionDenied:
-			// Security-related errors - worth noting but not alarming
-			return logging.Warn
-		case connect.CodeResourceExhausted:
-			// Rate limiting or resource issues - worth noting
-			return logging.Warn
-		case connect.CodeInternal, connect.CodeDataLoss, connect.CodeUnknown:
-			// Server-side errors - need immediate attention
-			return logging.Error
-		case connect.CodeUnavailable, connect.CodeDeadlineExceeded:
-			// Service availability issues - should be monitored
-			return logging.Error
-		default:
-			// Unknown codes - treat as potential issues
-			return logging.Warn
-		}
+	code, ok := connectCodeOf(err)
+	if !ok {
+		// For non-connect, non-StatusError errors, use warn as default
+		return logging.Warn
 	}
 
-	// For non-connect errors, use warn as default
-	return logging.Warn
+	switch code {
+	case connect.CodeCanceled:
+		// Client canceled request - usually not an issue
+		return logging.Debug
+	case connect.CodeInvalidArgument, connect.CodeNotFound, connect.CodeAlreadyExists, connect.CodeFailedPrecondition:
+		// Client-side errors - usually expected validation or business logic errors
+		return logging.Info
+	case connect.CodeUnimplemented:
+		// Client called unsupported feature - not a server issue
+		return logging.Info
+	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
+		// Security-related errors - worth noting but not alarming
+		return logging.Warn
+	case connect.CodeResourceExhausted:
+		// Rate limiting or resource issues - worth noting
+		return logging.Warn
+	case connect.CodeInternal, connect.CodeDataLoss, connect.CodeUnknown:
+		// Server-side errors - need immediate attention
+		return logging.Error
+	case connect.CodeUnavailable, connect.CodeDeadlineExceeded:
+		// Service availability issues - should be monitored
+		return logging.Error
+	default:
+		// Unknown codes - treat as potential issues
+		return logging.Warn
+	}
+}
+
+// connectCodeOf extracts a connect.Code from either a wrapped connect.Error
+// or a pkg/errors.StatusError. Returns (code, true) on success.
+func connectCodeOf(err error) (connect.Code, bool) {
+	if connectErr := new(connect.Error); goerrors.As(err, &connectErr) {
+		return connectErr.Code(), true
+	}
+	if isStatusError(err) {
+		if status := errors.StatusOf(err); status != 0 {
+			return connect.Code(status), true
+		}
+	}
+	return 0, false
 }
