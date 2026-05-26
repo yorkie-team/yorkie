@@ -227,7 +227,17 @@ func TestClusterNodes(t *testing.T) {
 
 			return false
 		}, 1*gotime.Second, 50*gotime.Millisecond)
-		prvToken := leader.LeaseToken
+
+		// Re-read the leader immediately before disconnect so prvToken reflects
+		// the latest renewal in MongoDB. Without this, a renewal that fires
+		// between the Eventually read and SetDisconnected leaves the captured
+		// token stale, which can let a resurfaced stale row falsely satisfy the
+		// "LeaseToken != prvToken" predicate below.
+		infos, err := svr.Backend().ClusterNodes(ctx)
+		require.NoError(t, err)
+		require.NotEmpty(t, infos)
+		require.True(t, infos[0].IsLeader)
+		prvToken := infos[0].LeaseToken
 
 		mockDB.SetDisconnected(true)
 
@@ -240,17 +250,22 @@ func TestClusterNodes(t *testing.T) {
 
 		mockDB.SetDisconnected(false)
 
+		// NOTE: After reconnect, the node must wait for its own previous lease
+		// to expire naturally before it can reacquire leadership with a new
+		// token. The acquire pre-check in TryLeadership counts the caller's
+		// own row as an active leader, so the predicate also requires a token
+		// change to confirm reacquisition rather than a stale row resurfacing.
 		assert.Eventually(t, func() bool {
 			infos, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
-			if len(infos) > 0 && infos[0].IsLeader {
+			if len(infos) > 0 && infos[0].IsLeader && infos[0].LeaseToken != prvToken {
 				leader = infos[0]
 				return true
 			}
 
 			return false
-		}, 1*gotime.Second, 50*gotime.Millisecond)
+		}, 2*gotime.Second, 50*gotime.Millisecond)
 		currToken := leader.LeaseToken
 
 		assert.NotEqual(t, prvToken, currToken)

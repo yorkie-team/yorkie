@@ -29,6 +29,9 @@ import (
 
 func TestLRUWithStats(t *testing.T) {
 	t.Run("basic operations", func(t *testing.T) {
+		// Only one key is added, so shard collisions cannot evict
+		// anything; if a second key is ever added here, raise size to
+		// at least 16*N (see the sibling subtest for the reasoning).
 		c, err := cache.NewLRU[string, int](3, "test-cache")
 		assert.NoError(t, err)
 
@@ -51,7 +54,13 @@ func TestLRUWithStats(t *testing.T) {
 	})
 
 	t.Run("hit rate calculation", func(t *testing.T) {
-		c, err := cache.NewLRU[string, int](5, "test-cache")
+		// LRU is sharded across 16 shards with per-shard capacity size/16
+		// (floored at 1). With size=5, each shard held one slot, so any
+		// two of the added keys that hashed to the same shard would evict
+		// each other. maphash.MakeSeed randomizes the shard mapping per
+		// process, producing ~18% flake rate. Size 64 gives perShard=4,
+		// enough to hold all three added keys even on worst-case collision.
+		c, err := cache.NewLRU[string, int](64, "test-cache")
 		assert.NoError(t, err)
 
 		// Add some data
