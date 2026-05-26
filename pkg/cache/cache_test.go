@@ -29,6 +29,9 @@ import (
 
 func TestLRUWithStats(t *testing.T) {
 	t.Run("basic operations", func(t *testing.T) {
+		// Only one key is added, so shard collisions cannot evict
+		// anything; if a second key is ever added here, raise size to
+		// at least 16*N (see the sibling subtest for the reasoning).
 		c, err := cache.NewLRU[string, int](3, "test-cache")
 		assert.NoError(t, err)
 

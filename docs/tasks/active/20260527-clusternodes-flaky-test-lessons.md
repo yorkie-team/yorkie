@@ -90,8 +90,9 @@ test fragility.
 ## `go test` result caching can hide process-seed-dependent flakes
 
 `go test ./pkg/cache -count=100` produces 100 identical results because
-the cache key is `(package, source, env)` and not "actual stochastic
-output". Even worse, `for i in 1..N; do go test ...; done` without
+the cache key is `(package, source, env, flags)` and not "actual
+stochastic output". Even worse, `for i in 1..N; do go test ...; done`
+without
 `go clean -testcache` between iterations also reuses the cached
 result. The flake only surfaces when the seed is regenerated, which
 happens at process start, which happens when `go test` actually
