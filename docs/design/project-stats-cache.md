@@ -182,14 +182,19 @@ FindProjectInfosForRefresh(
 
 Implementation: `find({_id: {$gt: lastID}}).sort({_id: 1}).limit(N)`.
 
-`CountActivatedClients` and `CountDocuments` use secondary read preference to
-keep the load off the primary:
+`CountActivatedClients` and `CountAliveDocuments` use secondary read preference
+to keep the load off the primary. In mongo-driver v2, `CountOptions` no longer
+exposes `SetReadPreference`, so the preference is applied at the collection
+level (the `c.collection(...)` helper returns a fresh handle per call, so the
+option is scoped to this single call):
 
 ```go
-c.collection(ColClients).CountDocuments(
+c.collection(
+    ColClients,
+    options.Collection().SetReadPreference(readpref.SecondaryPreferred()),
+).CountDocuments(
     ctx,
     bson.M{"project_id": projectID, "status": database.ClientActivated},
-    options.Count().SetReadPreference(readpref.SecondaryPreferred()),
 )
 ```
 
@@ -203,8 +208,10 @@ Housekeeping:
   ProjectStatsRefreshInterval: "5m"  # default
 ```
 
-If the value is "0" or empty, the task is not registered. This is the
-opt-out path for the in-memory backend and short-running tests.
+If the value is empty, `EnsureDefaults` fills in the 5-minute default. The
+opt-out path is the explicit string `"0s"`, which the parser maps to a
+`time.Duration` of `0` and the registration site skips. Tests that do not
+need the task running set `"0s"` explicitly.
 
 ### API Surface
 

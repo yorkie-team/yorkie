@@ -458,13 +458,15 @@ func (c *Client) CountActivatedClients(
 	ctx context.Context,
 	projectID types.ID,
 ) (int64, error) {
-	count, err := c.collection(ColClients).CountDocuments(
+	count, err := c.collection(
+		ColClients,
+		options.Collection().SetReadPreference(readpref.SecondaryPreferred()),
+	).CountDocuments(
 		ctx,
 		bson.M{
 			"project_id": projectID,
 			StatusKey:    database.ClientActivated,
 		},
-		options.Count().SetReadPreference(readpref.SecondaryPreferred()),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("count activated clients of %s: %w", projectID, err)
@@ -478,13 +480,15 @@ func (c *Client) CountAliveDocuments(
 	ctx context.Context,
 	projectID types.ID,
 ) (int64, error) {
-	count, err := c.collection(ColDocuments).CountDocuments(
+	count, err := c.collection(
+		ColDocuments,
+		options.Collection().SetReadPreference(readpref.SecondaryPreferred()),
+	).CountDocuments(
 		ctx,
 		bson.M{
 			"project_id": projectID,
 			"removed_at": bson.M{"$exists": false},
 		},
-		options.Count().SetReadPreference(readpref.SecondaryPreferred()),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("count alive documents of %s: %w", projectID, err)

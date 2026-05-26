@@ -38,7 +38,7 @@
 - `make proto` in the local dev environment regenerates three unrelated
   files (`yorkie.connect.go`, `yorkie.openapi.yaml`,
   `cluster.openapi.yaml`) because of a connect-go plugin version
-  mismatch. Those churn was reverted before landing Task 6. A separate
+  mismatch. That churn was reverted before landing Task 6. A separate
   follow-up should pin the plugin versions or run buf with locked
   plugins.
 
@@ -52,10 +52,12 @@
   an explicit `"0s"`. An empty string in YAML is filled in by
   `EnsureDefaults`. To run yorkie without project-stats refresh, set
   `ProjectStatsRefreshInterval: "0s"` in config.
-- The CLI flag `--housekeeping-project-stats-refresh-interval` is
-  referenced in error messages but is NOT actually registered in
-  `cmd/yorkie/server.go`. Operators expecting CLI overrides will need a
-  follow-up commit to wire it through cobra.
+- The CLI flag `--housekeeping-project-stats-refresh-interval` was
+  initially referenced in error messages without being registered in
+  `cmd/yorkie/server.go`; it was wired through cobra in a follow-up
+  commit on this same branch. Future config fields should add the
+  cobra registration in the same change as the config field to avoid
+  the same gap.
 - The refresh job uses `tryLock(statsRefreshKey)`. On a sharded cluster
   where the count of activated clients exceeds what one tick can refresh
   in under `ProjectStatsRefreshInterval`, subsequent ticks no-op rather
