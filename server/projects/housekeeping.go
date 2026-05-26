@@ -35,6 +35,10 @@ const (
 // the values back as cached stats on the project document.
 //
 // Returns the new cursor position and the number of projects processed.
+//
+// The cursor advances to the tail of the fetched batch even when individual
+// projects fail (errors are logged and the project is skipped), so a single
+// bad project cannot stall subsequent refreshes.
 func RefreshStats(
 	ctx context.Context,
 	be *backend.Backend,
