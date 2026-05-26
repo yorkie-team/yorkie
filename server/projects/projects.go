@@ -196,12 +196,7 @@ func GetProjectStats(
 		return nil, err
 	}
 
-	documentsCount, err := be.DB.GetDocumentsCount(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	clientsCount, err := be.DB.GetClientsCount(ctx, id)
+	counts, err := be.DB.GetProjectStatsCounts(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -224,8 +219,8 @@ func GetProjectStats(
 		Sessions:                    sessions,
 		PeakSessionsPerChannelCount: peakSessionsPerChannelCount,
 		PeakSessionsPerChannel:      peakSessionsPerChannel,
-		DocumentsCount:              documentsCount,
-		ClientsCount:                clientsCount,
+		DocumentsCount:              counts.DocumentsCount,
+		ClientsCount:                counts.ClientsCount,
 		ChannelsCount:               int64(channelsCount),
 	}, nil
 }

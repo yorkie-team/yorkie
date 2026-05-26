@@ -1671,35 +1671,135 @@ func (c *Client) UpdateDocInfoSchema(
 	return nil
 }
 
-// GetDocumentsCount returns the number of documents in the given project.
-func (c *Client) GetDocumentsCount(
+// GetProjectStatsCounts returns the cached project counts via a projection-only
+// FindOne. ProjectCache is intentionally bypassed to avoid compounding staleness.
+func (c *Client) GetProjectStatsCounts(
+	ctx context.Context,
+	projectID types.ID,
+) (*database.ProjectStatsCounts, error) {
+	var doc struct {
+		StatsClientsCount   int64       `bson:"stats_clients_count"`
+		StatsDocumentsCount int64       `bson:"stats_documents_count"`
+		StatsUpdatedAt      gotime.Time `bson:"stats_updated_at"`
+	}
+	err := c.collection(ColProjects).FindOne(
+		ctx,
+		bson.M{"_id": projectID},
+		options.FindOne().SetProjection(bson.M{
+			"stats_clients_count":   1,
+			"stats_documents_count": 1,
+			"stats_updated_at":      1,
+		}),
+	).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return &database.ProjectStatsCounts{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project stats counts %s: %w", projectID, err)
+	}
+	return &database.ProjectStatsCounts{
+		ClientsCount:   doc.StatsClientsCount,
+		DocumentsCount: doc.StatsDocumentsCount,
+		UpdatedAt:      doc.StatsUpdatedAt,
+	}, nil
+}
+
+// UpdateProjectStats writes the cached stats fields on the project document.
+func (c *Client) UpdateProjectStats(
+	ctx context.Context,
+	projectID types.ID,
+	clientsCount int64,
+	documentsCount int64,
+	updatedAt gotime.Time,
+) error {
+	res, err := c.collection(ColProjects).UpdateOne(
+		ctx,
+		bson.M{"_id": projectID},
+		bson.M{"$set": bson.M{
+			"stats_clients_count":   clientsCount,
+			"stats_documents_count": documentsCount,
+			"stats_updated_at":      updatedAt,
+		}},
+	)
+	if err != nil {
+		return fmt.Errorf("update project stats %s: %w", projectID, err)
+	}
+	if res.MatchedCount == 0 {
+		return database.ErrProjectNotFound
+	}
+	return nil
+}
+
+// CountActivatedClients counts clients with status = activated for the given
+// project. Uses secondary read preference to keep load off the primary.
+func (c *Client) CountActivatedClients(
 	ctx context.Context,
 	projectID types.ID,
 ) (int64, error) {
-	count, err := c.collection(ColDocuments).CountDocuments(ctx, bson.M{
-		"project_id": projectID,
-		"removed_at": bson.M{
-			"$exists": false,
+	count, err := c.collection(
+		ColClients,
+		options.Collection().SetReadPreference(readpref.SecondaryPreferred()),
+	).CountDocuments(
+		ctx,
+		bson.M{
+			"project_id": projectID,
+			StatusKey:    database.ClientActivated,
 		},
-	})
+	)
 	if err != nil {
-		return 0, fmt.Errorf("count documents of %s: %w", projectID, err)
+		return 0, fmt.Errorf("count activated clients of %s: %w", projectID, err)
 	}
-
 	return count, nil
 }
 
-// GetClientsCount returns the number of active clients in the given project.
-func (c *Client) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
-	count, err := c.collection(ColClients).CountDocuments(ctx, bson.M{
-		"project_id": projectID,
-		StatusKey:    database.ClientActivated,
-	})
+// CountAliveDocuments counts non-removed documents for the given project.
+// Uses secondary read preference to keep load off the primary.
+func (c *Client) CountAliveDocuments(
+	ctx context.Context,
+	projectID types.ID,
+) (int64, error) {
+	count, err := c.collection(
+		ColDocuments,
+		options.Collection().SetReadPreference(readpref.SecondaryPreferred()),
+	).CountDocuments(
+		ctx,
+		bson.M{
+			"project_id": projectID,
+			"removed_at": bson.M{"$exists": false},
+		},
+	)
 	if err != nil {
-		return 0, fmt.Errorf("count clients of %s: %w", projectID, err)
+		return 0, fmt.Errorf("count alive documents of %s: %w", projectID, err)
+	}
+	return count, nil
+}
+
+// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
+// ordered by `_id` ascending. Returns (nil, ZeroID, nil) when iteration is exhausted.
+func (c *Client) FindProjectInfosForRefresh(
+	ctx context.Context,
+	limit int,
+	lastID types.ID,
+) ([]*database.ProjectInfo, types.ID, error) {
+	cursor, err := c.collection(ColProjects).Find(
+		ctx,
+		bson.M{"_id": bson.M{"$gt": lastID}},
+		options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(limit)),
+	)
+	if err != nil {
+		return nil, database.ZeroID, fmt.Errorf("find projects for refresh: %w", err)
 	}
 
-	return count, nil
+	var infos []*database.ProjectInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, database.ZeroID, fmt.Errorf("decode projects for refresh: %w", err)
+	}
+
+	tail := database.ZeroID
+	if len(infos) > 0 {
+		tail = infos[len(infos)-1].ID
+	}
+	return infos, tail, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info.
