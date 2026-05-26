@@ -45,6 +45,7 @@ const (
 	DefaultHousekeepingInterval             = 30 * time.Second
 	DefaultHousekeepingCandidatesLimit      = 500
 	DefaultHousekeepingCompactionMinChanges = 1000
+	DefaultProjectStatsRefreshInterval      = 5 * time.Minute
 
 	DefaultMongoConnectionURI                = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout            = 5 * time.Second
@@ -236,6 +237,9 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 	if c.Housekeeping.CompactionMinChanges == 0 {
 		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
 	}
+	if c.Housekeeping.ProjectStatsRefreshInterval == "" {
+		c.Housekeeping.ProjectStatsRefreshInterval = DefaultProjectStatsRefreshInterval.String()
+	}
 }
 
 // ensureBackendDefaultValue set the default backend.Config value
@@ -387,9 +391,10 @@ func newConfig(port int, profilingPort int) *Config {
 			RenewalInterval: DefaultMembershipRenewalInterval.String(),
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:             DefaultHousekeepingInterval.String(),
-			CandidatesLimit:      DefaultHousekeepingCandidatesLimit,
-			CompactionMinChanges: DefaultHousekeepingCompactionMinChanges,
+			Interval:                    DefaultHousekeepingInterval.String(),
+			CandidatesLimit:             DefaultHousekeepingCandidatesLimit,
+			CompactionMinChanges:        DefaultHousekeepingCompactionMinChanges,
+			ProjectStatsRefreshInterval: DefaultProjectStatsRefreshInterval.String(),
 		},
 		Backend: &backend.Config{
 			UseDefaultProject: DefaultUseDefaultProject,
