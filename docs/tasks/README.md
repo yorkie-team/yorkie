@@ -18,9 +18,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Active Tasks
 
-| Task | Todo | Lessons |
-|---|---|---|
-| splitLevel>=2 Convergence (2026-04-24) | [20260424-split-level-2-convergence-todo.md](./active/20260424-split-level-2-convergence-todo.md) | [20260424-split-level-2-convergence-lessons.md](./active/20260424-split-level-2-convergence-lessons.md) |
+_(none)_
 
 ## Archive
 
