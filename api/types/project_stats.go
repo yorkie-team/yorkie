@@ -16,6 +16,8 @@
 
 package types
 
+import "time"
+
 // MetricPoint represents a point of metric data.
 type MetricPoint struct {
 	// Time is the time of the data.
@@ -71,4 +73,9 @@ type ProjectStats struct {
 
 	// ChannelsCount is the number of channels in the project.
 	ChannelsCount int64 `json:"channels_count"`
+
+	// StatsUpdatedAt is the time when the cached counts (DocumentsCount, ClientsCount)
+	// were last refreshed by the project-stats housekeeping task. Zero indicates
+	// the refresh has not run yet.
+	StatsUpdatedAt time.Time `json:"stats_updated_at"`
 }

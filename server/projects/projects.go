@@ -222,6 +222,7 @@ func GetProjectStats(
 		DocumentsCount:              counts.DocumentsCount,
 		ClientsCount:                counts.ClientsCount,
 		ChannelsCount:               int64(channelsCount),
+		StatsUpdatedAt:              counts.UpdatedAt,
 	}, nil
 }
 
