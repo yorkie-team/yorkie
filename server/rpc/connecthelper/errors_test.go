@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/errors"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 func TestStatus(t *testing.T) {
@@ -327,5 +328,38 @@ func TestToConnectErrorNewSystemPriority(t *testing.T) {
 		assert.True(t, ok)
 		// Should be treated as internal since it's not recognized by legacy system
 		assert.Equal(t, connect.CodeInternal, connectErr.Code())
+	})
+}
+
+func TestLogLevelOf(t *testing.T) {
+	t.Run("StatusError NotFound maps to Info", func(t *testing.T) {
+		// Raw StatusError, as returned from manager.Refresh before
+		// ToConnectError conversion in the RPC interceptor.
+		err := errors.NotFound("session not found").WithCode("ErrSessionNotFound")
+		assert.Equal(t, logging.Info, LogLevelOf(err))
+	})
+
+	t.Run("Wrapped StatusError NotFound maps to Info", func(t *testing.T) {
+		base := errors.NotFound("session not found").WithCode("ErrSessionNotFound")
+		err := fmt.Errorf("refresh %s: %w", "abc", base)
+		assert.Equal(t, logging.Info, LogLevelOf(err))
+	})
+
+	t.Run("connect.Error NotFound maps to Info", func(t *testing.T) {
+		err := connect.NewError(connect.CodeNotFound, goerrors.New("session not found"))
+		assert.Equal(t, logging.Info, LogLevelOf(err))
+	})
+
+	t.Run("StatusError Internal maps to Error", func(t *testing.T) {
+		err := errors.Internal("boom")
+		assert.Equal(t, logging.Error, LogLevelOf(err))
+	})
+
+	t.Run("Plain error falls back to Warn", func(t *testing.T) {
+		assert.Equal(t, logging.Warn, LogLevelOf(goerrors.New("unstructured")))
+	})
+
+	t.Run("Nil error returns Debug", func(t *testing.T) {
+		assert.Equal(t, logging.Debug, LogLevelOf(nil))
 	})
 }

@@ -19,6 +19,7 @@ package channel
 
 import (
 	"context"
+	goerrors "errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -503,11 +504,18 @@ func classifyExpiredSessions(
 func cleanUpExpiredSessions(ctx context.Context, manager *Manager, expiredSessionIDs []types.ID) int {
 	cleanedCount := 0
 	for _, id := range expiredSessionIDs {
-		if _, err := manager.Detach(ctx, id); err != nil {
-			logging.From(ctx).Warnf("detach expired session of %s: %v", id, err)
+		_, err := manager.Detach(ctx, id)
+		if err == nil {
+			cleanedCount++
 			continue
 		}
-		cleanedCount++
+		// Client may have detached the session concurrently with the cleanup
+		// tick; treat the resulting race as expected and log at info.
+		if goerrors.Is(err, ErrSessionNotFound) {
+			logging.From(ctx).Infof("detach expired session of %s: %v", id, err)
+			continue
+		}
+		logging.From(ctx).Warnf("detach expired session of %s: %v", id, err)
 	}
 	return cleanedCount
 }
