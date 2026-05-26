@@ -1959,6 +1959,12 @@ components:
           description: ""
           title: sessions_count
           type: integer
+        statsUpdatedAt:
+          $ref: '#/components/schemas/google.protobuf.Timestamp'
+          additionalProperties: false
+          description: ""
+          title: stats_updated_at
+          type: object
       title: GetProjectStatsResponse
       type: object
     yorkie.v1.GetRevisionByAdminRequest:
