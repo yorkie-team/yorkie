@@ -279,11 +279,35 @@ type Database interface {
 	// UpdateDocInfoSchema updates the document schema.
 	UpdateDocInfoSchema(ctx context.Context, refKey types.DocRefKey, schemaKey string) error
 
-	// GetDocumentsCount returns the number of documents in the given project.
-	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
+	// GetProjectStatsCounts returns the cached project counts (clients, documents)
+	// stored on the project document. Bypasses ProjectCache.
+	GetProjectStatsCounts(ctx context.Context, projectID types.ID) (*ProjectStatsCounts, error)
 
-	// GetClientsCount returns the number of active clients in the given project.
-	GetClientsCount(ctx context.Context, projectID types.ID) (int64, error)
+	// UpdateProjectStats writes the cached stats fields on the project document.
+	UpdateProjectStats(
+		ctx context.Context,
+		projectID types.ID,
+		clientsCount int64,
+		documentsCount int64,
+		updatedAt gotime.Time,
+	) error
+
+	// CountActivatedClients counts clients with status = activated for the given
+	// project. Slow on large collections; used by the project-stats refresh task only.
+	CountActivatedClients(ctx context.Context, projectID types.ID) (int64, error)
+
+	// CountAliveDocuments counts non-removed documents for the given project.
+	// Slow on large collections; used by the project-stats refresh task only.
+	CountAliveDocuments(ctx context.Context, projectID types.ID) (int64, error)
+
+	// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
+	// ordered by `_id` ascending. Used by housekeeping tasks that need to iterate
+	// across all projects.
+	FindProjectInfosForRefresh(
+		ctx context.Context,
+		limit int,
+		lastID types.ID,
+	) ([]*ProjectInfo, types.ID, error)
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(

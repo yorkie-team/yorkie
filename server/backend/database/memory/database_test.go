@@ -17,11 +17,15 @@
 package memory_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 )
@@ -30,6 +34,7 @@ const (
 	projectID    = types.ID("000000000000000000000000")
 	projectOneID = types.ID("000000000000000000000001")
 	projectTwoID = types.ID("000000000000000000000002")
+	testOwnerID  = types.ID("000000000000000000000000")
 )
 
 func TestDB(t *testing.T) {
@@ -159,4 +164,61 @@ func TestDB(t *testing.T) {
 	t.Run("FindCompactionCandidates test", func(t *testing.T) {
 		testcases.RunFindCompactionCandidatesTest(t, db, projectID)
 	})
+}
+
+func TestProjectStatsCounts(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns zeros when project has no stats fields", func(t *testing.T) {
+		db, err := memory.New()
+		assert.NoError(t, err)
+
+		info, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+		assert.NoError(t, err)
+
+		counts, err := db.GetProjectStatsCounts(ctx, info.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), counts.ClientsCount)
+		assert.Equal(t, int64(0), counts.DocumentsCount)
+		assert.True(t, counts.UpdatedAt.IsZero())
+	})
+
+	t.Run("returns updated values after UpdateProjectStats", func(t *testing.T) {
+		db, err := memory.New()
+		assert.NoError(t, err)
+
+		info, err := db.CreateProjectInfo(ctx, t.Name(), testOwnerID)
+		assert.NoError(t, err)
+
+		now := time.Now()
+		assert.NoError(t, db.UpdateProjectStats(ctx, info.ID, 100, 50, now))
+
+		counts, err := db.GetProjectStatsCounts(ctx, info.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(100), counts.ClientsCount)
+		assert.Equal(t, int64(50), counts.DocumentsCount)
+		assert.WithinDuration(t, now, counts.UpdatedAt, time.Millisecond)
+	})
+}
+
+func TestFindProjectInfosForRefresh(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	var ids []types.ID
+	for i := 0; i < 5; i++ {
+		info, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-p%d", t.Name(), i), testOwnerID)
+		assert.NoError(t, err)
+		ids = append(ids, info.ID)
+	}
+
+	page1, lastID, err := db.FindProjectInfosForRefresh(ctx, 3, database.ZeroID)
+	assert.NoError(t, err)
+	assert.Len(t, page1, 3)
+
+	page2, _, err := db.FindProjectInfosForRefresh(ctx, 3, lastID)
+	assert.NoError(t, err)
+	assert.Len(t, page2, 2)
 }

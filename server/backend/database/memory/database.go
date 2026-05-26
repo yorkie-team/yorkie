@@ -1639,8 +1639,84 @@ func (d *DB) UpdateDocInfoSchema(
 	return nil
 }
 
-// GetDocumentsCount returns the number of documents in the given project.
-func (d *DB) GetDocumentsCount(
+// GetProjectStatsCounts returns the cached project counts stored on the project info.
+func (d *DB) GetProjectStatsCounts(
+	_ context.Context,
+	projectID types.ID,
+) (*database.ProjectStatsCounts, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "id", projectID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find project %s: %w", projectID, err)
+	}
+	if raw == nil {
+		return &database.ProjectStatsCounts{}, nil
+	}
+	info := raw.(*database.ProjectInfo)
+	return &database.ProjectStatsCounts{
+		ClientsCount:   info.StatsClientsCount,
+		DocumentsCount: info.StatsDocumentsCount,
+		UpdatedAt:      info.StatsUpdatedAt,
+	}, nil
+}
+
+// UpdateProjectStats writes the cached stats fields on the project document.
+func (d *DB) UpdateProjectStats(
+	_ context.Context,
+	projectID types.ID,
+	clientsCount int64,
+	documentsCount int64,
+	updatedAt gotime.Time,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "id", projectID.String())
+	if err != nil {
+		return fmt.Errorf("find project %s: %w", projectID, err)
+	}
+	if raw == nil {
+		return database.ErrProjectNotFound
+	}
+	info := raw.(*database.ProjectInfo).DeepCopy()
+	info.StatsClientsCount = clientsCount
+	info.StatsDocumentsCount = documentsCount
+	info.StatsUpdatedAt = updatedAt
+
+	if err := txn.Insert(tblProjects, info); err != nil {
+		return fmt.Errorf("update project stats %s: %w", projectID, err)
+	}
+	txn.Commit()
+	return nil
+}
+
+// CountActivatedClients counts clients with status = activated for the given project.
+func (d *DB) CountActivatedClients(
+	_ context.Context,
+	projectID types.ID,
+) (int64, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return 0, fmt.Errorf("count clients of %s: %w", projectID, err)
+	}
+
+	var count int64
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		if raw.(*database.ClientInfo).Status != database.ClientActivated {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+
+// CountAliveDocuments counts non-removed documents for the given project.
+func (d *DB) CountAliveDocuments(
 	_ context.Context,
 	projectID types.ID,
 ) (int64, error) {
@@ -1652,38 +1728,48 @@ func (d *DB) GetDocumentsCount(
 		return 0, fmt.Errorf("count documents of %s: %w", projectID, err)
 	}
 
-	count := int64(0)
+	var count int64
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		info := raw.(*database.DocInfo).DeepCopy()
-		if !info.RemovedAt.IsZero() {
+		if !raw.(*database.DocInfo).RemovedAt.IsZero() {
 			continue
 		}
 		count++
 	}
-
 	return count, nil
 }
 
-// GetClientsCount returns the number of active clients in the given project.
-func (d *DB) GetClientsCount(ctx context.Context, projectID types.ID) (int64, error) {
+// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
+// ordered by ID ascending.
+func (d *DB) FindProjectInfosForRefresh(
+	_ context.Context,
+	limit int,
+	lastID types.ID,
+) ([]*database.ProjectInfo, types.ID, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.Get(tblClients, "project_id", projectID.String())
+	iter, err := txn.LowerBound(tblProjects, "id", lastID.String())
 	if err != nil {
-		return 0, fmt.Errorf("count clients of %s: %w", projectID, err)
+		return nil, database.ZeroID, fmt.Errorf("list projects for refresh: %w", err)
 	}
 
-	count := int64(0)
+	var infos []*database.ProjectInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		info := raw.(*database.ClientInfo).DeepCopy()
-		if info.Status != database.ClientActivated {
+		info := raw.(*database.ProjectInfo)
+		if info.ID == lastID {
 			continue
 		}
-		count++
+		infos = append(infos, info.DeepCopy())
+		if len(infos) >= limit {
+			break
+		}
 	}
 
-	return count, nil
+	tail := database.ZeroID
+	if len(infos) > 0 {
+		tail = infos[len(infos)-1].ID
+	}
+	return infos, tail, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info. If the
