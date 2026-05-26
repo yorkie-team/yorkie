@@ -64,11 +64,18 @@ func (c *Config) Validate() error {
 	}
 
 	if c.ProjectStatsRefreshInterval != "" {
-		if _, err := time.ParseDuration(c.ProjectStatsRefreshInterval); err != nil {
+		d, err := time.ParseDuration(c.ProjectStatsRefreshInterval)
+		if err != nil {
 			return fmt.Errorf(
 				`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: %w`,
 				c.ProjectStatsRefreshInterval,
 				err,
+			)
+		}
+		if d < 0 {
+			return fmt.Errorf(
+				`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: must be >= 0`,
+				c.ProjectStatsRefreshInterval,
 			)
 		}
 	}
@@ -96,6 +103,12 @@ func (c *Config) ParseProjectStatsRefreshInterval() (time.Duration, error) {
 		return 0, fmt.Errorf(
 			`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: %w`,
 			c.ProjectStatsRefreshInterval, err,
+		)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf(
+			`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: must be >= 0`,
+			c.ProjectStatsRefreshInterval,
 		)
 	}
 	return d, nil
