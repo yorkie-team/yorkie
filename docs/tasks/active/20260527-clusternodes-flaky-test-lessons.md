@@ -60,6 +60,48 @@ disconnect switch, narrowing the race window from
 when you compare a captured value against a live one, capture the
 captured value as close to the change-of-state as possible.
 
+## A test cache size below the shard count is a process-dependent flake
+
+`pkg/cache.LRU` is sharded across 16 fixed shards, with per-shard
+capacity computed as `size / numShards` and floored at 1. A test that
+constructs the cache with `size=5` therefore gets a 16-shard cache
+with one slot per shard — a 16-slot pool with the strict additional
+constraint that no shard may hold more than one entry.
+
+The shard mapping is `maphash.Comparable(hashSeed, key)`, and
+`hashSeed` is initialized once per process via `maphash.MakeSeed()`.
+That means: within a single process the shard assignment is stable
+(so `-count=N` cannot reproduce the flake), but across processes it
+is random. Three keys hashed into 16 shards with seed-determined
+positions have probability `1 − (16·15·14)/16³ ≈ 18%` of producing at
+least one collision, which on a single-slot shard is an eviction.
+
+`go test` caches results aggressively, so the apparent stability under
+`-count=N` or `for ... go test` loops is misleading. Reproducing this
+class of flake requires `go clean -testcache` (or matching) between
+iterations so each iteration is a fresh process with a fresh seed.
+
+**Rule**: when a test under `pkg/cache` (or any sharded structure)
+sizes the cache, the size must be chosen with the shard count in mind.
+Pick a size such that per-shard capacity is at least the number of
+keys you expect to coexist, otherwise hash collisions become silent
+test fragility.
+
+## `go test` result caching can hide process-seed-dependent flakes
+
+`go test ./pkg/cache -count=100` produces 100 identical results because
+the cache key is `(package, source, env)` and not "actual stochastic
+output". Even worse, `for i in 1..N; do go test ...; done` without
+`go clean -testcache` between iterations also reuses the cached
+result. The flake only surfaces when the seed is regenerated, which
+happens at process start, which happens when `go test` actually
+re-runs (cache miss).
+
+**Rule**: when debugging a flake that varies across CI runs but not
+local re-runs, suspect `go test` caching. Use `go clean -testcache`
+between iterations or check for randomized seeds in package-level
+`var` declarations.
+
 ## `assert.Eventually` timeout should cover the slowest legitimate path
 
 The original 1s timeout was tight against the worst-case acquire delay

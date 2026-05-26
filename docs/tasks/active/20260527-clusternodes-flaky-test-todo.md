@@ -1,16 +1,25 @@
 **Created**: 2026-05-27
 
-# ClusterNodes Leadership Revocation Flaky Test
+# Flaky Test Fixes: Leadership Revocation and LRU Hit Rate
 
 Branch: `fix-clusternodes-flaky-test`
 
 ## Goal
 
-Eliminate the ~25–35% flake rate of
-`TestClusterNodes/Leadership_revocation_and_reacquisition_after_temporary_DB_disconnection_test`
-without touching production code, since the underlying behavior was
-deliberately introduced by #1804 and the test's assumption was the
-incorrect side.
+Eliminate two pre-existing flakes in the test suite, both caused by
+tests making assumptions that hold only under specific timing or
+hashing luck. No production code changes.
+
+1. `TestClusterNodes/Leadership_revocation_and_reacquisition_after_temporary_DB_disconnection_test`
+   flaked ~25–35% due to a race between `FindClusterNodes`'s
+   `updated_at` window (200ms) and `lease_duration` (300ms), combined
+   with the intentional "wait for natural expiry" behavior added in
+   #1804.
+2. `TestLRUWithStats/hit_rate_calculation` flaked ~18% due to using a
+   cache size smaller than the shard count (sharded LRU floors
+   per-shard capacity at 1; `maphash` randomizes shard mapping per
+   process so hash collisions between the three added keys cause
+   evictions in ~18% of CI runs).
 
 ## Done
 
@@ -37,6 +46,20 @@ incorrect side.
       `TestClusterNodes` pass; `make lint` clean
 - [x] Self-review via code-review subagent (no Critical/Important; one
       Minor applied)
+- [x] LRU hit-rate flake investigation:
+  - [x] Confirm sharded structure (`numShards = 16`) and per-shard
+        flooring in `pkg/cache/lru_with_stats.go:40-60`
+  - [x] Confirm `var hashSeed = maphash.MakeSeed()` randomizes per
+        process, explaining CI-only flake
+  - [x] Reproduce locally with `go clean -testcache` between fresh
+        runs: 6/30 fail (20%, matches the 18% theoretical rate)
+- [x] LRU hit-rate fix in `pkg/cache/cache_test.go`:
+  - [x] Bump test cache size from 5 → 64 so per-shard capacity (4) is
+        large enough to hold all three added keys even on worst-case
+        shard collision
+  - [x] Comment explains the sharded sizing constraint
+- [x] Verify LRU fix: 30/30 fresh processes pass; full `pkg/cache`
+      package green; `make lint` clean
 
 ## Remaining
 
