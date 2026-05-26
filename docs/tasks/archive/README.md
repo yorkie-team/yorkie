@@ -20,7 +20,7 @@ Total archived tasks: 11
 
 | Task | Todo | Lessons |
 |---|---|---|
-| splitLevel >= 2 Convergence Implementation Plan (2026-04-24) | [20260424-split-level-2-convergence-todo.md](./2026/04/20260424-split-level-2-convergence-todo.md) | - |
+| splitLevel>=2 Convergence (2026-04-24) | [20260424-split-level-2-convergence-todo.md](./2026/04/20260424-split-level-2-convergence-todo.md) | [20260424-split-level-2-convergence-lessons.md](./2026/04/20260424-split-level-2-convergence-lessons.md) |
 | Array Move Convergence Implementation Plan (2026-04-21) | [20260421-array-move-convergence-todo.md](./2026/04/20260421-array-move-convergence-todo.md) | - |
 | Simplify Istio to Gateway-Only Mode (2026-04-18) | [20260418-istio-gateway-only-todo.md](./2026/04/20260418-istio-gateway-only-todo.md) | - |
 | Epoch-Aware Push Implementation Plan (2026-04-17) | [20260417-epoch-aware-push-todo.md](./2026/04/20260417-epoch-aware-push-todo.md) | - |
