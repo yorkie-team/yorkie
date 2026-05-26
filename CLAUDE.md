@@ -3,21 +3,21 @@
 Go server providing document synchronization via CRDTs with MongoDB or
 in-memory storage.
 
-See @docs/design/README.md for architecture and @docs/tasks/README.md
-for the active/archive task index.
+Architecture docs live under `docs/design/`; tasks under @docs/tasks/README.md.
 
 ## Commands
 
 ```sh
-make tools                   # Install dev tools (run periodically)
-make build                   # Build binary to bin/yorkie
-make fmt                     # gofmt + goimports
-make lint                    # golangci-lint
-make test                    # Unit tests
-make test -tags integration  # Integration tests (MongoDB required)
-make bench                   # Benchmarks (-tags bench)
-make coverage                # Coverage report
-make proto                   # Regenerate protobuf via buf
+make tools         # Install dev tools (run periodically)
+make build         # Build binary to bin/yorkie
+make fmt           # gofmt
+make lint          # golangci-lint
+make proto         # Regenerate protobuf via buf
+make test          # Integration tests (-tags integration, MongoDB required)
+make test-complex  # Long-running complex tests (-tags complex)
+make bench         # Benchmarks (-tags bench)
+make coverage      # Integration test coverage (MongoDB required)
+go test ./...      # Unit-only tests (no build tag, no DB)
 
 # Integration test environment
 docker compose -f build/docker/docker-compose.yml up --build -d
@@ -52,9 +52,10 @@ not `\n` inside `"..."`.
 
 ## Pitfalls
 
-- Build tags `integration`, `bench`, `complex` gate test files — pass
-  the tag (e.g. `make test -tags integration`) or VSCode/gopls won't
-  index those files.
+- Build tags `integration`, `bench`, `complex` gate test files. The
+  Makefile targets pass them via `go test -tags …`; for VSCode/gopls
+  to index those files, set `gopls.build.buildFlags` per
+  `CONTRIBUTING.md`.
 - Apache 2.0 license header required on every Go file.
 - Follow [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md);
   every package needs a package comment (`// Package xxx provides…`).
@@ -74,8 +75,9 @@ changes go to `docs/design/<topic>.md`.
 1. **Plan** — write the todo file before touching code; update
    `docs/design/` if architecture changes.
 2. **Branch + commit** — topic branch from `main`; each commit
-   `make lint && make test` green; follow the commit-message convention
-   above.
+   `make lint` green and `make test` green when MongoDB is up (or at
+   least `go test ./...` for unit-only changes); follow the
+   commit-message convention above.
 3. **Self review** — dispatch `superpowers:requesting-code-review` (or
    `/code-review`) over the full branch diff before pushing. Apply
    blocking findings; note non-blocking as known limitations.
@@ -89,6 +91,7 @@ changes go to `docs/design/<topic>.md`.
 6. **Before merge** — CI green and maintainer approval: capture
    lessons in `*-lessons.md`, then
    `bash scripts/tasks-archive.sh && bash scripts/tasks-index.sh`
-   to move the pair into `archive/YYYY/MM/` and regenerate indexes.
-   Update the top-level `docs/tasks/README.md` if needed. Merge, then
-   start a new session for the next task.
+   to move the pair into `archive/YYYY/MM/` and regenerate the
+   top-level and archive READMEs. The active README is hand-written;
+   only touch it if the convention itself changed. Merge, then start
+   a new session for the next task.
