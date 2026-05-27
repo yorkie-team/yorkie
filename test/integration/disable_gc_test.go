@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -222,5 +223,50 @@ func TestDisableGCOnAttach(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotZero(t, len(minVV),
 			"re-attach without opt-out should resume minVV tracking")
+	})
+
+	t.Run("opt-out client picks up server lamport when attach returns a snapshot", func(t *testing.T) {
+		// Latent issue exposed by the snapshot pull path:
+		// server/packs/pushpull.go nils resPack.VersionVector for opt-out
+		// even when the response is a snapshot, leaving the client without
+		// the lamport info it needs to catch up. Today this test FAILS
+		// because the opt-out client's lamport remains ~1 after the
+		// snapshot pull, while the server doc has advanced far beyond.
+		clients := activeClients(t, 2)
+		defer deactivateAndCloseClients(t, clients)
+		c1, c2 := clients[0], clients[1]
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		// 01. c1 attaches normally and writes past the snapshot threshold
+		// so that any later pull at serverSeq=0 produces a snapshot
+		// response.
+		d1 := document.New(docKey)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetInteger(fmt.Sprintf("k%d", i), i)
+				return nil
+			}))
+		}
+		assert.NoError(t, c1.Sync(ctx))
+		d1Lamport := d1.InternalDocument().Lamport()
+
+		// 02. c2 attaches with opt-out. The attach response's pull path
+		// crosses the threshold, so the server returns a snapshot. With
+		// the current behavior the response's VV is nil and c2's lamport
+		// fails to catch up.
+		d2 := document.New(docKey)
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithDisableGC()))
+
+		d2Lamport := d2.InternalDocument().Lamport()
+		t.Logf("d1.lamport=%d  d2.lamport after opt-out snapshot pull=%d",
+			d1Lamport, d2Lamport)
+
+		assert.GreaterOrEqual(t, d2Lamport, d1Lamport,
+			"opt-out client must catch up to the server's lamport via the "+
+				"snapshot response; got %d, server is at %d",
+			d2Lamport, d1Lamport)
 	})
 }

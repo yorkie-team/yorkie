@@ -22,7 +22,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -139,4 +141,78 @@ func TestDisableGCStillAdvancesLamport(t *testing.T) {
 		"disable_gc must still advance lamport on incoming remote changes")
 	assert.Equal(t, 1, len(docB.VersionVector()),
 		"disable_gc must keep doc.VV at size 1 after consuming remote changes")
+}
+
+// TestDisableGCSnapshotPullCatchesUpLamport pins the client-side contract
+// for the snapshot pull path under disable_gc: the server sends a snapshot
+// together with a single-entry VV keyed by the receiving client's actor
+// and carrying the doc's max lamport (see server/packs/pushpull.go
+// pullPack). The client's applySnapshot must use that lamport to advance
+// its change clock and keep doc.VV at size 1.
+func TestDisableGCSnapshotPullCatchesUpLamport(t *testing.T) {
+	actorA, err := time.ActorIDFromHex("000000000000000000000001")
+	assert.NoError(t, err)
+	actorB, err := time.ActorIDFromHex("000000000000000000000002")
+	assert.NoError(t, err)
+
+	// 01. docA accumulates lamport by making many local updates.
+	docA := document.New("snap-contract")
+	docA.SetActor(actorA)
+	const numUpdates = 20
+	assert.NoError(t, docA.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.SetNewCounter("c", 0)
+		return nil
+	}))
+	for i := 0; i < numUpdates; i++ {
+		assert.NoError(t, docA.Update(func(r *json.Object, _ *presence.Presence) error {
+			r.GetCounter("c").Increase(1)
+			return nil
+		}))
+	}
+	docALamport := docA.InternalDocument().Lamport()
+	assert.GreaterOrEqual(t, docALamport, int64(numUpdates),
+		"sanity: docA's lamport must reflect its updates")
+
+	// 02. Build the snapshot bytes the server would persist.
+	snapshotBytes, err := converter.SnapshotToBytes(docA.RootObject(), docA.AllPresences())
+	assert.NoError(t, err)
+
+	// 03. Opt-out docB receives the snapshot. Mirror what the server now
+	//     sends: a single-entry VV keyed by the receiving client's actor
+	//     and carrying the doc's max lamport. This keeps the wire footprint
+	//     at one entry while letting the client catch its clock up.
+	docB := document.New("snap-contract")
+	docB.SetActor(actorB)
+	docB.SetDisableGC(true)
+
+	snapshotPack := change.NewPack(
+		docB.Key(),
+		change.InitialCheckpoint,
+		nil,
+		time.VersionVector{docB.ActorID(): docALamport},
+		snapshotBytes,
+	)
+	assert.NoError(t, docB.ApplyChangePack(snapshotPack))
+
+	docBLamport := docB.InternalDocument().Lamport()
+	assert.GreaterOrEqual(t, docBLamport, docALamport,
+		"opt-out client must catch up to the snapshot's lamport (server=%d got=%d)",
+		docALamport, docBLamport)
+	assert.Equal(t, 1, len(docB.VersionVector()),
+		"opt-out doc.VV must stay at size 1 after snapshot pull, got %s",
+		docB.VersionVector().Marshal())
+
+	// 04. The next produced local Change must therefore start at a
+	//     lamport beyond the server's, and still carry a size-1 VV.
+	assert.NoError(t, docB.Update(func(r *json.Object, _ *presence.Presence) error {
+		r.GetCounter("c").Increase(1)
+		return nil
+	}))
+	newPack := docB.CreateChangePack()
+	newChange := newPack.Changes[len(newPack.Changes)-1]
+	assert.Greater(t, newChange.ID().Lamport(), docALamport,
+		"new local Change.lamport must exceed server's previous max")
+	assert.Equal(t, 1, len(newChange.ID().VersionVector()),
+		"new local Change.VV must stay size 1, got %s",
+		newChange.ID().VersionVector().Marshal())
 }
