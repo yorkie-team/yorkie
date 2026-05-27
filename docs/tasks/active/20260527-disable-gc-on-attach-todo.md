@@ -7,15 +7,27 @@
 > superpowers:executing-plans to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Implementation note (post-refactor):** The plan below was written
+> for a persisted design where `disable_gc` lived on `ClientDocInfo`.
+> Mid-implementation it pivoted to a stateless per-request design —
+> the flag travels on `AttachDocumentRequest` and `PushPullChangesRequest`
+> only and is read into `PushPullOptions` by the handler. The sections
+> below referencing `ClientDocInfo.DisableGC`, `AttachDocument`
+> signature changes, `DetachDocument` resets, mongo `$set` for
+> `disable_gc`, and backend persistence are **historical context**, not
+> shipped behavior. See `docs/design/disable-gc-on-attach.md` for the
+> final design and the lessons file for the pivot rationale.
+
 **Goal:** Add a per-attachment `disableGC` flag so a client can opt out
 of receiving the response VersionVector and participating in server-side
 `minVV` tracking. Targets high-fan-out Counter/primitive workloads where
 no client consumes tombstones.
 
-**Architecture:** Add `bool disable_gc` to `AttachDocumentRequest`,
-persist on `ClientDocInfo`, branch the `UpdateMinVersionVector` call in
-`server/packs/pushpull.go`, surface the option on Go and JS SDK
-`Attach`. Two PRs: Go server + Go SDK first, JS SDK after.
+**Architecture (as shipped):** Add `bool disable_gc` to
+`AttachDocumentRequest` and `PushPullChangesRequest`; thread the value
+through `packs.PushPullOptions`; branch the `UpdateMinVersionVector`
+call in `server/packs/pushpull.go`; surface the option on Go and JS
+SDK `Attach`. Two PRs: Go server + Go SDK first, JS SDK after.
 
 **Spec:** `docs/design/disable-gc-on-attach.md`
 

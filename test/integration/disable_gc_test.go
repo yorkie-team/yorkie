@@ -67,7 +67,8 @@ func TestDisableGCOnAttach(t *testing.T) {
 		c1, c2 := clients[0], clients[1]
 
 		ctx := context.Background()
-		d1 := document.New(helper.TestKey(t))
+		docKey := helper.TestKey(t)
+		d1 := document.New(docKey)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -76,7 +77,7 @@ func TestDisableGCOnAttach(t *testing.T) {
 		}))
 		assert.NoError(t, c1.Sync(ctx))
 
-		d2 := document.New(helper.TestKey(t))
+		d2 := document.New(docKey)
 		assert.NoError(t, c2.Attach(ctx, d2, client.WithDisableGC()))
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -102,9 +103,10 @@ func TestDisableGCOnAttach(t *testing.T) {
 		c1 := clients[0]
 
 		ctx := context.Background()
+		docKey := helper.TestKey(t)
 
 		// First attach with opt-out.
-		d1 := document.New(helper.TestKey(t))
+		d1 := document.New(docKey)
 		assert.NoError(t, c1.Attach(ctx, d1, client.WithDisableGC()))
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("counter", 0).Increase(1)
@@ -113,9 +115,10 @@ func TestDisableGCOnAttach(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c1.Detach(ctx, d1))
 
-		// Re-attach without opt-out. The flag must reset to false; subsequent
-		// PushPulls participate in minVV tracking normally.
-		d2 := document.New(helper.TestKey(t))
+		// Re-attach without opt-out. The SDK derives the per-request flag
+		// from the current attachment only, so subsequent PushPulls
+		// participate in minVV tracking normally.
+		d2 := document.New(docKey)
 		assert.NoError(t, c1.Attach(ctx, d2))
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
@@ -123,5 +126,19 @@ func TestDisableGCOnAttach(t *testing.T) {
 		}))
 		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, "2", d2.Root().GetCounter("counter").Marshal())
+
+		// Confirm server-side: re-attached client now appears in the
+		// versionvectors table. The opt-out attach didn't write a row, so
+		// a non-empty minVV after re-attach proves the new attachment is
+		// participating in minVV tracking.
+		be := defaultServer.Backend()
+		project, err := defaultServer.DefaultProject(ctx)
+		assert.NoError(t, err)
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, d2.Key())
+		assert.NoError(t, err)
+		minVV, err := be.DB.GetMinVersionVector(ctx, docInfo.RefKey(), time.NewVersionVector())
+		assert.NoError(t, err)
+		assert.NotZero(t, len(minVV),
+			"re-attach without opt-out should resume minVV tracking")
 	})
 }
