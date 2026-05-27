@@ -1344,7 +1344,10 @@ func (c *Client) FindActiveClients(
 	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
 		"_id":    bson.M{"$gt": lastClientID},
 		"status": database.ClientActivated,
-	}, options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(candidatesLimit)))
+	}, options.Find().
+		SetSort(bson.M{"_id": 1}).
+		SetLimit(int64(candidatesLimit)).
+		SetBatchSize(int32(candidatesLimit)))
 	if err != nil {
 		return nil, database.ZeroID, fmt.Errorf("find active clients: %w", err)
 	}
@@ -1792,7 +1795,10 @@ func (c *Client) FindProjectInfosForRefresh(
 	cursor, err := c.collection(ColProjects).Find(
 		ctx,
 		filter,
-		options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(limit)),
+		options.Find().
+			SetSort(bson.M{"_id": 1}).
+			SetLimit(int64(limit)).
+			SetBatchSize(int32(limit)),
 	)
 	if err != nil {
 		return nil, database.ZeroID, fmt.Errorf("find projects for refresh: %w", err)
@@ -2100,7 +2106,10 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 				"doc_id":     docRefKey.DocID,
 				"server_seq": bson.M{"$gte": current, "$lte": to},
 			}
-			opts := options.Find().SetSort(bson.D{{Key: "server_seq", Value: 1}}).SetLimit(chunkSize)
+			opts := options.Find().
+				SetSort(bson.D{{Key: "server_seq", Value: 1}}).
+				SetLimit(chunkSize).
+				SetBatchSize(int32(chunkSize))
 			cursor, err := c.collection(ColChanges).Find(ctx, filter, opts)
 			if err != nil {
 				return nil, fmt.Errorf("find changes of %s: %w", docRefKey, err)
