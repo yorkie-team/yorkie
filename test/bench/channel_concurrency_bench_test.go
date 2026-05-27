@@ -405,6 +405,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 
 				var wg sync.WaitGroup
 				done := make(chan struct{})
+				var closeOnce sync.Once
 				var listCount int64
 
 				// Start readers (List operations)
@@ -443,7 +444,9 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 						atomic.AddInt32(&writeCount, 1)
 
 						if atomic.LoadInt32(&writeCount) >= int32(tc.writers) {
-							close(done)
+							closeOnce.Do(func() {
+								close(done)
+							})
 						}
 					}(w)
 				}

@@ -25,6 +25,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -56,8 +58,8 @@ func benchmarkGetDocuments(
 		connect.NewRequest(docRequest),
 	)
 
-	assert.NoError(b, err)
-	assert.NotNil(b, resp.Msg)
+	require.NoError(b, err)
+	require.NotNil(b, resp.Msg)
 	assert.Len(b, resp.Msg.Documents, cnt)
 }
 
@@ -88,7 +90,7 @@ func BenchmarkGetDocuments(b *testing.B) {
 			Password: helper.AdminPassword,
 		},
 		))
-	assert.NoError(b, err)
+	require.NoError(b, err)
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 	resp1, err := testAdminClient.GetProject(
@@ -97,7 +99,7 @@ func BenchmarkGetDocuments(b *testing.B) {
 			Name: "default",
 		},
 		))
-	assert.NoError(b, err)
+	require.NoError(b, err)
 
 	project := converter.FromProject(resp1.Msg.Project)
 	ctx = projects.With(context.Background(), project)
@@ -105,7 +107,7 @@ func BenchmarkGetDocuments(b *testing.B) {
 	var docKeys []string
 	for i := range 1000 {
 		_, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), helper.TestKey(b, i))
-		assert.NoError(b, err)
+		require.NoError(b, err)
 		docKeys = append(docKeys, doc.Key().String())
 	}
 
