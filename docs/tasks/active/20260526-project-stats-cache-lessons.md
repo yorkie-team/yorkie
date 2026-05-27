@@ -15,6 +15,14 @@
 - Bundling the design doc and implementation plan as the first two
   commits on the branch gave every subsequent task an unambiguous SSOT
   to point reviewers at.
+- Local smoke (server + CLI + `mongosh` against the project doc) caught
+  a cursor bug that the integration test missed: the auto-created
+  `default` project has `_id == ZeroID`, which a `$gt: ZeroID` filter
+  silently skips on every cycle. The integration test created a fresh
+  project and never exercised the ZeroID boundary. Running the actual
+  binary against a real MongoDB surfaced it within one refresh cycle.
+  Future similar features should include a smoke pass even when unit +
+  integration tests are green.
 
 ## Surprises / non-obvious adaptations
 
