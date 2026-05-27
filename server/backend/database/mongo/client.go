@@ -1774,16 +1774,24 @@ func (c *Client) CountAliveDocuments(
 	return count, nil
 }
 
-// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
-// ordered by `_id` ascending. Returns (nil, ZeroID, nil) when iteration is exhausted.
+// FindProjectInfosForRefresh returns up to `limit` project infos ordered by
+// `_id` ascending. On the first cycle (lastID == ZeroID) the boundary is
+// inclusive so the auto-created `default` project (whose `_id` equals ZeroID)
+// is not skipped forever; on subsequent cycles `_id > lastID` is used to avoid
+// re-processing the previous cursor position. Returns (nil, ZeroID, nil) when
+// iteration is exhausted.
 func (c *Client) FindProjectInfosForRefresh(
 	ctx context.Context,
 	limit int,
 	lastID types.ID,
 ) ([]*database.ProjectInfo, types.ID, error) {
+	filter := bson.M{}
+	if lastID != database.ZeroID {
+		filter["_id"] = bson.M{"$gt": lastID}
+	}
 	cursor, err := c.collection(ColProjects).Find(
 		ctx,
-		bson.M{"_id": bson.M{"$gt": lastID}},
+		filter,
 		options.Find().SetSort(bson.M{"_id": 1}).SetLimit(int64(limit)),
 	)
 	if err != nil {

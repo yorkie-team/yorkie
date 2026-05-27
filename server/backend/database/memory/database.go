@@ -1738,8 +1738,11 @@ func (d *DB) CountAliveDocuments(
 	return count, nil
 }
 
-// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
-// ordered by ID ascending.
+// FindProjectInfosForRefresh returns up to `limit` project infos ordered by
+// ID ascending. On the first cycle (lastID == ZeroID) the boundary is
+// inclusive so the auto-created `default` project (ID == ZeroID) is included;
+// on subsequent cycles the boundary is skipped to avoid re-processing the
+// previous cursor position.
 func (d *DB) FindProjectInfosForRefresh(
 	_ context.Context,
 	limit int,
@@ -1753,10 +1756,12 @@ func (d *DB) FindProjectInfosForRefresh(
 		return nil, database.ZeroID, fmt.Errorf("list projects for refresh: %w", err)
 	}
 
+	skipBoundary := lastID != database.ZeroID
+
 	var infos []*database.ProjectInfo
 	for raw := iter.Next(); raw != nil; raw = iter.Next() {
 		info := raw.(*database.ProjectInfo)
-		if info.ID == lastID {
+		if skipBoundary && info.ID == lastID {
 			continue
 		}
 		infos = append(infos, info.DeepCopy())

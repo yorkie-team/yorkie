@@ -312,9 +312,14 @@ type Database interface {
 	// load off the primary.
 	CountAliveDocuments(ctx context.Context, projectID types.ID) (int64, error)
 
-	// FindProjectInfosForRefresh returns up to `limit` project infos with `_id > lastID`,
-	// ordered by `_id` ascending. Used by housekeeping tasks that need to iterate
-	// across all projects.
+	// FindProjectInfosForRefresh returns up to `limit` project infos ordered by
+	// `_id` ascending, used by housekeeping tasks that iterate across all projects.
+	//
+	// When `lastID == ZeroID` the boundary is inclusive — the cursor starts before
+	// the first possible ID, so a project with `_id == ZeroID` (the auto-created
+	// `default` project) is included on the first cycle of each term. When
+	// `lastID != ZeroID` the boundary is exclusive (`_id > lastID`) so the project
+	// at the previous cursor position is not re-processed.
 	//
 	// When the iteration is exhausted (no projects beyond lastID), returns
 	// (nil, ZeroID, nil). Callers restart by passing ZeroID as lastID on the next call.

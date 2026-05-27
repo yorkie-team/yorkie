@@ -250,6 +250,43 @@ func TestFindProjectInfosForRefresh(t *testing.T) {
 	assert.Equal(t, database.ZeroID, page3LastID)
 }
 
+func TestFindProjectInfosForRefreshIncludesDefaultProject(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	// The default project has ID == ZeroID. Without inclusive-boundary handling
+	// on the first cycle, it would be silently skipped forever by every cursor
+	// walk starting at ZeroID.
+	_, defaultProject, err := db.EnsureDefaultUserAndProject(ctx, "admin", "admin")
+	assert.NoError(t, err)
+	assert.Equal(t, database.ZeroID, defaultProject.ID)
+
+	other, err := db.CreateProjectInfo(ctx, "other", testOwnerID)
+	assert.NoError(t, err)
+
+	// First cycle: ZeroID cursor must include the default project.
+	page1, page1LastID, err := db.FindProjectInfosForRefresh(ctx, 10, database.ZeroID)
+	assert.NoError(t, err)
+	assert.Len(t, page1, 2)
+	assert.Equal(t, defaultProject.ID, page1[0].ID)
+	assert.Equal(t, other.ID, page1[1].ID)
+	assert.Equal(t, other.ID, page1LastID)
+
+	// Subsequent cycle: cursor advanced past `other`, iteration exhausted.
+	page2, page2LastID, err := db.FindProjectInfosForRefresh(ctx, 10, page1LastID)
+	assert.NoError(t, err)
+	assert.Len(t, page2, 0)
+	assert.Equal(t, database.ZeroID, page2LastID)
+
+	// Next term begins by restarting with ZeroID; default is included again.
+	page3, _, err := db.FindProjectInfosForRefresh(ctx, 10, database.ZeroID)
+	assert.NoError(t, err)
+	assert.Len(t, page3, 2)
+	assert.Equal(t, defaultProject.ID, page3[0].ID)
+}
+
 func TestCountActivatedClients(t *testing.T) {
 	ctx := context.Background()
 

@@ -180,7 +180,13 @@ FindProjectInfosForRefresh(
 ) ([]*ProjectInfo, types.ID, error)
 ```
 
-Implementation: `find({_id: {$gt: lastID}}).sort({_id: 1}).limit(N)`.
+Implementation: `find(filter).sort({_id: 1}).limit(N)`, where `filter` is
+`{_id: {$gt: lastID}}` for non-zero cursors and `{}` for the initial cycle
+(`lastID == ZeroID`). The initial cycle is inclusive because the auto-created
+`default` project has `_id == ZeroID` — a strictly-greater filter would skip
+it on every cycle. After processing, the cursor advances to the last returned
+project's ID, so the inclusive boundary only widens the very first batch of a
+term.
 
 `CountActivatedClients` and `CountAliveDocuments` use secondary read preference
 to keep the load off the primary. In mongo-driver v2, `CountOptions` no longer
