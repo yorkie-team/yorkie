@@ -136,6 +136,12 @@ type AttachOptions struct {
 	Presence    presence.Data
 	InitialRoot yson.Object
 	Schema      string
+
+	// DisableGC declares that this attachment will not produce or consume
+	// tombstones. The server skips minVV tracking and omits the response
+	// VersionVector for this client. Use only with Counter / primitive
+	// workloads; misuse leads to undefined GC behavior on this client.
+	DisableGC bool
 }
 
 // WithRealtimeSync configures the manual sync of the client.
@@ -160,6 +166,19 @@ func WithInitialRoot(root yson.Object) AttachOption {
 // WithSchema configures the schema of the document.
 func WithSchema(schema string) AttachOption {
 	return func(o *AttachOptions) { o.Schema = schema }
+}
+
+// WithDisableGC declares that this attachment will not produce or consume
+// tombstones. The server skips minVV tracking and omits the response
+// VersionVector for this client. Use only with Counter / primitive
+// workloads; misuse leads to undefined GC behavior on this client. See
+// docs/design/disable-gc-on-attach.md.
+//
+// This option controls the wire contract with the server. It is distinct
+// from the package-level document.WithDisableGC option, which disables
+// the document's local GC pass regardless of what the server sends.
+func WithDisableGC() AttachOption {
+	return func(o *AttachOptions) { o.DisableGC = true }
 }
 
 // AttachChannelOption configures AttachChannelOptions.
