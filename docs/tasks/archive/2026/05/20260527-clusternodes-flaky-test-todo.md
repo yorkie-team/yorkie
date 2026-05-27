@@ -63,7 +63,7 @@ hashing luck. No production code changes.
 
 ## Remaining
 
-- [ ] PR review and merge
+- [x] PR review and merge
 
 ## Notes
 
