@@ -76,6 +76,13 @@ type InternalDocument struct {
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
 	localChanges []*change.Change
+
+	// disableGC, when true, declares that this document does not produce or
+	// consume tombstones (see docs/design/disable-gc-on-attach.md). It is set
+	// by the client on Attach and consumed by ApplyChanges to skip merging
+	// remote actors' version vectors into changeID, keeping each subsequent
+	// local Change's VV at O(1) for high-fan-out Counter workloads.
+	disableGC bool
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -144,6 +151,13 @@ func (d *InternalDocument) SyncCheckpoint(serverSeq int64, clientSeq uint32) {
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *InternalDocument) HasLocalChanges() bool {
 	return len(d.localChanges) > 0
+}
+
+// SetDisableGC records whether this document participates in GC. The client
+// calls this on Attach so subsequent ApplyChanges runs use the lamport-only
+// sync path described in docs/design/disable-gc-on-attach.md.
+func (d *InternalDocument) SetDisableGC(disableGC bool) {
+	d.disableGC = disableGC
 }
 
 // ApplyChangePack applies the given change pack into this document.
@@ -304,7 +318,11 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			}
 		}
 
-		d.changeID = d.changeID.SyncClocks(c.ID())
+		if d.disableGC {
+			d.changeID = d.changeID.SyncLamport(c.ID())
+		} else {
+			d.changeID = d.changeID.SyncClocks(c.ID())
+		}
 	}
 
 	return events, nil

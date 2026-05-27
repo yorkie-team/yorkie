@@ -509,6 +509,11 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		d.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
 	}
 
+	// Record the opt-out decision before applying the attach response so the
+	// first ApplyChangePack already routes remote changes through the
+	// lamport-only sync path. See docs/design/disable-gc-on-attach.md.
+	d.SetDisableGC(opts.DisableGC)
+
 	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}

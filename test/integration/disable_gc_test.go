@@ -97,6 +97,88 @@ func TestDisableGCOnAttach(t *testing.T) {
 		assert.Equal(t, "2", d2.Root().GetCounter("counter").Marshal())
 	})
 
+	t.Run("opt-out clients keep per-Change VV at size 1 under multi-actor fanout", func(t *testing.T) {
+		// Regression for the bug where Change.ID.VersionVector accumulated
+		// O(num_actors) entries on every opt-out client because
+		// ApplyChanges -> SyncClocks merged every remote actor into the
+		// local VV. After the SyncLamport fix the per-Change VV must stay
+		// at size 1 so the on-the-wire savings the opt-out promises
+		// actually materialize.
+		clients := activeClients(t, 3)
+		defer deactivateAndCloseClients(t, clients)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+		d1 := document.New(docKey)
+		d2 := document.New(docKey)
+		d3 := document.New(docKey)
+		assert.NoError(t, c1.Attach(ctx, d1, client.WithDisableGC()))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithDisableGC()))
+		assert.NoError(t, c3.Attach(ctx, d3, client.WithDisableGC()))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("counter", 0)
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
+
+		// A few rounds of mutual increments + sync. The second round is
+		// when accumulation used to first show up because every actor has
+		// then seen every other actor at least once.
+		for range 3 {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("counter").Increase(1)
+				return nil
+			}))
+			assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("counter").Increase(1)
+				return nil
+			}))
+			assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("counter").Increase(1)
+				return nil
+			}))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c3.Sync(ctx))
+		}
+
+		// Drain remaining pushed changes so every client sees the full
+		// counter. Two extra sync passes are enough for a 3-client mesh.
+		for range 2 {
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.NoError(t, c3.Sync(ctx))
+		}
+
+		// Convergence sanity check: 3 rounds * 3 actors = 9 increments.
+		assert.Equal(t, "9", d1.Root().GetCounter("counter").Marshal())
+		assert.Equal(t, "9", d2.Root().GetCounter("counter").Marshal())
+		assert.Equal(t, "9", d3.Root().GetCounter("counter").Marshal())
+
+		// The contract assertion: every opt-out doc's VV stays at size 1.
+		for i, d := range []*document.Document{d1, d2, d3} {
+			vv := d.VersionVector()
+			assert.Equal(t, 1, len(vv),
+				"opt-out doc[%d].VersionVector() must stay at size 1, got %s",
+				i, vv.Marshal())
+		}
+
+		// And so does the next produced local Change.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("counter").Increase(1)
+			return nil
+		}))
+		pack := d1.CreateChangePack()
+		vv := pack.Changes[len(pack.Changes)-1].ID().VersionVector()
+		assert.Equal(t, 1, len(vv),
+			"new local Change produced under disable_gc must carry size-1 VV, got %s",
+			vv.Marshal())
+	})
+
 	t.Run("re-attach without WithDisableGC restores normal GC participation", func(t *testing.T) {
 		clients := activeClients(t, 1)
 		defer deactivateAndCloseClients(t, clients)
