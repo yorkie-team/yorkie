@@ -252,8 +252,9 @@ func (s *yorkieServer) AttachDocument(
 
 	// 03. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushPull,
-		Status: document.StatusAttached,
+		Mode:      types.SyncModePushPull,
+		Status:    document.StatusAttached,
+		DisableGC: req.Msg.DisableGc,
 	})
 	if err != nil {
 		return nil, err
@@ -1284,8 +1285,9 @@ func (s *yorkieServer) PushPullChanges(
 	// 03. Push/Pull between the client and server.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:   syncMode,
-		Status: document.StatusAttached,
+		Mode:      syncMode,
+		Status:    document.StatusAttached,
+		DisableGC: req.Msg.DisableGc,
 	})
 	if err != nil {
 		return nil, err

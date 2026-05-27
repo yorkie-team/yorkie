@@ -62,6 +62,12 @@ type PushPullOptions struct {
 
 	// Status represents the status of the document to be updated.
 	Status document.StatusType
+
+	// DisableGC, when true, makes the server skip minVV tracking for this
+	// client and omit the response VersionVector. Set per-request by the
+	// RPC handler from the matching wire field. See
+	// docs/design/disable-gc-on-attach.md.
+	DisableGC bool
 }
 
 var (
@@ -300,12 +306,23 @@ func pullPack(
 	}
 
 	// 03. update client's vector and checkpoint to DB.
-	minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
-	if err != nil {
-		return nil, err
-	}
-	if resPack.SnapshotLen() == 0 {
-		resPack.VersionVector = minVersionVector
+	// Skip both minVV tracking and response VV when this PushPull is
+	// flagged as GC-free. The client never consumes the response VV, and
+	// excluding it from minVV is correct because tombstones do not need to
+	// be kept alive for this client. See docs/design/disable-gc-on-attach.md.
+	if opts.DisableGC {
+		// The snapshot path in pullSnapshot populates resPack.VersionVector
+		// unconditionally, so clear it here to keep the wire contract for
+		// opt-out clients consistent across both pull paths.
+		resPack.VersionVector = nil
+	} else {
+		minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
+		if err != nil {
+			return nil, err
+		}
+		if resPack.SnapshotLen() == 0 {
+			resPack.VersionVector = minVersionVector
+		}
 	}
 	if !clientInfo.IsServerClient() {
 		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
