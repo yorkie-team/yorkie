@@ -7,6 +7,23 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.10] - 2026-05-27
+
+### Added
+
+- Support wildcard patterns in Project.AllowedOrigins by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1810
+- Add disable_gc opt-out for GC-free attach workloads by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1822
+
+### Changed
+
+- Log session-not-found events at info level by @raararaara in https://github.com/yorkie-team/yorkie/pull/1814
+- Cache project stats counts to keep GetProjectStats fast at scale by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1819
+- Avoid getMore by sizing cursor batch to query limit by @raararaara in https://github.com/yorkie-team/yorkie/pull/1821
+
+### Fixed
+
+- Fix flaky leadership revocation and LRU hit-rate tests by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1820
+
 ## [v0.7.9] - 2026-05-14
 
 ### Added
