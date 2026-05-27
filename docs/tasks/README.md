@@ -1,5 +1,5 @@
 ---
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Tasks Index
@@ -18,9 +18,11 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Active Tasks
 
-_(none)_
+| Task | Todo | Lessons |
+|---|---|---|
+| Flaky Test Fixes: Leadership Revocation and LRU Hit Rate (2026-05-27) | [20260527-clusternodes-flaky-test-todo.md](./active/20260527-clusternodes-flaky-test-todo.md) | [20260527-clusternodes-flaky-test-lessons.md](./active/20260527-clusternodes-flaky-test-lessons.md) |
 
 ## Archive
 
-- Archived task count: 11
+- Archived task count: 12
 - Archive index: [archive/README.md](./archive/README.md)

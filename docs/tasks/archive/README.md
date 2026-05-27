@@ -1,5 +1,5 @@
 ---
-updated: 2026-05-26
+updated: 2026-05-27
 ---
 
 # Tasks Archive
@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 11
+Total archived tasks: 12
 
-## 2026/05 (1 task)
+## 2026/05 (2 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Project Stats Cache Implementation Plan (2026-05-26) | [20260526-project-stats-cache-todo.md](./2026/05/20260526-project-stats-cache-todo.md) | [20260526-project-stats-cache-lessons.md](./2026/05/20260526-project-stats-cache-lessons.md) |
 | Allowed Origins Wildcard (2026-05-19) | [20260519-allowed-origins-wildcard-todo.md](./2026/05/20260519-allowed-origins-wildcard-todo.md) | [20260519-allowed-origins-wildcard-lessons.md](./2026/05/20260519-allowed-origins-wildcard-lessons.md) |
 
 ## 2026/04 (9 tasks)

@@ -140,6 +140,18 @@ type ProjectInfo struct {
 
 	// UpdatedAt is the time when the project was updated.
 	UpdatedAt time.Time `bson:"updated_at"`
+
+	// StatsClientsCount is the cached count of activated clients in the project.
+	// Refreshed periodically by the project-stats housekeeping task.
+	StatsClientsCount int64 `bson:"stats_clients_count"`
+
+	// StatsDocumentsCount is the cached count of non-removed documents in the project.
+	// Refreshed periodically by the project-stats housekeeping task.
+	StatsDocumentsCount int64 `bson:"stats_documents_count"`
+
+	// StatsUpdatedAt is the time when the stats fields above were last refreshed.
+	// Zero value indicates the refresh has not run yet for this project.
+	StatsUpdatedAt time.Time `bson:"stats_updated_at"`
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
@@ -204,6 +216,9 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AllowedOrigins:              i.AllowedOrigins,
 		CreatedAt:                   i.CreatedAt,
 		UpdatedAt:                   i.UpdatedAt,
+		StatsClientsCount:           i.StatsClientsCount,
+		StatsDocumentsCount:         i.StatsDocumentsCount,
+		StatsUpdatedAt:              i.StatsUpdatedAt,
 	}
 }
 
@@ -309,4 +324,11 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		CreatedAt:                   i.CreatedAt,
 		UpdatedAt:                   i.UpdatedAt,
 	}
+}
+
+// ProjectStatsCounts holds the cached count values for GetProjectStats.
+type ProjectStatsCounts struct {
+	ClientsCount   int64
+	DocumentsCount int64
+	UpdatedAt      time.Time
 }

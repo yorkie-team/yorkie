@@ -33,6 +33,10 @@ type Config struct {
 
 	// CompactionMinChanges is the minimum number of changes to compact a document.
 	CompactionMinChanges int `yaml:"CompactionMinChanges"`
+
+	// ProjectStatsRefreshInterval is the interval between project-stats refresh cycles.
+	// If empty or "0s", the project-stats refresh task is not registered.
+	ProjectStatsRefreshInterval string `yaml:"ProjectStatsRefreshInterval"`
 }
 
 // Validate validates the configuration.
@@ -59,6 +63,23 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if c.ProjectStatsRefreshInterval != "" {
+		d, err := time.ParseDuration(c.ProjectStatsRefreshInterval)
+		if err != nil {
+			return fmt.Errorf(
+				`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: %w`,
+				c.ProjectStatsRefreshInterval,
+				err,
+			)
+		}
+		if d < 0 {
+			return fmt.Errorf(
+				`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: must be >= 0`,
+				c.ProjectStatsRefreshInterval,
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -70,4 +91,25 @@ func (c *Config) ParseInterval() (time.Duration, error) {
 	}
 
 	return interval, nil
+}
+
+// ParseProjectStatsRefreshInterval parses the configured interval. Returns 0 if empty.
+func (c *Config) ParseProjectStatsRefreshInterval() (time.Duration, error) {
+	if c.ProjectStatsRefreshInterval == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(c.ProjectStatsRefreshInterval)
+	if err != nil {
+		return 0, fmt.Errorf(
+			`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: %w`,
+			c.ProjectStatsRefreshInterval, err,
+		)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf(
+			`invalid argument %s for "--housekeeping-project-stats-refresh-interval" flag: must be >= 0`,
+			c.ProjectStatsRefreshInterval,
+		)
+	}
+	return d, nil
 }

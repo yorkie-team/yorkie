@@ -279,11 +279,55 @@ type Database interface {
 	// UpdateDocInfoSchema updates the document schema.
 	UpdateDocInfoSchema(ctx context.Context, refKey types.DocRefKey, schemaKey string) error
 
-	// GetDocumentsCount returns the number of documents in the given project.
-	GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
+	// GetProjectStatsCounts returns the cached project counts (clients, documents)
+	// stored on the project document. Bypasses ProjectCache.
+	//
+	// When the project is missing or has never been refreshed, returns a
+	// zero-valued ProjectStatsCounts (not nil, no error). Callers detect the
+	// cold-start state with counts.UpdatedAt.IsZero().
+	GetProjectStatsCounts(ctx context.Context, projectID types.ID) (*ProjectStatsCounts, error)
 
-	// GetClientsCount returns the number of active clients in the given project.
-	GetClientsCount(ctx context.Context, projectID types.ID) (int64, error)
+	// UpdateProjectStats writes the cached stats fields on the project document.
+	//
+	// Returns ErrProjectNotFound when the project doesn't exist. Note: this is
+	// asymmetric with GetProjectStatsCounts (which returns zeros for cold start) —
+	// reads tolerate a missing record, writes refuse to create one.
+	UpdateProjectStats(
+		ctx context.Context,
+		projectID types.ID,
+		clientsCount int64,
+		documentsCount int64,
+		updatedAt gotime.Time,
+	) error
+
+	// CountActivatedClients counts clients with status = activated for the given
+	// project. Slow on large collections; used by the project-stats refresh task only.
+	// MongoDB implementations MUST use SecondaryPreferred read preference to keep
+	// load off the primary.
+	CountActivatedClients(ctx context.Context, projectID types.ID) (int64, error)
+
+	// CountAliveDocuments counts non-removed documents for the given project.
+	// Slow on large collections; used by the project-stats refresh task only.
+	// MongoDB implementations MUST use SecondaryPreferred read preference to keep
+	// load off the primary.
+	CountAliveDocuments(ctx context.Context, projectID types.ID) (int64, error)
+
+	// FindProjectInfosForRefresh returns up to `limit` project infos ordered by
+	// `_id` ascending, used by housekeeping tasks that iterate across all projects.
+	//
+	// When `lastID == ZeroID` the boundary is inclusive — the cursor starts before
+	// the first possible ID, so a project with `_id == ZeroID` (the auto-created
+	// `default` project) is included on the first cycle of each term. When
+	// `lastID != ZeroID` the boundary is exclusive (`_id > lastID`) so the project
+	// at the previous cursor position is not re-processed.
+	//
+	// When the iteration is exhausted (no projects beyond lastID), returns
+	// (nil, ZeroID, nil). Callers restart by passing ZeroID as lastID on the next call.
+	FindProjectInfosForRefresh(
+		ctx context.Context,
+		limit int,
+		lastID types.ID,
+	) ([]*ProjectInfo, types.ID, error)
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(

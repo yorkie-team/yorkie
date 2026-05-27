@@ -17,6 +17,7 @@ syntax = "proto3";
 
 package yorkie.v1;
 
+import "google/protobuf/timestamp.proto";
 import "yorkie/v1/resources.proto";
 
 option go_package = "github.com/yorkie-team/yorkie/api/yorkie/v1;v1";
@@ -192,6 +193,7 @@ message GetProjectStatsResponse {
   repeated MetricPoint active_documents = 13;
   int32 active_clients_count = 14;
   repeated MetricPoint active_clients = 15;
+  google.protobuf.Timestamp stats_updated_at = 16;
 }
 
 message RemoveMemberRequest {

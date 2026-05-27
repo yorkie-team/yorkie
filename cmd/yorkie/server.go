@@ -60,7 +60,8 @@ var (
 	clusterClientPoolSize    int
 	maxConcurrentClusterRPCs int
 
-	housekeepingInterval time.Duration
+	housekeepingInterval                    time.Duration
+	housekeepingProjectStatsRefreshInterval time.Duration
 
 	mongoConnectionURI                string
 	mongoConnectionTimeout            time.Duration
@@ -112,6 +113,7 @@ func newServerCmd() *cobra.Command {
 			conf.Profiling.PprofEnabled = pprofEnabled
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.ProjectStatsRefreshInterval = housekeepingProjectStatsRefreshInterval.String()
 
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
 			conf.Backend.ChannelSessionTTL = channelSessionTTL.String()
@@ -347,6 +349,12 @@ func init() {
 		"housekeeping-compaction-min-changes",
 		server.DefaultHousekeepingCompactionMinChanges,
 		"minimum number of changes to compact a document for housekeeping run",
+	)
+	cmd.Flags().DurationVar(
+		&housekeepingProjectStatsRefreshInterval,
+		"housekeeping-project-stats-refresh-interval",
+		server.DefaultProjectStatsRefreshInterval,
+		`Project-stats refresh interval. Set to "0s" to disable the project-stats refresh task.`,
 	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,

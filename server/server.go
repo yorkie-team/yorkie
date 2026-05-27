@@ -210,6 +210,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 
 	deactivateState := &housekeepingState{lastID: database.ZeroID}
 	compactionState := &housekeepingState{lastID: database.ZeroID}
+	statsState := &housekeepingState{lastID: database.ZeroID}
 
 	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		deactivateState.Lock()
@@ -306,6 +307,53 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	statsInterval, err := be.Housekeeping.Config.ParseProjectStatsRefreshInterval()
+	if err != nil {
+		return err
+	}
+	if statsInterval > 0 {
+		if err := be.Housekeeping.RegisterTask(statsInterval, func(ctx context.Context) error {
+			statsState.Lock()
+			currentLastID := statsState.lastID
+			statsState.Unlock()
+
+			isNewTerm := currentLastID == database.ZeroID
+			start := time.Now()
+
+			lastID, processed, err := projects.RefreshStats(
+				ctx,
+				be,
+				be.Housekeeping.Config.CandidatesLimit,
+				currentLastID,
+			)
+			if err != nil {
+				return err
+			}
+
+			statsState.Lock()
+			if isNewTerm {
+				statsState.term++
+			}
+			statsState.lastID = lastID
+			statsState.totalProcessed += processed
+			if processed > 0 {
+				logging.From(ctx).Infof(
+					"HSKP: project-stats #%d %s refreshed %d/%d %s",
+					statsState.term,
+					currentLastID,
+					processed,
+					statsState.totalProcessed,
+					time.Since(start),
+				)
+			}
+			statsState.Unlock()
+
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil

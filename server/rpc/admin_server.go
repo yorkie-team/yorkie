@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -290,6 +291,7 @@ func (s *adminServer) GetProjectStats(
 		SessionsCount:               int32(stats.SessionsCount),
 		PeakSessionsPerChannel:      converter.ToMetricPoints(stats.PeakSessionsPerChannel),
 		PeakSessionsPerChannelCount: int32(stats.PeakSessionsPerChannelCount),
+		StatsUpdatedAt:              timestamppb.New(stats.StatsUpdatedAt),
 	}), nil
 }
 
