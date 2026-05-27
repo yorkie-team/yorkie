@@ -72,6 +72,11 @@ message AttachDocumentRequest {
   string client_id = 1;
   ChangePack change_pack = 2;
   string schema_key = 3;
+  // disable_gc declares that this attachment will not produce or consume
+  // tombstones. The server skips minVV tracking and omits the response
+  // VersionVector for this client. Use only with Counter / primitive
+  // workloads; misuse leads to undefined GC behavior on this client.
+  bool disable_gc = 4;
 }
 
 message AttachDocumentResponse {
@@ -211,6 +216,12 @@ message PushPullChangesRequest {
   string document_id = 2;
   ChangePack change_pack = 3;
   bool push_only = 4;
+  // disable_gc declares that this PushPull will not produce or consume
+  // tombstones. The server skips minVV tracking and omits the response
+  // VersionVector. Clients that attached with disable_gc=true must keep
+  // setting this on every subsequent PushPullChanges. See
+  // docs/design/disable-gc-on-attach.md.
+  bool disable_gc = 5;
 }
 
 message PushPullChangesResponse {

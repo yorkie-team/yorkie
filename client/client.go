@@ -491,6 +491,7 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 			SchemaKey:  opts.Schema,
+			DisableGc:  opts.DisableGC,
 		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
@@ -540,6 +541,7 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		closeWatchStream:    cancelFunc,
 		syncMode:            syncMode,
 		changeEventReceived: false,
+		disableGC:           opts.DisableGC,
 	})
 	if opts.IsRealtime {
 		if err = c.runWatchLoop(watchCtx, d); err != nil {
@@ -1068,6 +1070,7 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 			DocumentId: attachment.resourceID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
+			DisableGc:  attachment.disableGC,
 		}), c.options.APIKey, opt.key.String()))
 	if err != nil {
 		return err

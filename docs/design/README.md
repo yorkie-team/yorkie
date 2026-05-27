@@ -18,6 +18,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Tree Split Undo/Redo](tree-split-undo-redo.md): Boundary-deletion reverse ops for `Tree.Edit` with `splitLevel >= 1` plus pre-tombstoned descendant filtering
 - [VersionVector](version-vector.md): VersionVector for GC and Resolving conflicts in CRDT
 - [VV Cleanup](vv-cleanup.md): Remove detached client's lamport from version vectors
+- [Disable GC on Attach](disable-gc-on-attach.md): Per-attachment opt-out from VV exchange and `minVV` tracking for GC-free workloads
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict

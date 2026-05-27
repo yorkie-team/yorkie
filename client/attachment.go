@@ -56,6 +56,12 @@ type Attachment struct {
 	syncMode            SyncMode
 	changeEventReceived bool
 	lastSyncTime        gotime.Time
+
+	// disableGC is set when the document was attached with
+	// WithDisableGC. The client sets the matching wire field on every
+	// PushPullChanges so the server can skip minVV tracking and omit the
+	// response VersionVector. See docs/design/disable-gc-on-attach.md.
+	disableGC bool
 }
 
 func (a *Attachment) Is(resourceType attachable.ResourceType) bool {
