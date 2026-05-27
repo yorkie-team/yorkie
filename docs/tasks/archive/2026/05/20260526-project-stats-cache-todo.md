@@ -2,7 +2,7 @@
 
 # Project Stats Cache Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Cache `clients_count` and `documents_count` on the project document, refreshed asynchronously by a new housekeeping task, so `GetProjectStats` returns within the dashboard's 3s deadline regardless of collection size.
 
@@ -41,7 +41,7 @@
 **Files:**
 - Modify: `server/backend/database/project_info.go`
 
-- [ ] **Step 1: Add fields to `ProjectInfo`**
+- [x] **Step 1: Add fields to `ProjectInfo`**
 
 Insert after `UpdatedAt` field (around line 142):
 
@@ -59,7 +59,7 @@ StatsDocumentsCount int64 `bson:"stats_documents_count"`
 StatsUpdatedAt time.Time `bson:"stats_updated_at"`
 ```
 
-- [ ] **Step 2: Update `DeepCopy` to copy new fields**
+- [x] **Step 2: Update `DeepCopy` to copy new fields**
 
 Add inside the `return &ProjectInfo{...}` block:
 
@@ -69,7 +69,7 @@ StatsDocumentsCount:         i.StatsDocumentsCount,
 StatsUpdatedAt:              i.StatsUpdatedAt,
 ```
 
-- [ ] **Step 3: Add `ProjectStatsCounts` value type at end of file**
+- [x] **Step 3: Add `ProjectStatsCounts` value type at end of file**
 
 ```go
 // ProjectStatsCounts holds the cached count values for GetProjectStats.
@@ -80,12 +80,12 @@ type ProjectStatsCounts struct {
 }
 ```
 
-- [ ] **Step 4: Verify build**
+- [x] **Step 4: Verify build**
 
 Run: `go build ./...`
 Expected: clean build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/backend/database/project_info.go
@@ -99,7 +99,7 @@ git commit -m "Add stats fields to ProjectInfo for cached project counts"
 **Files:**
 - Modify: `server/backend/database/database.go`
 
-- [ ] **Step 1: Remove old method signatures**
+- [x] **Step 1: Remove old method signatures**
 
 Delete the `GetDocumentsCount` and `GetClientsCount` lines (around 282–286):
 
@@ -111,7 +111,7 @@ GetDocumentsCount(ctx context.Context, projectID types.ID) (int64, error)
 GetClientsCount(ctx context.Context, projectID types.ID) (int64, error)
 ```
 
-- [ ] **Step 2: Add new method signatures in the same location**
+- [x] **Step 2: Add new method signatures in the same location**
 
 ```go
 // GetProjectStatsCounts returns the cached project counts (clients, documents)
@@ -145,12 +145,12 @@ FindProjectInfosForRefresh(
 ) ([]*ProjectInfo, types.ID, error)
 ```
 
-- [ ] **Step 3: Verify build fails (interface unimplemented)**
+- [x] **Step 3: Verify build fails (interface unimplemented)**
 
 Run: `go build ./...`
 Expected: build errors in `mongo/client.go` and `memory/database.go` ("does not implement Database").
 
-- [ ] **Step 4: Commit (intentional broken build for next task to fix)**
+- [x] **Step 4: Commit (intentional broken build for next task to fix)**
 
 Hold off committing until Tasks 3 and 4 land. Continue.
 
@@ -161,7 +161,7 @@ Hold off committing until Tasks 3 and 4 land. Continue.
 **Files:**
 - Modify: `server/backend/database/memory/database.go`
 
-- [ ] **Step 1: Write failing tests in `server/backend/database/memory/database_test.go`**
+- [x] **Step 1: Write failing tests in `server/backend/database/memory/database_test.go`**
 
 Add to the test file:
 
@@ -216,16 +216,16 @@ func TestFindProjectInfosForRefresh(t *testing.T) {
 
 Adjust `testOwner` and helper imports if existing patterns differ; copy from existing tests in the same file.
 
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
 
 Run: `go test ./server/backend/database/memory/... -run 'TestProjectStatsCounts|TestFindProjectInfosForRefresh' -v`
 Expected: compile errors (methods undefined).
 
-- [ ] **Step 3: Remove old `GetClientsCount` and `GetDocumentsCount` (lines 1642–1687)**
+- [x] **Step 3: Remove old `GetClientsCount` and `GetDocumentsCount` (lines 1642–1687)**
 
 Delete both methods entirely.
 
-- [ ] **Step 4: Implement new methods**
+- [x] **Step 4: Implement new methods**
 
 Append:
 
@@ -364,16 +364,16 @@ func (d *DB) FindProjectInfosForRefresh(
 }
 ```
 
-- [ ] **Step 5: Update existing tests that referenced the removed methods**
+- [x] **Step 5: Update existing tests that referenced the removed methods**
 
 Find references with: `grep -rn 'GetClientsCount\|GetDocumentsCount' server/backend/database/memory/`. Replace with `CountActivatedClients` / `CountAliveDocuments` where the test was exercising the count semantic, or delete obsolete tests that only covered the old API.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 Run: `go test ./server/backend/database/memory/... -v`
 Expected: all pass, including new tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add server/backend/database/database.go server/backend/database/memory/
@@ -387,11 +387,11 @@ git commit -m "Add project stats methods to database interface and memory backen
 **Files:**
 - Modify: `server/backend/database/mongo/client.go`
 
-- [ ] **Step 1: Remove old `GetClientsCount` and `GetDocumentsCount` (lines 1658–1687)**
+- [x] **Step 1: Remove old `GetClientsCount` and `GetDocumentsCount` (lines 1658–1687)**
 
 Delete both methods entirely.
 
-- [ ] **Step 2: Add new method implementations**
+- [x] **Step 2: Add new method implementations**
 
 Append:
 
@@ -525,7 +525,7 @@ func (c *Client) FindProjectInfosForRefresh(
 }
 ```
 
-- [ ] **Step 3: Add missing imports**
+- [x] **Step 3: Add missing imports**
 
 Ensure `client.go` imports the following (some may already be present):
 
@@ -536,17 +536,17 @@ Ensure `client.go` imports the following (some may already be present):
 "go.mongodb.org/mongo-driver/v2/mongo/readpref"
 ```
 
-- [ ] **Step 4: Verify build**
+- [x] **Step 4: Verify build**
 
 Run: `go build ./...`
 Expected: clean build.
 
-- [ ] **Step 5: Run mongo integration smoke test**
+- [x] **Step 5: Run mongo integration smoke test**
 
 Run: `go test -tags integration ./server/backend/database/mongo/... -v -run 'TestProject' -count=1`
 Expected: existing project tests still pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/backend/database/mongo/client.go
@@ -560,7 +560,7 @@ git commit -m "Implement project stats methods in MongoDB backend"
 **Files:**
 - Modify: `server/projects/projects.go`
 
-- [ ] **Step 1: Replace the slow read sites**
+- [x] **Step 1: Replace the slow read sites**
 
 Around lines 199–207, replace:
 
@@ -585,7 +585,7 @@ if err != nil {
 }
 ```
 
-- [ ] **Step 2: Update the return value at the end of `GetProjectStats`**
+- [x] **Step 2: Update the return value at the end of `GetProjectStats`**
 
 Replace `DocumentsCount: documentsCount,` and `ClientsCount: clientsCount,` with:
 
@@ -597,12 +597,12 @@ StatsUpdatedAt:   counts.UpdatedAt,
 
 (The new `StatsUpdatedAt` field is added in Task 7.)
 
-- [ ] **Step 3: Verify build fails (StatsUpdatedAt undefined)**
+- [x] **Step 3: Verify build fails (StatsUpdatedAt undefined)**
 
 Run: `go build ./...`
 Expected: error about `StatsUpdatedAt` not defined on `types.ProjectStats`. This is intentional and resolved in Task 7.
 
-- [ ] **Step 4: Do not commit yet**
+- [x] **Step 4: Do not commit yet**
 
 Hold this change; finalize after Tasks 6–7 are landed.
 
@@ -614,7 +614,7 @@ Hold this change; finalize after Tasks 6–7 are landed.
 - Modify: `api/yorkie/v1/admin.proto`
 - Regenerated: `api/yorkie/v1/admin.pb.go`, `api/yorkie/v1/admin.connect.go`
 
-- [ ] **Step 1: Edit the proto**
+- [x] **Step 1: Edit the proto**
 
 In `GetProjectStatsResponse`, append a new field after `active_clients = 15`:
 
@@ -628,12 +628,12 @@ If `google/protobuf/timestamp.proto` is not already imported at the top, add:
 import "google/protobuf/timestamp.proto";
 ```
 
-- [ ] **Step 2: Regenerate**
+- [x] **Step 2: Regenerate**
 
 Run: `make proto`
 Expected: `api/yorkie/v1/admin.pb.go` updated with `StatsUpdatedAt *timestamppb.Timestamp`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add api/yorkie/v1/admin.proto api/yorkie/v1/admin.pb.go api/yorkie/v1/admin.connect.go
@@ -648,7 +648,7 @@ git commit -m "Add stats_updated_at to GetProjectStatsResponse"
 - Modify: `api/types/project_stats.go`
 - Modify: `server/rpc/admin_server.go`
 
-- [ ] **Step 1: Add field to `ProjectStats`**
+- [x] **Step 1: Add field to `ProjectStats`**
 
 Append to the `ProjectStats` struct in `api/types/project_stats.go`:
 
@@ -659,18 +659,18 @@ Append to the `ProjectStats` struct in `api/types/project_stats.go`:
 StatsUpdatedAt time.Time `json:"stats_updated_at"`
 ```
 
-- [ ] **Step 2: Wire the field in `admin_server.go::GetProjectStats`**
+- [x] **Step 2: Wire the field in `admin_server.go::GetProjectStats`**
 
 Locate the response construction (around line 270). Add `StatsUpdatedAt: timestamppb.New(stats.StatsUpdatedAt)` to the proto response, where the other fields are mapped.
 
 If the existing handler uses a converter, find the converter and add the mapping there instead. Look for: `grep -n 'ClientsCount\|DocumentsCount' server/rpc/admin_server.go api/converter/`.
 
-- [ ] **Step 3: Verify build**
+- [x] **Step 3: Verify build**
 
 Run: `go build ./...`
 Expected: clean build. Task 5 changes now also compile.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add api/types/project_stats.go server/projects/projects.go server/rpc/admin_server.go
@@ -685,7 +685,7 @@ git commit -m "Surface stats_updated_at through GetProjectStats response"
 - Modify: `server/backend/housekeeping/config.go`
 - Modify: `server/config.go`
 
-- [ ] **Step 1: Add field to `housekeeping.Config`**
+- [x] **Step 1: Add field to `housekeeping.Config`**
 
 In `server/backend/housekeeping/config.go`, add next to existing `Interval`:
 
@@ -695,7 +695,7 @@ In `server/backend/housekeeping/config.go`, add next to existing `Interval`:
 ProjectStatsRefreshInterval string `yaml:"ProjectStatsRefreshInterval"`
 ```
 
-- [ ] **Step 2: Add parser method**
+- [x] **Step 2: Add parser method**
 
 In the same file, mirroring the existing `ParseInterval`:
 
@@ -716,11 +716,11 @@ func (c *Config) ParseProjectStatsRefreshInterval() (time.Duration, error) {
 }
 ```
 
-- [ ] **Step 3: Validate in `Validate`**
+- [x] **Step 3: Validate in `Validate`**
 
 If the existing `Validate` method has logic for `Interval`, mirror it for the new field (only validate if non-empty).
 
-- [ ] **Step 4: Add default in `server/config.go`**
+- [x] **Step 4: Add default in `server/config.go`**
 
 Find `DefaultHousekeepingInterval = 30 * time.Second` (line 45) and add adjacent:
 
@@ -730,12 +730,12 @@ DefaultProjectStatsRefreshInterval = 5 * time.Minute
 
 Propagate the default in `EnsureDefaults` (around line 231) and `NewConfig` (around line 390). Mirror the existing `Interval` pattern.
 
-- [ ] **Step 5: Verify build**
+- [x] **Step 5: Verify build**
 
 Run: `go build ./...`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/backend/housekeeping/config.go server/config.go
@@ -749,7 +749,7 @@ git commit -m "Add ProjectStatsRefreshInterval housekeeping config"
 **Files:**
 - Create: `server/projects/housekeeping.go`
 
-- [ ] **Step 1: Write the new file**
+- [x] **Step 1: Write the new file**
 
 ```go
 /*
@@ -834,7 +834,7 @@ func RefreshStats(
 }
 ```
 
-- [ ] **Step 2: Write unit test in `server/projects/housekeeping_test.go`**
+- [x] **Step 2: Write unit test in `server/projects/housekeeping_test.go`**
 
 ```go
 /*
@@ -912,12 +912,12 @@ func TestRefreshStatsPaginationWrap(t *testing.T) {
 
 If `helper.NewBackendWithMemoryDB` does not exist, inspect existing tests in `server/projects/` for the pattern they use to bootstrap a backend with in-memory DB and follow it.
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `go test ./server/projects/... -v -run 'TestRefreshStats'`
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/projects/housekeeping.go server/projects/housekeeping_test.go
@@ -931,7 +931,7 @@ git commit -m "Add RefreshStats housekeeping task"
 **Files:**
 - Modify: `server/server.go`
 
-- [ ] **Step 1: Add a refresh-state field**
+- [x] **Step 1: Add a refresh-state field**
 
 Inside `RegisterHousekeepingTasks` (around line 211), alongside `deactivateState` and `compactionState`, add:
 
@@ -939,7 +939,7 @@ Inside `RegisterHousekeepingTasks` (around line 211), alongside `deactivateState
 statsState := &housekeepingState{lastID: database.ZeroID}
 ```
 
-- [ ] **Step 2: Register the new task at end of `RegisterHousekeepingTasks`, before the final `return nil`**
+- [x] **Step 2: Register the new task at end of `RegisterHousekeepingTasks`, before the final `return nil`**
 
 ```go
 statsInterval, err := be.Housekeeping.Config.ParseProjectStatsRefreshInterval()
@@ -992,12 +992,12 @@ if statsInterval > 0 {
 
 Add `"github.com/yorkie-team/yorkie/server/projects"` import if not already present.
 
-- [ ] **Step 3: Verify build and lint**
+- [x] **Step 3: Verify build and lint**
 
 Run: `make lint && make test`
 Expected: clean.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/server.go
@@ -1011,7 +1011,7 @@ git commit -m "Register project-stats refresh as a housekeeping task"
 **Files:**
 - Create: `test/integration/project_stats_test.go`
 
-- [ ] **Step 1: Write the integration test**
+- [x] **Step 1: Write the integration test**
 
 Pattern after an existing test in `test/integration/` that exercises housekeeping (look at `housekeeping_test.go` or similar).
 
@@ -1077,12 +1077,12 @@ func TestProjectStatsRefresh(t *testing.T) {
 
 Helper calls (`helper.NewBackend`, `helper.TestProjectName`, `helper.CreateTestDocument`, etc.) should be matched against actual existing helpers — adjust naming to what `test/helper/` exposes.
 
-- [ ] **Step 2: Run integration tests**
+- [x] **Step 2: Run integration tests**
 
 Run: `make test -tags integration` (requires local MongoDB)
 Expected: new test passes.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add test/integration/project_stats_test.go
@@ -1093,22 +1093,22 @@ git commit -m "Add integration test for project-stats refresh"
 
 ### Task 12: Final lint + full test sweep
 
-- [ ] **Step 1: Run linter**
+- [x] **Step 1: Run linter**
 
 Run: `make lint`
 Expected: clean.
 
-- [ ] **Step 2: Run unit tests**
+- [x] **Step 2: Run unit tests**
 
 Run: `make test`
 Expected: clean.
 
-- [ ] **Step 3: Run integration tests**
+- [x] **Step 3: Run integration tests**
 
 Run: `make test -tags integration`
 Expected: clean.
 
-- [ ] **Step 4: Manual smoke**
+- [x] **Step 4: Manual smoke**
 
 Start a local server with the new config:
 
@@ -1121,7 +1121,7 @@ Housekeeping:
 
 Activate a couple of clients, create a doc, wait one refresh cycle, and call `GetProjectStats` — confirm counts and `StatsUpdatedAt` are populated.
 
-- [ ] **Step 5: Move task to lessons (after PR merge)**
+- [x] **Step 5: Move task to lessons (after PR merge)**
 
 Once the PR is merged:
 
