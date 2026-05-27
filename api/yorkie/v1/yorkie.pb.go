@@ -221,10 +221,15 @@ func (*DeactivateClientResponse) Descriptor() ([]byte, []int) {
 }
 
 type AttachDocumentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChangePack    *ChangePack            `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
-	SchemaKey     string                 `protobuf:"bytes,3,opt,name=schema_key,json=schemaKey,proto3" json:"schema_key,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ClientId   string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ChangePack *ChangePack            `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	SchemaKey  string                 `protobuf:"bytes,3,opt,name=schema_key,json=schemaKey,proto3" json:"schema_key,omitempty"`
+	// disable_gc declares that this attachment will not produce or consume
+	// tombstones. The server skips minVV tracking and omits the response
+	// VersionVector for this client. Use only with Counter / primitive
+	// workloads; misuse leads to undefined GC behavior on this client.
+	DisableGc     bool `protobuf:"varint,4,opt,name=disable_gc,json=disableGc,proto3" json:"disable_gc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -278,6 +283,13 @@ func (x *AttachDocumentRequest) GetSchemaKey() string {
 		return x.SchemaKey
 	}
 	return ""
+}
+
+func (x *AttachDocumentRequest) GetDisableGc() bool {
+	if x != nil {
+		return x.DisableGc
+	}
+	return false
 }
 
 type AttachDocumentResponse struct {
@@ -1618,11 +1630,17 @@ func (x *RemoveDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type PushPullChangesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClientId      string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId    string                 `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ChangePack    *ChangePack            `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
-	PushOnly      bool                   `protobuf:"varint,4,opt,name=push_only,json=pushOnly,proto3" json:"push_only,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ClientId   string                 `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	DocumentId string                 `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack *ChangePack            `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	PushOnly   bool                   `protobuf:"varint,4,opt,name=push_only,json=pushOnly,proto3" json:"push_only,omitempty"`
+	// disable_gc declares that this PushPull will not produce or consume
+	// tombstones. The server skips minVV tracking and omits the response
+	// VersionVector. Clients that attached with disable_gc=true must keep
+	// setting this on every subsequent PushPullChanges. See
+	// docs/design/disable-gc-on-attach.md.
+	DisableGc     bool `protobuf:"varint,5,opt,name=disable_gc,json=disableGc,proto3" json:"disable_gc,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1681,6 +1699,13 @@ func (x *PushPullChangesRequest) GetChangePack() *ChangePack {
 func (x *PushPullChangesRequest) GetPushOnly() bool {
 	if x != nil {
 		return x.PushOnly
+	}
+	return false
+}
+
+func (x *PushPullChangesRequest) GetDisableGc() bool {
+	if x != nil {
+		return x.DisableGc
 	}
 	return false
 }
@@ -2769,13 +2794,15 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x17DeactivateClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12 \n" +
 	"\vsynchronous\x18\x02 \x01(\bR\vsynchronous\"\x1a\n" +
-	"\x18DeactivateClientResponse\"\x8b\x01\n" +
+	"\x18DeactivateClientResponse\"\xaa\x01\n" +
 	"\x15AttachDocumentRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x126\n" +
 	"\vchange_pack\x18\x02 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
 	"changePack\x12\x1d\n" +
 	"\n" +
-	"schema_key\x18\x03 \x01(\tR\tschemaKey\"\xd8\x01\n" +
+	"schema_key\x18\x03 \x01(\tR\tschemaKey\x12\x1d\n" +
+	"\n" +
+	"disable_gc\x18\x04 \x01(\bR\tdisableGc\"\xd8\x01\n" +
 	"\x16AttachDocumentResponse\x12\x1f\n" +
 	"\vdocument_id\x18\x01 \x01(\tR\n" +
 	"documentId\x126\n" +
@@ -2870,14 +2897,16 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"changePack\"P\n" +
 	"\x16RemoveDocumentResponse\x126\n" +
 	"\vchange_pack\x18\x01 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
-	"changePack\"\xab\x01\n" +
+	"changePack\"\xca\x01\n" +
 	"\x16PushPullChangesRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vdocument_id\x18\x02 \x01(\tR\n" +
 	"documentId\x126\n" +
 	"\vchange_pack\x18\x03 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
 	"changePack\x12\x1b\n" +
-	"\tpush_only\x18\x04 \x01(\bR\bpushOnly\"Q\n" +
+	"\tpush_only\x18\x04 \x01(\bR\bpushOnly\x12\x1d\n" +
+	"\n" +
+	"disable_gc\x18\x05 \x01(\bR\tdisableGc\"Q\n" +
 	"\x17PushPullChangesResponse\x126\n" +
 	"\vchange_pack\x18\x01 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
 	"changePack\"\x8d\x01\n" +
