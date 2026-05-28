@@ -101,6 +101,7 @@ func FromProject(pbProject *api.Project) *types.Project {
 		EventWebhookMaxWaitInterval: pbProject.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  pbProject.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   pbProject.ClientDeactivateThreshold,
+		ChannelSessionTTL:           pbProject.ChannelSessionTtl,
 		SnapshotThreshold:           int64(pbProject.SnapshotThreshold),
 		SnapshotInterval:            int64(pbProject.SnapshotInterval),
 		MaxSubscribersPerDocument:   int(pbProject.MaxSubscribersPerDocument),
@@ -1035,6 +1036,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
+	}
+	if pbProjectFields.ChannelSessionTtl != nil {
+		updatableProjectFields.ChannelSessionTTL = &pbProjectFields.ChannelSessionTtl.Value
 	}
 	if pbProjectFields.SnapshotThreshold != nil {
 		value := int64(pbProjectFields.SnapshotThreshold.Value)

@@ -325,6 +325,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		ChannelSessionTTL:           i.ChannelSessionTTL,
 		SnapshotThreshold:           i.SnapshotThreshold,
 		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
