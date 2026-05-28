@@ -47,8 +47,8 @@ const (
 
 	DefaultClientDeactivateThreshold time.Duration = 24 * time.Hour
 
-	// DefaultChannelSessionTTL mirrors server/config.DefaultChannelSessionTTL
-	// to avoid an import cycle. The two values must stay in sync.
+	// DefaultChannelSessionTTL is the default per-project channel session TTL.
+	// server/config.DefaultChannelSessionTTL aliases this value.
 	DefaultChannelSessionTTL time.Duration = 15 * time.Second
 
 	DefaultSnapshotThreshold int64 = 500

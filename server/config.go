@@ -25,6 +25,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
@@ -65,7 +66,7 @@ const (
 	DefaultKafkaSessionEventsTopic  = "session-events"
 	DefaultKafkaWriteTimeout        = 5 * time.Second
 
-	DefaultChannelSessionTTL             = 15 * time.Second
+	DefaultChannelSessionTTL             = database.DefaultChannelSessionTTL
 	DefaultChannelSessionCleanupInterval = 10 * time.Second
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
