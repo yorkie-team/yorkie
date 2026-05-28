@@ -214,8 +214,7 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 	return clientDeactivateThreshold, nil
 }
 
-// ChannelSessionTTLAsTimeDuration converts ChannelSessionTTL
-// string to time.Duration.
+// ChannelSessionTTLAsTimeDuration converts ChannelSessionTTL string to time.Duration.
 func (p *Project) ChannelSessionTTLAsTimeDuration() (time.Duration, error) {
 	d, err := time.ParseDuration(p.ChannelSessionTTL)
 	if err != nil {
