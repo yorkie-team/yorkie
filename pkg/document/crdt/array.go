@@ -103,7 +103,7 @@ func (a *Array) RGATreeList() *RGATreeList {
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {
-		if node.isRemoved() {
+		if node.IsRemoved() {
 			continue
 		}
 		elements = append(elements, node.Element())

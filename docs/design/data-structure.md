@@ -73,17 +73,18 @@ CRDT data structures are used by JSON-like group to resolve conflicts in concurr
 
 - `RHT`(Replicated Hash Table): similar to hash table, but resolves concurrent-editing conflicts.
 - `ElementRHT`: similar to `RHT`, but has elements as values.
-- `RGATreeList`: extended `RGA(Replicated Growable Array)` with an additional index tree. The index tree manages the indices of elements and provides faster access to elements at the int-based index.
+- `RGATreeList`: extended `RGA(Replicated Growable Array)` with an additional index tree. The index tree manages the indices of elements and provides faster access to elements at the int-based index. It uses `TreeList` as the index tree to guarantee O(log N) worst-case for all operations.
 - `RGATreeSplit`: extended `RGATreeList` allowing characters to be represented as blocks rather than each single character.
 - `CRDTTree`: represents the CRDT tree with an index tree structure'. It resolves conflicts arising from concurrent editing.
 ### Common Group
 
 Common data structures can be used for general purposes.
 
-- [`SplayTree`](https://en.wikipedia.org/wiki/Splay_tree): A tree that moves nodes to the root by splaying. This is effective when user frequently access the same location, such as text editing. We use `SplayTree` as an index tree to give each node a weight, and to quickly access the node based on the index.
+- [`SplayTree`](https://en.wikipedia.org/wiki/Splay_tree): A tree that moves nodes to the root by splaying. This is effective when user frequently access the same location, such as text editing. We use `SplayTree` as an index tree in `RGATreeSplit` to give each node a weight, and to quickly access the node based on the index.
 - [`LLRBTree`](https://en.wikipedia.org/wiki/Left-leaning_red%E2%80%93black_tree): A tree simpler than Red-Black Tree. Newly added `floor` method finds the node of the largest key less than or equal to the given key.
+- `TreeList`: An order-statistic tree built on Left-leaning Red-Black Tree. It maintains both a live-node weight (for index-based lookup over non-removed elements) and a structural count (including tombstones), guaranteeing O(log N) worst-case for insert, delete, and index-based access. Used as the index tree of `RGATreeList`.
 - `IndexTree`: A tree implementation to represent a document of text-based editors.
   
 ### Risks and Mitigation
 
-We can replace the data structures with better ones for some reason, such as performance. For example, `SplayTree` used in `RGATreeList` can be replaced with [TreeList](https://commons.apache.org/proper/commons-collections/apidocs/org/apache/commons/collections4/list/TreeList.html).
+We can replace the data structures with better ones for some reason, such as performance. For example, the `SplayTree` previously used in `RGATreeList` has been replaced with `TreeList` to guarantee O(log N) worst-case for random access, which is more predictable for non-locality workloads.
