@@ -269,4 +269,119 @@ func TestDisableGCOnAttach(t *testing.T) {
 				"snapshot response; got %d, server is at %d",
 			d2Lamport, d1Lamport)
 	})
+
+	t.Run("snapshot row stores empty VV when every client opts out", func(t *testing.T) {
+		// Server-side regression: with no opt-in client tracking the doc
+		// (no row in versionvectors), the persisted snapshot row's VV has
+		// no GC consumer. CreateSnapshotInfo must therefore store an
+		// empty VV so opt-out-only documents do not accumulate per-actor
+		// entries in snapshot rows. Before the fix, every snapshot row
+		// carried a VV of size O(num_actors_ever).
+		const numClients = 5
+		clients := activeClients(t, numClients)
+		defer deactivateAndCloseClients(t, clients)
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+		docs := make([]*document.Document, numClients)
+		for i := 0; i < numClients; i++ {
+			docs[i] = document.New(docKey)
+			assert.NoError(t, clients[i].Attach(ctx, docs[i], client.WithDisableGC()))
+		}
+
+		// c0 creates the counter; everyone increments enough rounds to
+		// cross the test backend's snapshot threshold (10).
+		assert.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("c", 0)
+			return nil
+		}))
+		assert.NoError(t, clients[0].Sync(ctx))
+		for i := 1; i < numClients; i++ {
+			assert.NoError(t, clients[i].Sync(ctx))
+		}
+		for round := 0; round < 3; round++ {
+			for i := 0; i < numClients; i++ {
+				assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetCounter("c").Increase(1)
+					return nil
+				}))
+				assert.NoError(t, clients[i].Sync(ctx))
+			}
+		}
+		// Flush so storeSnapshot fires in the pubsub goroutine.
+		for i := 0; i < numClients; i++ {
+			assert.NoError(t, clients[i].Sync(ctx))
+		}
+
+		be := defaultServer.Backend()
+		project, err := defaultServer.DefaultProject(ctx)
+		assert.NoError(t, err)
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, docKey)
+		assert.NoError(t, err)
+		snapInfo, err := be.DB.FindClosestSnapshotInfo(
+			ctx, docInfo.RefKey(), docInfo.ServerSeq, false,
+		)
+		assert.NoError(t, err)
+		assert.NotEqual(t, int64(0), snapInfo.ServerSeq,
+			"sanity: a snapshot row must exist past serverSeq 0")
+		assert.Equal(t, 0, len(snapInfo.VersionVector),
+			"opt-out-only snapshot row VV must be empty, got %s",
+			snapInfo.VersionVector.Marshal())
+	})
+
+	t.Run("snapshot row preserves VV when at least one client is opt-in", func(t *testing.T) {
+		// Counter test for the previous regression: as soon as a single
+		// opt-in client is tracking the doc, the snapshot VV must be
+		// preserved (with at least that client's entry) so the opt-in
+		// client's GC path keeps working.
+		clients := activeClients(t, 4)
+		defer deactivateAndCloseClients(t, clients)
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		// clients[0] is opt-in; clients[1..3] are opt-out.
+		docs := make([]*document.Document, 4)
+		docs[0] = document.New(docKey)
+		assert.NoError(t, clients[0].Attach(ctx, docs[0]))
+		for i := 1; i < 4; i++ {
+			docs[i] = document.New(docKey)
+			assert.NoError(t, clients[i].Attach(ctx, docs[i], client.WithDisableGC()))
+		}
+
+		assert.NoError(t, docs[0].Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("c", 0)
+			return nil
+		}))
+		for _, c := range clients {
+			assert.NoError(t, c.Sync(ctx))
+		}
+		for round := 0; round < 3; round++ {
+			for i := 0; i < 4; i++ {
+				assert.NoError(t, docs[i].Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetCounter("c").Increase(1)
+					return nil
+				}))
+				assert.NoError(t, clients[i].Sync(ctx))
+			}
+		}
+		for _, c := range clients {
+			assert.NoError(t, c.Sync(ctx))
+		}
+
+		be := defaultServer.Backend()
+		project, err := defaultServer.DefaultProject(ctx)
+		assert.NoError(t, err)
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, docKey)
+		assert.NoError(t, err)
+		snapInfo, err := be.DB.FindClosestSnapshotInfo(
+			ctx, docInfo.RefKey(), docInfo.ServerSeq, false,
+		)
+		assert.NoError(t, err)
+		assert.NotEqual(t, int64(0), snapInfo.ServerSeq,
+			"sanity: a snapshot row must exist past serverSeq 0")
+		assert.NotZero(t, len(snapInfo.VersionVector),
+			"mixed-mode snapshot row VV must be preserved (at least the "+
+				"opt-in client's entry); got empty")
+	})
 }
