@@ -2094,13 +2094,26 @@ func (d *DB) CreateSnapshotInfo(
 		snapshotField = nil
 	}
 
+	// If no opt-in client tracks this doc (no versionvectors row), the
+	// stored snapshot VV has no GC consumer. Persist an empty VV so
+	// opt-out-only documents do not accumulate per-actor entries in
+	// snapshot rows. See docs/design/disable-gc-on-attach.md.
+	vv := doc.VersionVector().DeepCopy()
+	hasOptIn, err := d.hasVersionVectorRow(txn, docRefKey)
+	if err != nil {
+		return err
+	}
+	if !hasOptIn {
+		vv = time.NewVersionVector()
+	}
+
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:              newID(),
 		ProjectID:       docRefKey.ProjectID,
 		DocID:           docRefKey.DocID,
 		ServerSeq:       doc.Checkpoint().ServerSeq,
 		Lamport:         doc.Lamport(),
-		VersionVector:   doc.VersionVector().DeepCopy(),
+		VersionVector:   vv,
 		Snapshot:        snapshotField,
 		HasExternalBody: hasExternalBody,
 		CreatedAt:       gotime.Now(),
@@ -2109,6 +2122,16 @@ func (d *DB) CreateSnapshotInfo(
 	}
 	txn.Commit()
 	return nil
+}
+
+// hasVersionVectorRow reports whether any client has stored a version
+// vector row for the given document within the open transaction.
+func (d *DB) hasVersionVectorRow(txn *memdb.Txn, docRefKey types.DocRefKey) (bool, error) {
+	raw, err := txn.First(tblVersionVectors, "doc_id", docRefKey.DocID.String())
+	if err != nil {
+		return false, fmt.Errorf("check version vector row: %w", err)
+	}
+	return raw != nil, nil
 }
 
 // FindSnapshotInfo returns the snapshot info of the given DocRefKey and serverSeq.

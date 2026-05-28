@@ -120,6 +120,26 @@ func (id ID) SyncClocks(other ID) ID {
 	return newID
 }
 
+// SyncLamport advances the lamport clock against the given ID without
+// merging its version vector into the receiver's. It is the counterpart
+// of SyncClocks for attachments that have opted out of GC participation
+// (see docs/design/disable-gc-on-attach.md): the receiver does not need
+// other actors' entries in its VV because it never produces or consumes
+// tombstones, and dropping them keeps each subsequent local Change's VV
+// at O(1) instead of O(num_actors). Lamport must still advance so that
+// TimeTickets produced locally remain ordered against remote operations.
+func (id ID) SyncLamport(other ID) ID {
+	if !other.HasClocks() {
+		return id
+	}
+
+	lamport := max(id.lamport, other.lamport) + 1
+
+	newID := NewID(id.clientSeq, InitialServerSeq, lamport, id.actorID, id.versionVector)
+	newID.versionVector.Set(id.actorID, lamport)
+	return newID
+}
+
 // SetClocks sets the given clocks to this ID. This is used when the snapshot is
 // given from the server.
 func (id ID) SetClocks(otherLamport int64, vector time.VersionVector) ID {

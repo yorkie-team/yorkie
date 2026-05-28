@@ -288,6 +288,14 @@ func (d *Document) InternalDocument() *InternalDocument {
 	return d.doc
 }
 
+// SetDisableGC records whether this document participates in GC. See
+// InternalDocument.SetDisableGC and docs/design/disable-gc-on-attach.md.
+func (d *Document) SetDisableGC(disableGC bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.doc.SetDisableGC(disableGC)
+}
+
 // Key returns the key of this document.
 func (d *Document) Key() key.Key {
 	return d.doc.key

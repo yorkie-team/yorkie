@@ -307,14 +307,32 @@ func pullPack(
 
 	// 03. update client's vector and checkpoint to DB.
 	// Skip both minVV tracking and response VV when this PushPull is
-	// flagged as GC-free. The client never consumes the response VV, and
-	// excluding it from minVV is correct because tombstones do not need to
-	// be kept alive for this client. See docs/design/disable-gc-on-attach.md.
+	// flagged as GC-free. The client never consumes the response VV for
+	// tombstone GC, and excluding it from minVV is correct because
+	// tombstones do not need to be kept alive for this client. See
+	// docs/design/disable-gc-on-attach.md.
 	if opts.DisableGC {
-		// The snapshot path in pullSnapshot populates resPack.VersionVector
-		// unconditionally, so clear it here to keep the wire contract for
-		// opt-out clients consistent across both pull paths.
-		resPack.VersionVector = nil
+		if resPack.SnapshotLen() > 0 {
+			// Snapshot pulls must still carry the doc's max lamport so the
+			// opt-out client's change clock catches up; otherwise its
+			// subsequent local Changes are produced with ticks far behind
+			// the server's actual state. Truncate the full VV that
+			// pullSnapshot populated down to a single entry keyed by the
+			// requesting client's own actor: this preserves lamport
+			// progression via SetClocks while keeping the size-1 invariant
+			// the opt-out client maintains.
+			actorID, err := clientInfo.ID.ToActorID()
+			if err != nil {
+				return nil, err
+			}
+			maxLamport := resPack.VersionVector.MaxLamport()
+			resPack.VersionVector = time.VersionVector{actorID: maxLamport}
+		} else {
+			// Change pulls do not need a pack-level lamport hint: each
+			// Change.ID carries its own lamport that the client uses
+			// directly via SyncLamport.
+			resPack.VersionVector = nil
+		}
 	} else {
 		minVersionVector, err := be.DB.UpdateMinVersionVector(ctx, clientInfo, docInfo.RefKey(), reqPack.VersionVector)
 		if err != nil {

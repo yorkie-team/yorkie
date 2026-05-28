@@ -2154,6 +2154,19 @@ func (c *Client) CreateSnapshotInfo(
 		return fmt.Errorf("compress snapshot of %s: %w", docRefKey, err)
 	}
 
+	// If no opt-in client tracks this doc (i.e., versionvectors has no
+	// row for it), the stored snapshot VV serves no GC purpose. Persist
+	// an empty VV so opt-out-only documents do not accumulate per-actor
+	// entries in snapshot rows. See docs/design/disable-gc-on-attach.md.
+	vv := doc.VersionVector()
+	hasOptIn, err := c.hasVersionVectorRow(ctx, docRefKey)
+	if err != nil {
+		return err
+	}
+	if !hasOptIn {
+		vv = time.NewVersionVector()
+	}
+
 	serverSeq := doc.Checkpoint().ServerSeq
 	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
 
@@ -2162,7 +2175,7 @@ func (c *Client) CreateSnapshotInfo(
 		"doc_id":            docRefKey.DocID,
 		"server_seq":        serverSeq,
 		"lamport":           doc.Lamport(),
-		"version_vector":    doc.VersionVector(),
+		"version_vector":    vv,
 		"has_external_body": hasExternalBody,
 		"created_at":        gotime.Now(),
 	}
@@ -2188,6 +2201,24 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	return nil
+}
+
+// hasVersionVectorRow reports whether any client has stored a version
+// vector row for the given document. It tells the snapshot path whether
+// any opt-in client is tracking this doc; if not, the snapshot VV can
+// be persisted as empty since no GC consumer needs it.
+func (c *Client) hasVersionVectorRow(ctx context.Context, docRefKey types.DocRefKey) (bool, error) {
+	err := c.collection(ColVersionVectors).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if err == mongo.ErrNoDocuments {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check version vector row: %w", err)
+	}
+	return true, nil
 }
 
 // FindSnapshotInfo returns the snapshot info of the given DocRefKey and serverSeq.
