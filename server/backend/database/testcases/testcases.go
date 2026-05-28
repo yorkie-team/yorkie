@@ -1266,6 +1266,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newEventWebhookMaxWaitInterval := "3s"
 		newEventWebhookRequestTimeout := "5s"
 		newClientDeactivateThreshold := "1h"
+		newChannelSessionTTL := "1m"
 		newSnapshotThreshold := int64(50)
 		newSnapshotInterval := int64(100)
 
@@ -1285,6 +1286,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), info.EventWebhookMaxWaitInterval)
 		assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), info.EventWebhookRequestTimeout)
 		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
+		assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
 		assert.Equal(t, database.DefaultSnapshotThreshold, info.SnapshotThreshold)
 		assert.Equal(t, database.DefaultSnapshotInterval, info.SnapshotInterval)
 		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
@@ -1308,6 +1310,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
 			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+			ChannelSessionTTL:           &newChannelSessionTTL,
 			SnapshotThreshold:           &newSnapshotThreshold,
 			SnapshotInterval:            &newSnapshotInterval,
 		}
@@ -1331,6 +1334,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookMaxWaitInterval, updateInfo.EventWebhookMaxWaitInterval)
 		assert.Equal(t, newEventWebhookRequestTimeout, updateInfo.EventWebhookRequestTimeout)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+		assert.Equal(t, newChannelSessionTTL, updateInfo.ChannelSessionTTL)
 		assert.Equal(t, newSnapshotThreshold, updateInfo.SnapshotThreshold)
 		assert.Equal(t, newSnapshotInterval, updateInfo.SnapshotInterval)
 
