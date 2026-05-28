@@ -75,6 +75,11 @@ type UpdatableProjectFields struct {
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
 
+	// ChannelSessionTTL controls per-project presence-channel
+	// session retention. Must parse as a Go duration and fall
+	// within [1s, 5m].
+	ChannelSessionTTL *string `bson:"channel_session_ttl,omitempty" validate:"omitempty,channel_session_ttl"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold *int64 `bson:"snapshot_threshold,omitempty" validate:"omitempty,min=0"`
@@ -161,7 +166,8 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.MaxSizePerDocument == nil &&
 		i.RemoveOnDetach == nil &&
 		i.AutoRevisionEnabled == nil &&
-		i.AllowedOrigins == nil {
+		i.AllowedOrigins == nil &&
+		i.ChannelSessionTTL == nil {
 		return ErrEmptyProjectFields
 	}
 
@@ -243,6 +249,27 @@ func init() {
 	if err := validation.RegisterTranslation(
 		"valid_origin",
 		"given {0} must be '*' or an origin URL; wildcards are only allowed inside host labels",
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterValidation(
+		"channel_session_ttl",
+		func(level validation.FieldLevel) bool {
+			d, err := time.ParseDuration(level.Field().String())
+			if err != nil {
+				return false
+			}
+			return d >= time.Second && d <= 5*time.Minute
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+	if err := validation.RegisterTranslation(
+		"channel_session_ttl",
+		"given {0} must be a duration between 1s and 5m",
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
