@@ -472,10 +472,7 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 		}
 		info, err := m.db.FindProjectInfoByID(ctx, projectID)
 		if err != nil {
-			logging.From(ctx).Warnf(
-				"cleanup TTL lookup %s: %v (using server default)",
-				projectID, err,
-			)
+			logging.From(ctx).Warnf("cleanup: find project info %s: %v", projectID, err)
 			ttlByProject[projectID] = m.sessionTTL
 			return m.sessionTTL
 		}

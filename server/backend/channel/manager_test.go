@@ -167,7 +167,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 
 		// Create a channel
 		refKey := types.ChannelRefKey{
-			ProjectID:  defaultProjectID,
+			ProjectID:  types.NewID(),
 			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
