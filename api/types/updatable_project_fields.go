@@ -267,6 +267,7 @@ func init() {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)
 	}
+
 	if err := validation.RegisterTranslation(
 		"channel_session_ttl",
 		"given {0} must be a duration between 1s and 5m",

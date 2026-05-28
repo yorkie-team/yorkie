@@ -31,6 +31,7 @@ func TestChannelSessionTTLValidation(t *testing.T) {
 		value   string
 		wantErr bool
 	}{
+		{"valid 1s min", "1s", false},
 		{"valid 15s", "15s", false},
 		{"valid 1m", "1m", false},
 		{"valid 5m max", "5m", false},
