@@ -463,6 +463,31 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 		return true
 	})
 
+	// Per-tick TTL memoization: resolve project TTL once per project per pass.
+	// Project setting changes are picked up on the next tick.
+	ttlByProject := make(map[types.ID]gotime.Duration)
+	ttlFor := func(projectID types.ID) gotime.Duration {
+		if d, ok := ttlByProject[projectID]; ok {
+			return d
+		}
+		info, err := m.db.FindProjectInfoByID(ctx, projectID)
+		if err != nil {
+			logging.From(ctx).Warnf(
+				"cleanup TTL lookup %s: %v (using server default)",
+				projectID, err,
+			)
+			ttlByProject[projectID] = m.sessionTTL
+			return m.sessionTTL
+		}
+		d, err := info.ToProject().ChannelSessionTTLAsTimeDuration()
+		if err != nil || d <= 0 {
+			ttlByProject[projectID] = m.sessionTTL
+			return m.sessionTTL
+		}
+		ttlByProject[projectID] = d
+		return d
+	}
+
 	// Process each channel with proper locking
 	for _, key := range channelKeys {
 		ch := m.channels.Get(key)
@@ -470,8 +495,11 @@ func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
 			continue
 		}
 
+		// Resolve per-project TTL (memoized for this pass).
+		ttl := ttlFor(key.ProjectID)
+
 		// Check if session has expired (UpdatedAt + TTL < now)
-		expiredSessionIDs := classifyExpiredSessions(now, m.sessionTTL, ch.Sessions)
+		expiredSessionIDs := classifyExpiredSessions(now, ttl, ch.Sessions)
 
 		// Remove expired sessions
 		cleanedCount += cleanUpExpiredSessions(ctx, m, expiredSessionIDs)
