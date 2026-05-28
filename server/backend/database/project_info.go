@@ -47,6 +47,10 @@ const (
 
 	DefaultClientDeactivateThreshold time.Duration = 24 * time.Hour
 
+	// DefaultChannelSessionTTL is the default per-project channel session TTL.
+	// server/config.DefaultChannelSessionTTL aliases this value.
+	DefaultChannelSessionTTL time.Duration = 15 * time.Second
+
 	DefaultSnapshotThreshold int64 = 500
 	DefaultSnapshotInterval  int64 = 500
 )
@@ -108,6 +112,11 @@ type ProjectInfo struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// ChannelSessionTTL controls how long a presence-channel
+	// session is retained after its last refresh, per project.
+	// Falls back to the server-wide ChannelSessionTTL when empty or invalid.
+	ChannelSessionTTL string `bson:"channel_session_ttl"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `bson:"snapshot_threshold"`
@@ -168,6 +177,7 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		EventWebhookMaxWaitInterval: DefaultEventWebhookMaxWaitInterval.String(),
 		EventWebhookRequestTimeout:  DefaultEventWebhookRequestTimeout.String(),
 		ClientDeactivateThreshold:   DefaultClientDeactivateThreshold.String(),
+		ChannelSessionTTL:           DefaultChannelSessionTTL.String(),
 		SnapshotThreshold:           DefaultSnapshotThreshold,
 		SnapshotInterval:            DefaultSnapshotInterval,
 		MaxSubscribersPerDocument:   0,
@@ -206,6 +216,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		ChannelSessionTTL:           i.ChannelSessionTTL,
 		SnapshotThreshold:           i.SnapshotThreshold,
 		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
@@ -266,6 +277,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
+	if fields.ChannelSessionTTL != nil {
+		i.ChannelSessionTTL = *fields.ChannelSessionTTL
+	}
 	if fields.SnapshotThreshold != nil {
 		i.SnapshotThreshold = *fields.SnapshotThreshold
 	}
@@ -311,6 +325,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		EventWebhookMaxWaitInterval: i.EventWebhookMaxWaitInterval,
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
+		ChannelSessionTTL:           i.ChannelSessionTTL,
 		SnapshotThreshold:           i.SnapshotThreshold,
 		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,

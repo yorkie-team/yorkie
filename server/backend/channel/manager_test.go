@@ -19,6 +19,7 @@ package channel_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,14 +32,18 @@ import (
 	pkgtime "github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend/channel"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-var (
-	defaultProjectID = types.ID("000000000000000000000000")
-)
+// TestMain initializes the default logger so that logging.From(ctx).Warnf
+// calls inside CleanupExpired do not panic when running with a bare context.
+func TestMain(m *testing.M) {
+	logging.DefaultLogger()
+	os.Exit(m.Run())
+}
 
 // mockPubSub is a mock implementation of PubSub for testing
 type mockPubSub struct {
@@ -125,9 +130,11 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Create a channel
+		// Use a random projectID not in the DB so the manager's short
+		// fallback TTL governs — this test is about cleanup mechanics, not
+		// per-project TTL.
 		refKey := types.ChannelRefKey{
-			ProjectID:  defaultProjectID,
+			ProjectID:  types.NewID(),
 			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
@@ -156,7 +163,7 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 
 		// Create a channel
 		refKey := types.ChannelRefKey{
-			ProjectID:  defaultProjectID,
+			ProjectID:  types.NewID(),
 			ChannelKey: "test-room",
 		}
 		clientID := pkgtime.InitialActorID
@@ -190,9 +197,11 @@ func TestChannelManager_RefreshAndCleanup(t *testing.T) {
 		cleanupInterval := 10 * time.Second
 		manager, _, _ := createManager(t, ttl, cleanupInterval)
 
-		// Create two channels
+		// Use a random projectID not in the DB so the manager's short
+		// fallback TTL governs — this test is about cleanup mechanics, not
+		// per-project TTL.
 		refKey := types.ChannelRefKey{
-			ProjectID:  defaultProjectID,
+			ProjectID:  types.NewID(),
 			ChannelKey: "test-room",
 		}
 		clientID1 := pkgtime.InitialActorID
@@ -1578,5 +1587,169 @@ func TestChannelManager_RaceConditions(t *testing.T) {
 		assert.Equal(t, 50, cleaned, "should clean up 50 expired sessions")
 		assert.Equal(t, int64(50), manager.SessionCount(refKey, false),
 			"50 refreshed sessions should survive")
+	})
+}
+
+// countingDB wraps database.Database and counts calls to FindProjectInfoByID.
+// It delegates all methods to the inner DB; only FindProjectInfoByID is intercepted.
+type countingDB struct {
+	database.Database
+	findByIDCount int32
+}
+
+func (c *countingDB) FindProjectInfoByID(
+	ctx context.Context,
+	id types.ID,
+) (*database.ProjectInfo, error) {
+	atomic.AddInt32(&c.findByIDCount, 1)
+	return c.Database.FindProjectInfoByID(ctx, id)
+}
+
+// createManagerWithDB creates a manager using the given database.
+func createManagerWithDB(
+	t *testing.T,
+	db database.Database,
+	ttl time.Duration,
+	cleanupInterval time.Duration,
+) (*channel.Manager, *mockPubSub, *MockBroker) {
+	pubsub := &mockPubSub{}
+	broker := &MockBroker{}
+	brokers := messaging.NewBroker(broker, broker, broker, broker, broker)
+	manager := channel.NewManager(pubsub, ttl, cleanupInterval, nil, brokers, db)
+	return manager, pubsub, broker
+}
+
+func TestCleanupExpired(t *testing.T) {
+	t.Run("per-project TTL applied", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Build a real in-memory DB with two projects.
+		db, err := memory.New()
+		assert.NoError(t, err)
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, "test-user2", "test-password")
+		assert.NoError(t, err)
+
+		// projA: 1 s TTL — session should expire after 2 s wait.
+		projAInfo, err := db.CreateProjectInfo(ctx, "projA", user.ID)
+		assert.NoError(t, err)
+		ttlA := "1s"
+		_, err = db.UpdateProjectInfo(ctx, projAInfo.ID, &types.UpdatableProjectFields{
+			ChannelSessionTTL: &ttlA,
+		})
+		assert.NoError(t, err)
+
+		// projB: 5 s TTL — session should survive after 2 s wait.
+		projBInfo, err := db.CreateProjectInfo(ctx, "projB", user.ID)
+		assert.NoError(t, err)
+		ttlB := "5s"
+		_, err = db.UpdateProjectInfo(ctx, projBInfo.ID, &types.UpdatableProjectFields{
+			ChannelSessionTTL: &ttlB,
+		})
+		assert.NoError(t, err)
+
+		// Use a long server-default TTL so it never fires on its own.
+		manager, _, _ := createManagerWithDB(t, db, 60*time.Second, 60*time.Second)
+
+		refKeyA := types.ChannelRefKey{ProjectID: projAInfo.ID, ChannelKey: "room-a"}
+		refKeyB := types.ChannelRefKey{ProjectID: projBInfo.ID, ChannelKey: "room-b"}
+		// ActorID is 12 bytes = 24 hex chars.
+		clientA, err := pkgtime.ActorIDFromHex("aa0000000000000000000000")
+		assert.NoError(t, err)
+		clientB, err := pkgtime.ActorIDFromHex("bb0000000000000000000000")
+		assert.NoError(t, err)
+
+		_, _, err = manager.Attach(ctx, refKeyA, clientA)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, refKeyB, clientB)
+		assert.NoError(t, err)
+
+		// Wait long enough for projA's 1s TTL to fire but not projB's 5s TTL.
+		time.Sleep(2 * time.Second)
+
+		cleaned, err := manager.CleanupExpired(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, cleaned, "only projA session should be cleaned")
+
+		assert.Equal(t, int64(0), manager.SessionCount(refKeyA, false),
+			"projA session should be gone")
+		assert.Equal(t, int64(1), manager.SessionCount(refKeyB, false),
+			"projB session should still be present")
+	})
+
+	t.Run("fallback on lookup failure", func(t *testing.T) {
+		ctx := context.Background()
+
+		db, err := memory.New()
+		assert.NoError(t, err)
+		_, _, err = db.EnsureDefaultUserAndProject(ctx, "test-user3", "test-password")
+		assert.NoError(t, err)
+
+		// Manager with a short server-default TTL of 1 s.
+		manager, _, _ := createManagerWithDB(t, db, 1*time.Second, 60*time.Second)
+
+		// Use a project ID that does NOT exist in the DB.
+		missingProjectID := types.NewID()
+		refKey := types.ChannelRefKey{ProjectID: missingProjectID, ChannelKey: "room-x"}
+		clientID, err := pkgtime.ActorIDFromHex("cc0000000000000000000000")
+		assert.NoError(t, err)
+
+		_, _, err = manager.Attach(ctx, refKey, clientID)
+		assert.NoError(t, err)
+
+		// Wait for the server-default TTL to fire.
+		time.Sleep(2 * time.Second)
+
+		cleaned, err := manager.CleanupExpired(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, cleaned, "fallback TTL should clean up the session")
+
+		assert.Equal(t, int64(0), manager.SessionCount(refKey, false),
+			"session should be gone after fallback TTL expires")
+	})
+
+	t.Run("memoization within one pass", func(t *testing.T) {
+		ctx := context.Background()
+
+		innerDB, err := memory.New()
+		assert.NoError(t, err)
+		user, _, err := innerDB.EnsureDefaultUserAndProject(ctx, "test-user4", "test-password")
+		assert.NoError(t, err)
+
+		projInfo, err := innerDB.CreateProjectInfo(ctx, "projMemo", user.ID)
+		assert.NoError(t, err)
+
+		cdb := &countingDB{Database: innerDB}
+
+		// Long TTL so no session expires; we only care about call count.
+		manager, _, _ := createManagerWithDB(t, cdb, 60*time.Second, 60*time.Second)
+
+		projectID := projInfo.ID
+		refKey1 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-m1"}
+		refKey2 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-m2"}
+		refKey3 := types.ChannelRefKey{ProjectID: projectID, ChannelKey: "room-m3"}
+
+		client1, err := pkgtime.ActorIDFromHex("dd0000000000000000000001")
+		assert.NoError(t, err)
+		client2, err := pkgtime.ActorIDFromHex("dd0000000000000000000002")
+		assert.NoError(t, err)
+		client3, err := pkgtime.ActorIDFromHex("dd0000000000000000000003")
+		assert.NoError(t, err)
+
+		_, _, err = manager.Attach(ctx, refKey1, client1)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, refKey2, client2)
+		assert.NoError(t, err)
+		_, _, err = manager.Attach(ctx, refKey3, client3)
+		assert.NoError(t, err)
+
+		// Reset counter after Attach calls (which don't call FindProjectInfoByID).
+		atomic.StoreInt32(&cdb.findByIDCount, 0)
+
+		_, err = manager.CleanupExpired(ctx)
+		assert.NoError(t, err)
+
+		calls := atomic.LoadInt32(&cdb.findByIDCount)
+		assert.Equal(t, int32(1), calls,
+			"FindProjectInfoByID should be called exactly once per project per pass")
 	})
 }

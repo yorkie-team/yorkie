@@ -18,11 +18,23 @@ package types_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
+
+func TestChannelSessionTTLAsTimeDuration(t *testing.T) {
+	p := &types.Project{ChannelSessionTTL: "30s"}
+	d, err := p.ChannelSessionTTLAsTimeDuration()
+	assert.NoError(t, err)
+	assert.Equal(t, 30*time.Second, d)
+
+	p.ChannelSessionTTL = "garbage"
+	_, err = p.ChannelSessionTTLAsTimeDuration()
+	assert.ErrorIs(t, err, types.ErrInvalidTimeDurationString)
+}
 
 func TestProjectInfo(t *testing.T) {
 	t.Run("require auth test", func(t *testing.T) {

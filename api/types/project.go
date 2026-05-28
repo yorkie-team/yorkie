@@ -85,6 +85,10 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// ChannelSessionTTL controls how long a presence-channel
+	// session is retained after its last refresh, per project.
+	ChannelSessionTTL string `bson:"channel_session_ttl"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `bson:"snapshot_threshold,omitempty"`
@@ -208,6 +212,15 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 		return 0, ErrInvalidTimeDurationString
 	}
 	return clientDeactivateThreshold, nil
+}
+
+// ChannelSessionTTLAsTimeDuration converts ChannelSessionTTL string to time.Duration.
+func (p *Project) ChannelSessionTTLAsTimeDuration() (time.Duration, error) {
+	d, err := time.ParseDuration(p.ChannelSessionTTL)
+	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+	return d, nil
 }
 
 // GetAuthWebhookOptions returns the webhook options for the auth webhook.

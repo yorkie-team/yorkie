@@ -52,6 +52,7 @@ var (
 	flagEventWebhookRequestTimeout  time.Duration
 	flagName                        string
 	flagClientDeactivateThreshold   time.Duration
+	flagChannelSessionTTL           time.Duration
 	flagSnapshotThreshold           int64
 	flagSnapshotInterval            int64
 	flagMaxSubscribersPerDocument   int
@@ -177,6 +178,11 @@ func newUpdateCommand() *cobra.Command {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold.String()
 			}
 
+			newChannelSessionTTL := project.ChannelSessionTTL
+			if cmd.Flags().Lookup("channel-session-ttl").Changed {
+				newChannelSessionTTL = flagChannelSessionTTL.String()
+			}
+
 			newSnapshotThreshold := project.SnapshotThreshold
 			if cmd.Flags().Lookup("snapshot-threshold").Changed {
 				newSnapshotThreshold = flagSnapshotThreshold
@@ -217,6 +223,7 @@ func newUpdateCommand() *cobra.Command {
 				EventWebhookMaxWaitInterval: &newEventWebhookMaxWaitInterval,
 				EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 				ClientDeactivateThreshold:   &newClientDeactivateThreshold,
+				ChannelSessionTTL:           &newChannelSessionTTL,
 				SnapshotThreshold:           &newSnapshotThreshold,
 				SnapshotInterval:            &newSnapshotInterval,
 				MaxSubscribersPerDocument:   &newMaxSubscribersPerDocument,
@@ -415,6 +422,12 @@ func init() {
 		"client-deactivate-threshold",
 		database.DefaultClientDeactivateThreshold,
 		"client deactivate threshold for housekeeping",
+	)
+	cmd.Flags().DurationVar(
+		&flagChannelSessionTTL,
+		"channel-session-ttl",
+		database.DefaultChannelSessionTTL,
+		"Channel session TTL (must be between 1s and 5m)",
 	)
 	cmd.Flags().Int64Var(
 		&flagSnapshotThreshold,

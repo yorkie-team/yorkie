@@ -25,6 +25,36 @@ import (
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
+func TestChannelSessionTTLValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid 1s min", "1s", false},
+		{"valid 15s", "15s", false},
+		{"valid 1m", "1m", false},
+		{"valid 5m max", "5m", false},
+		{"too short", "500ms", true},
+		{"below 1s", "0s", true},
+		{"above 5m", "10m", true},
+		{"unparseable", "soon", true},
+		{"empty", "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := tc.value
+			f := &types.UpdatableProjectFields{ChannelSessionTTL: &v}
+			err := f.Validate()
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestUpdatableProjectFields(t *testing.T) {
 	var formErr *validation.FormError
 	t.Run("validation test", func(t *testing.T) {

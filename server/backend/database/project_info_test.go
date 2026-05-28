@@ -25,6 +25,18 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
+func TestNewProjectInfoSetsDefaultChannelSessionTTL(t *testing.T) {
+	info := database.NewProjectInfo("p", types.ID("000000000000000000000000"))
+	assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
+}
+
+func TestUpdateFieldsAppliesChannelSessionTTL(t *testing.T) {
+	info := database.NewProjectInfo("p", types.ID("000000000000000000000000"))
+	v := "1m"
+	info.UpdateFields(&types.UpdatableProjectFields{ChannelSessionTTL: &v})
+	assert.Equal(t, "1m", info.ChannelSessionTTL)
+}
+
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
 		dummyOwnerID := types.ID("000000000000000000000000")
