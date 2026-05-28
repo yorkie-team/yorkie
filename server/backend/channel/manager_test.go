@@ -38,10 +38,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-var (
-	defaultProjectID = types.ID("000000000000000000000000")
-)
-
 // TestMain initializes the default logger so that logging.From(ctx).Warnf
 // calls inside CleanupExpired do not panic when running with a bare context.
 func TestMain(m *testing.M) {

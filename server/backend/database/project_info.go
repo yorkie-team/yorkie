@@ -114,7 +114,7 @@ type ProjectInfo struct {
 
 	// ChannelSessionTTL controls how long a presence-channel
 	// session is retained after its last refresh, per project.
-	// Falls back to the server-wide ChannelSessionTTL when empty.
+	// Falls back to the server-wide ChannelSessionTTL when empty or invalid.
 	ChannelSessionTTL string `bson:"channel_session_ttl"`
 
 	// SnapshotThreshold is the threshold that determines if changes should be
