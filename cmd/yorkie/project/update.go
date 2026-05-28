@@ -179,7 +179,7 @@ func newUpdateCommand() *cobra.Command {
 			}
 
 			newChannelSessionTTL := project.ChannelSessionTTL
-			if flagChannelSessionTTL != 0 {
+			if cmd.Flags().Lookup("channel-session-ttl").Changed {
 				newChannelSessionTTL = flagChannelSessionTTL.String()
 			}
 
