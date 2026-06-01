@@ -1,5 +1,5 @@
 ---
-updated: 2026-05-27
+updated: 2026-06-01
 ---
 
 # Tasks Index
@@ -22,5 +22,5 @@ _(none)_
 
 ## Archive
 
-- Archived task count: 14
+- Archived task count: 16
 - Archive index: [archive/README.md](./archive/README.md)
