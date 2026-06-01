@@ -60,18 +60,18 @@ of that block that lost the guard.
 
 ## Plan
 
-- [ ] Apply fixes:
-  - [ ] `get_documents_bench_test.go`: use `require.NoError` (or
+- [x] Apply fixes:
+  - [x] `get_documents_bench_test.go`: use `require.NoError` (or
         `b.Fatal`) so an RPC failure stops the goroutine instead of
         falling through to a nil deref. Apply at all call sites in
         `benchmarkGetDocuments` and in setup.
-  - [ ] `channel_concurrency_bench_test.go`: add `var closeOnce sync.Once`
+  - [x] `channel_concurrency_bench_test.go`: add `var closeOnce sync.Once`
         in `ListWhileModifying` and wrap the `close(done)` in
         `closeOnce.Do(...)`, matching `SessionCountWhileModifying`.
-- [ ] Verify: `make lint` green; sanity-run the two bench subtests
+- [x] Verify: `make lint` green; sanity-run the two bench subtests
       locally with `-count` to confirm the panics are gone.
-- [ ] Self-review via code-review subagent.
-- [ ] Open PR, link issue #1703 for context.
+- [x] Self-review via code-review subagent.
+- [x] Open PR, link issue #1703 for context.
 
 ## Notes
 

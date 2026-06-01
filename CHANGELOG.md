@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.11] - 2026-06-01
+
+### Added
+
+- Add per-project ChannelSessionTTL with admin override by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1827
+
+### Changed
+
+- Introduce treelist to optimize random access in Array by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1685
+
+### Fixed
+
+- Fix close-of-closed-channel and nil deref panics in test/bench by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1825
+- Stop disable_gc clients from accumulating per-Change VV and lamport drift by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1826
+
 ## [v0.7.10] - 2026-05-27
 
 ### Added
