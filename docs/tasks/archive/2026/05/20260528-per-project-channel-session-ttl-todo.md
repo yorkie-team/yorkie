@@ -46,16 +46,16 @@ once this PR lands.
 
 ### Task 1: Add proto fields
 
-- [ ] Edit `api/yorkie/v1/resources.proto`:
+- [x] Edit `api/yorkie/v1/resources.proto`:
   - In `message Project`, append `string channel_session_ttl = 28;`
     after `auto_revision_enabled = 27;`.
   - In `message UpdatableProjectFields`, append
     `google.protobuf.StringValue channel_session_ttl = 23;` after
     `auto_revision_enabled = 22;`.
-- [ ] Regenerate: `make proto`.
-- [ ] Confirm no other generated files churn beyond the two messages
+- [x] Regenerate: `make proto`.
+- [x] Confirm no other generated files churn beyond the two messages
   via `git diff --stat api/yorkie/v1/`.
-- [ ] Commit:
+- [x] Commit:
   ```
   Add channel_session_ttl to Project proto
 
@@ -67,7 +67,7 @@ once this PR lands.
 
 ### Task 2: ProjectInfo DB struct + default + update wiring
 
-- [ ] In `server/backend/database/project_info.go`:
+- [x] In `server/backend/database/project_info.go`:
   - Add constant near other defaults (around line 48):
     ```go
     DefaultChannelSessionTTL time.Duration = 15 * time.Second
@@ -94,7 +94,7 @@ once this PR lands.
     ```
   - In `ToProject`, set `ChannelSessionTTL: i.ChannelSessionTTL`.
 
-- [ ] Write failing test in `server/backend/database/project_info_test.go`:
+- [x] Write failing test in `server/backend/database/project_info_test.go`:
   ```go
   func TestNewProjectInfoSetsDefaultChannelSessionTTL(t *testing.T) {
       info := database.NewProjectInfo("p", types.ID("owner"))
@@ -108,7 +108,7 @@ once this PR lands.
       assert.Equal(t, "1m", info.ChannelSessionTTL)
   }
   ```
-- [ ] Run: `go test ./server/backend/database/...`. Expected: FAIL
+- [x] Run: `go test ./server/backend/database/...`. Expected: FAIL
   (field does not exist on `UpdatableProjectFields` yet — proceeds
   through Task 3).
 
@@ -119,7 +119,7 @@ once this PR lands.
 
 ### Task 3: UpdatableProjectFields field + bounded validator (TDD)
 
-- [ ] Write failing validator tests in
+- [x] Write failing validator tests in
   `api/types/updatable_project_fields_test.go` (create if absent):
   ```go
   func TestChannelSessionTTLValidation(t *testing.T) {
@@ -151,10 +151,10 @@ once this PR lands.
       }
   }
   ```
-- [ ] Run: `go test ./api/types/... -run TestChannelSessionTTL -v`.
+- [x] Run: `go test ./api/types/... -run TestChannelSessionTTL -v`.
   Expected: build error (field missing).
 
-- [ ] In `api/types/updatable_project_fields.go`:
+- [x] In `api/types/updatable_project_fields.go`:
   - Add field on `UpdatableProjectFields` after
     `ClientDeactivateThreshold`:
     ```go
@@ -189,11 +189,11 @@ once this PR lands.
         os.Exit(1)
     }
     ```
-- [ ] Run: `go test ./api/types/... -run TestChannelSessionTTL -v`.
+- [x] Run: `go test ./api/types/... -run TestChannelSessionTTL -v`.
   Expected: PASS.
-- [ ] Run: `go test ./server/backend/database/...`. Expected: PASS
+- [x] Run: `go test ./server/backend/database/...`. Expected: PASS
   (Task 2 tests now compile).
-- [ ] Commit Tasks 2+3 together:
+- [x] Commit Tasks 2+3 together:
   ```
   Wire ChannelSessionTTL field through project types and DB
 
@@ -205,7 +205,7 @@ once this PR lands.
 
 ### Task 4: api/types.Project field + helper (TDD)
 
-- [ ] Write failing test in `api/types/project_test.go`
+- [x] Write failing test in `api/types/project_test.go`
   (create or extend):
   ```go
   func TestChannelSessionTTLAsTimeDuration(t *testing.T) {
@@ -219,10 +219,10 @@ once this PR lands.
       assert.ErrorIs(t, err, types.ErrInvalidTimeDurationString)
   }
   ```
-- [ ] Run: `go test ./api/types/... -run TestChannelSessionTTL`.
+- [x] Run: `go test ./api/types/... -run TestChannelSessionTTL`.
   Expected: FAIL (helper missing).
 
-- [ ] In `api/types/project.go`:
+- [x] In `api/types/project.go`:
   - Add field on `Project`:
     ```go
     // ChannelSessionTTL controls how long a presence-channel
@@ -241,10 +241,10 @@ once this PR lands.
         return d, nil
     }
     ```
-- [ ] Run: `go test ./api/types/... -run TestChannelSessionTTL`.
+- [x] Run: `go test ./api/types/... -run TestChannelSessionTTL`.
   Expected: PASS.
 
-- [ ] Update converter:
+- [x] Update converter:
   - In `api/converter/from_pb.go`, locate the `*api.Project` →
     `types.Project` mapping (function `FromProject` or similar)
     and add `ChannelSessionTTL: pbProject.ChannelSessionTtl`.
@@ -253,10 +253,10 @@ once this PR lands.
   - In any helpers that convert `UpdatableProjectFields` ↔ proto
     `UpdatableProjectFields`, add the new field. Grep:
     `git grep -n "ClientDeactivateThreshold" api/converter/`.
-- [ ] Run: `go build ./...`. Expected: success.
-- [ ] Run: `go test ./api/... ./server/backend/database/...`.
+- [x] Run: `go build ./...`. Expected: success.
+- [x] Run: `go test ./api/... ./server/backend/database/...`.
   Expected: PASS.
-- [ ] Commit:
+- [x] Commit:
   ```
   Expose ChannelSessionTTL on api/types.Project and converters
 
@@ -266,7 +266,7 @@ once this PR lands.
 
 ### Task 5: Channel manager — per-channel TTL at cleanup time (TDD)
 
-- [ ] Write failing test in
+- [x] Write failing test in
   `server/backend/channel/manager_test.go`. Use the existing test
   scaffolding pattern (if `manager_test.go` already constructs a
   `Manager` with a stub `database.Database`, extend it; otherwise
@@ -333,10 +333,10 @@ once this PR lands.
   > write a minimal one in the same file. Mirror the surface area the
   > manager actually uses (only `FindProjectInfoByID` matters here).
 
-- [ ] Run: `go test ./server/backend/channel/... -run TestCleanupExpired`.
+- [x] Run: `go test ./server/backend/channel/... -run TestCleanupExpired`.
   Expected: FAIL (current code uses `m.sessionTTL` for every channel).
 
-- [ ] In `server/backend/channel/manager.go`, modify
+- [x] In `server/backend/channel/manager.go`, modify
   `CleanupExpired` (around lines 453-486):
   ```go
   func (m *Manager) CleanupExpired(ctx context.Context) (int, error) {
@@ -395,11 +395,11 @@ once this PR lands.
       return cleanedCount, nil
   }
   ```
-- [ ] Run: `go test ./server/backend/channel/... -run TestCleanupExpired`.
+- [x] Run: `go test ./server/backend/channel/... -run TestCleanupExpired`.
   Expected: PASS.
-- [ ] Run: `go test ./server/backend/channel/...` (entire package).
+- [x] Run: `go test ./server/backend/channel/...` (entire package).
   Expected: PASS — no regression in existing channel tests.
-- [ ] Commit:
+- [x] Commit:
   ```
   Resolve channel session TTL per project at cleanup time
 
@@ -412,28 +412,28 @@ once this PR lands.
 
 ### Task 6: Full suite + lint
 
-- [ ] `make lint`. Expected: clean.
-- [ ] `go test ./...`. Expected: PASS.
-- [ ] If MongoDB is running locally (`docker compose -f
+- [x] `make lint`. Expected: clean.
+- [x] `go test ./...`. Expected: PASS.
+- [x] If MongoDB is running locally (`docker compose -f
   build/docker/docker-compose.yml up -d`), run `make test` for the
   integration suite. Expected: PASS.
-- [ ] `git rebase origin/main`. Resolve any conflicts in
+- [x] `git rebase origin/main`. Resolve any conflicts in
   `resources.proto` field numbers if `main` moved.
 
 ### Task 7: Self-review and PR
 
-- [ ] Dispatch `superpowers:requesting-code-review` over the branch
+- [x] Dispatch `superpowers:requesting-code-review` over the branch
   diff. Apply blocking findings; note non-blocking as comments.
-- [ ] `git push -u origin feat/per-project-channel-session-ttl`.
-- [ ] Open PR titled `Add per-project channel session TTL`
+- [x] `git push -u origin feat/per-project-channel-session-ttl`.
+- [x] Open PR titled `Add per-project channel session TTL`
   (≤70 chars). Body: Summary (2-3 bullets) + Test plan.
-- [ ] Link the design doc in the PR description.
+- [x] Link the design doc in the PR description.
 
 ### Task 8: Archive
 
-- [ ] Write `20260528-per-project-channel-session-ttl-lessons.md`
+- [x] Write `20260528-per-project-channel-session-ttl-lessons.md`
   alongside this todo (key lessons, surprises).
-- [ ] After merge, run from yorkie repo root:
+- [x] After merge, run from yorkie repo root:
   ```
   bash scripts/tasks-archive.sh
   bash scripts/tasks-index.sh
