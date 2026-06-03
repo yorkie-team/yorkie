@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/scylla"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
@@ -91,6 +92,7 @@ type Backend struct {
 func New(
 	conf *Config,
 	mongoConf *mongo.Config,
+	scyllaConf *scylla.Config,
 	membershipConf *membership.Config,
 	housekeepingConf *housekeeping.Config,
 	metrics *prometheus.Metrics,
@@ -137,15 +139,25 @@ func New(
 		cluster.WithClusterSecret(conf.ClusterSecret),
 	)
 
-	// 04. Create the database instance. If the MongoDB configuration is given,
-	// create a MongoDB instance. Otherwise, create a memory database instance.
+	// 04. Create the database instance. Selection order:
+	//   - ScyllaDB + MongoDB hybrid when both configs are provided (scylla
+	//     owns the table groups enabled in scyllaConf.Tables, mongo owns
+	//     everything else).
+	//   - MongoDB only when only the mongo config is provided.
+	//   - In-memory store otherwise.
 	var db database.Database
-	if mongoConf != nil {
+	switch {
+	case scyllaConf != nil && mongoConf != nil:
+		db, err = scylla.Dial(scyllaConf, mongoConf)
+		if err != nil {
+			return nil, err
+		}
+	case mongoConf != nil:
 		db, err = mongo.Dial(mongoConf)
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	default:
 		db, err = memdb.New()
 		if err != nil {
 			return nil, err

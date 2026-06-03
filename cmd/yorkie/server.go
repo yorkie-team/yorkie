@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/scylla"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -78,6 +80,23 @@ var (
 	mongoChangeCacheSize              int
 	mongoVectorCacheSize              int
 
+	useScyllaDB                    bool
+	scyllaHosts                    string
+	scyllaPort                     int
+	scyllaKeyspace                 string
+	scyllaUsername                 string
+	scyllaPassword                 string
+	scyllaConsistency              string
+	scyllaConnectTimeout           time.Duration
+	scyllaQueryTimeout             time.Duration
+	scyllaMonitoringEnabled        bool
+	scyllaMonitoringSlowThreshold  time.Duration
+	scyllaTableClients             bool
+	scyllaTableChanges             bool
+	scyllaTableSnapshots           bool
+	scyllaTableVersionVectors      bool
+	scyllaReplicationFactor        int
+
 	pprofEnabled bool
 
 	authWebhookCacheTTL time.Duration
@@ -125,6 +144,28 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ClusterClientTimeout = clusterClientTimeout.String()
 			conf.Backend.MaxConcurrentClusterRPCs = maxConcurrentClusterRPCs
 			conf.Backend.ClusterClientPoolSize = clusterClientPoolSize
+
+			if useScyllaDB {
+				conf.Scylla = &scylla.Config{
+					Hosts:                        strings.Split(scyllaHosts, ","),
+					Port:                         scyllaPort,
+					Keyspace:                     scyllaKeyspace,
+					Username:                     scyllaUsername,
+					Password:                     scyllaPassword,
+					Consistency:                  scyllaConsistency,
+					ConnectTimeout:               scyllaConnectTimeout.String(),
+					QueryTimeout:                 scyllaQueryTimeout.String(),
+					MonitoringEnabled:            scyllaMonitoringEnabled,
+					MonitoringSlowQueryThreshold: scyllaMonitoringSlowThreshold.String(),
+					ReplicationFactor:            scyllaReplicationFactor,
+					Tables: scylla.Tables{
+						Clients:        scyllaTableClients,
+						Changes:        scyllaTableChanges,
+						Snapshots:      scyllaTableSnapshots,
+						VersionVectors: scyllaTableVersionVectors,
+					},
+				}
+			}
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -445,6 +486,107 @@ func init() {
 		"backend-admin-user",
 		server.DefaultAdminUser,
 		"The name of the default admin user, who has full permissions.",
+	)
+	cmd.Flags().BoolVar(
+		&useScyllaDB,
+		"use-scylla-db",
+		false,
+		"Whether to host the table groups selected by --scylla-table-* on ScyllaDB. "+
+			"Requires --mongo-connection-uri; ScyllaDB owns only the enabled groups, "+
+			"MongoDB owns everything else.",
+	)
+	cmd.Flags().StringVar(
+		&scyllaHosts,
+		"scylla-hosts",
+		"127.0.0.1",
+		"Comma-separated list of ScyllaDB hosts.",
+	)
+	cmd.Flags().IntVar(
+		&scyllaPort,
+		"scylla-port",
+		9042,
+		"ScyllaDB CQL native transport port.",
+	)
+	cmd.Flags().StringVar(
+		&scyllaKeyspace,
+		"scylla-keyspace",
+		"yorkie",
+		"ScyllaDB keyspace to use.",
+	)
+	cmd.Flags().StringVar(
+		&scyllaUsername,
+		"scylla-username",
+		"",
+		"ScyllaDB username (empty disables password auth).",
+	)
+	cmd.Flags().StringVar(
+		&scyllaPassword,
+		"scylla-password",
+		"",
+		"ScyllaDB password.",
+	)
+	cmd.Flags().StringVar(
+		&scyllaConsistency,
+		"scylla-consistency",
+		"LOCAL_QUORUM",
+		"ScyllaDB consistency level (ONE, LOCAL_QUORUM, QUORUM, ...).",
+	)
+	cmd.Flags().DurationVar(
+		&scyllaConnectTimeout,
+		"scylla-connect-timeout",
+		5*time.Second,
+		"ScyllaDB connect timeout.",
+	)
+	cmd.Flags().DurationVar(
+		&scyllaQueryTimeout,
+		"scylla-query-timeout",
+		3*time.Second,
+		"ScyllaDB query timeout.",
+	)
+	cmd.Flags().BoolVar(
+		&scyllaMonitoringEnabled,
+		"scylla-monitoring-enabled",
+		false,
+		"Whether to log ScyllaDB slow queries.",
+	)
+	cmd.Flags().DurationVar(
+		&scyllaMonitoringSlowThreshold,
+		"scylla-monitoring-slow-query-threshold",
+		200*time.Millisecond,
+		"Threshold for ScyllaDB slow query logging.",
+	)
+	cmd.Flags().BoolVar(
+		&scyllaTableClients,
+		"scylla-table-clients",
+		true,
+		"Host the clients table group (clients, client_documents, doc_clients) on ScyllaDB.",
+	)
+	cmd.Flags().BoolVar(
+		&scyllaTableChanges,
+		"scylla-table-changes",
+		true,
+		"Host the changes table on ScyllaDB.",
+	)
+	cmd.Flags().BoolVar(
+		&scyllaTableSnapshots,
+		"scylla-table-snapshots",
+		true,
+		"Host the snapshots table on ScyllaDB.",
+	)
+	cmd.Flags().BoolVar(
+		&scyllaTableVersionVectors,
+		"scylla-table-version-vectors",
+		true,
+		"Host the versionvectors table on ScyllaDB.",
+	)
+	cmd.Flags().IntVar(
+		&scyllaReplicationFactor,
+		"scylla-replication-factor",
+		1,
+		"SimpleStrategy replication factor for the ScyllaDB keyspace. Set this "+
+			"equal to the number of nodes in the cluster (e.g. 3 for the scylla-perf "+
+			"profile in docker-compose) so that perf comparisons against a sharded "+
+			"MongoDB cluster are on equal footing.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminPassword,

@@ -49,6 +49,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Allowed Origins Wildcard](allowed-origins-wildcard.md): Wildcard pattern matching for project `AllowedOrigins` CORS check
 - [Project Stats Cache](project-stats-cache.md): Asynchronously refreshed cache for `ClientsCount` and `DocumentsCount` to keep `GetProjectStats` fast at large scale
 - [Per-Project Channel Session TTL](per-project-channel-session-ttl.md): Per-project override for `ChannelSessionTTL` to tune the presence-count "feels occupied" effect
+- [ScyllaDB Storage (Gradual Adoption)](scylladb-storage.md): Per-table opt-in PoC that moves write-heavy table groups (clients, changes, snapshots, version vectors) to ScyllaDB while keeping the rest on MongoDB
 
 ## Maintaining the Document
 

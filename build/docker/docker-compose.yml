@@ -5,3 +5,90 @@ services:
     restart: always
     ports:
       - "27017:27017"
+
+  # Single-node ScyllaDB used by unit/integration tests. Suitable for
+  # functional verification but NOT a fair perf baseline against a sharded
+  # MongoDB cluster — start the scylla-perf profile instead for that.
+  scylla:
+    image: scylladb/scylla:5.4
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 8G
+    command: >
+      --smp 4
+      --memory 4G
+      --overprovisioned 1
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESC KEYSPACES"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "9042:9042"
+
+  # ------------------------------------------------------------------
+  # scylla-perf profile: a 3-node ScyllaDB cluster for perf comparisons
+  # against a sharded MongoDB cluster. Bring it up with:
+  #   docker compose --profile scylla-perf up -d
+  # And start the server with:
+  #   --scylla-hosts=127.0.0.1 --scylla-port=9043 --scylla-replication-factor=3
+  # See docs/design/scylladb-storage.md for the rationale.
+  # ------------------------------------------------------------------
+  scylla-perf-node1:
+    image: scylladb/scylla:5.4
+    profiles: ["scylla-perf"]
+    command: >
+      --seeds=scylla-perf-node1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend epoll
+      --api-address 0.0.0.0
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESC KEYSPACES"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "9043:9042"
+
+  scylla-perf-node2:
+    image: scylladb/scylla:5.4
+    profiles: ["scylla-perf"]
+    command: >
+      --seeds=scylla-perf-node1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend epoll
+    depends_on:
+      scylla-perf-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESC KEYSPACES"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  scylla-perf-node3:
+    image: scylladb/scylla:5.4
+    profiles: ["scylla-perf"]
+    command: >
+      --seeds=scylla-perf-node1
+      --smp 1
+      --memory 1G
+      --overprovisioned 1
+      --developer-mode 1
+      --reactor-backend epoll
+    depends_on:
+      scylla-perf-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESC KEYSPACES"]
+      interval: 10s
+      timeout: 5s
+      retries: 30

@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/scylla"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/membership"
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
@@ -109,6 +110,7 @@ type Config struct {
 	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
 	Backend      *backend.Config      `yaml:"Backend"`
 	Mongo        *mongo.Config        `yaml:"Mongo"`
+	Scylla       *scylla.Config       `yaml:"Scylla"`
 	Kafka        *messaging.Config    `yaml:"Kafka"`
 	StarRocks    *warehouse.Config    `yaml:"StarRocks"`
 }

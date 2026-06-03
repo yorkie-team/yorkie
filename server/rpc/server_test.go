@@ -69,6 +69,7 @@ func TestMain(m *testing.M) {
 	be, err := backend.New(
 		helper.TestBackendConfig(),
 		helper.TestMongoConfig(),
+		nil,
 		helper.TestMembershipConfig(),
 		helper.TestHousekeepingConfig(),
 		met, nil, nil,
