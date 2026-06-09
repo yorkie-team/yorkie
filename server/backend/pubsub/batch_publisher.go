@@ -121,21 +121,16 @@ func (bp *BatchPublisher[E]) processLoop() {
 func (bp *BatchPublisher[E]) publish() {
 	bp.mutex.Lock()
 
-	if len(bp.events) == 0 {
-		bp.mutex.Unlock()
-		return
-	}
-
 	events := bp.events
 	bp.events = nil
 
-	if bp.onPublish != nil {
+	if len(events) > 0 && bp.onPublish != nil {
 		bp.onPublish()
 	}
 
 	bp.mutex.Unlock()
 
-	if logging.Enabled(zap.DebugLevel) {
+	if len(events) > 0 && logging.Enabled(zap.DebugLevel) {
 		bp.logger.Infof(
 			"Publishing batch of %d events for %s",
 			len(events),
@@ -143,7 +138,14 @@ func (bp *BatchPublisher[E]) publish() {
 		)
 	}
 
+	// Iterate even when the batch is empty so dead subscriptions
+	// (self-pruned after consecutive Publish failures) are reaped.
+	var deadIDs []string
 	for _, sub := range bp.subs.Values() {
+		if sub.IsDead() {
+			deadIDs = append(deadIDs, sub.ID())
+			continue
+		}
 		for _, event := range events {
 			if bp.filter != nil && bp.filter(sub.Subscriber(), event) {
 				continue
@@ -154,8 +156,15 @@ func (bp *BatchPublisher[E]) publish() {
 					"Publish to %s timeout or closed",
 					sub.Subscriber(),
 				)
+				if sub.IsDead() {
+					deadIDs = append(deadIDs, sub.ID())
+					break
+				}
 			}
 		}
+	}
+	for _, id := range deadIDs {
+		bp.subs.Delete(id)
 	}
 }
 
