@@ -187,4 +187,30 @@ func (s *yorkieServer) WatchDocument(
 
 ### Risks and Mitigation
 
-Currently, Subscription instances are managed in memory.
+Subscription instances are managed in memory on the pod that owns the
+stream. Two concrete risks follow from this.
+
+**1. Subscription leak when the stream never terminates cleanly.**
+The only cleanup path tied to a `Subscription` is the WatchDocument
+stream handler's `defer s.backend.PubSub.Unsubscribe(...)`. If the
+stream context never reaches `Done()` — half-closed TCP, dropped
+HTTP/2 stream, a client that crashes without an explicit close — the
+entry survives in `Subscriptions.internalMap` indefinitely. The
+`BatchPublisher` then emits a `Publish to %s timeout or closed` log
+line every cycle for the stale subscriber.
+
+*Mitigation:* `Subscription[E]` counts consecutive `Publish` failures
+(timeout on the events channel or an already-closed channel). Once
+the counter reaches `defaultMaxConsecutivePublishFailures`, the
+subscription marks itself dead and closes its events channel. The
+`BatchPublisher.publish()` loop calls `Subscription.IsDead()` at the
+top of each iteration, skips dead entries, and reaps them via
+`Subscriptions.Delete(id)` after the loop. Stream-lifecycle cleanup
+remains the primary path; self-prune is a fallback for the dead-stream
+case.
+
+**2. In-memory state is per-pod.** A leaked subscription on pod X
+cannot be reaped by anything running on pod Y. The self-prune
+mitigation runs locally on the pod that owns the stale subscription,
+which is sufficient for log-volume and CPU costs but does not provide
+cluster-wide subscription introspection.
