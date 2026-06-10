@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 
+// Package integration contains end-to-end tests exercising the Yorkie
+// server against a real MongoDB instance. Files are gated by the
+// `integration` build tag and run via `make test`.
 package integration
 
 import (

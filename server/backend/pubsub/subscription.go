@@ -40,17 +40,33 @@ const (
 //
 // Declared as var (not const) so tests can shorten it via
 // SetDefaultMaxConsecutivePublishFailures; production code keeps the
-// default.
-var defaultMaxConsecutivePublishFailures = 100
+// default. Access is guarded by defaultMaxFailuresMu so the setter and
+// the reader in NewSubscription stay race-free.
+var (
+	defaultMaxFailuresMu                 sync.RWMutex
+	defaultMaxConsecutivePublishFailures = 100
+)
 
 // SetDefaultMaxConsecutivePublishFailures overrides the default failure
 // threshold for newly created Subscriptions. Intended for tests only;
 // production code should rely on the package default. Callers should
-// restore the previous value with defer.
+// restore the previous value with defer. Panics on n < 1 since a
+// non-positive threshold would prune every subscription on first send.
 func SetDefaultMaxConsecutivePublishFailures(n int) (previous int) {
+	if n < 1 {
+		panic("pubsub: max consecutive publish failures must be >= 1")
+	}
+	defaultMaxFailuresMu.Lock()
+	defer defaultMaxFailuresMu.Unlock()
 	previous = defaultMaxConsecutivePublishFailures
 	defaultMaxConsecutivePublishFailures = n
 	return previous
+}
+
+func currentDefaultMaxFailures() int {
+	defaultMaxFailuresMu.RLock()
+	defer defaultMaxFailuresMu.RUnlock()
+	return defaultMaxConsecutivePublishFailures
 }
 
 // Subscription represents a subscription of a subscriber to events of type E.
@@ -71,7 +87,7 @@ func NewSubscription[E any](subscriber time.ActorID, bufSize int) *Subscription[
 		subscriber:  subscriber,
 		events:      make(chan E, bufSize),
 		closed:      false,
-		maxFailures: defaultMaxConsecutivePublishFailures,
+		maxFailures: currentDefaultMaxFailures(),
 	}
 }
 

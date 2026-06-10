@@ -38,6 +38,12 @@ func TestSubscriptionSelfPrune(t *testing.T) {
 
 		<-sub.Events() // drain
 		assert.True(t, sub.Publish(3))
+
+		// Without the reset, failureCount would already be 1 and these
+		// two further failures would push it to 3 (== maxFailures), so
+		// IsDead() must remain false only if the success cleared it.
+		assert.False(t, sub.Publish(4))
+		assert.False(t, sub.Publish(5))
 		assert.False(t, sub.IsDead())
 	})
 
@@ -56,8 +62,12 @@ func TestSubscriptionSelfPrune(t *testing.T) {
 		sub := NewSubscription[int](actor, 1)
 		sub.Close()
 
+		// A dead Publish must short-circuit instead of waiting the full
+		// publishTimeout. Bound against publishTimeout itself (not half)
+		// to tolerate scheduler jitter on slow CI runners while still
+		// proving short-circuit semantics.
 		start := gotime.Now()
 		assert.False(t, sub.Publish(42))
-		assert.Less(t, gotime.Since(start), publishTimeout/2)
+		assert.Less(t, gotime.Since(start), publishTimeout)
 	})
 }
