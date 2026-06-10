@@ -271,7 +271,11 @@ t.Run("stale subscription is reaped by batch publisher", func(t *testing.T) {
 
     // Never drain sub.Events(); fill the buffer (size 1 for DocSubscription)
     // and emit publishes until the publisher reaps it.
-    docEvent := events.DocEvent{Type: events.DocChanged, Actor: idB, Key: refKey}
+    docEvent := events.DocEvent{
+        Type:      events.DocChanged,
+        Publisher: idB,
+        DocRefKey: refKey,
+    }
     // Each publish() cycle attempts to send up to len(events) items; the
     // default threshold is 100 consecutive failures. Emit enough events
     // to cross that bar within a reasonable timeout.
