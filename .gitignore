@@ -65,7 +65,6 @@ output.txt
 .DS_Store
 
 # vscode
-.vscode
 
 # Chart dependencies
 **/charts/*.tgz
@@ -80,3 +79,6 @@ output.txt
 
 # worktrees
 .worktrees
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
