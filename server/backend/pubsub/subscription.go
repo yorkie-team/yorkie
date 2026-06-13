@@ -32,22 +32,62 @@ const (
 	publishTimeout = 100 * gotime.Millisecond
 )
 
+// defaultMaxConsecutivePublishFailures is the threshold of consecutive
+// Publish failures (timeout or already-closed channel) after which a
+// Subscription marks itself dead and lets the BatchPublisher reap it.
+// Set conservatively so transient slow consumers are not pruned, while
+// keeping leaked subscriptions from accumulating indefinitely.
+//
+// Declared as var (not const) so tests can shorten it via
+// SetDefaultMaxConsecutivePublishFailures; production code keeps the
+// default. Access is guarded by defaultMaxFailuresMu so the setter and
+// the reader in NewSubscription stay race-free.
+var (
+	defaultMaxFailuresMu                 sync.RWMutex
+	defaultMaxConsecutivePublishFailures = 100
+)
+
+// SetDefaultMaxConsecutivePublishFailures overrides the default failure
+// threshold for newly created Subscriptions. Intended for tests only;
+// production code should rely on the package default. Callers should
+// restore the previous value with defer. Panics on n < 1 since a
+// non-positive threshold would prune every subscription on first send.
+func SetDefaultMaxConsecutivePublishFailures(n int) (previous int) {
+	if n < 1 {
+		panic("pubsub: max consecutive publish failures must be >= 1")
+	}
+	defaultMaxFailuresMu.Lock()
+	defer defaultMaxFailuresMu.Unlock()
+	previous = defaultMaxConsecutivePublishFailures
+	defaultMaxConsecutivePublishFailures = n
+	return previous
+}
+
+func currentDefaultMaxFailures() int {
+	defaultMaxFailuresMu.RLock()
+	defer defaultMaxFailuresMu.RUnlock()
+	return defaultMaxConsecutivePublishFailures
+}
+
 // Subscription represents a subscription of a subscriber to events of type E.
 type Subscription[E any] struct {
-	id         string
-	subscriber time.ActorID
-	mu         sync.Mutex
-	closed     bool
-	events     chan E
+	id           string
+	subscriber   time.ActorID
+	mu           sync.Mutex
+	closed       bool
+	failureCount int
+	maxFailures  int
+	events       chan E
 }
 
 // NewSubscription creates a new instance of Subscription with the given buffer size.
 func NewSubscription[E any](subscriber time.ActorID, bufSize int) *Subscription[E] {
 	return &Subscription[E]{
-		id:         xid.New().String(),
-		subscriber: subscriber,
-		events:     make(chan E, bufSize),
-		closed:     false,
+		id:          xid.New().String(),
+		subscriber:  subscriber,
+		events:      make(chan E, bufSize),
+		closed:      false,
+		maxFailures: currentDefaultMaxFailures(),
 	}
 }
 
@@ -78,6 +118,12 @@ func (s *Subscription[E]) Close() {
 }
 
 // Publish publishes the given event to the subscriber.
+//
+// On a successful send the internal failure counter is reset. On timeout
+// or an already-closed channel the counter increments; once it reaches
+// maxFailures the subscription closes itself so the BatchPublisher can
+// reap it on the next iteration. This is the only fallback path when
+// the owning stream handler never invokes Unsubscribe.
 func (s *Subscription[E]) Publish(event E) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,11 +135,26 @@ func (s *Subscription[E]) Publish(event E) bool {
 	// NOTE(hackerwins): When a subscription is being closed by a subscriber,
 	// the subscriber may not receive messages.
 	select {
-	case s.Events() <- event:
+	case s.events <- event:
+		s.failureCount = 0
 		return true
 	case <-gotime.After(publishTimeout):
+		s.failureCount++
+		if s.failureCount >= s.maxFailures {
+			s.closed = true
+			close(s.events)
+		}
 		return false
 	}
+}
+
+// IsDead reports whether this Subscription has been closed, either
+// explicitly via Close or by self-prune after too many consecutive
+// Publish failures.
+func (s *Subscription[E]) IsDead() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
 }
 
 // Subscriptions is a collection of Subscription[E] with an associated BatchPublisher.
