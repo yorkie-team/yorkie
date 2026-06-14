@@ -309,8 +309,7 @@ jobs:
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
           fi
 
-          git add bench_result.txt
-          git add commit_hash.txt
+          git add -f bench_result.txt commit_hash.txt
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           git diff --staged --quiet || git commit -m "Update benchmark results at $TIMESTAMP"
           git checkout -B yorkie-ci-benchmark
@@ -515,9 +514,7 @@ jobs:
             git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
           fi
 
-          git add load_summary.json
-          git add output.txt
-          git add commit_hash.txt
+          git add -f load_summary.json output.txt commit_hash.txt
           TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           git diff --staged --quiet || git commit -m "Update load results at $TIMESTAMP"
           git checkout -B yorkie-ci-load
