@@ -68,6 +68,12 @@ type PushPullOptions struct {
 	// RPC handler from the matching wire field. See
 	// docs/design/disable-gc-on-attach.md.
 	DisableGC bool
+
+	// DisablePresence forwards the document-scope opt-out persisted on
+	// DocInfo. When true, the PushPull pipeline strips presence on both
+	// the write and read paths so the response carries an empty presence
+	// map regardless of what any client sends.
+	DisablePresence bool
 }
 
 var (

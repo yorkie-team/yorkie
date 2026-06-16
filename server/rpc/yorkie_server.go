@@ -202,10 +202,21 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	// 02. Ensure the document exists and is attached to the client.
-	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey, false)
+	// 02. Ensure the document exists and is attached to the client. The
+	// disable_presence flag is fixated on first attach via $setOnInsert;
+	// the persisted value wins for later attaches, so we log a warning
+	// when the requested value disagrees with what came back.
+	docInfo, err := documents.FindOrCreateDocInfo(
+		ctx, s.backend, clientInfo, pack.DocumentKey, req.Msg.DisablePresence,
+	)
 	if err != nil {
 		return nil, err
+	}
+	if req.Msg.DisablePresence != docInfo.DisablePresence {
+		logging.From(ctx).Warnf(
+			"attach with disable_presence=%v but doc fixated to %v: %s",
+			req.Msg.DisablePresence, docInfo.DisablePresence, docInfo.Key,
+		)
 	}
 
 	clientInfo, err = clients.AttachDocument(ctx, s.backend, clientInfo, docInfo, pack.IsAttached())
@@ -252,9 +263,10 @@ func (s *yorkieServer) AttachDocument(
 
 	// 03. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:      types.SyncModePushPull,
-		Status:    document.StatusAttached,
-		DisableGC: req.Msg.DisableGc,
+		Mode:            types.SyncModePushPull,
+		Status:          document.StatusAttached,
+		DisableGC:       req.Msg.DisableGc,
+		DisablePresence: docInfo.DisablePresence,
 	})
 	if err != nil {
 		return nil, err
@@ -282,6 +294,7 @@ func (s *yorkieServer) AttachDocument(
 		ChangePack:         pbChangePack,
 		DocumentId:         docInfo.ID.String(),
 		MaxSizePerDocument: int32(project.MaxSizePerDocument),
+		DisablePresence:    docInfo.DisablePresence,
 	}
 	if schema != nil {
 		response.SchemaRules = converter.ToRules(schema.Rules)
@@ -1282,12 +1295,20 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	// 03. Push/Pull between the client and server.
+	// 03. Read the document's disable_presence option so PushPull can
+	// enforce it. FindDocInfoByRefKey hits the LRU cache for warm docs.
 	docKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:      syncMode,
-		Status:    document.StatusAttached,
-		DisableGC: req.Msg.DisableGc,
+		Mode:            syncMode,
+		Status:          document.StatusAttached,
+		DisableGC:       req.Msg.DisableGc,
+		DisablePresence: docInfo.DisablePresence,
 	})
 	if err != nil {
 		return nil, err
