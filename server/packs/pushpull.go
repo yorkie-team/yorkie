@@ -101,6 +101,13 @@ func PushPull(
 	start := gotime.Now()
 	hostname := be.Config.Hostname
 
+	// 00. Strip presence on the way in when the document opted out. Doing
+	// this before pushPack means no presence-only change ever reaches the
+	// changes collection, regardless of which SDK version sent it.
+	if opts.DisablePresence {
+		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
+	}
+
 	// 01. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
 	if err != nil {

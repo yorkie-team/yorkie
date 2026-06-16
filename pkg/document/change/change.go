@@ -108,6 +108,20 @@ func (c *Change) PresenceChange() *inner.Change {
 	return c.presenceChange
 }
 
+// SetPresenceChange replaces the presence change carried by this change.
+// Passing nil drops the presence change in place; the server uses this to
+// strip presence on documents created with disable_presence.
+func (c *Change) SetPresenceChange(pc *inner.Change) {
+	c.presenceChange = pc
+}
+
+// HasOperations reports whether this change carries at least one operation.
+// A change with zero operations and a nil presence change can be safely
+// dropped from the wire.
+func (c *Change) HasOperations() bool {
+	return len(c.operations) > 0
+}
+
 // AfterOrEqual returns whether this change is after or equal to the given change.
 func (c *Change) AfterOrEqual(other *Change) bool {
 	return c.id.AfterOrEqual(other.id)
