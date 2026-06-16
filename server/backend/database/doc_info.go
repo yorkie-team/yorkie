@@ -62,6 +62,12 @@ type DocInfo struct {
 	// compaction. A serverSeq is only meaningful within its epoch — once the
 	// epoch changes, all prior checkpoints are invalidated.
 	Epoch int64 `bson:"epoch"`
+
+	// DisablePresence declares that this document does not accept presence
+	// put/clear. Written via $setOnInsert at first attach and immutable
+	// thereafter; the empty (false) value matches documents created before
+	// this option existed.
+	DisablePresence bool `bson:"disable_presence,omitempty"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
@@ -82,18 +88,19 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 	}
 
 	return &DocInfo{
-		ID:          info.ID,
-		ProjectID:   info.ProjectID,
-		Key:         info.Key,
-		ServerSeq:   info.ServerSeq,
-		Owner:       info.Owner,
-		Schema:      info.Schema,
-		CreatedAt:   info.CreatedAt,
-		AccessedAt:  info.AccessedAt,
-		UpdatedAt:   info.UpdatedAt,
-		RemovedAt:   info.RemovedAt,
-		CompactedAt: info.CompactedAt,
-		Epoch:       info.Epoch,
+		ID:              info.ID,
+		ProjectID:       info.ProjectID,
+		Key:             info.Key,
+		ServerSeq:       info.ServerSeq,
+		Owner:           info.Owner,
+		Schema:          info.Schema,
+		CreatedAt:       info.CreatedAt,
+		AccessedAt:      info.AccessedAt,
+		UpdatedAt:       info.UpdatedAt,
+		RemovedAt:       info.RemovedAt,
+		CompactedAt:     info.CompactedAt,
+		Epoch:           info.Epoch,
+		DisablePresence: info.DisablePresence,
 	}
 }
 
