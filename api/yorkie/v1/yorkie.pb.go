@@ -229,9 +229,14 @@ type AttachDocumentRequest struct {
 	// tombstones. The server skips minVV tracking and omits the response
 	// VersionVector for this client. Use only with Counter / primitive
 	// workloads; misuse leads to undefined GC behavior on this client.
-	DisableGc     bool `protobuf:"varint,4,opt,name=disable_gc,json=disableGc,proto3" json:"disable_gc,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisableGc bool `protobuf:"varint,4,opt,name=disable_gc,json=disableGc,proto3" json:"disable_gc,omitempty"`
+	// disable_presence declares that this document does not produce, consume,
+	// or store presence. Honored on first attach only; subsequent attaches
+	// observe the value persisted in the server-side document metadata. See
+	// docs/tasks/active/20260616-presenceless-document-option-todo.md.
+	DisablePresence bool `protobuf:"varint,5,opt,name=disable_presence,json=disablePresence,proto3" json:"disable_presence,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AttachDocumentRequest) Reset() {
@@ -292,14 +297,27 @@ func (x *AttachDocumentRequest) GetDisableGc() bool {
 	return false
 }
 
+func (x *AttachDocumentRequest) GetDisablePresence() bool {
+	if x != nil {
+		return x.DisablePresence
+	}
+	return false
+}
+
 type AttachDocumentResponse struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	DocumentId         string                 `protobuf:"bytes,1,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	ChangePack         *ChangePack            `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	MaxSizePerDocument int32                  `protobuf:"varint,3,opt,name=max_size_per_document,json=maxSizePerDocument,proto3" json:"max_size_per_document,omitempty"`
 	SchemaRules        []*Rule                `protobuf:"bytes,4,rep,name=schema_rules,json=schemaRules,proto3" json:"schema_rules,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// disable_presence carries the server-fixated value of the document's
+	// presence option (see AttachDocumentRequest.disable_presence). Clients
+	// align their local gating state to this value rather than the requested
+	// value, so an attach to an already-fixated document observes the
+	// persisted decision.
+	DisablePresence bool `protobuf:"varint,5,opt,name=disable_presence,json=disablePresence,proto3" json:"disable_presence,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AttachDocumentResponse) Reset() {
@@ -358,6 +376,13 @@ func (x *AttachDocumentResponse) GetSchemaRules() []*Rule {
 		return x.SchemaRules
 	}
 	return nil
+}
+
+func (x *AttachDocumentResponse) GetDisablePresence() bool {
+	if x != nil {
+		return x.DisablePresence
+	}
+	return false
 }
 
 type DetachDocumentRequest struct {
@@ -2794,7 +2819,7 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\x17DeactivateClientRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12 \n" +
 	"\vsynchronous\x18\x02 \x01(\bR\vsynchronous\"\x1a\n" +
-	"\x18DeactivateClientResponse\"\xaa\x01\n" +
+	"\x18DeactivateClientResponse\"\xd5\x01\n" +
 	"\x15AttachDocumentRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x126\n" +
 	"\vchange_pack\x18\x02 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
@@ -2802,14 +2827,16 @@ const file_yorkie_v1_yorkie_proto_rawDesc = "" +
 	"\n" +
 	"schema_key\x18\x03 \x01(\tR\tschemaKey\x12\x1d\n" +
 	"\n" +
-	"disable_gc\x18\x04 \x01(\bR\tdisableGc\"\xd8\x01\n" +
+	"disable_gc\x18\x04 \x01(\bR\tdisableGc\x12)\n" +
+	"\x10disable_presence\x18\x05 \x01(\bR\x0fdisablePresence\"\x83\x02\n" +
 	"\x16AttachDocumentResponse\x12\x1f\n" +
 	"\vdocument_id\x18\x01 \x01(\tR\n" +
 	"documentId\x126\n" +
 	"\vchange_pack\x18\x02 \x01(\v2\x15.yorkie.v1.ChangePackR\n" +
 	"changePack\x121\n" +
 	"\x15max_size_per_document\x18\x03 \x01(\x05R\x12maxSizePerDocument\x122\n" +
-	"\fschema_rules\x18\x04 \x03(\v2\x0f.yorkie.v1.RuleR\vschemaRules\"\xc2\x01\n" +
+	"\fschema_rules\x18\x04 \x03(\v2\x0f.yorkie.v1.RuleR\vschemaRules\x12)\n" +
+	"\x10disable_presence\x18\x05 \x01(\bR\x0fdisablePresence\"\xc2\x01\n" +
 	"\x15DetachDocumentRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x1f\n" +
 	"\vdocument_id\x18\x02 \x01(\tR\n" +

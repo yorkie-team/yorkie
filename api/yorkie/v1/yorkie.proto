@@ -77,6 +77,11 @@ message AttachDocumentRequest {
   // VersionVector for this client. Use only with Counter / primitive
   // workloads; misuse leads to undefined GC behavior on this client.
   bool disable_gc = 4;
+  // disable_presence declares that this document does not produce, consume,
+  // or store presence. Honored on first attach only; subsequent attaches
+  // observe the value persisted in the server-side document metadata. See
+  // docs/tasks/active/20260616-presenceless-document-option-todo.md.
+  bool disable_presence = 5;
 }
 
 message AttachDocumentResponse {
@@ -84,6 +89,12 @@ message AttachDocumentResponse {
   ChangePack change_pack = 2;
   int32 max_size_per_document = 3;
   repeated Rule schema_rules = 4;
+  // disable_presence carries the server-fixated value of the document's
+  // presence option (see AttachDocumentRequest.disable_presence). Clients
+  // align their local gating state to this value rather than the requested
+  // value, so an attach to an already-fixated document observes the
+  // persisted decision.
+  bool disable_presence = 5;
 }
 
 message DetachDocumentRequest {
