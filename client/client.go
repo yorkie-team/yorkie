@@ -523,6 +523,15 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	d.SetDisableGC(opts.DisableGC)
 	d.SetDisablePresence(res.Msg.DisablePresence)
 
+	// If the server reported the doc as presenceless but the local client
+	// did not opt in (so Step 01 produced an initial empty PUT), reset the
+	// local presence map. The wire-side PUT was stripped by the server and
+	// never crosses the boundary, but the local InternalDocument still
+	// carries the cloned entry until we clear it here.
+	if res.Msg.DisablePresence && !opts.DisablePresence {
+		d.InternalDocument().ResetPresences()
+	}
+
 	if err := d.ApplyChangePack(pack); err != nil {
 		return err
 	}
