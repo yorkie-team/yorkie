@@ -62,6 +62,13 @@ type Attachment struct {
 	// PushPullChanges so the server can skip minVV tracking and omit the
 	// response VersionVector. See docs/design/disable-gc-on-attach.md.
 	disableGC bool
+
+	// disablePresence carries the server-fixated DisablePresence value
+	// returned by AttachDocument. It is purely informational on the client
+	// today (the local gating is held on the Document itself); kept here so
+	// future RPCs that need the fixated value can read it without going
+	// back to the Document.
+	disablePresence bool
 }
 
 func (a *Attachment) Is(resourceType attachable.ResourceType) bool {

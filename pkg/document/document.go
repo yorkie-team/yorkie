@@ -19,6 +19,7 @@ package document
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -84,12 +85,28 @@ type Options struct {
 	// NOTE(hackerwins): This is temporary option. We need to remove this option
 	// after introducing the garbage collection based on the version vector.
 	DisableGC bool
+
+	// DisablePresence gates the document against producing presence
+	// changes. When true, Update silently drops any presence emit issued
+	// inside the user callback. The Client sets this from the
+	// server-fixated value returned in the AttachDocument response so a
+	// late attacher cannot pollute a presenceless document even if it
+	// did not pass WithDisablePresence locally.
+	DisablePresence bool
 }
 
 // WithDisableGC configures the document to disable garbage collection.
 func WithDisableGC() Option {
 	return func(o *Options) {
 		o.DisableGC = true
+	}
+}
+
+// WithDisablePresence configures the document to drop presence changes
+// locally. See Options.DisablePresence.
+func WithDisablePresence() Option {
+	return func(o *Options) {
+		o.DisablePresence = true
 	}
 }
 
@@ -117,6 +134,11 @@ type Document struct {
 	// clonePresences is a copy of `doc.presences` to be exposed to the user and
 	// is used to protect `doc.presences`.
 	clonePresences *presence.Map
+
+	// presenceDroppedOnce ensures the warn-log issued when a presenceless
+	// document drops a user-supplied presence change fires at most once
+	// per Document instance.
+	presenceDroppedOnce sync.Once
 
 	// MaxSizeLimit is the maximum size of a document in bytes.
 	MaxSizeLimit int
@@ -173,6 +195,17 @@ func (d *Document) Update(
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		return err
+	}
+
+	// Gate any presence emit when the document opted out. We warn once per
+	// document so the silent drop is discoverable without log spam if a
+	// caller wires presence into a presenceless document by mistake.
+	if d.options.DisablePresence && ctx.HasPresenceChange() {
+		ctx.DropPresenceChange()
+		d.warnPresenceDroppedOnce()
+		if !ctx.HasOperations() {
+			return nil
+		}
 	}
 
 	if !ctx.IsPresenceOnlyChange() && len(d.SchemaRules) > 0 {
@@ -294,6 +327,29 @@ func (d *Document) SetDisableGC(disableGC bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.doc.SetDisableGC(disableGC)
+}
+
+// SetDisablePresence records the server-fixated value of disable_presence.
+// The Client calls this with the value carried in the AttachDocument
+// response so subsequent Update calls inside this Document gate on the
+// persisted decision rather than the locally requested one.
+func (d *Document) SetDisablePresence(disablePresence bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.options.DisablePresence = disablePresence
+}
+
+// warnPresenceDroppedOnce emits a single line to stderr the first time
+// Update silently drops a presence change on a presenceless document.
+// Using sync.Once keeps the warning useful without spamming the log on
+// every interaction.
+func (d *Document) warnPresenceDroppedOnce() {
+	d.presenceDroppedOnce.Do(func() {
+		log.Printf(
+			"yorkie: document %q opted out of presence; dropping presence change from Update",
+			d.doc.key,
+		)
+	})
 }
 
 // Key returns the key of this document.
