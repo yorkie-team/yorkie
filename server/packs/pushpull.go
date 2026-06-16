@@ -531,6 +531,19 @@ func pullChangeInfos(
 		if clientInfo.ID == pulledChange.ActorID && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
 			continue
 		}
+
+		// Defensive: drop any stray presence from cached or older rows on
+		// the way to the wire. Strip on a clone so the cache's shared
+		// pointer stays untouched, and drop the change entirely if the
+		// strip leaves it carrying no operations.
+		if docInfo.DisablePresence && pulledChange.PresenceChange != nil {
+			pulledChange = pulledChange.DeepCopy()
+			pulledChange.PresenceChange = nil
+			if !pulledChange.HasOperations() {
+				continue
+			}
+		}
+
 		filteredChanges = append(filteredChanges, pulledChange)
 	}
 
