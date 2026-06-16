@@ -109,7 +109,7 @@ func TestProjectStatsRefresh(t *testing.T) {
 
 	// 3. Create at least one non-removed document for that project.
 	docKey := key.Key(fmt.Sprintf("%s-doc", t.Name()))
-	_, err = be.DB.FindOrCreateDocInfo(ctx, clientInfos[0].RefKey(), docKey)
+	_, err = be.DB.FindOrCreateDocInfo(ctx, clientInfos[0].RefKey(), docKey, false)
 	assert.NoError(t, err)
 
 	// 5. Run RefreshStats and assert processed >= 1.

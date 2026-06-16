@@ -203,7 +203,7 @@ func (s *yorkieServer) AttachDocument(
 	}
 
 	// 02. Ensure the document exists and is attached to the client.
-	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey)
+	docInfo, err := documents.FindOrCreateDocInfo(ctx, s.backend, clientInfo, pack.DocumentKey, false)
 	if err != nil {
 		return nil, err
 	}

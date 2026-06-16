@@ -1394,10 +1394,13 @@ func (d *DB) FindAttachedClientCountsByDocIDs(
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
+// The disablePresence flag is honored only when this call creates the row;
+// when the row exists, its persisted value is returned unchanged.
 func (d *DB) FindOrCreateDocInfo(
 	_ context.Context,
 	clientRefKey types.ClientRefKey,
 	docKey key.Key,
+	disablePresence bool,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -1410,15 +1413,16 @@ func (d *DB) FindOrCreateDocInfo(
 	if info == nil {
 		now := gotime.Now()
 		info = &database.DocInfo{
-			ID:         newID(),
-			ProjectID:  clientRefKey.ProjectID,
-			Key:        docKey,
-			Owner:      clientRefKey.ClientID,
-			ServerSeq:  0,
-			Schema:     "",
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			AccessedAt: now,
+			ID:              newID(),
+			ProjectID:       clientRefKey.ProjectID,
+			Key:             docKey,
+			Owner:           clientRefKey.ClientID,
+			ServerSeq:       0,
+			Schema:          "",
+			CreatedAt:       now,
+			UpdatedAt:       now,
+			AccessedAt:      now,
+			DisablePresence: disablePresence,
 		}
 		if err := txn.Insert(tblDocuments, info); err != nil {
 			return nil, fmt.Errorf("find or create document of %s: %w", docKey, err)

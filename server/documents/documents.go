@@ -94,6 +94,7 @@ func CreateDocument(
 			ClientID:  userID,
 		},
 		docKey,
+		false,
 	)
 	if err != nil {
 		return nil, err
@@ -331,6 +332,7 @@ func GetDocumentByServerSeq(
 			ClientID:  types.IDFromActorID(time.InitialActorID),
 		},
 		k,
+		false,
 	)
 	if err != nil {
 		return nil, err
@@ -398,18 +400,22 @@ func FindDocInfoByRefKey(
 	return be.DB.FindDocInfoByRefKey(ctx, refkey)
 }
 
-// FindOrCreateDocInfo returns a document for the given document key. If
-// createDocIfNotExist is true, it creates a new document if it does not exist.
+// FindOrCreateDocInfo returns a document for the given document key. The
+// disablePresence argument is honored only on the create path; when the
+// document already exists, its persisted value is returned unchanged so
+// callers must read it back from the returned DocInfo.
 func FindOrCreateDocInfo(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
 	docKey key.Key,
+	disablePresence bool,
 ) (*database.DocInfo, error) {
 	return be.DB.FindOrCreateDocInfo(
 		ctx,
 		clientInfo.RefKey(),
 		docKey,
+		disablePresence,
 	)
 }
 

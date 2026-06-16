@@ -267,8 +267,15 @@ type Database interface {
 	// FindDocInfosByIDs finds the documents of the given IDs.
 	FindDocInfosByIDs(ctx context.Context, projectID types.ID, docIDs []types.ID) ([]*DocInfo, error)
 
-	// FindOrCreateDocInfo finds the document or creates it if it does not exist.
-	FindOrCreateDocInfo(ctx context.Context, clientRefKey types.ClientRefKey, docKey key.Key) (*DocInfo, error)
+	// FindOrCreateDocInfo finds the document or creates it if it does not
+	// exist. The disablePresence flag is fixated only on the create path;
+	// for an existing document, the persisted value wins.
+	FindOrCreateDocInfo(
+		ctx context.Context,
+		clientRefKey types.ClientRefKey,
+		docKey key.Key,
+		disablePresence bool,
+	) (*DocInfo, error)
 
 	// FindDocInfoByRefKey finds the document of the given refKey.
 	FindDocInfoByRefKey(ctx context.Context, refKey types.DocRefKey) (*DocInfo, error)

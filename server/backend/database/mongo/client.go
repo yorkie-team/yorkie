@@ -1462,10 +1462,14 @@ func (c *Client) FindAttachedClientCountsByDocIDs(
 }
 
 // FindOrCreateDocInfo finds the document or creates it if it does not exist.
+// The disablePresence flag is fixated via $setOnInsert at first attach and
+// observed by later callers — the persisted value wins regardless of what
+// they pass.
 func (c *Client) FindOrCreateDocInfo(
 	ctx context.Context,
 	clientRefKey types.ClientRefKey,
 	docKey key.Key,
+	disablePresence bool,
 ) (*database.DocInfo, error) {
 	filter := bson.M{
 		"project_id": clientRefKey.ProjectID,
@@ -1484,10 +1488,11 @@ func (c *Client) FindOrCreateDocInfo(
 				"accessed_at": now,
 			},
 			"$setOnInsert": bson.M{
-				"owner":      clientRefKey.ClientID,
-				"server_seq": 0,
-				"created_at": now,
-				"updated_at": now,
+				"owner":            clientRefKey.ClientID,
+				"server_seq":       0,
+				"created_at":       now,
+				"updated_at":       now,
+				"disable_presence": disablePresence,
 			},
 		},
 		options.FindOneAndUpdate().
