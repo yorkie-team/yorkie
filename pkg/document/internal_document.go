@@ -160,6 +160,15 @@ func (d *InternalDocument) SetDisableGC(disableGC bool) {
 	d.disableGC = disableGC
 }
 
+// ResetPresences clears the presence map and the online-clients set. The
+// server calls this when serializing or persisting a snapshot for a
+// presenceless document so that no earlier-cached presence entry leaks
+// onto the wire or into the snapshots collection.
+func (d *InternalDocument) ResetPresences() {
+	d.presences = presence.NewMap()
+	d.onlineClients = make(map[string]bool)
+}
+
 // ApplyChangePack applies the given change pack into this document.
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
 	hasSnapshot := len(pack.Snapshot) > 0
