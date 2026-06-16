@@ -147,7 +147,7 @@ break the guarantee.
 **Files:**
 - Modify: `api/yorkie/v1/yorkie.proto`
 
-- [ ] **Step 1: Add the request field**
+- [x] **Step 1: Add the request field**
 
 ```protobuf
 message AttachDocumentRequest {
@@ -162,7 +162,7 @@ message AttachDocumentRequest {
 }
 ```
 
-- [ ] **Step 2: Add the response field**
+- [x] **Step 2: Add the response field**
 
 ```protobuf
 message AttachDocumentResponse {
@@ -174,13 +174,13 @@ message AttachDocumentResponse {
 }
 ```
 
-- [ ] **Step 3: Regenerate**
+- [x] **Step 3: Regenerate**
 
 Run: `make proto`
 Expected: only `api/yorkie/v1/yorkie.pb.go` and its `.connect.go`
 companion change. No other generated files should move.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add api/yorkie/v1/yorkie.proto api/yorkie/v1/yorkie.pb.go api/yorkie/v1/v1connect/yorkie.connect.go
@@ -194,7 +194,7 @@ git commit -m "Add disable_presence fields to AttachDocument RPC"
 **Files:**
 - Modify: `server/backend/database/doc_info.go`
 
-- [ ] **Step 1: Add the field**
+- [x] **Step 1: Add the field**
 
 ```go
 type DocInfo struct {
@@ -209,17 +209,17 @@ type DocInfo struct {
 }
 ```
 
-- [ ] **Step 2: Extend `DeepCopy()`**
+- [x] **Step 2: Extend `DeepCopy()`**
 
 Add `DisablePresence: d.DisablePresence` so the clone path used by
 caches and tests carries the flag.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `go test ./server/backend/database/...`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add server/backend/database/doc_info.go
@@ -233,7 +233,7 @@ git commit -m "Add DisablePresence to DocInfo schema"
 **Files:**
 - Modify: `server/backend/database/mongo/client.go`
 
-- [ ] **Step 1: Extend the signature**
+- [x] **Step 1: Extend the signature**
 
 ```go
 func (c *Client) FindOrCreateDocInfo(
@@ -244,7 +244,7 @@ func (c *Client) FindOrCreateDocInfo(
 ) (*database.DocInfo, error) {
 ```
 
-- [ ] **Step 2: Include the field in `$setOnInsert`**
+- [x] **Step 2: Include the field in `$setOnInsert`**
 
 ```go
 "$setOnInsert": bson.M{
@@ -260,18 +260,18 @@ The `$setOnInsert` operator only writes on actual inserts. Second
 and later attaches observe the persisted value and ignore the wire
 field — that is the immutability guarantee.
 
-- [ ] **Step 3: Duplicate-key fallback already returns the persisted row**
+- [x] **Step 3: Duplicate-key fallback already returns the persisted row**
 
 Confirm the existing `FindOne` fallback after `IsDuplicateKeyError`
 returns the document as written, so the late attacher sees the
 first writer's value.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `make test`
 Expected: existing backend tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add server/backend/database/mongo/client.go
@@ -285,18 +285,18 @@ git commit -m "Fixate DisablePresence on FindOrCreateDocInfo upsert"
 **Files:**
 - Modify: `server/backend/database/memory/database.go`
 
-- [ ] **Step 1: Match the new signature**
+- [x] **Step 1: Match the new signature**
 
 The in-memory `FindOrCreateDocInfo` accepts `disablePresence bool`
 and applies it only when creating a new entry. An existing entry
 keeps its current value.
 
-- [ ] **Step 2: Mirror tests if existing table touches the signature**
+- [x] **Step 2: Mirror tests if existing table touches the signature**
 
 Run: `go test ./server/backend/database/memory/...`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```sh
 git add server/backend/database/memory/database.go server/backend/database/testcases/
@@ -311,12 +311,12 @@ git commit -m "Memory backend honors DisablePresence at insert"
 - Modify: `server/documents/documents.go`
 - Modify: `server/rpc/yorkie_server.go`
 
-- [ ] **Step 1: Plumb through `documents.FindOrCreateDocInfo`**
+- [x] **Step 1: Plumb through `documents.FindOrCreateDocInfo`**
 
 The thin wrapper in `server/documents/documents.go` accepts and
 forwards `disablePresence`.
 
-- [ ] **Step 2: `AttachDocument` handler**
+- [x] **Step 2: `AttachDocument` handler**
 
 ```go
 // server/rpc/yorkie_server.go
@@ -341,19 +341,19 @@ return connect.NewResponse(&api.AttachDocumentResponse{
 
 `PushPull` is called with `PushPullOptions{DisablePresence: docInfo.DisablePresence}`.
 
-- [ ] **Step 3: `PushPullChanges` handler — fetch DocInfo first**
+- [x] **Step 3: `PushPullChanges` handler — fetch DocInfo first**
 
 The handler today does not fetch `DocInfo`. Add one call (it is
 cached via `docCache` so the cost is amortized) before the
 `packs.PushPull` invocation and forward `docInfo.DisablePresence`
 through `PushPullOptions`.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `go test ./server/rpc/...`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add server/documents/documents.go server/rpc/yorkie_server.go
@@ -369,7 +369,7 @@ git commit -m "Forward DisablePresence through AttachDocument and PushPullChange
 - Modify: `server/packs/pushpull.go`
 - Modify: `pkg/document/change/change.go`
 
-- [ ] **Step 1: Setter and operation accessor on `Change`**
+- [x] **Step 1: Setter and operation accessor on `Change`**
 
 In `pkg/document/change/change.go`, add:
 
@@ -383,7 +383,7 @@ func (c *Change) HasOperations() bool {
 }
 ```
 
-- [ ] **Step 2: `stripPresenceChanges` helper**
+- [x] **Step 2: `stripPresenceChanges` helper**
 
 ```go
 // server/packs/strip.go
@@ -409,7 +409,7 @@ func stripPresenceChanges(changes []*change.Change) []*change.Change {
 }
 ```
 
-- [ ] **Step 3: Strip at PushPull entry**
+- [x] **Step 3: Strip at PushPull entry**
 
 ```go
 // server/packs/pushpull.go — at the very top of PushPull
@@ -429,12 +429,12 @@ type PushPullOptions struct {
 }
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `go test ./pkg/document/change/... ./server/packs/...`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add server/packs/strip.go server/packs/pushpull.go pkg/document/change/change.go
@@ -449,7 +449,7 @@ git commit -m "Strip presence changes at PushPull entry when document is presenc
 - Modify: `server/packs/pushpull.go`
 - Modify: `pkg/document/internal_document.go`
 
-- [ ] **Step 1: `InternalDocument.ResetPresences()`**
+- [x] **Step 1: `InternalDocument.ResetPresences()`**
 
 ```go
 // pkg/document/internal_document.go
@@ -464,7 +464,7 @@ func (d *InternalDocument) ResetPresences() {
 }
 ```
 
-- [ ] **Step 2: Threading `opts` into `pullSnapshot`**
+- [x] **Step 2: Threading `opts` into `pullSnapshot`**
 
 `preparePack` and `pullSnapshot` currently take no `PushPullOptions`.
 Extend both signatures to receive it. In `pullSnapshot`:
@@ -482,12 +482,12 @@ Both belt-and-suspenders: the in-memory reset prevents downstream
 leak (e.g. if the snapshot path branches), and the `nil` argument
 ensures the wire bytes carry an empty map.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `go test ./pkg/document/... ./server/packs/...`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add pkg/document/internal_document.go server/packs/pushpull.go
@@ -501,7 +501,7 @@ git commit -m "Serialize empty presence map for presenceless documents"
 **Files:**
 - Modify: `server/packs/snapshot.go`
 
-- [ ] **Step 1: Accept `disablePresence`**
+- [x] **Step 1: Accept `disablePresence`**
 
 ```go
 func storeSnapshot(
@@ -528,12 +528,12 @@ This is defensive: if any earlier `snapshots` row was written before
 the flag (cannot happen via this PR, but is the safe shape), the
 in-memory doc would otherwise inherit it via `applySnapshot`.
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `go test ./server/packs/...`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```sh
 git add server/packs/snapshot.go
@@ -547,7 +547,7 @@ git commit -m "Persist empty presence map for presenceless documents"
 **Files:**
 - Modify: `server/packs/pushpull.go`
 
-- [ ] **Step 1: Receive `docInfo` and strip on read**
+- [x] **Step 1: Receive `docInfo` and strip on read**
 
 ```go
 for _, pulledChange := range pulled {
@@ -572,12 +572,12 @@ for _, pulledChange := range pulled {
 
 `DeepCopy` keeps the cache's shared pointer untouched.
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `go test ./server/packs/...`
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```sh
 git add server/packs/pushpull.go
@@ -595,7 +595,7 @@ git commit -m "Defensive presence strip on PushPull read path"
 - Modify: `pkg/document/document.go`
 - Modify: `pkg/document/change/context.go`
 
-- [ ] **Step 1: Attach option**
+- [x] **Step 1: Attach option**
 
 ```go
 // client/options.go
@@ -610,7 +610,7 @@ func WithDisablePresence() AttachOption {
 }
 ```
 
-- [ ] **Step 2: Send on the wire, store response value on the attachment**
+- [x] **Step 2: Send on the wire, store response value on the attachment**
 
 ```go
 // client/client.go (inside attachDocument)
@@ -645,7 +645,7 @@ if !opts.DisablePresence {
 }
 ```
 
-- [ ] **Step 3: Gate `Document.Update`**
+- [x] **Step 3: Gate `Document.Update`**
 
 ```go
 // pkg/document/document.go (inside Update, after the user callback)
@@ -665,12 +665,12 @@ A single `Logger.Warn` per document the first time the gate trips
 (state held on the document) makes the silent-drop discoverable
 without log spam.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `go test ./client/... ./pkg/document/...`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add client/ pkg/document/
@@ -684,7 +684,7 @@ git commit -m "Add WithDisablePresence to Go SDK with response-driven gating"
 **Files:**
 - Add: `test/integration/presenceless_document_test.go`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 Build tag `integration`. Coverage:
 
@@ -708,7 +708,7 @@ Build tag `integration`. Coverage:
 Mirror the existing client setup in
 `test/integration/disable_gc_test.go`.
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 ```sh
 docker compose -f build/docker/docker-compose.yml up --build -d
@@ -717,12 +717,12 @@ go test -tags integration ./test/integration/ -run TestPresenceless -v
 
 Expected: all subtests PASS.
 
-- [ ] **Step 3: Full integration sweep**
+- [x] **Step 3: Full integration sweep**
 
 Run: `make test`
 Expected: no regressions (gc, snapshot, presence, vv-cleanup).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add test/integration/presenceless_document_test.go
@@ -736,12 +736,12 @@ git commit -m "Add integration tests for presenceless document option"
 **Files:**
 - Add: `test/bench/strip_presence_changes_bench_test.go`
 
-- [ ] **Step 1: Cover the four shapes**
+- [x] **Step 1: Cover the four shapes**
 
 Build tag `bench`. Inputs of size n ∈ {1, 8, 64} for shapes
 `presence_only`, `mixed`, `ops_only`, and a size-0 input.
 
-- [ ] **Step 2: Run**
+- [x] **Step 2: Run**
 
 ```sh
 go test -tags bench ./test/bench/ -run x -bench BenchmarkStripPresenceChanges -benchmem
@@ -750,7 +750,7 @@ go test -tags bench ./test/bench/ -run x -bench BenchmarkStripPresenceChanges -b
 Expected: zero allocations across all shapes; sub-microsecond at
 n=64 for the worst shape.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```sh
 git add test/bench/strip_presence_changes_bench_test.go
@@ -761,7 +761,7 @@ git commit -m "Benchmark stripPresenceChanges across shapes"
 
 ## Task 13: Self-review and PR
 
-- [ ] **Step 1: Lint and unit tests**
+- [x] **Step 1: Lint and unit tests**
 
 ```sh
 make lint
