@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,5 +118,127 @@ func TestPresencelessDocument(t *testing.T) {
 			"omitting the option should leave DocInfo on the default false")
 		assert.NotEmpty(t, d1.AllPresences(),
 			"default-path doc should still accumulate presence")
+	})
+
+	t.Run("force-exit clients do not leak into a late attacher's response", func(t *testing.T) {
+		// Regression for the original symptom that motivated this option:
+		// dozens of thousands of clients attach to a Counter-only document
+		// and never call Detach (mobile background, iOS Safari, network
+		// drop). Without the option the document's presence map grows
+		// without bound, inflating the AttachDocument response for every
+		// subsequent client. With the option on, the presence map must
+		// stay empty no matter how many earlier clients walked away.
+		const N = 5
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		// Spawn N "force-exit" clients: each attaches with the option,
+		// sets a presence entry, syncs, and then is dropped without ever
+		// calling Detach or Deactivate. The server-side strip is the only
+		// thing keeping their entries out of the document.
+		forceClients := activeClients(t, N)
+		// NOTE: intentionally not calling deactivateAndCloseClients on
+		// forceClients — the test models clients that disappeared
+		// ungracefully. We do close the connections at the end so the
+		// goroutines exit cleanly, but no Deactivate.
+		defer func() {
+			for _, c := range forceClients {
+				assert.NoError(t, c.Close())
+			}
+		}()
+
+		for i, c := range forceClients {
+			d := document.New(docKey)
+			assert.NoError(t, c.Attach(ctx, d, client.WithDisablePresence()))
+			actor := i // capture
+			assert.NoError(t, d.Update(func(_ *json.Object, p *presence.Presence) error {
+				p.Set("idx", strconv.Itoa(actor))
+				return nil
+			}))
+			assert.NoError(t, c.Sync(ctx))
+		}
+
+		// A fresh client now attaches without opting out. Even though the
+		// previous N clients all wrote presence and none of them cleaned
+		// up, the late attacher's view must carry no foreign presence.
+		measureClient := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, measureClient)
+		dm := document.New(docKey)
+		assert.NoError(t, measureClient[0].Attach(ctx, dm))
+
+		// Filter out the measure client's own actor — if any presence
+		// remains it must only be its own self-entry, never one of the
+		// force-exited writers.
+		for actorID := range dm.AllPresences() {
+			assert.Equal(t, measureClient[0].ID().String(), actorID,
+				"presenceless doc must surface no foreign presence even when prior clients force-exited")
+		}
+	})
+
+	t.Run("force-exit clients do not leak when the late attacher pulls a snapshot", func(t *testing.T) {
+		// Same regression as above but driven across the snapshot
+		// threshold (helper.SnapshotThreshold = 10) so the measuring
+		// client's attach response goes through pullSnapshot rather than
+		// pullChanges. This exercises both the entry-side strip and the
+		// snapshot-time ResetPresences/empty-map serialization at once.
+		const N = 5
+		const updatesPerClient = 3 // 5 × 3 = 15 > SnapshotThreshold(10)
+
+		ctx := context.Background()
+		docKey := helper.TestKey(t)
+
+		forceClients := activeClients(t, N)
+		defer func() {
+			for _, c := range forceClients {
+				assert.NoError(t, c.Close())
+			}
+		}()
+
+		// Each Update touches the root (Counter increment) and presence —
+		// the same shape the symptom workload uses. After strip the
+		// operation half remains, so server_seq grows; if we set presence
+		// alone the entry-side strip would drop the whole change and
+		// server_seq would stay at zero, never crossing the snapshot
+		// threshold.
+		for i, c := range forceClients {
+			d := document.New(docKey)
+			assert.NoError(t, c.Attach(ctx, d, client.WithDisablePresence()))
+			actor := i // capture
+			for round := range updatesPerClient {
+				r := round // capture
+				assert.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
+					if root.Get("counter") == nil {
+						root.SetNewCounter("counter", int64(0))
+					}
+					root.GetCounter("counter").Increase(1)
+					p.Set("idx", strconv.Itoa(actor))
+					p.Set("round", strconv.Itoa(r))
+					return nil
+				}))
+				assert.NoError(t, c.Sync(ctx))
+			}
+			// intentional: no detach / deactivate
+		}
+
+		// Sanity-check the threshold was actually crossed so the late
+		// attacher really pulls a snapshot — otherwise the test is the
+		// same as the previous (changes-path) case.
+		project, err := defaultServer.DefaultProject(ctx)
+		assert.NoError(t, err)
+		docInfo, err := defaultServer.Backend().DB.FindDocInfoByKey(ctx, project.ID, docKey)
+		assert.NoError(t, err)
+		assert.Greater(t, docInfo.ServerSeq, helper.SnapshotThreshold,
+			"prerequisite: server_seq must exceed SnapshotThreshold so the late attach hits pullSnapshot")
+
+		measureClient := activeClients(t, 1)
+		defer deactivateAndCloseClients(t, measureClient)
+		dm := document.New(docKey)
+		assert.NoError(t, measureClient[0].Attach(ctx, dm))
+
+		for actorID := range dm.AllPresences() {
+			assert.Equal(t, measureClient[0].ID().String(), actorID,
+				"presenceless doc must surface no foreign presence even after the snapshot path")
+		}
 	})
 }
