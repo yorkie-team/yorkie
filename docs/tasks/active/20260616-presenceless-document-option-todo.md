@@ -775,7 +775,7 @@ Dispatch `superpowers:requesting-code-review` (or `/code-review`)
 over the full branch diff. Apply Critical/Important findings;
 capture non-blocking notes in the lessons file.
 
-- [ ] **Step 3: Rebase on main and open PR**
+- [x] **Step 3: Rebase on main and open PR** — yorkie-team/yorkie#1841
 
 ```sh
 git fetch && git rebase origin/main
