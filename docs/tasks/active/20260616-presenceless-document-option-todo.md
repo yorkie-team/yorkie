@@ -8,13 +8,14 @@
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a Document-scope option `disable_presence` so a document
-can declare it never accepts or stores presence. Driven by a high
-fan-out counter workload (insurance `/car` Counter document) where
-presence accumulates monotonically on the server (~28K stale actors,
-~170KB response payload) because clients reach end-of-life without
-sending `detach`. Once a document is created with the flag, the server
-strips presence on every PushPull regardless of which client attached,
-so other-client `presence.put/clear` cannot pollute the document map.
+can declare it never accepts or stores presence. Driven by high
+fan-out Counter-only documents where presence accumulates monotonically
+on the server because clients reach end-of-life without sending
+`detach` — observed in real workloads with tens of thousands of stale
+actors and attach responses inflated to hundreds of kilobytes. Once a
+document is created with the flag, the server strips presence on every
+PushPull regardless of which client attached, so other-client
+`presence.put/clear` cannot pollute the document map.
 
 **Architecture (as designed):** The flag is declared at first attach
 through `AttachDocumentRequest.disable_presence`, persisted on
@@ -51,15 +52,14 @@ end-to-end test.
 
 ### Symptom
 
-`insurance-web.car.intro.YYYY-MM-DD` is a Counter-only document
-(SyncMode Manual, `disableGC=true`). The page increments a `pv`
-counter once on mount and never uses presence functionally, yet the
-JS SDK still emits an empty PUT presence change at attach. Combined
-with users leaving the page without sending `detach` (mobile
-background, iOS Safari, network drop), the document's presence map
-grows monotonically.
+A daily-rotated, Counter-only document (`SyncMode.Manual`,
+`disableGC=true`) increments a `pv` counter once on mount and never
+uses presence functionally, yet the JS SDK still emits an empty PUT
+presence change at attach. Combined with users leaving the page
+without sending `detach` (mobile background, iOS Safari, network
+drop), the document's presence map grows monotonically.
 
-prod measurement (2026-06-12 ~ 06-15):
+Representative measurement (two snapshots ~2.5 hours apart):
 
 | server_seq | root.bytes | presences.entries | presences.bytes |
 |---|---|---|---|
@@ -88,13 +88,12 @@ document key with it set. Existing documents stay on the default
 
 ### Compared to candidate alternatives
 
-A separate evaluation (devops repo
-`docs/tasks/active/20260612-insurance-car-presence-leak-todo.md`)
-compared four candidates: (1) per-client opt-out, (2) project-scoped
-setting, (3) JS SDK pagehide detach hardening, (4) this proposal.
-Candidate 2 was QA-verified on a sibling branch. Candidate 4 is
-chosen as the structural option closest to how the user already
-declares document properties (`disableGC`) while keeping the
+A separate evaluation compared four candidates: (1) per-client
+opt-out, (2) project-scoped setting, (3) JS SDK pagehide detach
+hardening, (4) this proposal. Candidate 2 was QA-verified on a
+sibling branch. Candidate 4 is chosen as the structural option
+closest to how the user already declares document properties
+(`disableGC`) while keeping the
 enforcement document-scoped so a single misconfigured client cannot
 break the guarantee.
 
@@ -796,9 +795,10 @@ gh pr create --title "Add disable_presence Document option" \
   attach response.
 
 ## Background
-High fan-out Counter-only document (insurance `/car`) accumulates
-~28K stale presence entries because clients reach end-of-life
-without `detach`, inflating attach responses to ~170KB. See
+A high fan-out, Counter-only document accumulates stale presence
+entries on the order of tens of thousands when clients reach
+end-of-life without `detach`, inflating attach responses to hundreds
+of kilobytes. See
 `docs/tasks/active/20260616-presenceless-document-option-todo.md`
 for the full measurement trail and alternatives considered.
 
@@ -848,7 +848,6 @@ bash scripts/tasks-index.sh
 ## Remaining
 
 - [ ] All Task 1–14 steps above
-- [ ] yorkie-js-sdk follow-up PR (separate task doc, agent in flight)
-- [ ] Insurance FE adoption (devops repo, separate task)
+- [ ] yorkie-js-sdk follow-up PR (separate task doc)
 - [ ] Future: admin RPC to toggle the flag after creation (deferred;
       out of scope here)

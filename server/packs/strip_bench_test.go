@@ -28,9 +28,10 @@ import (
 )
 
 // BenchmarkStripPresenceChanges pins the allocation profile of the
-// PushPull entry-side strip across the four input shapes the helper sees
-// in production: presence-only (the worst-case for the insurance /car
-// counter document), mixed, ops-only, and empty.
+// PushPull entry-side strip across the four input shapes the helper
+// receives in practice: presence-only (the worst case for a
+// high-fan-out, presence-free Counter document), mixed, ops-only, and
+// empty.
 func BenchmarkStripPresenceChanges(b *testing.B) {
 	id := change.NewID(0, 0, 0, time.InitialActorID, time.NewVersionVector())
 	pc := func() *inner.Change {
