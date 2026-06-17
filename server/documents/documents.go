@@ -480,8 +480,9 @@ func UpdateDocument(
 			docInfo.RefKey(),
 			doc.CreateChangePack(),
 			packs.PushPullOptions{
-				Mode:   types.SyncModePushOnly,
-				Status: document.StatusAttached,
+				Mode:            types.SyncModePushOnly,
+				Status:          document.StatusAttached,
+				DisablePresence: docInfo.DisablePresence,
 			}); err != nil {
 			return nil, err
 		}

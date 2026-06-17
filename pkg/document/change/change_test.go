@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package change_test provides tests for the change package.
 package change_test
 
 import (

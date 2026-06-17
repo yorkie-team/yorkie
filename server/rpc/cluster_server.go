@@ -119,9 +119,15 @@ func (s *clusterServer) DetachDocument(
 		}
 	}
 
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushOnly,
-		Status: status,
+		Mode:            types.SyncModePushOnly,
+		Status:          status,
+		DisablePresence: docInfo.DisablePresence,
 	}); err != nil {
 		return nil, err
 	}

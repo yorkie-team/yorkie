@@ -1225,10 +1225,19 @@ func (s *yorkieServer) DetachDocument(
 		}
 	}
 
-	// 03. Push/Pull between the client and server.
+	// 03. Read the document's disable_presence so PushPull can enforce it on
+	// the detach path as well. FindDocInfoByRefKey hits the LRU cache for
+	// warm docs.
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// 04. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushPull,
-		Status: status,
+		Mode:            types.SyncModePushPull,
+		Status:          status,
+		DisablePresence: docInfo.DisablePresence,
 	})
 	if err != nil {
 		return nil, err
@@ -1371,10 +1380,18 @@ func (s *yorkieServer) RemoveDocument(
 		defer locker.Unlock()
 	}
 
-	// 02. Push/Pull between the client and server.
+	// 02. Read the document's disable_presence so PushPull can enforce it on
+	// the remove path as well.
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// 03. Push/Pull between the client and server.
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docKey, pack, packs.PushPullOptions{
-		Mode:   types.SyncModePushPull,
-		Status: document.StatusRemoved,
+		Mode:            types.SyncModePushPull,
+		Status:          document.StatusRemoved,
+		DisablePresence: docInfo.DisablePresence,
 	})
 	if err != nil {
 		return nil, err
