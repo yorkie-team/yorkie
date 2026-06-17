@@ -142,6 +142,12 @@ type AttachOptions struct {
 	// VersionVector for this client. Use only with Counter / primitive
 	// workloads; misuse leads to undefined GC behavior on this client.
 	DisableGC bool
+
+	// DisablePresence declares that this document does not produce,
+	// consume, or store presence. Honored on first attach only; later
+	// attachers observe the server-fixated value carried in the attach
+	// response. See docs/tasks/active/20260616-presenceless-document-option-todo.md.
+	DisablePresence bool
 }
 
 // WithRealtimeSync configures the manual sync of the client.
@@ -179,6 +185,15 @@ func WithSchema(schema string) AttachOption {
 // the document's local GC pass regardless of what the server sends.
 func WithDisableGC() AttachOption {
 	return func(o *AttachOptions) { o.DisableGC = true }
+}
+
+// WithDisablePresence declares that this document does not produce, consume,
+// or store presence. The server fixates the flag on first attach (via
+// $setOnInsert on DocInfo) and returns the persisted value in the attach
+// response; clients gate on the response value rather than the requested
+// one so a single misconfigured client cannot break the guarantee.
+func WithDisablePresence() AttachOption {
+	return func(o *AttachOptions) { o.DisablePresence = true }
 }
 
 // AttachChannelOption configures AttachChannelOptions.

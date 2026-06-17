@@ -130,6 +130,23 @@ func (c *Context) SetPresenceChange(presenceChange inner.Change) {
 	c.presenceChange = &presenceChange
 }
 
+// HasPresenceChange reports whether this context carries a presence change.
+func (c *Context) HasPresenceChange() bool {
+	return c.presenceChange != nil
+}
+
+// DropPresenceChange clears any presence change accumulated on this context.
+// The client uses this on documents attached with disable_presence so the
+// emitted Change carries operations only.
+func (c *Context) DropPresenceChange() {
+	c.presenceChange = nil
+}
+
+// HasOperations reports whether this context has at least one operation.
+func (c *Context) HasOperations() bool {
+	return len(c.operations) > 0
+}
+
 // GCElementPairMap returns the gcElementPairMap for testing purposes.
 func (c *Context) GCElementPairMap() map[string]crdt.ElementPair {
 	return c.root.GCElementPairMap()

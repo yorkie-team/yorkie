@@ -1587,7 +1587,7 @@ func RunDeactivateClientWithAttachingDocumentTest(
 	}
 
 	docKey := helper.TestKey(t)
-	docInfo, err := be.DB.FindOrCreateDocInfo(ctx, refKey, docKey)
+	docInfo, err := be.DB.FindOrCreateDocInfo(ctx, refKey, docKey, false)
 	assert.NoError(t, err)
 
 	_, err = be.DB.TryAttaching(ctx, refKey, docInfo.ID)

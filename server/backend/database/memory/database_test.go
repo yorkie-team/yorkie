@@ -333,7 +333,7 @@ func TestCountAliveDocuments(t *testing.T) {
 	var docs []*database.DocInfo
 	for i := 0; i < 2; i++ {
 		docKey := key.Key(fmt.Sprintf("tests$%s-d%d", t.Name(), i))
-		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+		docInfo, err := db.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(t, err)
 		docs = append(docs, docInfo)
 	}

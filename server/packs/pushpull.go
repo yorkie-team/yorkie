@@ -68,6 +68,12 @@ type PushPullOptions struct {
 	// RPC handler from the matching wire field. See
 	// docs/design/disable-gc-on-attach.md.
 	DisableGC bool
+
+	// DisablePresence forwards the document-scope opt-out persisted on
+	// DocInfo. When true, the PushPull pipeline strips presence on both
+	// the write and read paths so the response carries an empty presence
+	// map regardless of what any client sends.
+	DisablePresence bool
 }
 
 var (
@@ -94,6 +100,13 @@ func PushPull(
 ) (*ServerPack, error) {
 	start := gotime.Now()
 	hostname := be.Config.Hostname
+
+	// 00. Strip presence on the way in when the document opted out. Doing
+	// this before pushPack means no presence-only change ever reaches the
+	// changes collection, regardless of which SDK version sent it.
+	if opts.DisablePresence {
+		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
+	}
 
 	// 01. push the change pack to the database.
 	pushedChanges, docInfo, initialSeq, cpAfterPush, err := pushPack(ctx, be, clientInfo, docKey, reqPack)
@@ -280,7 +293,7 @@ func pullPack(
 ) (*ServerPack, error) {
 	// 01. pull changes or a snapshot from the database and create a response pack.
 	resPack, err := preparePack(ctx, be, clientInfo, snapshotThreshold,
-		docInfo, reqPack, cpAfterPush, initialSeq, opts.Mode)
+		docInfo, reqPack, cpAfterPush, initialSeq, opts)
 
 	if err != nil {
 		// NOTE(hackerwins): When a client detaches after a compaction, the epoch
@@ -361,11 +374,11 @@ func preparePack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
-	mode types.SyncMode,
+	opts PushPullOptions,
 ) (*ServerPack, error) {
 	// NOTE(hackerwins): If the client is push-only, it does not need to pull changes.
 	// So, just return the checkpoint with server seq after pushing changes.
-	if mode == types.SyncModePushOnly {
+	if opts.Mode == types.SyncModePushOnly {
 		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
@@ -413,7 +426,7 @@ func preparePack(
 
 	// NOTE(hackerwins): If the size of changes for the response is greater than the snapshot threshold,
 	// we pull the snapshot from DB to reduce the size of the response.
-	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
+	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts)
 }
 
 // pullSnapshot pulls the snapshot from DB.
@@ -425,6 +438,7 @@ func pullSnapshot(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
+	opts PushPullOptions,
 ) (*ServerPack, error) {
 	doc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
@@ -457,7 +471,17 @@ func pullSnapshot(
 		}
 	}
 
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	// Belt-and-suspenders for presenceless documents: clear the in-memory
+	// presence map so any downstream branch sees no cached entries, and
+	// pass a nil presence map into SnapshotToBytes so the wire bytes carry
+	// an empty map regardless of what the doc has accumulated.
+	presences := doc.AllPresences()
+	if opts.DisablePresence {
+		doc.ResetPresences()
+		presences = nil
+	}
+
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), presences)
 	if err != nil {
 		return nil, err
 	}
@@ -507,6 +531,19 @@ func pullChangeInfos(
 		if clientInfo.ID == pulledChange.ActorID && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
 			continue
 		}
+
+		// Defensive: drop any stray presence from cached or older rows on
+		// the way to the wire. Strip on a clone so the cache's shared
+		// pointer stays untouched, and drop the change entirely if the
+		// strip leaves it carrying no operations.
+		if docInfo.DisablePresence && pulledChange.PresenceChange != nil {
+			pulledChange = pulledChange.DeepCopy()
+			pulledChange.PresenceChange = nil
+			if !pulledChange.HasOperations() {
+				continue
+			}
+		}
+
 		filteredChanges = append(filteredChanges, pulledChange)
 	}
 

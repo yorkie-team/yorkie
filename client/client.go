@@ -472,12 +472,16 @@ func (c *Client) Detach(ctx context.Context, r attachable.Attachable, opts ...in
 // attachDocument attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
 func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts *AttachOptions) error {
-	// 01. Initialize presence data
-	if err := d.Update(func(r *json.Object, p *document.Presence) error {
-		p.Initialize(opts.Presence)
-		return nil
-	}); err != nil {
-		return err
+	// 01. Initialize presence data. Skip when the caller declared the
+	// document presenceless so we never produce an initial PUT change for
+	// a doc that will reject presence on the wire anyway.
+	if !opts.DisablePresence {
+		if err := d.Update(func(r *json.Object, p *document.Presence) error {
+			p.Initialize(opts.Presence)
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 	pbChangePack, err := converter.ToChangePack(d.CreateChangePack())
 	if err != nil {
@@ -488,10 +492,11 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 	res, err := c.client.AttachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId:   c.id.String(),
-			ChangePack: pbChangePack,
-			SchemaKey:  opts.Schema,
-			DisableGc:  opts.DisableGC,
+			ClientId:        c.id.String(),
+			ChangePack:      pbChangePack,
+			SchemaKey:       opts.Schema,
+			DisableGc:       opts.DisableGC,
+			DisablePresence: opts.DisablePresence,
 		}), c.options.APIKey, d.Key().String()),
 	)
 	if err != nil {
@@ -509,10 +514,23 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		d.SchemaRules = converter.FromRules(res.Msg.SchemaRules)
 	}
 
-	// Record the opt-out decision before applying the attach response so the
+	// Record the opt-out decisions before applying the attach response so the
 	// first ApplyChangePack already routes remote changes through the
-	// lamport-only sync path. See docs/design/disable-gc-on-attach.md.
+	// lamport-only sync path (DisableGC) and so Update silently drops
+	// presence (DisablePresence). The DisablePresence value is taken from
+	// the server-fixated response — a late attacher to a presenceless doc
+	// observes the persisted true even without WithDisablePresence locally.
 	d.SetDisableGC(opts.DisableGC)
+	d.SetDisablePresence(res.Msg.DisablePresence)
+
+	// If the server reported the doc as presenceless but the local client
+	// did not opt in (so Step 01 produced an initial empty PUT), reset the
+	// local presence map. The wire-side PUT was stripped by the server and
+	// never crosses the boundary, but the local InternalDocument still
+	// carries the cloned entry until we clear it here.
+	if res.Msg.DisablePresence && !opts.DisablePresence {
+		d.InternalDocument().ResetPresences()
+	}
 
 	if err := d.ApplyChangePack(pack); err != nil {
 		return err
@@ -547,6 +565,7 @@ func (c *Client) attachDocument(ctx context.Context, d *document.Document, opts 
 		syncMode:            syncMode,
 		changeEventReceived: false,
 		disableGC:           opts.DisableGC,
+		disablePresence:     res.Msg.DisablePresence,
 	})
 	if opts.IsRealtime {
 		if err = c.runWatchLoop(watchCtx, d); err != nil {

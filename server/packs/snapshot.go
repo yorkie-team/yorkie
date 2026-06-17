@@ -239,6 +239,15 @@ func storeSnapshot(
 		return err
 	}
 
+	// 04b. Drop presence before persisting when the document opted out.
+	// Defensive against snapshot rows written before the flag existed: the
+	// ApplyChangePack above can rehydrate cached presence onto the in-memory
+	// doc, so reset right before CreateSnapshotInfo to keep the new
+	// snapshots row clean.
+	if docInfo.DisablePresence {
+		doc.ResetPresences()
+	}
+
 	// 05. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(
 		ctx,

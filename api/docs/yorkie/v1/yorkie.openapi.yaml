@@ -130,6 +130,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.YorkieService
+  /yorkie.v1.YorkieService/PeekChannel:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.YorkieService.PeekChannel.yorkie.v1.PeekChannelRequest'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.YorkieService.PeekChannel.yorkie.v1.PeekChannelResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.YorkieService
   /yorkie.v1.YorkieService/PushPullChanges:
     post:
       description: ""
@@ -306,6 +318,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListRevisionsRequest'
       required: true
+    yorkie.v1.YorkieService.PeekChannel.yorkie.v1.PeekChannelRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.PeekChannelRequest'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.PeekChannelRequest'
+      required: true
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesRequest:
       content:
         application/json:
@@ -450,6 +471,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.ListRevisionsResponse'
+      description: ""
+    yorkie.v1.YorkieService.PeekChannel.yorkie.v1.PeekChannelResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.PeekChannelResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.PeekChannelResponse'
       description: ""
     yorkie.v1.YorkieService.PushPullChanges.yorkie.v1.PushPullChangesResponse:
       content:
@@ -708,6 +738,24 @@ components:
           description: ""
           title: client_id
           type: string
+        disableGc:
+          additionalProperties: false
+          description: |-
+            disable_gc declares that this attachment will not produce or consume
+             tombstones. The server skips minVV tracking and omits the response
+             VersionVector for this client. Use only with Counter / primitive
+             workloads; misuse leads to undefined GC behavior on this client.
+          title: disable_gc
+          type: boolean
+        disablePresence:
+          additionalProperties: false
+          description: |-
+            disable_presence declares that this document does not produce, consume,
+             or store presence. Honored on first attach only; subsequent attaches
+             observe the value persisted in the server-side document metadata. See
+             docs/tasks/active/20260616-presenceless-document-option-todo.md.
+          title: disable_presence
+          type: boolean
         schemaKey:
           additionalProperties: false
           description: ""
@@ -725,6 +773,16 @@ components:
           description: ""
           title: change_pack
           type: object
+        disablePresence:
+          additionalProperties: false
+          description: |-
+            disable_presence carries the server-fixated value of the document's
+             presence option (see AttachDocumentRequest.disable_presence). Clients
+             align their local gating state to this value rather than the requested
+             value, so an attach to an already-fixated document observes the
+             persisted decision.
+          title: disable_presence
+          type: boolean
         documentId:
           additionalProperties: false
           description: ""
@@ -1924,6 +1982,34 @@ components:
           type: object
       title: CreatedAtMapByActorEntry
       type: object
+    yorkie.v1.PeekChannelRequest:
+      additionalProperties: false
+      description: |-
+        PeekChannel reads the current session_count of a channel without creating
+         a session on the server. Use this when a client only needs to display the
+         count (e.g. "N people writing") without contributing to it and without
+         receiving broadcasts. Caller polls on its own cadence.
+      properties:
+        channelKey:
+          additionalProperties: false
+          description: ""
+          title: channel_key
+          type: string
+      title: PeekChannelRequest
+      type: object
+    yorkie.v1.PeekChannelResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        sessionCount:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: session_count
+      title: PeekChannelResponse
+      type: object
     yorkie.v1.Presence:
       additionalProperties: false
       description: ""
@@ -1996,6 +2082,16 @@ components:
           description: ""
           title: client_id
           type: string
+        disableGc:
+          additionalProperties: false
+          description: |-
+            disable_gc declares that this PushPull will not produce or consume
+             tombstones. The server skips minVV tracking and omits the response
+             VersionVector. Clients that attached with disable_gc=true must keep
+             setting this on every subsequent PushPullChanges. See
+             docs/design/disable-gc-on-attach.md.
+          title: disable_gc
+          type: boolean
         documentId:
           additionalProperties: false
           description: ""

@@ -188,8 +188,9 @@ func Restore(
 		docKey,
 		doc.CreateChangePack(),
 		packs.PushPullOptions{
-			Mode:   types.SyncModePushOnly,
-			Status: document.StatusAttached,
+			Mode:            types.SyncModePushOnly,
+			Status:          document.StatusAttached,
+			DisablePresence: docInfo.DisablePresence,
 		},
 	); err != nil {
 		return fmt.Errorf("push pull: %w", err)

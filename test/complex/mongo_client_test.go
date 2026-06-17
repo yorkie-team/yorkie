@@ -147,7 +147,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		docInfo1, err := cli.FindOrCreateDocInfo(ctx, types.ClientRefKey{
 			ProjectID: projectID1,
 			ClientID:  dummyClientID,
-		}, docKey1)
+		}, docKey1, false)
 		assert.NoError(t, err)
 
 		// 02. Create an extra document with duplicate ID.

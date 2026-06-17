@@ -91,7 +91,7 @@ func setUpClientsAndDocs(
 	for i := range n {
 		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i), map[string]string{"userID": fmt.Sprintf("user-%d", i)})
 		assert.NoError(b, err)
-		docInfo, err := be.DB.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey)
+		docInfo, err := be.DB.FindOrCreateDocInfo(ctx, clientInfo.RefKey(), docKey, false)
 		assert.NoError(b, err)
 		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID, false, docInfo.Epoch))
 		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
