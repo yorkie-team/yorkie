@@ -1,5 +1,5 @@
 ---
-updated: 2026-06-01
+updated: 2026-06-18
 ---
 
 # Tasks Archive
@@ -8,7 +8,14 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 16
+Total archived tasks: 18
+
+## 2026/06 (2 tasks)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| Presenceless Document Option (2026-06-16) | [20260616-presenceless-document-option-todo.md](./2026/06/20260616-presenceless-document-option-todo.md) | - |
+| Self-Prune Stale Document Subscriptions (2026-06-09) | [20260609-subscription-self-prune-todo.md](./2026/06/20260609-subscription-self-prune-todo.md) | - |
 
 ## 2026/05 (6 tasks)
 
