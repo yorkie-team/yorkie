@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.12] - 2026-06-18
+
+### Added
+
+- Add disable_presence Document option for presence-free docs by @raararaara in https://github.com/yorkie-team/yorkie/pull/1841
+
+### Fixed
+
+- Self-prune leaked Subscription via consecutive Publish failures by @raararaara in https://github.com/yorkie-team/yorkie/pull/1833
+
 ## [v0.7.11] - 2026-06-01
 
 ### Added
