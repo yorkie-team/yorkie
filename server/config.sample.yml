@@ -59,6 +59,11 @@ Housekeeping:
   # CandidatesLimit is the maximum number of candidates to be returned in a single query (default: 500).
   CandidatesLimit: 500
 
+  # DeactivateConcurrency is the max number of concurrent per-candidate
+  # Deactivate calls within a single housekeeping cycle (default: 16).
+  # Set to 0 or 1 to fall back to sequential execution.
+  DeactivateConcurrency: 16
+
   # CompactionMinChanges is minimum number of changes to compact a document. (default: 1000).
   CompactionMinChanges: 1000
 

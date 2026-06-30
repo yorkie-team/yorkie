@@ -224,6 +224,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimit,
+			be.Housekeeping.Config.DeactivateConcurrency,
 			currentLastID,
 		)
 		if err != nil {
