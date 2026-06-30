@@ -19,6 +19,7 @@ package clients
 
 import (
 	"context"
+	goerrors "errors"
 	"fmt"
 	"time"
 
@@ -186,6 +187,45 @@ func FindActiveClientInfo(
 ) (*database.ClientInfo, error) {
 	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey, skipCache...)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := info.EnsureActivated(); err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+// VerifyChannelActor verifies that the given actor is allowed to call a
+// channel RPC. Three outcomes:
+//
+//   - mongo row exists AND activated: ok, returns (info, nil)
+//   - mongo row exists AND deactivated: rejected, returns the
+//     ErrClientNotActivated wrapped error
+//   - mongo row does NOT exist: treated as an ephemeral channel-only
+//     actor (allocated by firstChannelRefresh without writing to mongo),
+//     returns (nil, nil)
+//
+// This is the validation entry point for channel-only RPCs (AttachChannel,
+// DetachChannel, Watch on channel resources, WatchChannel, Broadcast).
+// Doc-attached RPCs continue to use FindActiveClientInfo, which still
+// rejects "not found" cases — doc attachment requires an activated client
+// row in mongo (created via the explicit ActivateClient RPC).
+//
+// Security note: the integrity check that a real activated client exists
+// is no longer load-bearing for channel-only actors. The auth.VerifyAccess
+// project-level token check remains the security boundary for these RPCs.
+func VerifyChannelActor(
+	ctx context.Context,
+	be *backend.Backend,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	info, err := be.DB.FindClientInfoByRefKey(ctx, refKey, true)
+	if err != nil {
+		if goerrors.Is(err, database.ErrClientNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 

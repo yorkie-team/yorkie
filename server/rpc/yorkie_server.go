@@ -324,11 +324,12 @@ func (s *yorkieServer) AttachChannel(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	// Tolerate ephemeral actor IDs: a channel-only first-refresh allocates
+	// the actor without writing to mongo. See clients.VerifyChannelActor.
+	if _, err = clients.VerifyChannelActor(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -376,11 +377,11 @@ func (s *yorkieServer) DetachChannel(
 	}
 
 	project := projects.From(ctx)
-	_, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	// Tolerate ephemeral actor IDs (channel-only flow).
+	if _, err = clients.VerifyChannelActor(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 
@@ -418,9 +419,21 @@ func (s *yorkieServer) RefreshChannel(
 }
 
 // firstChannelRefresh handles the first RefreshChannel call from a client.
-// It activates the client (if needed), attaches it to the channel, and
-// refreshes the TTL — returning the freshly allocated client_id and
-// session_id so the client can include them in subsequent heartbeats.
+// It allocates an ephemeral actor ID for the channel session and attaches
+// it to the channel — without writing a `clients` row to MongoDB.
+//
+// Rationale: channel-only callers (e.g., presence-only consumers) only
+// need an actor identifier for the in-memory channel session map. A
+// MongoDB `clients` row would be created here, sit idle for the project's
+// `ClientDeactivateThreshold` (default 24h), then be reaped by
+// housekeeping. With inflow at hundreds per second this dominates the
+// housekeeping backlog. Skipping the insert here keeps channel sessions
+// purely in-memory; doc-attached clients still go through the explicit
+// `ActivateClient` RPC path and continue to materialize a `clients` row.
+//
+// Kafka events are still emitted with the ephemeral actor ID so the
+// warehouse-based ActiveClients / Users metrics continue to record
+// channel-only activations.
 func (s *yorkieServer) firstChannelRefresh(
 	ctx context.Context,
 	req *connect.Request[api.RefreshChannelRequest],
@@ -443,7 +456,10 @@ func (s *yorkieServer) firstChannelRefresh(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend, project, req.Msg.ClientKey, req.Msg.Metadata)
+
+	// Allocate an ephemeral actor ID locally — no MongoDB write.
+	clientID := types.NewID()
+	actorID, err := clientID.ToActorID()
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +468,7 @@ func (s *yorkieServer) firstChannelRefresh(
 		ctx,
 		messaging.ClientEventMessage{
 			ProjectID: project.ID.String(),
-			ClientID:  cli.ID.String(),
+			ClientID:  clientID.String(),
 			Timestamp: gotime.Now(),
 			EventType: events.ClientActivatedEvent,
 		},
@@ -475,11 +491,6 @@ func (s *yorkieServer) firstChannelRefresh(
 		}
 	}
 
-	actorID, err := cli.ID.ToActorID()
-	if err != nil {
-		return nil, err
-	}
-
 	refKey := types.ChannelRefKey{
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
@@ -491,7 +502,7 @@ func (s *yorkieServer) firstChannelRefresh(
 
 	return connect.NewResponse(&api.RefreshChannelResponse{
 		SessionCount: sessionCount,
-		ClientId:     cli.ID.String(),
+		ClientId:     clientID.String(),
 		SessionId:    sessionID.String(),
 	}), nil
 }
@@ -572,7 +583,10 @@ func (s *yorkieServer) Watch(
 	}
 
 	project := projects.From(ctx)
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	// Watch may include either doc resources, channel resources, or both.
+	// Tolerate ephemeral actor IDs here (channel-only callers); doc resource
+	// subscriptions are gated separately by their own permission checks.
+	if _, err = clients.VerifyChannelActor(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
@@ -1006,7 +1020,8 @@ func (s *yorkieServer) WatchChannel(
 	}
 
 	project := projects.From(ctx)
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	// Tolerate ephemeral actor IDs (channel-only flow).
+	if _, err = clients.VerifyChannelActor(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
@@ -1135,8 +1150,8 @@ func (s *yorkieServer) Broadcast(
 
 	project := projects.From(ctx)
 
-	// 03. Verify active client
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
+	// 03. Tolerate ephemeral actor IDs (channel-only flow).
+	if _, err = clients.VerifyChannelActor(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	}); err != nil {
