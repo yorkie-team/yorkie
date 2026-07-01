@@ -167,6 +167,28 @@ spec:
           "--starrocks-dsn",
           "{{ .Values.yorkie.args.starrocksDSN }}",
           {{- end }}
+          {{- with .Values.yorkie.housekeeping }}
+          {{- if hasKey . "interval" }}
+          "--housekeeping-interval",
+          "{{ .interval }}",
+          {{- end }}
+          {{- if hasKey . "candidatesLimit" }}
+          "--housekeeping-candidates-limit",
+          "{{ .candidatesLimit }}",
+          {{- end }}
+          {{- if hasKey . "deactivateConcurrency" }}
+          "--housekeeping-deactivate-concurrency",
+          "{{ .deactivateConcurrency }}",
+          {{- end }}
+          {{- if hasKey . "compactionMinChanges" }}
+          "--housekeeping-compaction-min-changes",
+          "{{ .compactionMinChanges }}",
+          {{- end }}
+          {{- if hasKey . "projectStatsRefreshInterval" }}
+          "--housekeeping-project-stats-refresh-interval",
+          "{{ .projectStatsRefreshInterval }}",
+          {{- end }}
+          {{- end }}
         ]
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}

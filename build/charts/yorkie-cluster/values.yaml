@@ -30,6 +30,15 @@ yorkie:
   mongoMonitoringEnabled: false
   mongoMonitoringSlowQueryThreshold: "100ms"
 
+  # Housekeeping tunables. Leave any field empty (default) to fall back to
+  # the yorkie binary's built-in default. See --help output for each flag.
+  housekeeping:
+    # interval: "30s"
+    # candidatesLimit: 2000
+    # deactivateConcurrency: 8
+    # compactionMinChanges: 1000
+    # projectStatsRefreshInterval: "5m"
+
   resources: {}
 
 # Configuration for istio ingress gateway
