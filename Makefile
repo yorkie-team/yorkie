@@ -44,7 +44,7 @@ lint: ## runs the golang-ci lint, checks for lint violations
 
 coverage: ## runs coverage tests
 	go clean -testcache
-	go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic ./...
+	go test -tags integration -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
 	go tool cover -html=coverage.txt
 	rm -f coverage.txt
 
