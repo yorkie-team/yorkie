@@ -212,6 +212,15 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 	compactionState := &housekeepingState{lastID: database.ZeroID}
 	statsState := &housekeepingState{lastID: database.ZeroID}
 
+	// Log deactivation task config at registration so operators can grep for
+	// "HSKP: deactivation registered" and verify concurrency mode (parallel
+	// vs sequential fallback) without waiting for the first cycle.
+	deactivateConcurrency := be.Housekeeping.Config.DeactivateConcurrency
+	logging.DefaultLogger().Infof(
+		"HSKP: deactivation registered — interval=%s candidates_limit=%d concurrency=%d",
+		interval, be.Housekeeping.Config.CandidatesLimit, deactivateConcurrency,
+	)
+
 	if err = be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
 		deactivateState.Lock()
 		currentLastID := deactivateState.lastID
@@ -224,7 +233,7 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 			ctx,
 			be,
 			be.Housekeeping.Config.CandidatesLimit,
-			be.Housekeeping.Config.DeactivateConcurrency,
+			deactivateConcurrency,
 			currentLastID,
 		)
 		if err != nil {
@@ -242,13 +251,14 @@ func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
 
 		if processedCount > 0 {
 			logging.From(ctx).Infof(
-				"HSKP: deactivation #%d %s candidates %d/%d deactivated %d/%d %s",
+				"HSKP: deactivation #%d %s candidates %d/%d deactivated %d/%d cc=%d %s",
 				deactivateState.term,
 				currentLastID,
 				candidatesCount,
 				deactivateState.totalCandidates,
 				processedCount,
 				deactivateState.totalProcessed,
+				deactivateConcurrency,
 				time.Since(start),
 			)
 		}
