@@ -120,6 +120,9 @@ func dispatchDeactivate(
 	if concurrency <= 1 {
 		count := 0
 		for _, c := range candidates {
+			if ctx.Err() != nil {
+				break
+			}
 			if err := deactivate(c); err != nil {
 				logging.From(ctx).Warnf("failed to deactivate client %s: %v", c.Client.ID, err)
 				continue

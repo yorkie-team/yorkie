@@ -132,21 +132,25 @@ func TestDispatchDeactivate_ConcurrencyBoundedBySemaphore(t *testing.T) {
 }
 
 func TestDispatchDeactivate_ContextCancelStops(t *testing.T) {
-	candidates := makeCandidates(50)
-	cancelCtx, cancel := context.WithCancel(testCtx())
-	cancel()
-	ctx := cancelCtx
+	for _, concurrency := range []int{1, 4} {
+		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
+			candidates := makeCandidates(50)
+			cancelCtx, cancel := context.WithCancel(testCtx())
+			cancel()
 
-	var calls atomic.Int32
-	count := dispatchDeactivate(ctx, candidates, 4, func(_ CandidatePair) error {
-		calls.Add(1)
-		return nil
-	})
+			var calls atomic.Int32
+			count := dispatchDeactivate(cancelCtx, candidates, concurrency, func(_ CandidatePair) error {
+				calls.Add(1)
+				return nil
+			})
 
-	// On a cancelled context, the semaphore.Acquire fails for the first
-	// candidate, so dispatch breaks out before any goroutine runs.
-	assert.Equal(t, 0, count)
-	assert.Equal(t, int32(0), calls.Load())
+			// Both the sequential and parallel branches must short-circuit on
+			// a cancelled context. Sequential branch checks ctx.Err() at the
+			// loop head; parallel branch fails semaphore.Acquire immediately.
+			assert.Equal(t, 0, count)
+			assert.Equal(t, int32(0), calls.Load())
+		})
+	}
 }
 
 func TestDispatchDeactivate_NoCandidates(t *testing.T) {

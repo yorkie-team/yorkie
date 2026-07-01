@@ -236,7 +236,7 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 	if c.Housekeeping.CandidatesLimit == 0 {
 		c.Housekeeping.CandidatesLimit = DefaultHousekeepingCandidatesLimit
 	}
-	if c.Housekeeping.DeactivateConcurrency == 0 {
+	if c.Housekeeping.DeactivateConcurrency < 0 {
 		c.Housekeeping.DeactivateConcurrency = DefaultHousekeepingDeactivateConcurrency
 	}
 	if c.Housekeeping.CompactionMinChanges == 0 {
