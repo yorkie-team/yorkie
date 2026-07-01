@@ -44,8 +44,8 @@ const (
 	DefaultMembershipRenewalInterval = 5 * time.Second
 
 	DefaultHousekeepingInterval              = 30 * time.Second
-	DefaultHousekeepingCandidatesLimit       = 500
-	DefaultHousekeepingDeactivateConcurrency = 16
+	DefaultHousekeepingCandidatesLimit       = 2000
+	DefaultHousekeepingDeactivateConcurrency = 8
 	DefaultHousekeepingCompactionMinChanges  = 1000
 	DefaultProjectStatsRefreshInterval       = 5 * time.Minute
 
