@@ -28,7 +28,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	yorkiesync "github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -163,4 +165,39 @@ func TestDispatchDeactivate_NoCandidates(t *testing.T) {
 			assert.Equal(t, 0, count)
 		})
 	}
+}
+
+// TestDeactivateInactives_SkipsWhenLockHeld verifies the concurrent-cycle
+// contract: when a prior housekeeping tick is still holding the deactivation
+// lock, an overlapping tick observes the busy lock via TryLock and returns
+// immediately without touching the database. The cursor is preserved (the
+// caller-supplied lastClientID is returned unchanged) and no candidates are
+// processed.
+//
+// Distinguishing the skip path from the empty-candidates path: the skip
+// branch returns `lastClientID` (input), while the empty-candidates branch
+// returns `database.ZeroID`.
+func TestDeactivateInactives_SkipsWhenLockHeld(t *testing.T) {
+	be := &backend.Backend{
+		Lockers: yorkiesync.New(),
+	}
+	inputLastID := types.ID("aaaaaaaaaaaaaaaaaaaaaaaa")
+
+	// Simulate an in-flight prior cycle by pre-acquiring the same lock.
+	holder, acquired := be.Lockers.LockerWithTryLock(deactivationKey)
+	if !acquired {
+		t.Fatalf("expected to acquire deactivation lock initially")
+	}
+	defer holder.Unlock()
+
+	outLastID, candidatesCount, processedCount, err := DeactivateInactives(
+		testCtx(), be, 500, 8, inputLastID,
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, inputLastID, outLastID,
+		"skip path must return the input lastClientID (cursor unchanged); "+
+			"empty-candidates path would have returned database.ZeroID")
+	assert.Equal(t, 0, candidatesCount)
+	assert.Equal(t, 0, processedCount)
 }
