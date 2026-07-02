@@ -31,6 +31,11 @@ type Config struct {
 	// CandidatesLimit is the maximum number of candidates to be returned in a single query.
 	CandidatesLimit int `yaml:"CandidatesLimit"`
 
+	// DeactivateConcurrency is the maximum number of concurrent client
+	// deactivations within a single housekeeping cycle. Values <= 1 fall
+	// back to sequential execution (legacy behavior).
+	DeactivateConcurrency int `yaml:"DeactivateConcurrency"`
+
 	// CompactionMinChanges is the minimum number of changes to compact a document.
 	CompactionMinChanges int `yaml:"CompactionMinChanges"`
 
@@ -53,6 +58,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-candidates-limit" flag`,
 			c.CandidatesLimit,
+		)
+	}
+
+	if c.DeactivateConcurrency < 0 {
+		return fmt.Errorf(
+			`invalid argument %d for "--housekeeping-deactivate-concurrency" flag: must be >= 0`,
+			c.DeactivateConcurrency,
 		)
 	}
 
