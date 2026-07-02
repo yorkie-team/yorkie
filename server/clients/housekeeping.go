@@ -91,14 +91,27 @@ func DeactivateInactives(
 // real backend. Splits sequential vs parallel by `concurrency` and delegates
 // the actual dispatch / counting to dispatchDeactivate so the scheduling
 // logic stays unit-testable independent of the backend.
+//
+// In-flight Deactivate() calls run on a workCtx detached from the parent
+// via context.WithoutCancel. Parent ctx cancellation (typically a shutdown
+// signal) still stops dispatching new candidates (sem.Acquire fails fast
+// in dispatchDeactivate), but already-launched per-candidate operations
+// finish through DetachDocument + DeactivateClient instead of aborting
+// mid-flight and leaving the client in a partial state
+// (some docs detached, client still activated) that would only be
+// reconsidered a full ClientDeactivateThreshold later.
+// The Kubernetes pod terminationGracePeriodSeconds (default 30s) bounds
+// how long wg.Wait can block during shutdown; per-candidate cluster RPC
+// calls are separately bounded by the cluster rpcTimeout.
 func deactivateCandidates(
 	ctx context.Context,
 	be *backend.Backend,
 	candidates []CandidatePair,
 	concurrency int,
 ) int {
+	workCtx := context.WithoutCancel(ctx)
 	return dispatchDeactivate(ctx, candidates, concurrency, func(c CandidatePair) error {
-		_, err := Deactivate(ctx, be, c.Project, c.Client.RefKey())
+		_, err := Deactivate(workCtx, be, c.Project, c.Client.RefKey())
 		return err
 	})
 }
