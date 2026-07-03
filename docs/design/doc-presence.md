@@ -527,3 +527,121 @@ Both orderings produce the same result through the same code path.
 | Existing tests depend on current (buggy) event timing | Update tests to expect correct behavior — old timing was a bug |
 | Edge cases missed in reconcile | State space is small (2 bits × 2 bits = 16 transitions) — exhaustive verification possible |
 | Behavioral difference between JS and Go SDK during rollout | JS SDK ships first as reference implementation; Go SDK follows with same pattern |
+
+## Presence Event Delivery Unification (Go SDK)
+
+> target-version: 0.7.13
+
+### Summary
+
+The reconciliation design above unified event *decisions* — which
+event to emit for a given state transition. On the Go client, event
+*delivery* remained dual-pathed, which reorders events under
+concurrency ([yorkie#1847](https://github.com/yorkie-team/yorkie/issues/1847)).
+This section unifies delivery: `Document` becomes the single publisher
+of presence lifecycle events, and delivery order is guaranteed to
+match state transition order.
+
+### Problem
+
+Reconciled events reach the user-facing watch response channel (`rch`
+in `client.runWatchLoop`) via two independent paths:
+
+1. **Stream path**: server `DocWatched`/`DocUnwatched` →
+   `handleWatchResponse` → `AddOnlineClientAndReconcile`/
+   `RemoveOnlineClientAndReconcile` returns the event → the stream
+   goroutine sends it to `rch` directly.
+2. **Sync path**: PushPull applies remote presence changes →
+   `InternalDocument.ApplyChanges` → `ReconcilePresence` → the
+   document event channel (`d.events`) → a forwarder goroutine sends
+   it to `rch`.
+
+Which path emits `watched` depends on arrival order: if the peer's
+watch event arrives before its presence syncs, reconcile returns nil
+on the stream path (waiting state) and the `watched` event is emitted
+later by the sync path. The subsequent `unwatched` still goes via the
+stream path. Two goroutines then race on the unbuffered `rch`, and
+the Go runtime picks a sender arbitrarily — `unwatched` can be
+delivered before `watched`.
+
+### Design
+
+`Document` is the single publisher of presence lifecycle events, and
+the client decouples event production from application consumption.
+
+**Emission** — `AddOnlineClientAndReconcile` and
+`RemoveOnlineClientAndReconcile` emit the reconciled event into
+`d.events` while holding `d.mu` (the same pattern `applyChanges`
+already uses) instead of returning it to the caller.
+`handleWatchResponse` no longer builds watch responses for
+`DocWatched`/`DocUnwatched`; it only updates state via the reconcile
+methods.
+
+**Delivery** — `runWatchLoop` runs a three-goroutine pipeline with a
+single direction of backpressure:
+
+```
+stream reader ─┐
+               ├─> watchBuffer (unbounded) ─> sender ─> rch
+pump ──────────┘
+```
+
+- The *pump* is the sole consumer of `d.Events()` and only appends to
+  the unbounded `watchBuffer` — it never blocks on the application.
+- The *sender* is the sole writer and closer of `rch`.
+- The *stream reader* pushes `DocumentChanged` and error responses
+  into the same buffer and drives the lifecycle: on exit it stops the
+  pump, closes the buffer, and (on stream error) re-establishes the
+  loop — the old pump is stopped before the new one starts, so
+  `d.Events()` always has exactly one consumer.
+
+**Ordering guarantee**: sends to `d.events` happen under `d.mu`, so
+lock acquisition order = state transition order = channel send order,
+and the pump/buffer/sender chain preserves FIFO. An `unwatched` event
+requires `hadPresence && wasOnline`, a state only reachable through
+the transition that emitted `watched` — so `watched` before
+`unwatched` holds structurally.
+
+**Deadlock analysis**: a producer emitting under `d.mu` waits only
+for the pump to receive, and the pump's only other action is a
+non-blocking buffer append — it never acquires `d.mu` and never
+touches `rch`. An application goroutine that reads `rch` and calls
+into the document (`Update`, `Sync`) therefore cannot form a wait
+cycle with producers: the sender absorbs `rch` backpressure into the
+buffer instead of propagating it to the document mutex. A naive
+variant of this design — sending on the buffer-1 `d.events` under
+`d.mu` with a forwarder that writes `rch` directly — deadlocks
+exactly there (consumer in `Update` waits on `d.mu`, stream reader
+holds `d.mu` waiting on the full channel, forwarder waits on `rch`),
+which is why the unbounded buffer sits between them.
+
+**Buffer growth**: the buffer is bounded in practice by peer presence
+churn between application reads; entries are small (event type plus a
+presence map reference). The buffer lives per watch-loop invocation
+and is dropped on stream teardown.
+
+### Non-Goals
+
+- The JS SDK already delivers all presence events through the single
+  `doc.publish` path; no change needed there.
+- The broader TODO of hiding watch events behind document events
+  entirely (reworking the `WatchStream` API) is out of scope.
+- Cross-category ordering between `DocumentChanged` and presence
+  lifecycle events is not guaranteed — the server-side batch
+  publisher already reorders and dedups across these categories
+  (see `doc_subscription.go`), and applications must already handle
+  a `DocumentChanged` arriving before the corresponding `watched`.
+
+### Behavioral note: fast join/leave produces no events
+
+Per the reconciliation state table, a peer that unwatches before its
+presence has synced to the observer is never surfaced: the `watched`
+condition (`hasPresence && isOnline`) was never met, so neither
+`watched` nor `unwatched` fires. This matches the JS SDK. The old
+delivery path masked this window — the stream reader was throttled by
+the blocking response-channel handoff, so the observer's sync usually
+applied the peer's presence before the unwatch was processed. With the
+pipeline the stream reader is no longer throttled, so tests (and
+applications) that want to observe a leave must first observe the
+join; `watch document with different projects test` waits for the
+`watched` event before unwatching for exactly this reason.
