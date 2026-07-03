@@ -56,8 +56,13 @@ Housekeeping:
   # Interval is the time between housekeeping runs (default: 30s).
   Interval: "30s"
 
-  # CandidatesLimit is the maximum number of candidates to be returned in a single query (default: 500).
-  CandidatesLimit: 500
+  # CandidatesLimit is the maximum number of candidates to be returned in a single query (default: 2000).
+  CandidatesLimit: 2000
+
+  # DeactivateConcurrency is the max number of concurrent per-candidate
+  # Deactivate calls within a single housekeeping cycle (default: 8).
+  # Set to 0 or 1 to fall back to sequential execution.
+  DeactivateConcurrency: 8
 
   # CompactionMinChanges is minimum number of changes to compact a document. (default: 1000).
   CompactionMinChanges: 1000

@@ -44,6 +44,17 @@ func TestConfig(t *testing.T) {
 		conf3 := validConf
 		conf3.CompactionMinChanges = 0
 		assert.Error(t, conf3.Validate())
+
+		// A negative DeactivateConcurrency must be rejected. This guards the
+		// check against being masked by an ensure-default coercion upstream.
+		conf4 := validConf
+		conf4.DeactivateConcurrency = -1
+		assert.Error(t, conf4.Validate())
+
+		// Zero is a valid sequential opt-in and must pass validation.
+		conf5 := validConf
+		conf5.DeactivateConcurrency = 0
+		assert.NoError(t, conf5.Validate())
 	})
 
 	t.Run("parse test", func(t *testing.T) {

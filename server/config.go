@@ -43,10 +43,11 @@ const (
 	DefaultMembershipLeaseDuration   = 15 * time.Second
 	DefaultMembershipRenewalInterval = 5 * time.Second
 
-	DefaultHousekeepingInterval             = 30 * time.Second
-	DefaultHousekeepingCandidatesLimit      = 500
-	DefaultHousekeepingCompactionMinChanges = 1000
-	DefaultProjectStatsRefreshInterval      = 5 * time.Minute
+	DefaultHousekeepingInterval              = 30 * time.Second
+	DefaultHousekeepingCandidatesLimit       = 2000
+	DefaultHousekeepingDeactivateConcurrency = 8
+	DefaultHousekeepingCompactionMinChanges  = 1000
+	DefaultProjectStatsRefreshInterval       = 5 * time.Minute
 
 	DefaultMongoConnectionURI                = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout            = 5 * time.Second
@@ -235,6 +236,11 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 	if c.Housekeeping.CandidatesLimit == 0 {
 		c.Housekeeping.CandidatesLimit = DefaultHousekeepingCandidatesLimit
 	}
+	// DeactivateConcurrency intentionally has no ensure-coercion here.
+	// newConfig() pre-seeds the default before YAML unmarshal, so an omitted
+	// field already resolves to the default; an explicit 0 is preserved as a
+	// sequential opt-in (dispatch falls back to sequential when <= 1), and a
+	// negative value is left for Validate() to reject.
 	if c.Housekeeping.CompactionMinChanges == 0 {
 		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
 	}
@@ -394,6 +400,7 @@ func newConfig(port int, profilingPort int) *Config {
 		Housekeeping: &housekeeping.Config{
 			Interval:                    DefaultHousekeepingInterval.String(),
 			CandidatesLimit:             DefaultHousekeepingCandidatesLimit,
+			DeactivateConcurrency:       DefaultHousekeepingDeactivateConcurrency,
 			CompactionMinChanges:        DefaultHousekeepingCompactionMinChanges,
 			ProjectStatsRefreshInterval: DefaultProjectStatsRefreshInterval.String(),
 		},

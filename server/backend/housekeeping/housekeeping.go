@@ -59,6 +59,13 @@ func (h *Housekeeping) RegisterTask(
 	if _, err := h.scheduler.NewJob(
 		gocron.DurationJob(interval),
 		gocron.NewTask(func() {
+			// TODO(raararaara): Wire a cancellable context here so Stop() can
+			// signal in-flight tasks on shutdown. Today this is
+			// context.Background(), so the deactivation dispatch cannot stop
+			// mid-cycle on a termination signal. Wiring it must also restore
+			// per-candidate in-flight protection (context.WithoutCancel in
+			// deactivateCandidates) and audit compaction / project-stats,
+			// which share this task path, for cancel-safety.
 			ctx := context.Background()
 
 			if !h.membership.IsLeader() {

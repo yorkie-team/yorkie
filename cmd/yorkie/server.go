@@ -345,6 +345,12 @@ func init() {
 		"candidates limit for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
+		&conf.Housekeeping.DeactivateConcurrency,
+		"housekeeping-deactivate-concurrency",
+		server.DefaultHousekeepingDeactivateConcurrency,
+		"max concurrent client deactivations within a single housekeeping cycle (0 or 1 = sequential)",
+	)
+	cmd.Flags().IntVar(
 		&conf.Housekeeping.CompactionMinChanges,
 		"housekeeping-compaction-min-changes",
 		server.DefaultHousekeepingCompactionMinChanges,

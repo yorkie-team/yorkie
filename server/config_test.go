@@ -50,6 +50,7 @@ func assertDefaultConfig(t *testing.T, conf *server.Config) {
 
 	assertDurationEqual(t, server.DefaultHousekeepingInterval, conf.Housekeeping.Interval)
 	assert.Equal(t, server.DefaultHousekeepingCandidatesLimit, conf.Housekeeping.CandidatesLimit)
+	assert.Equal(t, server.DefaultHousekeepingDeactivateConcurrency, conf.Housekeeping.DeactivateConcurrency)
 	assert.Equal(t, server.DefaultHousekeepingCompactionMinChanges, conf.Housekeeping.CompactionMinChanges)
 
 	assertDurationEqual(t, server.DefaultAdminTokenDuration, conf.Backend.AdminTokenDuration)
@@ -117,5 +118,42 @@ func TestNewConfigFromFile(t *testing.T) {
 		conf, err := server.NewConfigFromFile(filePath)
 		assert.NoError(t, err)
 		assertDefaultConfig(t, conf)
+	})
+
+	t.Run("explicit zero DeactivateConcurrency preserved (sequential opt-in)", func(t *testing.T) {
+		filePath := "config.zero-concurrency.yml"
+		file, err := os.Create(filePath)
+		assert.NoError(t, err)
+		_, err = file.WriteString("Housekeeping:\n  DeactivateConcurrency: 0\n")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, file.Close())
+			assert.NoError(t, os.Remove(filePath))
+		}()
+
+		conf, err := server.NewConfigFromFile(filePath)
+		assert.NoError(t, err)
+		// Explicit 0 must survive ensureDefaultValue so the documented
+		// "0 or 1 → sequential fallback" rollback works.
+		assert.Equal(t, 0, conf.Housekeeping.DeactivateConcurrency)
+	})
+
+	t.Run("negative DeactivateConcurrency survives ensure for Validate to reject", func(t *testing.T) {
+		filePath := "config.negative-concurrency.yml"
+		file, err := os.Create(filePath)
+		assert.NoError(t, err)
+		_, err = file.WriteString("Housekeeping:\n  DeactivateConcurrency: -5\n")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, file.Close())
+			assert.NoError(t, os.Remove(filePath))
+		}()
+
+		conf, err := server.NewConfigFromFile(filePath)
+		assert.NoError(t, err)
+		// ensureDefaultValue must not coerce a negative value away, otherwise
+		// the Validate() guard below would be dead code.
+		assert.Equal(t, -5, conf.Housekeeping.DeactivateConcurrency)
+		assert.Error(t, conf.Housekeeping.Validate())
 	})
 }
