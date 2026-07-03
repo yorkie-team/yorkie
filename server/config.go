@@ -236,9 +236,11 @@ func (c *Config) ensureHouseKeepingDefaultValue() {
 	if c.Housekeeping.CandidatesLimit == 0 {
 		c.Housekeeping.CandidatesLimit = DefaultHousekeepingCandidatesLimit
 	}
-	if c.Housekeeping.DeactivateConcurrency < 0 {
-		c.Housekeeping.DeactivateConcurrency = DefaultHousekeepingDeactivateConcurrency
-	}
+	// DeactivateConcurrency intentionally has no ensure-coercion here.
+	// newConfig() pre-seeds the default before YAML unmarshal, so an omitted
+	// field already resolves to the default; an explicit 0 is preserved as a
+	// sequential opt-in (dispatch falls back to sequential when <= 1), and a
+	// negative value is left for Validate() to reject.
 	if c.Housekeeping.CompactionMinChanges == 0 {
 		c.Housekeeping.CompactionMinChanges = DefaultHousekeepingCompactionMinChanges
 	}

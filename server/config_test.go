@@ -137,4 +137,23 @@ func TestNewConfigFromFile(t *testing.T) {
 		// "0 or 1 → sequential fallback" rollback works.
 		assert.Equal(t, 0, conf.Housekeeping.DeactivateConcurrency)
 	})
+
+	t.Run("negative DeactivateConcurrency survives ensure for Validate to reject", func(t *testing.T) {
+		filePath := "config.negative-concurrency.yml"
+		file, err := os.Create(filePath)
+		assert.NoError(t, err)
+		_, err = file.WriteString("Housekeeping:\n  DeactivateConcurrency: -5\n")
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, file.Close())
+			assert.NoError(t, os.Remove(filePath))
+		}()
+
+		conf, err := server.NewConfigFromFile(filePath)
+		assert.NoError(t, err)
+		// ensureDefaultValue must not coerce a negative value away, otherwise
+		// the Validate() guard below would be dead code.
+		assert.Equal(t, -5, conf.Housekeeping.DeactivateConcurrency)
+		assert.Error(t, conf.Housekeeping.Validate())
+	})
 }

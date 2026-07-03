@@ -52,8 +52,12 @@ Housekeeping:
   # Interval between housekeeping runs (default: 30s)
   Interval: "30s"
 
-  # Maximum number of candidates to be returned in a single query (default: 500)
-  CandidatesLimit: 500
+  # Maximum number of candidates to be returned in a single query (default: 2000)
+  CandidatesLimit: 2000
+
+  # Maximum number of concurrent client deactivations within a single cycle.
+  # Values <= 1 fall back to sequential execution (default: 8)
+  DeactivateConcurrency: 8
 
   # Minimum number of changes required to compact a document (default: 1000)
   CompactionMinChanges: 1000
@@ -80,9 +84,19 @@ This approach is essential because:
 // Pseudocode for client deactivation
 for each project {
     candidates = FindInactiveClients(project, threshold: "24h")
+
+    // Dispatch per-candidate deactivations across up to
+    // DeactivateConcurrency goroutines within the cycle.
+    // Concurrency <= 1 falls back to sequential execution.
+    sem = NewWeighted(DeactivateConcurrency)
     for each candidate {
-        DeactivateClient(candidate)
+        sem.Acquire()
+        go {
+            defer sem.Release()
+            DeactivateClient(candidate)
+        }
     }
+    wait for all in-flight deactivations
 }
 ```
 
@@ -126,6 +140,7 @@ for each project {
 
 - **Interval**: Runs every 30 seconds by default
 - **Concurrency Control**: Uses distributed locking to prevent multiple instances from running simultaneously
+- **Parallel Deactivation**: Within a single cycle, up to `DeactivateConcurrency` client deactivations run in parallel (default: 8); values <= 1 fall back to sequential execution
 - **Project Cycling**: Processes projects in a round-robin fashion to distribute load
 - **Batching**: Limits candidates per project to prevent overwhelming the system
 
@@ -169,6 +184,7 @@ For detailed information about the garbage collection algorithm, refer to:
 Housekeeping:
   Interval: "10s"
   CandidatesLimit: 10
+  DeactivateConcurrency: 8
   CompactionMinChanges: 100
 ```
 
@@ -178,6 +194,7 @@ Housekeeping:
 Housekeeping:
   Interval: "1m"
   CandidatesLimit: 1000
+  DeactivateConcurrency: 8
   CompactionMinChanges: 5000
 ```
 
