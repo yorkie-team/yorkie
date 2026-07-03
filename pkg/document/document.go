@@ -526,8 +526,14 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 }
 
 // AddOnlineClientAndReconcile adds the given client to the online clients
-// and returns the appropriate presence event based on the state transition.
-func (d *Document) AddOnlineClientAndReconcile(clientID string) *DocEvent {
+// and emits the appropriate presence event based on the state transition
+// through the document event channel.
+//
+// The send happens while holding d.mu — the same pattern as applyChanges —
+// so that lock acquisition order, state transition order, and channel send
+// order coincide. Delivering through the caller instead reintroduces the
+// reordering race between the watch-stream and sync paths (yorkie#1847).
+func (d *Document) AddOnlineClientAndReconcile(clientID string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -537,13 +543,16 @@ func (d *Document) AddOnlineClientAndReconcile(clientID string) *DocEvent {
 
 	d.doc.AddOnlineClient(clientID)
 
-	return d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence)
+	if event := d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence); event != nil {
+		d.events <- *event
+	}
 }
 
 // RemoveOnlineClientAndReconcile removes the given client from the online
-// clients and returns the appropriate presence event based on the state
-// transition.
-func (d *Document) RemoveOnlineClientAndReconcile(clientID string) *DocEvent {
+// clients and emits the appropriate presence event based on the state
+// transition through the document event channel. See
+// AddOnlineClientAndReconcile for why the send happens under the lock.
+func (d *Document) RemoveOnlineClientAndReconcile(clientID string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -553,7 +562,9 @@ func (d *Document) RemoveOnlineClientAndReconcile(clientID string) *DocEvent {
 
 	d.doc.RemoveOnlineClient(clientID)
 
-	return d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence)
+	if event := d.doc.ReconcilePresence(clientID, hadPresence, wasOnline, prevPresence); event != nil {
+		d.events <- *event
+	}
 }
 
 // Events returns the events of this document.

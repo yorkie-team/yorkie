@@ -452,6 +452,12 @@ func TestDocumentWithProjects(t *testing.T) {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
+		// watchedReceived signals that c1 observed c2 joining. The unwatch
+		// below must happen after this: a peer that leaves before its
+		// presence has synced is never surfaced (see ReconcilePresence),
+		// so unwatching earlier would legitimately produce no events.
+		watchedReceived := make(chan struct{})
+
 		d1 := document.New(helper.TestKey(t))
 		err = c1.Attach(ctx, d1, client.WithRealtimeSync())
 		assert.NoError(t, err)
@@ -477,6 +483,9 @@ func TestDocumentWithProjects(t *testing.T) {
 						Type:      resp.Type,
 						Presences: resp.Presences,
 					})
+					if len(responsePairs) == 1 {
+						close(watchedReceived)
+					}
 				}
 				if len(responsePairs) == 2 {
 					return
@@ -513,6 +522,10 @@ func TestDocumentWithProjects(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, c3.Sync(ctx))
+
+		// Wait until c1 observed c2 joining before unwatching; leaving
+		// before the join is observed produces no events by design.
+		<-watchedReceived
 
 		// c2 unwatch the document, so c1 receives a document unwatched event.
 		expected = append(expected, watchDocPair{

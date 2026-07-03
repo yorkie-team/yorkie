@@ -921,14 +921,65 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 	rch := make(chan WatchDocResponse)
 	attachment.watchStream = rch
 
+	// The delivery pipeline has three goroutines with a single direction of
+	// backpressure:
+	//
+	//	stream reader ─┐
+	//	               ├─> watchBuffer ─> sender ─> rch
+	//	pump ──────────┘
+	//
+	// The pump is the sole consumer of the document event channel and only
+	// appends to the unbounded buffer, so producers emitting document events
+	// under the document mutex are never blocked by a slow application
+	// reading rch. The sender is the sole writer and closer of rch. The pump
+	// stops only after the stream reader has exited, so a reconcile emission
+	// in flight always has a live consumer.
+	buf := newWatchBuffer()
+	pumpStop := make(chan struct{})
+
+	// pump: document events -> buf.
+	go func() {
+		for {
+			select {
+			case e := <-d.Events():
+				t := PresenceChanged
+				if e.Type == document.WatchedEvent {
+					t = DocumentWatched
+				} else if e.Type == document.UnwatchedEvent {
+					t = DocumentUnwatched
+				}
+				buf.push(WatchDocResponse{Type: t, Presences: e.Presences})
+			case <-pumpStop:
+				return
+			}
+		}
+	}()
+
+	// sender: buf -> rch.
+	go func() {
+		defer close(rch)
+		for {
+			resp, ok := buf.pop(ctx)
+			if !ok {
+				return
+			}
+			select {
+			case rch <- resp:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// stream reader: server responses -> buf.
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
 			resp, err := handleWatchResponse(pbResp, d)
 			if err != nil {
-				rch <- WatchDocResponse{Err: err}
-				ctx.Done()
-				close(rch)
+				close(pumpStop)
+				buf.push(WatchDocResponse{Err: err})
+				buf.close()
 				return
 			}
 			if resp == nil {
@@ -945,46 +996,21 @@ func (c *Client) runWatchLoop(ctx context.Context, d *document.Document) error {
 				}
 			}
 
-			rch <- *resp
+			buf.push(*resp)
 		}
-		if err = stream.Err(); err != nil {
-			rch <- WatchDocResponse{Err: err}
-			ctx.Done()
-			close(rch)
 
-			// If watch stream is disconnected, we re-establish the watch stream.
-			err = c.runWatchLoop(ctx, d)
-			if err != nil {
-				return
-			}
+		close(pumpStop)
+		if err := stream.Err(); err != nil {
+			buf.push(WatchDocResponse{Err: err})
+			buf.close()
+
+			// If watch stream is disconnected, we re-establish the watch
+			// stream. The pump above has already stopped, so the new loop's
+			// pump is the sole consumer of the document event channel.
+			_ = c.runWatchLoop(ctx, d)
 			return
 		}
-	}()
-
-	// TODO(hackerwins): We need to revise the implementation of the watch
-	// event handling. Currently, we are using the same channel for both
-	// document events and watch events. This is not ideal because the
-	// client cannot distinguish between document events and watch events.
-	// We'll expose only document events and watch events will be handled
-	// internally.
-
-	// TODO(hackerwins): We should ensure that the goroutine is closed when
-	// the stream is closed.
-	go func() {
-		for {
-			select {
-			case e := <-d.Events():
-				t := PresenceChanged
-				if e.Type == document.WatchedEvent {
-					t = DocumentWatched
-				} else if e.Type == document.UnwatchedEvent {
-					t = DocumentUnwatched
-				}
-				rch <- WatchDocResponse{Type: t, Presences: e.Presences}
-			case <-ctx.Done():
-				return
-			}
-		}
+		buf.close()
 	}()
 
 	return nil
@@ -1025,27 +1051,15 @@ func handleWatchResponse(pbResp *api.WatchResponse, d *document.Document) (*Watc
 			case events.DocChanged:
 				return &WatchDocResponse{Type: DocumentChanged}, nil
 			case events.DocWatched:
-				event := d.AddOnlineClientAndReconcile(cli.String())
-				if event == nil {
-					return nil, nil
-				}
-				t := PresenceChanged
-				if event.Type == document.WatchedEvent {
-					t = DocumentWatched
-				}
-				return &WatchDocResponse{
-					Type:      t,
-					Presences: event.Presences,
-				}, nil
+				// NOTE(hackerwins): The reconciled event is emitted through
+				// the document event channel and forwarded by the event
+				// goroutine in runWatchLoop, keeping presence lifecycle
+				// events on a single ordered path (yorkie#1847).
+				d.AddOnlineClientAndReconcile(cli.String())
+				return nil, nil
 			case events.DocUnwatched:
-				event := d.RemoveOnlineClientAndReconcile(cli.String())
-				if event == nil {
-					return nil, nil
-				}
-				return &WatchDocResponse{
-					Type:      DocumentUnwatched,
-					Presences: event.Presences,
-				}, nil
+				d.RemoveOnlineClientAndReconcile(cli.String())
+				return nil, nil
 			}
 		}
 	}
