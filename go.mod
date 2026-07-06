@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	connectrpc.com/connect v1.19.1
-	connectrpc.com/grpchealth v1.4.0
+	connectrpc.com/grpchealth v1.5.0
 	github.com/go-co-op/gocron/v2 v2.18.2
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
