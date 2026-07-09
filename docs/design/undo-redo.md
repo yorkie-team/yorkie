@@ -558,6 +558,7 @@ it creates new nodes independent of GC state.
 |----------|------|------|
 | Node-ID overlap detection | Extend undo op with removed node IDs; reconciliation compares node sets instead of index ranges. Content re-insert preserved (GC-safe). | Significant change to operation model and reconciliation logic. |
 | Reconciliation content trimming | Case 3: when undo fully contained by remote delete, clear content. | Only handles full containment; partial overlap (Cases 5-6) can't predict future undo intent. |
+| Identity-preserving restore (GC-recreate) | Undo un-tombstones surviving nodes and recreates purged nodes under their original IDs. GC-safe: carried values make restore independent of tombstone survival, extending Approach B past its multi-client GC failure. | Significant change to operation model on the scale of Approach B. Re-injecting nodes with past `createdAt` needs a convergence proof against the GC contract. |
 | Accept as known limitation | Document the issue; focus on other improvements. | Overlapping undo is uncommon in practice; users can work around. |
 
 ### Analysis: Tree Redo Divergence (resolved)
