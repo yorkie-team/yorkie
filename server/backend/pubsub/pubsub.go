@@ -150,10 +150,6 @@ func (m *PubSub) Publish(
 	publisherID time.ActorID,
 	event events.DocEvent,
 ) {
-	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
-	// race condition of concurrent access to the cache.
-	_ = event.Actor.String()
-
 	docKey := event.Key
 
 	if logging.Enabled(zap.DebugLevel) {
