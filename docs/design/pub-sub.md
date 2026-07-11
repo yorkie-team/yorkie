@@ -41,7 +41,7 @@ In brief, when the client sends a WatchDocument request, it establishes a stream
 
 ### How does it work?
 
-We are using the [PubSub pattern](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) for handling event delivery targets. For more details, you can check out the [sync package](https://github.com/yorkie-team/yorkie/blob/main/server/backend/sync/pubsub.go) that we're working on.
+We are using the [PubSub pattern](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) for handling event delivery targets. For more details, you can check out the [pubsub package](https://github.com/yorkie-team/yorkie/blob/main/server/backend/pubsub/pubsub.go) that we're working on.
 
 ![pub-sub pattern vs observer pattern](media/pubsub-pattern.png)
 
