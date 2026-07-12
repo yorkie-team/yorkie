@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -4481,6 +4482,57 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>ab</p><p>ced</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("can edit with splitLevel walking past root does not panic", func(t *testing.T) {
+		ctx := context.Background()
+		txt := func(v string) *json.TreeNode { return &json.TreeNode{Type: "text", Value: v} }
+
+		seeds := []struct {
+			name   string
+			tree   json.TreeNode
+			length int
+		}{
+			// <doc><p>x</p></doc>
+			{"shallow", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "x"}}},
+			}}, 3},
+			// <doc><p>x</p><p>y</p></doc>
+			{"twoP", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "x"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "y"}}},
+			}}, 6},
+			// <doc><p><b>x</b></p></doc>
+			{"deep", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{
+					{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "x"}}},
+				}},
+			}}, 5},
+			// <doc><p></p></doc>
+			{"emptyP", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{}},
+			}}, 2},
+		}
+
+		for _, seed := range seeds {
+			for pos := range seed.length + 1 {
+				for _, sl := range []int{1, 2} {
+					name := fmt.Sprintf("%s/pos=%d/sl=%d", seed.name, pos, sl)
+					t.Run(name, func(t *testing.T) {
+						d := document.New(helper.TestKey(t))
+						assert.NoError(t, c1.Attach(ctx, d))
+						assert.NoError(t, d.Update(func(root *json.Object, _ *presence.Presence) error {
+							root.SetNewTree("t", seed.tree)
+							return nil
+						}))
+						assert.NoError(t, d.Update(func(root *json.Object, _ *presence.Presence) error {
+							root.GetTree("t").Edit(pos, pos, txt("a"), sl)
+							return nil
+						}))
+					})
+				}
+			}
+		}
 	})
 }
 
