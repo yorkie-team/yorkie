@@ -1462,6 +1462,10 @@ func (t *Tree) split(
 			}
 		}
 
+		if parent.Index.Parent == nil {
+			break
+		}
+
 		var err error
 		offset := 0
 		if left != parent {
