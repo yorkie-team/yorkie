@@ -100,6 +100,8 @@ message Operation {
     string content = 5;
     TimeTicket executed_at = 6;
     map<string, string> attributes = 7;
+    repeated RestoreSpan restore_spans = 8; // identity-preserving undo/redo
+    RestoreMode restore_mode = 9;
   }
   message Style {
     TimeTicket parent_created_at = 1;
@@ -421,6 +423,27 @@ message TextNodePos {
   TimeTicket created_at = 1;
   int32 offset = 2;
   int32 relative_offset = 3;
+}
+
+// RestoreSpan carries a run of characters from a single original text
+// insertion, addressed by split-invariant absolute offsets [start, end),
+// for identity-preserving undo/redo. content and attributes are a deep
+// copy of the removed value so restore is independent of GC state.
+message RestoreSpan {
+  TimeTicket created_at = 1;
+  int32 start = 2;
+  int32 end = 3;
+  string content = 4;
+  map<string, string> attributes = 5;
+}
+
+// RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
+// means an ordinary edit (no restore semantics), keeping forward edits
+// unchanged on the wire.
+enum RestoreMode {
+  RESTORE_MODE_UNSPECIFIED = 0;
+  RESTORE_MODE_RESTORE = 1;
+  RESTORE_MODE_RETOMBSTONE = 2;
 }
 
 message TimeTicket {
