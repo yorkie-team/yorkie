@@ -18,6 +18,7 @@ package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -42,6 +43,15 @@ type Edit struct {
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
+
+	// restoreSpans carries the removed content tagged with its original
+	// character identities for identity-preserving undo/redo. Empty for
+	// ordinary edits.
+	restoreSpans []*crdt.RestoreSpan
+
+	// restoreMode selects the identity-preserving path (restore vs
+	// retombstone). RestoreModeNone for ordinary edits.
+	restoreMode crdt.RestoreMode
 }
 
 // NewEdit creates a new instance of Edit.
@@ -52,6 +62,8 @@ func NewEdit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
+	restoreSpans []*crdt.RestoreSpan,
+	restoreMode crdt.RestoreMode,
 ) *Edit {
 	return &Edit{
 		parentCreatedAt: parentCreatedAt,
@@ -60,6 +72,8 @@ func NewEdit(
 		content:         content,
 		attributes:      attributes,
 		executedAt:      executedAt,
+		restoreSpans:    restoreSpans,
+		restoreMode:     restoreMode,
 	}
 }
 
@@ -69,14 +83,42 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, pairs, diff, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
-		for _, pair := range pairs {
-			root.RegisterGCPair(pair)
-			root.AdjustDiffForGCPair(&diff, pair)
-		}
-		root.Acc(diff)
-		if err != nil {
-			return err
+		switch e.restoreMode {
+		case crdt.RestoreModeRestore:
+			untombstoned, recreated, stillTombstoned := obj.Restore(
+				e.restoreSpans, e.executedAt, e.from)
+
+			var diff resource.DataSize
+			for _, node := range untombstoned {
+				root.UnregisterGCPair(crdt.GCPair{Parent: obj.RGATreeSplit(), Child: node})
+				diff.Add(node.DataSize())
+			}
+			for _, node := range recreated {
+				diff.Add(node.DataSize())
+			}
+			for _, pair := range stillTombstoned {
+				root.RegisterGCPair(pair)
+			}
+			root.Acc(diff)
+
+		case crdt.RestoreModeRetombstone:
+			pairs, diff := obj.Retombstone(e.restoreSpans, e.executedAt)
+			for _, pair := range pairs {
+				root.RegisterGCPair(pair)
+				root.AdjustDiffForGCPair(&diff, pair)
+			}
+			root.Acc(diff)
+
+		default:
+			_, pairs, diff, err := obj.Edit(e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+			for _, pair := range pairs {
+				root.RegisterGCPair(pair)
+				root.AdjustDiffForGCPair(&diff, pair)
+			}
+			root.Acc(diff)
+			if err != nil {
+				return err
+			}
 		}
 
 	default:
@@ -119,4 +161,14 @@ func (e *Edit) Content() string {
 // Attributes returns the attributes of this Edit.
 func (e *Edit) Attributes() map[string]string {
 	return e.attributes
+}
+
+// RestoreSpans returns the identity-preserving restore payload.
+func (e *Edit) RestoreSpans() []*crdt.RestoreSpan {
+	return e.restoreSpans
+}
+
+// RestoreMode returns the identity-preserving mode of this Edit.
+func (e *Edit) RestoreMode() crdt.RestoreMode {
+	return e.restoreMode
 }

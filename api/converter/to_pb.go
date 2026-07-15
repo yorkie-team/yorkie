@@ -436,8 +436,39 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 			Content:         e.Content(),
 			Attributes:      e.Attributes(),
 			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+			RestoreSpans:    toRestoreSpans(e.RestoreSpans()),
+			RestoreMode:     toRestoreMode(e.RestoreMode()),
 		},
 	}, nil
+}
+
+func toRestoreSpans(spans []*crdt.RestoreSpan) []*api.RestoreSpan {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	pbSpans := make([]*api.RestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		pbSpans = append(pbSpans, &api.RestoreSpan{
+			CreatedAt:  ToTimeTicket(span.CreatedAt),
+			Start:      int32(span.Start),
+			End:        int32(span.End),
+			Content:    span.Content,
+			Attributes: span.Attributes,
+		})
+	}
+	return pbSpans
+}
+
+func toRestoreMode(mode crdt.RestoreMode) api.RestoreMode {
+	switch mode {
+	case crdt.RestoreModeRestore:
+		return api.RestoreMode_RESTORE_MODE_RESTORE
+	case crdt.RestoreModeRetombstone:
+		return api.RestoreMode_RESTORE_MODE_RETOMBSTONE
+	default:
+		return api.RestoreMode_RESTORE_MODE_UNSPECIFIED
+	}
 }
 
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {

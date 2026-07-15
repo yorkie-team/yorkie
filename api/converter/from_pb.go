@@ -502,6 +502,10 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+	restoreSpans, err := fromRestoreSpans(pbEdit.RestoreSpans)
+	if err != nil {
+		return nil, err
+	}
 	return operations.NewEdit(
 		parentCreatedAt,
 		from,
@@ -509,7 +513,42 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		pbEdit.Content,
 		pbEdit.Attributes,
 		executedAt,
+		restoreSpans,
+		fromRestoreMode(pbEdit.RestoreMode),
 	), nil
+}
+
+func fromRestoreSpans(pbSpans []*api.RestoreSpan) ([]*crdt.RestoreSpan, error) {
+	if len(pbSpans) == 0 {
+		return nil, nil
+	}
+
+	spans := make([]*crdt.RestoreSpan, 0, len(pbSpans))
+	for _, pbSpan := range pbSpans {
+		createdAt, err := fromTimeTicket(pbSpan.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		spans = append(spans, &crdt.RestoreSpan{
+			CreatedAt:  createdAt,
+			Start:      int(pbSpan.Start),
+			End:        int(pbSpan.End),
+			Content:    pbSpan.Content,
+			Attributes: pbSpan.Attributes,
+		})
+	}
+	return spans, nil
+}
+
+func fromRestoreMode(mode api.RestoreMode) crdt.RestoreMode {
+	switch mode {
+	case api.RestoreMode_RESTORE_MODE_RESTORE:
+		return crdt.RestoreModeRestore
+	case api.RestoreMode_RESTORE_MODE_RETOMBSTONE:
+		return crdt.RestoreModeRetombstone
+	default:
+		return crdt.RestoreModeNone
+	}
 }
 
 func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {

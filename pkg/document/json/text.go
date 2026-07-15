@@ -102,6 +102,8 @@ func (p *Text) Edit(
 		content,
 		attrs,
 		ticket,
+		nil,
+		crdt.RestoreModeNone,
 	))
 
 	return p
