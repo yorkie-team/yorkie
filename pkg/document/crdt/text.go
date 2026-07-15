@@ -407,6 +407,8 @@ func (t *Text) Style(
 		}
 	}
 
+	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
+
 	return pairs, diff, nil
 }
 
@@ -473,6 +475,8 @@ func (t *Text) RemoveStyle(
 			}
 		}
 	}
+
+	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
 	return pairs, diff, nil
 }

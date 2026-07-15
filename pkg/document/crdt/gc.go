@@ -26,6 +26,15 @@ import (
 type GCPair struct {
 	Parent GCParent
 	Child  GCChild
+
+	// GCOnlySize is set for a child whose size was never counted in
+	// docSize.Live: a piece born removed by splitting an already-tombstoned
+	// node. Its value is the net-new size the split created. When set,
+	// RegisterGCPair adds this to docSize.GC and AdjustDiffForGCPair leaves
+	// docSize.Live untouched, instead of the usual live->gc move. Purge
+	// subtracts the child's full size from GC; across the split's original
+	// node and its born-dead pieces these telescope back to zero.
+	GCOnlySize *resource.DataSize
 }
 
 // GCParent is an interface for the parent of the garbage collection target.
