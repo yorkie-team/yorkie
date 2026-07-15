@@ -2,6 +2,7 @@ package crdt
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,43 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/llrb"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
+
+// RestoreMode selects the identity-preserving path for undo/redo of a
+// Text deletion.
+type RestoreMode int
+
+const (
+	// RestoreModeNone means an ordinary edit (no restore semantics).
+	RestoreModeNone RestoreMode = iota
+	// RestoreModeRestore re-establishes removed characters under their
+	// original identities (undo of a deletion).
+	RestoreModeRestore
+	// RestoreModeRetombstone re-deletes previously restored characters
+	// (redo of an identity-preserving undo).
+	RestoreModeRetombstone
+)
+
+// RestoreSpan carries a run of characters from a single original text
+// insertion, addressed by split-invariant absolute offsets [Start, End),
+// with a deep copy of the removed value so restore is independent of GC
+// state. This is the operation-layer form built from protobuf; the RGA
+// primitive slices Content per gap when recreating purged nodes.
+type RestoreSpan struct {
+	CreatedAt  *time.Ticket
+	Start      int
+	End        int
+	Content    string
+	Attributes map[string]string
+}
+
+// restoreSpanValue is the internal form of a RestoreSpan carrying a real
+// value V so recreation can reuse the value's own Split for sub-slicing.
+type restoreSpanValue[V RGATreeSplitValue] struct {
+	createdAt *time.Ticket
+	start     int
+	end       int
+	value     V
+}
 
 var (
 	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
@@ -661,6 +699,222 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 			s.treeByIndex.DeleteRange(leftBoundary.indexNode, rightBoundary.indexNode)
 		}
 	}
+}
+
+// subValue returns a deep copy of full restricted to [from, to). full is
+// left unmodified.
+func subValue[V RGATreeSplitValue](full V, from, to int) V {
+	cp := full.DeepCopy()
+	tail := cp.Split(from) // cp=[0,from), tail=[from,len)
+	tail.Split(to - from)  // tail=[from,to), discard [to,len)
+	return tail.(V)
+}
+
+// restore re-establishes the characters in spans under their ORIGINAL
+// identities. Per overlapping region:
+//   - live piece exists       → skip (idempotent; another undo restored it)
+//   - tombstoned piece exists → clear removedAt (un-tombstone)
+//   - no piece exists (GC'd)  → recreate a node with the original ID
+//
+// Returns (untombstoned, recreated, stillTombstoned):
+//   - untombstoned: nodes flipped tombstone→live (caller GC-unregisters the
+//     pre-existing ones and moves their size GC→Live)
+//   - recreated: brand-new live nodes for purged regions (caller adds their
+//     size to Live)
+//   - stillTombstoned: born-tombstoned split remainders that must be
+//     GC-registered (drained pendingGCPairs, minus un-tombstoned targets)
+func (s *RGATreeSplit[V]) restore(
+	spans []restoreSpanValue[V],
+	executedAt *time.Ticket,
+	fallbackAnchor *RGATreeSplitNodePos,
+) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair) {
+	targets := map[string]struct{}{}
+
+	for _, span := range spans {
+		pieces := s.findPiecesOverlapping(span.createdAt, span.start, span.end)
+
+		cursor := span.start
+		pieceIdx := 0
+		for cursor < span.end {
+			var piece *RGATreeSplitNode[V]
+			pieceStart, pieceEnd := math.MaxInt, math.MaxInt
+			if pieceIdx < len(pieces) {
+				piece = pieces[pieceIdx]
+				pieceStart = piece.ID().Offset()
+				pieceEnd = pieceStart + piece.contentLen()
+			}
+
+			if piece != nil && pieceStart <= cursor {
+				overlapEnd := min(pieceEnd, span.end)
+				if piece.removedAt != nil {
+					target, _ := s.isolateRange(piece, cursor, overlapEnd)
+					target.SetRemovedAt(nil)
+					s.treeByIndex.Splay(target.indexNode)
+					untombstoned = append(untombstoned, target)
+					targets[target.IDString()] = struct{}{}
+				}
+				cursor = overlapEnd
+				if overlapEnd >= pieceEnd {
+					pieceIdx++
+				}
+			} else {
+				gapEnd := min(pieceStart, span.end)
+				val := subValue(span.value, cursor-span.start, gapEnd-span.start)
+				newNode := NewRGATreeSplitNode(
+					NewRGATreeSplitNodeID(span.createdAt, cursor), val)
+				prev := s.findRestoreAnchor(
+					span.createdAt, cursor, gapEnd, executedAt, fallbackAnchor)
+				s.InsertAfter(prev, newNode)
+				recreated = append(recreated, newNode)
+				cursor = gapEnd
+			}
+		}
+	}
+
+	// isolateRange splits of tombstones buffer born-dead remainders into
+	// pendingGCPairs. An un-tombstoned target that was itself split-born is
+	// in that buffer but is now live — drop it; register the rest.
+	for _, pair := range s.drainPendingGCPairs() {
+		if _, isTarget := targets[pair.Child.IDString()]; !isTarget {
+			stillTombstoned = append(stillTombstoned, pair)
+		}
+	}
+	return untombstoned, recreated, stillTombstoned
+}
+
+// retombstone re-deletes the characters in spans (redo of an
+// identity-preserving undo). Only live pieces are affected; already-removed
+// or purged regions are skipped (idempotent). Returns GC pairs for the
+// newly tombstoned nodes and the net docSize diff from splitting live
+// pieces (which the caller accounts to Live).
+func (s *RGATreeSplit[V]) retombstone(
+	spans []restoreSpanValue[V],
+	executedAt *time.Ticket,
+) ([]GCPair, resource.DataSize) {
+	var pairs []GCPair
+	var diff resource.DataSize
+
+	for _, span := range spans {
+		pieces := s.findPiecesOverlapping(span.createdAt, span.start, span.end)
+		for _, piece := range pieces {
+			if piece.removedAt != nil {
+				continue
+			}
+			pieceStart := piece.ID().Offset()
+			pieceEnd := pieceStart + piece.contentLen()
+			target, splitDiff := s.isolateRange(
+				piece, max(pieceStart, span.start), min(pieceEnd, span.end))
+			diff.Add(splitDiff)
+			target.SetRemovedAt(executedAt)
+			s.treeByIndex.Splay(target.indexNode)
+			pairs = append(pairs, GCPair{Parent: s, Child: target})
+		}
+	}
+	return pairs, diff
+}
+
+// findPiecesOverlapping collects existing nodes (live or tombstoned) of
+// insertion createdAt overlapping [start, end), in ascending offset order.
+func (s *RGATreeSplit[V]) findPiecesOverlapping(
+	createdAt *time.Ticket, start, end int,
+) []*RGATreeSplitNode[V] {
+	var pieces []*RGATreeSplitNode[V]
+	probe := end - 1
+	for probe >= 0 {
+		id := NewRGATreeSplitNodeID(createdAt, probe)
+		key, node := s.treeByID.Floor(id)
+		if key == nil || !key.hasSameCreatedAt(id) {
+			break
+		}
+		nodeStart := node.ID().Offset()
+		nodeEnd := nodeStart + node.contentLen()
+		if nodeEnd <= start {
+			break
+		}
+		if nodeStart < end && nodeEnd > start {
+			pieces = append(pieces, node)
+		}
+		if nodeStart <= start {
+			break
+		}
+		probe = nodeStart - 1
+	}
+	for i, j := 0, len(pieces)-1; i < j; i, j = i+1, j-1 {
+		pieces[i], pieces[j] = pieces[j], pieces[i]
+	}
+	return pieces
+}
+
+// findPieceCovering returns the node of insertion createdAt whose range
+// covers offset, if present.
+func (s *RGATreeSplit[V]) findPieceCovering(
+	createdAt *time.Ticket, offset int,
+) *RGATreeSplitNode[V] {
+	id := NewRGATreeSplitNodeID(createdAt, offset)
+	key, node := s.treeByID.Floor(id)
+	if key == nil || !key.hasSameCreatedAt(id) {
+		return nil
+	}
+	nodeStart := node.ID().Offset()
+	if nodeStart <= offset && offset < nodeStart+node.contentLen() {
+		return node
+	}
+	return nil
+}
+
+// isolateRange splits piece so a node exactly covering [from, to) exists,
+// and returns it plus the net docSize diff produced by the splits.
+// Requires pieceStart <= from < to <= pieceEnd.
+func (s *RGATreeSplit[V]) isolateRange(
+	piece *RGATreeSplitNode[V], from, to int,
+) (*RGATreeSplitNode[V], resource.DataSize) {
+	var diff resource.DataSize
+	node := piece
+	if from > node.ID().Offset() {
+		right, d, _ := s.splitNode(node, from-node.ID().Offset())
+		diff.Add(d)
+		node = right
+	}
+	newStart := node.ID().Offset()
+	if to < newStart+node.contentLen() {
+		_, d, _ := s.splitNode(node, to-newStart)
+		diff.Add(d)
+	}
+	return node, diff
+}
+
+// findRestoreAnchor returns the node to insert a recreated fragment
+// [gapStart, gapEnd) of insertion createdAt AFTER. Resolution ladder:
+//
+//	(a) piece covering gapEnd → before it (exact original slot)
+//	(b) nearest surviving piece left of gapStart → after it
+//	(c) rightmost surviving piece (right of gap) → before it
+//	(d) op fallback anchor (refined) — the one non-replica-invariant rule
+//	(e) head (deterministic last resort)
+func (s *RGATreeSplit[V]) findRestoreAnchor(
+	createdAt *time.Ticket, gapStart, gapEnd int,
+	executedAt *time.Ticket, fallback *RGATreeSplitNodePos,
+) *RGATreeSplitNode[V] {
+	if succ := s.findPieceCovering(createdAt, gapEnd); succ != nil {
+		return succ.prev
+	}
+	if gapStart > 0 {
+		id := NewRGATreeSplitNodeID(createdAt, gapStart-1)
+		if key, node := s.treeByID.Floor(id); key != nil && key.hasSameCreatedAt(id) {
+			return node
+		}
+	}
+	rightmostID := NewRGATreeSplitNodeID(createdAt, math.MaxInt32)
+	if key, node := s.treeByID.Floor(rightmostID); key != nil &&
+		key.hasSameCreatedAt(rightmostID) && node.ID().Offset() >= gapEnd {
+		return node.prev
+	}
+	if fallback != nil {
+		if left, _, _, err := s.findNodeWithSplit(fallback, executedAt); err == nil {
+			return left
+		}
+	}
+	return s.initialHead
 }
 
 func (s *RGATreeSplit[V]) nodes() []*RGATreeSplitNode[V] {

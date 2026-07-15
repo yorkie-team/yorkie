@@ -341,6 +341,55 @@ func (t *Text) Edit(
 	)
 }
 
+// Restore executes an identity-preserving undo of a deletion, restoring
+// the characters described by spans under their original identities.
+// Returns (untombstoned, recreated, stillTombstoned); see
+// RGATreeSplit.restore.
+func (t *Text) Restore(
+	spans []*RestoreSpan,
+	executedAt *time.Ticket,
+	fallback *RGATreeSplitNodePos,
+) (untombstoned, recreated []*RGATreeSplitNode[*TextValue], stillTombstoned []GCPair) {
+	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
+	for _, s := range spans {
+		attrs := NewRHT()
+		for k, v := range s.Attributes {
+			attrs.Set(k, v, executedAt)
+		}
+		internal = append(internal, restoreSpanValue[*TextValue]{
+			createdAt: s.CreatedAt,
+			start:     s.Start,
+			end:       s.End,
+			value:     NewTextValue(s.Content, attrs),
+		})
+	}
+	return t.rgaTreeSplit.restore(internal, executedAt, fallback)
+}
+
+// Retombstone executes a redo (re-delete) of a previously restored range.
+// Returns GC pairs for the newly tombstoned nodes and the net docSize diff
+// from splitting live pieces.
+func (t *Text) Retombstone(
+	spans []*RestoreSpan,
+	executedAt *time.Ticket,
+) ([]GCPair, resource.DataSize) {
+	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
+	for _, s := range spans {
+		internal = append(internal, restoreSpanValue[*TextValue]{
+			createdAt: s.CreatedAt,
+			start:     s.Start,
+			end:       s.End,
+			value:     NewTextValue(s.Content, NewRHT()),
+		})
+	}
+	return t.rgaTreeSplit.retombstone(internal, executedAt)
+}
+
+// RGATreeSplit returns the underlying RGATreeSplit of this Text.
+func (t *Text) RGATreeSplit() *RGATreeSplit[*TextValue] {
+	return t.rgaTreeSplit
+}
+
 // Style applies the given attributes of the given range.
 func (t *Text) Style(
 	from,

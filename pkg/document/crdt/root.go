@@ -261,6 +261,18 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	r.docSize.GC.Add(size)
 }
 
+// UnregisterGCPair removes a GC pair whose child has been restored
+// (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
+func (r *Root) UnregisterGCPair(pair GCPair) {
+	p, ok := r.gcNodePairMap[pair.Child.IDString()]
+	if !ok {
+		return
+	}
+
+	r.docSize.GC.Sub(p.Child.DataSize())
+	delete(r.gcNodePairMap, pair.Child.IDString())
+}
+
 // Acc accumulates the given DataSize to Live.
 func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
