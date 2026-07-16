@@ -12,18 +12,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
-// RestoreMode selects the identity-preserving path for undo/redo of a
-// Text deletion.
+// RestoreMode selects the identity-preserving path for reviving or
+// re-removing a run of Text characters under their original identities.
+//
+// This is a server-side CRDT primitive, not a server-side undo/redo
+// implementation: the server only applies whichever mode the wire
+// operation already specifies. Deciding *when* to revive or re-remove
+// content (history stacks, position reconciliation, etc.) is entirely a
+// client responsibility, per docs/design/undo-redo.md's stated
+// non-goal of server-side undo/redo.
 type RestoreMode int
 
 const (
 	// RestoreModeNone means an ordinary edit (no restore semantics).
 	RestoreModeNone RestoreMode = iota
 	// RestoreModeRestore re-establishes removed characters under their
-	// original identities (undo of a deletion).
+	// original identities.
 	RestoreModeRestore
-	// RestoreModeRetombstone re-deletes previously restored characters
-	// (redo of an identity-preserving undo).
+	// RestoreModeRetombstone re-removes previously restored characters
+	// under their original identities.
 	RestoreModeRetombstone
 )
 
@@ -712,7 +719,7 @@ func subValue[V RGATreeSplitValue](full V, from, to int) V {
 
 // restore re-establishes the characters in spans under their ORIGINAL
 // identities. Per overlapping region:
-//   - live piece exists       → skip (idempotent; another undo restored it)
+//   - live piece exists       → skip (idempotent; another restore already revived it)
 //   - tombstoned piece exists → clear removedAt (un-tombstone)
 //   - no piece exists (GC'd)  → recreate a node with the original ID
 //
@@ -776,11 +783,11 @@ func (s *RGATreeSplit[V]) restore(
 	return untombstoned, recreated, stillTombstoned
 }
 
-// retombstone re-deletes the characters in spans (redo of an
-// identity-preserving undo). Only live pieces are affected; already-removed
-// or purged regions are skipped (idempotent). Returns GC pairs for the
-// newly tombstoned nodes and the net docSize diff from splitting live
-// pieces (which the caller accounts to Live).
+// retombstone re-removes the characters in spans under their original
+// identities. Only live pieces are affected; already-removed or purged
+// regions are skipped (idempotent). Returns GC pairs for the newly
+// tombstoned nodes and the net docSize diff from splitting live pieces
+// (which the caller accounts to Live).
 func (s *RGATreeSplit[V]) retombstone(
 	spans []restoreSpanValue[V],
 	executedAt *time.Ticket,

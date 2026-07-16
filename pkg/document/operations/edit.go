@@ -45,7 +45,8 @@ type Edit struct {
 	executedAt *time.Ticket
 
 	// restoreSpans carries the removed content tagged with its original
-	// character identities for identity-preserving undo/redo. Empty for
+	// character identities, letting the server revive or re-remove it
+	// under those identities on the client's instruction. Empty for
 	// ordinary edits.
 	restoreSpans []*crdt.RestoreSpan
 

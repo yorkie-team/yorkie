@@ -341,9 +341,8 @@ func (t *Text) Edit(
 	)
 }
 
-// Restore executes an identity-preserving undo of a deletion, restoring
-// the characters described by spans under their original identities.
-// Returns (untombstoned, recreated, stillTombstoned); see
+// Restore revives the characters described by spans under their original
+// identities. Returns (untombstoned, recreated, stillTombstoned); see
 // RGATreeSplit.restore.
 func (t *Text) Restore(
 	spans []*RestoreSpan,
@@ -365,9 +364,9 @@ func (t *Text) Restore(
 	return t.rgaTreeSplit.restore(internal)
 }
 
-// Retombstone executes a redo (re-delete) of a previously restored range.
-// Returns GC pairs for the newly tombstoned nodes and the net docSize diff
-// from splitting live pieces.
+// Retombstone re-removes a previously restored range under its original
+// identities. Returns GC pairs for the newly tombstoned nodes and the net
+// docSize diff from splitting live pieces.
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
