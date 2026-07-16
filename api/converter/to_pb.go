@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -428,6 +429,10 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 }
 
 func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
+	restoreSpans, err := toRestoreSpans(e.RestoreSpans())
+	if err != nil {
+		return nil, err
+	}
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
 			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
@@ -436,19 +441,25 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 			Content:         e.Content(),
 			Attributes:      e.Attributes(),
 			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
-			RestoreSpans:    toRestoreSpans(e.RestoreSpans()),
+			RestoreSpans:    restoreSpans,
 			RestoreMode:     toRestoreMode(e.RestoreMode()),
 		},
 	}, nil
 }
 
-func toRestoreSpans(spans []*crdt.RestoreSpan) []*api.RestoreSpan {
+func toRestoreSpans(spans []*crdt.RestoreSpan) ([]*api.RestoreSpan, error) {
 	if len(spans) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	pbSpans := make([]*api.RestoreSpan, 0, len(spans))
 	for _, span := range spans {
+		// Start/End are wire int32s; guard the narrowing rather than
+		// silently wrapping on documents large enough to overflow it.
+		if span.Start < math.MinInt32 || span.Start > math.MaxInt32 ||
+			span.End < math.MinInt32 || span.End > math.MaxInt32 {
+			return nil, ErrInvalidRestoreSpan
+		}
 		pbSpans = append(pbSpans, &api.RestoreSpan{
 			CreatedAt:  ToTimeTicket(span.CreatedAt),
 			Start:      int32(span.Start),
@@ -457,7 +468,7 @@ func toRestoreSpans(spans []*crdt.RestoreSpan) []*api.RestoreSpan {
 			Attributes: span.Attributes,
 		})
 	}
-	return pbSpans
+	return pbSpans, nil
 }
 
 func toRestoreMode(mode crdt.RestoreMode) api.RestoreMode {
