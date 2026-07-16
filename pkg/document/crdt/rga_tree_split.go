@@ -535,12 +535,12 @@ func (s *RGATreeSplit[V]) edit(
 	// 01. Split nodes with from and to
 	toLeft, toRight, diffTo, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, diff, err
+		return nil, s.drainPendingGCPairs(), diff, err
 	}
 
 	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, diff, err
+		return nil, s.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffTo, diffFrom)

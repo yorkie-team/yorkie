@@ -112,13 +112,12 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 			}(),
 			versionVector,
 		)
-		if err != nil {
-			return err
-		}
-
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
 			root.AdjustDiffForGCPair(&diff, pair)
+		}
+		if err != nil {
+			return err
 		}
 
 		root.Acc(diff)

@@ -1059,15 +1059,16 @@ func (t *Tree) Edit(
 	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
 	var diff resource.DataSize
+	var pairs []GCPair
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -1111,11 +1112,10 @@ func (t *Tree) Edit(
 		editedAt, versionVector,
 	)
 	if err != nil {
-		return nil, resource.DataSize{}, err
+		return t.drainPendingGCPairs(), resource.DataSize{}, err
 	}
 
 	// Phase 5: Delete — tombstone the collected nodes.
-	var pairs []GCPair
 	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
 			pairs = append(pairs, GCPair{
@@ -1129,7 +1129,7 @@ func (t *Tree) Edit(
 	if err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, toBeMergedNodes, editedAt,
 	); err != nil {
-		return nil, resource.DataSize{}, err
+		return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 	}
 
 	// §6.2: Propagate deletes to children moved by prior merges.
@@ -1140,7 +1140,7 @@ func (t *Tree) Edit(
 
 	// Phase 7: Split — split element nodes for the given splitLevel.
 	if err := t.split(fromParent, fromLeft, splitLevel, editedAt, issueTimeTicket, versionVector); err != nil {
-		return nil, resource.DataSize{}, err
+		return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 	}
 
 	// Phase 8: Insert — insert the given node at the given position.
@@ -1151,12 +1151,12 @@ func (t *Tree) Edit(
 			if leftInChildren == fromParent {
 				err := fromParent.InsertAt(content, 0)
 				if err != nil {
-					return nil, resource.DataSize{}, err
+					return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 				}
 			} else {
 				err := fromParent.InsertAfter(content, leftInChildren)
 				if err != nil {
-					return nil, resource.DataSize{}, err
+					return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 				}
 			}
 
@@ -1610,11 +1610,11 @@ func (t *Tree) Style(
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -1697,7 +1697,7 @@ func (t *Tree) Style(
 			}
 		}
 	}); err != nil {
-		return nil, resource.DataSize{}, err
+		return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)
@@ -1717,11 +1717,11 @@ func (t *Tree) RemoveStyle(
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffFrom, diffTo)
@@ -1798,7 +1798,7 @@ func (t *Tree) RemoveStyle(
 			}
 		}
 	}); err != nil {
-		return nil, resource.DataSize{}, err
+		return append(pairs, t.drainPendingGCPairs()...), resource.DataSize{}, err
 	}
 
 	pairs = append(pairs, t.drainPendingGCPairs()...)

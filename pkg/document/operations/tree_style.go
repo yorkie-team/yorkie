@@ -92,19 +92,16 @@ func (e *TreeStyle) Execute(root *crdt.Root, versionVector time.VersionVector) e
 	var err error
 	if len(e.attributes) > 0 {
 		pairs, diff, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, versionVector)
-		if err != nil {
-			return err
-		}
 	} else {
 		pairs, diff, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, versionVector)
-		if err != nil {
-			return err
-		}
 	}
 
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
 		root.AdjustDiffForGCPair(&diff, pair)
+	}
+	if err != nil {
+		return err
 	}
 
 	root.Acc(diff)
