@@ -100,11 +100,10 @@ func (e *Style) Execute(root *crdt.Root, versionVector time.VersionVector) error
 		root.RegisterGCPair(pair)
 		root.AdjustDiffForGCPair(&diff, pair)
 	}
+	root.Acc(diff)
 	if err != nil {
 		return err
 	}
-
-	root.Acc(diff)
 
 	return nil
 }

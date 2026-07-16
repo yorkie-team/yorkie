@@ -358,6 +358,7 @@ func (t *Text) Style(
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
+		diff.Add(diffTo)
 		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 
@@ -429,6 +430,7 @@ func (t *Text) RemoveStyle(
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
+		diff.Add(diffTo)
 		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 

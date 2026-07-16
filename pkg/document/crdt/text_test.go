@@ -123,4 +123,25 @@ func TestText(t *testing.T) {
 		assert.Error(t, err)
 		assert.Len(t, pairs, 1, "the pair buffered by splitting `to` must still be returned on the `from` error path")
 	})
+
+	t.Run("returns the live diff from splitting `to` even when the other split errors", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, _, err := text.Edit(fromPos, toPos, "hello world", nil, ctx.IssueTimeTicket(), nil)
+		assert.NoError(t, err)
+
+		// `to` lands in the middle of the live "hello world" node, so
+		// splitting it produces a non-zero metadata diff for the new node
+		// it mutates the list into. `from` is a position that cannot be
+		// found, so the second split call fails.
+		_, toPos, _ = text.CreateRange(3, 3)
+		fromPos = crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(ctx.IssueTimeTicket(), 0), 0)
+
+		_, _, diff, err := text.Edit(fromPos, toPos, "", nil, ctx.IssueTimeTicket(), nil)
+		assert.Error(t, err)
+		assert.Positive(t, diff.Meta, "the diff from splitting `to` must still be returned on the `from` error path")
+	})
 }
