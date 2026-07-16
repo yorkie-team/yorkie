@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -81,8 +82,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, err = a.Edit(ag1, ag2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "0189", a.String())
-		a.Restore(spanD1(seed), tick(4), nil)
-		a.Restore(spanD2(seed), tick(5), nil)
+		a.Restore(spanD1(seed), tick(4))
+		a.Restore(spanD2(seed), tick(5))
 
 		// Replica B: identical deletes, restore u2 then u1.
 		b := seededText(t, seed)
@@ -92,8 +93,8 @@ func TestTextRestore(t *testing.T) {
 		assert.NoError(t, err)
 		_, _, _, err = b.Edit(bg1, bg2, "", nil, tick(3), nil)
 		assert.NoError(t, err)
-		b.Restore(spanD2(seed), tick(5), nil)
-		b.Restore(spanD1(seed), tick(4), nil)
+		b.Restore(spanD2(seed), tick(5))
+		b.Restore(spanD1(seed), tick(4))
 
 		assert.Equal(t, "0123456789", a.String(), "replica A")
 		assert.Equal(t, "0123456789", b.String(), "replica B")
@@ -112,10 +113,10 @@ func TestTextRestore(t *testing.T) {
 		// Undo only d1: it clears the tombstone on the "45" nodes, so "45"
 		// reappears while "23"/"67" stay tombstoned by d2 (design doc's
 		// "Order B": "01" + "45" + "89").
-		text.Restore(spanD1(seed), tick(4), nil)
+		text.Restore(spanD1(seed), tick(4))
 		assert.Equal(t, "014589", text.String())
 		// Undo d2 as well: the full range comes back exactly once.
-		text.Restore(spanD2(seed), tick(5), nil)
+		text.Restore(spanD2(seed), tick(5))
 		assert.Equal(t, "0123456789", text.String())
 	})
 
@@ -128,8 +129,8 @@ func TestTextRestore(t *testing.T) {
 		_, _, _, _ = text.Edit(g1, g2, "", nil, tick(3), nil)
 		assert.Equal(t, "016789", text.String())
 
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4), nil)
-		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5), nil)
+		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}, tick(4))
+		text.Restore([]*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 5, Content: "234"}}, tick(5))
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -140,13 +141,13 @@ func TestTextRestore(t *testing.T) {
 		deleteRange(t, text, 4, 6, tick(2))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(3), nil)
+		text.Restore(spanD1(seed), tick(3))
 		assert.Equal(t, "0123456789", text.String())
 
 		text.Retombstone(spanD1(seed), tick(4))
 		assert.Equal(t, "01236789", text.String())
 
-		text.Restore(spanD1(seed), tick(5), nil)
+		text.Restore(spanD1(seed), tick(5))
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -155,8 +156,8 @@ func TestTextRestore(t *testing.T) {
 		seed := tick(1)
 		text := seededText(t, seed)
 		deleteRange(t, text, 4, 6, tick(2))
-		text.Restore(spanD1(seed), tick(3), nil)
-		text.Restore(spanD1(seed), tick(3), nil) // duplicate delivery
+		text.Restore(spanD1(seed), tick(3))
+		text.Restore(spanD1(seed), tick(3)) // duplicate delivery
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
 	})
@@ -203,7 +204,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		return []*crdt.RestoreSpan{{CreatedAt: seed, Start: 2, End: 8, Content: "234567"}}
 	}
 
-	run := func(t *testing.T, restoreU1First bool) {
+	run := func(t *testing.T, restoreU1First bool) resource.DocSize {
 		seed := tick(1000) // distinct from ticket lamports used elsewhere
 		root, text, parent := build(seed)
 
@@ -232,11 +233,76 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 
 		assert.Equal(t, "0123456789", text.String())
 		assert.True(t, text.RGATreeSplit().CheckWeight())
+
+		// The restores un-tombstone every remaining piece, so nothing should
+		// be left registered for GC and docSize.GC must drain to zero (see
+		// TestTextTombstoneSplitGC in gc_split_leak_test.go for the same
+		// invariant across replicas).
+		assert.Equal(t, 0, root.GarbageLen())
+		assert.Equal(t, resource.DataSize{}, root.DocSize().GC)
+
+		return root.DocSize()
 	}
 
-	t.Run("restore u1 then u2 after purge", func(t *testing.T) { run(t, true) })
-	t.Run("restore u2 then u1 after purge", func(t *testing.T) { run(t, false) })
+	var docSize1, docSize2 resource.DocSize
+	t.Run("restore u1 then u2 after purge", func(t *testing.T) { docSize1 = run(t, true) })
+	t.Run("restore u2 then u1 after purge", func(t *testing.T) { docSize2 = run(t, false) })
+
+	// Restoring the smaller span first, when the larger span still fully
+	// covers it as one gap, recreates fewer, larger fragments than the
+	// reverse order (which recreates the larger span, then finds the
+	// smaller one already live and skips it) — so Live.Meta legitimately
+	// differs by fragment count between orders. Live.Data (visible content
+	// bytes) is not: assert that instead, mirroring TestTextTombstoneSplitGC's
+	// docSize-equality check without over-asserting on an implementation
+	// detail that's allowed to vary.
+	assert.Equal(t, docSize1.Live.Data, docSize2.Live.Data,
+		"restore order must not affect visible content size")
 
 	// keep del reachable for readers extending the matrix
 	_ = del
+}
+
+// TestTextRestoreDocSizeAccounting pins the GC-size accounting of a partial
+// restore, which splits a tombstone (isolateRange) to un-tombstone a middle
+// piece. If the split-born target's GC pair is dropped instead of registered
+// then un-registered, the original tombstone's size is left in docSize.GC and
+// leaks. Purging every remaining tombstone must bring docSize.GC to exactly
+// zero.
+func TestTextRestoreDocSizeAccounting(t *testing.T) {
+	seed := tick(2000)
+	textTicket := tick(1)
+	text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+	root := helper.TestRoot()
+	root.RegisterElement(text)
+
+	exec := func(from, to int, content string, at *time.Ticket) {
+		f, e, err := text.CreateRange(from, to)
+		assert.NoError(t, err)
+		op := operations.NewEdit(textTicket, f, e, content, nil, at, nil, crdt.RestoreModeNone)
+		assert.NoError(t, op.Execute(root, nil))
+	}
+
+	exec(0, 0, "0123456789", seed) // seed through Execute so docSize tracks it
+	exec(2, 8, "", tick(2001))     // delete "234567" → single tombstone [2,8)
+	assert.Equal(t, "0189", text.String())
+
+	// Partial restore of the middle "45": splits the [2,8) tombstone into
+	// [2,4) + [4,6) + [6,8) and un-tombstones [4,6) (the split-born target).
+	restoreOp := operations.NewEdit(textTicket, nil, nil, "", nil, tick(2002),
+		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
+		crdt.RestoreModeRestore)
+	assert.NoError(t, restoreOp.Execute(root, nil))
+	assert.Equal(t, "014589", text.String())
+
+	// Purge the two remaining tombstones [2,4) and [6,8). If the target's
+	// pair accounting leaked, docSize.GC would retain the "45" size here.
+	_, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+	assert.NoError(t, err)
+	assert.Equal(t, 0, root.GarbageLen())
+
+	gc := root.DocSize().GC
+	assert.Zero(t, gc.Data, "GC data must be zero after purging all tombstones")
+	assert.Zero(t, gc.Meta, "GC meta must be zero after purging all tombstones")
+	assert.Equal(t, "014589", text.String())
 }
