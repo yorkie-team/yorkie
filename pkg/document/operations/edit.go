@@ -86,7 +86,15 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 		switch e.restoreMode {
 		case crdt.RestoreModeRestore:
 			untombstoned, recreated, stillTombstoned := obj.Restore(
-				e.restoreSpans, e.executedAt, e.from)
+				e.restoreSpans, e.executedAt)
+
+			// Register the still-tombstoned split remainders (which include
+			// any split-born target) BEFORE un-registering the un-tombstoned
+			// targets, so each target's GCOnlySize is booked before its full
+			// size is moved GC->Live. Reversing the order would leak GC size.
+			for _, pair := range stillTombstoned {
+				root.RegisterGCPair(pair)
+			}
 
 			var diff resource.DataSize
 			for _, node := range untombstoned {
@@ -95,9 +103,6 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 			}
 			for _, node := range recreated {
 				diff.Add(node.DataSize())
-			}
-			for _, pair := range stillTombstoned {
-				root.RegisterGCPair(pair)
 			}
 			root.Acc(diff)
 

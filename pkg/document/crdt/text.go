@@ -348,7 +348,6 @@ func (t *Text) Edit(
 func (t *Text) Restore(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
-	fallback *RGATreeSplitNodePos,
 ) (untombstoned, recreated []*RGATreeSplitNode[*TextValue], stillTombstoned []GCPair) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
@@ -363,7 +362,7 @@ func (t *Text) Restore(
 			value:     NewTextValue(s.Content, attrs),
 		})
 	}
-	return t.rgaTreeSplit.restore(internal, executedAt, fallback)
+	return t.rgaTreeSplit.restore(internal)
 }
 
 // Retombstone executes a redo (re-delete) of a previously restored range.

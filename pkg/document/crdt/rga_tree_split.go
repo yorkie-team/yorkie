@@ -721,15 +721,12 @@ func subValue[V RGATreeSplitValue](full V, from, to int) V {
 //     pre-existing ones and moves their size GC→Live)
 //   - recreated: brand-new live nodes for purged regions (caller adds their
 //     size to Live)
-//   - stillTombstoned: born-tombstoned split remainders that must be
-//     GC-registered (drained pendingGCPairs, minus un-tombstoned targets)
+//   - stillTombstoned: born-tombstoned split remainders (drained
+//     pendingGCPairs), including split-born targets so the caller can
+//     register them before un-registering (keeps GC accounting balanced)
 func (s *RGATreeSplit[V]) restore(
 	spans []restoreSpanValue[V],
-	executedAt *time.Ticket,
-	fallbackAnchor *RGATreeSplitNodePos,
 ) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair) {
-	targets := map[string]struct{}{}
-
 	for _, span := range spans {
 		pieces := s.findPiecesOverlapping(span.createdAt, span.start, span.end)
 
@@ -751,7 +748,6 @@ func (s *RGATreeSplit[V]) restore(
 					target.SetRemovedAt(nil)
 					s.treeByIndex.Splay(target.indexNode)
 					untombstoned = append(untombstoned, target)
-					targets[target.IDString()] = struct{}{}
 				}
 				cursor = overlapEnd
 				if overlapEnd >= pieceEnd {
@@ -762,8 +758,7 @@ func (s *RGATreeSplit[V]) restore(
 				val := subValue(span.value, cursor-span.start, gapEnd-span.start)
 				newNode := NewRGATreeSplitNode(
 					NewRGATreeSplitNodeID(span.createdAt, cursor), val)
-				prev := s.findRestoreAnchor(
-					span.createdAt, cursor, gapEnd, executedAt, fallbackAnchor)
+				prev := s.findRestoreAnchor(span.createdAt, cursor, gapEnd)
 				s.InsertAfter(prev, newNode)
 				recreated = append(recreated, newNode)
 				cursor = gapEnd
@@ -772,13 +767,12 @@ func (s *RGATreeSplit[V]) restore(
 	}
 
 	// isolateRange splits of tombstones buffer born-dead remainders into
-	// pendingGCPairs. An un-tombstoned target that was itself split-born is
-	// in that buffer but is now live — drop it; register the rest.
-	for _, pair := range s.drainPendingGCPairs() {
-		if _, isTarget := targets[pair.Child.IDString()]; !isTarget {
-			stillTombstoned = append(stillTombstoned, pair)
-		}
-	}
+	// pendingGCPairs. Return them all — including any split-born target that
+	// is now un-tombstoned. The caller registers these first, then
+	// un-registers the un-tombstoned targets, so the split's GCOnlySize is
+	// balanced against the original tombstone's accounting (a bare
+	// un-register on a never-registered split piece would leak GC size).
+	stillTombstoned = s.drainPendingGCPairs()
 	return untombstoned, recreated, stillTombstoned
 }
 
@@ -884,16 +878,16 @@ func (s *RGATreeSplit[V]) isolateRange(
 }
 
 // findRestoreAnchor returns the node to insert a recreated fragment
-// [gapStart, gapEnd) of insertion createdAt AFTER. Resolution ladder:
+// [gapStart, gapEnd) of insertion createdAt AFTER. Every rule keys on
+// identity (the insertion's own surviving pieces) so all replicas choose
+// the same insertion ancestry regardless of GC state:
 //
 //	(a) piece covering gapEnd → before it (exact original slot)
 //	(b) nearest surviving piece left of gapStart → after it
 //	(c) rightmost surviving piece (right of gap) → before it
-//	(d) op fallback anchor (refined) — the one non-replica-invariant rule
-//	(e) head (deterministic last resort)
+//	(d) head (deterministic last resort when the whole insertion is purged)
 func (s *RGATreeSplit[V]) findRestoreAnchor(
 	createdAt *time.Ticket, gapStart, gapEnd int,
-	executedAt *time.Ticket, fallback *RGATreeSplitNodePos,
 ) *RGATreeSplitNode[V] {
 	if succ := s.findPieceCovering(createdAt, gapEnd); succ != nil {
 		return succ.prev
@@ -908,11 +902,6 @@ func (s *RGATreeSplit[V]) findRestoreAnchor(
 	if key, node := s.treeByID.Floor(rightmostID); key != nil &&
 		key.hasSameCreatedAt(rightmostID) && node.ID().Offset() >= gapEnd {
 		return node.prev
-	}
-	if fallback != nil {
-		if left, _, _, err := s.findNodeWithSplit(fallback, executedAt); err == nil {
-			return left
-		}
 	}
 	return s.initialHead
 }
