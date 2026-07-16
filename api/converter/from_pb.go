@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	gotime "time"
+	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -525,6 +526,18 @@ func fromRestoreSpans(pbSpans []*api.RestoreSpan) ([]*crdt.RestoreSpan, error) {
 
 	spans := make([]*crdt.RestoreSpan, 0, len(pbSpans))
 	for _, pbSpan := range pbSpans {
+		if pbSpan == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
+		if pbSpan.Start < 0 || pbSpan.End < pbSpan.Start {
+			return nil, ErrInvalidRestoreSpan
+		}
+		// Text positions are indexed in UTF-16 code units, so the span's
+		// range must match Content's length under the same metric.
+		if int(pbSpan.End-pbSpan.Start) != len(utf16.Encode([]rune(pbSpan.Content))) {
+			return nil, ErrInvalidRestoreSpan
+		}
+
 		createdAt, err := fromTimeTicket(pbSpan.CreatedAt)
 		if err != nil {
 			return nil, err
