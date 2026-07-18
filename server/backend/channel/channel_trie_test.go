@@ -660,14 +660,12 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for range 100 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				trie.GetOrInsert(refKey, func() *Channel {
 					atomic.AddInt32(&createCount, 1)
 					return createTestChannel(projectID, "room-1")
 				})
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -697,9 +695,8 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 
 		// Writers
 		for w := range numWriters {
-			wg.Add(1)
-			go func(wid int) {
-				defer wg.Done()
+			wg.Go(func() {
+				wid := w
 				for i := range 10 {
 					refKey := types.ChannelRefKey{
 						ProjectID:  projectID,
@@ -709,21 +706,19 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 						return createTestChannel(projectID, refKey.ChannelKey)
 					})
 				}
-			}(w)
+			})
 		}
 
 		// Readers
 		for range numReaders {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				for range 10 {
 					trie.ForEach(func(ch *Channel) bool {
 						_ = ch.Key.ChannelKey
 						return true
 					})
 				}
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -776,15 +771,14 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 
 		// Concurrent deletes
 		for i := range 100 {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
+			wg.Go(func() {
+				idx := i
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
 					ChannelKey: key.Key(fmt.Sprintf("room-%d", idx)),
 				}
 				trie.Delete(refKey)
-			}(i)
+			})
 		}
 
 		wg.Wait()
@@ -814,9 +808,7 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 
 	// Readers doing ForEachInProject
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				trie.ForEachInProject(projectID, func(ch *Channel) bool {
@@ -825,14 +817,13 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 				})
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding channels
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
+			wid := i
 			for j := range 20 {
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
@@ -842,14 +833,13 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 					return createTestChannel(projectID, refKey.ChannelKey)
 				})
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing channels
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
+			did := i
 			for j := range 5 {
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
@@ -857,7 +847,7 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 				}
 				trie.Delete(refKey)
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -916,9 +906,7 @@ func TestChannelTrie_ConcurrentForEachDescendantWithModifications(t *testing.T) 
 
 	// Readers doing ForEachDescendant
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				trie.ForEachDescendant(parentRefKey, func(ch *Channel) bool {
@@ -927,14 +915,13 @@ func TestChannelTrie_ConcurrentForEachDescendantWithModifications(t *testing.T) 
 				})
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding descendants
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
+			wid := i
 			for j := range 10 {
 				k := key.Key(fmt.Sprintf("room-1.section-1.new-desk-%d-%d", wid, j))
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
@@ -942,20 +929,19 @@ func TestChannelTrie_ConcurrentForEachDescendantWithModifications(t *testing.T) 
 					return createTestChannel(projectID, k)
 				})
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing descendants
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
+			did := i
 			for j := range 2 {
 				k := key.Key(fmt.Sprintf("room-1.section-1.desk-%d", did*2+j))
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 				trie.Delete(refKey)
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -1009,9 +995,7 @@ func TestChannelTrie_ConcurrentForEachPrefixWithModifications(t *testing.T) {
 
 	// Readers doing ForEachPrefix
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				trie.ForEachPrefix("room-1", projectID, func(ch *Channel) bool {
@@ -1020,14 +1004,13 @@ func TestChannelTrie_ConcurrentForEachPrefixWithModifications(t *testing.T) {
 				})
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding matching channels
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
+			wid := i
 			for j := range 10 {
 				k := key.Key(fmt.Sprintf("room-1%d%d", wid, j)) // Matches "room-1" prefix
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
@@ -1035,18 +1018,17 @@ func TestChannelTrie_ConcurrentForEachPrefixWithModifications(t *testing.T) {
 					return createTestChannel(projectID, k)
 				})
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing matching channels
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
+			did := i
 			k := key.Key(fmt.Sprintf("room-%d", 10+did)) // room-10 through room-19
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.Delete(refKey)
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -1088,37 +1070,35 @@ func TestChannelTrie_ConcurrentHierarchicalChannelCreation(t *testing.T) {
 
 	// Concurrent creation of parent and child channels
 	for i := range numGoroutines {
-		wg.Add(3)
-
 		// Create parent channel
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			k := key.Key(fmt.Sprintf("room-%d", idx%10))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
 			})
-		}(i)
+		})
 
 		// Create child channel
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			k := key.Key(fmt.Sprintf("room-%d.section-%d", idx%10, idx%5))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
 			})
-		}(i)
+		})
 
 		// Create grandchild channel
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			k := key.Key(fmt.Sprintf("room-%d.section-%d.desk-%d", idx%10, idx%5, idx%3))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
 			})
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -1163,11 +1143,9 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 
 	// Concurrent operations across multiple projects
 	for i := range numGoroutines {
-		wg.Add(3)
-
 		// Insert to random projects
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			projectID := projectIDs[idx%len(projectIDs)]
 			for j := range 10 {
 				k := key.Key(fmt.Sprintf("room-%d-%d", idx, j))
@@ -1176,11 +1154,11 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 					return createTestChannel(projectID, k)
 				})
 			}
-		}(i)
+		})
 
 		// ForEachInProject on random projects
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			projectID := projectIDs[idx%len(projectIDs)]
 			count := 0
 			trie.ForEachInProject(projectID, func(ch *Channel) bool {
@@ -1188,16 +1166,16 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 				return true
 			})
 			_ = count
-		}(i)
+		})
 
 		// Delete from random projects
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
+			idx := i
 			projectID := projectIDs[idx%len(projectIDs)]
 			k := key.Key(fmt.Sprintf("room-%d-0", idx))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.Delete(refKey)
-		}(i)
+		})
 	}
 
 	wg.Wait()
