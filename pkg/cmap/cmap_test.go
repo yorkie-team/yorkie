@@ -227,36 +227,32 @@ func TestConcurrentMap(t *testing.T) {
 		}
 
 		var wg sync.WaitGroup
-		wg.Add(3) // For Keys, Values, and modifier goroutines
 
 		// Start a goroutine to continuously modify the map.
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range numItems {
 				m.Set(randomIntn(numItems), i)
 				m.Delete(randomIntn(numItems), func(val int, exists bool) bool {
 					return exists
 				})
 			}
-		}()
+		})
 
 		// Start a goroutine to iterate over keys.
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			keys := m.Keys()
 			if len(keys) > numItems {
 				t.Errorf("Number of keys (%d) is greater than inserted items (%d)", len(keys), numItems)
 			}
-		}()
+		})
 
 		// Start a goroutine to iterate over values.
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			values := m.Values()
 			if len(values) > numItems {
 				t.Errorf("Number of values (%d) is greater than inserted items (%d)", len(values), numItems)
 			}
-		}()
+		})
 
 		wg.Wait()
 	})
