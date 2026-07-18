@@ -18,10 +18,33 @@ goroutine, etc.).
 
 ## Prerequisite
 
-- `go.mod` currently pins `go 1.24.0`; bump to `go 1.25.0` (or later).
-  Installed toolchain here is `go1.26.4`, so no toolchain install
-  needed locally — but confirm CI's Go version (`.github/workflows/*`)
-  is >= 1.25 before relying on it.
+- [x] `go.mod` bumped `go 1.24.0` -> `go 1.25.0`; also bumped
+  `.github/workflows/ci.yml` (`GO_VERSION`), `base-docker-publish.yml`
+  (`go-version`), and `Dockerfile` (`FROM golang:1.24` builder image)
+  to 1.25, since CI/Docker were still pinned to 1.24 and would have
+  broken on the go.mod bump alone. `go mod tidy` ran clean, no go.sum
+  changes. Commit: `b8650560`.
+
+## Progress
+
+Working branch: `task/waitgroup-go-migration`. Each file below is its
+own commit (`make lint` / relevant unit tests green before commit).
+Resume by checking `git log main..HEAD --oneline` against this list.
+
+Non-test (2/7 done):
+- [x] `server/clients/housekeeping.go` — commit `2605156a`
+- [x] `server/backend/background/background.go` — commit `63d8348c`
+- [ ] `server/backend/fanout.go`
+- [ ] `server/backend/membership/membership.go`
+- [ ] `server/rpc/testcases/testcases.go`
+- [ ] `client/client.go`
+- [ ] `pkg/limit/limiter.go`
+
+Test (0/22 done) — see Scope list below for the full file set.
+
+Remaining after file migration: CONTRIBUTING.md note, full
+`make lint` + `make test` (MongoDB up) pass, `/code-review`
+self-review, rebase onto `main`, open Draft PR referencing #1860.
 
 ## Scope
 
