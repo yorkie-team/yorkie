@@ -259,14 +259,12 @@ func TestClientPoolConcurrency(t *testing.T) {
 		errs := make(chan error, goroutines)
 
 		for range goroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, err := pool.Get("http://127.0.0.1:0")
 				if err != nil {
 					errs <- err
 				}
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -289,9 +287,7 @@ func TestClientPoolConcurrency(t *testing.T) {
 		const goroutines = 100
 
 		for range goroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				client, err := pool.Get("http://127.0.0.1:0")
 				if err != nil {
 					return
@@ -299,7 +295,7 @@ func TestClientPoolConcurrency(t *testing.T) {
 				mu.Lock()
 				seen[client]++
 				mu.Unlock()
-			}()
+			})
 		}
 
 		wg.Wait()
