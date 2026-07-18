@@ -85,6 +85,8 @@ The coding style suggested by the Golang community is used in Yorkie. See the [s
 
 If you make any changes to the code, run `make fmt` to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
 
+When spawning a goroutine tracked by a `sync.WaitGroup`, use [`wg.Go(f)`](https://pkg.go.dev/sync#WaitGroup.Go) instead of the `wg.Add(1)` / `go func() { defer wg.Done(); ... }()` idiom — it keeps the `Add`/`Done` pairing balanced automatically.
+
 ### Commit Message Format
 
 We follow a rough convention for commit messages that is designed to answer two questions: what changed and why. The subject line should feature the what and the body of the commit should describe the why.
