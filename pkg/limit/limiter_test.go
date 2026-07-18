@@ -270,13 +270,11 @@ func TestConcurrentExecution(t *testing.T) {
 
 		wg := sync.WaitGroup{}
 		for range numExecute {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if lim.Allow("key", callback) {
 					callback()
 				}
-			}()
+			})
 		}
 		wg.Wait()
 		assert.Equal(t, 1, o.len())
@@ -297,13 +295,11 @@ func TestConcurrentExecution(t *testing.T) {
 		wg := sync.WaitGroup{}
 		for i := range numExecute {
 			i := i
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if lim.Allow(i, callback) {
 					callback()
 				}
-			}()
+			})
 		}
 		wg.Wait()
 
