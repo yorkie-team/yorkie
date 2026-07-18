@@ -48,16 +48,48 @@ for the remaining test files too:
   the method takes args, and drop the now-orphaned `defer wg.Done()`
   at the far end.
 - Closure took loop-var params to dodge pre-1.22 capture bugs (e.g.
-  `func(c CandidatePair) {...}(candidate)`): don't rename the body to
-  match the outer var — rename the *outer loop var* to match the
-  former param name instead, so the body stays untouched and the
-  diff stays minimal.
+  `func(gIdx int) {...}(g)`): **correction, superseded below** — an
+  earlier version of this note said to rename the outer loop var to
+  match the former param name (used once, in `housekeeping.go`'s
+  `candidate`→`c`). The repo owner corrected this: renaming *either*
+  side is out of scope for a mechanical swap. The actual rule used
+  for every file after `housekeeping.go`: keep both the outer loop
+  var and the param name exactly as they were, and add one shadow
+  line as the first statement of the new closure body —
+  `gIdx := g` (or `a, b := x, y` for multiple params). Only
+  `wg.Add`/the param list/`defer wg.Done()` are touched; zero
+  identifiers change anywhere in the diff.
 
-Test (0/22 done) — see Scope list below for the full file set.
+Test (22/22 done). Migrated in 12 folder-batches (dispatched to
+parallel subagents for groups 3 onward), each verified with
+build+vet+gofmt+lint+test (and `-race` where feasible) before commit:
 
-Remaining after file migration: CONTRIBUTING.md note, full
-`make lint` + `make test` (MongoDB up) pass, `/code-review`
-self-review, rebase onto `main`, open Draft PR referencing #1860.
+- [x] `cluster/pool_test.go` — `1d594861`
+- [x] `test/bench/*.go` (5 files) — `d2652c94`
+- [x] `server/backend/pubsub/pubsub_test.go` — `42bfb60b`
+- [x] `server/backend/membership/membership_test.go` — `cb0b9f7a`
+- [x] `server/rpc/admin_server_unit_test.go` — `24f76bf4`
+- [x] `pkg/limit/limiter_test.go` — `c8c25464`
+- [x] `pkg/cache/cache_test.go` — no changes (all sites are batch
+  `Add(n)` matched by a single loop-generated `Done()`, doesn't fit
+  the mechanical triple)
+- [x] `pkg/locker/locker_test.go` — `70567710`
+- [x] `pkg/cmap/cmap_test.go` — `e434bc83`
+- [x] `server/backend/channel/*.go` (2 files) — `e26c5045`
+- [x] `test/integration/*.go` (7 of 8 files; `doc_presence_test.go`
+  untouched — Done() fires conditionally inside a select loop, not a
+  single deferred call) — `3f5c2ee2`
+- [x] `pkg/trie/*.go` (2 files) — `fd7b0256`
+
+Key convention established mid-task (see notes below): loop-var
+capture params are shadow-assigned, never renamed. The Add(2)/two-
+literal-blocks exception was extended case-by-case to Add(3)/three
+blocks where each block is independently a one-Add-one-Done unit —
+never to `Add(n)` preceding a loop (that stays a hard skip).
+
+Remaining: CONTRIBUTING.md note, full `make lint` + `make test`
+(MongoDB up) pass across the whole diff, `/code-review` self-review,
+rebase onto `main`, open Draft PR referencing #1860.
 
 ## Scope
 
