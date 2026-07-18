@@ -94,15 +94,14 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						gIdx := g
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, gIdx))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err == nil {
 							atomic.AddInt64(&successCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -148,9 +147,8 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						gIdx := g
 						channelKey := types.ChannelRefKey{
 							ProjectID:  projectID,
 							ChannelKey: key.Key(fmt.Sprintf("room-%d", gIdx)),
@@ -163,7 +161,7 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 						if sessionID != "" {
 							atomic.AddInt64(&successCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -226,10 +224,8 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				var attachErrors, detachErrors int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
-
+					wg.Go(func() {
+						gIdx := g
 						if (gIdx*100)/tc.goroutineCount < tc.detachRatio {
 							// Detach operation
 							idx := atomic.AddInt32(&sessionIdx, 1) - 1
@@ -249,7 +245,7 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 							}
 							atomic.AddInt64(&attachCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -314,9 +310,8 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 
 				// Start readers
 				for r := range tc.readers {
-					wg.Add(1)
-					go func(rIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						rIdx := r
 						for {
 							select {
 							case <-done:
@@ -330,15 +325,14 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 								}
 							}
 						}
-					}(r)
+					})
 				}
 
 				// Start writers
 				var writeCount int32
 				for w := range tc.writers {
-					wg.Add(1)
-					go func(wIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						wIdx := w
 						channelKey := channelKeys[wIdx%tc.channelCount]
 						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", wIdx))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
@@ -350,7 +344,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 								close(done)
 							})
 						}
-					}(w)
+					})
 				}
 
 				wg.Wait()
@@ -409,10 +403,8 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				var listCount int64
 
 				// Start readers (List operations)
-				for r := range tc.readers {
-					wg.Add(1)
-					go func(rIdx int) {
-						defer wg.Done()
+				for range tc.readers {
+					wg.Go(func() {
 						for {
 							select {
 							case <-done:
@@ -425,15 +417,14 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 								}
 							}
 						}
-					}(r)
+					})
 				}
 
 				// Start writers
 				var writeCount int32
 				for w := range tc.writers {
-					wg.Add(1)
-					go func(wIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						wIdx := w
 						channelKey := types.ChannelRefKey{
 							ProjectID:  projectID,
 							ChannelKey: key.Key(fmt.Sprintf("new-room-%d", wIdx)),
@@ -448,7 +439,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 								close(done)
 							})
 						}
-					}(w)
+					})
 				}
 
 				wg.Wait()
@@ -494,9 +485,8 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutines {
-					wg.Add(1)
-					go func(iterIdx, gIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						iterIdx, gIdx := i, g
 
 						var channelKey types.ChannelRefKey
 						switch tc.operation {
@@ -532,7 +522,7 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 						mu.Lock()
 						sessionIDs[gIdx] = sessionID
 						mu.Unlock()
-					}(i, g)
+					})
 				}
 
 				wg.Wait()
@@ -606,9 +596,8 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 				var attachCount, readCount int64
 
 				for g := range tc.goroutines {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
+						gIdx := g
 
 						for op := range tc.operationsEach {
 							channelKey := channelKeys[(gIdx+op)%tc.channelCount]
@@ -655,7 +644,7 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 								}
 							}
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()

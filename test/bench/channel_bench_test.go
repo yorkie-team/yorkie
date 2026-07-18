@@ -161,10 +161,8 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 		var wg sync.WaitGroup
 
 		for i := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-
+			wg.Go(func() {
+				idx := i
 				channelKey := channelKeys[idx%channelCount]
 
 				if idx%100 < readRatio {
@@ -178,7 +176,7 @@ func benchmarkManagerConcurrentOperations(b *testing.B, clientCount, channelCoun
 						atomic.AddInt64(&attachErrors, 1)
 					}
 				}
-			}(i)
+			})
 		}
 
 		wg.Wait()
@@ -260,10 +258,8 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 		var wg sync.WaitGroup
 
 		for i := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-
+			wg.Go(func() {
+				idx := i
 				channelKey := channelKeys[idx%totalChannels]
 
 				if idx%100 < readRatio {
@@ -277,7 +273,7 @@ func benchmarkManagerHierarchicalConcurrent(b *testing.B, levelCounts []int, cli
 						atomic.AddInt64(&attachErrors, 1)
 					}
 				}
-			}(i)
+			})
 		}
 
 		wg.Wait()
@@ -334,15 +330,14 @@ func benchmarkManagerAttach(b *testing.B, clientCount int) {
 
 		var attachErrors int64
 		for j := range clientCount {
-			wg.Add(1)
-			go func(iterIdx, clientIdx int) {
-				defer wg.Done()
+			wg.Go(func() {
+				iterIdx, clientIdx := i, j
 				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", iterIdx, clientIdx))
 				_, _, err := manager.Attach(ctx, channelKey, clientID)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
 				}
-			}(i, j)
+			})
 		}
 
 		wg.Wait()
@@ -385,14 +380,13 @@ func benchmarkManagerDetach(b *testing.B, clientCount int) {
 		var detachErrors int64
 		var wg sync.WaitGroup
 		for j := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
+			wg.Go(func() {
+				idx := j
 				_, err := manager.Detach(ctx, sessionIDs[idx])
 				if err != nil {
 					atomic.AddInt64(&detachErrors, 1)
 				}
-			}(j)
+			})
 		}
 
 		wg.Wait()
@@ -428,9 +422,8 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 		var mu sync.Mutex
 
 		for j := range clientCount {
-			wg.Add(1)
-			go func(clientIdx int) {
-				defer wg.Done()
+			wg.Go(func() {
+				clientIdx := j
 				clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", clientIdx))
 				sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 				if err != nil {
@@ -439,7 +432,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 				mu.Lock()
 				sessionIDs[clientIdx] = sessionID
 				mu.Unlock()
-			}(j)
+			})
 		}
 
 		wg.Wait()
@@ -451,9 +444,8 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 
 		// Concurrent detach
 		for j := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
+			wg.Go(func() {
+				idx := j
 				mu.Lock()
 				sessionID := sessionIDs[idx]
 				mu.Unlock()
@@ -461,7 +453,7 @@ func benchmarkManagerAttachDetachCycle(b *testing.B, clientCount int) {
 				if err != nil {
 					atomic.AddInt64(&detachErrors, 1)
 				}
-			}(j)
+			})
 		}
 
 		wg.Wait()
