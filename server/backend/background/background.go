@@ -80,16 +80,12 @@ func (b *Background) Go(
 	}
 
 	// now safe to add since WaitGroup wait has not started yet
-	b.wg.Add(1)
 	routineLogger := logging.NewNamed(b.routineID.next())
 	b.metrics.AddBackgroundGoroutines(taskType)
-	go func() {
-		defer func() {
-			b.wg.Done()
-			b.metrics.RemoveBackgroundGoroutines(taskType)
-		}()
+	b.wg.Go(func() {
+		defer b.metrics.RemoveBackgroundGoroutines(taskType)
 		f(logging.With(context.Background(), routineLogger))
-	}()
+	})
 }
 
 // Close closes the background service. This will wait for all goroutines to
