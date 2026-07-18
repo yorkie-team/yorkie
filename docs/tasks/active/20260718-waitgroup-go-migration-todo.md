@@ -31,14 +31,27 @@ Working branch: `task/waitgroup-go-migration`. Each file below is its
 own commit (`make lint` / relevant unit tests green before commit).
 Resume by checking `git log main..HEAD --oneline` against this list.
 
-Non-test (2/7 done):
+Non-test (7/7 done):
 - [x] `server/clients/housekeeping.go` — commit `2605156a`
 - [x] `server/backend/background/background.go` — commit `63d8348c`
-- [ ] `server/backend/fanout.go`
-- [ ] `server/backend/membership/membership.go`
-- [ ] `server/rpc/testcases/testcases.go`
-- [ ] `client/client.go`
-- [ ] `pkg/limit/limiter.go`
+- [x] `server/backend/fanout.go` — commit `79524bc3`
+- [x] `server/backend/membership/membership.go` — commit `dbb48bd4`
+- [x] `server/rpc/testcases/testcases.go` — commit `180cd10d`
+- [x] `client/client.go` — commit `c4f04d99`
+- [x] `pkg/limit/limiter.go` — commit `d95b6982`
+
+Two non-mechanical variants found along the way, worth knowing about
+for the remaining test files too:
+- Add/Done split across two functions (`membership.go`,
+  `limiter.go`'s `expirationLoop`): pass the method value straight to
+  `wg.Go` (`lim.wg.Go(lim.expirationLoop)`), or wrap in a closure if
+  the method takes args, and drop the now-orphaned `defer wg.Done()`
+  at the far end.
+- Closure took loop-var params to dodge pre-1.22 capture bugs (e.g.
+  `func(c CandidatePair) {...}(candidate)`): don't rename the body to
+  match the outer var — rename the *outer loop var* to match the
+  former param name instead, so the body stays untouched and the
+  diff stays minimal.
 
 Test (0/22 done) — see Scope list below for the full file set.
 
