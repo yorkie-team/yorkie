@@ -174,9 +174,8 @@ func TestLeadershipConcurrency(t *testing.T) {
 	acquiredCount := make([]int, numGoroutines)
 
 	for i := range numGoroutines {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
+		wg.Go(func() {
+			id := i
 
 			rpcAddr := fmt.Sprintf("test-addr-%d", id)
 
@@ -188,7 +187,7 @@ func TestLeadershipConcurrency(t *testing.T) {
 				}
 				time.Sleep(5 * time.Millisecond)
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
