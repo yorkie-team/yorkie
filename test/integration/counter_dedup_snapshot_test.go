@@ -105,9 +105,8 @@ func TestCounterDedupSnapshotConcurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := 0; i < numClients; i++ {
-		wg.Add(1)
-		go func(vu int) {
-			defer wg.Done()
+		wg.Go(func() {
+			vu := i
 			for j := 0; j < perClient; j++ {
 				actor := fmt.Sprintf("user-%d-%d", vu, j)
 				err := docs[vu].Update(func(root *json.Object, p *presence.Presence) error {
@@ -117,7 +116,7 @@ func TestCounterDedupSnapshotConcurrent(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, clients[vu].Sync(ctx))
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 

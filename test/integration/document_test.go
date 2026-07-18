@@ -152,13 +152,10 @@ func TestDocument(t *testing.T) {
 		wg := sync.WaitGroup{}
 
 		// 01. cli1 watches doc1.
-		wg.Add(1)
 		rch, _, err := c1.WatchStream(d1)
 		assert.NoError(t, err)
 
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for {
 				resp := <-rch
 				if resp.Err == io.EOF {
@@ -173,7 +170,7 @@ func TestDocument(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		// 02. cli2 updates doc2.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -450,7 +447,6 @@ func TestDocumentWithProjects(t *testing.T) {
 		var expected []watchDocPair
 		var responsePairs []watchDocPair
 		wg := sync.WaitGroup{}
-		wg.Add(1)
 
 		// watchedReceived signals that c1 observed c2 joining. The unwatch
 		// below must happen after this: a peer that leaves before its
@@ -465,8 +461,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		assert.NoError(t, err)
 		defer cancel1()
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				resp := <-rch
 				if resp.Err == io.EOF {
@@ -491,7 +486,7 @@ func TestDocumentWithProjects(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		// c2 watches the same document, so c1 receives a document watched event.
 		expected = append(expected, watchDocPair{

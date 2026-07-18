@@ -292,9 +292,7 @@ func TestRESTAPI(t *testing.T) {
 
 		wg := sync.WaitGroup{}
 		for range 10 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				res := post(
 					t,
 					project,
@@ -304,7 +302,7 @@ func TestRESTAPI(t *testing.T) {
 				summary := &documentSummary{}
 				assert.NoError(t, gojson.Unmarshal(res, summary))
 				assert.Equal(t, `{"arr":[1]}`, summary.Document.Root)
-			}()
+			})
 		}
 		wg.Wait()
 	})
