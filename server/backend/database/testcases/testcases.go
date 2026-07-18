@@ -1294,7 +1294,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 
 		createdInfo, err := db.FindProjectInfoByID(ctx, info.ID)
 		assert.NoError(t, err)
-		assert.False(t, createdInfo.UpdatedAt.IsZero())
+		assert.Equal(t, createdInfo.CreatedAt, createdInfo.UpdatedAt)
 		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
 		assert.NoError(t, err)
 
