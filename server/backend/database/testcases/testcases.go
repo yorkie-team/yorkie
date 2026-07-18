@@ -1289,6 +1289,12 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
 		assert.Equal(t, database.DefaultSnapshotThreshold, info.SnapshotThreshold)
 		assert.Equal(t, database.DefaultSnapshotInterval, info.SnapshotInterval)
+		assert.False(t, info.UpdatedAt.IsZero())
+		assert.Equal(t, info.CreatedAt, info.UpdatedAt)
+
+		createdInfo, err := db.FindProjectInfoByID(ctx, info.ID)
+		assert.NoError(t, err)
+		assert.False(t, createdInfo.UpdatedAt.IsZero())
 		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
 		assert.NoError(t, err)
 

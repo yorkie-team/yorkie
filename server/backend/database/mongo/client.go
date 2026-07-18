@@ -544,6 +544,7 @@ func (c *Client) CreateProjectInfo(
 		"public_key":                      info.PublicKey,
 		"secret_key":                      info.SecretKey,
 		"created_at":                      info.CreatedAt,
+		"updated_at":                      info.UpdatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {

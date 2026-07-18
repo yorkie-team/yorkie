@@ -165,6 +165,7 @@ type ProjectInfo struct {
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
 func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
+	now := time.Now()
 	return &ProjectInfo{
 		Name:                        name,
 		Owner:                       owner,
@@ -187,7 +188,8 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		AutoRevisionEnabled:         true,
 		PublicKey:                   shortuuid.New(),
 		SecretKey:                   shortuuid.New(),
-		CreatedAt:                   time.Now(),
+		CreatedAt:                   now,
+		UpdatedAt:                   now,
 	}
 }
 
