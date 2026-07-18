@@ -307,11 +307,8 @@ func (c *Client) Deactivate(ctx context.Context, opts ...DeactivateOption) error
 // It periodically checks if any resource needs synchronization and performs it.
 func (c *Client) runSyncLoop(ctx context.Context) {
 	c.syncCtx, c.syncCancel = context.WithCancel(ctx)
-	c.syncLoopWg.Add(1)
 
-	go func() {
-		defer c.syncLoopWg.Done()
-
+	c.syncLoopWg.Go(func() {
 		ticker := gotime.NewTicker(c.options.SyncLoopDuration)
 		defer ticker.Stop()
 
@@ -333,7 +330,7 @@ func (c *Client) runSyncLoop(ctx context.Context) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // syncInternal performs synchronization for the given attachment based on its type.
