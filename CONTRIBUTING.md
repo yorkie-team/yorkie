@@ -125,6 +125,8 @@ There are multiple types of tests. The location of the test code varies with typ
 - Integration: These tests cover interactions of package components or interactions between Yorkie packages and some other non-Yorkie system resource (eg: MongoDB).
 - Benchmark: These confirm that the performance of the implemented function.
 
+When a unit test needs to observe a timer, ticker, debounce window, or backoff, use a [`testing/synctest`](https://pkg.go.dev/testing/synctest) bubble (`synctest.Test`) instead of sleeping real wall-clock time. Inside the bubble, `time.Sleep` advances a fake clock instantly and `synctest.Wait` deterministically replaces "sleep a little to let goroutines catch up", which keeps tests fast and free of load-dependent flakes. See `pkg/limit/limiter_test.go` for examples.
+
 ### Code Coverage
 
 We are using [Codecov](https://about.codecov.io) for analyzing PR's code coverage. If you want to check the coverage of your code in local browser, you can run the command below.
