@@ -68,7 +68,7 @@ func TestRestoreSpanRoundTrip(t *testing.T) {
 			if tc.mode == crdt.RestoreModeNone {
 				op = operations.NewEdit(seed, pos, pos, "", nil, executedAt)
 			} else {
-				op = operations.NewRestoreEdit(seed, pos, pos, executedAt, tc.spans, tc.mode)
+				op = operations.NewRestoreEdit(seed, pos, pos, executedAt, tc.spans, tc.mode, nil)
 			}
 
 			pbOps, err := converter.ToOperations([]operations.Operation{op})

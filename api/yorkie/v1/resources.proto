@@ -102,6 +102,12 @@ message Operation {
     map<string, string> attributes = 7;
     repeated RestoreSpan restore_spans = 8; // identity-preserving undo/redo
     RestoreMode restore_mode = 9;
+    // retombstone_spans is the companion span set for an identity-preserving
+    // reverse op: restore_spans is content the reversed edit removed (to
+    // revive), retombstone_spans is content it inserted (to re-remove). Both
+    // are addressed by original identity so a revived neighbour keeps its
+    // relative order across chained undo/redo. restore_mode selects direction.
+    repeated RestoreSpan retombstone_spans = 10;
   }
   message Style {
     TimeTicket parent_created_at = 1;

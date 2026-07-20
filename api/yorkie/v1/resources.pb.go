@@ -3747,8 +3747,14 @@ type Operation_Edit struct {
 	Attributes          map[string]string      `protobuf:"bytes,7,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	RestoreSpans        []*RestoreSpan         `protobuf:"bytes,8,rep,name=restore_spans,json=restoreSpans,proto3" json:"restore_spans,omitempty"` // identity-preserving undo/redo
 	RestoreMode         RestoreMode            `protobuf:"varint,9,opt,name=restore_mode,json=restoreMode,proto3,enum=yorkie.v1.RestoreMode" json:"restore_mode,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// retombstone_spans is the companion span set for an identity-preserving
+	// reverse op: restore_spans is content the reversed edit removed (to
+	// revive), retombstone_spans is content it inserted (to re-remove). Both
+	// are addressed by original identity so a revived neighbour keeps its
+	// relative order across chained undo/redo. restore_mode selects direction.
+	RetombstoneSpans []*RestoreSpan `protobuf:"bytes,10,rep,name=retombstone_spans,json=retombstoneSpans,proto3" json:"retombstone_spans,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Operation_Edit) Reset() {
@@ -3842,6 +3848,13 @@ func (x *Operation_Edit) GetRestoreMode() RestoreMode {
 		return x.RestoreMode
 	}
 	return RestoreMode_RESTORE_MODE_UNSPECIFIED
+}
+
+func (x *Operation_Edit) GetRetombstoneSpans() []*RestoreSpan {
+	if x != nil {
+		return x.RetombstoneSpans
+	}
+	return nil
 }
 
 type Operation_Style struct {
@@ -4862,7 +4875,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x06vector\x18\x01 \x03(\v2$.yorkie.v1.VersionVector.VectorEntryR\x06vector\x1a9\n" +
 	"\vVectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xe3!\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa8\"\n" +
 	"\tOperation\x12,\n" +
 	"\x03set\x18\x01 \x01(\v2\x18.yorkie.v1.Operation.SetH\x00R\x03set\x12,\n" +
 	"\x03add\x18\x02 \x01(\v2\x18.yorkie.v1.Operation.AddH\x00R\x03add\x12/\n" +
@@ -4900,7 +4913,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x126\n" +
 	"\vexecuted_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x1a\xba\x05\n" +
+	"executedAt\x1a\xff\x05\n" +
 	"\x04Edit\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12*\n" +
 	"\x04from\x18\x02 \x01(\v2\x16.yorkie.v1.TextNodePosR\x04from\x12&\n" +
@@ -4913,7 +4926,9 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"attributes\x18\a \x03(\v2).yorkie.v1.Operation.Edit.AttributesEntryR\n" +
 	"attributes\x12;\n" +
 	"\rrestore_spans\x18\b \x03(\v2\x16.yorkie.v1.RestoreSpanR\frestoreSpans\x129\n" +
-	"\frestore_mode\x18\t \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreMode\x1a]\n" +
+	"\frestore_mode\x18\t \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreMode\x12C\n" +
+	"\x11retombstone_spans\x18\n" +
+	" \x03(\v2\x16.yorkie.v1.RestoreSpanR\x10retombstoneSpans\x1a]\n" +
 	"\x18CreatedAtMapByActorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
 	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a=\n" +
@@ -5554,67 +5569,68 @@ var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	57,  // 121: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
 	33,  // 122: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
 	0,   // 123: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	34,  // 124: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 125: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 126: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
-	58,  // 127: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
-	34,  // 128: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
-	59,  // 129: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
-	34,  // 130: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 131: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
-	34,  // 132: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 133: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 134: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
-	21,  // 135: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
-	60,  // 136: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
-	19,  // 137: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
-	34,  // 138: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 139: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 140: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
-	21,  // 141: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
-	61,  // 142: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
-	34,  // 143: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
-	62,  // 144: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
-	34,  // 145: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 146: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 147: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
-	34,  // 148: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 149: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	34,  // 150: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	34,  // 151: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	34,  // 152: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	13,  // 153: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
-	34,  // 154: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 155: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 156: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
-	14,  // 157: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
-	34,  // 158: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 159: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 160: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 161: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
-	34,  // 162: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 163: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 164: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
-	16,  // 165: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
-	34,  // 166: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 167: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 168: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 169: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
-	34,  // 170: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 171: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 172: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 173: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
-	34,  // 174: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 175: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 176: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
-	15,  // 177: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	15,  // 178: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	29,  // 179: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	180, // [180:180] is the sub-list for method output_type
-	180, // [180:180] is the sub-list for method input_type
-	180, // [180:180] is the sub-list for extension type_name
-	180, // [180:180] is the sub-list for extension extendee
-	0,   // [0:180] is the sub-list for field type_name
+	33,  // 124: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
+	34,  // 125: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	32,  // 126: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
+	32,  // 127: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
+	58,  // 128: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
+	34,  // 129: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
+	59,  // 130: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
+	34,  // 131: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 132: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
+	34,  // 133: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 134: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 135: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
+	21,  // 136: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
+	60,  // 137: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
+	19,  // 138: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
+	34,  // 139: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 140: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	21,  // 141: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
+	21,  // 142: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
+	61,  // 143: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
+	34,  // 144: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
+	62,  // 145: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
+	34,  // 146: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 147: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 148: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
+	34,  // 149: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 150: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	34,  // 151: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	34,  // 152: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	34,  // 153: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	13,  // 154: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
+	34,  // 155: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 156: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 157: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
+	14,  // 158: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
+	34,  // 159: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 160: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 161: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 162: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
+	34,  // 163: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 164: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 165: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
+	16,  // 166: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
+	34,  // 167: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 168: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 169: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 170: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
+	34,  // 171: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 172: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 173: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
+	18,  // 174: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
+	34,  // 175: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 176: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 177: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
+	15,  // 178: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	15,  // 179: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	29,  // 180: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	181, // [181:181] is the sub-list for method output_type
+	181, // [181:181] is the sub-list for method input_type
+	181, // [181:181] is the sub-list for extension type_name
+	181, // [181:181] is the sub-list for extension extendee
+	0,   // [0:181] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_resources_proto_init() }

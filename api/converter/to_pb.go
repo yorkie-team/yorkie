@@ -433,16 +433,21 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	if err != nil {
 		return nil, err
 	}
+	retombstoneSpans, err := toRestoreSpans(e.RetombstoneSpans())
+	if err != nil {
+		return nil, err
+	}
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
-			From:            toTextNodePos(e.From()),
-			To:              toTextNodePos(e.To()),
-			Content:         e.Content(),
-			Attributes:      e.Attributes(),
-			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
-			RestoreSpans:    restoreSpans,
-			RestoreMode:     toRestoreMode(e.RestoreMode()),
+			ParentCreatedAt:  ToTimeTicket(e.ParentCreatedAt()),
+			From:             toTextNodePos(e.From()),
+			To:               toTextNodePos(e.To()),
+			Content:          e.Content(),
+			Attributes:       e.Attributes(),
+			ExecutedAt:       ToTimeTicket(e.ExecutedAt()),
+			RestoreSpans:     restoreSpans,
+			RestoreMode:      toRestoreMode(e.RestoreMode()),
+			RetombstoneSpans: retombstoneSpans,
 		},
 	}, nil
 }

@@ -193,7 +193,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 	restore := func(t *testing.T, root *crdt.Root, parent *time.Ticket, spans []*crdt.RestoreSpan, at *time.Ticket) {
 		// A restore op is identity-addressed; its from/to positions are
 		// unused by the restore path except as a recreation fallback anchor.
-		op := operations.NewRestoreEdit(parent, nil, nil, at, spans, crdt.RestoreModeRestore)
+		op := operations.NewRestoreEdit(parent, nil, nil, at, spans, crdt.RestoreModeRestore, nil)
 		assert.NoError(t, op.Execute(root, nil))
 	}
 
@@ -291,7 +291,7 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	// [2,4) + [4,6) + [6,8) and un-tombstones [4,6) (the split-born target).
 	restoreOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(2002),
 		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
-		crdt.RestoreModeRestore)
+		crdt.RestoreModeRestore, nil)
 	assert.NoError(t, restoreOp.Execute(root, nil))
 	assert.Equal(t, "014589", text.String())
 
@@ -338,7 +338,7 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 	t.Run("rejects an actor absent from the change's version vector", func(t *testing.T) {
 		root, text, parent := build()
 		op := operations.NewRestoreEdit(parent, nil, nil, tick(2000),
-			forged(time.NewTicket(3, 0, victimActor)), crdt.RestoreModeRestore)
+			forged(time.NewTicket(3, 0, victimActor)), crdt.RestoreModeRestore, nil)
 		// The acting change knows only restoreActor, never victimActor.
 		vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
 		assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
@@ -348,7 +348,7 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 	t.Run("rejects a lamport beyond the change's knowledge of that actor", func(t *testing.T) {
 		root, text, parent := build()
 		op := operations.NewRestoreEdit(parent, nil, nil, tick(2000),
-			forged(time.NewTicket(999, 0, victimActor)), crdt.RestoreModeRestore)
+			forged(time.NewTicket(999, 0, victimActor)), crdt.RestoreModeRestore, nil)
 		// The change has observed victimActor only up to lamport 5, so a span
 		// claiming lamport 999 could not describe a node it ever saw.
 		vv := helper.VersionVectorOf(map[time.ActorID]int64{
@@ -373,7 +373,7 @@ func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
 		// which the change has observed, so validation admits it.
 		op := operations.NewRestoreEdit(parent, nil, nil, tick(1002),
 			[]*crdt.RestoreSpan{{CreatedAt: tick(1000), Start: 4, End: 6, Content: "45"}},
-			crdt.RestoreModeRestore)
+			crdt.RestoreModeRestore, nil)
 		assert.NoError(t, op.Execute(root, vv))
 		assert.Equal(t, "0123456789", text.String())
 	})
@@ -416,7 +416,7 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 
 	restore := func(root *crdt.Root, parent *time.Ticket, span *crdt.RestoreSpan, at *time.Ticket) {
 		op := operations.NewRestoreEdit(parent, nil, nil, at,
-			[]*crdt.RestoreSpan{span}, crdt.RestoreModeRestore)
+			[]*crdt.RestoreSpan{span}, crdt.RestoreModeRestore, nil)
 		assert.NoError(t, op.Execute(root, nil))
 	}
 

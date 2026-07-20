@@ -507,6 +507,10 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+	retombstoneSpans, err := fromRestoreSpans(pbEdit.RetombstoneSpans)
+	if err != nil {
+		return nil, err
+	}
 	if mode := fromRestoreMode(pbEdit.RestoreMode); mode != crdt.RestoreModeNone {
 		return operations.NewRestoreEdit(
 			parentCreatedAt,
@@ -515,6 +519,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 			executedAt,
 			restoreSpans,
 			mode,
+			retombstoneSpans,
 		), nil
 	}
 	return operations.NewEdit(
