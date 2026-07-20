@@ -186,14 +186,14 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 	del := func(t *testing.T, root *crdt.Root, text *crdt.Text, parent *time.Ticket, from, to int, at *time.Ticket) {
 		f, e, err := text.CreateRange(from, to)
 		assert.NoError(t, err)
-		op := operations.NewEdit(parent, f, e, "", nil, at, nil, crdt.RestoreModeNone)
+		op := operations.NewEdit(parent, f, e, "", nil, at)
 		assert.NoError(t, op.Execute(root, nil))
 	}
 
 	restore := func(t *testing.T, root *crdt.Root, parent *time.Ticket, spans []*crdt.RestoreSpan, at *time.Ticket) {
 		// A restore op is identity-addressed; its from/to positions are
 		// unused by the restore path except as a recreation fallback anchor.
-		op := operations.NewEdit(parent, nil, nil, "", nil, at, spans, crdt.RestoreModeRestore)
+		op := operations.NewRestoreEdit(parent, nil, nil, at, spans, crdt.RestoreModeRestore)
 		assert.NoError(t, op.Execute(root, nil))
 	}
 
@@ -212,8 +212,8 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		// original, then apply both.
 		f1, e1, _ := text.CreateRange(4, 6)
 		f2, e2, _ := text.CreateRange(2, 8)
-		op1 := operations.NewEdit(parent, f1, e1, "", nil, tick(1001), nil, crdt.RestoreModeNone)
-		op2 := operations.NewEdit(parent, f2, e2, "", nil, tick(1002), nil, crdt.RestoreModeNone)
+		op1 := operations.NewEdit(parent, f1, e1, "", nil, tick(1001))
+		op2 := operations.NewEdit(parent, f2, e2, "", nil, tick(1002))
 		assert.NoError(t, op1.Execute(root, nil))
 		assert.NoError(t, op2.Execute(root, nil))
 		assert.Equal(t, "0189", text.String())
@@ -279,7 +279,7 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	exec := func(from, to int, content string, at *time.Ticket) {
 		f, e, err := text.CreateRange(from, to)
 		assert.NoError(t, err)
-		op := operations.NewEdit(textTicket, f, e, content, nil, at, nil, crdt.RestoreModeNone)
+		op := operations.NewEdit(textTicket, f, e, content, nil, at)
 		assert.NoError(t, op.Execute(root, nil))
 	}
 
@@ -289,7 +289,7 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 
 	// Partial restore of the middle "45": splits the [2,8) tombstone into
 	// [2,4) + [4,6) + [6,8) and un-tombstones [4,6) (the split-born target).
-	restoreOp := operations.NewEdit(textTicket, nil, nil, "", nil, tick(2002),
+	restoreOp := operations.NewRestoreEdit(textTicket, nil, nil, tick(2002),
 		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
 		crdt.RestoreModeRestore)
 	assert.NoError(t, restoreOp.Execute(root, nil))
@@ -305,4 +305,136 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 	assert.Zero(t, gc.Data, "GC data must be zero after purging all tombstones")
 	assert.Zero(t, gc.Meta, "GC meta must be zero after purging all tombstones")
 	assert.Equal(t, "014589", text.String())
+}
+
+// victimActor is a distinct identity used to forge cross-actor restore spans
+// in the security test below.
+var victimActor, _ = time.ActorIDFromHex("000000000000000000000001")
+
+// TestTextRestoreRejectsForgedIdentity verifies that Edit.Execute rejects a
+// restore span whose node identity the acting change could not causally have
+// observed. Because Edit.Execute runs restore into authoritative server state,
+// without this guard a client could materialize a live node under a forged
+// (actor, lamport) identity carrying attacker-chosen content. The version
+// vector is the change's causal knowledge; an empty one marks the trusted
+// local path and is exercised by the other tests here (Execute(root, nil)).
+func TestTextRestoreRejectsForgedIdentity(t *testing.T) {
+	build := func() (*crdt.Root, *crdt.Text, *time.Ticket) {
+		textTicket := tick(1)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+		root := helper.TestRoot()
+		root.RegisterElement(text)
+		f, e, err := text.CreateRange(0, 0)
+		assert.NoError(t, err)
+		ins := operations.NewEdit(textTicket, f, e, "0123456789", nil, tick(1000))
+		assert.NoError(t, ins.Execute(root, nil))
+		return root, text, textTicket
+	}
+
+	forged := func(createdAt *time.Ticket) []*crdt.RestoreSpan {
+		return []*crdt.RestoreSpan{{CreatedAt: createdAt, Start: 4, End: 6, Content: "XY"}}
+	}
+
+	t.Run("rejects an actor absent from the change's version vector", func(t *testing.T) {
+		root, text, parent := build()
+		op := operations.NewRestoreEdit(parent, nil, nil, tick(2000),
+			forged(time.NewTicket(3, 0, victimActor)), crdt.RestoreModeRestore)
+		// The acting change knows only restoreActor, never victimActor.
+		vv := helper.VersionVectorOf(map[time.ActorID]int64{restoreActor: time.MaxLamport})
+		assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+		assert.Equal(t, "0123456789", text.String(), "state must be untouched on rejection")
+	})
+
+	t.Run("rejects a lamport beyond the change's knowledge of that actor", func(t *testing.T) {
+		root, text, parent := build()
+		op := operations.NewRestoreEdit(parent, nil, nil, tick(2000),
+			forged(time.NewTicket(999, 0, victimActor)), crdt.RestoreModeRestore)
+		// The change has observed victimActor only up to lamport 5, so a span
+		// claiming lamport 999 could not describe a node it ever saw.
+		vv := helper.VersionVectorOf(map[time.ActorID]int64{
+			restoreActor: time.MaxLamport,
+			victimActor:  5,
+		})
+		assert.ErrorIs(t, op.Execute(root, vv), operations.ErrUnknownRestoreIdentity)
+		assert.Equal(t, "0123456789", text.String(), "state must be untouched on rejection")
+	})
+
+	t.Run("admits an identity the change causally knows", func(t *testing.T) {
+		root, text, parent := build()
+		vv := helper.MaxVersionVector(restoreActor)
+
+		f, e, err := text.CreateRange(4, 6)
+		assert.NoError(t, err)
+		del := operations.NewEdit(parent, f, e, "", nil, tick(1001))
+		assert.NoError(t, del.Execute(root, vv))
+		assert.Equal(t, "01236789", text.String())
+
+		// The span revives the seed insertion (restoreActor, lamport 1000),
+		// which the change has observed, so validation admits it.
+		op := operations.NewRestoreEdit(parent, nil, nil, tick(1002),
+			[]*crdt.RestoreSpan{{CreatedAt: tick(1000), Start: 4, End: 6, Content: "45"}},
+			crdt.RestoreModeRestore)
+		assert.NoError(t, op.Execute(root, vv))
+		assert.Equal(t, "0123456789", text.String())
+	})
+}
+
+// TestTextRestoreTwoReplicaPurgedInsertion covers the corner the author flags
+// as the one non-replica-invariant anchor rule: when an entire insertion is
+// GC-purged, no piece survives to anchor recreated fragments against, so
+// findRestoreAnchor falls back to the deterministic head (rule (d)) for the
+// first fragment and keys on the already-recreated fragment for the rest. Two
+// replicas that restore the two halves in opposite orders must still converge.
+func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
+	seed := tick(3000)
+
+	// buildPurged returns a replica whose whole "0123456789" insertion has
+	// been deleted and physically purged, so restore must recreate from the
+	// carried span content and place fragments by identity alone.
+	buildPurged := func() (*crdt.Root, *crdt.Text, *time.Ticket) {
+		textTicket := tick(1)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), textTicket)
+		root := helper.TestRoot()
+		root.RegisterElement(text)
+
+		f, e, err := text.CreateRange(0, 0)
+		assert.NoError(t, err)
+		ins := operations.NewEdit(textTicket, f, e, "0123456789", nil, seed)
+		assert.NoError(t, ins.Execute(root, nil))
+
+		f, e, err = text.CreateRange(0, 10)
+		assert.NoError(t, err)
+		del := operations.NewEdit(textTicket, f, e, "", nil, tick(3001))
+		assert.NoError(t, del.Execute(root, nil))
+		assert.Equal(t, "", text.String())
+
+		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+		assert.NoError(t, err)
+		assert.Positive(t, n, "the whole insertion should be purged")
+		return root, text, textTicket
+	}
+
+	restore := func(root *crdt.Root, parent *time.Ticket, span *crdt.RestoreSpan, at *time.Ticket) {
+		op := operations.NewRestoreEdit(parent, nil, nil, at,
+			[]*crdt.RestoreSpan{span}, crdt.RestoreModeRestore)
+		assert.NoError(t, op.Execute(root, nil))
+	}
+
+	left := &crdt.RestoreSpan{CreatedAt: seed, Start: 0, End: 5, Content: "01234"}
+	right := &crdt.RestoreSpan{CreatedAt: seed, Start: 5, End: 10, Content: "56789"}
+
+	// Replica A restores left-then-right; replica B right-then-left.
+	rootA, textA, parentA := buildPurged()
+	restore(rootA, parentA, left, tick(3002))
+	restore(rootA, parentA, right, tick(3003))
+
+	rootB, textB, parentB := buildPurged()
+	restore(rootB, parentB, right, tick(3002))
+	restore(rootB, parentB, left, tick(3003))
+
+	assert.Equal(t, "0123456789", textA.String())
+	assert.Equal(t, textA.String(), textB.String(),
+		"replicas must converge regardless of restore arrival order")
+	assert.True(t, textA.RGATreeSplit().CheckWeight())
+	assert.True(t, textB.RGATreeSplit().CheckWeight())
 }

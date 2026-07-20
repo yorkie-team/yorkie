@@ -63,8 +63,6 @@ func NewEdit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-	restoreSpans []*crdt.RestoreSpan,
-	restoreMode crdt.RestoreMode,
 ) *Edit {
 	return &Edit{
 		parentCreatedAt: parentCreatedAt,
@@ -72,6 +70,27 @@ func NewEdit(
 		to:              to,
 		content:         content,
 		attributes:      attributes,
+		executedAt:      executedAt,
+		restoreMode:     crdt.RestoreModeNone,
+	}
+}
+
+// NewRestoreEdit creates an Edit that revives (RestoreModeRestore) or
+// re-removes (RestoreModeRetombstone) content under its original node
+// identities, carried in spans. Restore edits have no content or
+// attributes of their own; the spans describe what to re-establish.
+func NewRestoreEdit(
+	parentCreatedAt *time.Ticket,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
+	executedAt *time.Ticket,
+	restoreSpans []*crdt.RestoreSpan,
+	restoreMode crdt.RestoreMode,
+) *Edit {
+	return &Edit{
+		parentCreatedAt: parentCreatedAt,
+		from:            from,
+		to:              to,
 		executedAt:      executedAt,
 		restoreSpans:    restoreSpans,
 		restoreMode:     restoreMode,
@@ -84,6 +103,15 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
+		// Restore/retombstone spans carry client-supplied node identities
+		// (createdAt) that the server materializes into authoritative state.
+		// Reject any identity the acting change could not causally have
+		// observed, so a client cannot forge a node under another actor's
+		// clock or advance it. See validateRestoreIdentities.
+		if err := validateRestoreIdentities(e.restoreSpans, versionVector); err != nil {
+			return err
+		}
+
 		switch e.restoreMode {
 		case crdt.RestoreModeRestore:
 			untombstoned, recreated, stillTombstoned := obj.Restore(
@@ -131,6 +159,30 @@ func (e *Edit) Execute(root *crdt.Root, versionVector time.VersionVector) error 
 		return ErrNotApplicableDataType
 	}
 
+	return nil
+}
+
+// validateRestoreIdentities rejects restore/retombstone spans whose node
+// identity the acting change could not causally have observed. A legitimate
+// restore only revives content the client previously saw (and therefore
+// deleted), so each span's createdAt lamport must not exceed the actor's
+// clock as known to the change's version vector, and the actor must be
+// present in it. An empty version vector marks the trusted local path
+// (json package application), where no such check applies.
+func validateRestoreIdentities(
+	spans []*crdt.RestoreSpan,
+	versionVector time.VersionVector,
+) error {
+	if len(spans) == 0 || len(versionVector) == 0 {
+		return nil
+	}
+
+	for _, span := range spans {
+		known, ok := versionVector.Get(span.CreatedAt.ActorID())
+		if !ok || span.CreatedAt.Lamport() > known {
+			return ErrUnknownRestoreIdentity
+		}
+	}
 	return nil
 }
 

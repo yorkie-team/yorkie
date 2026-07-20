@@ -507,6 +507,16 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+	if mode := fromRestoreMode(pbEdit.RestoreMode); mode != crdt.RestoreModeNone {
+		return operations.NewRestoreEdit(
+			parentCreatedAt,
+			from,
+			to,
+			executedAt,
+			restoreSpans,
+			mode,
+		), nil
+	}
 	return operations.NewEdit(
 		parentCreatedAt,
 		from,
@@ -514,8 +524,6 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		pbEdit.Content,
 		pbEdit.Attributes,
 		executedAt,
-		restoreSpans,
-		fromRestoreMode(pbEdit.RestoreMode),
 	), nil
 }
 

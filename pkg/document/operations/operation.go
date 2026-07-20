@@ -29,6 +29,11 @@ var (
 	// ErrNotApplicableDataType occurs when attempting to execute an operation
 	// on a data type that cannot be executed.
 	ErrNotApplicableDataType = errors.New("not applicable datatype")
+
+	// ErrUnknownRestoreIdentity occurs when a restore/retombstone span carries
+	// a node identity the acting change could not causally have observed. It
+	// guards the server-executed restore path against forged identities.
+	ErrUnknownRestoreIdentity = errors.New("restore span identity is not causally known")
 )
 
 // Operation represents an operation to be executed on a document.
