@@ -234,14 +234,28 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	// NOTE(hackerwins): If the child is already registered, it means that the
 	// child should be removed from the cache.
 	if p, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
-		size := p.Child.DataSize()
-		r.docSize.GC.Sub(size)
+		// Subtract exactly what registration added: GCOnlySize for a
+		// born-dead split piece (only its net-new size was added to GC),
+		// the full child size otherwise.
+		if p.GCOnlySize != nil {
+			r.docSize.GC.Sub(*p.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(p.Child.DataSize())
+		}
 
 		delete(r.gcNodePairMap, p.Child.IDString())
 		return
 	}
 
 	r.gcNodePairMap[pair.Child.IDString()] = pair
+
+	// NOTE: A born-removed split piece was never counted in docSize.Live,
+	// so only its net-new size is added to GC (Live is left untouched by
+	// AdjustDiffForGCPair below).
+	if pair.GCOnlySize != nil {
+		r.docSize.GC.Add(*pair.GCOnlySize)
+		return
+	}
 
 	size := pair.Child.DataSize()
 	r.docSize.GC.Add(size)
@@ -254,6 +268,12 @@ func (r *Root) Acc(diff resource.DataSize) {
 
 // AdjustDiffForGCPair adjusts the given diff for the given GCPair.
 func (r *Root) AdjustDiffForGCPair(diff *resource.DataSize, pair GCPair) {
+	// NOTE: A born-removed split piece was never in docSize.Live, so there
+	// is nothing to subtract from Live for it.
+	if pair.GCOnlySize != nil {
+		return
+	}
+
 	size := pair.Child.DataSize()
 	diff.Sub(size)
 

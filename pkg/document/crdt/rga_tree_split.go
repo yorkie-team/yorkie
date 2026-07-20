@@ -321,6 +321,13 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	initialHead *RGATreeSplitNode[V]
 	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
+
+	// pendingGCPairs buffers GC pairs for nodes that were created
+	// already-tombstoned by splitting a removed node. Such pieces inherit
+	// removedAt without ever passing through Remove(), so they would
+	// otherwise never be registered for GC. edit, Text.Style and
+	// Text.RemoveStyle drain this buffer into the GC pairs they return.
+	pendingGCPairs []GCPair
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
@@ -441,7 +448,32 @@ func (s *RGATreeSplit[V]) splitNode(
 	diff.Add(node.DataSize(), splitNode.DataSize())
 	diff.Sub(prevSize)
 
+	// NOTE: A piece split off an already-tombstoned node inherits
+	// removedAt without going through Remove(), so no GC pair is created
+	// for it in the normal deletion path. Buffer one here so it can be
+	// purged; otherwise it stays in the list forever. The piece was never
+	// live, so the net-new size the split created goes straight to
+	// docSize.GC when the pair is registered; return a zero diff to the
+	// caller (which accounts diffs to docSize.Live).
+	if splitNode.removedAt != nil {
+		gcSize := diff
+		s.pendingGCPairs = append(s.pendingGCPairs, GCPair{
+			Parent:     s,
+			Child:      splitNode,
+			GCOnlySize: &gcSize,
+		})
+		return splitNode, resource.DataSize{}, nil
+	}
+
 	return splitNode, diff, nil
+}
+
+// drainPendingGCPairs returns the GC pairs buffered for born-tombstoned
+// split pieces and clears the buffer.
+func (s *RGATreeSplit[V]) drainPendingGCPairs() []GCPair {
+	pairs := s.pendingGCPairs
+	s.pendingGCPairs = nil
+	return pairs
 }
 
 // InsertAfter inserts the given node after the given previous node.
@@ -503,12 +535,13 @@ func (s *RGATreeSplit[V]) edit(
 	// 01. Split nodes with from and to
 	toLeft, toRight, diffTo, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, diff, err
+		return nil, s.drainPendingGCPairs(), diff, err
 	}
 
 	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, diff, err
+		diff.Add(diffTo)
+		return nil, s.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -541,6 +574,8 @@ func (s *RGATreeSplit[V]) edit(
 			Child:  removedNode,
 		})
 	}
+
+	pairs = append(pairs, s.drainPendingGCPairs()...)
 
 	return caretPos, pairs, diff, nil
 }

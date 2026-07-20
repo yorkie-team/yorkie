@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -87,5 +88,60 @@ func TestText(t *testing.T) {
 			`[{"attrs":{"b":"1"},"val":"H"},{"val":"ello "},{"val":"Yorkie"}]`,
 			text.Marshal(),
 		)
+	})
+
+	t.Run("returns a born-tombstoned split's GC pair even when the other split errors", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, _, err := text.Edit(fromPos, toPos, "hello world", nil, ctx.IssueTimeTicket(), nil)
+		assert.NoError(t, err)
+
+		// Tombstone "llo wo" (index 2..8), leaving "he" and "rld" live.
+		fromPos, toPos, _ = text.CreateRange(2, 8)
+		_, _, _, err = text.Edit(fromPos, toPos, "", nil, ctx.IssueTimeTicket(), nil)
+		assert.NoError(t, err)
+
+		var tombstoned *crdt.RGATreeSplitNode[*crdt.TextValue]
+		for _, n := range text.Nodes() {
+			if n.RemovedAt() != nil {
+				tombstoned = n
+				break
+			}
+		}
+		require.NotNil(t, tombstoned)
+
+		// `to` lands inside the already-tombstoned node, so splitting it
+		// buffers a born-dead GC pair for the split-off piece. `from` is a
+		// position that cannot be found, so the second split call fails.
+		toPos = crdt.NewRGATreeSplitNodePos(tombstoned.ID(), 3)
+		fromPos = crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(ctx.IssueTimeTicket(), 0), 0)
+
+		_, pairs, _, err := text.Edit(fromPos, toPos, "", nil, ctx.IssueTimeTicket(), nil)
+		assert.Error(t, err)
+		assert.Len(t, pairs, 1, "the pair buffered by splitting `to` must still be returned on the `from` error path")
+	})
+
+	t.Run("returns the live diff from splitting `to` even when the other split errors", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, _, err := text.Edit(fromPos, toPos, "hello world", nil, ctx.IssueTimeTicket(), nil)
+		assert.NoError(t, err)
+
+		// `to` lands in the middle of the live "hello world" node, so
+		// splitting it produces a non-zero metadata diff for the new node
+		// it mutates the list into. `from` is a position that cannot be
+		// found, so the second split call fails.
+		_, toPos, _ = text.CreateRange(3, 3)
+		fromPos = crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(ctx.IssueTimeTicket(), 0), 0)
+
+		_, _, diff, err := text.Edit(fromPos, toPos, "", nil, ctx.IssueTimeTicket(), nil)
+		assert.Error(t, err)
+		assert.Positive(t, diff.Meta, "the diff from splitting `to` must still be returned on the `from` error path")
 	})
 }

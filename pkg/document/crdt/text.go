@@ -354,11 +354,12 @@ func (t *Text) Style(
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return nil, diff, err
+		diff.Add(diffTo)
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -407,6 +408,8 @@ func (t *Text) Style(
 		}
 	}
 
+	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
+
 	return pairs, diff, nil
 }
 
@@ -423,11 +426,12 @@ func (t *Text) RemoveStyle(
 	// 01. Split nodes with from and to
 	_, toRight, diffTo, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return nil, diff, err
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 	_, fromRight, diffFrom, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return nil, diff, err
+		diff.Add(diffTo)
+		return t.rgaTreeSplit.drainPendingGCPairs(), diff, err
 	}
 
 	diff.Add(diffTo, diffFrom)
@@ -473,6 +477,8 @@ func (t *Text) RemoveStyle(
 			}
 		}
 	}
+
+	pairs = append(pairs, t.rgaTreeSplit.drainPendingGCPairs()...)
 
 	return pairs, diff, nil
 }
