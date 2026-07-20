@@ -46,6 +46,13 @@ make tools
 make build		# executable: ./bin/yorkie
 ```
 
+> [!NOTE]
+> `make tools` installs binaries into `$(go env GOPATH)/bin`. Make sure that directory is in your `PATH` so the installed tools (e.g. `golangci-lint`) are accessible:
+> ```sh
+> export PATH=$PATH:$(go env GOPATH)/bin
+> # Add this line to your shell rc file (~/.zshrc, ~/.bashrc, etc.) to make it permanent.
+> ```
+
 You can set testing environment via Docker Compose. It is needed because integration tests require local applications like MongoDB.
 
 ```sh

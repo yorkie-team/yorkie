@@ -1,4 +1,4 @@
-package integration
+//go:build integration
 
 /*
  * Copyright 2025 The Yorkie Authors. All rights reserved.
@@ -15,6 +15,8 @@ package integration
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+package integration
 
 import (
 	"context"
