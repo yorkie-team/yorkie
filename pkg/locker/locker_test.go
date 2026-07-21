@@ -282,7 +282,6 @@ func TestRWLockerConcurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i <= 1000; i++ {
 		wg.Go(func() {
-			i := i
 			if i%2 == 0 {
 				l.Lock("test")
 				// if there is a concurrency issue, will very likely panic here

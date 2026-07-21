@@ -294,7 +294,6 @@ func TestConcurrentExecution(t *testing.T) {
 
 		wg := sync.WaitGroup{}
 		for i := range numExecute {
-			i := i
 			wg.Go(func() {
 				if lim.Allow(i, callback) {
 					callback()
