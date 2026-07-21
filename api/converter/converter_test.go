@@ -266,7 +266,8 @@ func TestConverter(t *testing.T) {
 		}
 
 		pbChange := converter.ToPresenceChange(change)
-		clone := converter.FromPresenceChange(pbChange)
+		clone, err := converter.FromPresenceChange(pbChange)
+		assert.NoError(t, err)
 		assert.Equal(t, change, clone)
 	})
 

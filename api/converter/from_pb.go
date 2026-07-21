@@ -17,6 +17,7 @@
 package converter
 
 import (
+	goerrors "errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -212,6 +213,10 @@ func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	var changes []*change.Change
 	for _, pbChange := range pbChanges {
+		if pbChange == nil {
+			return nil, goerrors.New("change missing")
+		}
+
 		changeID, err := fromChangeID(pbChange.Id)
 		if err != nil {
 			return nil, err
@@ -220,11 +225,15 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 		if err != nil {
 			return nil, err
 		}
+		presenceChange, err := FromPresenceChange(pbChange.PresenceChange)
+		if err != nil {
+			return nil, err
+		}
 		changes = append(changes, change.New(
 			changeID,
 			pbChange.Message,
 			ops,
-			FromPresenceChange(pbChange.PresenceChange),
+			presenceChange,
 		))
 	}
 
@@ -232,6 +241,10 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 }
 
 func fromChangeID(id *api.ChangeID) (change.ID, error) {
+	if id == nil {
+		return change.InitialID(), goerrors.New("change id missing")
+	}
+
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
 		return change.InitialID(), err
@@ -311,6 +324,10 @@ func FromDocSize(pbDocSize *api.DocSize) resource.DocSize {
 func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	var ops []operations.Operation
 	for _, pbOp := range pbOps {
+		if pbOp == nil {
+			return nil, goerrors.New("operation missing")
+		}
+
 		var op operations.Operation
 		var err error
 		switch decoded := pbOp.Body.(type) {
@@ -368,20 +385,21 @@ func fromPresence(pbPresence *api.Presence) presence.Data {
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.
-func FromPresenceChange(pbPresenceChange *api.PresenceChange) *presence.Change {
+func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change, error) {
 	if pbPresenceChange == nil {
-		return nil
+		return nil, nil
 	}
 
 	var p presence.Change
 	switch pbPresenceChange.Type {
 	case api.PresenceChange_CHANGE_TYPE_PUT:
+		presenceData := fromPresence(pbPresenceChange.Presence)
+		if presenceData == nil {
+			return nil, goerrors.New("presence missing")
+		}
 		p = presence.Change{
 			ChangeType: presence.Put,
-			Presence:   pbPresenceChange.Presence.Data,
-		}
-		if p.Presence == nil {
-			p.Presence = presence.NewData()
+			Presence:   presenceData,
 		}
 	case api.PresenceChange_CHANGE_TYPE_CLEAR:
 		p = presence.Change{
@@ -390,10 +408,14 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) *presence.Change {
 		}
 	}
 
-	return &p
+	return &p, nil
 }
 
 func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
+	if pbSet == nil {
+		return nil, goerrors.New("operation set missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -416,6 +438,10 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 }
 
 func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
+	if pbAdd == nil {
+		return nil, goerrors.New("operation add missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -441,6 +467,10 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 }
 
 func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
+	if pbMove == nil {
+		return nil, goerrors.New("operation move missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -466,6 +496,10 @@ func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 }
 
 func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
+	if pbRemove == nil {
+		return nil, goerrors.New("operation remove missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -486,6 +520,10 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 }
 
 func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
+	if pbEdit == nil {
+		return nil, goerrors.New("operation edit missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -513,6 +551,10 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 }
 
 func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
+	if pbStyle == nil {
+		return nil, goerrors.New("operation style missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -550,6 +592,10 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 }
 
 func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
+	if pbInc == nil {
+		return nil, goerrors.New("operation increase missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -578,6 +624,10 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 }
 
 func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, error) {
+	if pbTreeEdit == nil {
+		return nil, goerrors.New("operation tree_edit missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbTreeEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -614,6 +664,10 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 }
 
 func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle, error) {
+	if pbTreeStyle == nil {
+		return nil, goerrors.New("operation tree_style missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbTreeStyle.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -654,6 +708,10 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 }
 
 func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, error) {
+	if pbSetByIndex == nil {
+		return nil, goerrors.New("operation array_set missing")
+	}
+
 	parentCreatedAt, err := fromTimeTicket(pbSetByIndex.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -681,6 +739,10 @@ func fromArraySet(pbSetByIndex *api.Operation_ArraySet) (*operations.ArraySet, e
 func fromTextNodePos(
 	pbPos *api.TextNodePos,
 ) (*crdt.RGATreeSplitNodePos, error) {
+	if pbPos == nil {
+		return nil, goerrors.New("text node pos missing")
+	}
+
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -700,6 +762,10 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 
 	nodes := make([]*crdt.TreeNode, len(pbNodes))
 	for i, pbNode := range pbNodes {
+		if pbNode == nil {
+			return nil, goerrors.New("tree node missing")
+		}
+
 		node, err := fromTreeNode(pbNode)
 		if err != nil {
 			return nil, err
@@ -712,6 +778,9 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 	depthTable[pbNodes[len(nodes)-1].Depth] = nodes[len(nodes)-1]
 	for i := len(nodes) - 2; i >= 0; i-- {
 		var parent *crdt.TreeNode = depthTable[pbNodes[i].Depth-1]
+		if parent == nil {
+			return nil, goerrors.New("tree node parent missing")
+		}
 
 		if err := parent.Prepend(nodes[i]); err != nil {
 			return nil, err
@@ -751,6 +820,10 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
 	rht := crdt.NewRHT()
 	for k, pbAttr := range pbRHT {
+		if pbAttr == nil {
+			return nil, goerrors.New("tree node attribute missing")
+		}
+
 		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
 		if err != nil {
 			return nil, err
@@ -761,6 +834,10 @@ func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
+	if pbNode == nil {
+		return nil, goerrors.New("tree node missing")
+	}
+
 	id, err := fromTreeNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
@@ -816,6 +893,10 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 }
 
 func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
+	if pbPos == nil {
+		return nil, goerrors.New("tree position missing")
+	}
+
 	parentID, err := fromTreeNodeID(pbPos.ParentId)
 	if err != nil {
 		return nil, err
@@ -830,6 +911,10 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 }
 
 func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
+	if pbPos == nil {
+		return nil, goerrors.New("tree node id missing")
+	}
+
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -858,6 +943,10 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 }
 
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
+	if pbElement == nil {
+		return nil, ErrUnsupportedElement
+	}
+
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		if pbElement.Value == nil {
