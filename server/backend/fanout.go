@@ -63,10 +63,7 @@ func FanOut[K comparable, V any, R any](
 
 	var wg sync.WaitGroup
 	for k, v := range tasks {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			if err := be.fanOut.semaphore.Acquire(ctx, 1); err != nil {
 				resultCh <- result{err: err}
 				return
@@ -75,7 +72,7 @@ func FanOut[K comparable, V any, R any](
 
 			values, err := fn(ctx, k, v)
 			resultCh <- result{values: values, err: err}
-		}()
+		})
 	}
 
 	go func() {

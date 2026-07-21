@@ -83,9 +83,7 @@ func TestPresenceBroadcast(t *testing.T) {
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rcv := 0
 			timeout := time.After(2 * time.Second)
 			for {
@@ -107,7 +105,7 @@ func TestPresenceBroadcast(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		wg.Wait()
 	})
@@ -152,9 +150,7 @@ func TestPresenceBroadcast(t *testing.T) {
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rcv := 0
 			timeout := time.After(2 * time.Second)
 			for {
@@ -170,7 +166,7 @@ func TestPresenceBroadcast(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		wg.Wait()
 	})
@@ -213,9 +209,7 @@ func TestPresenceBroadcast(t *testing.T) {
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rcv := 0
 			timeout := time.After(2 * time.Second)
 			for {
@@ -234,7 +228,7 @@ func TestPresenceBroadcast(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 
 		wg.Wait()
 	})

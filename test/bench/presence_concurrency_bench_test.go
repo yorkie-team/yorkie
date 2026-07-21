@@ -54,10 +54,7 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 		// 02. Then create new clients and attach them to the document concurrently.
 		var wg sync.WaitGroup
 		for range concurrentCnt {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			wg.Go(func() {
 				client, doc, err := helper.ClientAndAttachedDoc(ctx, svr.RPCAddr(), docKey)
 				assert.NoError(b, err)
 				err = client.Sync(ctx)
@@ -72,7 +69,7 @@ func benchmarkPresenceConcurrency(b *testing.B, svr *server.Yorkie, initialCnt i
 				}
 				assert.NoError(b, client.Sync(ctx))
 				assert.NoError(b, client.Close())
-			}()
+			})
 		}
 		wg.Wait()
 

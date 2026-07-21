@@ -94,15 +94,13 @@ func BenchmarkChannelConcurrency_AttachSameChannel(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
-						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, gIdx))
+					wg.Go(func() {
+						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, g))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err == nil {
 							atomic.AddInt64(&successCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -148,14 +146,12 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
 						channelKey := types.ChannelRefKey{
 							ProjectID:  projectID,
-							ChannelKey: key.Key(fmt.Sprintf("room-%d", gIdx)),
+							ChannelKey: key.Key(fmt.Sprintf("room-%d", g)),
 						}
-						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", gIdx))
+						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", g))
 						sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err != nil {
 							b.Errorf("Attach failed: %v", err)
@@ -163,7 +159,7 @@ func BenchmarkChannelConcurrency_AttachDifferentChannels(b *testing.B) {
 						if sessionID != "" {
 							atomic.AddInt64(&successCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -226,11 +222,8 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 				var attachErrors, detachErrors int64
 
 				for g := range tc.goroutineCount {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
-
-						if (gIdx*100)/tc.goroutineCount < tc.detachRatio {
+					wg.Go(func() {
+						if (g*100)/tc.goroutineCount < tc.detachRatio {
 							// Detach operation
 							idx := atomic.AddInt32(&sessionIdx, 1) - 1
 							if int(idx) < len(sessionIDs) {
@@ -242,14 +235,14 @@ func BenchmarkChannelConcurrency_AttachDetachMixed(b *testing.B) {
 							}
 						} else {
 							// Attach operation
-							clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", gIdx))
+							clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", g))
 							_, _, err := manager.Attach(ctx, channelKey, clientID)
 							if err != nil {
 								atomic.AddInt64(&attachErrors, 1)
 							}
 							atomic.AddInt64(&attachCount, 1)
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()
@@ -314,33 +307,29 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 
 				// Start readers
 				for r := range tc.readers {
-					wg.Add(1)
-					go func(rIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
 						for {
 							select {
 							case <-done:
 								return
 							default:
-								channelKey := channelKeys[rIdx%tc.channelCount]
-								count := manager.SessionCount(channelKey, rIdx%2 == 0)
+								channelKey := channelKeys[r%tc.channelCount]
+								count := manager.SessionCount(channelKey, r%2 == 0)
 								// Session count should always be >= 1 (initial session)
 								if count >= 1 {
 									atomic.AddInt64(&readCount, 1)
 								}
 							}
 						}
-					}(r)
+					})
 				}
 
 				// Start writers
 				var writeCount int32
 				for w := range tc.writers {
-					wg.Add(1)
-					go func(wIdx int) {
-						defer wg.Done()
-						channelKey := channelKeys[wIdx%tc.channelCount]
-						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", wIdx))
+					wg.Go(func() {
+						channelKey := channelKeys[w%tc.channelCount]
+						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", w))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						assert.NoError(b, err, "attach should succeed")
 						atomic.AddInt32(&writeCount, 1)
@@ -350,7 +339,7 @@ func BenchmarkChannelConcurrency_SessionCountWhileModifying(b *testing.B) {
 								close(done)
 							})
 						}
-					}(w)
+					})
 				}
 
 				wg.Wait()
@@ -409,10 +398,8 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 				var listCount int64
 
 				// Start readers (List operations)
-				for r := range tc.readers {
-					wg.Add(1)
-					go func(rIdx int) {
-						defer wg.Done()
+				for range tc.readers {
+					wg.Go(func() {
 						for {
 							select {
 							case <-done:
@@ -425,20 +412,18 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 								}
 							}
 						}
-					}(r)
+					})
 				}
 
 				// Start writers
 				var writeCount int32
 				for w := range tc.writers {
-					wg.Add(1)
-					go func(wIdx int) {
-						defer wg.Done()
+					wg.Go(func() {
 						channelKey := types.ChannelRefKey{
 							ProjectID:  projectID,
-							ChannelKey: key.Key(fmt.Sprintf("new-room-%d", wIdx)),
+							ChannelKey: key.Key(fmt.Sprintf("new-room-%d", w)),
 						}
-						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", wIdx))
+						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%024d", w))
 						_, _, err := manager.Attach(ctx, channelKey, clientID)
 						assert.NoError(b, err, "attach should succeed")
 						atomic.AddInt32(&writeCount, 1)
@@ -448,7 +433,7 @@ func BenchmarkChannelConcurrency_ListWhileModifying(b *testing.B) {
 								close(done)
 							})
 						}
-					}(w)
+					})
 				}
 
 				wg.Wait()
@@ -494,10 +479,7 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 				var successCount int64
 
 				for g := range tc.goroutines {
-					wg.Add(1)
-					go func(iterIdx, gIdx int) {
-						defer wg.Done()
-
+					wg.Go(func() {
 						var channelKey types.ChannelRefKey
 						switch tc.operation {
 						case "same_key":
@@ -508,10 +490,10 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 						case "different_keys":
 							channelKey = types.ChannelRefKey{
 								ProjectID:  projectID,
-								ChannelKey: key.Key(fmt.Sprintf("room-%d", gIdx)),
+								ChannelKey: key.Key(fmt.Sprintf("room-%d", g)),
 							}
 						case "mixed":
-							if gIdx%2 == 0 {
+							if g%2 == 0 {
 								channelKey = types.ChannelRefKey{
 									ProjectID:  projectID,
 									ChannelKey: "hot-spot",
@@ -519,20 +501,20 @@ func BenchmarkChannelConcurrency_ChannelManagerContention(b *testing.B) {
 							} else {
 								channelKey = types.ChannelRefKey{
 									ProjectID:  projectID,
-									ChannelKey: key.Key(fmt.Sprintf("room-%d", gIdx)),
+									ChannelKey: key.Key(fmt.Sprintf("room-%d", g)),
 								}
 							}
 						}
 
-						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", iterIdx, gIdx))
+						clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%012d%012d", i, g))
 						sessionID, _, err := manager.Attach(ctx, channelKey, clientID)
 						if err == nil && sessionID != "" {
 							atomic.AddInt64(&successCount, 1)
 						}
 						mu.Lock()
-						sessionIDs[gIdx] = sessionID
+						sessionIDs[g] = sessionID
 						mu.Unlock()
-					}(i, g)
+					})
 				}
 
 				wg.Wait()
@@ -606,17 +588,14 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 				var attachCount, readCount int64
 
 				for g := range tc.goroutines {
-					wg.Add(1)
-					go func(gIdx int) {
-						defer wg.Done()
-
+					wg.Go(func() {
 						for op := range tc.operationsEach {
-							channelKey := channelKeys[(gIdx+op)%tc.channelCount]
+							channelKey := channelKeys[(g+op)%tc.channelCount]
 
-							switch (gIdx + op) % 6 {
+							switch (g + op) % 6 {
 							case 0:
 								// Attach
-								clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%08d%08d%08d", i, gIdx, op))
+								clientID, _ := time.ActorIDFromHex(fmt.Sprintf("%08d%08d%08d", i, g, op))
 								_, _, err := manager.Attach(ctx, channelKey, clientID)
 								if err != nil {
 									atomic.AddInt64(&errorCount, 1)
@@ -655,7 +634,7 @@ func BenchmarkChannelConcurrency_StressTest(b *testing.B) {
 								}
 							}
 						}
-					}(g)
+					})
 				}
 
 				wg.Wait()

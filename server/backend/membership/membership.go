@@ -74,8 +74,9 @@ func (mm *Manager) Start(ctx context.Context) error {
 	mm.mutex.Lock()
 	defer mm.mutex.Unlock()
 
-	mm.wg.Add(1)
-	go mm.membershipLoop(ctx)
+	mm.wg.Go(func() {
+		mm.membershipLoop(ctx)
+	})
 
 	return nil
 }
@@ -114,8 +115,6 @@ func (mm *Manager) SetDB(db database.Database) {
 
 // membershipLoop runs the membership management loop.
 func (mm *Manager) membershipLoop(ctx context.Context) {
-	defer mm.wg.Done()
-
 	for {
 		mm.handleMembershipCycle(ctx)
 

@@ -174,21 +174,18 @@ func TestLeadershipConcurrency(t *testing.T) {
 	acquiredCount := make([]int, numGoroutines)
 
 	for i := range numGoroutines {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-
-			rpcAddr := fmt.Sprintf("test-addr-%d", id)
+		wg.Go(func() {
+			rpcAddr := fmt.Sprintf("test-addr-%d", i)
 
 			for range 50 {
 				info, err := db.TryLeadership(ctx, rpcAddr, "", leaseDuration)
 				if err == nil && info != nil {
-					acquiredCount[id]++
+					acquiredCount[i]++
 					time.Sleep(10 * time.Millisecond)
 				}
 				time.Sleep(5 * time.Millisecond)
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()

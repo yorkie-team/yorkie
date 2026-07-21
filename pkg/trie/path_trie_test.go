@@ -489,12 +489,10 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for range goroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				keyPath := []string{"project-1", "room-1"}
 				trie.Insert(keyPath, createTestValue(1))
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -513,16 +511,14 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		values := make([]*testValue, goroutines)
 
 		for i := range goroutines {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
+			wg.Go(func() {
 				keyPath := []string{"project-1", "room-1"}
 				val := trie.GetOrInsert(keyPath, func() *testValue {
 					createCount.Add(1)
 					return createTestValue(1)
 				})
-				values[idx] = val
-			}(i)
+				values[i] = val
+			})
 		}
 
 		wg.Wait()
@@ -551,31 +547,25 @@ func TestPathTrie_Concurrency(t *testing.T) {
 
 		// Concurrent reads
 		for i := range goroutines {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%10)}
+			wg.Go(func() {
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%10)}
 				val, ok := trie.Get(keyPath)
 				assert.True(t, ok)
 				assert.NotNil(t, val)
-			}(i)
+			})
 		}
 
 		// Concurrent writes
 		for i := range goroutines {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				keyPath := []string{"project-1", fmt.Sprintf("room-new-%d", idx)}
-				trie.Insert(keyPath, createTestValue(idx))
-			}(i)
+			wg.Go(func() {
+				keyPath := []string{"project-1", fmt.Sprintf("room-new-%d", i)}
+				trie.Insert(keyPath, createTestValue(i))
+			})
 		}
 
 		// Concurrent ForEach
 		for range 10 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				count := 0
 				trie.ForEach(func(v *testValue) bool {
 					count++
@@ -585,7 +575,7 @@ func TestPathTrie_Concurrency(t *testing.T) {
 				// At maximum, we could see all 10 + goroutines values
 				assert.GreaterOrEqual(t, count, 10, "should see at least initial values")
 				assert.LessOrEqual(t, count, 10+goroutines, "should not exceed total values")
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -606,12 +596,10 @@ func TestPathTrie_Concurrency(t *testing.T) {
 
 		// Concurrent deletes
 		for i := range valueCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx)}
+			wg.Go(func() {
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i)}
 				trie.Delete(keyPath)
-			}(i)
+			})
 		}
 
 		wg.Wait()
@@ -632,15 +620,12 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		keyPath := []string{"project-1", "room-1"}
 
 		for range iterations {
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				trie.Insert(keyPath, createTestValue(1))
-			}()
-			go func() {
-				defer wg.Done()
+			})
+			wg.Go(func() {
 				trie.Delete(keyPath)
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -654,29 +639,24 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for i := range operations {
-			wg.Add(3)
-
 			// Insert
-			go func(idx int) {
-				defer wg.Done()
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%100)}
-				trie.Insert(keyPath, createTestValue(idx%100))
-			}(i)
+			wg.Go(func() {
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%100)}
+				trie.Insert(keyPath, createTestValue(i%100))
+			})
 
 			// Read
-			go func(idx int) {
-				defer wg.Done()
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%100)}
+			wg.Go(func() {
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%100)}
 				_, _ = trie.Get(keyPath)
-			}(i)
+			})
 
 			// ForEach
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				trie.ForEach(func(v *testValue) bool {
 					return true
 				})
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -809,14 +789,12 @@ func TestPathTrie_RootValue(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for range 100 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				trie.GetOrInsertRoot(func() *testValue {
 					atomic.AddInt32(&createCount, 1)
 					return createTestValue(1)
 				})
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -904,11 +882,9 @@ func TestPathTrie_RootValue(t *testing.T) {
 		var wg sync.WaitGroup
 
 		for i := range 100 {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				trie.InsertRoot(createTestValue(idx))
-			}(i)
+			wg.Go(func() {
+				trie.InsertRoot(createTestValue(i))
+			})
 		}
 
 		wg.Wait()

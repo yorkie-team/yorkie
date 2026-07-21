@@ -58,12 +58,10 @@ func TestPubSub(t *testing.T) {
 		}()
 
 		var wg gosync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			e := <-subA.Events()
 			assert.Equal(t, e, docEvent)
-		}()
+		})
 
 		// publish the event to the documents by actorB
 		pubSub.Publish(ctx, idB, docEvent)
@@ -127,18 +125,16 @@ func TestPubSub(t *testing.T) {
 		var wg gosync.WaitGroup
 		subscriptions := make([]*pubsub.DocSubscription, concurrency)
 		for i := range concurrency {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				subs, _, err := pubSub.Subscribe(ctx, actors[idx], refKey, limitCount)
+			wg.Go(func() {
+				subs, _, err := pubSub.Subscribe(ctx, actors[i], refKey, limitCount)
 				if err == nil {
 					successCount.Add(1)
-					subscriptions[idx] = subs
+					subscriptions[i] = subs
 				} else {
 					failCount.Add(1)
 					assert.ErrorIs(t, err, pubsub.ErrTooManySubscribers)
 				}
-			}(i)
+			})
 		}
 		wg.Wait()
 		defer func() {

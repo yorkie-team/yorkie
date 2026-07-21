@@ -164,10 +164,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for i := range totalGroups {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			wg.Go(func() {
 				if err := sem.Acquire(ctx, 1); err != nil {
 					resultCh <- groupResult{err: err}
 					return
@@ -186,7 +183,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 				currentConcurrency.Add(-1)
 
 				resultCh <- groupResult{value: i}
-			}()
+			})
 		}
 
 		go func() { wg.Wait(); close(resultCh) }()
@@ -217,16 +214,14 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for i := range 5 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := sem.Acquire(ctx, 1); err != nil {
 					resultCh <- groupResult{id: i, err: err}
 					return
 				}
 				defer sem.Release(1)
 				resultCh <- groupResult{id: i}
-			}()
+			})
 		}
 
 		// Give goroutines time to block on Acquire.
@@ -265,16 +260,14 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for range 3 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				if err := sem.Acquire(ctx, 1); err != nil {
 					resultCh <- groupResult{err: err}
 					return
 				}
 				defer sem.Release(1)
 				resultCh <- groupResult{}
-			}()
+			})
 		}
 
 		go func() { wg.Wait(); close(resultCh) }()
@@ -301,9 +294,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for range totalGroups {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				defer completedCount.Add(1)
 
 				if err := sem.Acquire(ctx, 1); err != nil {
@@ -314,7 +305,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 				time.Sleep(5 * time.Millisecond)
 				resultCh <- groupResult{}
-			}()
+			})
 		}
 
 		// Cancel early while some goroutines are still running.
@@ -345,10 +336,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for i := range totalGroups {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			wg.Go(func() {
 				if err := sem.Acquire(ctx, 1); err != nil {
 					resultCh <- groupResult{err: err}
 					return
@@ -360,7 +348,7 @@ func TestSemaphoreFanOutPattern(t *testing.T) {
 					return
 				}
 				resultCh <- groupResult{value: i}
-			}()
+			})
 		}
 
 		go func() { wg.Wait(); close(resultCh) }()

@@ -15,10 +15,10 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Set up Go 1.24
+      - name: Set up Go 1.25
         uses: actions/setup-go@v4
         with:
-          go-version: 1.24
+          go-version: 1.25
 
       - name: Use docker buildx
         run: docker buildx create --use

@@ -398,28 +398,24 @@ func TestShardedPathTrie_ConcurrentReadWrite(t *testing.T) {
 
 	// Writers
 	for w := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range 100 {
-				shardKey := fmt.Sprintf("p1.r%d", wid)
-				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i+100)}, wid*1000+i)
+				shardKey := fmt.Sprintf("p1.r%d", w)
+				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i+100)}, w*1000+i)
 			}
-		}(w)
+		})
 	}
 
 	// Readers
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 100 {
 				st.ForEach(func(v int) bool {
 					_ = v
 					return true
 				})
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -581,15 +577,13 @@ func TestShardedPathTrie_ConcurrentGetOrInsert(t *testing.T) {
 
 	// Many goroutines trying to GetOrInsert the same key
 	for range 100 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			st.GetOrInsert(shardKey, keyPath, func() int {
 				count := int(createCount)
 				createCount++
 				return count
 			})
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -612,12 +606,10 @@ func TestShardedPathTrie_ConcurrentDelete(t *testing.T) {
 
 	// Concurrent deletes
 	for i := range 100 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			shardKey := fmt.Sprintf("p1.r%d", idx%10)
-			st.Delete(shardKey, []string{fmt.Sprintf("u%d", idx)})
-		}(i)
+		wg.Go(func() {
+			shardKey := fmt.Sprintf("p1.r%d", i%10)
+			st.Delete(shardKey, []string{fmt.Sprintf("u%d", i)})
+		})
 	}
 
 	wg.Wait()
@@ -646,9 +638,7 @@ func TestShardedPathTrie_ConcurrentForEachByShardWithModifications(t *testing.T)
 
 	// Readers doing ForEachByShard
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				st.ForEachByShard("p1.", func(v int) bool {
@@ -658,29 +648,25 @@ func TestShardedPathTrie_ConcurrentForEachByShardWithModifications(t *testing.T)
 				// Count may vary due to concurrent modifications
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding new values
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 50 {
-				st.Insert(fmt.Sprintf("p1.r%d", 100+wid*50+j), []string{"u1"}, wid*1000+j)
+				st.Insert(fmt.Sprintf("p1.r%d", 100+i*50+j), []string{"u1"}, i*1000+j)
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing values
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 5 {
-				st.Delete(fmt.Sprintf("p1.r%d", did*5+j), []string{"u1"})
+				st.Delete(fmt.Sprintf("p1.r%d", i*5+j), []string{"u1"})
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -719,9 +705,7 @@ func TestShardedPathTrie_ConcurrentForEachDescendantWithModifications(t *testing
 
 	// Readers doing ForEachDescendant
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				st.ForEachDescendant("p1.r1", nil, func(v int) bool {
@@ -730,29 +714,25 @@ func TestShardedPathTrie_ConcurrentForEachDescendantWithModifications(t *testing
 				})
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding descendants
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 20 {
-				st.Insert("p1.r1", []string{fmt.Sprintf("new-s%d-%d", wid, j)}, wid*1000+j)
+				st.Insert("p1.r1", []string{fmt.Sprintf("new-s%d-%d", i, j)}, i*1000+j)
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing descendants
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 2 {
-				st.Delete("p1.r1", []string{fmt.Sprintf("s%d", did*2+j)})
+				st.Delete("p1.r1", []string{fmt.Sprintf("s%d", i*2+j)})
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -798,9 +778,7 @@ func TestShardedPathTrie_ConcurrentForEachInShardWithModifications(t *testing.T)
 
 	// Readers doing ForEachInShard
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				count := 0
 				st.ForEachInShard("p1.r1", func(v int) bool {
@@ -809,29 +787,25 @@ func TestShardedPathTrie_ConcurrentForEachInShardWithModifications(t *testing.T)
 				})
 				_ = count
 			}
-		}()
+		})
 	}
 
 	// Writers adding to same shard
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 20 {
-				st.Insert("p1.r1", []string{fmt.Sprintf("new-u%d-%d", wid, j)}, wid*1000+j)
+				st.Insert("p1.r1", []string{fmt.Sprintf("new-u%d-%d", i, j)}, i*1000+j)
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing from same shard
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 5 {
-				st.Delete("p1.r1", []string{fmt.Sprintf("u%d", did*5+j)})
+				st.Delete("p1.r1", []string{fmt.Sprintf("u%d", i*5+j)})
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -869,19 +843,16 @@ func TestShardedPathTrie_ConcurrentShardCleanupRace(t *testing.T) {
 		st.Insert("p1.r1", []string{"u1"}, 1)
 
 		var wg sync.WaitGroup
-		wg.Add(2)
 
 		// Goroutine 1: Delete the value (may trigger shard cleanup)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			st.Delete("p1.r1", []string{"u1"})
-		}()
+		})
 
 		// Goroutine 2: Insert a new value to the same shard
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			st.Insert("p1.r1", []string{"u2"}, 2)
-		}()
+		})
 
 		wg.Wait()
 
@@ -900,21 +871,17 @@ func TestShardedPathTrie_ConcurrentRootValueOperations(t *testing.T) {
 
 	// Mixed GetOrInsert and Insert for root values
 	for i := range numGoroutines {
-		wg.Add(2)
-
 		// GetOrInsert root
-		go func(idx int) {
-			defer wg.Done()
-			st.GetOrInsert(fmt.Sprintf("p1.r%d", idx%10), nil, func() int {
-				return idx + 1
+		wg.Go(func() {
+			st.GetOrInsert(fmt.Sprintf("p1.r%d", i%10), nil, func() int {
+				return i + 1
 			})
-		}(i)
+		})
 
 		// Insert root (overwrites)
-		go func(idx int) {
-			defer wg.Done()
-			st.Insert(fmt.Sprintf("p1.r%d", idx%10), nil, (idx+1)*100)
-		}(i)
+		wg.Go(func() {
+			st.Insert(fmt.Sprintf("p1.r%d", i%10), nil, (i+1)*100)
+		})
 	}
 
 	wg.Wait()
@@ -938,35 +905,30 @@ func TestShardedPathTrie_ConcurrentMultiShardOperations(t *testing.T) {
 
 	// Concurrent operations across many different shards
 	for i := range numGoroutines {
-		wg.Add(3)
-
 		// Insert to random shards
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 20 {
-				shardKey := fmt.Sprintf("p%d.r%d", idx%5, j%10)
-				st.Insert(shardKey, []string{fmt.Sprintf("u%d", idx)}, idx*1000+j)
+				shardKey := fmt.Sprintf("p%d.r%d", i%5, j%10)
+				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i)}, i*1000+j)
 			}
-		}(i)
+		})
 
 		// Read from random shards
-		go func(idx int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 20 {
-				shardKey := fmt.Sprintf("p%d.r%d", idx%5, j%10)
-				_, _ = st.Get(shardKey, []string{fmt.Sprintf("u%d", (idx+1)%numGoroutines)})
+				shardKey := fmt.Sprintf("p%d.r%d", i%5, j%10)
+				_, _ = st.Get(shardKey, []string{fmt.Sprintf("u%d", (i+1)%numGoroutines)})
 			}
-		}(i)
+		})
 
 		// ForEach across all shards
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			count := 0
 			st.ForEach(func(v int) bool {
 				count++
 				return count < 100 // Early termination
 			})
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -1028,37 +990,31 @@ func TestShardedPathTrie_ConcurrentShardKeysWithModifications(t *testing.T) {
 
 	// Readers calling ShardKeys
 	for range numReaders {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				keys := st.ShardKeys()
 				// Keys should be a consistent snapshot
 				_ = keys
 			}
-		}()
+		})
 	}
 
 	// Writers adding new shards
 	for i := range numWriters {
-		wg.Add(1)
-		go func(wid int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 10 {
-				st.Insert(fmt.Sprintf("p2.r%d-%d", wid, j), []string{"u1"}, wid*1000+j)
+				st.Insert(fmt.Sprintf("p2.r%d-%d", i, j), []string{"u1"}, i*1000+j)
 			}
-		}(i)
+		})
 	}
 
 	// Deleters removing values from shards
 	for i := range numWriters {
-		wg.Add(1)
-		go func(did int) {
-			defer wg.Done()
+		wg.Go(func() {
 			for j := range 2 {
-				st.Delete(fmt.Sprintf("p1.r%d", did*2+j), []string{"u1"})
+				st.Delete(fmt.Sprintf("p1.r%d", i*2+j), []string{"u1"})
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -1103,15 +1059,13 @@ func TestShardedPathTrie_ConcurrentGetOrInsertRootSameKey(t *testing.T) {
 
 	// Many goroutines trying to GetOrInsert root value for same shard
 	for range 100 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			st.GetOrInsert(shardKey, nil, func() int {
 				// Atomically increment to detect multiple calls
 				count := atomic.AddInt32(&createCount, 1)
 				return int(count)
 			})
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -1141,11 +1095,9 @@ func TestShardedPathTrie_ConcurrentDeleteRoot(t *testing.T) {
 
 		// Multiple goroutines trying to delete root
 		for range 10 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				st.Delete("p1.r1", nil)
-			}()
+			})
 		}
 
 		wg.Wait()

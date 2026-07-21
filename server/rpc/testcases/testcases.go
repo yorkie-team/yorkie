@@ -724,9 +724,7 @@ func RunMaxSubscribersPerDocumentConcurrencyTest(
 	var successCount atomic.Int32
 	var wg sync.WaitGroup
 	for _, id := range clientIds {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resPack, err := testClient.AttachDocument(
 				context.Background(),
 				connect.NewRequest(&api.AttachDocumentRequest{
@@ -761,7 +759,7 @@ func RunMaxSubscribersPerDocumentConcurrencyTest(
 				successCount.Add(1)
 				break
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -835,9 +833,7 @@ func RunMaxAttachmentsPerDocumentConcurrencyTest(
 	var successCount, failCount atomic.Int32
 	var wg sync.WaitGroup
 	for _, id := range clientIds {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := testClient.AttachDocument(
 				context.Background(),
 				connect.NewRequest(&api.AttachDocumentRequest{
@@ -853,7 +849,7 @@ func RunMaxAttachmentsPerDocumentConcurrencyTest(
 			} else {
 				failCount.Add(1)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

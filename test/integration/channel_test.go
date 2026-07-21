@@ -996,15 +996,13 @@ func TestChannelIntegration(t *testing.T) {
 		// Attach all concurrently
 		var wg sync.WaitGroup
 		for i := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
+			wg.Go(func() {
 				var err error
-				channels[idx], err = channel.New(key.Key(channelKeys[idx]))
+				channels[i], err = channel.New(key.Key(channelKeys[i]))
 				assert.NoError(t, err)
-				err = clients[idx].Attach(ctx, channels[idx])
+				err = clients[i].Attach(ctx, channels[i])
 				assert.NoError(t, err)
-			}(i)
+			})
 		}
 		wg.Wait()
 
@@ -1024,12 +1022,10 @@ func TestChannelIntegration(t *testing.T) {
 
 		// Detach all concurrently
 		for i := range clientCount {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				err := clients[idx].Detach(ctx, channels[idx])
+			wg.Go(func() {
+				err := clients[i].Detach(ctx, channels[i])
 				assert.NoError(t, err)
-			}(i)
+			})
 		}
 		wg.Wait()
 

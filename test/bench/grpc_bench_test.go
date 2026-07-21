@@ -167,19 +167,16 @@ func BenchmarkRPC(b *testing.B) {
 		// Benchmark: Both clients update their documents concurrently
 		for b.Loop() {
 			wg := sync.WaitGroup{}
-			wg.Add(2)
 
 			// Client 1 updates its document
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				benchmarkUpdateAndSync(b, ctx, 50, c1, d1, testKey1)
-			}()
+			})
 
 			// Client 2 updates its document
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				benchmarkUpdateAndSync(b, ctx, 50, c2, d2, testKey2)
-			}()
+			})
 
 			wg.Wait()
 		}
@@ -212,17 +209,14 @@ func BenchmarkRPC(b *testing.B) {
 				assert.NoError(b, err)
 
 				wg := sync.WaitGroup{}
-				wg.Add(2)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					err := c1.Attach(ctx, doc1)
 					assert.NoError(b, err)
-				}()
-				go func() {
-					defer wg.Done()
+				})
+				wg.Go(func() {
 					err := c2.Attach(ctx, doc2)
 					assert.NoError(b, err)
-				}()
+				})
 				wg.Wait()
 			}()
 		}

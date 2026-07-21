@@ -136,23 +136,21 @@ func dispatchDeactivate(
 	var deactivated atomic.Int32
 	var wg sync.WaitGroup
 
-	for _, candidate := range candidates {
+	for _, c := range candidates {
 		if err := sem.Acquire(ctx, 1); err != nil {
 			// ctx error (e.g. cancellation): stop acquiring new slots.
 			// Already-launched goroutines drain via wg.Wait below.
 			logging.From(ctx).Warnf("acquire deactivate slot: %v", err)
 			break
 		}
-		wg.Add(1)
-		go func(c CandidatePair) {
-			defer wg.Done()
+		wg.Go(func() {
 			defer sem.Release(1)
 			if err := deactivate(c); err != nil {
 				logging.From(ctx).Warnf("failed to deactivate client %s: %v", c.Client.ID, err)
 				return
 			}
 			deactivated.Add(1)
-		}(candidate)
+		})
 	}
 	wg.Wait()
 
