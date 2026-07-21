@@ -512,13 +512,12 @@ func TestPathTrie_Concurrency(t *testing.T) {
 
 		for i := range goroutines {
 			wg.Go(func() {
-				idx := i
 				keyPath := []string{"project-1", "room-1"}
 				val := trie.GetOrInsert(keyPath, func() *testValue {
 					createCount.Add(1)
 					return createTestValue(1)
 				})
-				values[idx] = val
+				values[i] = val
 			})
 		}
 
@@ -549,8 +548,7 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		// Concurrent reads
 		for i := range goroutines {
 			wg.Go(func() {
-				idx := i
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%10)}
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%10)}
 				val, ok := trie.Get(keyPath)
 				assert.True(t, ok)
 				assert.NotNil(t, val)
@@ -560,9 +558,8 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		// Concurrent writes
 		for i := range goroutines {
 			wg.Go(func() {
-				idx := i
-				keyPath := []string{"project-1", fmt.Sprintf("room-new-%d", idx)}
-				trie.Insert(keyPath, createTestValue(idx))
+				keyPath := []string{"project-1", fmt.Sprintf("room-new-%d", i)}
+				trie.Insert(keyPath, createTestValue(i))
 			})
 		}
 
@@ -600,8 +597,7 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		// Concurrent deletes
 		for i := range valueCount {
 			wg.Go(func() {
-				idx := i
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx)}
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i)}
 				trie.Delete(keyPath)
 			})
 		}
@@ -645,15 +641,13 @@ func TestPathTrie_Concurrency(t *testing.T) {
 		for i := range operations {
 			// Insert
 			wg.Go(func() {
-				idx := i
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%100)}
-				trie.Insert(keyPath, createTestValue(idx%100))
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%100)}
+				trie.Insert(keyPath, createTestValue(i%100))
 			})
 
 			// Read
 			wg.Go(func() {
-				idx := i
-				keyPath := []string{"project-1", fmt.Sprintf("room-%d", idx%100)}
+				keyPath := []string{"project-1", fmt.Sprintf("room-%d", i%100)}
 				_, _ = trie.Get(keyPath)
 			})
 
@@ -889,8 +883,7 @@ func TestPathTrie_RootValue(t *testing.T) {
 
 		for i := range 100 {
 			wg.Go(func() {
-				idx := i
-				trie.InsertRoot(createTestValue(idx))
+				trie.InsertRoot(createTestValue(i))
 			})
 		}
 

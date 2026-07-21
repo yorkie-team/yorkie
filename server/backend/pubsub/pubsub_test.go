@@ -126,11 +126,10 @@ func TestPubSub(t *testing.T) {
 		subscriptions := make([]*pubsub.DocSubscription, concurrency)
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
-				subs, _, err := pubSub.Subscribe(ctx, actors[idx], refKey, limitCount)
+				subs, _, err := pubSub.Subscribe(ctx, actors[i], refKey, limitCount)
 				if err == nil {
 					successCount.Add(1)
-					subscriptions[idx] = subs
+					subscriptions[i] = subs
 				} else {
 					failCount.Add(1)
 					assert.ErrorIs(t, err, pubsub.ErrTooManySubscribers)

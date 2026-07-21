@@ -902,15 +902,14 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
-				clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
+				clientID, err := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				if err != nil {
-					errors[idx] = err
+					errors[i] = err
 					return
 				}
 				sessionID, _, err := manager.Attach(ctx, refKey, clientID)
-				sessionIDs[idx] = sessionID
-				errors[idx] = err
+				sessionIDs[i] = sessionID
+				errors[i] = err
 			})
 		}
 		wg.Wait()
@@ -942,12 +941,11 @@ func TestChannelManager_Concurrency(t *testing.T) {
 
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
-					ChannelKey: key.Key(fmt.Sprintf("room-%d", idx)),
+					ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 				}
-				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
+				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
@@ -979,8 +977,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		// Concurrent detaches
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
-				_, err := manager.Detach(ctx, initialSessions[idx])
+				_, err := manager.Detach(ctx, initialSessions[i])
 				if err != nil {
 					atomic.AddInt64(&detachErrors, 1)
 				}
@@ -990,8 +987,7 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		// Concurrent attaches
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
-				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("2%023d", idx))
+				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("2%023d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
@@ -1025,9 +1021,8 @@ func TestChannelManager_Concurrency(t *testing.T) {
 		// Concurrent attaches to different hierarchical channels
 		for i := range 100 {
 			wg.Go(func() {
-				idx := i
-				refKey := refKeys[idx%len(refKeys)]
-				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
+				refKey := refKeys[i%len(refKeys)]
+				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)
@@ -1120,8 +1115,7 @@ func TestChannelManager_SeqMonotonic(t *testing.T) {
 		var attachErrors int64
 		for i := range concurrency {
 			wg.Go(func() {
-				idx := i
-				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", idx))
+				clientID, _ := pkgtime.ActorIDFromHex(fmt.Sprintf("%024d", i))
 				_, _, err := manager.Attach(ctx, refKey, clientID)
 				if err != nil {
 					atomic.AddInt64(&attachErrors, 1)

@@ -48,7 +48,7 @@ for the remaining test files too:
   the method takes args, and drop the now-orphaned `defer wg.Done()`
   at the far end.
 - Closure took loop-var params to dodge pre-1.22 capture bugs (e.g.
-  `func(gIdx int) {...}(g)`): **correction, superseded below** — an
+  `func(gIdx int) {...}(g)`): **correction, superseded twice** — an
   earlier version of this note said to rename the outer loop var to
   match the former param name (used once, in `housekeeping.go`'s
   `candidate`→`c`). The repo owner corrected this: renaming *either*
@@ -59,6 +59,26 @@ for the remaining test files too:
   `gIdx := g` (or `a, b := x, y` for multiple params). Only
   `wg.Add`/the param list/`defer wg.Done()` are touched; zero
   identifiers change anywhere in the diff.
+
+  **Superseded again by PR review feedback**: the shadow line itself
+  is dead code — Go 1.22+ already scopes `for`-loop variables per
+  iteration, so a `wg.Go` closure can capture `i`/`g`/`w`/`r`/`j`
+  directly with no capture-bug risk, shadow copy or not. A reviewer
+  flagged this on the PR (`svr := svr` and the `idx := i` family)
+  and asked for a follow-up commit deleting them. Fixed 61 sites
+  across the 11 test files that had them (all under
+  `pkg/trie`, `server/backend/channel`, `server/backend/pubsub`,
+  `server/backend/membership`, `test/bench`, `test/integration`) by
+  deleting the shadow-decl line and renaming every use of the shadow
+  identifier back to the outer loop var, scoped strictly to that one
+  closure's body (brace-depth tracked, not a file-wide rename — two
+  sibling closures in the same file can shadow the same outer var
+  under different names, e.g. `wid`/`did` both from `i` in separate
+  `for i := range numWriters` loops). None of the 7 non-test files
+  used this pattern. Verified via a hand-reviewed `git diff` of all
+  11 files against this exact site list before running any build
+  tooling — every hunk is either a deleted shadow line or an
+  in-closure identifier rename, nothing else moved.
 
 Test (22/22 done). Migrated in 12 folder-batches (dispatched to
 parallel subagents for groups 3 onward), each verified with
@@ -87,9 +107,15 @@ literal-blocks exception was extended case-by-case to Add(3)/three
 blocks where each block is independently a one-Add-one-Done unit —
 never to `Add(n)` preceding a loop (that stays a hard skip).
 
-Remaining: CONTRIBUTING.md note, full `make lint` + `make test`
-(MongoDB up) pass across the whole diff, `/code-review` self-review,
-rebase onto `main`, open Draft PR referencing #1860.
+Remaining: full `make test` (MongoDB up, `-race`, `-tags integration`)
+pass across the whole diff, `/code-review` self-review, rebase onto
+`main`, open Draft PR referencing #1860.
+
+- [x] Review follow-up: remove now-unnecessary loop-var shadow copies
+  from `wg.Go` closures (61 sites, 11 test files) — see the
+  superseded note above for the full rationale and verification.
+  `make lint` (0 issues) and `go test ./...` (full unit suite) green
+  after the change.
 
 ## Scope
 

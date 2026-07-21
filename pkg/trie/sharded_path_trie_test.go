@@ -399,10 +399,9 @@ func TestShardedPathTrie_ConcurrentReadWrite(t *testing.T) {
 	// Writers
 	for w := range numWriters {
 		wg.Go(func() {
-			wid := w
 			for i := range 100 {
-				shardKey := fmt.Sprintf("p1.r%d", wid)
-				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i+100)}, wid*1000+i)
+				shardKey := fmt.Sprintf("p1.r%d", w)
+				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i+100)}, w*1000+i)
 			}
 		})
 	}
@@ -608,9 +607,8 @@ func TestShardedPathTrie_ConcurrentDelete(t *testing.T) {
 	// Concurrent deletes
 	for i := range 100 {
 		wg.Go(func() {
-			idx := i
-			shardKey := fmt.Sprintf("p1.r%d", idx%10)
-			st.Delete(shardKey, []string{fmt.Sprintf("u%d", idx)})
+			shardKey := fmt.Sprintf("p1.r%d", i%10)
+			st.Delete(shardKey, []string{fmt.Sprintf("u%d", i)})
 		})
 	}
 
@@ -656,9 +654,8 @@ func TestShardedPathTrie_ConcurrentForEachByShardWithModifications(t *testing.T)
 	// Writers adding new values
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 50 {
-				st.Insert(fmt.Sprintf("p1.r%d", 100+wid*50+j), []string{"u1"}, wid*1000+j)
+				st.Insert(fmt.Sprintf("p1.r%d", 100+i*50+j), []string{"u1"}, i*1000+j)
 			}
 		})
 	}
@@ -666,9 +663,8 @@ func TestShardedPathTrie_ConcurrentForEachByShardWithModifications(t *testing.T)
 	// Deleters removing values
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 5 {
-				st.Delete(fmt.Sprintf("p1.r%d", did*5+j), []string{"u1"})
+				st.Delete(fmt.Sprintf("p1.r%d", i*5+j), []string{"u1"})
 			}
 		})
 	}
@@ -724,9 +720,8 @@ func TestShardedPathTrie_ConcurrentForEachDescendantWithModifications(t *testing
 	// Writers adding descendants
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 20 {
-				st.Insert("p1.r1", []string{fmt.Sprintf("new-s%d-%d", wid, j)}, wid*1000+j)
+				st.Insert("p1.r1", []string{fmt.Sprintf("new-s%d-%d", i, j)}, i*1000+j)
 			}
 		})
 	}
@@ -734,9 +729,8 @@ func TestShardedPathTrie_ConcurrentForEachDescendantWithModifications(t *testing
 	// Deleters removing descendants
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 2 {
-				st.Delete("p1.r1", []string{fmt.Sprintf("s%d", did*2+j)})
+				st.Delete("p1.r1", []string{fmt.Sprintf("s%d", i*2+j)})
 			}
 		})
 	}
@@ -799,9 +793,8 @@ func TestShardedPathTrie_ConcurrentForEachInShardWithModifications(t *testing.T)
 	// Writers adding to same shard
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 20 {
-				st.Insert("p1.r1", []string{fmt.Sprintf("new-u%d-%d", wid, j)}, wid*1000+j)
+				st.Insert("p1.r1", []string{fmt.Sprintf("new-u%d-%d", i, j)}, i*1000+j)
 			}
 		})
 	}
@@ -809,9 +802,8 @@ func TestShardedPathTrie_ConcurrentForEachInShardWithModifications(t *testing.T)
 	// Deleters removing from same shard
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 5 {
-				st.Delete("p1.r1", []string{fmt.Sprintf("u%d", did*5+j)})
+				st.Delete("p1.r1", []string{fmt.Sprintf("u%d", i*5+j)})
 			}
 		})
 	}
@@ -881,16 +873,14 @@ func TestShardedPathTrie_ConcurrentRootValueOperations(t *testing.T) {
 	for i := range numGoroutines {
 		// GetOrInsert root
 		wg.Go(func() {
-			idx := i
-			st.GetOrInsert(fmt.Sprintf("p1.r%d", idx%10), nil, func() int {
-				return idx + 1
+			st.GetOrInsert(fmt.Sprintf("p1.r%d", i%10), nil, func() int {
+				return i + 1
 			})
 		})
 
 		// Insert root (overwrites)
 		wg.Go(func() {
-			idx := i
-			st.Insert(fmt.Sprintf("p1.r%d", idx%10), nil, (idx+1)*100)
+			st.Insert(fmt.Sprintf("p1.r%d", i%10), nil, (i+1)*100)
 		})
 	}
 
@@ -917,19 +907,17 @@ func TestShardedPathTrie_ConcurrentMultiShardOperations(t *testing.T) {
 	for i := range numGoroutines {
 		// Insert to random shards
 		wg.Go(func() {
-			idx := i
 			for j := range 20 {
-				shardKey := fmt.Sprintf("p%d.r%d", idx%5, j%10)
-				st.Insert(shardKey, []string{fmt.Sprintf("u%d", idx)}, idx*1000+j)
+				shardKey := fmt.Sprintf("p%d.r%d", i%5, j%10)
+				st.Insert(shardKey, []string{fmt.Sprintf("u%d", i)}, i*1000+j)
 			}
 		})
 
 		// Read from random shards
 		wg.Go(func() {
-			idx := i
 			for j := range 20 {
-				shardKey := fmt.Sprintf("p%d.r%d", idx%5, j%10)
-				_, _ = st.Get(shardKey, []string{fmt.Sprintf("u%d", (idx+1)%numGoroutines)})
+				shardKey := fmt.Sprintf("p%d.r%d", i%5, j%10)
+				_, _ = st.Get(shardKey, []string{fmt.Sprintf("u%d", (i+1)%numGoroutines)})
 			}
 		})
 
@@ -1014,9 +1002,8 @@ func TestShardedPathTrie_ConcurrentShardKeysWithModifications(t *testing.T) {
 	// Writers adding new shards
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 10 {
-				st.Insert(fmt.Sprintf("p2.r%d-%d", wid, j), []string{"u1"}, wid*1000+j)
+				st.Insert(fmt.Sprintf("p2.r%d-%d", i, j), []string{"u1"}, i*1000+j)
 			}
 		})
 	}
@@ -1024,9 +1011,8 @@ func TestShardedPathTrie_ConcurrentShardKeysWithModifications(t *testing.T) {
 	// Deleters removing values from shards
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 2 {
-				st.Delete(fmt.Sprintf("p1.r%d", did*2+j), []string{"u1"})
+				st.Delete(fmt.Sprintf("p1.r%d", i*2+j), []string{"u1"})
 			}
 		})
 	}

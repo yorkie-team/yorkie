@@ -288,7 +288,6 @@ func TestClusterNodes(t *testing.T) {
 		var wg sync.WaitGroup
 		for _, svr := range svrs {
 			wg.Go(func() {
-				svr := svr
 				require.NoError(t, svr.Start())
 			})
 		}

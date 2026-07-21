@@ -696,11 +696,10 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 		// Writers
 		for w := range numWriters {
 			wg.Go(func() {
-				wid := w
 				for i := range 10 {
 					refKey := types.ChannelRefKey{
 						ProjectID:  projectID,
-						ChannelKey: key.Key(fmt.Sprintf("room-%d.section-%d", wid, i)),
+						ChannelKey: key.Key(fmt.Sprintf("room-%d.section-%d", w, i)),
 					}
 					trie.GetOrInsert(refKey, func() *Channel {
 						return createTestChannel(projectID, refKey.ChannelKey)
@@ -772,10 +771,9 @@ func TestChannelTrie_ConcurrentOperations(t *testing.T) {
 		// Concurrent deletes
 		for i := range 100 {
 			wg.Go(func() {
-				idx := i
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
-					ChannelKey: key.Key(fmt.Sprintf("room-%d", idx)),
+					ChannelKey: key.Key(fmt.Sprintf("room-%d", i)),
 				}
 				trie.Delete(refKey)
 			})
@@ -823,11 +821,10 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 	// Writers adding channels
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 20 {
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
-					ChannelKey: key.Key(fmt.Sprintf("new-room-%d-%d", wid, j)),
+					ChannelKey: key.Key(fmt.Sprintf("new-room-%d-%d", i, j)),
 				}
 				trie.GetOrInsert(refKey, func() *Channel {
 					return createTestChannel(projectID, refKey.ChannelKey)
@@ -839,11 +836,10 @@ func TestChannelTrie_ConcurrentForEachInProjectWithModifications(t *testing.T) {
 	// Deleters removing channels
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 5 {
 				refKey := types.ChannelRefKey{
 					ProjectID:  projectID,
-					ChannelKey: key.Key(fmt.Sprintf("room-%d", did*5+j)),
+					ChannelKey: key.Key(fmt.Sprintf("room-%d", i*5+j)),
 				}
 				trie.Delete(refKey)
 			}
@@ -921,9 +917,8 @@ func TestChannelTrie_ConcurrentForEachDescendantWithModifications(t *testing.T) 
 	// Writers adding descendants
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 10 {
-				k := key.Key(fmt.Sprintf("room-1.section-1.new-desk-%d-%d", wid, j))
+				k := key.Key(fmt.Sprintf("room-1.section-1.new-desk-%d-%d", i, j))
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 				trie.GetOrInsert(refKey, func() *Channel {
 					return createTestChannel(projectID, k)
@@ -935,9 +930,8 @@ func TestChannelTrie_ConcurrentForEachDescendantWithModifications(t *testing.T) 
 	// Deleters removing descendants
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
 			for j := range 2 {
-				k := key.Key(fmt.Sprintf("room-1.section-1.desk-%d", did*2+j))
+				k := key.Key(fmt.Sprintf("room-1.section-1.desk-%d", i*2+j))
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 				trie.Delete(refKey)
 			}
@@ -1010,9 +1004,8 @@ func TestChannelTrie_ConcurrentForEachPrefixWithModifications(t *testing.T) {
 	// Writers adding matching channels
 	for i := range numWriters {
 		wg.Go(func() {
-			wid := i
 			for j := range 10 {
-				k := key.Key(fmt.Sprintf("room-1%d%d", wid, j)) // Matches "room-1" prefix
+				k := key.Key(fmt.Sprintf("room-1%d%d", i, j)) // Matches "room-1" prefix
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 				trie.GetOrInsert(refKey, func() *Channel {
 					return createTestChannel(projectID, k)
@@ -1024,8 +1017,7 @@ func TestChannelTrie_ConcurrentForEachPrefixWithModifications(t *testing.T) {
 	// Deleters removing matching channels
 	for i := range numWriters {
 		wg.Go(func() {
-			did := i
-			k := key.Key(fmt.Sprintf("room-%d", 10+did)) // room-10 through room-19
+			k := key.Key(fmt.Sprintf("room-%d", 10+i)) // room-10 through room-19
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.Delete(refKey)
 		})
@@ -1072,8 +1064,7 @@ func TestChannelTrie_ConcurrentHierarchicalChannelCreation(t *testing.T) {
 	for i := range numGoroutines {
 		// Create parent channel
 		wg.Go(func() {
-			idx := i
-			k := key.Key(fmt.Sprintf("room-%d", idx%10))
+			k := key.Key(fmt.Sprintf("room-%d", i%10))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
@@ -1082,8 +1073,7 @@ func TestChannelTrie_ConcurrentHierarchicalChannelCreation(t *testing.T) {
 
 		// Create child channel
 		wg.Go(func() {
-			idx := i
-			k := key.Key(fmt.Sprintf("room-%d.section-%d", idx%10, idx%5))
+			k := key.Key(fmt.Sprintf("room-%d.section-%d", i%10, i%5))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
@@ -1092,8 +1082,7 @@ func TestChannelTrie_ConcurrentHierarchicalChannelCreation(t *testing.T) {
 
 		// Create grandchild channel
 		wg.Go(func() {
-			idx := i
-			k := key.Key(fmt.Sprintf("room-%d.section-%d.desk-%d", idx%10, idx%5, idx%3))
+			k := key.Key(fmt.Sprintf("room-%d.section-%d.desk-%d", i%10, i%5, i%3))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.GetOrInsert(refKey, func() *Channel {
 				return createTestChannel(projectID, k)
@@ -1145,10 +1134,9 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 	for i := range numGoroutines {
 		// Insert to random projects
 		wg.Go(func() {
-			idx := i
-			projectID := projectIDs[idx%len(projectIDs)]
+			projectID := projectIDs[i%len(projectIDs)]
 			for j := range 10 {
-				k := key.Key(fmt.Sprintf("room-%d-%d", idx, j))
+				k := key.Key(fmt.Sprintf("room-%d-%d", i, j))
 				refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 				trie.GetOrInsert(refKey, func() *Channel {
 					return createTestChannel(projectID, k)
@@ -1158,8 +1146,7 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 
 		// ForEachInProject on random projects
 		wg.Go(func() {
-			idx := i
-			projectID := projectIDs[idx%len(projectIDs)]
+			projectID := projectIDs[i%len(projectIDs)]
 			count := 0
 			trie.ForEachInProject(projectID, func(ch *Channel) bool {
 				count++
@@ -1170,9 +1157,8 @@ func TestChannelTrie_ConcurrentMultiProjectOperations(t *testing.T) {
 
 		// Delete from random projects
 		wg.Go(func() {
-			idx := i
-			projectID := projectIDs[idx%len(projectIDs)]
-			k := key.Key(fmt.Sprintf("room-%d-0", idx))
+			projectID := projectIDs[i%len(projectIDs)]
+			k := key.Key(fmt.Sprintf("room-%d-0", i))
 			refKey := types.ChannelRefKey{ProjectID: projectID, ChannelKey: k}
 			trie.Delete(refKey)
 		})
