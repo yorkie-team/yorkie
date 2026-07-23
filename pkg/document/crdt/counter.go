@@ -50,9 +50,15 @@ const (
 func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, error) {
 	switch counterType {
 	case IntegerCnt, IntegerDedupCnt:
+		if len(value) < 4 {
+			return nil, fmt.Errorf("invalid counter integer payload: got %d bytes, want 4", len(value))
+		}
 		val := int32(binary.LittleEndian.Uint32(value))
 		return int(val), nil
 	case LongCnt:
+		if len(value) < 8 {
+			return nil, fmt.Errorf("invalid counter long payload: got %d bytes, want 8", len(value))
+		}
 		return int64(binary.LittleEndian.Uint64(value)), nil
 	default:
 		return nil, ErrUnsupportedType
