@@ -1,5 +1,5 @@
 ---
-updated: 2026-06-18
+updated: 2026-07-23
 ---
 
 # Tasks Archive
@@ -8,7 +8,14 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 18
+Total archived tasks: 20
+
+## 2026/07 (2 tasks)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| Migrate to sync.WaitGroup.Go for goroutine spawning (2026-07-18) | [20260718-waitgroup-go-migration-todo.md](./2026/07/20260718-waitgroup-go-migration-todo.md) | - |
+| Unify client watch event delivery into a single path (2026-07-03) | [20260703-watch-event-single-path-todo.md](./2026/07/20260703-watch-event-single-path-todo.md) | [20260703-watch-event-single-path-lessons.md](./2026/07/20260703-watch-event-single-path-lessons.md) |
 
 ## 2026/06 (2 tasks)
 

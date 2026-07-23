@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.13] - 2026-07-23
+
+### Added
+
+- Identity-preserving restore for Text undo/redo (server + wire) by @harrykim8672 in https://github.com/yorkie-team/yorkie/pull/1875
+
+### Changed
+
+- Unify client presence event delivery into a single ordered path by @hackerwins in https://github.com/yorkie-team/yorkie/pull/1852
+- Parallelize per-candidate Deactivate within a cycle by @raararaara in https://github.com/yorkie-team/yorkie/pull/1849
+- Expose housekeeping flags in yorkie-cluster chart by @raararaara in https://github.com/yorkie-team/yorkie/pull/1850
+- Migrate to sync.WaitGroup.Go for goroutine spawning by @mr8356 in https://github.com/yorkie-team/yorkie/pull/1881
+
+### Fixed
+
+- Prevent panic when splitLevel walks past the tree root by @ggyuchive in https://github.com/yorkie-team/yorkie/pull/1866
+- Register GC pairs for pieces split off tombstoned nodes by @harrykim8672 in https://github.com/yorkie-team/yorkie/pull/1874
+- Set updated_at on project creation by @lemon0333 in https://github.com/yorkie-team/yorkie/pull/1879
+
 ## [v0.7.12] - 2026-06-18
 
 ### Added

@@ -59,6 +59,6 @@ Unification" section.
       unthrottled stream reader can process unwatch before presence
       syncs → no events by design (JS parity); the test now waits for
       `watched` before unwatching
-- [ ] Verify: 20+ repeated runs of flaky + regression tests,
+- [x] Verify: 20+ repeated runs of flaky + regression tests,
       `make lint`, `go test ./...`, full integration suite
-- [ ] Open PR referencing #1847
+- [x] Open PR referencing #1847 (merged as #1852)
