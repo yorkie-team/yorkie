@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	gotime "time"
+	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -540,6 +541,25 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+	restoreSpans, err := fromRestoreSpans(pbEdit.RestoreSpans)
+	if err != nil {
+		return nil, err
+	}
+	retombstoneSpans, err := fromRestoreSpans(pbEdit.RetombstoneSpans)
+	if err != nil {
+		return nil, err
+	}
+	if mode := fromRestoreMode(pbEdit.RestoreMode); mode != crdt.RestoreModeNone {
+		return operations.NewRestoreEdit(
+			parentCreatedAt,
+			from,
+			to,
+			executedAt,
+			restoreSpans,
+			mode,
+			retombstoneSpans,
+		), nil
+	}
 	return operations.NewEdit(
 		parentCreatedAt,
 		from,
@@ -548,6 +568,58 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		pbEdit.Attributes,
 		executedAt,
 	), nil
+}
+
+func fromRestoreSpans(pbSpans []*api.RestoreSpan) ([]*crdt.RestoreSpan, error) {
+	if len(pbSpans) == 0 {
+		return nil, nil
+	}
+
+	spans := make([]*crdt.RestoreSpan, 0, len(pbSpans))
+	for _, pbSpan := range pbSpans {
+		if pbSpan == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
+		if pbSpan.Start < 0 || pbSpan.End < pbSpan.Start {
+			return nil, ErrInvalidRestoreSpan
+		}
+		// Text positions are indexed in UTF-16 code units, so the span's
+		// range must match Content's length under the same metric.
+		if int(pbSpan.End-pbSpan.Start) != len(utf16.Encode([]rune(pbSpan.Content))) {
+			return nil, ErrInvalidRestoreSpan
+		}
+
+		createdAt, err := fromTimeTicket(pbSpan.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		// A span addresses content by its original insertion identity, so a
+		// missing created_at is malformed. Reject it here rather than letting
+		// a nil ticket reach restore()/retombstone(), where it would panic on
+		// the first comparison (server-executed, client-supplied input).
+		if createdAt == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
+		spans = append(spans, &crdt.RestoreSpan{
+			CreatedAt:  createdAt,
+			Start:      int(pbSpan.Start),
+			End:        int(pbSpan.End),
+			Content:    pbSpan.Content,
+			Attributes: pbSpan.Attributes,
+		})
+	}
+	return spans, nil
+}
+
+func fromRestoreMode(mode api.RestoreMode) crdt.RestoreMode {
+	switch mode {
+	case api.RestoreMode_RESTORE_MODE_RESTORE:
+		return crdt.RestoreModeRestore
+	case api.RestoreMode_RESTORE_MODE_RETOMBSTONE:
+		return crdt.RestoreModeRetombstone
+	default:
+		return crdt.RestoreModeNone
+	}
 }
 
 func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {

@@ -261,6 +261,33 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	r.docSize.GC.Add(size)
 }
 
+// UnregisterGCPair removes a GC pair whose child has been restored
+// (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
+func (r *Root) UnregisterGCPair(pair GCPair) {
+	_, ok := r.gcNodePairMap[pair.Child.IDString()]
+	if !ok {
+		return
+	}
+
+	// NOTE: Unlike RegisterGCPair, GCOnlySize doesn't apply here. It only
+	// exists to avoid double-counting data at registration time, when a
+	// split-born child's content was already counted via a sibling's
+	// existing registration. Once registered, this entry's contribution
+	// to docSize.GC is always the child's own current DataSize() — that's
+	// what must come back out, regardless of how it went in.
+	//
+	// The caller clears removedAt before calling this, so DataSize() no
+	// longer includes the removedAt ticket that WAS counted while it was
+	// still registered. Add it back explicitly so GC doesn't retain a
+	// stale ticket's worth of residue.
+	r.docSize.GC.Sub(pair.Child.DataSize())
+	if _, isRHTNode := pair.Child.(*RHTNode); !isRHTNode {
+		r.docSize.GC.Meta -= time.TicketSize
+	}
+
+	delete(r.gcNodePairMap, pair.Child.IDString())
+}
+
 // Acc accumulates the given DataSize to Live.
 func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)

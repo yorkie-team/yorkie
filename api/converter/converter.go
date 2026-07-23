@@ -49,4 +49,9 @@ var (
 	// ErrUnsupportedCounterType is returned when the given counter type is not
 	// supported yet.
 	ErrUnsupportedCounterType = errors.InvalidArgument("unsupported counter type").WithCode("ErrUnsupportedCounterType")
+
+	// ErrInvalidRestoreSpan is returned when a restore span is malformed:
+	// a nil entry, a negative or inverted Start/End offset, or a range
+	// whose length doesn't match its Content.
+	ErrInvalidRestoreSpan = errors.InvalidArgument("invalid restore span").WithCode("ErrInvalidRestoreSpan")
 )

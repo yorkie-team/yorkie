@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -428,16 +429,62 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 }
 
 func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
+	restoreSpans, err := toRestoreSpans(e.RestoreSpans())
+	if err != nil {
+		return nil, err
+	}
+	retombstoneSpans, err := toRestoreSpans(e.RetombstoneSpans())
+	if err != nil {
+		return nil, err
+	}
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
-			From:            toTextNodePos(e.From()),
-			To:              toTextNodePos(e.To()),
-			Content:         e.Content(),
-			Attributes:      e.Attributes(),
-			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt:  ToTimeTicket(e.ParentCreatedAt()),
+			From:             toTextNodePos(e.From()),
+			To:               toTextNodePos(e.To()),
+			Content:          e.Content(),
+			Attributes:       e.Attributes(),
+			ExecutedAt:       ToTimeTicket(e.ExecutedAt()),
+			RestoreSpans:     restoreSpans,
+			RestoreMode:      toRestoreMode(e.RestoreMode()),
+			RetombstoneSpans: retombstoneSpans,
 		},
 	}, nil
+}
+
+func toRestoreSpans(spans []*crdt.RestoreSpan) ([]*api.RestoreSpan, error) {
+	if len(spans) == 0 {
+		return nil, nil
+	}
+
+	pbSpans := make([]*api.RestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		// Start/End are wire int32s; guard the narrowing rather than
+		// silently wrapping on documents large enough to overflow it.
+		if span.Start < math.MinInt32 || span.Start > math.MaxInt32 ||
+			span.End < math.MinInt32 || span.End > math.MaxInt32 {
+			return nil, ErrInvalidRestoreSpan
+		}
+		pbSpans = append(pbSpans, &api.RestoreSpan{
+			CreatedAt:  ToTimeTicket(span.CreatedAt),
+			Start:      int32(span.Start),
+			End:        int32(span.End),
+			Content:    span.Content,
+			Attributes: span.Attributes,
+		})
+	}
+	return pbSpans, nil
+}
+
+func toRestoreMode(mode crdt.RestoreMode) api.RestoreMode {
+	switch mode {
+	case crdt.RestoreModeRestore:
+		return api.RestoreMode_RESTORE_MODE_RESTORE
+	case crdt.RestoreModeRetombstone:
+		return api.RestoreMode_RESTORE_MODE_RETOMBSTONE
+	default:
+		return api.RestoreMode_RESTORE_MODE_UNSPECIFIED
+	}
 }
 
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
