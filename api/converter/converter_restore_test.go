@@ -91,3 +91,27 @@ func TestRestoreSpanRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestRestoreSpanRejectsNilCreatedAt guards the wire boundary: a span with no
+// created_at is malformed and must be rejected on deserialization, not passed
+// to the server-side restore path where a nil identity ticket would panic on
+// the first comparison.
+func TestRestoreSpanRejectsNilCreatedAt(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(seed, 0), 0)
+
+	op := operations.NewRestoreEdit(seed, pos, pos, executedAt,
+		[]*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}},
+		crdt.RestoreModeRestore, nil)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+
+	// Simulate a malformed / forged span that omits created_at.
+	pbOps[0].GetEdit().RestoreSpans[0].CreatedAt = nil
+
+	_, err = converter.FromOperations(pbOps)
+	assert.Error(t, err)
+}

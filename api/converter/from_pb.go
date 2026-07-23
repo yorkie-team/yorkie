@@ -555,6 +555,13 @@ func fromRestoreSpans(pbSpans []*api.RestoreSpan) ([]*crdt.RestoreSpan, error) {
 		if err != nil {
 			return nil, err
 		}
+		// A span addresses content by its original insertion identity, so a
+		// missing created_at is malformed. Reject it here rather than letting
+		// a nil ticket reach restore()/retombstone(), where it would panic on
+		// the first comparison (server-executed, client-supplied input).
+		if createdAt == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
 		spans = append(spans, &crdt.RestoreSpan{
 			CreatedAt:  createdAt,
 			Start:      int(pbSpan.Start),
