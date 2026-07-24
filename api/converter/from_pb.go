@@ -1038,6 +1038,16 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 		if id.CreatedAt == nil {
 			return nil, ErrInvalidRestoreSpan
 		}
+		// A text span's Length is the UTF-16 code-unit count of Value; the
+		// recreate path slices Value by [0, Length), so a mismatched (or
+		// negative) Length from crafted input would slice out of bounds.
+		// Reject it here (parity with fromRestoreSpans' Content-length check).
+		if pbSpan.Length < 0 {
+			return nil, ErrInvalidRestoreSpan
+		}
+		if pbSpan.IsText && int(pbSpan.Length) != len(utf16.Encode([]rune(pbSpan.Value))) {
+			return nil, ErrInvalidRestoreSpan
+		}
 		var attrs *crdt.RHT
 		if len(pbSpan.Attributes) > 0 {
 			attrs, err = fromRHT(pbSpan.Attributes)
@@ -1066,10 +1076,16 @@ func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSp
 			if span.LeftSiblingID, err = fromTreeNodeID(pbSpan.LeftSiblingId); err != nil {
 				return nil, err
 			}
+			if span.LeftSiblingID.CreatedAt == nil {
+				return nil, ErrInvalidRestoreSpan
+			}
 		}
 		if pbSpan.RightSiblingId != nil {
 			if span.RightSiblingID, err = fromTreeNodeID(pbSpan.RightSiblingId); err != nil {
 				return nil, err
+			}
+			if span.RightSiblingID.CreatedAt == nil {
+				return nil, ErrInvalidRestoreSpan
 			}
 		}
 		spans = append(spans, span)

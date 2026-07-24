@@ -17,6 +17,7 @@
 package converter_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -153,12 +154,14 @@ func TestTreeRestoreSpanRejectsNilCreatedAt(t *testing.T) {
 	build := func() []*api.Operation {
 		op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
 			[]*crdt.TreeRestoreSpan{{
-				ID:       crdt.NewTreeNodeID(seed, 2),
-				NodeType: "text",
-				IsText:   true,
-				Length:   1,
-				Value:    "x",
-				ParentID: crdt.NewTreeNodeID(seed, 0),
+				ID:             crdt.NewTreeNodeID(seed, 2),
+				NodeType:       "text",
+				IsText:         true,
+				Length:         1,
+				Value:          "x",
+				ParentID:       crdt.NewTreeNodeID(seed, 0),
+				LeftSiblingID:  crdt.NewTreeNodeID(seed, 1),
+				RightSiblingID: crdt.NewTreeNodeID(seed, 3),
 			}}, crdt.RestoreModeRestore, nil)
 		pbOps, err := converter.ToOperations([]operations.Operation{op})
 		assert.NoError(t, err)
@@ -178,4 +181,68 @@ func TestTreeRestoreSpanRejectsNilCreatedAt(t *testing.T) {
 		_, err := converter.FromOperations(pbOps)
 		assert.Error(t, err)
 	})
+
+	t.Run("nil left sibling created_at", func(t *testing.T) {
+		pbOps := build()
+		pbOps[0].GetTreeEdit().RestoreSpans[0].LeftSiblingId.CreatedAt = nil
+		_, err := converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
+
+	t.Run("nil right sibling created_at", func(t *testing.T) {
+		pbOps := build()
+		pbOps[0].GetTreeEdit().RestoreSpans[0].RightSiblingId.CreatedAt = nil
+		_, err := converter.FromOperations(pbOps)
+		assert.Error(t, err)
+	})
+}
+
+// TestTreeRestoreSpanRejectsBadTextLength guards the recreate slicing path: a
+// text span whose Length does not match its Value (in UTF-16 code units) would
+// slice out of bounds when a purged range is rebuilt, so it is rejected on read.
+func TestTreeRestoreSpanRejectsBadTextLength(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	// Length 3 but "hello" is 5 UTF-16 code units — serialization is in range,
+	// but deserialization must reject the mismatch.
+	op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+		[]*crdt.TreeRestoreSpan{{
+			ID:       crdt.NewTreeNodeID(seed, 2),
+			NodeType: "text",
+			IsText:   true,
+			Length:   3,
+			Value:    "hello",
+			ParentID: crdt.NewTreeNodeID(seed, 0),
+		}}, crdt.RestoreModeRestore, nil)
+	pbOps, err := converter.ToOperations([]operations.Operation{op})
+	assert.NoError(t, err)
+	_, err = converter.FromOperations(pbOps)
+	assert.Error(t, err)
+}
+
+// TestTreeRestoreSpanRejectsLengthOverflow guards serialization: a Length beyond
+// int32 must error rather than silently wrap to a bogus (possibly negative)
+// wire value (parity with the Text toRestoreSpans bounds check).
+func TestTreeRestoreSpanRejectsLengthOverflow(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000000")
+	assert.NoError(t, err)
+	seed := time.NewTicket(1, 0, actor)
+	executedAt := time.NewTicket(4, 0, actor)
+	pos := crdt.NewTreePos(crdt.NewTreeNodeID(seed, 0), crdt.NewTreeNodeID(seed, 0))
+
+	op := operations.NewRestoreTreeEdit(seed, pos, pos, executedAt,
+		[]*crdt.TreeRestoreSpan{{
+			ID:       crdt.NewTreeNodeID(seed, 2),
+			NodeType: "text",
+			IsText:   true,
+			Length:   math.MaxInt32 + 1,
+			Value:    "x",
+			ParentID: crdt.NewTreeNodeID(seed, 0),
+		}}, crdt.RestoreModeRestore, nil)
+	_, err = converter.ToOperations([]operations.Operation{op})
+	assert.Error(t, err)
 }

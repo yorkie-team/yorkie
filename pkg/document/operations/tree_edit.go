@@ -127,12 +127,15 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 				root.RegisterGCPair(pair)
 				root.AdjustDiffForGCPair(&diff, pair)
 			}
-			// 2. Revive (restore) by identity: un-tombstoned nodes move
-			// gc->live via UnregisterGCPair (after removedAt is cleared, which
-			// Restore does); recreated nodes are brand new, so add to Live.
+			// 2. Revive (restore) by identity. For an un-tombstoned node
+			// (removedAt already cleared by Restore) UnregisterGCPair removes
+			// its size from docSize.GC, and diff.Add books the same size into
+			// Live — the node just became visible. Recreated nodes are brand
+			// new, so they only need the Live addition. Mirrors Text restore.
 			untombstoned, recreated := obj.Restore(toRestore)
 			for _, node := range untombstoned {
 				root.UnregisterGCPair(crdt.GCPair{Parent: obj, Child: node})
+				diff.Add(node.DataSize())
 			}
 			for _, node := range recreated {
 				diff.Add(node.DataSize())

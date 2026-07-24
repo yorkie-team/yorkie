@@ -526,8 +526,16 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 		ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 	}
 	if len(e.RestoreSpans()) > 0 || len(e.RetombstoneSpans()) > 0 {
-		pbTreeEdit.RestoreSpans = toTreeRestoreSpans(e.RestoreSpans())
-		pbTreeEdit.RetombstoneSpans = toTreeRestoreSpans(e.RetombstoneSpans())
+		restoreSpans, err := toTreeRestoreSpans(e.RestoreSpans())
+		if err != nil {
+			return nil, err
+		}
+		retombstoneSpans, err := toTreeRestoreSpans(e.RetombstoneSpans())
+		if err != nil {
+			return nil, err
+		}
+		pbTreeEdit.RestoreSpans = restoreSpans
+		pbTreeEdit.RetombstoneSpans = retombstoneSpans
 		pbTreeEdit.RestoreMode = toRestoreMode(e.RestoreMode())
 	}
 	return &api.Operation_TreeEdit_{TreeEdit: pbTreeEdit}, nil
