@@ -363,6 +363,36 @@ func toTreeNodeID(pos *crdt.TreeNodeID) *api.TreeNodeID {
 	}
 }
 
+// toTreeRestoreSpans converts identity-preserving Tree restore spans to
+// Protobuf. Optional id fields are emitted only when present.
+func toTreeRestoreSpans(spans []*crdt.TreeRestoreSpan) []*api.TreeRestoreSpan {
+	if len(spans) == 0 {
+		return nil
+	}
+	pbSpans := make([]*api.TreeRestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		pbSpan := &api.TreeRestoreSpan{
+			Id:         toTreeNodeID(span.ID),
+			NodeType:   span.NodeType,
+			IsText:     span.IsText,
+			Length:     int32(span.Length),
+			Value:      span.Value,
+			Attributes: toRHT(span.Attributes),
+		}
+		if span.ParentID != nil {
+			pbSpan.ParentId = toTreeNodeID(span.ParentID)
+		}
+		if span.LeftSiblingID != nil {
+			pbSpan.LeftSiblingId = toTreeNodeID(span.LeftSiblingID)
+		}
+		if span.RightSiblingID != nil {
+			pbSpan.RightSiblingId = toTreeNodeID(span.RightSiblingID)
+		}
+		pbSpans = append(pbSpans, pbSpan)
+	}
+	return pbSpans
+}
+
 func toTreePos(pos *crdt.TreePos) *api.TreePos {
 	return &api.TreePos{
 		ParentId: &api.TreeNodeID{
