@@ -725,6 +725,26 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, err
 	}
 
+	restoreSpans, err := fromTreeRestoreSpans(pbTreeEdit.RestoreSpans)
+	if err != nil {
+		return nil, err
+	}
+	retombstoneSpans, err := fromTreeRestoreSpans(pbTreeEdit.RetombstoneSpans)
+	if err != nil {
+		return nil, err
+	}
+	if mode := fromRestoreMode(pbTreeEdit.RestoreMode); mode != crdt.RestoreModeNone {
+		return operations.NewRestoreTreeEdit(
+			parentCreatedAt,
+			from,
+			to,
+			executedAt,
+			restoreSpans,
+			mode,
+			retombstoneSpans,
+		), nil
+	}
+
 	return operations.NewTreeEdit(
 		parentCreatedAt,
 		from,
@@ -996,6 +1016,81 @@ func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 		createdAt,
 		int(pbPos.Offset),
 	), nil
+}
+
+// fromTreeRestoreSpans converts Protobuf identity-preserving Tree restore
+// spans to model format. A span addresses content by insertion identity, so a
+// missing id/parent_id created_at is malformed and rejected (parity with the
+// Text restore span read path).
+func fromTreeRestoreSpans(pbSpans []*api.TreeRestoreSpan) ([]*crdt.TreeRestoreSpan, error) {
+	if len(pbSpans) == 0 {
+		return nil, nil
+	}
+	spans := make([]*crdt.TreeRestoreSpan, 0, len(pbSpans))
+	for _, pbSpan := range pbSpans {
+		if pbSpan == nil || pbSpan.Id == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
+		id, err := fromTreeNodeID(pbSpan.Id)
+		if err != nil {
+			return nil, err
+		}
+		if id.CreatedAt == nil {
+			return nil, ErrInvalidRestoreSpan
+		}
+		// A text span's Length is the UTF-16 code-unit count of Value; the
+		// recreate path slices Value by [0, Length), so a mismatched (or
+		// negative) Length from crafted input would slice out of bounds.
+		// Reject it here (parity with fromRestoreSpans' Content-length check).
+		if pbSpan.Length < 0 {
+			return nil, ErrInvalidRestoreSpan
+		}
+		if pbSpan.IsText && int(pbSpan.Length) != len(utf16.Encode([]rune(pbSpan.Value))) {
+			return nil, ErrInvalidRestoreSpan
+		}
+		var attrs *crdt.RHT
+		if len(pbSpan.Attributes) > 0 {
+			attrs, err = fromRHT(pbSpan.Attributes)
+			if err != nil {
+				return nil, err
+			}
+		}
+		span := &crdt.TreeRestoreSpan{
+			ID:         id,
+			NodeType:   pbSpan.NodeType,
+			IsText:     pbSpan.IsText,
+			Length:     int(pbSpan.Length),
+			Value:      pbSpan.Value,
+			Attributes: attrs,
+		}
+		if pbSpan.ParentId != nil {
+			span.ParentID, err = fromTreeNodeID(pbSpan.ParentId)
+			if err != nil {
+				return nil, err
+			}
+			if span.ParentID.CreatedAt == nil {
+				return nil, ErrInvalidRestoreSpan
+			}
+		}
+		if pbSpan.LeftSiblingId != nil {
+			if span.LeftSiblingID, err = fromTreeNodeID(pbSpan.LeftSiblingId); err != nil {
+				return nil, err
+			}
+			if span.LeftSiblingID.CreatedAt == nil {
+				return nil, ErrInvalidRestoreSpan
+			}
+		}
+		if pbSpan.RightSiblingId != nil {
+			if span.RightSiblingID, err = fromTreeNodeID(pbSpan.RightSiblingId); err != nil {
+				return nil, err
+			}
+			if span.RightSiblingID.CreatedAt == nil {
+				return nil, ErrInvalidRestoreSpan
+			}
+		}
+		spans = append(spans, span)
+	}
+	return spans, nil
 }
 
 func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {

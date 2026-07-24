@@ -588,6 +588,17 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	return false
 }
 
+// unremove clears the tombstone of this node (identity-preserving restore),
+// mirroring remove()'s ancestor-length bookkeeping so the node becomes visible
+// again in place.
+func (n *TreeNode) unremove() {
+	if n.removedAt == nil {
+		return
+	}
+	n.removedAt = nil
+	n.Index.UpdateAncestorsLength(n.Index.PaddedLength())
+}
+
 func (n *TreeNode) canDelete(removedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
 	// NOTE(sigmaith): Skip if the node's creation was not visible to this operation.
 	if !creationKnown {
@@ -735,6 +746,27 @@ func (n *TreeNode) GCPairs() []GCPair {
 	return pairs
 }
 
+// TreeRestoreSpan identifies a node a deletion transitioned visible →
+// tombstoned, for identity-preserving Tree undo/redo. For text nodes the span
+// is the absolute-offset interval [ID.Offset, ID.Offset+Length) of the
+// original insertion (split-invariant); for element nodes it is the whole
+// node. Value/Attributes are a deep copy so a GC-purged node can be recreated.
+// LeftSiblingID/RightSiblingID are the deleted run's external boundary anchors
+// (redundant on purpose): since a run's spans travel together, restore rebuilds
+// the run's internal order from the op itself and needs only ONE surviving
+// boundary to place it (id-order is not sibling-order in a tree).
+type TreeRestoreSpan struct {
+	ID             *TreeNodeID
+	NodeType       string
+	IsText         bool
+	Length         int
+	Value          string
+	Attributes     *RHT
+	ParentID       *TreeNodeID
+	LeftSiblingID  *TreeNodeID
+	RightSiblingID *TreeNodeID
+}
+
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
@@ -827,18 +859,246 @@ func (t *Tree) Purge(child GCChild) error {
 
 	insPrevID := node.InsPrevID
 	insNextID := node.InsNextID
+	// NOTE: findFloorNode may return nil when the insertion neighbor was
+	// already purged (restore/recreate reorders GC so a neighbor can be
+	// collected first). Guard both derefs rather than assuming survival.
 	if insPrevID != nil {
-		insPrev := t.findFloorNode(insPrevID)
-		insPrev.InsNextID = insNextID
+		if insPrev := t.findFloorNode(insPrevID); insPrev != nil {
+			insPrev.InsNextID = insNextID
+		}
 	}
 	if insNextID != nil {
-		insNext := t.findFloorNode(insNextID)
-		insNext.InsPrevID = insPrevID
+		if insNext := t.findFloorNode(insNextID); insNext != nil {
+			insNext.InsPrevID = insPrevID
+		}
 	}
 	node.InsPrevID = nil
 	node.InsNextID = nil
 
 	return nil
+}
+
+// Restore re-establishes the nodes described by spans under their ORIGINAL
+// identities (identity-preserving Tree undo): live → skip (idempotent),
+// tombstoned → unremove in place, purged → recreate. Spans must be in
+// parent-before-child order. Returns (untombstoned, recreated); the caller
+// un-registers GC pairs for the un-tombstoned nodes and accounts recreated
+// sizes to Live. Mirrors the JS CRDTTree.restore.
+func (t *Tree) Restore(spans []*TreeRestoreSpan) (untombstoned, recreated []*TreeNode) {
+	for _, span := range spans {
+		if !span.IsText {
+			node := t.findFloorNode(span.ID)
+			if node != nil && node.id.Equal(span.ID) {
+				if node.IsRemoved() {
+					node.unremove()
+					untombstoned = append(untombstoned, node)
+				}
+				continue
+			}
+			if created := t.recreateFromSpan(span, span.ID.Offset, span.Length); created != nil {
+				recreated = append(recreated, created)
+			}
+			continue
+		}
+
+		// Text: surviving pieces may be split finer than the span.
+		start := span.ID.Offset
+		end := start + span.Length
+		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		cursor := start
+		pieceIdx := 0
+		for cursor < end {
+			if pieceIdx < len(pieces) && pieces[pieceIdx].id.Offset <= cursor {
+				piece := pieces[pieceIdx]
+				pieceStart := piece.id.Offset
+				pieceEnd := pieceStart + piece.Length()
+				if pieceEnd > end {
+					// Piece wider than the span. Under causal delivery the
+					// forward delete split at span boundaries on every replica
+					// before its undo could arrive, so this is unexpected; skip
+					// rather than un-tombstone beyond the span.
+					break
+				}
+				if piece.IsRemoved() {
+					piece.unremove()
+					untombstoned = append(untombstoned, piece)
+				}
+				cursor = min(pieceEnd, end)
+				if cursor >= pieceEnd {
+					pieceIdx++
+				}
+			} else {
+				gapEnd := end
+				if pieceIdx < len(pieces) {
+					gapEnd = min(pieces[pieceIdx].id.Offset, end)
+				}
+				if created := t.recreateFromSpan(span, cursor, gapEnd-cursor); created != nil {
+					recreated = append(recreated, created)
+				}
+				cursor = gapEnd
+			}
+		}
+	}
+	return untombstoned, recreated
+}
+
+// Retombstone re-removes the nodes described by spans (redo of an
+// identity-preserving undo). Live pieces only; idempotent. Returns GC pairs
+// for the newly tombstoned nodes. Mirrors the JS CRDTTree.retombstone.
+func (t *Tree) Retombstone(spans []*TreeRestoreSpan, executedAt *time.Ticket) []GCPair {
+	var pairs []GCPair
+	for _, span := range spans {
+		start := span.ID.Offset
+		length := span.Length
+		if length < 1 {
+			length = 1
+		}
+		end := start + length
+
+		var pieces []*TreeNode
+		if span.IsText {
+			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
+			pieces = []*TreeNode{n}
+		}
+
+		for _, piece := range pieces {
+			if piece.IsRemoved() {
+				continue
+			}
+			if piece.IsText() && piece.id.Offset+piece.Length() > start+span.Length {
+				// Piece wider than the span; skip (see Restore).
+				continue
+			}
+			if piece.remove(executedAt) {
+				pairs = append(pairs, GCPair{Parent: t, Child: piece})
+			}
+		}
+	}
+	return pairs
+}
+
+// findPiecesOverlapping collects surviving pieces (live or tombstoned) of the
+// text insertion createdAt overlapping [start, end), ascending, via descending
+// floor probes. Mirrors the JS CRDTTree.findPiecesOverlapping.
+func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*TreeNode {
+	var pieces []*TreeNode
+	probe := end - 1
+	for probe >= 0 {
+		node := t.findFloorNode(&TreeNodeID{CreatedAt: createdAt, Offset: probe})
+		if node == nil || !node.IsText() {
+			break
+		}
+		nodeStart := node.id.Offset
+		nodeEnd := nodeStart + node.Length()
+		if nodeEnd <= start {
+			break
+		}
+		if nodeStart < end && nodeEnd > start {
+			pieces = append(pieces, node)
+		}
+		if nodeStart <= start {
+			break
+		}
+		probe = nodeStart - 1
+	}
+	for i, j := 0, len(pieces)-1; i < j; i, j = i+1, j-1 {
+		pieces[i], pieces[j] = pieces[j], pieces[i]
+	}
+	return pieces
+}
+
+// recreateFromSpan rebuilds a purged node (or purged text sub-range) under its
+// original identity and attaches it via the anchor ladder (floor-lookup +
+// parent-identity check at each rung): (a) same-insertion successor/
+// predecessor piece → exact slot; (b) captured left boundary sibling → after
+// it; (c) captured right boundary sibling → before it; (d) deterministic
+// id-order fallback (first slot whose child id > node id — a pure function of
+// ids, identical on every replica). Parent genuinely absent → skip (B1).
+// Mirrors the JS CRDTTree.recreateFromSpan.
+func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) *TreeNode {
+	if span.ParentID == nil {
+		return nil
+	}
+	parent := t.findFloorNode(span.ParentID)
+	if parent == nil || !parent.id.Equal(span.ParentID) {
+		return nil // B1: parent gone; leave the node unplaced.
+	}
+
+	var node *TreeNode
+	if span.IsText {
+		encoded := utf16.Encode([]rune(span.Value))
+		relStart := offset - span.ID.Offset
+		val := string(utf16.Decode(encoded[relStart : relStart+length]))
+		node = NewTreeNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset}, span.NodeType, nil, val)
+	} else {
+		var attrs *RHT
+		if span.Attributes != nil {
+			attrs = span.Attributes.DeepCopy()
+		}
+		node = NewTreeNode(span.ID, span.NodeType, attrs)
+	}
+
+	siblings := parent.Children(true)
+	childIndex := func(target *TreeNode) int {
+		for i, c := range siblings {
+			if c == target {
+				return i
+			}
+		}
+		return len(siblings)
+	}
+	sameParent := func(n *TreeNode) bool {
+		return n.Index.Parent != nil && n.Index.Parent.Value == parent
+	}
+
+	// (a) same-insertion successor / predecessor piece (text): exact slot.
+	if span.IsText {
+		succ := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset + length})
+		if succ != nil && succ.IsText() && sameParent(succ) && succ.id.Offset == offset+length {
+			_ = parent.InsertAt(node, childIndex(succ))
+			t.NodeMapByID.Put(node.id, node)
+			return node
+		}
+		if offset > span.ID.Offset || offset > 0 {
+			pred := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset - 1})
+			if pred != nil && pred.IsText() && sameParent(pred) {
+				_ = parent.InsertAfter(node, pred)
+				t.NodeMapByID.Put(node.id, node)
+				return node
+			}
+		}
+	}
+
+	// (b) captured left boundary sibling, if it still exists under this parent.
+	if span.LeftSiblingID != nil {
+		if left := t.findFloorNode(span.LeftSiblingID); left != nil && sameParent(left) {
+			_ = parent.InsertAfter(node, left)
+			t.NodeMapByID.Put(node.id, node)
+			return node
+		}
+	}
+
+	// (c) captured right boundary sibling (redundant anchor): insert before it.
+	if span.RightSiblingID != nil {
+		if right := t.findFloorNode(span.RightSiblingID); right != nil && sameParent(right) {
+			_ = parent.InsertAt(node, childIndex(right))
+			t.NodeMapByID.Put(node.id, node)
+			return node
+		}
+	}
+
+	// (d) deterministic id-order fallback: first slot whose child id > node id.
+	insertIdx := len(siblings)
+	for i, c := range siblings {
+		if c.id.Compare(node.id) > 0 {
+			insertIdx = i
+			break
+		}
+	}
+	_ = parent.InsertAt(node, insertIdx)
+	t.NodeMapByID.Put(node.id, node)
+	return node
 }
 
 // MetaSize returns the size of the metadata of this element.

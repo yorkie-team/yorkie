@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
@@ -361,6 +362,41 @@ func toTreeNodeID(pos *crdt.TreeNodeID) *api.TreeNodeID {
 		CreatedAt: ToTimeTicket(pos.CreatedAt),
 		Offset:    int32(pos.Offset),
 	}
+}
+
+// toTreeRestoreSpans converts identity-preserving Tree restore spans to
+// Protobuf. Optional id fields are emitted only when present. Length is bounds
+// -checked against int32 rather than silently wrapping (parity with
+// toRestoreSpans), so a document large enough to overflow it errors instead.
+func toTreeRestoreSpans(spans []*crdt.TreeRestoreSpan) ([]*api.TreeRestoreSpan, error) {
+	if len(spans) == 0 {
+		return nil, nil
+	}
+	pbSpans := make([]*api.TreeRestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		if span.Length < 0 || span.Length > math.MaxInt32 {
+			return nil, ErrInvalidRestoreSpan
+		}
+		pbSpan := &api.TreeRestoreSpan{
+			Id:         toTreeNodeID(span.ID),
+			NodeType:   span.NodeType,
+			IsText:     span.IsText,
+			Length:     int32(span.Length),
+			Value:      span.Value,
+			Attributes: toRHT(span.Attributes),
+		}
+		if span.ParentID != nil {
+			pbSpan.ParentId = toTreeNodeID(span.ParentID)
+		}
+		if span.LeftSiblingID != nil {
+			pbSpan.LeftSiblingId = toTreeNodeID(span.LeftSiblingID)
+		}
+		if span.RightSiblingID != nil {
+			pbSpan.RightSiblingId = toTreeNodeID(span.RightSiblingID)
+		}
+		pbSpans = append(pbSpans, pbSpan)
+	}
+	return pbSpans, nil
 }
 
 func toTreePos(pos *crdt.TreePos) *api.TreePos {

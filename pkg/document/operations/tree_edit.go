@@ -18,6 +18,7 @@ package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -41,6 +42,16 @@ type TreeEdit struct {
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
+
+	// restoreSpans/restoreMode/retombstoneSpans carry identity-preserving
+	// Tree undo/redo, mirroring Edit. restoreMode selects direction: an undo
+	// (Restore) revives restoreSpans and re-removes retombstoneSpans by
+	// identity; the redo (Retombstone) does the opposite. RestoreModeNone for
+	// ordinary edits. Reverse ops are generated client-side; the server only
+	// executes the mode the wire op specifies.
+	restoreSpans     []*crdt.TreeRestoreSpan
+	restoreMode      crdt.RestoreMode
+	retombstoneSpans []*crdt.TreeRestoreSpan
 }
 
 // NewTreeEdit creates a new instance of TreeEdit.
@@ -59,6 +70,30 @@ func NewTreeEdit(
 		contents:        contents,
 		splitLevel:      splitLevel,
 		executedAt:      executedAt,
+		restoreMode:     crdt.RestoreModeNone,
+	}
+}
+
+// NewRestoreTreeEdit creates a TreeEdit that revives (RestoreModeRestore) or
+// re-removes (RestoreModeRetombstone) tree nodes under their original
+// identities, carried in spans.
+func NewRestoreTreeEdit(
+	parentCreatedAt *time.Ticket,
+	from *crdt.TreePos,
+	to *crdt.TreePos,
+	executedAt *time.Ticket,
+	restoreSpans []*crdt.TreeRestoreSpan,
+	restoreMode crdt.RestoreMode,
+	retombstoneSpans []*crdt.TreeRestoreSpan,
+) *TreeEdit {
+	return &TreeEdit{
+		parentCreatedAt:  parentCreatedAt,
+		from:             from,
+		to:               to,
+		executedAt:       executedAt,
+		restoreSpans:     restoreSpans,
+		restoreMode:      restoreMode,
+		retombstoneSpans: retombstoneSpans,
 	}
 }
 
@@ -68,6 +103,47 @@ func (e *TreeEdit) Execute(root *crdt.Root, versionVector time.VersionVector) er
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:
+		// Identity-preserving restore/retombstone path (mirrors Edit).
+		// restoreMode selects direction; an undo revives restoreSpans and
+		// re-removes retombstoneSpans, the redo does the opposite. Both span
+		// sets carry client-supplied identities materialized into authoritative
+		// state, so reject any the acting change could not causally observe.
+		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
+			if err := validateTreeRestoreIdentities(e.restoreSpans, versionVector); err != nil {
+				return err
+			}
+			if err := validateTreeRestoreIdentities(e.retombstoneSpans, versionVector); err != nil {
+				return err
+			}
+
+			toRestore, toRetombstone := e.restoreSpans, e.retombstoneSpans
+			if e.restoreMode == crdt.RestoreModeRetombstone {
+				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
+			}
+
+			var diff resource.DataSize
+			// 1. Re-remove (retombstone) by identity.
+			for _, pair := range obj.Retombstone(toRetombstone, e.executedAt) {
+				root.RegisterGCPair(pair)
+				root.AdjustDiffForGCPair(&diff, pair)
+			}
+			// 2. Revive (restore) by identity. For an un-tombstoned node
+			// (removedAt already cleared by Restore) UnregisterGCPair removes
+			// its size from docSize.GC, and diff.Add books the same size into
+			// Live — the node just became visible. Recreated nodes are brand
+			// new, so they only need the Live addition. Mirrors Text restore.
+			untombstoned, recreated := obj.Restore(toRestore)
+			for _, node := range untombstoned {
+				root.UnregisterGCPair(crdt.GCPair{Parent: obj, Child: node})
+				diff.Add(node.DataSize())
+			}
+			for _, node := range recreated {
+				diff.Add(node.DataSize())
+			}
+			root.Acc(diff)
+			return nil
+		}
+
 		var contents []*crdt.TreeNode
 		var err error
 		if len(e.Contents()) != 0 {
@@ -161,4 +237,36 @@ func (e *TreeEdit) SplitLevel() int {
 // ExecutedAt returns execution time of this operation.
 func (e *TreeEdit) ExecutedAt() *time.Ticket {
 	return e.executedAt
+}
+
+// RestoreSpans returns the identity-preserving restore payload, if any.
+func (e *TreeEdit) RestoreSpans() []*crdt.TreeRestoreSpan {
+	return e.restoreSpans
+}
+
+// RestoreMode returns the identity-preserving mode of this op.
+func (e *TreeEdit) RestoreMode() crdt.RestoreMode {
+	return e.restoreMode
+}
+
+// RetombstoneSpans returns the companion span set, if any.
+func (e *TreeEdit) RetombstoneSpans() []*crdt.TreeRestoreSpan {
+	return e.retombstoneSpans
+}
+
+// validateTreeRestoreIdentities rejects any restore span whose node identity
+// the acting change could not causally have observed (shared rule with the
+// Text restore path).
+func validateTreeRestoreIdentities(
+	spans []*crdt.TreeRestoreSpan,
+	versionVector time.VersionVector,
+) error {
+	if len(spans) == 0 {
+		return nil
+	}
+	createdAts := make([]*time.Ticket, 0, len(spans))
+	for _, span := range spans {
+		createdAts = append(createdAts, span.ID.CreatedAt)
+	}
+	return validateRestoreTickets(createdAts, versionVector)
 }

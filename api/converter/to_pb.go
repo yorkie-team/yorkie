@@ -517,16 +517,28 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 }
 
 func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
-	return &api.Operation_TreeEdit_{
-		TreeEdit: &api.Operation_TreeEdit{
-			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
-			From:            toTreePos(e.FromPos()),
-			To:              toTreePos(e.ToPos()),
-			Contents:        ToTreeNodesWhenEdit(e.Contents()),
-			SplitLevel:      int32(e.SplitLevel()),
-			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
-		},
-	}, nil
+	pbTreeEdit := &api.Operation_TreeEdit{
+		ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+		From:            toTreePos(e.FromPos()),
+		To:              toTreePos(e.ToPos()),
+		Contents:        ToTreeNodesWhenEdit(e.Contents()),
+		SplitLevel:      int32(e.SplitLevel()),
+		ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+	}
+	if len(e.RestoreSpans()) > 0 || len(e.RetombstoneSpans()) > 0 {
+		restoreSpans, err := toTreeRestoreSpans(e.RestoreSpans())
+		if err != nil {
+			return nil, err
+		}
+		retombstoneSpans, err := toTreeRestoreSpans(e.RetombstoneSpans())
+		if err != nil {
+			return nil, err
+		}
+		pbTreeEdit.RestoreSpans = restoreSpans
+		pbTreeEdit.RetombstoneSpans = retombstoneSpans
+		pbTreeEdit.RestoreMode = toRestoreMode(e.RestoreMode())
+	}
+	return &api.Operation_TreeEdit_{TreeEdit: pbTreeEdit}, nil
 }
 
 func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
