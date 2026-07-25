@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -63,173 +64,182 @@ func TestThrottlerBehavior(t *testing.T) {
 		expireInterval  = 10 * time.Millisecond
 		throttleWindow  = 100 * time.Millisecond
 		debouncingTime  = 100 * time.Millisecond
-		executeTime     = 5 * time.Millisecond
-		waitingTime     = expireInterval + throttleWindow + debouncingTime + executeTime
+		waitingTime     = expireInterval + throttleWindow + debouncingTime
 	)
 
 	// Test case: "e1" -> e1 occurs
 	t.Run("e1", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := &occurs{}
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := &occurs{}
 
-		e1 := func() { o.add(1) }
-		if lim.Allow("key", e1) {
-			e1()
-		}
-		// Immediately after execution, the callback should have been invoked.
-		assert.Equal(t, 1, o.get(0))
-		// After waiting, no additional invocation should occur.
-		time.Sleep(waitingTime)
-		assert.Equal(t, 1, o.len())
-		lim.Close()
+			e1 := func() { o.add(1) }
+			if lim.Allow("key", e1) {
+				e1()
+			}
+			// Immediately after execution, the callback should have been invoked.
+			assert.Equal(t, 1, o.get(0))
+			// After waiting, no additional invocation should occur.
+			time.Sleep(waitingTime)
+			assert.Equal(t, 1, o.len())
+			lim.Close()
+		})
 	})
 
 	// Test case: "e1 e2" -> e1 then e2 occurs
 	t.Run("e1 e2", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := &occurs{}
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := &occurs{}
 
-		e1 := func() { o.add(1) }
-		if lim.Allow("key", e1) {
-			e1()
-		}
-		// First callback is executed directly.
-		assert.Equal(t, 1, o.get(0))
+			e1 := func() { o.add(1) }
+			if lim.Allow("key", e1) {
+				e1()
+			}
+			// First callback is executed directly.
+			assert.Equal(t, 1, o.get(0))
 
-		e2 := func() { o.add(2) }
-		if lim.Allow("key", e2) {
-			e2()
-		}
+			e2 := func() { o.add(2) }
+			if lim.Allow("key", e2) {
+				e2()
+			}
 
-		// At this point, only the immediate callback should have occurred.
-		assert.Equal(t, 1, o.len())
-		time.Sleep(waitingTime)
+			// At this point, only the immediate callback should have occurred.
+			assert.Equal(t, 1, o.len())
+			time.Sleep(waitingTime)
 
-		// After waiting, the deferred callback should be executed.
-		assert.Equal(t, 2, o.len())
-		assert.Equal(t, 2, o.get(1))
-		lim.Close()
+			// After waiting, the deferred callback should be executed.
+			assert.Equal(t, 2, o.len())
+			assert.Equal(t, 2, o.get(1))
+			lim.Close()
+		})
 	})
 
 	// Test case: "e1 e2 e3" -> e1 immediately and e3 deferred
 	t.Run("e1 e2 e3", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := &occurs{}
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := &occurs{}
 
-		e1 := func() { o.add(1) }
-		if lim.Allow("key", e1) {
-			e1()
-		}
-		// First callback is executed immediately.
-		assert.Equal(t, 1, o.get(0))
+			e1 := func() { o.add(1) }
+			if lim.Allow("key", e1) {
+				e1()
+			}
+			// First callback is executed immediately.
+			assert.Equal(t, 1, o.get(0))
 
-		e2 := func() { o.add(2) }
-		if lim.Allow("key", e2) {
-			e2()
-		}
-		e3 := func() { o.add(3) }
-		if lim.Allow("key", e3) {
-			e3()
-		}
+			e2 := func() { o.add(2) }
+			if lim.Allow("key", e2) {
+				e2()
+			}
+			e3 := func() { o.add(3) }
+			if lim.Allow("key", e3) {
+				e3()
+			}
 
-		// Only the immediate callback should have been executed so far.
-		assert.Equal(t, 1, o.len())
-		time.Sleep(waitingTime)
+			// Only the immediate callback should have been executed so far.
+			assert.Equal(t, 1, o.len())
+			time.Sleep(waitingTime)
 
-		// After waiting, the latest callback (e3) is executed.
-		assert.Equal(t, 2, o.len())
-		assert.Equal(t, 3, o.get(1))
-		lim.Close()
+			// After waiting, the latest callback (e3) is executed.
+			assert.Equal(t, 2, o.len())
+			assert.Equal(t, 3, o.get(1))
+			lim.Close()
+		})
 	})
 
 	// Test case: "/ e1 e2 e3 / e4" -> e1 immediately then e4 immediately when allowed
 	t.Run("/ e1 e2 e3 / e4", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := &occurs{}
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := &occurs{}
 
-		e1 := func() { o.add(1) }
-		if lim.Allow("key", e1) {
-			e1()
-		}
-		// Immediate execution for the first callback.
-		assert.Equal(t, 1, o.get(0))
+			e1 := func() { o.add(1) }
+			if lim.Allow("key", e1) {
+				e1()
+			}
+			// Immediate execution for the first callback.
+			assert.Equal(t, 1, o.get(0))
 
-		e2 := func() { o.add(2) }
-		if lim.Allow("key", e2) {
-			e2()
-		}
-		e3 := func() { o.add(3) }
-		if lim.Allow("key", e3) {
-			e3()
-		}
+			e2 := func() { o.add(2) }
+			if lim.Allow("key", e2) {
+				e2()
+			}
+			e3 := func() { o.add(3) }
+			if lim.Allow("key", e3) {
+				e3()
+			}
 
-		// Still, only the immediate callback should have been executed.
-		assert.Equal(t, 1, o.len())
+			// Still, only the immediate callback should have been executed.
+			assert.Equal(t, 1, o.len())
 
-		// Wait for part of the throttle window; deferred callbacks are not yet flushed.
-		time.Sleep(throttleWindow + debouncingTime/2)
-		assert.Equal(t, 1, o.len())
+			// Wait for part of the throttle window; deferred callbacks are not yet flushed.
+			time.Sleep(throttleWindow + debouncingTime/2)
+			assert.Equal(t, 1, o.len())
 
-		e4 := func() { o.add(4) }
-		if lim.Allow("key", e4) {
-			e4()
-		}
+			e4 := func() { o.add(4) }
+			if lim.Allow("key", e4) {
+				e4()
+			}
 
-		// The new callback should now be executed immediately.
-		assert.Equal(t, 2, o.len())
-		assert.Equal(t, 4, o.get(1))
-		time.Sleep(waitingTime)
-		// No further callbacks should be executed after waiting.
-		assert.Equal(t, 2, o.len())
-		lim.Close()
+			// The new callback should now be executed immediately.
+			assert.Equal(t, 2, o.len())
+			assert.Equal(t, 4, o.get(1))
+			time.Sleep(waitingTime)
+			// No further callbacks should be executed after waiting.
+			assert.Equal(t, 2, o.len())
+			lim.Close()
+		})
 	})
 
 	// Test case: "/ e1 e2 e3 / e4 e5" -> e1, then e4 immediately, then e5 deferred
 	t.Run("/ e1 e2 e3 / e4 e5", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := &occurs{}
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := &occurs{}
 
-		// e1 occurs directly.
-		e1 := func() { o.add(1) }
-		if lim.Allow("key", e1) {
-			e1()
-		}
-		assert.Equal(t, 1, o.get(0))
+			// e1 occurs directly.
+			e1 := func() { o.add(1) }
+			if lim.Allow("key", e1) {
+				e1()
+			}
+			assert.Equal(t, 1, o.get(0))
 
-		// e2 is saved.
-		e2 := func() { o.add(2) }
-		if lim.Allow("key", e2) {
-			e2()
-		}
-		// e3 replaces e2.
-		e3 := func() { o.add(3) }
-		if lim.Allow("key", e3) {
-			e3()
-		}
-		assert.Equal(t, 1, o.len())
-		time.Sleep(throttleWindow + debouncingTime/2)
-		assert.Equal(t, 1, o.len())
+			// e2 is saved.
+			e2 := func() { o.add(2) }
+			if lim.Allow("key", e2) {
+				e2()
+			}
+			// e3 replaces e2.
+			e3 := func() { o.add(3) }
+			if lim.Allow("key", e3) {
+				e3()
+			}
+			assert.Equal(t, 1, o.len())
+			time.Sleep(throttleWindow + debouncingTime/2)
+			assert.Equal(t, 1, o.len())
 
-		// Before flushing e3, e4 occurs so e3 is skipped.
-		e4 := func() { o.add(4) }
-		if lim.Allow("key", e4) {
-			e4()
-		}
-		assert.Equal(t, 2, o.len())
-		assert.Equal(t, 4, o.get(1))
+			// Before flushing e3, e4 occurs so e3 is skipped.
+			e4 := func() { o.add(4) }
+			if lim.Allow("key", e4) {
+				e4()
+			}
+			assert.Equal(t, 2, o.len())
+			assert.Equal(t, 4, o.get(1))
 
-		// e5 meets limit so it is saved.
-		e5 := func() { o.add(5) }
-		if lim.Allow("key", e5) {
-			e5()
-		}
-		assert.Equal(t, 2, o.len())
+			// e5 meets limit so it is saved.
+			e5 := func() { o.add(5) }
+			if lim.Allow("key", e5) {
+				e5()
+			}
+			assert.Equal(t, 2, o.len())
 
-		// And flushed when it expires.
-		time.Sleep(waitingTime)
-		assert.Equal(t, 3, o.len())
-		assert.Equal(t, 5, o.get(2))
-		lim.Close()
+			// And flushed when it expires.
+			time.Sleep(waitingTime)
+			assert.Equal(t, 3, o.len())
+			assert.Equal(t, 5, o.get(2))
+			lim.Close()
+		})
 	})
 }
 
@@ -240,102 +250,110 @@ func TestConcurrentExecution(t *testing.T) {
 		expireInterval  = 10 * time.Millisecond
 		throttleWindow  = 100 * time.Millisecond
 		debouncingTime  = 100 * time.Millisecond
-		executeTime     = 5 * time.Millisecond
-		waitingTime     = expireInterval + throttleWindow + debouncingTime + executeTime
+		waitingTime     = expireInterval + throttleWindow + debouncingTime
 		numExecute      = 1000
 	)
 
 	t.Run("Multiple Synchronous Calls with Trailing Debounce", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := occurs{}
-		callback := func() { o.add(1) }
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := occurs{}
+			callback := func() { o.add(1) }
 
-		for range numExecute {
-			if lim.Allow("key", callback) {
-				callback()
-			}
-		}
-		assert.Equal(t, 1, o.len())
-
-		time.Sleep(waitingTime)
-		assert.Equal(t, 2, o.len())
-		lim.Close()
-		assert.Equal(t, 2, o.len())
-	})
-
-	t.Run("Concurrent Calls: Single Immediate and Trailing Execution", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := occurs{}
-		callback := func() { o.add(1) }
-
-		wg := sync.WaitGroup{}
-		for range numExecute {
-			wg.Go(func() {
-				if lim.Allow("key", callback) {
-					callback()
-				}
-			})
-		}
-		wg.Wait()
-		assert.Equal(t, 1, o.len())
-
-		time.Sleep(waitingTime)
-		assert.Equal(t, 2, o.len())
-		lim.Close()
-		assert.Equal(t, 2, o.len())
-	})
-
-	t.Run("Concurrent Calls with Different Keys", func(t *testing.T) {
-		lim := limit.NewLimiter[int](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := occurs{
-			array: make([]int, 0, numExecute*2),
-		}
-		callback := func() { o.add(1) }
-
-		wg := sync.WaitGroup{}
-		for i := range numExecute {
-			wg.Go(func() {
-				if lim.Allow(i, callback) {
-					callback()
-				}
-			})
-		}
-		wg.Wait()
-
-		time.Sleep(waitingTime)
-		assert.Equal(t, numExecute, o.len())
-		lim.Close()
-		assert.Equal(t, numExecute, o.len())
-	})
-
-	t.Run("Continuous Event Stream Throttling", func(t *testing.T) {
-		const (
-			numWindows = 3 // Number of throttle windows.
-		)
-
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-
-		o := occurs{
-			array: make([]int, 0, numWindows+1),
-		}
-
-		// Continuously trigger events until the simulation ends.
-		for i := range numWindows {
-			callback := func() { o.add(i) }
 			for range numExecute {
 				if lim.Allow("key", callback) {
 					callback()
 				}
 			}
-			time.Sleep(throttleWindow)
-		}
-		assert.Equal(t, numWindows, o.len())
-		time.Sleep(waitingTime)
-		assert.Equal(t, numWindows+1, o.len())
+			assert.Equal(t, 1, o.len())
 
-		for i := range numWindows {
-			assert.Equal(t, i, o.get(i))
-		}
+			time.Sleep(waitingTime)
+			assert.Equal(t, 2, o.len())
+			lim.Close()
+			assert.Equal(t, 2, o.len())
+		})
+	})
+
+	t.Run("Concurrent Calls: Single Immediate and Trailing Execution", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := occurs{}
+			callback := func() { o.add(1) }
+
+			wg := sync.WaitGroup{}
+			for range numExecute {
+				wg.Go(func() {
+					if lim.Allow("key", callback) {
+						callback()
+					}
+				})
+			}
+			wg.Wait()
+			assert.Equal(t, 1, o.len())
+
+			time.Sleep(waitingTime)
+			assert.Equal(t, 2, o.len())
+			lim.Close()
+			assert.Equal(t, 2, o.len())
+		})
+	})
+
+	t.Run("Concurrent Calls with Different Keys", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[int](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := occurs{
+				array: make([]int, 0, numExecute*2),
+			}
+			callback := func() { o.add(1) }
+
+			wg := sync.WaitGroup{}
+			for i := range numExecute {
+				wg.Go(func() {
+					if lim.Allow(i, callback) {
+						callback()
+					}
+				})
+			}
+			wg.Wait()
+
+			time.Sleep(waitingTime)
+			assert.Equal(t, numExecute, o.len())
+			lim.Close()
+			assert.Equal(t, numExecute, o.len())
+		})
+	})
+
+	t.Run("Continuous Event Stream Throttling", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			const (
+				numWindows = 3 // Number of throttle windows.
+			)
+
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+
+			o := occurs{
+				array: make([]int, 0, numWindows+1),
+			}
+
+			// Continuously trigger events until the simulation ends.
+			for i := range numWindows {
+				callback := func() { o.add(i) }
+				for range numExecute {
+					if lim.Allow("key", callback) {
+						callback()
+					}
+				}
+				time.Sleep(throttleWindow)
+			}
+			assert.Equal(t, numWindows, o.len())
+			time.Sleep(waitingTime)
+			assert.Equal(t, numWindows+1, o.len())
+
+			for i := range numWindows {
+				assert.Equal(t, i, o.get(i))
+			}
+			lim.Close()
+		})
 	})
 }
 
@@ -364,84 +382,70 @@ func TestBatchExpiration(t *testing.T) {
 	}
 
 	t.Run("Process Expire Batch", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := occurs{
-			array: make([]int, 0, totalKeys*2),
-		}
-
-		// Channel to track callback completions
-		completionChan := make(chan struct{}, totalKeys*2)
-		callback := createCallbackWithTracking(&o, completionChan)
-
-		// For each key: first call executes immediately, second call schedules a debounced callback.
-		for i := range totalKeys {
-			key := fmt.Sprintf("key-%d", i)
-			// Immediate execution.
-			if lim.Allow(key, callback) {
-				callback()
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := occurs{
+				array: make([]int, 0, totalKeys*2),
 			}
-			// Queue the debounced callback.
-			lim.Allow(key, callback)
-		}
 
-		assert.Equal(t, totalKeys, o.len())
+			// Channel to track callback completions
+			completionChan := make(chan struct{}, totalKeys*2)
+			callback := createCallbackWithTracking(&o, completionChan)
 
-		// Wait for immediate callbacks to be processed
-		for i := 0; i < totalKeys; i++ {
-			select {
-			case <-completionChan:
-			case <-time.After(100 * time.Millisecond):
-				t.Fatalf("Timeout waiting for immediate callback %d", i)
+			// For each key: first call executes immediately, second call schedules a debounced callback.
+			for i := range totalKeys {
+				key := fmt.Sprintf("key-%d", i)
+				// Immediate execution.
+				if lim.Allow(key, callback) {
+					callback()
+				}
+				// Queue the debounced callback.
+				lim.Allow(key, callback)
 			}
-		}
 
-		// Wait for all debounced callbacks to complete.
-		// NOTE: We don't assert intermediate per-batch counts because the ticker
-		// and test assertions can race — a subsequent batch may fire before the
-		// test checks o.len(), leading to flaky intermediate counts.
-		for i := range expireBatchSize * batchNum {
-			select {
-			case <-completionChan:
-			case <-time.After(expireInterval * 2):
-				t.Fatalf("Timeout waiting for debounced callback %d", i+1)
+			assert.Equal(t, totalKeys, o.len())
+
+			// Wait for immediate callbacks to be processed
+			for range totalKeys {
+				<-completionChan
 			}
-		}
 
-		assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
-		lim.Close()
-		assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
+			// Wait for all debounced callbacks to complete.
+			// NOTE: We don't assert intermediate per-batch counts because the ticker
+			// and test assertions can race — a subsequent batch may fire before the
+			// test checks o.len(), leading to flaky intermediate counts.
+			for range expireBatchSize * batchNum {
+				<-completionChan
+			}
+
+			assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
+			lim.Close()
+			assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
+		})
 	})
 
 	t.Run("Force Close Expired", func(t *testing.T) {
-		lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
-		o := occurs{
-			array: make([]int, 0, totalKeys*2),
-		}
-		callback := func() { o.add(1) }
-
-		for i := range totalKeys {
-			key := fmt.Sprintf("key-%d", i)
-			// Immediate execution.
-			if lim.Allow(key, callback) {
-				callback()
+		synctest.Test(t, func(t *testing.T) {
+			lim := limit.NewLimiter[string](expireBatchSize, expireInterval, throttleWindow, debouncingTime)
+			o := occurs{
+				array: make([]int, 0, totalKeys*2),
 			}
-			// Queue the debounced callback.
-			lim.Allow(key, callback)
-		}
+			callback := func() { o.add(1) }
 
-		assert.Equal(t, totalKeys, o.len())
+			for i := range totalKeys {
+				key := fmt.Sprintf("key-%d", i)
+				// Immediate execution.
+				if lim.Allow(key, callback) {
+					callback()
+				}
+				// Queue the debounced callback.
+				lim.Allow(key, callback)
+			}
 
-		done := make(chan struct{})
-		go func() {
+			assert.Equal(t, totalKeys, o.len())
+
 			lim.Close()
-			done <- struct{}{}
-		}()
-		select {
-		case <-done:
 			assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
-		case <-time.After(expireInterval):
-			assert.Equal(t, totalKeys+expireBatchSize*batchNum, o.len())
-			assert.Fail(t, "close timeout")
-		}
+		})
 	})
 }

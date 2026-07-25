@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -148,179 +149,187 @@ func TestMakeChannelSessionCountCacheKey(t *testing.T) {
 
 func TestSemaphoreFanOutPattern(t *testing.T) {
 	t.Run("semaphore limits concurrent operations", func(t *testing.T) {
-		const maxConcurrent = 3
-		const totalGroups = 10
-		sem := semaphore.NewWeighted(int64(maxConcurrent))
-		ctx := context.Background()
+		synctest.Test(t, func(t *testing.T) {
+			const maxConcurrent = 3
+			const totalGroups = 10
+			sem := semaphore.NewWeighted(int64(maxConcurrent))
+			ctx := context.Background()
 
-		var peakConcurrency atomic.Int32
-		var currentConcurrency atomic.Int32
+			var peakConcurrency atomic.Int32
+			var currentConcurrency atomic.Int32
 
-		type groupResult struct {
-			value int
-			err   error
-		}
-		resultCh := make(chan groupResult, totalGroups)
+			type groupResult struct {
+				value int
+				err   error
+			}
+			resultCh := make(chan groupResult, totalGroups)
 
-		var wg sync.WaitGroup
-		for i := range totalGroups {
-			wg.Go(func() {
-				if err := sem.Acquire(ctx, 1); err != nil {
-					resultCh <- groupResult{err: err}
-					return
-				}
-				defer sem.Release(1)
-
-				current := currentConcurrency.Add(1)
-				for {
-					old := peakConcurrency.Load()
-					if current <= old || peakConcurrency.CompareAndSwap(old, current) {
-						break
+			var wg sync.WaitGroup
+			for i := range totalGroups {
+				wg.Go(func() {
+					if err := sem.Acquire(ctx, 1); err != nil {
+						resultCh <- groupResult{err: err}
+						return
 					}
-				}
+					defer sem.Release(1)
 
-				time.Sleep(10 * time.Millisecond)
-				currentConcurrency.Add(-1)
+					current := currentConcurrency.Add(1)
+					for {
+						old := peakConcurrency.Load()
+						if current <= old || peakConcurrency.CompareAndSwap(old, current) {
+							break
+						}
+					}
 
-				resultCh <- groupResult{value: i}
-			})
-		}
+					time.Sleep(10 * time.Millisecond)
+					currentConcurrency.Add(-1)
 
-		go func() { wg.Wait(); close(resultCh) }()
+					resultCh <- groupResult{value: i}
+				})
+			}
 
-		var results []int
-		for res := range resultCh {
-			assert.NoError(t, res.err)
-			results = append(results, res.value)
-		}
+			go func() { wg.Wait(); close(resultCh) }()
 
-		assert.Len(t, results, totalGroups)
-		assert.LessOrEqual(t, int(peakConcurrency.Load()), maxConcurrent)
+			var results []int
+			for res := range resultCh {
+				assert.NoError(t, res.err)
+				results = append(results, res.value)
+			}
+
+			assert.Len(t, results, totalGroups)
+			assert.LessOrEqual(t, int(peakConcurrency.Load()), maxConcurrent)
+		})
 	})
 
 	t.Run("context cancellation unblocks semaphore acquire", func(t *testing.T) {
-		sem := semaphore.NewWeighted(1)
-		ctx, cancel := context.WithCancel(context.Background())
+		synctest.Test(t, func(t *testing.T) {
+			sem := semaphore.NewWeighted(1)
+			ctx, cancel := context.WithCancel(context.Background())
 
-		type groupResult struct {
-			id  int
-			err error
-		}
-		resultCh := make(chan groupResult, 5)
-
-		// Hold the semaphore to block subsequent goroutines.
-		err := sem.Acquire(ctx, 1)
-		assert.NoError(t, err)
-
-		var wg sync.WaitGroup
-		for i := range 5 {
-			wg.Go(func() {
-				if err := sem.Acquire(ctx, 1); err != nil {
-					resultCh <- groupResult{id: i, err: err}
-					return
-				}
-				defer sem.Release(1)
-				resultCh <- groupResult{id: i}
-			})
-		}
-
-		// Give goroutines time to block on Acquire.
-		time.Sleep(50 * time.Millisecond)
-
-		// Cancel the context — all blocked goroutines should unblock with error.
-		cancel()
-
-		go func() { wg.Wait(); close(resultCh) }()
-
-		var errCount int
-		for res := range resultCh {
-			if res.err != nil {
-				errCount++
-				assert.ErrorIs(t, res.err, context.Canceled)
+			type groupResult struct {
+				id  int
+				err error
 			}
-		}
-		assert.Equal(t, 5, errCount)
+			resultCh := make(chan groupResult, 5)
 
-		sem.Release(1)
+			// Hold the semaphore to block subsequent goroutines.
+			err := sem.Acquire(ctx, 1)
+			assert.NoError(t, err)
+
+			var wg sync.WaitGroup
+			for i := range 5 {
+				wg.Go(func() {
+					if err := sem.Acquire(ctx, 1); err != nil {
+						resultCh <- groupResult{id: i, err: err}
+						return
+					}
+					defer sem.Release(1)
+					resultCh <- groupResult{id: i}
+				})
+			}
+
+			// Wait until all goroutines are durably blocked on Acquire.
+			synctest.Wait()
+
+			// Cancel the context — all blocked goroutines should unblock with error.
+			cancel()
+
+			go func() { wg.Wait(); close(resultCh) }()
+
+			var errCount int
+			for res := range resultCh {
+				if res.err != nil {
+					errCount++
+					assert.ErrorIs(t, res.err, context.Canceled)
+				}
+			}
+			assert.Equal(t, 5, errCount)
+
+			sem.Release(1)
+		})
 	})
 
 	t.Run("context deadline unblocks semaphore acquire", func(t *testing.T) {
-		sem := semaphore.NewWeighted(1)
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
+		synctest.Test(t, func(t *testing.T) {
+			sem := semaphore.NewWeighted(1)
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
 
-		// Hold the semaphore with a non-cancellable context.
-		err := sem.Acquire(context.Background(), 1)
-		assert.NoError(t, err)
+			// Hold the semaphore with a non-cancellable context.
+			err := sem.Acquire(context.Background(), 1)
+			assert.NoError(t, err)
 
-		type groupResult struct {
-			err error
-		}
-		resultCh := make(chan groupResult, 3)
+			type groupResult struct {
+				err error
+			}
+			resultCh := make(chan groupResult, 3)
 
-		var wg sync.WaitGroup
-		for range 3 {
-			wg.Go(func() {
-				if err := sem.Acquire(ctx, 1); err != nil {
-					resultCh <- groupResult{err: err}
-					return
-				}
-				defer sem.Release(1)
-				resultCh <- groupResult{}
-			})
-		}
+			var wg sync.WaitGroup
+			for range 3 {
+				wg.Go(func() {
+					if err := sem.Acquire(ctx, 1); err != nil {
+						resultCh <- groupResult{err: err}
+						return
+					}
+					defer sem.Release(1)
+					resultCh <- groupResult{}
+				})
+			}
 
-		go func() { wg.Wait(); close(resultCh) }()
+			go func() { wg.Wait(); close(resultCh) }()
 
-		for res := range resultCh {
-			assert.Error(t, res.err)
-			assert.ErrorIs(t, res.err, context.DeadlineExceeded)
-		}
+			for res := range resultCh {
+				assert.Error(t, res.err)
+				assert.ErrorIs(t, res.err, context.DeadlineExceeded)
+			}
 
-		sem.Release(1)
+			sem.Release(1)
+		})
 	})
 
 	t.Run("all goroutines complete even on context cancellation", func(t *testing.T) {
-		const totalGroups = 20
-		sem := semaphore.NewWeighted(2)
-		ctx, cancel := context.WithCancel(context.Background())
+		synctest.Test(t, func(t *testing.T) {
+			const totalGroups = 20
+			sem := semaphore.NewWeighted(2)
+			ctx, cancel := context.WithCancel(context.Background())
 
-		var completedCount atomic.Int32
+			var completedCount atomic.Int32
 
-		type groupResult struct {
-			err error
-		}
-		resultCh := make(chan groupResult, totalGroups)
+			type groupResult struct {
+				err error
+			}
+			resultCh := make(chan groupResult, totalGroups)
 
-		var wg sync.WaitGroup
-		for range totalGroups {
-			wg.Go(func() {
-				defer completedCount.Add(1)
+			var wg sync.WaitGroup
+			for range totalGroups {
+				wg.Go(func() {
+					defer completedCount.Add(1)
 
-				if err := sem.Acquire(ctx, 1); err != nil {
-					resultCh <- groupResult{err: err}
-					return
-				}
-				defer sem.Release(1)
+					if err := sem.Acquire(ctx, 1); err != nil {
+						resultCh <- groupResult{err: err}
+						return
+					}
+					defer sem.Release(1)
 
-				time.Sleep(5 * time.Millisecond)
-				resultCh <- groupResult{}
-			})
-		}
+					time.Sleep(5 * time.Millisecond)
+					resultCh <- groupResult{}
+				})
+			}
 
-		// Cancel early while some goroutines are still running.
-		time.Sleep(15 * time.Millisecond)
-		cancel()
+			// Cancel early while some goroutines are still running.
+			time.Sleep(15 * time.Millisecond)
+			cancel()
 
-		go func() { wg.Wait(); close(resultCh) }()
+			go func() { wg.Wait(); close(resultCh) }()
 
-		var collected int
-		for range resultCh {
-			collected++
-		}
+			var collected int
+			for range resultCh {
+				collected++
+			}
 
-		assert.Equal(t, totalGroups, collected)
-		assert.Equal(t, int32(totalGroups), completedCount.Load())
+			assert.Equal(t, totalGroups, collected)
+			assert.Equal(t, int32(totalGroups), completedCount.Load())
+		})
 	})
 
 	t.Run("fan-out fan-in collects all results and tracks first error", func(t *testing.T) {
