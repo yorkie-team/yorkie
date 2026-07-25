@@ -68,6 +68,7 @@ service AdminService {
 
   rpc ListChannels (ListChannelsRequest) returns (ListChannelsResponse) {}
   rpc GetChannels (GetChannelsRequest) returns (GetChannelsResponse) {}
+  rpc BroadcastByAdmin (BroadcastByAdminRequest) returns (BroadcastByAdminResponse) {}
   
   rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 
@@ -425,3 +426,11 @@ message CompactDocumentByAdminRequest {
 message CompactDocumentByAdminResponse {
   bool compacted = 1;
 }
+
+message BroadcastByAdminRequest {
+  string channel_key = 1;
+  string topic = 2;
+  bytes payload = 3;
+}
+
+message BroadcastByAdminResponse {}

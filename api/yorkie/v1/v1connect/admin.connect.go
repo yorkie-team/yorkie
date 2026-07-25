@@ -145,6 +145,9 @@ const (
 	// AdminServiceGetChannelsProcedure is the fully-qualified name of the AdminService's GetChannels
 	// RPC.
 	AdminServiceGetChannelsProcedure = "/yorkie.v1.AdminService/GetChannels"
+	// AdminServiceBroadcastByAdminProcedure is the fully-qualified name of the AdminService's
+	// BroadcastByAdmin RPC.
+	AdminServiceBroadcastByAdminProcedure = "/yorkie.v1.AdminService/BroadcastByAdmin"
 	// AdminServiceGetServerVersionProcedure is the fully-qualified name of the AdminService's
 	// GetServerVersion RPC.
 	AdminServiceGetServerVersionProcedure = "/yorkie.v1.AdminService/GetServerVersion"
@@ -189,6 +192,7 @@ type AdminServiceClient interface {
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
+	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
@@ -373,6 +377,11 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceGetChannelsProcedure,
 			opts...,
 		),
+		broadcastByAdmin: connect.NewClient[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse](
+			httpClient,
+			baseURL+AdminServiceBroadcastByAdminProcedure,
+			opts...,
+		),
 		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
 			httpClient,
 			baseURL+AdminServiceGetServerVersionProcedure,
@@ -422,6 +431,7 @@ type adminServiceClient struct {
 	restoreRevisionByAdmin *connect.Client[v1.RestoreRevisionByAdminRequest, v1.RestoreRevisionByAdminResponse]
 	listChannels           *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
 	getChannels            *connect.Client[v1.GetChannelsRequest, v1.GetChannelsResponse]
+	broadcastByAdmin       *connect.Client[v1.BroadcastByAdminRequest, v1.BroadcastByAdminResponse]
 	getServerVersion       *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 	compactDocumentByAdmin *connect.Client[v1.CompactDocumentByAdminRequest, v1.CompactDocumentByAdminResponse]
 }
@@ -596,6 +606,11 @@ func (c *adminServiceClient) GetChannels(ctx context.Context, req *connect.Reque
 	return c.getChannels.CallUnary(ctx, req)
 }
 
+// BroadcastByAdmin calls yorkie.v1.AdminService.BroadcastByAdmin.
+func (c *adminServiceClient) BroadcastByAdmin(ctx context.Context, req *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error) {
+	return c.broadcastByAdmin.CallUnary(ctx, req)
+}
+
 // GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
 func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return c.getServerVersion.CallUnary(ctx, req)
@@ -642,6 +657,7 @@ type AdminServiceHandler interface {
 	RestoreRevisionByAdmin(context.Context, *connect.Request[v1.RestoreRevisionByAdminRequest]) (*connect.Response[v1.RestoreRevisionByAdminResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error)
+	BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error)
 	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 	CompactDocumentByAdmin(context.Context, *connect.Request[v1.CompactDocumentByAdminRequest]) (*connect.Response[v1.CompactDocumentByAdminResponse], error)
 }
@@ -822,6 +838,11 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		svc.GetChannels,
 		opts...,
 	)
+	adminServiceBroadcastByAdminHandler := connect.NewUnaryHandler(
+		AdminServiceBroadcastByAdminProcedure,
+		svc.BroadcastByAdmin,
+		opts...,
+	)
 	adminServiceGetServerVersionHandler := connect.NewUnaryHandler(
 		AdminServiceGetServerVersionProcedure,
 		svc.GetServerVersion,
@@ -902,6 +923,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceListChannelsHandler.ServeHTTP(w, r)
 		case AdminServiceGetChannelsProcedure:
 			adminServiceGetChannelsHandler.ServeHTTP(w, r)
+		case AdminServiceBroadcastByAdminProcedure:
+			adminServiceBroadcastByAdminHandler.ServeHTTP(w, r)
 		case AdminServiceGetServerVersionProcedure:
 			adminServiceGetServerVersionHandler.ServeHTTP(w, r)
 		case AdminServiceCompactDocumentByAdminProcedure:
@@ -1049,6 +1072,10 @@ func (UnimplementedAdminServiceHandler) ListChannels(context.Context, *connect.R
 
 func (UnimplementedAdminServiceHandler) GetChannels(context.Context, *connect.Request[v1.GetChannelsRequest]) (*connect.Response[v1.GetChannelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetChannels is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) BroadcastByAdmin(context.Context, *connect.Request[v1.BroadcastByAdminRequest]) (*connect.Response[v1.BroadcastByAdminResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.BroadcastByAdmin is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {

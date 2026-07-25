@@ -66,6 +66,9 @@ const (
 	// ClusterServiceGetChannelsProcedure is the fully-qualified name of the ClusterService's
 	// GetChannels RPC.
 	ClusterServiceGetChannelsProcedure = "/yorkie.v1.ClusterService/GetChannels"
+	// ClusterServiceBroadcastProcedure is the fully-qualified name of the ClusterService's Broadcast
+	// RPC.
+	ClusterServiceBroadcastProcedure = "/yorkie.v1.ClusterService/Broadcast"
 	// ClusterServiceGetChannelCountProcedure is the fully-qualified name of the ClusterService's
 	// GetChannelCount RPC.
 	ClusterServiceGetChannelCountProcedure = "/yorkie.v1.ClusterService/GetChannelCount"
@@ -82,6 +85,7 @@ type ClusterServiceClient interface {
 	GetDocument(context.Context, *connect.Request[v1.ClusterServiceGetDocumentRequest]) (*connect.Response[v1.ClusterServiceGetDocumentResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ClusterServiceListChannelsRequest]) (*connect.Response[v1.ClusterServiceListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.ClusterServiceGetChannelsRequest]) (*connect.Response[v1.ClusterServiceGetChannelsResponse], error)
+	Broadcast(context.Context, *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
@@ -126,6 +130,11 @@ func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			baseURL+ClusterServiceGetChannelsProcedure,
 			opts...,
 		),
+		broadcast: connect.NewClient[v1.ClusterServiceBroadcastRequest, v1.ClusterServiceBroadcastResponse](
+			httpClient,
+			baseURL+ClusterServiceBroadcastProcedure,
+			opts...,
+		),
 		getChannelCount: connect.NewClient[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse](
 			httpClient,
 			baseURL+ClusterServiceGetChannelCountProcedure,
@@ -147,6 +156,7 @@ type clusterServiceClient struct {
 	getDocument     *connect.Client[v1.ClusterServiceGetDocumentRequest, v1.ClusterServiceGetDocumentResponse]
 	listChannels    *connect.Client[v1.ClusterServiceListChannelsRequest, v1.ClusterServiceListChannelsResponse]
 	getChannels     *connect.Client[v1.ClusterServiceGetChannelsRequest, v1.ClusterServiceGetChannelsResponse]
+	broadcast       *connect.Client[v1.ClusterServiceBroadcastRequest, v1.ClusterServiceBroadcastResponse]
 	getChannelCount *connect.Client[v1.ClusterServiceGetChannelCountRequest, v1.ClusterServiceGetChannelCountResponse]
 	invalidateCache *connect.Client[v1.InvalidateCacheRequest, v1.InvalidateCacheResponse]
 }
@@ -181,6 +191,11 @@ func (c *clusterServiceClient) GetChannels(ctx context.Context, req *connect.Req
 	return c.getChannels.CallUnary(ctx, req)
 }
 
+// Broadcast calls yorkie.v1.ClusterService.Broadcast.
+func (c *clusterServiceClient) Broadcast(ctx context.Context, req *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error) {
+	return c.broadcast.CallUnary(ctx, req)
+}
+
 // GetChannelCount calls yorkie.v1.ClusterService.GetChannelCount.
 func (c *clusterServiceClient) GetChannelCount(ctx context.Context, req *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error) {
 	return c.getChannelCount.CallUnary(ctx, req)
@@ -199,6 +214,7 @@ type ClusterServiceHandler interface {
 	GetDocument(context.Context, *connect.Request[v1.ClusterServiceGetDocumentRequest]) (*connect.Response[v1.ClusterServiceGetDocumentResponse], error)
 	ListChannels(context.Context, *connect.Request[v1.ClusterServiceListChannelsRequest]) (*connect.Response[v1.ClusterServiceListChannelsResponse], error)
 	GetChannels(context.Context, *connect.Request[v1.ClusterServiceGetChannelsRequest]) (*connect.Response[v1.ClusterServiceGetChannelsResponse], error)
+	Broadcast(context.Context, *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error)
 	GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error)
 	InvalidateCache(context.Context, *connect.Request[v1.InvalidateCacheRequest]) (*connect.Response[v1.InvalidateCacheResponse], error)
 }
@@ -239,6 +255,11 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 		svc.GetChannels,
 		opts...,
 	)
+	clusterServiceBroadcastHandler := connect.NewUnaryHandler(
+		ClusterServiceBroadcastProcedure,
+		svc.Broadcast,
+		opts...,
+	)
 	clusterServiceGetChannelCountHandler := connect.NewUnaryHandler(
 		ClusterServiceGetChannelCountProcedure,
 		svc.GetChannelCount,
@@ -263,6 +284,8 @@ func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.Handler
 			clusterServiceListChannelsHandler.ServeHTTP(w, r)
 		case ClusterServiceGetChannelsProcedure:
 			clusterServiceGetChannelsHandler.ServeHTTP(w, r)
+		case ClusterServiceBroadcastProcedure:
+			clusterServiceBroadcastHandler.ServeHTTP(w, r)
 		case ClusterServiceGetChannelCountProcedure:
 			clusterServiceGetChannelCountHandler.ServeHTTP(w, r)
 		case ClusterServiceInvalidateCacheProcedure:
@@ -298,6 +321,10 @@ func (UnimplementedClusterServiceHandler) ListChannels(context.Context, *connect
 
 func (UnimplementedClusterServiceHandler) GetChannels(context.Context, *connect.Request[v1.ClusterServiceGetChannelsRequest]) (*connect.Response[v1.ClusterServiceGetChannelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.GetChannels is not implemented"))
+}
+
+func (UnimplementedClusterServiceHandler) Broadcast(context.Context, *connect.Request[v1.ClusterServiceBroadcastRequest]) (*connect.Response[v1.ClusterServiceBroadcastResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.ClusterService.Broadcast is not implemented"))
 }
 
 func (UnimplementedClusterServiceHandler) GetChannelCount(context.Context, *connect.Request[v1.ClusterServiceGetChannelCountRequest]) (*connect.Response[v1.ClusterServiceGetChannelCountResponse], error) {
