@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
 func FuzzFromChangePack(f *testing.F) {
@@ -39,6 +40,17 @@ func FuzzFromChangePack(f *testing.F) {
 			return
 		}
 		_, _ = converter.FromChangePack(pbPack)
+	})
+}
+
+func FuzzCounterValueFromBytes(f *testing.F) {
+	f.Add(byte(crdt.IntegerCnt), []byte{0, 0, 0, 0})
+	f.Add(byte(crdt.LongCnt), []byte{0, 0, 0, 0, 0, 0, 0, 0})
+	f.Add(byte(crdt.IntegerDedupCnt), []byte{0, 0, 0, 0})
+
+	f.Fuzz(func(t *testing.T, rawCounterType byte, value []byte) {
+		counterType := crdt.CounterType(rawCounterType % byte(crdt.IntegerDedupCnt+1))
+		_, _ = crdt.CounterValueFromBytes(counterType, value)
 	})
 }
 
